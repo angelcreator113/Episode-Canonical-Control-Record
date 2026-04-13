@@ -21,6 +21,10 @@ function buildNav(shows) {
       items: [
         { icon: '◈', label: 'LalaVerse', route: '/universe' },
         { icon: '📖', label: 'Show Bible', route: '/show-bible' },
+        { icon: '🌍', label: 'World Dashboard', route: '/world-dashboard', hint: 'Setup progress & state' },
+        { icon: '🏗️', label: 'World Foundation', route: '/world-foundation', hint: 'DREAM map, cities, locations' },
+        { icon: '⭐', label: 'Social Systems', route: '/social-systems', hint: 'Archetypes, legends, trends' },
+        { icon: '📅', label: 'Culture & Events', route: '/culture-events', hint: 'Calendar, memory, legacy' },
       ],
     },
     {
@@ -30,15 +34,6 @@ function buildNav(shows) {
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=overview` },
         ] : []),
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
-      ],
-    },
-    {
-      zone: 'WORLD BUILDING',
-      items: [
-        { icon: '🌍', label: 'World Dashboard', route: '/world-dashboard', hint: 'Setup progress & state' },
-        { icon: '🏗️', label: 'World Foundation', route: '/world-foundation', hint: 'DREAM map, cities, locations' },
-        { icon: '⭐', label: 'Social Systems', route: '/social-systems', hint: 'Archetypes, legends, trends' },
-        { icon: '📅', label: 'Culture & Events', route: '/culture-events', hint: 'Calendar, memory, legacy' },
       ],
     },
     {
