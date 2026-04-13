@@ -19,6 +19,21 @@ const CAT_COLORS = {
   technology: { bg:'#fcf0e8', border:'#b89060', text:'#7a5a30' },
 };
 
+// DREAM city mapping for events
+const DREAM_EVENT_CITIES = [
+  { key: 'dazzle_district', name: 'Dazzle District', letter: 'D', color: '#d4789a', categories: ['fashion'] },
+  { key: 'radiance_row', name: 'Radiance Row', letter: 'R', color: '#a889c8', categories: ['beauty'] },
+  { key: 'echo_park', name: 'Echo Park', letter: 'E', color: '#c9a84c', categories: ['entertainment', 'music'] },
+  { key: 'ascent_tower', name: 'Ascent Tower', letter: 'A', color: '#6bba9a', categories: ['technology'] },
+  { key: 'maverick_harbor', name: 'Maverick Harbor', letter: 'M', color: '#7ab3d4', categories: ['lifestyle', 'community'] },
+];
+
+function getCityForEvent(ev) {
+  if (ev.lalaverse_district) return DREAM_EVENT_CITIES.find(c => c.name === ev.lalaverse_district) || null;
+  const cat = (ev.cultural_category || '').toLowerCase();
+  return DREAM_EVENT_CITIES.find(c => c.categories.includes(cat)) || null;
+}
+
 const TABS = [
   { key: 'calendar', label: 'Calendar' },
   { key: 'memory', label: 'Memory' },
@@ -42,6 +57,7 @@ export default function CultureEvents() {
   const [shows, setShows] = useState([]);
   const [spawnResult, setSpawnResult] = useState(null);
   const [spawning, setSpawning] = useState(null);
+  const [calView, setCalView] = useState('city');
 
   useEffect(() => { fetch('/api/v1/shows').then(r=>r.json()).then(d=>setShows(d.data||[])).catch(()=>{}); }, []);
 
@@ -107,19 +123,64 @@ export default function CultureEvents() {
       {/* CALENDAR TAB */}
       {tab === 'calendar' && (
         <div>
-          {/* Stats */}
-          <div style={{ display:'flex', gap:12, marginBottom:16 }}>
-            {[['Major', events.filter(e=>!e.is_micro_event).length, '#d4789a'], ['Micro', microEvents.length, '#a889c8'], ['Total', events.length, '#7ab3d4']].map(([l,n,c]) => (
-              <div key={l} style={{ ...card, textAlign:'center', padding:'10px 20px' }}>
-                <div style={{ fontSize:20, fontWeight:700, color:c }}>{n}</div>
-                <div style={{ fontSize:10, color:'#888' }}>{l}</div>
-              </div>
-            ))}
+          {/* Stats + view toggle */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+            <div style={{ display:'flex', gap:12 }}>
+              {[['Major', events.filter(e=>!e.is_micro_event).length, '#d4789a'], ['Micro', microEvents.length, '#a889c8'], ['Total', events.length, '#7ab3d4']].map(([l,n,c]) => (
+                <div key={l} style={{ ...card, textAlign:'center', padding:'10px 20px', marginBottom:0 }}>
+                  <div style={{ fontSize:20, fontWeight:700, color:c }}>{n}</div>
+                  <div style={{ fontSize:10, color:'#888' }}>{l}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:4 }}>
+              <button onClick={() => setCalView('month')} style={{ padding:'5px 12px', fontSize:10, fontWeight:600, fontFamily:"'DM Mono', monospace", borderRadius:6, border:'1px solid #e8e0d0', background: calView==='month' ? '#2C2C2C' : '#fff', color: calView==='month' ? '#fff' : '#888', cursor:'pointer' }}>By Month</button>
+              <button onClick={() => setCalView('city')} style={{ padding:'5px 12px', fontSize:10, fontWeight:600, fontFamily:"'DM Mono', monospace", borderRadius:6, border:'1px solid #e8e0d0', background: calView==='city' ? '#2C2C2C' : '#fff', color: calView==='city' ? '#fff' : '#888', cursor:'pointer' }}>By City</button>
+            </div>
           </div>
 
           {loading ? <div style={{ textAlign:'center', color:'#999', padding:40 }}>Loading events...</div> : (
             <>
-              {/* Timeline grid */}
+              {/* BY CITY VIEW */}
+              {calView === 'city' && (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:10, marginBottom:24 }}>
+                  {DREAM_EVENT_CITIES.map(city => {
+                    const cityEvents = events.filter(ev => !ev.is_micro_event && getCityForEvent(ev)?.key === city.key);
+                    return (
+                      <div key={city.key} style={{ minHeight:100 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8, paddingBottom:6, borderBottom:`2px solid ${city.color}` }}>
+                          <span style={{ fontSize:16, fontWeight:900, color:city.color, fontFamily:"'DM Mono', monospace" }}>{city.letter}</span>
+                          <span style={{ fontSize:11, fontWeight:700, color:'#2C2C2C' }}>{city.name}</span>
+                          <span style={{ fontSize:9, color:'#999', marginLeft:'auto' }}>{cityEvents.length}</span>
+                        </div>
+                        {cityEvents.length > 0 ? cityEvents.map(ev => {
+                          const cat = CAT_COLORS[ev.cultural_category] || CAT_COLORS.community;
+                          return (
+                            <div key={ev.id} onClick={()=>setExpandedId(expandedId===ev.id?null:ev.id)} style={{ background:cat.bg, borderLeft:`3px solid ${city.color}`, borderRadius:6, padding:'6px 8px', marginBottom:4, cursor:'pointer', fontSize:11 }}>
+                              <div style={{ fontWeight:600, color:'#2C2C2C' }}>{ev.title}</div>
+                              {ev.start_datetime && <div style={{ fontSize:9, color:'#999' }}>{MONTHS[new Date(ev.start_datetime).getUTCMonth()]}</div>}
+                              {expandedId === ev.id && (
+                                <div style={{ marginTop:6 }}>
+                                  {ev.what_world_knows && <p style={{ fontSize:10, color:'#666', margin:'2px 0' }}>{ev.what_world_knows}</p>}
+                                  {ev.location_name && <div style={{ fontSize:9, color:'#888' }}>📍 {ev.location_name}</div>}
+                                  <div style={{ display:'flex', gap:4, marginTop:4 }}>
+                                    <button onClick={(e)=>{e.stopPropagation();handleCreateEvent(ev);}} style={{ padding:'3px 8px', fontSize:9, fontWeight:600, background:'#e8f5e9', color:'#2e7d32', border:'1px solid #c8e6c9', borderRadius:4, cursor:'pointer' }}>Create Event</button>
+                                    <button onClick={(e)=>{e.stopPropagation();if(confirm(`Delete "${ev.title}"?`))handleDelete(ev.id);}} style={{ padding:'3px 8px', fontSize:9, fontWeight:600, background:'#ffebee', color:'#c62828', border:'1px solid #ffcdd2', borderRadius:4, cursor:'pointer' }}>Delete</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }) : <div style={{ fontSize:10, color:'#ccc', padding:'4px 0' }}>No events</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* BY MONTH VIEW */}
+              {calView === 'month' && (
+              <div>
               <div style={lbl}>TIMELINE</div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:8, marginBottom:24 }}>
                 {MONTHS.map((m, i) => (
@@ -127,11 +188,16 @@ export default function CultureEvents() {
                     <div style={{ fontSize:11, fontWeight:700, color:'#2C2C2C', marginBottom:4, fontFamily:"'DM Mono', monospace" }}>{m}</div>
                     {(byMonth[i]||[]).length > 0 ? (byMonth[i]||[]).map(ev => {
                       const cat = CAT_COLORS[ev.cultural_category] || CAT_COLORS.community;
+                      const city = getCityForEvent(ev);
                       return (
                         <div key={ev.id} onClick={()=>setExpandedId(expandedId===ev.id?null:ev.id)} style={{ background:cat.bg, borderLeft:`3px solid ${cat.border}`, borderRadius:6, padding:'6px 8px', marginBottom:4, cursor:'pointer', fontSize:11 }}>
-                          <div style={{ fontWeight:600, color:'#2C2C2C' }}>{ev.title}</div>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                            <span style={{ fontWeight:600, color:'#2C2C2C' }}>{ev.title}</span>
+                            {city && <span style={{ fontSize:8, fontWeight:700, color:city.color, fontFamily:"'DM Mono', monospace" }}>{city.letter}</span>}
+                          </div>
                           {expandedId === ev.id && (
                             <div style={{ marginTop:6 }}>
+                              {city && <div style={{ fontSize:9, color:city.color, fontWeight:600, marginBottom:2 }}>{city.name}</div>}
                               {ev.what_world_knows && <p style={{ fontSize:10, color:'#666', margin:'2px 0' }}>{ev.what_world_knows}</p>}
                               {ev.location_name && <div style={{ fontSize:9, color:'#888' }}>📍 {ev.location_name}</div>}
                               <div style={{ display:'flex', gap:4, marginTop:4 }}>
@@ -146,6 +212,8 @@ export default function CultureEvents() {
                   </div>
                 ))}
               </div>
+              </div>
+              )}
 
               {/* Awards */}
               <div style={lbl}>AWARD SHOWS</div>

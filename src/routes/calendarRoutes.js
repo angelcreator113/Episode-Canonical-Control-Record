@@ -42,6 +42,25 @@ function getModels(req) {
   return req.app.get('models') || require('../models');
 }
 
+// DREAM city mapping — cultural events belong to specific cities
+const CATEGORY_TO_DREAM_CITY = {
+  fashion:       'Dazzle District',
+  beauty:        'Radiance Row',
+  entertainment: 'Echo Park',
+  music:         'Echo Park',
+  technology:    'Ascent Tower',
+  startup:       'Ascent Tower',
+  lifestyle:     'Maverick Harbor',
+  community:     'Maverick Harbor',
+  creator:       'Maverick Harbor',
+};
+
+function dreamCityFromEvent(event) {
+  if (event.lalaverse_district) return event.lalaverse_district;
+  const cat = (event.cultural_category || '').toLowerCase();
+  return CATEGORY_TO_DREAM_CITY[cat] || null;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // MARKERS
 // ────────────────────────────────────────────────────────────────────────────
@@ -528,7 +547,7 @@ router.post('/events/:id/spawn-world-event', optionalAuth, async (req, res) => {
         venue_address: req.body.venue_address || venueAddress || null,
         event_date: req.body.event_date || (calendarEvent.start_datetime ? new Date(calendarEvent.start_datetime).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : null),
         event_time: req.body.event_time || null,
-        location_hint: calendarEvent.location_name || calendarEvent.lalaverse_district || null,
+        location_hint: calendarEvent.location_name || dreamCityFromEvent(calendarEvent) || calendarEvent.lalaverse_district || null,
         dress_code: req.body.dress_code || null,
         prestige: req.body.prestige || Math.min(10, (calendarEvent.severity_level || 5) + 2),
         narrative_stakes: req.body.narrative_stakes || calendarEvent.what_only_we_know || null,
