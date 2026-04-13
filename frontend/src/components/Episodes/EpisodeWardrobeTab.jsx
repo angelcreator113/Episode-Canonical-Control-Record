@@ -1,324 +1,198 @@
 import React, { useState, useEffect } from 'react';
-import wardrobeService from '../../services/wardrobeService';
-import './EpisodeWardrobeTab.css';
+import { useNavigate } from 'react-router-dom';
+import api from '../../services/api';
+
+/**
+ * EpisodeWardrobeTab — Outfit context for this episode
+ *
+ * Shows: assigned outfit pieces, event dress code match,
+ * total cost, brand summary, tier alignment, and link
+ * to outfit picker in Producer Mode.
+ */
+
+const CAT_ICONS = {
+  dress: '👗', top: '👚', bottom: '👖', shoes: '👟', accessory: '🎀',
+  jewelry: '💍', bag: '👜', outerwear: '🧥', perfume: '🌸',
+};
+
+const TIER_COLORS = { basic: '#94a3b8', mid: '#6366f1', luxury: '#eab308', elite: '#ec4899' };
 
 function EpisodeWardrobeTab({ episodeId, episode }) {
-  const [wardrobeItems, setWardrobeItems] = useState([]);
-  const [showWardrobe, setShowWardrobe] = useState([]);
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [filterCategory, setFilterCategory] = useState('all');
-  const [viewMode, setViewMode] = useState('grid');
+
+  const showId = episode?.show_id || episode?.showId;
 
   useEffect(() => {
-    if (episodeId) loadWardrobeData();
+    if (episodeId) loadData();
   }, [episodeId]);
 
-  const loadWardrobeData = async () => {
+  const loadData = async () => {
     setLoading(true);
-    setError(null);
     try {
-      const res = await wardrobeService.getEpisodeWardrobe(episodeId);
-      const items = res?.data?.data || res?.data || [];
-      setWardrobeItems(Array.isArray(items) ? items : []);
+      // Load episode wardrobe
+      const [wardrobeRes, eventsRes] = await Promise.allSettled([
+        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).catch(() => ({ data: {} })),
+        showId ? api.get(`/api/v1/world/${showId}/events`).catch(() => ({ data: {} })) : Promise.resolve({ data: {} }),
+      ]);
 
-      // Also load show wardrobe for the assignment modal
-      if (episode?.show_id || episode?.showId) {
-        try {
-          const showRes = await wardrobeService.getShowWardrobe(episode.show_id || episode.showId);
-          const showItems = showRes?.data?.data || showRes?.data || [];
-          setShowWardrobe(Array.isArray(showItems) ? showItems : []);
-        } catch {
-          // Show wardrobe optional
-        }
+      // Get items from event outfit_pieces (more accurate than episode_wardrobe)
+      const events = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.events || []) : [];
+      const linkedEvent = events.find(e => e.used_in_episode_id === episodeId);
+      setEvent(linkedEvent || null);
+
+      let outfitPieces = linkedEvent?.outfit_pieces;
+      if (typeof outfitPieces === 'string') try { outfitPieces = JSON.parse(outfitPieces); } catch { outfitPieces = []; }
+
+      if (outfitPieces?.length > 0) {
+        setItems(outfitPieces);
+      } else {
+        // Fallback: load from show wardrobe
+        const allWardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.data?.data || []) : [];
+        setItems(allWardrobe.slice(0, 10));
       }
-    } catch (err) {
-      console.error('Failed to load wardrobe:', err);
-      setError('Failed to load wardrobe data');
-    } finally {
-      setLoading(false);
-    }
+    } catch { setItems([]); }
+    finally { setLoading(false); }
   };
 
-  const handleUnlink = async (wardrobeId) => {
-    if (!confirm('Remove this wardrobe item from the episode?')) return;
-    try {
-      await wardrobeService.unlinkFromEpisode(episodeId, wardrobeId);
-      await loadWardrobeData();
-    } catch (err) {
-      console.error('Failed to unlink wardrobe item:', err);
-    }
-  };
+  if (loading) return <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading wardrobe...</div>;
 
-  // Group items by character
-  const groupedByCharacter = wardrobeItems.reduce((acc, item) => {
-    const char = item.character || item.character_name || 'Unassigned';
-    if (!acc[char]) acc[char] = [];
-    acc[char].push(item);
-    return acc;
-  }, {});
-
-  const categories = ['all', ...new Set(wardrobeItems.map(i => i.category || i.garment_type || 'Other').filter(Boolean))];
-  const filteredItems = filterCategory === 'all'
-    ? wardrobeItems
-    : wardrobeItems.filter(i => (i.category || i.garment_type) === filterCategory);
-
-  if (loading) {
-    return (
-      <div className="ewt-loading">
-        <div className="ewt-spinner" />
-        <p>Loading wardrobe...</p>
-      </div>
-    );
-  }
+  // Stats
+  const totalCost = items.reduce((s, w) => s + (parseFloat(w.price) || 0), 0);
+  const brands = [...new Set(items.map(w => w.brand).filter(Boolean))];
+  const tiers = items.map(w => w.tier).filter(Boolean);
+  const ownedCount = items.filter(w => w.is_owned).length;
+  const dressCode = event?.dress_code;
+  const prestige = event?.prestige || 5;
+  const hasOutfit = items.some(w => w.id);
 
   return (
-    <div className="episode-wardrobe-tab">
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       {/* Header */}
-      <div className="ewt-header">
-        <div className="ewt-header-left">
-          <h2>👗 Episode Wardrobe</h2>
-          <p className="ewt-subtitle">Manage character outfits for this episode</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Episode Outfit</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
+            {items.length} piece{items.length !== 1 ? 's' : ''} · ${totalCost.toLocaleString()} total
+            {dressCode && ` · Dress code: ${dressCode}`}
+          </p>
         </div>
-        <div className="ewt-header-actions">
-          <div className="ewt-view-toggle">
-            <button
-              className={`ewt-view-btn ${viewMode === 'grid' ? 'active' : ''}`}
-              onClick={() => setViewMode('grid')}
-              title="Grid view"
-            >▦</button>
-            <button
-              className={`ewt-view-btn ${viewMode === 'character' ? 'active' : ''}`}
-              onClick={() => setViewMode('character')}
-              title="By character"
-            >👤</button>
+        {showId && (
+          <button onClick={() => navigate(`/shows/${showId}/world?tab=events`)} style={{
+            padding: '8px 18px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>
+            👗 Pick Outfit →
+          </button>
+        )}
+      </div>
+
+      {/* Event Context Bar */}
+      {event && (
+        <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase' }}>Event</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{event.name}</div>
           </div>
-          <button
-            className="ewt-assign-btn"
-            onClick={() => setShowAssignModal(true)}
-          >
-            + Add Wardrobe Item
-          </button>
+          {dressCode && (
+            <div>
+              <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase' }}>Dress Code</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#B8962E' }}>{dressCode}</div>
+            </div>
+          )}
+          <div>
+            <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase' }}>Prestige</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#B8962E' }}>{prestige}/10</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase' }}>Owned</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: ownedCount === items.length ? '#16a34a' : '#f59e0b' }}>{ownedCount}/{items.length}</div>
+          </div>
+          {brands.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase' }}>Brands</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>{brands.join(', ')}</div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* Stats Bar */}
-      <div className="ewt-stats">
-        <div className="ewt-stat">
-          <span className="ewt-stat-value">{wardrobeItems.length}</span>
-          <span className="ewt-stat-label">Items Assigned</span>
-        </div>
-        <div className="ewt-stat">
-          <span className="ewt-stat-value">{Object.keys(groupedByCharacter).length}</span>
-          <span className="ewt-stat-label">Characters</span>
-        </div>
-        <div className="ewt-stat">
-          <span className="ewt-stat-value">{showWardrobe.length}</span>
-          <span className="ewt-stat-label">Show Library</span>
-        </div>
-      </div>
-
-      {error && <div className="ewt-error">{error}</div>}
-
-      {/* Category Filter */}
-      {categories.length > 2 && (
-        <div className="ewt-filters">
-          {categories.map(cat => (
-            <button
-              key={cat}
-              className={`ewt-filter-chip ${filterCategory === cat ? 'active' : ''}`}
-              onClick={() => setFilterCategory(cat)}
-            >
-              {cat === 'all' ? 'All' : cat}
+      {/* No outfit state */}
+      {items.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>👗</div>
+          <h3 style={{ margin: '0 0 8px', fontSize: 16, color: '#1a1a2e' }}>No outfit selected</h3>
+          <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
+            Pick wardrobe items for this episode from the event panel in Producer Mode.
+          </p>
+          {showId && (
+            <button onClick={() => navigate(`/shows/${showId}/world?tab=events`)} style={{
+              padding: '8px 20px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}>
+              🎭 Go to Producer Mode
             </button>
-          ))}
+          )}
         </div>
       )}
 
-      {/* Content */}
-      {wardrobeItems.length === 0 ? (
-        <div className="ewt-empty">
-          <div className="ewt-empty-icon">👗</div>
-          <h3>No Wardrobe Items Yet</h3>
-          <p>Add wardrobe items from your show's library to this episode</p>
-          <button
-            className="ewt-assign-btn"
-            onClick={() => setShowAssignModal(true)}
-          >
-            + Add First Item
-          </button>
-        </div>
-      ) : viewMode === 'character' ? (
-        /* Character-grouped view */
-        <div className="ewt-character-groups">
-          {Object.entries(groupedByCharacter).map(([charName, items]) => (
-            <div key={charName} className="ewt-char-group">
-              <div className="ewt-char-header">
-                <span className="ewt-char-avatar">👤</span>
-                <h3>{charName}</h3>
-                <span className="ewt-char-count">{items.length} item{items.length !== 1 ? 's' : ''}</span>
-              </div>
-              <div className="ewt-char-items">
-                {items.map(item => (
-                  <WardrobeCard
-                    key={item.id}
-                    item={item}
-                    onView={() => setSelectedItem(item)}
-                    onRemove={() => handleUnlink(item.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* Grid view */
-        <div className="ewt-grid">
-          {filteredItems.map(item => (
-            <WardrobeCard
-              key={item.id}
-              item={item}
-              onView={() => setSelectedItem(item)}
-              onRemove={() => handleUnlink(item.id)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Show Wardrobe Picker Modal */}
-      {showAssignModal && (
-        <div className="ewt-picker-overlay" onClick={() => setShowAssignModal(false)}>
-          <div className="ewt-picker-modal" onClick={e => e.stopPropagation()}>
-            <div className="ewt-picker-header">
-              <h3>Add from Show Wardrobe</h3>
-              <button className="ewt-picker-close" onClick={() => setShowAssignModal(false)}>×</button>
-            </div>
-            <div className="ewt-picker-body">
-              {showWardrobe.length === 0 ? (
-                <div className="ewt-picker-empty">
-                  <p>No wardrobe items in show library yet.</p>
-                  <p>Upload items to the show's wardrobe first.</p>
+      {/* Outfit Grid */}
+      {items.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+          {items.map((w, i) => {
+            const imgUrl = w.image_url || w.s3_url_processed || w.s3_url || w.thumbnail_url;
+            const cat = w.category || w.clothing_category || 'item';
+            const tierColor = TIER_COLORS[w.tier] || '#94a3b8';
+            return (
+              <div key={w.id || i} style={{
+                background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', overflow: 'hidden',
+              }}>
+                {/* Image */}
+                <div style={{ width: '100%', aspectRatio: '1', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
+                  {imgUrl ? (
+                    <img src={imgUrl} alt={w.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => e.target.style.display = 'none'} />
+                  ) : (
+                    <span style={{ fontSize: 40, color: '#cbd5e1' }}>{CAT_ICONS[cat] || '👗'}</span>
+                  )}
+                  {w.tier && (
+                    <span style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 4, fontSize: 9, fontWeight: 700, background: 'rgba(255,255,255,0.9)', color: tierColor }}>
+                      {w.tier}
+                    </span>
+                  )}
+                  {w.is_owned && (
+                    <span style={{ position: 'absolute', top: 6, left: 6, padding: '2px 6px', borderRadius: 4, fontSize: 8, fontWeight: 700, background: '#f0fdf4', color: '#16a34a' }}>
+                      Owned
+                    </span>
+                  )}
                 </div>
-              ) : (
-                <div className="ewt-picker-grid">
-                  {showWardrobe
-                    .filter(item => !wardrobeItems.some(w => w.id === item.id))
-                    .map(item => (
-                      <div key={item.id} className="ewt-picker-item" onClick={async () => {
-                        try {
-                          await wardrobeService.linkToEpisode(episodeId, item.id);
-                          await loadWardrobeData();
-                          setShowAssignModal(false);
-                        } catch (err) {
-                          console.error('Failed to link wardrobe item:', err);
-                          alert('Failed to add wardrobe item');
-                        }
-                      }}>
-                        <div className="ewt-picker-thumb">
-                          {item.thumbnail_url || item.s3_url || item.s3_url_processed ? (
-                            <img src={item.thumbnail_url || item.s3_url || item.s3_url_processed} alt={item.name} />
-                          ) : (
-                            <span className="ewt-placeholder">👗</span>
-                          )}
-                        </div>
-                        <div className="ewt-picker-info">
-                          <span className="ewt-picker-name">{item.name || 'Untitled'}</span>
-                          <span className="ewt-picker-type">{item.clothing_category || 'Wardrobe'}</span>
-                        </div>
-                      </div>
-                    ))}
-                  {showWardrobe.filter(item => !wardrobeItems.some(w => w.id === item.id)).length === 0 && (
-                    <div className="ewt-picker-empty">
-                      <p>All show wardrobe items have been added to this episode.</p>
+
+                {/* Info */}
+                <div style={{ padding: '10px 12px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {w.name || cat}
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
+                    <span style={{ fontSize: 9, padding: '1px 6px', background: '#f1f5f9', borderRadius: 4, color: '#64748b' }}>
+                      {CAT_ICONS[cat] || '🏷️'} {cat}
+                    </span>
+                    {w.brand && <span style={{ fontSize: 9, padding: '1px 6px', background: '#faf5ea', borderRadius: 4, color: '#B8962E' }}>{w.brand}</span>}
+                  </div>
+                  {w.price > 0 && (
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>${parseFloat(w.price).toLocaleString()}</div>
+                  )}
+                  {w.description && (
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {w.description}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Item Detail Drawer */}
-      {selectedItem && !showAssignModal && (
-        <div className="ewt-drawer-overlay" onClick={() => setSelectedItem(null)}>
-          <div className="ewt-drawer" onClick={e => e.stopPropagation()}>
-            <div className="ewt-drawer-header">
-              <h3>{selectedItem.name}</h3>
-              <button className="ewt-drawer-close" onClick={() => setSelectedItem(null)}>×</button>
-            </div>
-            <div className="ewt-drawer-body">
-              {(selectedItem.thumbnail_url || selectedItem.s3_url || selectedItem.s3_url_processed) && (
-                <div className="ewt-drawer-image">
-                  <img
-                    src={selectedItem.thumbnail_url || selectedItem.s3_url || selectedItem.s3_url_processed}
-                    alt={selectedItem.name}
-                  />
-                </div>
-              )}
-              <div className="ewt-drawer-details">
-                {selectedItem.character && (
-                  <div className="ewt-detail-row">
-                    <span className="ewt-detail-label">Character</span>
-                    <span className="ewt-detail-value">{selectedItem.character}</span>
-                  </div>
-                )}
-                {selectedItem.clothing_category && (
-                  <div className="ewt-detail-row">
-                    <span className="ewt-detail-label">Category</span>
-                    <span className="ewt-detail-value">{selectedItem.clothing_category}</span>
-                  </div>
-                )}
-                {selectedItem.style && (
-                  <div className="ewt-detail-row">
-                    <span className="ewt-detail-label">Style</span>
-                    <span className="ewt-detail-value">{selectedItem.style}</span>
-                  </div>
-                )}
-                {selectedItem.description && (
-                  <div className="ewt-detail-row">
-                    <span className="ewt-detail-label">Description</span>
-                    <span className="ewt-detail-value">{selectedItem.description}</span>
-                  </div>
-                )}
               </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
       )}
-    </div>
-  );
-}
-
-/* Wardrobe Card sub-component */
-function WardrobeCard({ item, onView, onRemove }) {
-  const imageUrl = item.thumbnail_url || item.s3_url || item.s3_url_processed;
-  const name = item.name || 'Wardrobe Item';
-  const category = item.clothing_category || '';
-
-  return (
-    <div className="ewt-card" onClick={onView}>
-      <div className="ewt-card-image">
-        {imageUrl ? (
-          <img src={imageUrl} alt={name} />
-        ) : (
-          <div className="ewt-card-placeholder">👗</div>
-        )}
-      </div>
-      <div className="ewt-card-info">
-        <div className="ewt-card-name">{name}</div>
-        {item.character && <div className="ewt-card-character">👤 {item.character}</div>}
-        {category && <div className="ewt-card-category">{category}</div>}
-      </div>
-      <button
-        className="ewt-card-remove"
-        onClick={e => { e.stopPropagation(); onRemove(); }}
-        title="Remove from episode"
-      >
-        ×
-      </button>
     </div>
   );
 }
