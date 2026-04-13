@@ -3589,16 +3589,24 @@ router.post('/world/map/upload', optionalAuth, mapUpload.single('image'), async 
     const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 
     // Store URL in page_content using the model
+    let dbSaved = false;
     try {
       const PageContent = models.PageContent;
       if (PageContent) {
-        await PageContent.upsert({ page_name: 'world_foundation', constant_key: 'MAP_IMAGE_URL', data: url });
+        const [row, created] = await PageContent.findOrCreate({
+          where: { page_name: 'world_foundation', constant_key: 'MAP_IMAGE_URL' },
+          defaults: { data: url },
+        });
+        if (!created) {
+          await row.update({ data: url });
+        }
+        dbSaved = true;
       }
     } catch (dbErr) {
-      console.warn('[world-map] page_content save failed (non-blocking):', dbErr?.message);
+      console.warn('[world-map] page_content save failed:', dbErr?.message);
     }
 
-    res.json({ success: true, url, message: 'Map image uploaded' });
+    res.json({ success: true, url, db_saved: dbSaved, message: 'Map image uploaded' });
   } catch (err) {
     console.error('[world-map] Upload error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -3638,7 +3646,11 @@ router.put('/world/map/positions', optionalAuth, async (req, res) => {
     if (!positions || typeof positions !== 'object') return res.status(400).json({ error: 'positions required' });
     const PageContent = models.PageContent;
     if (!PageContent) return res.status(500).json({ error: 'PageContent model not available' });
-    await PageContent.upsert({ page_name: 'world_foundation', constant_key: 'MAP_CITY_POSITIONS', data: positions });
+    const [row, created] = await PageContent.findOrCreate({
+      where: { page_name: 'world_foundation', constant_key: 'MAP_CITY_POSITIONS' },
+      defaults: { data: positions },
+    });
+    if (!created) await row.update({ data: positions });
     res.json({ success: true });
   } catch (err) {
     console.error('[world-map] PUT positions failed:', err);
