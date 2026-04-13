@@ -438,30 +438,29 @@ Lala does not know she was built. The world she lives in feels complete and self
       try {
         const { Op } = require('sequelize');
         const cityName = (city || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-        // Try to find a property in their city
-        let homeLoc = await db.WorldLocation.findOne({
-          where: { city: { [Op.iLike]: `%${cityName}%` }, location_type: 'property' },
-          order: db.sequelize.random(),
+        const displayName = profile.display_name || profile.handle || 'Creator';
+
+        // Always create a personal home/studio for each creator
+        const slug = `${(displayName).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-place`;
+        const tier = profile.follower_tier;
+        const propertyType = tier === 'mega' ? 'penthouse' : tier === 'macro' ? 'apartment' : tier === 'mid' ? 'loft' : 'studio';
+        const propertyLabel = tier === 'mega' ? 'Penthouse' : tier === 'macro' ? 'Apartment' : tier === 'mid' ? 'Loft' : 'Studio';
+
+        let homeLoc = await db.WorldLocation.create({
+          name: `${displayName}'s ${propertyLabel}`,
+          slug,
+          location_type: 'property',
+          property_type: propertyType,
+          city: cityName,
+          description: `${displayName}'s personal ${propertyLabel.toLowerCase()} in ${cityName}. This is where they create content, get ready, and live their real life.`,
+          narrative_role: 'sanctuary',
         }).catch(() => null);
-        // Fallback: any location in their city
+
+        // Fallback if slug conflict — just find any property
         if (!homeLoc) {
           homeLoc = await db.WorldLocation.findOne({
-            where: { city: { [Op.iLike]: `%${cityName}%` } },
+            where: { city: { [Op.iLike]: `%${cityName}%` }, location_type: 'property' },
             order: db.sequelize.random(),
-          }).catch(() => null);
-        }
-        // If no location exists at all in this city, auto-create one for this creator
-        if (!homeLoc) {
-          const displayName = profile.display_name || profile.handle || 'Creator';
-          const slug = `${displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-studio`;
-          homeLoc = await db.WorldLocation.create({
-            name: `${displayName}'s Studio`,
-            slug,
-            location_type: 'property',
-            property_type: 'studio',
-            city: cityName,
-            description: `Home studio of ${displayName} in ${cityName}.`,
-            narrative_role: 'sanctuary',
           }).catch(() => null);
         }
         if (homeLoc) {
