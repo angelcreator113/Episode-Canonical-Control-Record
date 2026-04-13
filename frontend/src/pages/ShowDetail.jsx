@@ -295,55 +295,54 @@ function ShowDetail() {
         )}
         
         {activeTab === 'episodes' && (
-          <div className="episodes-tab">
-            {/* Header row - aligned */}
-            <div className="episodes-header">
-              <div className="header-left">
-                <h2 className="episodes-title">Episodes</h2>
-                <span className="episodes-count">({episodes.length})</span>
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Episodes</h2>
+                <p style={{ margin: '2px 0 0', fontSize: 13, color: '#94a3b8' }}>
+                  {episodes.length} episode{episodes.length !== 1 ? 's' : ''}
+                  {episodes.filter(e => e.evaluation_status === 'accepted').length > 0 && ` · ${episodes.filter(e => e.evaluation_status === 'accepted').length} completed`}
+                </p>
               </div>
-              
-              <div className="header-right">
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 {/* View toggle */}
-                <div className="view-toggle">
-                  <button 
-                    className={`view-btn ${episodeView === 'kanban' ? 'active' : ''}`}
-                    onClick={() => setEpisodeView('kanban')}
-                    title="Pipeline view"
-                  >
-                    Pipeline
-                  </button>
-                  <button 
-                    className={`view-btn ${episodeView === 'grid' ? 'active' : ''}`}
-                    onClick={() => setEpisodeView('grid')}
-                    title="Grid view"
-                  >
-                    Grid
-                  </button>
+                <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+                  {['grid', 'list', 'kanban'].map(v => (
+                    <button key={v} onClick={() => setEpisodeView(v)} style={{
+                      padding: '4px 12px', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                      background: episodeView === v ? '#6366f1' : '#fff',
+                      color: episodeView === v ? '#fff' : '#64748b',
+                    }}>
+                      {v === 'grid' ? '⊞' : v === 'list' ? '≡' : '◫'} {v.charAt(0).toUpperCase() + v.slice(1)}
+                    </button>
+                  ))}
                 </div>
-                
-                <button 
-                  onClick={() => navigate(`/shows/${showId}/quick-episode`)}
-                  className="btn-primary"
-                  style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}
-                >
-                  ⚡ New Episode
+                <button onClick={() => navigate(`/shows/${showId}/quick-episode`)} style={{
+                  padding: '6px 16px', borderRadius: 6, border: 'none', background: '#B8962E', color: '#fff',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}>
+                  + New Episode
                 </button>
               </div>
             </div>
-            
+
             {episodes.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">📺</div>
-                <h3>No episodes yet</h3>
-                <p>Create your first episode to get started</p>
-                <button 
-                  onClick={() => navigate(`/shows/${showId}/quick-episode`)}
-                  className="btn-primary"
-                  style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}
-                >
-                  ⚡ Create First Episode
-                </button>
+              /* Empty state */
+              <div style={{ textAlign: 'center', padding: '40px 20px', background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>📺</div>
+                <h3 style={{ margin: '0 0 8px', fontSize: 16, color: '#1a1a2e' }}>No episodes yet</h3>
+                <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16, maxWidth: 400, margin: '0 auto 16px' }}>
+                  Episodes are generated from events in Producer Mode. Create an event, pick an outfit, then generate the episode.
+                </p>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                  <button onClick={() => navigate(`/shows/${showId}/world?tab=events`)} style={{
+                    padding: '8px 20px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff',
+                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  }}>
+                    🎭 Go to Producer Mode
+                  </button>
+                </div>
               </div>
             ) : episodeView === 'kanban' ? (
               <EpisodeKanbanBoard
@@ -351,11 +350,55 @@ function ShowDetail() {
                 onStatusChange={handleStatusChange}
                 onCreateEpisode={() => navigate(`/shows/${showId}/quick-episode`)}
               />
+            ) : episodeView === 'list' ? (
+              /* List view — compact table */
+              <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: 10, textTransform: 'uppercase' }}>#</th>
+                      <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: 10, textTransform: 'uppercase' }}>Title</th>
+                      <th style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: 10, textTransform: 'uppercase' }}>Status</th>
+                      <th style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: 10, textTransform: 'uppercase' }}>Tier</th>
+                      <th style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600, color: '#64748b', fontSize: 10, textTransform: 'uppercase' }}>Net P&L</th>
+                      <th style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600, color: '#64748b', fontSize: 10, textTransform: 'uppercase' }}>Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {episodes.sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0)).map(ep => {
+                      let evalJson = ep.evaluation_json;
+                      if (typeof evalJson === 'string') try { evalJson = JSON.parse(evalJson); } catch { evalJson = null; }
+                      const tierKey = evalJson?.tier_final;
+                      const tier = tierKey ? { slay: { e: '👑', c: '#FFD700' }, pass: { e: '✨', c: '#22c55e' }, safe: { e: '😐', c: '#eab308' }, fail: { e: '💔', c: '#dc2626' } }[tierKey] : null;
+                      const net = (parseFloat(ep.total_income) || 0) - (parseFloat(ep.total_expenses) || 0);
+                      const st = { draft: '✏️', scripted: '📜', in_build: '🎬', in_review: '👀', published: '✅', archived: '📦' }[ep.status] || '⚪';
+                      return (
+                        <tr key={ep.id} onClick={() => handleViewEpisode(ep.id)} style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#fafafa'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                        >
+                          <td style={{ padding: '8px 14px', fontWeight: 600, color: '#94a3b8' }}>{ep.episode_number || '—'}</td>
+                          <td style={{ padding: '8px 14px', fontWeight: 600, color: '#1a1a2e', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.title || 'Untitled'}</td>
+                          <td style={{ padding: '8px 14px', textAlign: 'center' }}>{st}</td>
+                          <td style={{ padding: '8px 14px', textAlign: 'center' }}>{tier ? <span style={{ color: tier.c }}>{tier.e}</span> : '—'}</td>
+                          <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600, color: net > 0 ? '#16a34a' : net < 0 ? '#dc2626' : '#94a3b8' }}>
+                            {net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 700, color: tier?.c || '#94a3b8' }}>
+                            {evalJson?.score || '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             ) : (
-              <div className="episodes-grid">
+              /* Grid view */
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
                 {episodes.map(episode => (
-                  <EpisodeCard 
-                    key={episode.id} 
+                  <EpisodeCard
+                    key={episode.id}
                     episode={episode}
                     onView={handleViewEpisode}
                     onEdit={handleEditEpisode}
