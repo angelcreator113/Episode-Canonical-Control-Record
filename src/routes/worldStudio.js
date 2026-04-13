@@ -3550,4 +3550,77 @@ router.get('/world/context-summary', optionalAuth, async (req, res) => {
   } catch (err) { res.json({ facts: [], threads: [], locations: [], activeThreadCount: 0, tensionCount: 0 }); }
 });
 
+/* ═══════════════════════════════════════════════════════════
+   WORLD MAP — Upload custom map image for DREAM map
+   ═══════════════════════════════════════════════════════════ */
+
+const multer = require('multer');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+
+const S3_BUCKET = process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || 'prime-episodes';
+const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+const mapS3 = new S3Client({ region: AWS_REGION });
+const mapUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
+  fileFilter: (_req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Only JPEG, PNG, and WebP images are allowed'));
+  },
+});
+
+// POST /world/map/upload — upload custom DREAM map image
+router.post('/world/map/upload', optionalAuth, mapUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No image file provided' });
+
+    const ext = req.file.mimetype === 'image/png' ? 'png' : req.file.mimetype === 'image/webp' ? 'webp' : 'jpg';
+    const s3Key = `world-map/dream-map-${Date.now()}.${ext}`;
+
+    await mapS3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+      CacheControl: 'max-age=31536000',
+    }));
+
+    const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+
+    // Store URL in page-content for world_foundation
+    try {
+      await Q(req, `INSERT INTO page_content (page_name, constant_key, data, created_at, updated_at)
+        VALUES ('world_foundation', 'MAP_IMAGE_URL', :data, NOW(), NOW())
+        ON CONFLICT (page_name, constant_key) DO UPDATE SET data = :data, updated_at = NOW()`,
+        { data: JSON.stringify(url) }
+      );
+    } catch { /* page_content table may not have unique constraint — try upsert manually */
+      try {
+        const [existing] = await Q(req, `SELECT id FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_IMAGE_URL' LIMIT 1`);
+        if (existing) {
+          await Q(req, `UPDATE page_content SET data = :data, updated_at = NOW() WHERE id = :id`, { data: JSON.stringify(url), id: existing.id });
+        } else {
+          await Q(req, `INSERT INTO page_content (page_name, constant_key, data, created_at, updated_at) VALUES ('world_foundation', 'MAP_IMAGE_URL', :data, NOW(), NOW())`, { data: JSON.stringify(url) });
+        }
+      } catch (e) { console.warn('[world-map] page_content save failed:', e.message); }
+    }
+
+    res.json({ success: true, url, message: 'Map image uploaded' });
+  } catch (err) {
+    console.error('[world-map] Upload error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /world/map — get current map image URL
+router.get('/world/map', optionalAuth, async (req, res) => {
+  try {
+    const [row] = await Q(req, `SELECT data FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_IMAGE_URL' LIMIT 1`);
+    const url = row ? JSON.parse(row.data) : null;
+    res.json({ url });
+  } catch {
+    res.json({ url: null });
+  }
+});
+
 module.exports = router;
