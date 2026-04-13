@@ -231,11 +231,15 @@ export default function EpisodeScriptTab({ episode, show }) {
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Script will use</div>
             {[
-              { icon: '💌', label: 'Event', ok: !!episode?.description },
-              { icon: '👗', label: 'Wardrobe', ok: true },
-              { icon: '📍', label: 'Scene plan', ok: scenePlan.length > 0 },
-              { icon: '🪙', label: 'Financial pressure', ok: true },
-              { icon: '📱', label: 'Social tasks', ok: true },
+              { icon: '💌', label: 'Event + host + guests', ok: !!episode?.description },
+              { icon: '👗', label: 'Wardrobe + brand intelligence', ok: true },
+              { icon: '📍', label: 'Scene plan + locations', ok: scenePlan.length > 0 },
+              { icon: '🪙', label: 'Financial pressure + coin balance', ok: true },
+              { icon: '📱', label: 'Social tasks (content to create)', ok: true },
+              { icon: '👥', label: 'Character voices + archetypes', ok: true },
+              { icon: '📺', label: 'Previous episode continuity', ok: true },
+              { icon: '🎯', label: 'Designed intent (SLAY/PASS/FAIL)', ok: !!episode?.evaluation_json || true },
+              { icon: '📊', label: 'Season arc + emotional phase', ok: true },
             ].map(item => (
               <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12 }}>
                 <span style={{ color: item.ok ? '#16a34a' : '#f59e0b' }}>{item.ok ? '✓' : '○'}</span>
