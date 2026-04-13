@@ -216,13 +216,13 @@ function ShowDetail() {
           )}
 
           <div className="show-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Link to={`/shows/${showId}/edit`} className="btn-secondary" style={{ fontSize: 11, padding: '5px 14px', background: 'rgba(184,150,46,0.15)', border: '1px solid rgba(184,150,46,0.3)', color: '#B8962E', borderRadius: 6 }}>
+            <Link to={`/shows/${showId}/edit`} className="btn-secondary" style={{ fontSize: 11, padding: '5px 14px', background: '#fff', border: '1px solid #D4C5A0', color: '#8B7D6B', borderRadius: 6 }}>
               ✏️ Edit
             </Link>
-            <Link to={`/shows/${showId}/world?tab=overview`} className="btn-secondary" style={{ fontSize: 11, padding: '5px 14px', background: 'rgba(250,247,240,0.1)', border: '1px solid rgba(250,247,240,0.2)', color: '#FAF7F0', borderRadius: 6 }}>
+            <Link to={`/shows/${showId}/world?tab=overview`} className="btn-secondary" style={{ fontSize: 11, padding: '5px 14px', background: '#B8962E', border: '1px solid #B8962E', color: '#fff', borderRadius: 6 }}>
               🎭 Producer Mode
             </Link>
-            <span style={{ fontSize: 10, color: 'rgba(250,247,240,0.45)', marginLeft: 4 }}>
+            <span style={{ fontSize: 10, color: '#A69880', marginLeft: 4 }}>
               {episodes.length} episode{episodes.length !== 1 ? 's' : ''}
               {show.premiereDate && ` · Premiered ${new Date(show.premiereDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`}
             </span>
