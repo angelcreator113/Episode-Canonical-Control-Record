@@ -564,7 +564,6 @@ export default function DreamMap({
         }}>
           {[
             { shape: 'circle', color: '#B8962E', label: 'Venue' },
-            { shape: 'square', color: '#7ab3d4', label: 'Scene Set' },
             { shape: 'pulse', color: '#d4789a', label: 'Lala' },
           ].map(l => (
             <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: "'DM Mono', monospace" }}>
