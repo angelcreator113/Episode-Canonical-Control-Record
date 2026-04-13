@@ -1,80 +1,81 @@
 /**
- * UniversePage.jsx
- * frontend/src/pages/UniversePage.jsx
+ * UniversePage.jsx — LalaVerse World Overview
  *
- * Route: /universe
- * Sidebar: ◈ Universe → /universe (under Home)
+ * Shows the show's world at a glance: stats, characters, locations,
+ * series/books, and links to the production pipeline.
  *
- * Pass 1 features:
- * - Five tabs: Universe | Series | Production | Wardrobe | Assets
- * - Universe tab: edit all fields, preview toggle, Claude "Structure from Raw Draft"
- * - Series tab: create/edit series, books grouped inside, edit era inline
- * - Production tab: shows + episodes merged — select a show to browse episodes
- * - Canon Timeline strip at bottom of Universe tab
- *
- * Light theme — modern white design with gold accents
+ * No longer depends on a hardcoded universe ID — loads from the
+ * first available show, which is the actual production context.
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import './UniversePage.css';
-
-function useWindowWidth() {
-  const [w, setW] = useState(window.innerWidth);
-  useEffect(() => {
-    const h = () => setW(window.innerWidth);
-    window.addEventListener('resize', h);
-    return () => window.removeEventListener('resize', h);
-  }, []);
-  return w;
-}
-
-const UNIVERSE_API    = '/api/v1/universe';
-const STORYTELLER_API = '/api/v1/storyteller';
-const SHOWS_API       = '/api/v1/shows';
-const MEMORIES_API    = '/api/v1/memories';
-
-const LALAVERSE_ID = 'a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e'; // from seed
-
-// ── Main Page ──────────────────────────────────────────────────────────────
+import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
 
 export default function UniversePage() {
-  const width = useWindowWidth();
-  const isMobile = width < 640;
-  const isTablet = width >= 640 && width < 1024;
-  const [universe, setUniverse]   = useState(null);
-  const [series, setSeries]       = useState([]);
-  const [shows, setShows]         = useState([]);
-  const [books, setBooks]         = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [toast, setToast]         = useState(null);
+  const navigate = useNavigate();
+  const [show, setShow] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [universe, setUniverse] = useState(null);
+  const [series, setSeries] = useState([]);
+  const [books, setBooks] = useState([]);
+  const [toast, setToast] = useState(null);
 
-  function showToast(msg, type = 'success') {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 2800);
-  }
+  const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [uRes, sRes] = await Promise.all([
-        fetch(`${UNIVERSE_API}/${LALAVERSE_ID}`),
-        fetch(`${UNIVERSE_API}/series?universe_id=${LALAVERSE_ID}`),
-      ]);
-      const uData = await uRes.json();
-      const sData = await sRes.json();
-      setUniverse(uData.universe);
-      setSeries(sData.series || []);
+      // Load show
+      const showRes = await api.get('/api/v1/shows');
+      const shows = showRes.data?.data || showRes.data?.shows || showRes.data || [];
+      const firstShow = Array.isArray(shows) ? shows[0] : null;
+      setShow(firstShow);
 
-      const bRes = await fetch(`${STORYTELLER_API}/books`);
-      const bData = await bRes.json();
-      setBooks(bData.books || []);
+      if (!firstShow) { setLoading(false); return; }
+
+      // Load stats in parallel
+      const [eventsRes, wardrobeRes, episodesRes, overlaysRes, charsRes, booksRes] = await Promise.allSettled([
+        api.get(`/api/v1/world/${firstShow.id}/events?limit=100`),
+        api.get(`/api/v1/wardrobe?show_id=${firstShow.id}&limit=500`),
+        api.get(`/api/v1/episodes?show_id=${firstShow.id}&limit=100`),
+        api.get(`/api/v1/ui-overlays/${firstShow.id}`),
+        api.get(`/api/v1/character-registry?show_id=${firstShow.id}&limit=100`).catch(() => ({ data: {} })),
+        api.get('/api/v1/storyteller/books').catch(() => ({ data: {} })),
+      ]);
+
+      const events = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.events || []) : [];
+      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.data?.data || []) : [];
+      const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value.data?.data || episodesRes.value.data || []) : [];
+      const overlays = overlaysRes.status === 'fulfilled' ? (overlaysRes.value.data?.data || []) : [];
+      const characters = charsRes.status === 'fulfilled' ? (charsRes.value.data?.data || charsRes.value.data?.characters || []) : [];
+      const booksData = booksRes.status === 'fulfilled' ? (booksRes.value.data?.books || []) : [];
+
+      setBooks(booksData);
+
+      setStats({
+        events: events.length,
+        wardrobe: wardrobe.length,
+        episodes: Array.isArray(episodes) ? episodes.length : 0,
+        overlays: overlays.filter(o => o.generated || o.url || o.asset_id).length,
+        overlaysTotal: overlays.length,
+        characters: Array.isArray(characters) ? characters.length : 0,
+        books: booksData.length,
+        wardrobeValue: wardrobe.reduce((s, w) => s + (parseFloat(w.price) || 0), 0),
+        completed: (Array.isArray(episodes) ? episodes : []).filter(e => e.evaluation_status === 'accepted').length,
+      });
+
+      // Try loading universe (optional — may not exist)
+      try {
+        const uRes = await api.get('/api/v1/universe/a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e');
+        setUniverse(uRes.data?.universe || null);
+      } catch { /* universe not seeded — that's fine */ }
 
       try {
-        const shRes = await fetch(`${SHOWS_API}`);
-        const shData = await shRes.json();
-        const showsList = shData.data || shData.shows || shData;
-        setShows(Array.isArray(showsList) ? showsList : []);
-      } catch (_) {}
+        const sRes = await api.get('/api/v1/universe/series?universe_id=a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e');
+        setSeries(sRes.data?.series || []);
+      } catch { /* no series — fine */ }
 
     } catch (err) {
       console.error('UniversePage load error:', err);
@@ -85,405 +86,143 @@ export default function UniversePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <LoadingState />;
-  if (!universe) return <ErrorState onRetry={load} />;
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading LalaVerse...</div>;
+
+  const showId = show?.id;
 
   return (
-    <div className="up-shell">
-      <div className="up-hero-compact" style={{ padding: isMobile ? '10px 16px' : '10px 48px' }}>
-        <div className="up-hero-compact-left">
-          <h1 className="up-hero-compact-title">{universe.name}</h1>
-          <span className="up-hero-compact-slug">/{universe.slug}</span>
-        </div>
-        <div className="up-hero-compact-stats">
-          <div className="up-compact-stat"><span className="up-compact-val">{series.length}</span> series</div>
-          <div className="up-compact-stat"><span className="up-compact-val">{shows.length}</span> shows</div>
-          <div className="up-compact-stat"><span className="up-compact-val">{shows.reduce((sum, sh) => sum + (parseInt(sh.episodeCount || sh.dataValues?.episodeCount) || 0), 0)}</span> episodes</div>
-          <div className="up-compact-stat"><span className="up-compact-val">{(universe.core_themes || []).length}</span> themes</div>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 24px' }}>
+      {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9', color: toast.type === 'error' ? '#C62828' : '#16a34a', borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500 }}>{toast.msg}</div>}
+
+      {/* Hero */}
+      <div style={{ background: 'linear-gradient(135deg, #F5F0E8, #EDE4D3)', borderRadius: 12, padding: '24px 28px', marginBottom: 16, border: '1px solid rgba(184,150,46,0.15)' }}>
+        <h1 style={{ margin: '0 0 4px', fontSize: 24, fontWeight: 700, color: '#1a1a2e' }}>
+          {universe?.name || 'The LalaVerse'}
+        </h1>
+        <p style={{ margin: '0 0 12px', fontSize: 14, color: '#6B5E4F', lineHeight: 1.5 }}>
+          {show?.description || universe?.description || 'A narrative-driven luxury fashion life simulator. Fashion is strategy. Reputation is currency. Legacy is built episode by episode.'}
+        </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {showId && <button onClick={() => navigate(`/shows/${showId}/world?tab=overview`)} style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: '#B8962E', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>🎭 Producer Mode</button>}
+          {showId && <button onClick={() => navigate(`/shows/${showId}`)} style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid #D4C5A0', background: '#fff', color: '#8B7D6B', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>📺 Show Dashboard</button>}
+          <button onClick={() => navigate('/show-bible')} style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid #D4C5A0', background: '#fff', color: '#8B7D6B', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>📖 Show Bible</button>
         </div>
       </div>
 
-      <div className="up-tab-content" style={isMobile ? { padding: '0 16px' } : isTablet ? { padding: '0 28px' } : undefined}>
-        <UniverseTab
-          universe={universe}
-          series={series}
-          books={books}
-          onSaved={(updated) => { setUniverse(updated); showToast('Universe saved'); }}
-          showToast={showToast}
-          isMobile={isMobile}
-          isTablet={isTablet}
-        />
-      </div>
-
-      {toast && (
-        <div className={`up-toast ${toast.type === 'error' ? 'up-toast--error' : 'up-toast--success'}`}>
-          {toast.msg}
+      {/* Stats Grid */}
+      {stats && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+          {[
+            { label: 'Episodes', value: stats.episodes, icon: '📺', color: '#6366f1' },
+            { label: 'Events', value: stats.events, icon: '💌', color: '#f59e0b' },
+            { label: 'Characters', value: stats.characters, icon: '👥', color: '#ec4899' },
+            { label: 'Wardrobe', value: stats.wardrobe, icon: '👗', color: '#B8962E' },
+          ].map(s => (
+            <div key={s.label} style={{ background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '14px 16px' }}>
+              <div style={{ fontSize: 10, color: '#94a3b8' }}>{s.icon} {s.label}</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.value}</div>
+            </div>
+          ))}
         </div>
       )}
-    </div>
-  );
-}
 
-// ══════════════════════════════════════════════════════════════════════════
-//  TAB 1 — UNIVERSE
-// ══════════════════════════════════════════════════════════════════════════
+      {/* Two columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+        {/* Production Overview */}
+        <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
+          <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>🎬 Production</h3>
+          {[
+            { label: 'Episodes Created', value: stats?.episodes || 0 },
+            { label: 'Episodes Completed', value: stats?.completed || 0 },
+            { label: 'UI Overlays', value: `${stats?.overlays || 0}/${stats?.overlaysTotal || 0}` },
+            { label: 'Wardrobe Value', value: `$${(stats?.wardrobeValue || 0).toLocaleString()}` },
+          ].map(row => (
+            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13 }}>
+              <span style={{ color: '#64748b' }}>{row.label}</span>
+              <span style={{ fontWeight: 700, color: '#1a1a2e' }}>{row.value}</span>
+            </div>
+          ))}
+        </div>
 
-function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, isTablet }) {
-  const [form, setForm]         = useState({
-    name:               universe.name || '',
-    description:        universe.description || '',
-    pnos_beliefs:       universe.pnos_beliefs || '',
-    world_rules:        universe.world_rules || '',
-    narrative_economy:  universe.narrative_economy || '',
-    core_themes:        (universe.core_themes || []).join(', '),
-  });
-  const [preview, setPreview]   = useState(true);
-  const [saving, setSaving]     = useState(false);
-  const [dirty, setDirty]       = useState(false);
-  const [structuring, setStructuring] = useState(false);
-  const [rawDraft, setRawDraft] = useState('');
-  const [showRawModal, setShowRawModal] = useState(false);
-
-  function set(field, value) {
-    setForm(prev => ({ ...prev, [field]: value }));
-    setDirty(true);
-  }
-
-  async function save() {
-    setSaving(true);
-    try {
-      const res = await fetch(`${UNIVERSE_API}/${universe.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          core_themes: form.core_themes
-            .split(',')
-            .map(t => t.trim())
-            .filter(Boolean),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      onSaved(data.universe);
-      setDirty(false);
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function structureFromRaw() {
-    if (!rawDraft.trim()) return;
-    setStructuring(true);
-    try {
-      const res = await fetch('/api/v1/memories/structure-universe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_text: rawDraft }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      const s = data.structured;
-      setForm(prev => ({
-        ...prev,
-        description:       s.description       || prev.description,
-        pnos_beliefs:      s.pnos_beliefs       || prev.pnos_beliefs,
-        world_rules:       s.world_rules        || prev.world_rules,
-        narrative_economy: s.narrative_economy  || prev.narrative_economy,
-        core_themes:       s.core_themes?.join(', ') || prev.core_themes,
-      }));
-      setDirty(true);
-      setShowRawModal(false);
-      setRawDraft('');
-      showToast('Draft structured — review and save');
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setStructuring(false);
-    }
-  }
-
-  // ── Canon timeline data ──────────────────────────────────────────────
-  const timelineItems = [
-    ...books.map(b => ({
-      type: 'book',
-      label: b.title,
-      era: b.era_name,
-      position: b.timeline_position,
-      canon: b.canon_status,
-    })),
-    ...[] // shows would go here
-  ].sort((a, b) => {
-    const order = ['Pre-Show','Early Show','Soft Luxury Era','Prime Era','Legacy Era'];
-    return (order.indexOf(a.position) || 0) - (order.indexOf(b.position) || 0);
-  });
-
-  return (
-    <div className="up-tab-shell">
-
-      {/* Actions bar */}
-      <div className="up-actions-bar">
-        <button className="up-btn-secondary" onClick={() => setPreview(!preview)}>
-          {preview ? '✎ Edit' : '◉ Preview'}
-        </button>
-        <button
-          className="up-btn-secondary"
-          onClick={() => setShowRawModal(true)}
-        >
-          ✦ Structure from Raw Draft
-        </button>
-        {dirty && (
-          <button
-            className="up-btn-primary"
-            style={{ opacity: saving ? 0.6 : 1 }}
-            onClick={save}
-            disabled={saving}
-          >
-            {saving ? 'Saving…' : 'Save Universe'}
-          </button>
-        )}
+        {/* World Context */}
+        <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
+          <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>🌍 World</h3>
+          {universe ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {universe.core_themes?.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Core Themes</div>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {universe.core_themes.map(t => (
+                      <span key={t} style={{ padding: '2px 8px', background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 6, fontSize: 11, color: '#B8962E' }}>{t}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {universe.pnos_beliefs && (
+                <div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Story Laws</div>
+                  <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>{universe.pnos_beliefs.slice(0, 200)}...</div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+              Universe not configured yet. World rules are managed in the Show Bible.
+              <button onClick={() => navigate('/show-bible?tab=knowledge')} style={{ display: 'block', marginTop: 8, padding: '6px 14px', borderRadius: 6, border: '1px solid #D4C5A0', background: '#fff', color: '#8B7D6B', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>📖 Open Show Bible</button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {preview ? (
-        // ── Preview mode ───────────────────────────────────────────────
-        <div className="up-preview-shell">
-          <h2 className="up-preview-title">{form.name}</h2>
-          <div className="up-preview-section">
-            <div className="up-preview-label">Description</div>
-            <div className="up-preview-body">{form.description}</div>
-          </div>
-          {form.core_themes && (
-            <div className="up-preview-section">
-              <div className="up-preview-label">Core Themes</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
-                {form.core_themes.split(',').map(t => t.trim()).filter(Boolean).map(t => (
-                  <span key={t} className="up-theme-chip">{t}</span>
+      {/* Series & Books */}
+      {(series.length > 0 || books.length > 0) && (
+        <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px', marginBottom: 16 }}>
+          <h3 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>📚 Series & Books</h3>
+          {series.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 6 }}>Series ({series.length})</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {series.map(s => (
+                  <span key={s.id} style={{ padding: '4px 12px', background: '#f1f5f9', borderRadius: 6, fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{s.name}</span>
                 ))}
               </div>
             </div>
           )}
-          <div className="up-preview-section">
-            <div className="up-preview-label">PNOS Beliefs</div>
-            <div className="up-preview-body">{form.pnos_beliefs}</div>
-          </div>
-          <div className="up-preview-section">
-            <div className="up-preview-label">World Rules</div>
-            <div className="up-preview-body">{form.world_rules}</div>
-          </div>
-          <div className="up-preview-section">
-            <div className="up-preview-label">Narrative Economy</div>
-            <div className="up-preview-body">{form.narrative_economy}</div>
-          </div>
-        </div>
-      ) : (
-        // ── Edit mode ──────────────────────────────────────────────────
-        <div className="up-form-shell">
-
-          <Field label='UNIVERSE NAME'>
-            <input
-              className="up-input"
-              value={form.name}
-              onChange={e => set('name', e.target.value)}
-            />
-          </Field>
-
-          <Field label='CORE THEMES' hint='Comma-separated'>
-            <input
-              className="up-input"
-              value={form.core_themes}
-              onChange={e => set('core_themes', e.target.value)}
-              placeholder='ambition, identity, beauty, consequence, becoming'
-            />
-          </Field>
-
-          <Field label='UNIVERSE DESCRIPTION'>
-            <textarea
-              className="up-textarea"
-              style={{ minHeight: 120 }}
-              value={form.description}
-              onChange={e => set('description', e.target.value)}
-            />
-          </Field>
-
-          <Field label='PNOS BELIEFS' hint='The laws that govern how story works'>
-            <textarea
-              className="up-textarea"
-              style={{ minHeight: 180 }}
-              value={form.pnos_beliefs}
-              onChange={e => set('pnos_beliefs', e.target.value)}
-            />
-          </Field>
-
-          <Field label='WORLD RULES' hint='Mechanical + narrative rules'>
-            <textarea
-              className="up-textarea"
-              style={{ minHeight: 180 }}
-              value={form.world_rules}
-              onChange={e => set('world_rules', e.target.value)}
-            />
-          </Field>
-
-          <Field label='NARRATIVE ECONOMY' hint='Currency, reputation, access systems'>
-            <textarea
-              className="up-textarea"
-              style={{ minHeight: 100 }}
-              value={form.narrative_economy}
-              onChange={e => set('narrative_economy', e.target.value)}
-            />
-          </Field>
-
-        </div>
-      )}
-
-      {/* World Studio Portals */}
-      <div className="up-timeline-block" style={{ marginBottom: 16 }}>
-        <div className="up-section-label">CHARACTER WORLD</div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '8px 0' }}>
-          {[
-            { label: '✦ World Studio',    desc: 'Generate & manage characters',    href: '/world-studio' },
-            { label: '📋 Character Registry', desc: 'Full registry view',          href: '/character-registry' },
-            { label: '🔗 Relationships',   desc: 'Inter-character map',            href: '/relationships' },
-            { label: '🔥 Scene Studio',    desc: 'Book scenes & intimacy',         href: '/scene-studio' },
-            { label: '📜 World State',     desc: 'Live tensions & state',          href: '/universe/world-state' },
-            { label: '📍 World Locations', desc: 'Places & spaces',               href: '/world-locations' },
-          ].map(p => (
-            <a key={p.href} href={p.href} style={{
-              display: 'flex', flexDirection: 'column', padding: '10px 16px',
-              background: '#fff', border: '1px solid #e0d9ce', borderRadius: 8,
-              textDecoration: 'none', color: '#1a1a1a', minWidth: 160,
-              transition: 'border-color 0.2s',
-            }} onMouseEnter={e => e.currentTarget.style.borderColor = '#d4a574'}
-               onMouseLeave={e => e.currentTarget.style.borderColor = '#e0d9ce'}>
-              <span style={{ fontWeight: 600, fontSize: 14 }}>{p.label}</span>
-              <span style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{p.desc}</span>
-            </a>
-          ))}
-        </div>
-      </div>
-
-      {/* Canon Timeline */}
-      {timelineItems.length > 0 && (
-        <div className="up-timeline-block">
-          <div className="up-section-label">CANON TIMELINE</div>
-          <div className="up-timeline-strip">
-            {timelineItems.map((item, i) => (
-              <div key={i} className="up-timeline-item">
-                <div className={`up-timeline-dot ${item.type === 'book' ? 'up-timeline-dot--book' : 'up-timeline-dot--show'}`} />
-                <div className="up-timeline-label">{item.label}</div>
-                {item.era && <div className="up-timeline-era">{item.era}</div>}
-                {item.position && <div className="up-timeline-pos">{item.position}</div>}
+          {books.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 6 }}>Books ({books.length})</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {books.map(b => (
+                  <span key={b.id} style={{ padding: '4px 12px', background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 6, fontSize: 12, color: '#B8962E' }}>{b.title}</span>
+                ))}
               </div>
-            ))}
-            <div className="up-timeline-item" style={{ opacity: 0.35 }}>
-              <div className="up-timeline-dot up-timeline-dot--placeholder" />
-              <div className="up-timeline-label">[ Next ]</div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* Raw Draft Modal */}
-      {showRawModal && (
-        <div className="up-modal-overlay" onClick={e => e.target === e.currentTarget && setShowRawModal(false)}>
-          <div className="up-modal" style={isMobile ? { width: '100%', maxHeight: '100vh', borderRadius: 0, height: '100vh' } : undefined}>
-            <div className="up-modal-header">
-              <div>
-                <div className="up-modal-label">CLAUDE</div>
-                <div className="up-modal-title">Structure Universe From Raw Draft</div>
-              </div>
-              <button className="up-close-btn" onClick={() => setShowRawModal(false)}>✕</button>
-            </div>
-            <div className="up-modal-body">
-              <p className="up-modal-hint">
-                Paste your messy world notes, lore, philosophy, or themes. Claude will structure them into description, PNOS beliefs, world rules, core themes, and narrative economy. You review before saving.
-              </p>
-              <textarea
-                className="up-textarea"
-                style={{ minHeight: 260 }}
-                placeholder='Paste your raw universe notes here…'
-                value={rawDraft}
-                onChange={e => setRawDraft(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="up-modal-footer">
-              <button className="up-btn-secondary" onClick={() => setShowRawModal(false)}>Cancel</button>
-              <button
-                className="up-btn-primary"
-                style={{ opacity: structuring ? 0.6 : 1 }}
-                onClick={structureFromRaw}
-                disabled={structuring || !rawDraft.trim()}
-              >
-                {structuring ? (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span>Structuring</span>
-                    <LoadingDots />
-                  </span>
-                ) : '✦ Structure with Claude'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ══════════════════════════════════════════════════════════════════════════
-//  SHARED COMPONENTS
-// ══════════════════════════════════════════════════════════════════════════
-
-function Field({ label, hint, children }) {
-  return (
-    <div className="up-field">
-      <div className="up-field-header">
-        <label className="up-field-label">{label}</label>
-        {hint && <span className="up-field-hint">{hint}</span>}
+      {/* Quick Links */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        {[
+          { icon: '🎭', label: 'Producer Mode', route: showId ? `/shows/${showId}/world?tab=overview` : '/shows' },
+          { icon: '👥', label: 'Characters', route: '/character-registry?view=world' },
+          { icon: '🔗', label: 'Relationships', route: '/world-studio?tab=relationships' },
+          { icon: '📖', label: 'Show Bible', route: '/show-bible' },
+        ].map(link => (
+          <button key={link.label} onClick={() => navigate(link.route)} style={{
+            background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '14px 16px',
+            cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+            transition: 'all 0.15s',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#B8962E'; e.currentTarget.style.background = '#FAFAF7'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#fff'; }}
+          >
+            <span style={{ fontSize: 22 }}>{link.icon}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>{link.label}</span>
+          </button>
+        ))}
       </div>
-      {children}
     </div>
   );
 }
-
-function LoadingDots() {
-  return (
-    <span style={{ display: 'inline-flex', gap: 3 }}>
-      {[0,1,2].map(i => (
-        <span key={i} style={{
-          width: 4, height: 4, borderRadius: '50%',
-          background: '#b0922e', display: 'inline-block',
-          animation: 'pulse 1.2s ease-in-out infinite',
-          animationDelay: `${i * 0.2}s`,
-        }} />
-      ))}
-    </span>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="up-loading">
-      Loading universe…
-    </div>
-  );
-}
-
-function ErrorState({ onRetry }) {
-  return (
-    <div className="up-error">
-      <div className="up-error-msg">
-        Could not load universe data.
-      </div>
-      <button className="up-btn-secondary" onClick={onRetry}>Retry</button>
-    </div>
-  );
-}
-
-// Styles migrated to UniversePage.css — this stub kept for any edge-case references
-const s = {
-  _migrated: true,
-};
-
