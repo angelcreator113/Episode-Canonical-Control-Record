@@ -439,41 +439,58 @@ Lala does not know she was built. The world she lives in feels complete and self
         const { Op } = require('sequelize');
         const cityName = (city || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         const displayName = profile.display_name || profile.handle || 'Creator';
+        const category = profile.content_category || '';
 
-        // Always create a personal home/studio for each creator
-        const slug = `${(displayName).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-place`;
-        const tier = profile.follower_tier;
-        const propertyType = tier === 'mega' ? 'penthouse' : tier === 'macro' ? 'apartment' : tier === 'mid' ? 'loft' : 'studio';
-        const propertyLabel = tier === 'mega' ? 'Penthouse' : tier === 'macro' ? 'Apartment' : tier === 'mid' ? 'Loft' : 'Studio';
+        // Map archetype/category to venue type they'd own or work from
+        const CREATOR_VENUE_MAP = {
+          fashion: { type: 'boutique', label: 'Showroom' },
+          beauty: { type: 'salon', label: 'Studio' },
+          music: { type: 'recording_studio', label: 'Studio' },
+          entertainment: { type: 'recording_studio', label: 'Studio' },
+          fitness: { type: 'gym', label: 'Gym' },
+          food: { type: 'restaurant', label: 'Kitchen' },
+          lifestyle: { type: 'cafe', label: 'Space' },
+          tech: { type: 'coworking', label: 'Lab' },
+          art: { type: 'gallery', label: 'Gallery' },
+        };
+        const venueInfo = CREATOR_VENUE_MAP[category] || CREATOR_VENUE_MAP[category?.split('/')[0]] || { type: 'other', label: 'Studio' };
+        const slug = `${(displayName).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${venueInfo.label.toLowerCase()}`;
 
+        // Create their signature venue — this is where they work and host
         let homeLoc = await db.WorldLocation.create({
-          name: `${displayName}'s ${propertyLabel}`,
+          name: `${displayName}'s ${venueInfo.label}`,
           slug,
-          location_type: 'property',
-          property_type: propertyType,
+          location_type: 'venue',
+          venue_type: venueInfo.type,
           city: cityName,
-          description: `${displayName}'s personal ${propertyLabel.toLowerCase()} in ${cityName}. This is where they create content, get ready, and live their real life.`,
+          description: `${displayName}'s signature ${venueInfo.label.toLowerCase()} in ${cityName}. Where they create, host, and build their brand.`,
           narrative_role: 'sanctuary',
         }).catch(() => null);
 
-        // Fallback if slug conflict — just find any property
+        // Fallback if slug conflict
         if (!homeLoc) {
           homeLoc = await db.WorldLocation.findOne({
-            where: { city: { [Op.iLike]: `%${cityName}%` }, location_type: 'property' },
+            where: { city: { [Op.iLike]: `%${cityName}%` }, location_type: 'venue' },
             order: db.sequelize.random(),
           }).catch(() => null);
         }
         if (homeLoc) {
           await profile.update({ home_location_id: homeLoc.id });
         }
-        // Also pick up to 3 random venues in their city as frequent venues
+
+        // Pick up to 3 existing venues in their city as frequent hangouts
         const cityVenues = await db.WorldLocation.findAll({
-          where: { city: { [Op.iLike]: `%${cityName}%` }, location_type: 'venue' },
+          where: {
+            city: { [Op.iLike]: `%${cityName}%` },
+            location_type: 'venue',
+            ...(homeLoc ? { id: { [Op.ne]: homeLoc.id } } : {}),
+          },
           order: db.sequelize.random(),
           limit: 3,
         }).catch(() => []);
-        if (cityVenues.length > 0) {
-          await profile.update({ frequent_venues: cityVenues.map(v => v.id) });
+        if (cityVenues.length > 0 || homeLoc) {
+          const venueIds = [...(homeLoc ? [homeLoc.id] : []), ...cityVenues.map(v => v.id)];
+          await profile.update({ frequent_venues: venueIds });
         }
       } catch (locErr) {
         console.warn('[socialProfiles] auto-location assignment:', locErr?.message);
