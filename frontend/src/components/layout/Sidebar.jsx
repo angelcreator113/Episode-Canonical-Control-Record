@@ -29,10 +29,7 @@ function buildNav(shows) {
       items: [
         ...(showId ? [
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=overview` },
-          { icon: '🎞️', label: 'Scene Sets', route: `/shows/${showId}/world?tab=scene-sets` },
-        ] : [
-          { icon: '🎞️', label: 'Scene Sets', route: '/scene-library' },
-        ]),
+        ] : []),
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
       ],
     },
