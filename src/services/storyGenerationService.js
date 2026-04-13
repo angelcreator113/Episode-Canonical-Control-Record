@@ -91,7 +91,10 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
       const [rows] = await sequelize.query(
         `SELECT sp.handle, sp.display_name, sp.creator_name, sp.archetype, sp.posting_voice,
                 rc.display_name as char_name, rc.core_belief, rc.role_type, rc.depth_level,
-                rc.personality, rc.pressure_type
+                rc.personality, rc.pressure_type,
+                rc.core_wound, rc.core_desire, rc.core_fear,
+                rc.mask_persona, rc.truth_persona, rc.therapy_primary_defense,
+                rc.signature_trait, rc.character_archetype
          FROM social_profiles sp
          LEFT JOIN registry_characters rc ON rc.id = sp.registry_character_id
          WHERE sp.id IN (:ids) AND sp.deleted_at IS NULL`,
@@ -109,11 +112,17 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
 
   const charContext = characters.map(c => {
     let block = `${c.creator_name || c.display_name || c.handle} (@${c.handle})`;
-    if (c.core_belief) block += ` — believes: "${c.core_belief}"`;
     if (c.role_type) block += ` [${c.role_type}]`;
     if (c.depth_level) block += ` (depth: ${c.depth_level})`;
+    if (c.core_belief) block += `\n    Believes: "${c.core_belief}"`;
+    if (c.core_wound) block += `\n    Wound: "${c.core_wound}"`;
+    if (c.core_desire) block += `\n    Desires: "${c.core_desire}"`;
+    if (c.core_fear) block += `\n    Fears: "${c.core_fear}"`;
+    if (c.mask_persona && c.truth_persona) block += `\n    Shows: ${c.mask_persona.slice(0, 50)} | Underneath: ${c.truth_persona.slice(0, 50)}`;
+    if (c.therapy_primary_defense) block += `\n    Defense mechanism: ${c.therapy_primary_defense}`;
+    if (c.signature_trait) block += `\n    Signature trait: ${c.signature_trait}`;
     return block;
-  }).join('\n') || 'No character details';
+  }).join('\n\n') || 'No character details';
 
   const prompt = `You are writing a ${spec.name.toLowerCase()} based on an episode of "Styling Adventures with Lala" — a luxury fashion life simulator in the LalaVerse franchise (Mary-Kate & Ashley style).
 
