@@ -352,6 +352,78 @@ async function completeEpisode(episodeId, showId, sequelize) {
     } catch { /* non-blocking */ }
   }
 
+  // ── 16. Auto-push episode outcome to franchise brain ──
+  try {
+    const episodeKnowledge = [
+      {
+        title: `Episode ${episode.episode_number || '?'}: ${episode.title || 'Untitled'} — ${evalResult.tier_final.toUpperCase()} Result`,
+        content: `Episode "${episode.title}" completed with tier ${evalResult.tier_final.toUpperCase()} (score: ${evalResult.score}/100).
+Event: ${event?.name || 'No event'}. Venue: ${event?.venue_name || 'Unknown'}.
+Stat changes: ${Object.entries(mergedDeltas).filter(([,v]) => v !== 0).map(([k,v]) => `${k}: ${v >= 0 ? '+' : ''}${v}`).join(', ')}.
+Final state: coins=${newState.coins}, reputation=${newState.reputation}, influence=${newState.influence}, brand_trust=${newState.brand_trust}, stress=${newState.stress}.
+Social tasks: ${socialBonuses.detail?.completed || 0}/${socialBonuses.detail?.total || 0} completed. Outfit: ${outfitPieces.length} pieces.
+${narrativeLines.short || ''}`,
+        category: 'narrative',
+        severity: evalResult.tier_final === 'slay' ? 'important' : 'context',
+        always_inject: false,
+        applies_to: JSON.stringify(['episode_history', 'character_arc', evalResult.tier_final]),
+        source_document: 'episode-completion',
+        source_version: FORMULA_VERSION,
+        extracted_by: 'episode_completion_pipeline',
+        status: 'active',
+        review_note: `Auto-generated on episode completion — ${new Date().toISOString()}`,
+        injection_count: 0,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    ];
+
+    // Add character state snapshot as knowledge
+    episodeKnowledge.push({
+      title: `Character State after Episode ${episode.episode_number || '?'}`,
+      content: `JustAWoman's stats after Episode ${episode.episode_number}: coins=${newState.coins}, reputation=${newState.reputation}, influence=${newState.influence}, brand_trust=${newState.brand_trust}, stress=${newState.stress}. ${newState.stress >= 8 ? 'STRESS IS CRITICAL — character is near breakdown.' : newState.stress >= 5 ? 'Stress is elevated — character is feeling pressure.' : 'Stress is manageable.'} ${newState.reputation >= 8 ? 'Reputation is strong — character is well-known.' : ''} ${newState.influence >= 8 ? 'Influence is high — character moves culture.' : ''}`,
+      category: 'character',
+      severity: 'important',
+      always_inject: true,
+      applies_to: JSON.stringify(['character_state', 'justawoman', 'current_stats']),
+      source_document: 'episode-completion',
+      source_version: FORMULA_VERSION,
+      extracted_by: 'episode_completion_pipeline',
+      status: 'active',
+      review_note: `Auto-generated character state snapshot — Episode ${episode.episode_number}`,
+      injection_count: 0,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    // Supersede previous character state snapshot
+    await sequelize.query(
+      `UPDATE franchise_knowledge SET status = 'superseded', updated_at = NOW()
+       WHERE source_document = 'episode-completion' AND category = 'character'
+       AND applies_to::text LIKE '%current_stats%' AND status = 'active'`,
+    ).catch(() => {});
+
+    // Insert new knowledge entries
+    await sequelize.query(
+      `INSERT INTO franchise_knowledge (title, content, category, severity, always_inject, applies_to, source_document, source_version, extracted_by, status, review_note, injection_count, created_at, updated_at)
+       VALUES ${episodeKnowledge.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+      { replacements: episodeKnowledge.flatMap(e => [e.title, e.content, e.category, e.severity, e.always_inject, e.applies_to, e.source_document, e.source_version, e.extracted_by, e.status, e.review_note, e.injection_count, e.created_at, e.updated_at]) }
+    ).catch(async () => {
+      // Fallback: insert one at a time if bulk fails
+      for (const entry of episodeKnowledge) {
+        await sequelize.query(
+          `INSERT INTO franchise_knowledge (title, content, category, severity, always_inject, applies_to, source_document, source_version, extracted_by, status, review_note, injection_count, created_at, updated_at)
+           VALUES (:title, :content, :category, :severity, :always_inject, :applies_to, :source_document, :source_version, :extracted_by, :status, :review_note, :injection_count, :created_at, :updated_at)`,
+          { replacements: entry }
+        ).catch(() => {});
+      }
+    });
+
+    console.log(`[Franchise Brain] Auto-pushed ${episodeKnowledge.length} entries for Episode ${episode.episode_number}`);
+  } catch (brainErr) {
+    console.warn('[Franchise Brain] Auto-push failed (non-blocking):', brainErr.message);
+  }
+
   return {
     episode_id: episodeId,
     evaluation: {

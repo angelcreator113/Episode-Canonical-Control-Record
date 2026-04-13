@@ -51,8 +51,20 @@ router.post('/franchise-brain/seed', optionalAuth, async (req, res) => {
     const { force = false } = req.body;
     const path = require('path');
 
-    // Check existing count
-    const existing = await db.FranchiseKnowledge.count();
+    // Check if table exists first
+    let existing = 0;
+    try {
+      existing = await db.FranchiseKnowledge.count();
+    } catch (tableErr) {
+      // Table doesn't exist — try to sync it
+      try {
+        await db.FranchiseKnowledge.sync();
+        existing = 0;
+      } catch (syncErr) {
+        return res.status(500).json({ error: 'franchise_knowledge table could not be created: ' + syncErr.message });
+      }
+    }
+
     if (existing > 0 && !force) {
       return res.status(409).json({
         error: `Show Brain already has ${existing} entries. Pass force: true to re-seed.`,
