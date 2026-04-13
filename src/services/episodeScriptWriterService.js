@@ -507,6 +507,7 @@ ${(() => {
       }
 
       block += `\n  SCRIPT DIRECTIVE: When this character speaks, use THEIR voice. ${p.depth_level === 'alive' ? `Show their wound patterns and defense mechanisms in subtle behavior.${p.core_wound ? ` Their wound ("${p.core_wound.slice(0, 60)}") should bleed through in moments of pressure.` : ''}${p.mask_persona ? ` They present as ${p.mask_persona.slice(0, 40)} but underneath they are ${(p.truth_persona || 'different').slice(0, 40)}.` : ''}` : p.depth_level === 'active' ? `Include internal contradictions — what they say vs what they mean.${p.therapy_primary_defense ? ` Default defense: ${p.therapy_primary_defense}.` : ''}` : 'Keep them consistent with their archetype.'}`;
+
       return block;
     }).join('\n\n');
     socialBlock += '\n';
