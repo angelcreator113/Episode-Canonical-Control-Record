@@ -3277,45 +3277,68 @@ router.delete('/world/locations/:id', optionalAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /world/locations/seed-infrastructure — seed WorldLocation from hardcoded infrastructure
+// POST /world/locations/seed-infrastructure — generate full DREAM city infrastructure
 router.post('/world/locations/seed-infrastructure', optionalAuth, async (req, res) => {
   try {
-    const INFRA = [
-      { name: 'Velvet City', location_type: 'exterior', narrative_role: 'hub', description: 'The fashion capital — haute couture meets street culture.', sensory_details: { sight: 'Neon-lit runways reflected in rain-slicked cobblestones', sound: 'The click of heels on marble, camera shutters', smell: 'French perfume mixed with espresso', texture: 'Silk, sequins, velvet upholstery', atmosphere: 'Glamorous and competitive, beauty as currency' } },
-      { name: 'Glow District', location_type: 'exterior', narrative_role: 'hub', description: 'Beauty/wellness empire district — salons, labs, spas.', sensory_details: { sight: 'Pink-tinged lighting, glass storefronts with gold lettering', sound: 'Gentle spa music, bubbling serums', smell: 'Rose water, shea butter, botanical extracts', texture: 'Smooth marble counters, plush towels', atmosphere: 'Curated perfection hiding fierce competition' } },
-      { name: 'Pulse City', location_type: 'exterior', narrative_role: 'hub', description: 'Entertainment capital — music, TV, film studios.', sensory_details: { sight: 'Giant LED billboards, red carpet flash photography', sound: 'Bass drops, crowd cheers, camera drones', smell: 'Popcorn, fog machine haze, champagne', texture: 'Leather backstage couches, VIP wristbands', atmosphere: 'Electric and relentless, fame as oxygen' } },
-      { name: 'Creator Harbor', location_type: 'exterior', narrative_role: 'hub', description: 'Influencer culture district — studios, brand HQs, pop-ups.', sensory_details: { sight: 'Ring lights in every window, pastel-colored facades', sound: 'Notification pings, "Hey guys welcome back"', smell: 'Fresh merch packaging, coffee', texture: 'Phone screens, ring light warmth', atmosphere: 'Performative authenticity, everyone is always on' } },
-      { name: 'Horizon City', location_type: 'exterior', narrative_role: 'hub', description: 'Tech/startup district — innovation labs, venture capital.', sensory_details: { sight: 'Glass towers, holographic pitch decks, green energy grids', sound: 'Keyboard clicks, startup pitch bells, AI voice assistants', smell: 'New electronics, ozone, matcha lattes', texture: 'Smooth glass, ergonomic everything', atmosphere: 'Optimistic futurism, disruption worship' } },
-      { name: 'Velvet Academy', location_type: 'interior', narrative_role: 'sanctuary', description: 'Fashion design school — atelier workshops, fabric libraries.', sensory_details: { sight: 'Mannequins draped in student work, mood boards', sound: 'Sewing machines whirring, fabric scissors', smell: 'Fresh linen, dye chemicals, leather', texture: 'Raw silk, pattern paper, chalk dust', atmosphere: 'Creative pressure-cooker, mentorship and rivalry' } },
-      { name: 'Glow Institute', location_type: 'interior', narrative_role: 'sanctuary', description: 'Beauty science school — labs, formulation studios.', sensory_details: { sight: 'Chemical beakers with pink liquids, skin scan monitors', sound: 'Centrifuges humming, pH meter beeps', smell: 'Essential oils, lab-grade chemicals', texture: 'Latex gloves, smooth glass vials', atmosphere: 'Where art meets chemistry, innovation under pressure' } },
-      { name: 'Nova Studios', location_type: 'interior', narrative_role: 'battleground', description: 'Major entertainment production studio — sound stages, editing bays.', sensory_details: { sight: 'Soundstage lights, green screens, monitors everywhere', sound: 'Director\'s calls, playback speakers, walkie-talkies', smell: 'Gaffer tape, craft services coffee', texture: 'Heavy studio doors, camera rigs', atmosphere: 'High stakes, everyone replaceable, magic when it works' } },
-      { name: 'Dream Market Collective', location_type: 'interior', narrative_role: 'crossroads', description: 'Brand deal nexus — meeting rooms, negotiation suites.', sensory_details: { sight: 'Projector pitch decks, contract paperwork, brand logos', sound: 'Quiet conference room tension, pen clicks', smell: 'Fresh paper, perfume samples', texture: 'Mahogany tables, leather portfolios', atmosphere: 'Where art sells its soul — or makes its fortune' } },
-      { name: 'The Underground', location_type: 'interior', narrative_role: 'haven', description: 'Off-grid creative space — speakeasies, underground galleries, after-hours clubs.', sensory_details: { sight: 'Dim amber lighting, graffiti art, exposed brick', sound: 'Low bass, whispered conversations, jazz', smell: 'Candle wax, whiskey, oil paint', texture: 'Rough brick, velvet curtains, worn wooden stools', atmosphere: 'Raw and real — where people drop the performance' } },
-    ];
     const WorldLocation = models.WorldLocation;
+    if (!WorldLocation) return res.status(500).json({ error: 'WorldLocation model not available' });
+
+    // Full DREAM city infrastructure — cities, districts, venues, properties, landmarks
+    const DREAM_INFRA = [
+      // ── D: DAZZLE DISTRICT (Fashion & Luxury) ──
+      { name: 'Dazzle District', location_type: 'city', city: 'Dazzle District', narrative_role: 'hub', description: 'Fashion capital of the LalaVerse. Couture houses, runway shows, designer studios. Every sidewalk is a runway.', sensory_details: { sight: 'Neon-lit runways reflected in rain-slicked cobblestones', sound: 'Click of heels on marble, camera shutters', smell: 'French perfume mixed with espresso', atmosphere: 'Glamorous and competitive, beauty as currency' } },
+      { name: 'Runway Quarter', location_type: 'district', city: 'Dazzle District', description: 'The heart of fashion — where shows happen and deals are made.' },
+      { name: 'Boutique Row', location_type: 'street', city: 'Dazzle District', description: 'High-end shopping street lined with designer boutiques and pop-ups.' },
+      { name: 'Atelier Circle', location_type: 'venue', city: 'Dazzle District', venue_type: 'gallery', narrative_role: 'battleground', description: 'The premier fashion show venue. Atelier Circuit shows happen here.', venue_details: { capacity: '500', dress_code: 'Black Tie', price_level: '5', vibe_tags: ['couture', 'exclusive', 'high-stakes'] } },
+      { name: 'Dazzle Academy', location_type: 'venue', city: 'Dazzle District', venue_type: 'school', narrative_role: 'sanctuary', description: 'World\'s top fashion school — atelier workshops, fabric libraries, student runway shows.', sensory_details: { sight: 'Mannequins draped in student work, mood boards', sound: 'Sewing machines whirring', smell: 'Fresh linen, dye chemicals', atmosphere: 'Creative pressure-cooker, mentorship and rivalry' } },
+      { name: 'Dazzle House HQ', location_type: 'venue', city: 'Dazzle District', venue_type: 'office', description: 'Headquarters of Dazzle House — the most powerful fashion corporation in the LalaVerse.' },
+      { name: 'The Style Market', location_type: 'venue', city: 'Dazzle District', venue_type: 'boutique', description: 'Where street style meets luxury. Emerging designers get discovered here.' },
+      { name: 'Lala\'s Penthouse', location_type: 'property', city: 'Dazzle District', property_type: 'penthouse', narrative_role: 'sanctuary', description: 'JustAWoman\'s luxury penthouse overlooking the Runway Quarter.' },
+
+      // ── R: RADIANCE ROW (Beauty & Wellness) ──
+      { name: 'Radiance Row', location_type: 'city', city: 'Radiance Row', narrative_role: 'hub', description: 'Beauty & wellness heartland. Skincare labs, salons, beauty schools. Reinvention is the local religion.', sensory_details: { sight: 'Pink-tinged lighting, glass storefronts with gold lettering', sound: 'Gentle spa music, bubbling serums', smell: 'Rose water, shea butter, botanical extracts', atmosphere: 'Curated perfection hiding fierce competition' } },
+      { name: 'Salon Strip', location_type: 'street', city: 'Radiance Row', description: 'The most famous beauty street — every salon, lash studio, and nail bar worth knowing.' },
+      { name: 'Glow Labs HQ', location_type: 'venue', city: 'Radiance Row', venue_type: 'office', description: 'Headquarters of Glow Labs — skincare breakthroughs and viral beauty products.' },
+      { name: 'Radiance Institute', location_type: 'venue', city: 'Radiance Row', venue_type: 'school', narrative_role: 'sanctuary', description: 'Most prestigious beauty academy. Graduates dominate Glow Week.', sensory_details: { sight: 'Chemical beakers with pink liquids, skin scan monitors', sound: 'Centrifuges humming', smell: 'Essential oils, lab-grade chemicals', atmosphere: 'Where art meets chemistry' } },
+      { name: 'The Glow Spa', location_type: 'venue', city: 'Radiance Row', venue_type: 'spa', narrative_role: 'sanctuary', description: 'Ultra-luxury wellness retreat. Where influencers recover between scandals.', venue_details: { price_level: '5', dress_code: 'Resort Wear', vibe_tags: ['wellness', 'luxury', 'retreat'] } },
+
+      // ── E: ECHO PARK (Entertainment & Nightlife) ──
+      { name: 'Echo Park', location_type: 'city', city: 'Echo Park', narrative_role: 'hub', description: 'Entertainment & nightlife hub. Music studios, comedy clubs, creator houses. Something here becomes a meme by morning.', sensory_details: { sight: 'Giant LED billboards, red carpet flash photography', sound: 'Bass drops, crowd cheers, camera drones', smell: 'Fog machine haze, champagne', atmosphere: 'Electric and relentless, fame as oxygen' } },
+      { name: 'Music Row', location_type: 'street', city: 'Echo Park', description: 'Recording studios, music venues, and producer offices line both sides.' },
+      { name: 'Club Neon', location_type: 'venue', city: 'Echo Park', venue_type: 'club', narrative_role: 'battleground', description: 'The nightclub where careers are made and destroyed. The Nightlife Queen\'s domain.', venue_details: { hours: '10PM - 4AM', capacity: '800', dress_code: 'Trendy/Upscale', price_level: '4', vibe_tags: ['nightlife', 'exclusive', 'VIP'] } },
+      { name: 'Nova Studios', location_type: 'venue', city: 'Echo Park', venue_type: 'recording_studio', narrative_role: 'battleground', description: 'Major entertainment production studio — sound stages, editing bays, content creation.', sensory_details: { sight: 'Soundstage lights, green screens', sound: 'Director calls, playback speakers', atmosphere: 'High stakes, magic when it works' } },
+      { name: 'The Comedy Cellar', location_type: 'venue', city: 'Echo Park', venue_type: 'theater', description: 'Underground comedy venue. The Viral Comedian got her start here.' },
+
+      // ── A: ASCENT TOWER (Tech & Innovation) ──
+      { name: 'Ascent Tower', location_type: 'city', city: 'Ascent Tower', narrative_role: 'hub', description: 'Tech & innovation district. Digital platforms, creator economy tools, startups. Building the tools everyone uses.', sensory_details: { sight: 'Glass towers, holographic pitch decks', sound: 'Keyboard clicks, startup pitch bells', smell: 'New electronics, matcha lattes', atmosphere: 'Optimistic futurism, disruption worship' } },
+      { name: 'Innovation Hub', location_type: 'venue', city: 'Ascent Tower', venue_type: 'coworking', description: 'Open-plan innovation space where platform founders and engineers collaborate.' },
+      { name: 'Ascent Tech Institute', location_type: 'venue', city: 'Ascent Tower', venue_type: 'school', narrative_role: 'sanctuary', description: 'Technology and innovation school. Many LalaVerse platform founders came from here.' },
+      { name: 'Dream Market Collective', location_type: 'venue', city: 'Ascent Tower', venue_type: 'office', narrative_role: 'crossroads', description: 'The platform creators use to sell. Brand deal nexus, negotiation suites.', sensory_details: { sight: 'Projector pitch decks, contract paperwork', sound: 'Quiet conference room tension', atmosphere: 'Where art sells its soul — or makes its fortune' } },
+      { name: 'Trend Summit Arena', location_type: 'venue', city: 'Ascent Tower', venue_type: 'theater', description: 'Annual Trend Summit happens here. Where the future of creator economy is debated.' },
+
+      // ── M: MAVERICK HARBOR (Creator Economy & Counter-culture) ──
+      { name: 'Maverick Harbor', location_type: 'city', city: 'Maverick Harbor', narrative_role: 'hub', description: 'Creator economy & counter-culture. Content houses, podcast networks, underground scenes. Fame is suspicious here.', sensory_details: { sight: 'Ring lights in windows, pastel facades, warehouse murals', sound: '"Hey guys welcome back", podcast intros', smell: 'Fresh merch packaging, coffee', atmosphere: 'Collaborative, entrepreneurial, anti-algorithm' } },
+      { name: 'Creator Studios Row', location_type: 'street', city: 'Maverick Harbor', description: 'Content creator studios, collab spaces, and editing suites.' },
+      { name: 'Podcast Row', location_type: 'district', city: 'Maverick Harbor', description: 'Every major podcast network and audio studio in the LalaVerse.' },
+      { name: 'The Underground', location_type: 'venue', city: 'Maverick Harbor', venue_type: 'bar', narrative_role: 'haven', description: 'Off-grid speakeasy and gallery. Where people drop the performance.', sensory_details: { sight: 'Dim amber lighting, graffiti art, exposed brick', sound: 'Low bass, whispered conversations, jazz', smell: 'Candle wax, whiskey, oil paint', atmosphere: 'Raw and real' }, venue_details: { hours: '8PM - 3AM', dress_code: 'Come as you are', price_level: '3', vibe_tags: ['underground', 'authentic', 'creative'] } },
+      { name: 'Harbor Docks', location_type: 'landmark', city: 'Maverick Harbor', description: 'The waterfront where Creator Cruise departures happen. Marina with yachts and houseboats.' },
+      { name: 'The Creator Conservatory', location_type: 'venue', city: 'Maverick Harbor', venue_type: 'school', narrative_role: 'sanctuary', description: 'Content creation and media school. The school that legitimized being a creator.' },
+      { name: 'Pulse Media Network', location_type: 'venue', city: 'Maverick Harbor', venue_type: 'office', description: 'Talent management and influencer partnerships HQ. The middleman with enormous invisible power.' },
+    ];
+
     let created = 0;
-    for (const item of INFRA) {
+    for (const item of DREAM_INFRA) {
       const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      const exists = WorldLocation
-        ? await WorldLocation.findOne({ where: { slug } })
-        : (await Q(req, 'SELECT id FROM world_locations WHERE slug = :slug LIMIT 1', { replacements: { slug } }))[0];
+      const exists = await WorldLocation.findOne({ where: { slug } }).catch(() => null);
       if (exists) continue;
-      if (WorldLocation) {
-        await WorldLocation.create({ ...item, slug });
-      } else {
-        const id = require('uuid').v4();
-        await sequelize.query(
-          `INSERT INTO world_locations (id, name, slug, description, location_type, sensory_details, narrative_role, created_at, updated_at)
-           VALUES (:id, :name, :slug, :desc, :lt, :sd::jsonb, :nr, NOW(), NOW())`,
-          { replacements: { id, name: item.name, slug, desc: item.description, lt: item.location_type, sd: JSON.stringify(item.sensory_details), nr: item.narrative_role } }
-        );
-      }
+      await WorldLocation.create({ ...item, slug });
       created++;
     }
-    res.json({ success: true, created, total: INFRA.length, message: `Seeded ${created} new locations` });
+
+    res.json({ success: true, created, total: DREAM_INFRA.length, message: `Seeded ${created} DREAM locations across 5 cities` });
   } catch (err) {
     console.error('Seed infrastructure error:', err.message);
-    res.status(500).json({ error: err.message, hint: 'Check if migrations have been run — new columns may be missing' });
+    res.status(500).json({ error: err.message });
   }
 });
 
