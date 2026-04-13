@@ -26,19 +26,65 @@ const EpisodeDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTabState] = useState(searchParams.get('tab') || 'overview');
+  const [epSubTab, setEpSubTab] = useState(null);
 
   const [sceneView, setSceneView] = useState('composer');
   const [tabLoading, setTabLoading] = useState(false);
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [episodeScenes, setEpisodeScenes] = useState([]);
 
+  // Tab structure: 4 main tabs with sub-tabs
+  const EP_TABS = [
+    { key: 'overview', icon: '📋', label: 'Overview' },
+    { key: 'scripts', icon: '📝', label: 'Script' },
+    { key: 'production', icon: '🎬', label: 'Production', subs: [
+      { key: 'assets', label: 'Assets' },
+      { key: 'scenes', label: 'Scenes' },
+      { key: 'wardrobe', label: 'Wardrobe' },
+      { key: 'checklist', label: 'Checklist' },
+    ]},
+    { key: 'results', icon: '👑', label: 'Results', subs: [
+      { key: 'evaluation', label: 'Evaluation' },
+      { key: 'distribution', label: 'Distribution' },
+    ]},
+  ];
+
+  // Map old tab keys to new structure
+  const resolveEpTab = (tab) => {
+    const map = {
+      'assets': ['production', 'assets'],
+      'scenes': ['production', 'scenes'],
+      'wardrobe': ['production', 'wardrobe'],
+      'checklist': ['production', 'checklist'],
+      'production': ['production', 'assets'],
+      'evaluation': ['results', 'evaluation'],
+      'distribution': ['results', 'distribution'],
+    };
+    return map[tab] || [tab, null];
+  };
+
   // Tab management with URL persistence
   const setActiveTab = (tab) => {
     setTabLoading(true);
     setActiveTabState(tab);
+    const epTab = EP_TABS.find(t => t.key === tab);
+    setEpSubTab(epTab?.subs?.[0]?.key || null);
     setSearchParams({ tab });
     setTimeout(() => setTabLoading(false), 300);
   };
+
+  // Resolve initial tab on mount
+  React.useEffect(() => {
+    const initial = searchParams.get('tab') || 'overview';
+    const [main, sub] = resolveEpTab(initial);
+    if (main !== initial) {
+      setActiveTabState(main);
+      if (sub) setEpSubTab(sub);
+    } else {
+      const epTab = EP_TABS.find(t => t.key === main);
+      if (epTab?.subs && !epSubTab) setEpSubTab(epTab.subs[0].key);
+    }
+  }, []);
 
   // Keyboard shortcuts for tab navigation
   useEffect(() => {
@@ -611,84 +657,39 @@ const EpisodeDetail = () => {
       {/* Main Content Wrapper */}
       <div className="ed-wrap">
 
-        {/* Compact Tabs with Icons */}
+        {/* Main Tabs */}
         <div className="ed-tabs-modern">
-          <button
-            className={`ed-tab ${activeTab === 'overview' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('overview')}
-            title="Overview"
-          >
-            <span className="ed-tab-icon">📋</span>
-            <span className="ed-tab-label">Overview</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'scripts' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('scripts')}
-            title="Scripts"
-          >
-            <span className="ed-tab-icon">📝</span>
-            <span className="ed-tab-label">Script</span>
-          </button>
-
-          <button
-            className={`ed-tab ${activeTab === 'assets' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('assets')}
-            title="Assets"
-          >
-            <span className="ed-tab-icon">🎨</span>
-            <span className="ed-tab-label">Assets</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'scenes' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('scenes')}
-            title="Scenes"
-          >
-            <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">Scenes</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'wardrobe' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('wardrobe')}
-            title="Wardrobe"
-          >
-            <span className="ed-tab-icon">👗</span>
-            <span className="ed-tab-label">Wardrobe</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'distribution' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('distribution')}
-            title="Distribution"
-          >
-            <span className="ed-tab-icon">📤</span>
-            <span className="ed-tab-label">Distribution</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'production' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('production')}
-            title="Production Checklist"
-          >
-            <span className="ed-tab-icon">✅</span>
-            <span className="ed-tab-label">Production</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'evaluation' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('evaluation')}
-            title="Evaluation"
-          >
-            <span className="ed-tab-icon">👑</span>
-            <span className="ed-tab-label">Evaluation</span>
-          </button>
-          {/* TEMPORARILY DISABLED - YouTube Training feature in development
-          <button
-            className={`ed-tab ${activeTab === 'youtube' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('youtube')}
-            title="YouTube Training"
-          >
-            <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">YouTube Training</span>
-          </button>
-          */}
+          {EP_TABS.map(t => (
+            <button key={t.key}
+              className={`ed-tab ${activeTab === t.key ? 'ed-tab-active' : ''}`}
+              onClick={() => setActiveTab(t.key)}
+              title={t.label}
+            >
+              <span className="ed-tab-icon">{t.icon}</span>
+              <span className="ed-tab-label">{t.label}</span>
+            </button>
+          ))}
         </div>
+        {/* Sub-tabs */}
+        {(() => {
+          const currentTab = EP_TABS.find(t => t.key === activeTab);
+          if (!currentTab?.subs) return null;
+          return (
+            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid rgba(0,0,0,0.04)', paddingLeft: 8 }}>
+              {currentTab.subs.map(s => (
+                <button key={s.key} onClick={() => setEpSubTab(s.key)} style={{
+                  padding: '6px 14px', background: 'transparent', border: 'none',
+                  borderBottom: epSubTab === s.key ? '2px solid #6366f1' : '2px solid transparent',
+                  color: epSubTab === s.key ? '#6366f1' : '#94a3b8',
+                  fontSize: 12, fontWeight: epSubTab === s.key ? 600 : 500,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Content Area */}
         <div className="ed-content">
@@ -711,7 +712,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Assets Tab */}
-        {activeTab === 'assets' && (
+        {activeTab === 'production' && epSubTab === 'assets' && (
           episode.show ? (
             <EpisodeAssetsTab episode={episode} show={episode.show} />
           ) : (
@@ -735,7 +736,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Scenes Tab */}
-        {activeTab === 'scenes' && (
+        {activeTab === 'production' && epSubTab === 'scenes' && (
           <EpisodeScenesTab
             episode={episode}
             onToast={(msg, type) => toast && toast[type] ? toast[type](msg) : console.log(msg)}
@@ -743,7 +744,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Wardrobe Tab */}
-        {activeTab === 'wardrobe' && (
+        {activeTab === 'production' && epSubTab === 'wardrobe' && (
           <div>
             {/* Unified wardrobe — event picker + outfit builder */}
             {episodeEvents.length > 0 ? (
@@ -797,12 +798,12 @@ const EpisodeDetail = () => {
         )}
 
         {/* Distribution Tab */}
-        {activeTab === 'distribution' && (
+        {activeTab === 'results' && epSubTab === 'distribution' && (
           <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
         )}
 
         {/* Production Tab */}
-        {activeTab === 'production' && (
+        {activeTab === 'production' && epSubTab === 'checklist' && (
           <EpisodeTodoList
             episodeId={episode.id}
             showId={episode?.show_id || episode?.showId}
@@ -811,7 +812,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Evaluation Tab */}
-        {activeTab === 'evaluation' && (() => {
+        {activeTab === 'results' && epSubTab === 'evaluation' && (() => {
           const evalJson = episode.evaluation_json
             ? (typeof episode.evaluation_json === 'string' ? JSON.parse(episode.evaluation_json) : episode.evaluation_json)
             : null;
