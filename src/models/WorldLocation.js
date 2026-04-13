@@ -146,6 +146,12 @@ module.exports = (sequelize) => {
         as: 'calendarEvents',
       });
     }
+    if (models.SocialProfile) {
+      WorldLocation.hasMany(models.SocialProfile, {
+        foreignKey: 'home_location_id',
+        as: 'residents',
+      });
+    }
   };
 
   return WorldLocation;

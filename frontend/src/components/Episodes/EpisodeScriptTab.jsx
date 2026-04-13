@@ -1,8 +1,10 @@
 // frontend/src/components/Episodes/EpisodeScriptTab.jsx
 // Beat-by-beat script reviewer with Show Brain AI rewrite
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import api from '../../services/api';
+
+const DreamMap = lazy(() => import('../DreamMap'));
 
 const BEAT_NAMES = [
   { number: 1,  name: 'Opening Ritual',        icon: '🎬', color: '#5C3D8F' },
@@ -97,7 +99,7 @@ function BeatSection({ beat, scenePlan, expanded, onToggle, onApprove, onEdit, o
             <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A1A' }}>{beat.name}</span>
             {beat.approved && <span style={{ background: '#D4AF37', color: '#FFF', padding: '1px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700 }}>✓ APPROVED</span>}
           </div>
-          {scene?.scene_set_name && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</div>}
+          {scene?.scene_set_name && <div onClick={(e) => { e.stopPropagation(); setShowMap(true); }} style={{ fontSize: 11, color: '#7ab3d4', marginTop: 2, cursor: 'pointer' }} title="Open DREAM Map">📍 {scene.scene_set_name}{scene?.angle_label ? ` · ${scene.angle_label}` : ''}</div>}
         </div>
         <span style={{ fontSize: 12, color: '#AAA' }}>{beat.lines.filter(l => { const p = parseLine(l); return p && !p.hidden; }).length} lines</span>
         <span style={{ fontSize: 12, color: '#CCC', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
@@ -131,6 +133,16 @@ export default function EpisodeScriptTab({ episode, show }) {
   const [toast, setToast] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
+  const [showMap, setShowMap] = useState(false);
+  const [mapLocations, setMapLocations] = useState([]);
+  const [mapImageUrl, setMapImageUrl] = useState(null);
+
+  // Load map data when map is opened
+  useEffect(() => {
+    if (!showMap) return;
+    fetch('/api/v1/world/locations').then(r => r.json()).then(d => setMapLocations(d.locations || [])).catch(() => {});
+    fetch('/api/v1/world/map').then(r => r.json()).then(d => { if (d.url) setMapImageUrl(d.url); }).catch(() => {});
+  }, [showMap]);
 
   useEffect(() => {
     if (!episodeId) return;
@@ -291,6 +303,21 @@ export default function EpisodeScriptTab({ episode, show }) {
           </button>
         </div>
       ))}
+
+      {/* DREAM Map Modal */}
+      {showMap && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowMap(false)}>
+          <div style={{ width: '90vw', maxWidth: 1200, maxHeight: '85vh', background: '#1a1a2e', borderRadius: 16, overflow: 'hidden', position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(0,0,0,0.4)' }}>
+              <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700, color: '#B8962E', letterSpacing: 2 }}>DREAM MAP</span>
+              <button onClick={() => setShowMap(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 16, cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>x</button>
+            </div>
+            <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading map...</div>}>
+              <DreamMap locations={mapLocations} mapImageUrl={mapImageUrl} />
+            </Suspense>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

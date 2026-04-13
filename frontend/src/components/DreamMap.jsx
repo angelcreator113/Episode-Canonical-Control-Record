@@ -104,6 +104,68 @@ export default function DreamMap({
   const [hoveredPin, setHoveredPin] = useState(null);
   const [activeCity, setActiveCity] = useState(null);
 
+  // ── Edit mode: drag cities to reposition ──
+  const [editMode, setEditMode] = useState(false);
+  const [cityPositions, setCityPositions] = useState({});
+  const [draggingCity, setDraggingCity] = useState(null);
+  const [positionsDirty, setPositionsDirty] = useState(false);
+
+  // Load saved positions
+  useEffect(() => {
+    fetch('/api/v1/world/map/positions').then(r => r.json()).then(d => {
+      if (d.positions && Object.keys(d.positions).length > 0) setCityPositions(d.positions);
+    }).catch(() => {});
+  }, []);
+
+  // Get effective position for a city (saved override or default)
+  const getCityPos = useCallback((city) => {
+    if (cityPositions[city.key]) return cityPositions[city.key];
+    return { x: city.x, y: city.y };
+  }, [cityPositions]);
+
+  // Handle city drag
+  const onCityDragStart = useCallback((e, cityKey) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setDraggingCity(cityKey);
+  }, []);
+
+  const onCityDragMove = useCallback((e) => {
+    if (!draggingCity || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    // Convert mouse position to % of container, accounting for pan/zoom
+    const rawX = e.clientX - rect.left;
+    const rawY = e.clientY - rect.top;
+    const x = ((rawX - transform.x) / transform.scale / rect.width) * 100;
+    const y = ((rawY - transform.y) / transform.scale / rect.height) * 100;
+    setCityPositions(prev => ({ ...prev, [draggingCity]: { x: Math.max(5, Math.min(95, x)), y: Math.max(5, Math.min(95, y)) } }));
+    setPositionsDirty(true);
+  }, [draggingCity, transform]);
+
+  const onCityDragEnd = useCallback(() => {
+    setDraggingCity(null);
+  }, []);
+
+  // Save positions
+  const savePositions = useCallback(async () => {
+    try {
+      await fetch('/api/v1/world/map/positions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ positions: cityPositions }),
+      });
+      setPositionsDirty(false);
+    } catch (err) {
+      console.warn('[DreamMap] save positions failed:', err?.message);
+    }
+  }, [cityPositions]);
+
+  // Reset to defaults
+  const resetPositions = useCallback(() => {
+    setCityPositions({});
+    setPositionsDirty(true);
+  }, []);
+
   // Group locations by city
   const locationsByCity = useMemo(() => {
     const map = {};
@@ -128,17 +190,22 @@ export default function DreamMap({
 
   // ── Pan ──
   const onMouseDown = useCallback((e) => {
+    if (draggingCity) return;
     if (e.target.closest('[data-pin]') || e.target.closest('[data-zone]')) return;
     setDragging(true);
     setDragStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
-  }, [transform]);
+  }, [transform, draggingCity]);
 
   const onMouseMove = useCallback((e) => {
+    if (draggingCity) { onCityDragMove(e); return; }
     if (!dragging) return;
     setTransform(p => ({ ...p, x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }));
-  }, [dragging, dragStart]);
+  }, [dragging, dragStart, draggingCity, onCityDragMove]);
 
-  const onMouseUp = useCallback(() => setDragging(false), []);
+  const onMouseUp = useCallback(() => {
+    if (draggingCity) { onCityDragEnd(); return; }
+    setDragging(false);
+  }, [draggingCity, onCityDragEnd]);
 
   // ── Zoom ──
   const handleWheel = useCallback((e) => {
@@ -204,7 +271,7 @@ export default function DreamMap({
               <div style={{ position: 'absolute', left: '60%', top: '20%', width: '35%', height: '60%', background: 'radial-gradient(ellipse, rgba(180,200,160,0.4) 0%, rgba(160,180,140,0.2) 60%, transparent 80%)', borderRadius: '35%' }} />
               {/* Upload prompt */}
               <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.5)', borderRadius: 8, padding: '8px 16px', color: '#fff', fontSize: 11, fontFamily: "'DM Mono', monospace", whiteSpace: 'nowrap' }}>
-                Upload a custom map image in Settings
+                Upload your rendered DREAM map below
               </div>
             </div>
           )}
@@ -215,6 +282,8 @@ export default function DreamMap({
             const profCount = profilesByCity[city.key] || 0;
             const isActive = activeCity === city.key;
             const isHovered = hoveredCity === city.key;
+            const pos = getCityPos(city);
+            const isDragging = draggingCity === city.key;
 
             return (
               <div key={city.key}>
@@ -223,23 +292,25 @@ export default function DreamMap({
                   data-zone={city.key}
                   style={{
                     position: 'absolute',
-                    left: `${city.x}%`, top: `${city.y}%`,
+                    left: `${pos.x}%`, top: `${pos.y}%`,
                     transform: 'translate(-50%, -50%)',
                     width: isActive ? 140 : 100, height: isActive ? 140 : 100,
                     borderRadius: '50%',
-                    background: isActive ? city.glow : isHovered ? city.glow : 'rgba(255,255,255,0.08)',
-                    border: `2px solid ${isActive ? city.color : isHovered ? city.color + '80' : 'rgba(255,255,255,0.15)'}`,
-                    cursor: 'pointer',
-                    transition: 'all 0.25s ease',
+                    background: editMode ? (isDragging ? city.color + '40' : city.glow) : isActive ? city.glow : isHovered ? city.glow : 'rgba(255,255,255,0.08)',
+                    border: `2px ${editMode ? 'dashed' : 'solid'} ${isActive || editMode ? city.color : isHovered ? city.color + '80' : 'rgba(255,255,255,0.15)'}`,
+                    cursor: editMode ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
+                    transition: isDragging ? 'none' : 'all 0.25s ease',
                     display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center',
                     backdropFilter: 'blur(4px)',
-                    zIndex: isActive ? 5 : 2,
+                    zIndex: isDragging ? 20 : isActive ? 5 : 2,
                   }}
-                  onMouseEnter={() => setHoveredCity(city.key)}
+                  onMouseEnter={() => !editMode && setHoveredCity(city.key)}
                   onMouseLeave={() => setHoveredCity(null)}
+                  onMouseDown={(e) => { if (editMode) onCityDragStart(e, city.key); }}
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (editMode) return;
                     setActiveCity(isActive ? null : city.key);
                   }}
                 >
@@ -436,6 +507,53 @@ export default function DreamMap({
           ))}
         </div>
 
+        {/* Edit mode controls */}
+        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 4, zIndex: 10 }}>
+          {editMode ? (
+            <>
+              <button onClick={() => { savePositions(); setEditMode(false); }} style={{
+                padding: '6px 12px', borderRadius: 8, fontSize: 10, fontWeight: 700,
+                background: positionsDirty ? '#16a34a' : 'rgba(0,0,0,0.6)',
+                color: '#fff', border: '1px solid rgba(255,255,255,0.15)',
+                cursor: 'pointer', fontFamily: "'DM Mono', monospace",
+              }}>Save Positions</button>
+              <button onClick={resetPositions} style={{
+                padding: '6px 12px', borderRadius: 8, fontSize: 10, fontWeight: 700,
+                background: 'rgba(0,0,0,0.6)', color: '#ff8888',
+                border: '1px solid rgba(255,100,100,0.3)',
+                cursor: 'pointer', fontFamily: "'DM Mono', monospace",
+              }}>Reset</button>
+              <button onClick={() => { setCityPositions({}); setEditMode(false); setPositionsDirty(false); }} style={{
+                padding: '6px 12px', borderRadius: 8, fontSize: 10, fontWeight: 700,
+                background: 'rgba(0,0,0,0.6)', color: '#aaa',
+                border: '1px solid rgba(255,255,255,0.15)',
+                cursor: 'pointer', fontFamily: "'DM Mono', monospace",
+              }}>Cancel</button>
+            </>
+          ) : (
+            <button onClick={() => setEditMode(true)} style={{
+              padding: '6px 12px', borderRadius: 8, fontSize: 10, fontWeight: 700,
+              background: 'rgba(0,0,0,0.6)', color: '#B8962E',
+              border: '1px solid rgba(184,150,46,0.3)',
+              cursor: 'pointer', fontFamily: "'DM Mono', monospace",
+              backdropFilter: 'blur(4px)',
+            }}>Edit Positions</button>
+          )}
+        </div>
+
+        {/* Edit mode banner */}
+        {editMode && (
+          <div style={{
+            position: 'absolute', bottom: 50, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(184,150,46,0.9)', borderRadius: 8,
+            padding: '6px 16px', color: '#fff', fontSize: 11,
+            fontFamily: "'DM Mono', monospace", fontWeight: 600,
+            zIndex: 10, whiteSpace: 'nowrap',
+          }}>
+            Drag cities to reposition them on the map
+          </div>
+        )}
+
         {/* Legend */}
         <div style={{
           position: 'absolute', bottom: 12, left: 12, zIndex: 10,
@@ -446,7 +564,6 @@ export default function DreamMap({
         }}>
           {[
             { shape: 'circle', color: '#B8962E', label: 'Venue' },
-            { shape: 'square', color: '#7ab3d4', label: 'Scene Set' },
             { shape: 'pulse', color: '#d4789a', label: 'Lala' },
           ].map(l => (
             <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: "'DM Mono', monospace" }}>
