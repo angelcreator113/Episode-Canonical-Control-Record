@@ -125,11 +125,10 @@ export default function DreamMap({
 
   // Handle city drag
   const onCityDragStart = useCallback((e, cityKey) => {
-    if (!editMode) return;
     e.stopPropagation();
     e.preventDefault();
     setDraggingCity(cityKey);
-  }, [editMode]);
+  }, []);
 
   const onCityDragMove = useCallback((e) => {
     if (!draggingCity || !containerRef.current) return;
@@ -308,10 +307,11 @@ export default function DreamMap({
                   }}
                   onMouseEnter={() => !editMode && setHoveredCity(city.key)}
                   onMouseLeave={() => setHoveredCity(null)}
-                  onMouseDown={(e) => editMode ? onCityDragStart(e, city.key) : null}
+                  onMouseDown={(e) => { if (editMode) onCityDragStart(e, city.key); }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!editMode) setActiveCity(isActive ? null : city.key);
+                    if (editMode) return;
+                    setActiveCity(isActive ? null : city.key);
                   }}
                 >
                   <span style={{ fontSize: isActive ? 22 : 18 }}>{city.icon}</span>
