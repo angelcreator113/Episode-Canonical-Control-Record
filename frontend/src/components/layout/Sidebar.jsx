@@ -28,23 +28,17 @@ function buildNav(shows) {
       items: [
         ...(showId ? [
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=overview` },
-          { icon: '🎞️', label: 'Scene Sets', route: `/shows/${showId}/world?tab=scene-sets` },
-        ] : [
-          { icon: '🎞️', label: 'Scene Sets', route: '/scene-library' },
-        ]),
+        ] : []),
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
       ],
     },
     {
       zone: 'WORLD BUILDING',
       items: [
-        { icon: '🗺️', label: 'World Setup Guide', route: '/world-setup' },
-        { icon: '🏗️', label: 'Power Structures', route: '/world-infrastructure', hint: 'Cities, companies, schools' },
-        { icon: '⭐', label: 'Fame & Influence', route: '/influencer-systems', hint: 'How creators rise & fall' },
-        { icon: '📅', label: 'Cultural Calendar', route: '/cultural-calendar', hint: 'Yearly events & rhythms' },
-        { icon: '📜', label: 'Cultural Memory', route: '/cultural-memory', hint: 'Shared history & legends' },
-        { icon: '📍', label: 'Locations & Venues', route: '/world-locations', hint: 'Where things happen' },
-        { icon: '📊', label: 'World State', route: '/universe/world-state', hint: 'Current story snapshot' },
+        { icon: '🌍', label: 'World Dashboard', route: '/world-dashboard', hint: 'Setup progress & state' },
+        { icon: '🏗️', label: 'World Foundation', route: '/world-foundation', hint: 'DREAM map, cities, locations' },
+        { icon: '⭐', label: 'Social Systems', route: '/social-systems', hint: 'Archetypes, legends, trends' },
+        { icon: '📅', label: 'Culture & Events', route: '/culture-events', hint: 'Calendar, memory, legacy' },
       ],
     },
     {
@@ -58,9 +52,7 @@ function buildNav(shows) {
     {
       zone: 'STUDIO',
       items: [
-        { icon: '🎨', label: 'Scene Studio', route: '/scene-library' },
         { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
-        { icon: '📂', label: 'Assets', route: '/assets' },
         { icon: '📦', label: 'Compositions', route: '/library' },
       ],
     },
@@ -128,7 +120,7 @@ function Sidebar({ isOpen, onClose }) {
 
   // Auto-expand Universe sub-nav when on a /universe/* sub-page or world-building route
   useEffect(() => {
-    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/intelligence') || ['/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine', '/world-locations', '/amber', '/scene-studio'].some(p => location.pathname.startsWith(p))) {
+    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/intelligence') || ['/world-dashboard', '/world-foundation', '/social-systems', '/culture-events', '/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory', '/character-depth-engine', '/world-locations', '/amber', '/scene-studio'].some(p => location.pathname.startsWith(p))) {
       setUniverseOpen(true);
     }
   }, [location.pathname]);

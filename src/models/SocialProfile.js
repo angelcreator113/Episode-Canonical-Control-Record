@@ -127,7 +127,10 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
     },
     city: {
-      type: DataTypes.ENUM('nova_prime', 'velour_city', 'the_drift', 'solenne', 'cascade_row'),
+      type: DataTypes.ENUM(
+        'nova_prime', 'velour_city', 'the_drift', 'solenne', 'cascade_row',           // legacy
+        'dazzle_district', 'radiance_row', 'echo_park', 'ascent_tower', 'maverick_harbor' // DREAM
+      ),
       allowNull: true,
     },
     lala_relationship: {

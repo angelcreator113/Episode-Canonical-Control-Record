@@ -71,6 +71,13 @@ function guardJustAWomanRecord(req, res, next) {
 
 // ── LalaVerse city culture ───────────────────────────────────────────────────
 const CITY_CULTURE = {
+  // DREAM cities (unified)
+  dazzle_district: 'Fashion capital of the LalaVerse. Couture houses, runway shows, designer studios. Polished curators dominate. Every sidewalk is a runway. Brand deals are currency.',
+  radiance_row:    'Beauty & wellness heartland. Skincare labs, salons, beauty schools, product launches. Experimental, aesthetic, transformation culture. Reinvention is the local religion.',
+  echo_park:       'Entertainment & nightlife hub. Music studios, comedy clubs, creator houses, viral content. Chaotic, loud, viral culture. Something happens here that becomes a meme by morning.',
+  ascent_tower:    'Tech & innovation district. Digital platforms, creator economy tools, startup incubators. Futuristic, ambitious. The city building the tools everyone else uses.',
+  maverick_harbor: 'Creator economy & counter-culture. Content houses, podcast networks, collab spaces, underground scenes. Collaborative, entrepreneurial, anti-algorithm. Fame is suspicious here.',
+  // Legacy (for any un-migrated profiles)
   nova_prime:   'High fashion, aspirational, image-first. Polished curators dominate. Brand deals are currency.',
   velour_city:  'Music, nightlife, culture. Chaos creators and community builders. Authenticity is the brand.',
   the_drift:    'Underground, countercultural, anti-algorithm. Messy transparents and watchers. Fame is suspicious.',
