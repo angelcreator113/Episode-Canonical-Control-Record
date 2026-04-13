@@ -3587,22 +3587,26 @@ router.post('/world/map/upload', optionalAuth, mapUpload.single('image'), async 
 
     const url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 
-    // Store URL in page-content for world_foundation
+    // Store URL in page_content for world_foundation
     try {
-      await Q(req, `INSERT INTO page_content (page_name, constant_key, data, created_at, updated_at)
-        VALUES ('world_foundation', 'MAP_IMAGE_URL', :data, NOW(), NOW())
-        ON CONFLICT (page_name, constant_key) DO UPDATE SET data = :data, updated_at = NOW()`,
-        { data: JSON.stringify(url) }
+      // Try upsert
+      const [existing] = await sequelize.query(
+        `SELECT id FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_IMAGE_URL' LIMIT 1`,
+        { type: sequelize.QueryTypes.SELECT }
       );
-    } catch { /* page_content table may not have unique constraint — try upsert manually */
-      try {
-        const [existing] = await Q(req, `SELECT id FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_IMAGE_URL' LIMIT 1`);
-        if (existing) {
-          await Q(req, `UPDATE page_content SET data = :data, updated_at = NOW() WHERE id = :id`, { data: JSON.stringify(url), id: existing.id });
-        } else {
-          await Q(req, `INSERT INTO page_content (page_name, constant_key, data, created_at, updated_at) VALUES ('world_foundation', 'MAP_IMAGE_URL', :data, NOW(), NOW())`, { data: JSON.stringify(url) });
-        }
-      } catch (e) { console.warn('[world-map] page_content save failed:', e.message); }
+      if (existing) {
+        await sequelize.query(
+          `UPDATE page_content SET data = :data, updated_at = NOW() WHERE id = :id`,
+          { replacements: { data: JSON.stringify(url), id: existing.id } }
+        );
+      } else {
+        await sequelize.query(
+          `INSERT INTO page_content (page_name, constant_key, data, created_at, updated_at) VALUES ('world_foundation', 'MAP_IMAGE_URL', :data, NOW(), NOW())`,
+          { replacements: { data: JSON.stringify(url) } }
+        );
+      }
+    } catch (dbErr) {
+      console.warn('[world-map] page_content save failed (non-blocking):', dbErr?.message);
     }
 
     res.json({ success: true, url, message: 'Map image uploaded' });
@@ -3615,10 +3619,14 @@ router.post('/world/map/upload', optionalAuth, mapUpload.single('image'), async 
 // GET /world/map — get current map image URL
 router.get('/world/map', optionalAuth, async (req, res) => {
   try {
-    const [row] = await Q(req, `SELECT data FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_IMAGE_URL' LIMIT 1`);
+    const [row] = await sequelize.query(
+      `SELECT data FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_IMAGE_URL' LIMIT 1`,
+      { type: sequelize.QueryTypes.SELECT }
+    );
     const url = row ? JSON.parse(row.data) : null;
     res.json({ url });
-  } catch {
+  } catch (err) {
+    console.warn('[world-map] GET map failed:', err?.message);
     res.json({ url: null });
   }
 });
