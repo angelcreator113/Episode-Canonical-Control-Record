@@ -401,7 +401,7 @@ ${narrativeLines.short || ''}`,
       `UPDATE franchise_knowledge SET status = 'superseded', updated_at = NOW()
        WHERE source_document = 'episode-completion' AND category = 'character'
        AND applies_to::text LIKE '%current_stats%' AND status = 'active'`,
-    ).catch(() => {});
+    ).catch(err => console.warn('[episodeCompletion] supersede previous state:', err?.message));
 
     // Insert new knowledge entries
     await sequelize.query(
@@ -415,7 +415,7 @@ ${narrativeLines.short || ''}`,
           `INSERT INTO franchise_knowledge (title, content, category, severity, always_inject, applies_to, source_document, source_version, extracted_by, status, review_note, injection_count, created_at, updated_at)
            VALUES (:title, :content, :category, :severity, :always_inject, :applies_to, :source_document, :source_version, :extracted_by, :status, :review_note, :injection_count, :created_at, :updated_at)`,
           { replacements: entry }
-        ).catch(() => {});
+        ).catch(err => console.warn('[episodeCompletion] fallback insert:', err?.message));
       }
     });
 
