@@ -46,6 +46,7 @@ export default function ShowBiblePage() {
   const [toast, setToast] = useState(null);
   const [statusFilter, setStatusFilter] = useState('active');
   const [catFilter, setCatFilter] = useState('all');
+  const [scopeFilter, setScopeFilter] = useState('all'); // all | franchise | show
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ title: '', content: '', category: 'franchise_law', severity: 'important', always_inject: false });
@@ -112,11 +113,21 @@ export default function ShowBiblePage() {
   const getSection = (e) => { if (typeof e.content === 'object' && e.content?.section) return e.content.section; const tags = Array.isArray(e.applies_to) ? e.applies_to : []; return tags[0] || e.category || 'other'; };
   const matchSearch = (e) => { if (!search) return true; const q = search.toLowerCase(); return (e.title || '').toLowerCase().includes(q) || getSummary(e).toLowerCase().includes(q); };
 
+  // Scope helpers
+  const FRANCHISE_CATS = ['franchise_law', 'character', 'narrative', 'world'];
+  const SHOW_CATS = ['technical', 'brand', 'locked_decision'];
+  const getScope = (e) => FRANCHISE_CATS.includes(e.category) ? 'franchise' : 'show';
+  const matchScope = (e) => scopeFilter === 'all' || getScope(e) === scopeFilter;
+
   const activeCount = entries.filter(e => e.status === 'active').length;
   const pendingCount = entries.filter(e => e.status === 'pending_review').length;
   const archivedCount = entries.filter(e => e.status === 'archived').length;
   const alwaysInjectCount = entries.filter(e => e.always_inject && e.status === 'active').length;
   const totalInjections = entries.reduce((s, e) => s + (e.injection_count || 0), 0);
+  const franchiseCount = entries.filter(e => e.status === 'active' && getScope(e) === 'franchise').length;
+  const showCount = entries.filter(e => e.status === 'active' && getScope(e) === 'show').length;
+  const catCounts = {};
+  entries.filter(e => e.status === 'active').forEach(e => { catCounts[e.category] = (catCounts[e.category] || 0) + 1; });
 
   const S = {
     input: { width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', fontFamily: 'inherit' },
@@ -141,12 +152,14 @@ export default function ShowBiblePage() {
       </div>
 
       {/* Stats Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 16 }}>
         {[
           { label: 'Active Rules', value: activeCount, color: '#16a34a' },
-          { label: 'Pending Review', value: pendingCount, color: '#f59e0b' },
-          { label: 'Always Inject', value: alwaysInjectCount, color: '#6366f1' },
-          { label: 'AI Injections', value: totalInjections, color: '#B8962E' },
+          { label: '🌍 Franchise', value: franchiseCount, color: '#6366f1' },
+          { label: '📺 Show', value: showCount, color: '#B8962E' },
+          { label: 'Pending', value: pendingCount, color: '#f59e0b' },
+          { label: 'Always Inject', value: alwaysInjectCount, color: '#ec4899' },
+          { label: 'AI Injections', value: totalInjections, color: '#0ea5e9' },
         ].map(s => (
           <div key={s.label} style={{ background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0', padding: '10px 14px' }}>
             <div style={{ fontSize: 10, color: '#94a3b8' }}>{s.label}</div>
@@ -172,16 +185,41 @@ export default function ShowBiblePage() {
         ))}
       </div>
 
-      {/* Search */}
+      {/* Scope Filter + Search */}
       {(activeTab === 'knowledge' || activeTab === 'decisions') && (
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search entries..." style={{ ...S.input, marginBottom: 12, maxWidth: 400 }} />
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+            {[
+              { key: 'all', label: 'All', icon: '📋' },
+              { key: 'franchise', label: 'Franchise', icon: '🌍' },
+              { key: 'show', label: 'Show', icon: '📺' },
+            ].map(s => (
+              <button key={s.key} onClick={() => setScopeFilter(s.key)} style={{
+                padding: '4px 12px', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                background: scopeFilter === s.key ? (s.key === 'franchise' ? '#6366f1' : s.key === 'show' ? '#B8962E' : '#64748b') : '#fff',
+                color: scopeFilter === s.key ? '#fff' : '#64748b',
+              }}>{s.icon} {s.label}</button>
+            ))}
+          </div>
+          {/* Category chips */}
+          {activeTab === 'knowledge' && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {Object.entries(catCounts).sort((a, b) => b[1] - a[1]).map(([cat, count]) => (
+                <span key={cat} style={{ padding: '2px 8px', background: FRANCHISE_CATS.includes(cat) ? '#eef2ff' : '#FAF7F0', borderRadius: 4, fontSize: 9, fontWeight: 600, color: FRANCHISE_CATS.includes(cat) ? '#6366f1' : '#B8962E' }}>
+                  {cat.replace(/_/g, ' ')} ({count})
+                </span>
+              ))}
+            </div>
+          )}
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search entries..." style={{ ...S.input, maxWidth: 300, flex: '0 1 300px' }} />
+        </div>
       )}
 
       {/* ═══ KNOWLEDGE TAB ═══ */}
       {activeTab === 'knowledge' && !loading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {SECTIONS.map(section => {
-            const sectionEntries = entries.filter(e => e.status === 'active' && getSection(e) === section.key && matchSearch(e));
+            const sectionEntries = entries.filter(e => e.status === 'active' && getSection(e) === section.key && matchSearch(e) && matchScope(e));
             const critCount = sectionEntries.filter(e => e.severity === 'critical').length;
             const injectCount = sectionEntries.filter(e => e.always_inject).length;
             const isExpanded = expandedSection === section.key;
@@ -216,6 +254,7 @@ export default function ShowBiblePage() {
                                 <span style={{ fontSize: 12 }}>{sev.icon}</span>
                                 <span style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>{entry.title}</span>
                                 {entry.always_inject && <span style={{ fontSize: 8, padding: '1px 5px', background: '#6366f1', color: '#fff', borderRadius: 3, fontWeight: 700 }}>INJECT</span>}
+                                {getScope(entry) === 'franchise' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontWeight: 600 }}>🌍</span>}
                               </div>
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 10, color: '#94a3b8' }}>
                                 {entry.injection_count > 0 && <span title="Times used by AI">💉 {entry.injection_count}</span>}
@@ -280,7 +319,7 @@ export default function ShowBiblePage() {
               )}
             </div>
           </div>
-          {entries.filter(e => e.status === statusFilter && matchSearch(e) && (catFilter === 'all' || e.category === catFilter)).map(entry => {
+          {entries.filter(e => e.status === statusFilter && matchSearch(e) && matchScope(e) && (catFilter === 'all' || e.category === catFilter)).map(entry => {
             const sev = SEVERITY[entry.severity] || SEVERITY.context;
             return (
               <div key={entry.id} style={{ background: '#fff', borderRadius: 8, border: `1px solid ${sev.border}`, borderLeft: `3px solid ${sev.color}`, marginBottom: 6, padding: '10px 14px' }}>
@@ -291,6 +330,7 @@ export default function ShowBiblePage() {
                       <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: sev.bg, color: sev.color, fontWeight: 600 }}>{entry.severity}</span>
                       {entry.category && <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, background: '#f1f5f9', color: '#64748b' }}>{entry.category.replace(/_/g, ' ')}</span>}
                       {entry.always_inject && <span style={{ fontSize: 8, padding: '1px 5px', background: '#6366f1', color: '#fff', borderRadius: 3, fontWeight: 700 }}>INJECT</span>}
+                                {getScope(entry) === 'franchise' && <span style={{ fontSize: 8, padding: '1px 5px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontWeight: 600 }}>🌍</span>}
                     </div>
                     <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5, marginBottom: 4 }}>{getSummary(entry).slice(0, 200)}</div>
                     <div style={{ display: 'flex', gap: 8, fontSize: 10, color: '#94a3b8' }}>

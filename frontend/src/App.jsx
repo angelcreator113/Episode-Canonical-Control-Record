@@ -137,6 +137,7 @@ const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
 const WorldLocations = lazy(() => import('./pages/WorldLocations'));
 const ShowBrain = lazy(() => import('./pages/ShowBrain'));
 const ShowBiblePage = lazy(() => import('./pages/ShowBiblePage'));
+const StoriesPage = lazy(() => import('./pages/StoriesPage'));
 const TextureReviewPage = lazy(() => import('./pages/TextureReviewPage'));
 // WorldView merged into CharacterRegistryPage
 
@@ -396,7 +397,8 @@ function AppContent() {
           {/* ===== MANAGEMENT ROUTES ===== */}
           
           {/* StoryTeller Book Editor */}
-          <Route path="/storyteller" element={<StorytellerPage />} />
+          <Route path="/stories" element={<StoriesPage />} />
+          <Route path="/storyteller" element={<Navigate to="/stories" replace />} />
           <Route path="/book/:id" element={<BookToWriteRedirect />} />
           <Route path="/books/:bookId/read" element={<ReadingMode />} />
           <Route path="/chapter/:bookId/:chapterId" element={<ChapterJourney />} />
@@ -454,7 +456,7 @@ function AppContent() {
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
 
           {/* PNOS Story Engine — 50-Story Arc System */}
-          <Route path="/story-engine" element={<StoryEngine />} />
+          <Route path="/story-engine" element={<Navigate to="/stories" replace />} />
 
           {/* Texture Review — confirm/reject texture layers per story */}
           <Route path="/texture-review/:storyNumber" element={<TextureReviewPage />} />

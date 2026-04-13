@@ -50,14 +50,9 @@ function buildNav(shows) {
     {
       zone: 'WRITE',
       items: [
-        { icon: '✦', label: 'Storyteller', route: '/storyteller' },
-        { icon: '⚡', label: 'Short Stories', route: '/story-engine' },
-        { icon: '🌍', label: 'Characters', route: '/character-registry?view=world' },
+        { icon: '✍️', label: 'Stories', route: '/stories' },
+        { icon: '👥', label: 'Characters', route: '/character-registry?view=world' },
         { icon: '🔗', label: 'Relationships', route: '/world-studio?tab=relationships' },
-        { icon: '◇', label: 'Continuity', route: '/continuity' },
-        { icon: '🧠', label: 'Narrative Control', route: '/narrative-control' },
-        { icon: '▶', label: 'Novel Session', route: '/start' },
-        { icon: '📰', label: 'Press', route: '/press' },
       ],
     },
     {

@@ -207,19 +207,30 @@ async function loadScriptContext(episodeId, showId, models) {
     context.worldState = rows?.[0] || null;
   } catch { /* non-blocking */ }
 
-  // 10. Social profiles — host + guests for real character voices
+  // 10. Social profiles + linked character depth — host + guests with real literary depth
   context.socialProfiles = [];
   try {
     const auto = context.event?.canon_consequences?.automation || {};
     const profileIds = [auto.host_profile_id, ...(auto.guest_profiles || []).map(g => g.profile_id)].filter(Boolean);
     if (profileIds.length > 0) {
       const [rows] = await sequelize.query(
-        `SELECT id, handle, display_name, creator_name, platform, archetype, posting_voice,
-                content_persona, lala_relevance_score, celebrity_tier, follow_motivation
-         FROM social_profiles WHERE id IN (:ids) AND deleted_at IS NULL`,
+        `SELECT sp.id, sp.handle, sp.display_name, sp.creator_name, sp.platform, sp.archetype,
+                sp.posting_voice, sp.content_persona, sp.lala_relevance_score, sp.celebrity_tier,
+                sp.follow_motivation, sp.follow_emotion, sp.registry_character_id,
+                rc.display_name as char_name, rc.core_belief, rc.pressure_type, rc.pressure_quote,
+                rc.role_type, rc.role_label, rc.appearance_mode, rc.depth_level,
+                rc.personality, rc.description as char_description
+         FROM social_profiles sp
+         LEFT JOIN registry_characters rc ON rc.id = sp.registry_character_id
+         WHERE sp.id IN (:ids) AND sp.deleted_at IS NULL`,
         { replacements: { ids: profileIds } }
       );
-      context.socialProfiles = rows || [];
+      context.socialProfiles = (rows || []).map(r => {
+        // Parse personality JSON if present
+        let personality = r.personality;
+        if (typeof personality === 'string') try { personality = JSON.parse(personality); } catch { personality = null; }
+        return { ...r, personality };
+      });
     }
   } catch { /* non-blocking */ }
 
@@ -452,13 +463,27 @@ ${(() => {
   let socialBlock = '';
   if (context.socialProfiles?.length > 0) {
     socialBlock = '═══ CHARACTERS AT THE EVENT ═══\n';
-    socialBlock += context.socialProfiles.map(p =>
-      `${p.creator_name || p.display_name || p.handle} (@${p.handle}, ${p.platform})
+    socialBlock += context.socialProfiles.map(p => {
+      let block = `${p.creator_name || p.display_name || p.handle} (@${p.handle}, ${p.platform})
   Archetype: ${p.archetype || 'unknown'} | Tier: ${p.celebrity_tier || 'accessible'}
   Voice: ${p.posting_voice || 'Standard social media voice'}
-  Lala follows because: ${p.follow_motivation || 'general interest'}
-  SCRIPT DIRECTIVE: When this character speaks, use THEIR voice — not generic dialogue.`
-    ).join('\n\n');
+  Lala follows because: ${p.follow_motivation || 'general interest'}${p.follow_emotion ? ` (feels: ${p.follow_emotion})` : ''}`;
+
+      // Character literary depth (from registry)
+      if (p.core_belief || p.pressure_type || p.depth_level) {
+        block += `\n  ── CHARACTER DEPTH ──`;
+        if (p.role_type) block += `\n  Role: ${p.role_type}${p.role_label ? ` — ${p.role_label}` : ''}`;
+        if (p.core_belief) block += `\n  Core Belief: "${p.core_belief}"`;
+        if (p.pressure_type) block += `\n  Pressure: ${p.pressure_type}${p.pressure_quote ? ` — "${p.pressure_quote}"` : ''}`;
+        if (p.depth_level) block += `\n  Depth: ${p.depth_level} (${p.depth_level === 'sparked' ? 'surface only — keep dialogue simple' : p.depth_level === 'breathing' ? 'emerging complexity — hints of inner life' : p.depth_level === 'active' ? 'full inner world — internal monologue, contradictions' : 'fully alive — nuanced reactions, wound patterns visible'})`;
+        if (p.personality?.wound) block += `\n  Wound: ${p.personality.wound}`;
+        if (p.personality?.defense) block += `\n  Defense Mechanism: ${p.personality.defense}`;
+        if (p.char_description) block += `\n  Character: ${p.char_description.slice(0, 150)}`;
+      }
+
+      block += `\n  SCRIPT DIRECTIVE: When this character speaks, use THEIR voice. ${p.depth_level === 'alive' ? 'Show their wound patterns and defense mechanisms in subtle behavior.' : p.depth_level === 'active' ? 'Include internal contradictions — what they say vs what they mean.' : 'Keep them consistent with their archetype.'}`;
+      return block;
+    }).join('\n\n');
     socialBlock += '\n';
   }
 
