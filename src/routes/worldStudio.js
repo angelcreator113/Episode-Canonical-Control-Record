@@ -3632,4 +3632,41 @@ router.get('/world/map', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /world/map/positions — get saved city positions
+router.get('/world/map/positions', optionalAuth, async (req, res) => {
+  try {
+    const [row] = await sequelize.query(
+      `SELECT data FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_CITY_POSITIONS' LIMIT 1`,
+      { type: sequelize.QueryTypes.SELECT }
+    );
+    res.json({ positions: row ? JSON.parse(row.data) : {} });
+  } catch (err) {
+    console.warn('[world-map] GET positions failed:', err?.message);
+    res.json({ positions: {} });
+  }
+});
+
+// PUT /world/map/positions — save city positions
+router.put('/world/map/positions', optionalAuth, async (req, res) => {
+  try {
+    const { positions } = req.body;
+    if (!positions || typeof positions !== 'object') return res.status(400).json({ error: 'positions required' });
+    const data = JSON.stringify(positions);
+
+    const [existing] = await sequelize.query(
+      `SELECT id FROM page_content WHERE page_name = 'world_foundation' AND constant_key = 'MAP_CITY_POSITIONS' LIMIT 1`,
+      { type: sequelize.QueryTypes.SELECT }
+    );
+    if (existing) {
+      await sequelize.query(`UPDATE page_content SET data = :data, updated_at = NOW() WHERE id = :id`, { replacements: { data, id: existing.id } });
+    } else {
+      await sequelize.query(`INSERT INTO page_content (page_name, constant_key, data, created_at, updated_at) VALUES ('world_foundation', 'MAP_CITY_POSITIONS', :data, NOW(), NOW())`, { replacements: { data } });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[world-map] PUT positions failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
