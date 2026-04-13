@@ -450,6 +450,20 @@ Lala does not know she was built. The world she lives in feels complete and self
             order: db.sequelize.random(),
           }).catch(() => null);
         }
+        // If no location exists at all in this city, auto-create one for this creator
+        if (!homeLoc) {
+          const displayName = profile.display_name || profile.handle || 'Creator';
+          const slug = `${displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-studio`;
+          homeLoc = await db.WorldLocation.create({
+            name: `${displayName}'s Studio`,
+            slug,
+            location_type: 'property',
+            property_type: 'studio',
+            city: cityName,
+            description: `Home studio of ${displayName} in ${cityName}.`,
+            narrative_role: 'sanctuary',
+          }).catch(() => null);
+        }
         if (homeLoc) {
           await profile.update({ home_location_id: homeLoc.id });
         }
