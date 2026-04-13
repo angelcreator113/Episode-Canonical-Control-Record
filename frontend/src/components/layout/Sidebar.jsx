@@ -35,13 +35,10 @@ function buildNav(shows) {
     {
       zone: 'WORLD BUILDING',
       items: [
-        { icon: '🗺️', label: 'World Setup Guide', route: '/world-setup' },
-        { icon: '🏗️', label: 'Power Structures', route: '/world-infrastructure', hint: 'Cities, companies, schools' },
-        { icon: '⭐', label: 'Fame & Influence', route: '/influencer-systems', hint: 'How creators rise & fall' },
-        { icon: '📅', label: 'Cultural Calendar', route: '/cultural-calendar', hint: 'Yearly events & rhythms' },
-        { icon: '📜', label: 'Cultural Memory', route: '/cultural-memory', hint: 'Shared history & legends' },
-        { icon: '📍', label: 'Locations & Venues', route: '/world-locations', hint: 'Where things happen' },
-        { icon: '📊', label: 'World State', route: '/universe/world-state', hint: 'Current story snapshot' },
+        { icon: '🌍', label: 'World Dashboard', route: '/world-dashboard', hint: 'Setup progress & state' },
+        { icon: '🏗️', label: 'World Foundation', route: '/world-foundation', hint: 'DREAM map, cities, locations' },
+        { icon: '⭐', label: 'Social Systems', route: '/social-systems', hint: 'Archetypes, legends, trends' },
+        { icon: '📅', label: 'Culture & Events', route: '/culture-events', hint: 'Calendar, memory, legacy' },
       ],
     },
     {

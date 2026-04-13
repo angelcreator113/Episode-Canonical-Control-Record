@@ -75,11 +75,11 @@ export const FEED_STATE_CONFIG = {
 };
 
 export const LALAVERSE_CITIES = [
-  { value:'nova_prime',  label:'Nova Prime', desc:'Fashion & Aspiration' },
-  { value:'velour_city', label:'Velour City', desc:'Music & Culture' },
-  { value:'the_drift',   label:'The Drift', desc:'Underground & Anti-Algorithm' },
-  { value:'solenne',     label:'Solenne', desc:'Luxury & Soft Life' },
-  { value:'cascade_row', label:'Cascade Row', desc:'Commerce & Hustle' },
+  { value:'dazzle_district',  label:'Dazzle District',  desc:'Fashion & Luxury',           letter: 'D', color: '#d4789a' },
+  { value:'radiance_row',     label:'Radiance Row',     desc:'Beauty & Wellness',           letter: 'R', color: '#a889c8' },
+  { value:'echo_park',        label:'Echo Park',        desc:'Entertainment & Nightlife',   letter: 'E', color: '#c9a84c' },
+  { value:'ascent_tower',     label:'Ascent Tower',     desc:'Tech & Innovation',           letter: 'A', color: '#6bba9a' },
+  { value:'maverick_harbor',  label:'Maverick Harbor',  desc:'Creator Economy & Counter-culture', letter: 'M', color: '#7ab3d4' },
 ];
 
 export const LALA_RELATIONSHIPS = [

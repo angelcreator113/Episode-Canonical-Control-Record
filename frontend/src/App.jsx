@@ -135,6 +135,10 @@ const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulati
 const CulturalMemory = lazy(() => import('./pages/CulturalMemory'));
 const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
 const WorldLocations = lazy(() => import('./pages/WorldLocations'));
+const WorldFoundation = lazy(() => import('./pages/WorldFoundation'));
+const SocialSystemsPage = lazy(() => import('./pages/SocialSystems'));
+const CultureEvents = lazy(() => import('./pages/CultureEvents'));
+const WorldDashboard = lazy(() => import('./pages/WorldDashboard'));
 const ShowBrain = lazy(() => import('./pages/ShowBrain'));
 const ShowBiblePage = lazy(() => import('./pages/ShowBiblePage'));
 const StoriesPage = lazy(() => import('./pages/StoriesPage'));
@@ -449,6 +453,12 @@ function AppContent() {
           {/* World Locations — Places and spaces of the universe */}
           <Route path="/world-locations" element={<WorldLocations />} />
 
+          {/* Consolidated World Building Pages (DREAM) */}
+          <Route path="/world-dashboard" element={<WorldDashboard />} />
+          <Route path="/world-foundation" element={<WorldFoundation />} />
+          <Route path="/social-systems" element={<SocialSystemsPage />} />
+          <Route path="/culture-events" element={<CultureEvents />} />
+
           {/* Show Brain — Master Intelligence Document: identity, world rules, stats, economy, beats, 5 brains, canon */}
           <Route path="/show-brain" element={<Navigate to="/intelligence/show-brain" replace />} />
           
@@ -595,6 +605,10 @@ function AppContent() {
             '/world-infrastructure': 'World Infrastructure',
             '/character-life-simulation': 'Character Life Simulation',
             '/cultural-memory': 'Cultural Memory',
+            '/world-dashboard': 'World Dashboard',
+            '/world-foundation': 'World Foundation',
+            '/social-systems': 'Social Systems',
+            '/culture-events': 'Culture & Events',
             '/character-depth-engine': 'Character Depth Engine',
             '/show-brain': 'Show Brain',
             '/narrative-control': 'Narrative Control Center',
