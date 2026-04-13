@@ -122,8 +122,8 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
     <div style={{
       margin: '8px 12px',
       borderRadius: 8,
-      border: '1px solid #E0D9CC',
-      background: '#F5F2EC',
+      border: '1px solid #f0d4de',
+      background: '#fdf2f6',
       overflow: 'hidden',
       fontFamily: 'DM Sans, sans-serif',
       fontSize: 12,
