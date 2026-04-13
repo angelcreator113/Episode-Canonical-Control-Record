@@ -145,6 +145,10 @@ module.exports = (sequelize, DataTypes) => {
     is_justawoman_record: { type: DataTypes.BOOLEAN, defaultValue: false },
     lalaverse_cap_exempt:  { type: DataTypes.BOOLEAN, defaultValue: false },
 
+    // ── Location Link (DREAM map integration) ───────────────────────────────
+    home_location_id: { type: DataTypes.UUID, allowNull: true },  // FK to world_locations — where they live/work
+    frequent_venues:  { type: DataTypes.JSONB, defaultValue: [] }, // array of world_location IDs they visit
+
     // ── Multi-Platform Presence ──────────────────────────────────────────────
     platform_presences: {
       type: DataTypes.JSONB, defaultValue: {},

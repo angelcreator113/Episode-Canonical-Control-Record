@@ -3179,6 +3179,20 @@ router.get('/world/locations', optionalAuth, async (req, res) => {
         } catch { /* association may not exist */ }
       }
 
+      // Include resident profiles
+      if (models.SocialProfile) {
+        try {
+          include.push({
+            model: models.SocialProfile,
+            as: 'residents',
+            attributes: ['id', 'handle', 'display_name', 'archetype', 'follower_tier', 'city'],
+            where: { deleted_at: null },
+            required: false,
+            limit: 10,
+          });
+        } catch { /* association may not exist */ }
+      }
+
       const rows = await WorldLocation.findAll({
         include,
         order: [['name', 'ASC']],

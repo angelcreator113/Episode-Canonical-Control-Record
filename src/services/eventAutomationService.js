@@ -204,33 +204,59 @@ async function findHostProfile(calendarEvent, models, options = {}) {
 
 /**
  * Find a matching venue for a cultural event.
+ * Priority: host's frequent venues → host's city → category match → any venue
  *
  * @param {object} calendarEvent — StoryCalendarEvent
  * @param {object} models — Sequelize models
+ * @param {object} hostProfile — optional SocialProfile of the host
  * @returns {object|null} WorldLocation
  */
-async function findVenue(calendarEvent, models) {
+async function findVenue(calendarEvent, models, hostProfile) {
   const { WorldLocation } = models;
   if (!WorldLocation) return null;
 
+  const { Op } = require('sequelize');
   const category = calendarEvent.cultural_category || 'default';
   const venueTypes = CATEGORY_TO_VENUE[category] || ['restaurant', 'hotel', 'rooftop'];
 
-  // Try to find a venue matching the category
-  const { Op } = require('sequelize');
+  // 1. Check host's frequent venues first
+  if (hostProfile?.frequent_venues?.length > 0) {
+    try {
+      const hostVenue = await WorldLocation.findOne({
+        where: {
+          id: { [Op.in]: hostProfile.frequent_venues },
+          venue_type: { [Op.in]: venueTypes },
+        },
+      }).catch(() => null);
+      if (hostVenue) return hostVenue;
+    } catch (e) { console.warn('[eventAutomation] host venue lookup:', e?.message); }
+  }
+
+  // 2. Try venues in the host's city
+  if (hostProfile?.city) {
+    const cityName = (hostProfile.city || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    try {
+      const cityVenue = await WorldLocation.findOne({
+        where: {
+          city: { [Op.iLike]: `%${cityName}%` },
+          venue_type: { [Op.in]: venueTypes },
+        },
+        order: [['created_at', 'DESC']],
+      }).catch(() => null);
+      if (cityVenue) return cityVenue;
+    } catch (e) { console.warn('[eventAutomation] city venue lookup:', e?.message); }
+  }
+
+  // 3. Category match across all locations
   let venue = await WorldLocation.findOne({
-    where: {
-      venue_type: { [Op.in]: venueTypes },
-    },
+    where: { venue_type: { [Op.in]: venueTypes } },
     order: [['created_at', 'DESC']],
   }).catch(() => null);
 
-  // Fallback: any venue
+  // 4. Fallback: any venue
   if (!venue) {
     venue = await WorldLocation.findOne({
-      where: {
-        location_type: { [Op.in]: ['venue', 'interior'] },
-      },
+      where: { location_type: { [Op.in]: ['venue', 'interior'] } },
       order: [['created_at', 'DESC']],
     }).catch(() => null);
   }
@@ -462,7 +488,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
     const hostName = host?.display_name || host?.handle || null;
 
     // Find venue
-    let venue = await findVenue(calendarEvent, models);
+    let venue = await findVenue(calendarEvent, models, host);
 
     // Auto-create venue if none found
     if (!venue && calendarEvent.title) {

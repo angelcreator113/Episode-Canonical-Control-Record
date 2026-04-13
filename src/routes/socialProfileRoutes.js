@@ -433,6 +433,40 @@ Lala does not know she was built. The world she lives in feels complete and self
       await autoLinkRelationships(db, profile, generated.known_associates);
     }
 
+    // Auto-assign home location from city (DREAM map integration)
+    if (layer === 'lalaverse' && city && db.WorldLocation) {
+      try {
+        const { Op } = require('sequelize');
+        const cityName = (city || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        // Try to find a property in their city
+        let homeLoc = await db.WorldLocation.findOne({
+          where: { city: { [Op.iLike]: `%${cityName}%` }, location_type: 'property' },
+          order: db.sequelize.random(),
+        }).catch(() => null);
+        // Fallback: any location in their city
+        if (!homeLoc) {
+          homeLoc = await db.WorldLocation.findOne({
+            where: { city: { [Op.iLike]: `%${cityName}%` } },
+            order: db.sequelize.random(),
+          }).catch(() => null);
+        }
+        if (homeLoc) {
+          await profile.update({ home_location_id: homeLoc.id });
+        }
+        // Also pick up to 3 random venues in their city as frequent venues
+        const cityVenues = await db.WorldLocation.findAll({
+          where: { city: { [Op.iLike]: `%${cityName}%` }, location_type: 'venue' },
+          order: db.sequelize.random(),
+          limit: 3,
+        }).catch(() => []);
+        if (cityVenues.length > 0) {
+          await profile.update({ frequent_venues: cityVenues.map(v => v.id) });
+        }
+      } catch (locErr) {
+        console.warn('[socialProfiles] auto-location assignment:', locErr?.message);
+      }
+    }
+
     // Reload profile with followers included
     const fullProfile = await db.SocialProfile.findByPk(profile.id, {
       include: db.SocialProfileFollower ? [{ model: db.SocialProfileFollower, as: 'followers' }] : [],
