@@ -53,7 +53,6 @@ function buildNav(shows) {
         { icon: '✍️', label: 'Stories', route: '/stories' },
         { icon: '👥', label: 'Characters', route: '/character-registry?view=world' },
         { icon: '🔗', label: 'Relationships', route: '/world-studio?tab=relationships' },
-        { icon: '📰', label: 'Press', route: '/press' },
       ],
     },
     {

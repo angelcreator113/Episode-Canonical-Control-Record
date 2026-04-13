@@ -45,6 +45,7 @@ const EpisodeDetail = () => {
     ]},
     { key: 'results', icon: '👑', label: 'Results', subs: [
       { key: 'evaluation', label: 'Evaluation' },
+      { key: 'story', label: 'Story' },
       { key: 'distribution', label: 'Distribution' },
     ]},
   ];
@@ -58,6 +59,7 @@ const EpisodeDetail = () => {
       'checklist': ['production', 'checklist'],
       'production': ['production', 'assets'],
       'evaluation': ['results', 'evaluation'],
+      'story': ['results', 'story'],
       'distribution': ['results', 'distribution'],
     };
     return map[tab] || [tab, null];
@@ -794,6 +796,59 @@ const EpisodeDetail = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Story Tab — links to Stories page */}
+        {activeTab === 'results' && epSubTab === 'story' && (
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Episode Stories</h2>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={async (e) => {
+                  const btn = e.currentTarget; btn.disabled = true; btn.textContent = '⏳ Generating...';
+                  try {
+                    const sid = episode?.show_id || episode?.showId;
+                    await api.post(`/api/v1/world/${sid}/episodes/${episode.id}/generate-story`, { format: 'short_story' });
+                    btn.textContent = '✓ Generated — open Stories'; setTimeout(() => { btn.textContent = '✦ Generate Short Story'; btn.disabled = false; }, 2000);
+                  } catch { btn.textContent = 'Failed'; btn.disabled = false; }
+                }} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#B8962E', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                  ✦ Generate Short Story
+                </button>
+                <button onClick={() => window.location.href = '/stories'} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                  ✍️ Open Stories Library
+                </button>
+              </div>
+            </div>
+            <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '24px', textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>✍️</div>
+              <h3 style={{ margin: '0 0 8px', fontSize: 16, color: '#1a1a2e' }}>Generate Stories</h3>
+              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5, maxWidth: 400, margin: '0 auto 16px' }}>
+                Transform this episode into prose — short story, social fiction, snippet, or recap.
+                Each format tells the same story differently.
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                {[
+                  { format: 'short_story', icon: '📖', label: 'Short Story', desc: '2-3K words' },
+                  { format: 'social_fiction', icon: '📱', label: 'Social Fiction', desc: 'Posts & DMs' },
+                  { format: 'snippet', icon: '✂️', label: 'Snippet', desc: '400-600 words' },
+                  { format: 'recap', icon: '🔄', label: 'Recap', desc: 'Casual retelling' },
+                ].map(f => (
+                  <button key={f.format} onClick={async (e) => {
+                    const btn = e.currentTarget; btn.disabled = true; const orig = btn.textContent; btn.textContent = '⏳...';
+                    try {
+                      const sid = episode?.show_id || episode?.showId;
+                      await api.post(`/api/v1/world/${sid}/episodes/${episode.id}/generate-story`, { format: f.format });
+                      btn.textContent = '✓'; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+                    } catch { btn.textContent = '✗'; btn.disabled = false; }
+                  }} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fafafa', cursor: 'pointer', textAlign: 'center', minWidth: 120 }}>
+                    <div style={{ fontSize: 20, marginBottom: 4 }}>{f.icon}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#1a1a2e' }}>{f.label}</div>
+                    <div style={{ fontSize: 9, color: '#94a3b8' }}>{f.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
