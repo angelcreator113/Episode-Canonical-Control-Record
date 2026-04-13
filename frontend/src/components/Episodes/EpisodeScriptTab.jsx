@@ -171,13 +171,25 @@ export default function EpisodeScriptTab({ episode, show }) {
 
   const handleApprove = (beatId) => setBeats(prev => prev.map(b => b.id === beatId ? { ...b, approved: !b.approved } : b));
 
+  const [guardResult, setGuardResult] = useState(null);
+
   const handleGenerate = async () => {
-    setGenerating(true); setGenError(null);
+    setGenerating(true); setGenError(null); setGuardResult(null);
     try {
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/generate-script`, { showId });
-      setScriptText(res.data.script); setDevScript(res.data.script);
-      try { await api.put(`/api/v1/episodes/${episodeId}`, { script_content: res.data.script }); } catch {}
-      setToast({ msg: '✦ Script generated!', type: 'success' }); setTimeout(() => setToast(null), 4000);
+      const script = res.data.script || res.data.script_text || '';
+      setScriptText(script); setDevScript(script);
+      try { await api.put(`/api/v1/episodes/${episodeId}`, { script_content: script }); } catch {}
+
+      // Check for auto-guard results
+      if (res.data.guardResult) {
+        setGuardResult(res.data.guardResult);
+        const v = res.data.guardResult.violations?.length || 0;
+        setToast({ msg: v > 0 ? `✦ Script generated — ⚠️ ${v} franchise violation(s)` : '✦ Script generated — ✅ Passed franchise guard', type: v > 0 ? 'error' : 'success' });
+      } else {
+        setToast({ msg: '✦ Script generated!', type: 'success' });
+      }
+      setTimeout(() => setToast(null), 5000);
     } catch (err) { setGenError(err.response?.data?.error || 'Generation failed'); }
     finally { setGenerating(false); }
   };
@@ -210,6 +222,25 @@ export default function EpisodeScriptTab({ episode, show }) {
       {!developerMode && (hasScript ? (
         <div>
           {beats.map(beat => <BeatSection key={beat.id} beat={beat} scenePlan={scenePlan} expanded={expandedBeat === beat.id} onToggle={() => setExpandedBeat(expandedBeat === beat.id ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} />)}
+          {/* Franchise Guard Results */}
+          {guardResult && (
+            <div style={{
+              marginTop: 16, borderRadius: 10, padding: '14px 18px',
+              background: guardResult.violations?.length > 0 ? '#fef2f2' : '#f0fdf4',
+              border: `1px solid ${guardResult.violations?.length > 0 ? '#fecaca' : '#bbf7d0'}`,
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: guardResult.violations?.length > 0 ? '#dc2626' : '#16a34a', marginBottom: 6 }}>
+                {guardResult.violations?.length > 0 ? `🛡️ ${guardResult.violations.length} franchise violation(s)` : '🛡️ Passed franchise guard'}
+                <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8', marginLeft: 8 }}>({guardResult.rules_checked || '?'} rules checked)</span>
+              </div>
+              {guardResult.violations?.map((v, i) => (
+                <div key={i} style={{ padding: '6px 10px', background: '#fff', borderRadius: 6, marginBottom: 4, fontSize: 12, color: '#dc2626', border: '1px solid #fecaca' }}>
+                  <strong>{v.rule}:</strong> {v.explanation}
+                </div>
+              ))}
+            </div>
+          )}
+
           {allApproved && (
             <div style={{ background: 'linear-gradient(135deg, #E8F5E9, #F1F8E9)', border: '1px solid #A5D6A7', borderRadius: 12, padding: '20px 24px', marginTop: 16, textAlign: 'center' }}>
               <p style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#16a34a' }}>✦ All beats approved — script is ready</p>

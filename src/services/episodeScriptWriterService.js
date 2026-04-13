@@ -163,13 +163,15 @@ async function loadScriptContext(episodeId, showId, models) {
 
   // 6. Show Brain franchise laws
   context.franchiseLaws = [];
+  context.franchiseLawIds = [];
   if (FranchiseKnowledge) {
     try {
       context.franchiseLaws = await FranchiseKnowledge.findAll({
         where: { status: 'active', always_inject: true },
-        attributes: ['title', 'content', 'category'],
+        attributes: ['id', 'title', 'content', 'category'],
         limit: 50,
       }).then(laws => laws.map(l => l.toJSON()));
+      context.franchiseLawIds = context.franchiseLaws.map(l => l.id);
     } catch { /* non-blocking */ }
   }
 
@@ -641,7 +643,78 @@ async function generateEpisodeScript(episodeId, showId, models) {
     );
   } catch { /* non-blocking */ }
 
-  return script;
+  // Track which franchise laws were injected
+  if (context.franchiseLawIds?.length > 0 && models.FranchiseKnowledge) {
+    try {
+      await models.sequelize.query(
+        `UPDATE franchise_knowledge
+         SET injection_count = COALESCE(injection_count, 0) + 1,
+             last_injected_at = NOW(),
+             updated_at = NOW()
+         WHERE id IN (:ids)`,
+        { replacements: { ids: context.franchiseLawIds } }
+      );
+      console.log(`[ScriptWriter] Updated injection_count for ${context.franchiseLawIds.length} franchise entries`);
+    } catch (trackErr) {
+      console.warn('[ScriptWriter] Injection tracking failed:', trackErr.message);
+    }
+  }
+
+  // Auto-run franchise guard on generated script
+  let guardResult = null;
+  try {
+    const guardEntries = await models.FranchiseKnowledge.findAll({
+      where: { status: 'active' },
+      attributes: ['id', 'title', 'content', 'severity'],
+      limit: 100,
+    });
+
+    if (guardEntries.length > 0 && scriptText.length > 100) {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const guardClient = new Anthropic();
+      const rulesText = guardEntries.map(e => `[${e.severity}] ${e.title}: ${typeof e.content === 'string' ? e.content.slice(0, 200) : JSON.stringify(e.content).slice(0, 200)}`).join('\n');
+
+      const guardRes = await guardClient.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: `Check this script against these franchise rules. Report any violations.
+
+RULES:
+${rulesText}
+
+SCRIPT (first 3000 chars):
+${scriptText.slice(0, 3000)}
+
+Return JSON: { "violations": [{"rule": "rule title", "explanation": "what's wrong"}], "passed": true/false, "rules_checked": ${guardEntries.length} }
+Return ONLY the JSON.` }],
+      });
+
+      const guardText = guardRes.content?.[0]?.text || '';
+      const guardMatch = guardText.match(/\{[\s\S]*\}/);
+      if (guardMatch) {
+        guardResult = JSON.parse(guardMatch[0]);
+        guardResult.rules_checked = guardEntries.length;
+      }
+    }
+  } catch (guardErr) {
+    console.warn('[ScriptWriter] Auto-guard failed (non-blocking):', guardErr.message);
+  }
+
+  // Store guard result and injected entries on the script record
+  try {
+    await script.update({
+      context_snapshot: {
+        ...script.context_snapshot,
+        franchise_laws_injected: context.franchiseLawIds,
+        franchise_laws_count: context.franchiseLawIds?.length || 0,
+        guard_result: guardResult,
+        guard_passed: guardResult?.passed ?? null,
+        guard_violations: guardResult?.violations?.length || 0,
+      },
+    });
+  } catch { /* non-blocking */ }
+
+  return { ...script.toJSON(), guardResult };
 }
 
 /**
