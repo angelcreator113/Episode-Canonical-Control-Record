@@ -67,16 +67,16 @@ export default function UniversePage() {
         completed: (Array.isArray(episodes) ? episodes : []).filter(e => e.evaluation_status === 'accepted').length,
       });
 
-      // Try loading universe (optional — may not exist)
+      // Try loading universe from show's universe_id (or first available)
       try {
-        const uRes = await api.get('/api/v1/universe/a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e');
-        setUniverse(uRes.data?.universe || null);
+        const universeId = firstShow.universe_id;
+        if (universeId) {
+          const uRes = await api.get(`/api/v1/universe/${universeId}`);
+          setUniverse(uRes.data?.universe || null);
+          const sRes = await api.get(`/api/v1/universe/series?universe_id=${universeId}`);
+          setSeries(sRes.data?.series || []);
+        }
       } catch { /* universe not seeded — that's fine */ }
-
-      try {
-        const sRes = await api.get('/api/v1/universe/series?universe_id=a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e');
-        setSeries(sRes.data?.series || []);
-      } catch { /* no series — fine */ }
 
     } catch (err) {
       console.error('UniversePage load error:', err);
