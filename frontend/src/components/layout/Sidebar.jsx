@@ -28,10 +28,7 @@ function buildNav(shows) {
       items: [
         ...(showId ? [
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=overview` },
-          { icon: '🎞️', label: 'Scene Sets', route: `/shows/${showId}/world?tab=scene-sets` },
-        ] : [
-          { icon: '🎞️', label: 'Scene Sets', route: '/scene-library' },
-        ]),
+        ] : []),
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
       ],
     },
@@ -58,9 +55,7 @@ function buildNav(shows) {
     {
       zone: 'STUDIO',
       items: [
-        { icon: '🎨', label: 'Scene Studio', route: '/scene-library' },
         { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
-        { icon: '📂', label: 'Assets', route: '/assets' },
         { icon: '📦', label: 'Compositions', route: '/library' },
       ],
     },
