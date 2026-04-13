@@ -25,6 +25,8 @@ import { EventInvitePreview } from './feed/FeedEnhancements';
 import './WorldAdmin.css';
 
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
+const SceneSetsTab = lazy(() => import('./SceneSetsTab'));
+const UIOverlaysTab = lazy(() => import('./UIOverlaysTab'));
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
 const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', safe: '#eab308', fail: '#dc2626' };
@@ -3863,209 +3865,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
       {/* ════════════════════════ SCENE SETS ════════════════════════ */}
       {activeTab === 'wardrobe' && subTab === 'scene-sets' && (
-        <div style={S.content}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Scene Sets</h2>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
-                {sceneSets.length} location{sceneSets.length !== 1 ? 's' : ''} — homebase, venues, transitions
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={async () => {
-                const name = window.prompt("Homebase name (e.g., Lala's Apartment, The Studio):");
-                if (!name) return;
-                try {
-                  const rooms = ['Living Room', 'Bedroom', "Lala's Closet", 'Vanity / Makeup Station', 'Kitchen', 'Bathroom'];
-                  const res = await api.post(`/api/v1/scene-sets`, {
-                    name, scene_type: 'HOME_BASE', show_id: showId,
-                    canonical_description: `${name} — Lala's home base. Rooms: ${rooms.join(', ')}`,
-                  });
-                  const setId = res.data?.data?.id || res.data?.id;
-                  if (setId) {
-                    for (let i = 0; i < rooms.length; i++) {
-                      await api.post(`/api/v1/scene-sets/${setId}/angles`, {
-                        angle_name: `${name} — ${rooms[i]}`,
-                        angle_label: rooms[i].toUpperCase().replace(/[^A-Z]/g, '_'),
-                        sort_order: i + 1,
-                      }).catch(() => {});
-                    }
-                    setToast(`Homebase "${name}" created with ${rooms.length} rooms`);
-                    loadData();
-                  }
-                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-              }} style={{ ...S.smBtn, background: '#faf5ea', borderColor: '#e8d9b8', color: '#B8962E' }}>
-                🏠 Homebase
-              </button>
-              <button onClick={async () => {
-                try {
-                  await api.post(`/api/v1/scene-sets`, { name: "Lala's Closet", scene_type: 'CLOSET', show_id: showId, canonical_description: "Lala's walk-in closet — the heart of the show. Where outfit selection happens." });
-                  setToast("Lala's Closet created"); loadData();
-                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-              }} style={{ ...S.smBtn, background: '#fce7f3', borderColor: '#f9a8d4', color: '#ec4899' }}>
-                👗 Closet
-              </button>
-              <button onClick={async () => {
-                const name = window.prompt('Transition name (e.g., City Streets, Taxi Ride, Subway):');
-                if (!name) return;
-                try {
-                  await api.post(`/api/v1/scene-sets`, { name, scene_type: 'TRANSITION', show_id: showId, canonical_description: `${name} — transition scene between locations` });
-                  setToast(`Transition "${name}" created`); loadData();
-                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-              }} style={{ ...S.smBtn, background: '#eef2ff', borderColor: '#c7d2fe', color: '#6366f1' }}>
-                🚗 Transition
-              </button>
-              <button onClick={() => navigate(`/shows/${showId}/scene-library`)} style={S.primaryBtn}>
-                Scene Library →
-              </button>
-            </div>
-          </div>
-
-          {sceneSets.length === 0 ? (
-            <div style={{ ...S.card, textAlign: 'center', padding: 40 }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>📍</div>
-              <p style={{ fontSize: 14, color: '#94a3b8', marginBottom: 16 }}>No scene sets yet</p>
-              <p style={{ fontSize: 12, color: '#94a3b8' }}>Generate venue images from events, or create scenes in the Scene Library.</p>
-            </div>
-          ) : (
-            <div>
-              {/* Type filter chips */}
-              <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-                {[
-                  { type: null, label: 'All', icon: '📍' },
-                  { type: 'HOME_BASE', label: 'Homebase', icon: '🏠' },
-                  { type: 'CLOSET', label: 'Closet', icon: '👗' },
-                  { type: 'EVENT_LOCATION', label: 'Venues', icon: '🎭' },
-                  { type: 'TRANSITION', label: 'Transitions', icon: '🚗' },
-                ].map(f => {
-                  const count = f.type ? sceneSets.filter(s => s.scene_type === f.type).length : sceneSets.length;
-                  return (
-                    <span key={f.label} style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: '#f1f5f9', color: '#64748b', cursor: 'default' }}>
-                      {f.icon} {f.label} ({count})
-                    </span>
-                  );
-                })}
-              </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12 }}>
-              {sceneSets.map(ss => (
-                <div key={ss.id} onClick={() => navigate(`/shows/${showId}/scene-library?scene=${ss.id}`)}
-                  style={{
-                    ...S.card, padding: 0, overflow: 'hidden', cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
-                >
-                  {ss.base_still_url ? (
-                    <div style={{ position: 'relative' }}>
-                      {ss.video_clip_url ? (
-                        <video src={ss.video_clip_url} style={{ width: '100%', height: 140, objectFit: 'cover' }} autoPlay loop muted playsInline />
-                      ) : (
-                        <img src={ss.base_still_url} alt={ss.name} style={{ width: '100%', height: 140, objectFit: 'cover' }} />
-                      )}
-                      {ss.video_clip_url && (
-                        <span style={{ position: 'absolute', top: 8, right: 8, padding: '2px 8px', background: 'rgba(0,0,0,0.7)', color: '#fff', borderRadius: 4, fontSize: 9, fontWeight: 600 }}>🎬 Video</span>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ width: '100%', height: 140, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: 32 }}>📍</div>
-                  )}
-                  <div style={{ padding: '10px 14px' }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{ss.name}</div>
-                    <div style={{ fontSize: 10, color: '#94a3b8' }}>
-                      {ss.scene_type === 'HOME_BASE' ? '🏠 Homebase' : ss.scene_type === 'CLOSET' ? '👗 Closet' : ss.scene_type === 'TRANSITION' ? '🚗 Transition' : ss.scene_type?.replace(/_/g, ' ')}
-                      {ss.generation_status === 'complete' && <span style={{ marginLeft: 6, color: '#16a34a' }}>✓</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            </div>
-          )}
-        </div>
+        <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading scene sets...</div>}>
+          <SceneSetsTab showId={showId} />
+        </Suspense>
       )}
 
       {/* ════════════════════════ UI OVERLAYS ════════════════════════ */}
       {activeTab === 'wardrobe' && subTab === 'overlays-tab' && (
-        <div style={S.content}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>UI Overlays</h2>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
-                Show-level frames, icons, and episode overlays
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={async () => {
-                try {
-                  const res = await api.post(`/api/v1/ui-overlays/${showId}/generate-all`);
-                  setToast(res.data?.message || 'Overlay generation started');
-                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-              }} style={{ ...S.smBtn, background: '#faf5ea', borderColor: '#e8d9b8', color: '#B8962E' }}>
-                ✨ Generate All
-              </button>
-              <button onClick={() => navigate(`/shows/${showId}/scene-library?tab=overlays`)} style={S.primaryBtn}>
-                Manage Overlays →
-              </button>
-            </div>
-          </div>
-
-          {/* Overlay Grid */}
-          {!overlayData ? (
-            <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8' }}>Loading overlays...</div>
-          ) : (() => {
-            const generated = overlayData.filter(o => o.url || o.generated || o.asset_id);
-            const missing = overlayData.filter(o => !o.url && !o.generated && !o.asset_id);
-            const pct = overlayData.length > 0 ? Math.round((generated.length / overlayData.length) * 100) : 0;
-            return (
-              <div>
-                {/* Progress */}
-                <div style={{ ...S.card, marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>{generated.length}/{overlayData.length} generated</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#B8962E' }}>{pct}%</span>
-                  </div>
-                  <div style={{ height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, #B8962E, #D4AF37)', borderRadius: 3, transition: 'width 0.3s' }} />
-                  </div>
-                </div>
-
-                {/* Generated overlays */}
-                {generated.length > 0 && (
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Generated ({generated.length})</div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {generated.map(o => (
-                        <div key={o.id} style={{ position: 'relative' }}>
-                          <img src={o.url} alt={o.name} style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid #e2e8f0' }}
-                            onError={e => e.target.style.display = 'none'} />
-                          <div style={{ fontSize: 8, color: '#64748b', textAlign: 'center', marginTop: 2, maxWidth: 56, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {o.name?.replace(/ Icon| Screen| Panel/g, '')}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Missing overlays */}
-                {missing.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Not Generated ({missing.length})</div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {missing.map(o => (
-                        <span key={o.id} style={{ padding: '4px 10px', background: '#f8f8f8', border: '1px dashed #d1d5db', borderRadius: 6, fontSize: 10, color: '#94a3b8' }}>
-                          {o.name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </div>
+        <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading overlays...</div>}>
+          <UIOverlaysTab showId={showId} />
+        </Suspense>
       )}
+
+      {/* Old custom scene sets + overlays removed — using SceneSetsTab and UIOverlaysTab components */}
 
       {/* ════════════════════════ WARDROBE ════════════════════════ */}
       {activeTab === 'wardrobe' && subTab === 'wardrobe-items' && (() => {
