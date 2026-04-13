@@ -3557,7 +3557,7 @@ router.get('/world/context-summary', optionalAuth, async (req, res) => {
 const multer = require('multer');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
-const S3_BUCKET = process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || 'prime-episodes';
+const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const mapS3 = new S3Client({ region: AWS_REGION });
 const mapUpload = multer({
@@ -3573,6 +3573,7 @@ const mapUpload = multer({
 router.post('/world/map/upload', optionalAuth, mapUpload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No image file provided' });
+    if (!S3_BUCKET) return res.status(500).json({ success: false, error: 'S3 bucket not configured — set S3_PRIMARY_BUCKET env var' });
 
     const ext = req.file.mimetype === 'image/png' ? 'png' : req.file.mimetype === 'image/webp' ? 'webp' : 'jpg';
     const s3Key = `world-map/dream-map-${Date.now()}.${ext}`;
