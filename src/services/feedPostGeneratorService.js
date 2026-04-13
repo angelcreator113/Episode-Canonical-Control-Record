@@ -57,15 +57,21 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
     // Get profiles with high relevance to Lala
     profiles = await SocialProfile.findAll({
       where: {
-        series_id: null, // Filter will be by show context
+        series_id: null,
         status: ['generated', 'finalized', 'crossed'],
       },
       attributes: ['id', 'handle', 'display_name', 'creator_name', 'platform', 'vibe_sentence',
                    'archetype', 'posting_voice', 'follow_motivation', 'follow_emotion',
                    'lala_relevance_score', 'celebrity_tier', 'content_category',
-                   'follower_tier', 'aesthetic_dna', 'career_pressure'],
+                   'follower_tier', 'aesthetic_dna', 'career_pressure', 'registry_character_id'],
       order: [['lala_relevance_score', 'DESC']],
       limit: 20,
+      include: models.RegistryCharacter ? [{
+        model: models.RegistryCharacter,
+        as: 'registryCharacter',
+        attributes: ['display_name', 'core_belief', 'role_type', 'pressure_type', 'depth_level', 'personality'],
+        required: false,
+      }] : [],
     });
   } catch { /* skip */ }
 
@@ -84,12 +90,19 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
   // Build prompt
   const profileContext = profiles.slice(0, 12).map(p => {
     const d = p.toJSON();
-    return `@${d.handle} (${d.display_name || d.handle})${d.creator_name ? ` — real name: ${d.creator_name}` : ''}
+    const rc = d.registryCharacter || p.registryCharacter;
+    let block = `@${d.handle} (${d.display_name || d.handle})${d.creator_name ? ` — real name: ${d.creator_name}` : ''}
   Platform: ${d.platform} | Archetype: ${d.archetype} | Tier: ${d.follower_tier}
   Voice: ${d.posting_voice || d.vibe_sentence}
   Lala's follow motivation: ${d.follow_motivation || 'none'}
   Emotional response: ${d.follow_emotion || 'neutral'}
   Career pressure vs Lala: ${d.career_pressure || 'level'}`;
+    if (rc) {
+      if (rc.core_belief) block += `\n  Core belief: "${rc.core_belief}"`;
+      if (rc.role_type) block += `\n  Story role: ${rc.role_type}${rc.pressure_type ? ` (${rc.pressure_type})` : ''}`;
+      if (rc.depth_level && rc.depth_level !== 'sparked') block += `\n  Depth: ${rc.depth_level} — posts should reflect inner complexity`;
+    }
+    return block;
   }).join('\n\n');
 
   const eventContext = event
