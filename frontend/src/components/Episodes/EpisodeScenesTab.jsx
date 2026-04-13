@@ -328,20 +328,33 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
                         angles.map((angle) => {
                           const isCreating = creatingSceneFor === angle.id;
                           const imgUrl = angle.still_image_url || angle.thumbnail_url;
+                          const videoUrl = angle.video_clip_url;
                           return (
                             <div key={angle.id} className="est-angle-card">
                               <div className="est-angle-thumb">
-                                {imgUrl ? (
+                                {videoUrl ? (
+                                  <video src={videoUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} autoPlay loop muted playsInline />
+                                ) : imgUrl ? (
                                   <img src={imgUrl} alt={angle.angle_name} />
                                 ) : (
                                   <div className="est-angle-thumb-empty"><Camera size={16} /></div>
                                 )}
+                                {videoUrl && <span style={{ position: 'absolute', top: 4, right: 4, padding: '1px 6px', background: 'rgba(0,0,0,0.7)', color: '#fff', borderRadius: 3, fontSize: 8, fontWeight: 600 }}>🎬</span>}
+                                {angle.generation_status === 'pending' && <span style={{ position: 'absolute', bottom: 4, left: 4, padding: '1px 6px', background: '#fef3c7', color: '#92400e', borderRadius: 3, fontSize: 8, fontWeight: 600 }}>Pending</span>}
                               </div>
                               <div className="est-angle-info">
                                 <span className="est-angle-name">{angle.angle_name}</span>
-                                {angle.angle_label && (
-                                  <span className="est-angle-label">{angle.angle_label}</span>
-                                )}
+                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+                                  {angle.angle_label && (
+                                    <span className="est-angle-label">{angle.angle_label}</span>
+                                  )}
+                                  {angle.camera_motion && (
+                                    <span style={{ fontSize: 9, padding: '1px 5px', background: '#f0f0f0', borderRadius: 3, color: '#64748b' }}>{angle.camera_motion.replace(/_/g, ' ')}</span>
+                                  )}
+                                  {angle.beat_affinity && (
+                                    <span style={{ fontSize: 9, padding: '1px 5px', background: '#eef2ff', borderRadius: 3, color: '#6366f1' }}>Beat {angle.beat_affinity}</span>
+                                  )}
+                                </div>
                               </div>
                               <button
                                 className="est-btn est-btn-sm est-btn-accent"
