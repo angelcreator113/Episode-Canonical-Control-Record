@@ -256,6 +256,8 @@ router.get('/characters/:key/state', optionalAuth, async (req, res) => {
 // POST /api/v1/episodes/:id/evaluate
 // ═══════════════════════════════════════════
 
+// DEPRECATED: Use POST /world/:showId/episodes/:episodeId/complete instead
+// (episodeCompletionService.js merges evaluation + financials + social + wardrobe in one call)
 router.post('/episodes/:id/evaluate', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -420,6 +422,7 @@ router.post('/episodes/:id/evaluate', optionalAuth, async (req, res) => {
 // POST /api/v1/episodes/:id/override
 // ═══════════════════════════════════════════
 
+// DEPRECATED: Use POST /world/:showId/episodes/:episodeId/complete instead
 router.post('/episodes/:id/override', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -535,6 +538,7 @@ router.post('/episodes/:id/override', optionalAuth, async (req, res) => {
 // POST /api/v1/episodes/:id/accept
 // ═══════════════════════════════════════════
 
+// DEPRECATED: Use POST /world/:showId/episodes/:episodeId/complete instead
 router.post('/episodes/:id/accept', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
