@@ -184,6 +184,7 @@ export default function WorldFoundation() {
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C' }}>{selectedLoc.name}</div>
                   <div style={{ fontSize: 11, color: '#888' }}>{selectedLoc.location_type}{selectedLoc.venue_type ? ` · ${selectedLoc.venue_type}` : ''}{selectedLoc.city ? ` · ${selectedLoc.city}` : ''}</div>
+                  {(selectedLoc.street_address || selectedLoc.district) && <div style={{ fontSize: 10, color: '#999', marginTop: 2 }}>📍 {[selectedLoc.street_address, selectedLoc.district, selectedLoc.city].filter(Boolean).join(', ')}</div>}
                 </div>
                 <button onClick={() => setSelectedLoc(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#999' }}>x</button>
               </div>
@@ -328,8 +329,10 @@ export default function WorldFoundation() {
                             <button onClick={() => deleteLocation(loc.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#dc2626' }}>Del</button>
                           </div>
                         </div>
+                        {(loc.street_address || loc.district) && <div style={{ fontSize: 10, color: '#999', marginTop: 2 }}>📍 {[loc.street_address, loc.district, loc.city].filter(Boolean).join(', ')}</div>}
                         {loc.description && <p style={{ fontSize: 11, color: '#666', margin: '4px 0 0', lineHeight: 1.4 }}>{loc.description.slice(0, 100)}{loc.description.length > 100 ? '...' : ''}</p>}
-                        {loc.sceneSets?.length > 0 && <div style={{ fontSize: 9, color: '#7ab3d4', marginTop: 4, fontWeight: 600 }}>{loc.sceneSets.length} scene set{loc.sceneSets.length > 1 ? 's' : ''}</div>}
+                        {loc.residents?.length > 0 && <div style={{ fontSize: 9, color: '#d4789a', marginTop: 4, fontWeight: 600 }}>{loc.residents.length} resident{loc.residents.length > 1 ? 's' : ''}: {loc.residents.slice(0, 3).map(r => r.display_name || r.handle).join(', ')}</div>}
+                        {loc.sceneSets?.length > 0 && <div style={{ fontSize: 9, color: '#7ab3d4', marginTop: 2, fontWeight: 600 }}>{loc.sceneSets.length} scene set{loc.sceneSets.length > 1 ? 's' : ''}</div>}
                         {loc.events?.length > 0 && <div style={{ fontSize: 9, color: '#B8962E', marginTop: 2, fontWeight: 600 }}>{loc.events.length} event{loc.events.length > 1 ? 's' : ''}</div>}
                       </div>
                     ))}
