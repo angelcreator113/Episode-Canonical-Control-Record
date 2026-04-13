@@ -1,230 +1,120 @@
 /**
- * EpisodeCard Component - ENHANCED VISUAL HIERARCHY
- * Improved scanning, stronger hierarchy, clearer actions
+ * EpisodeCard — Enhanced with tier badge, score, financial P&L, production readiness
  */
 
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { formatters } from '../utils/formatters';
-import '../styles/EpisodeCard.css';
 
-/**
- * StatusBadge - Top-right status indicator
- */
-const StatusBadge = ({ status }) => {
-  const getStatusDisplay = (status) => {
-    const displays = {
-      draft: { emoji: '✏️', label: 'Draft' },
-      scripted: { emoji: '📜', label: 'Scripted' },
-      in_build: { emoji: '🎬', label: 'In Build' },
-      in_review: { emoji: '👀', label: 'In Review' },
-      review: { emoji: '👀', label: 'In Review' },
-      scheduled: { emoji: '📅', label: 'Scheduled' },
-      published: { emoji: '✅', label: 'Published' },
-      archived: { emoji: '📦', label: 'Archived' },
-    };
-    return displays[status] || { emoji: '⚪', label: formatters.formatStatus(status) };
-  };
-
-  const { emoji, label } = getStatusDisplay(status);
-
-  return (
-    <span className={`status-badge status-${status}`}>
-      <span className="status-emoji">{emoji}</span>
-      <span className="status-text">{label}</span>
-    </span>
-  );
+const TIER_CONFIG = {
+  slay: { emoji: '👑', label: 'SLAY', color: '#FFD700', bg: '#FFFBEB' },
+  pass: { emoji: '✨', label: 'PASS', color: '#22c55e', bg: '#f0fdf4' },
+  safe: { emoji: '😐', label: 'SAFE', color: '#eab308', bg: '#fefce8' },
+  fail: { emoji: '💔', label: 'FAIL', color: '#dc2626', bg: '#fef2f2' },
 };
 
-/**
- * MetaRow - Single inline row for episode metadata
- */
-const MetaRow = ({ episodeNumber, airDate, show }) => {
-  const parts = [];
-  
-  if (episodeNumber) {
-    parts.push({ type: 'text', content: `Episode ${episodeNumber}` });
-  }
-  
-  if (airDate) {
-    parts.push({ type: 'text', content: formatters.formatDate(airDate) });
-  }
-  
-  if (show?.name) {
-    parts.push({ type: 'link', content: show.name, id: show.id });
-  }
-
-  return (
-    <div className="meta-row">
-      {parts.map((part, idx) => (
-        <React.Fragment key={idx}>
-          {idx > 0 && <span className="meta-separator">•</span>}
-          {part.type === 'link' ? (
-            <Link 
-              to={`/shows/${part.id}`} 
-              className="meta-text meta-link"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {part.content}
-            </Link>
-          ) : (
-            <span className="meta-text">{part.content}</span>
-          )}
-        </React.Fragment>
-      ))}
-    </div>
-  );
+const STATUS_CONFIG = {
+  draft: { emoji: '✏️', label: 'Draft', color: '#94a3b8' },
+  scripted: { emoji: '📜', label: 'Scripted', color: '#6366f1' },
+  in_build: { emoji: '🎬', label: 'In Build', color: '#f59e0b' },
+  in_review: { emoji: '👀', label: 'Review', color: '#8b5cf6' },
+  published: { emoji: '✅', label: 'Published', color: '#22c55e' },
+  archived: { emoji: '📦', label: 'Archived', color: '#64748b' },
 };
 
-/**
- * CardHeader - Episode title (hero element)
- */
-const CardHeader = ({ title }) => (
-  <div className="card-content-area">
-    <h3 className="card-title">{title || 'Untitled Episode'}</h3>
-  </div>
-);
+function EpisodeCard({ episode, onEdit, onDelete, onView }) {
+  const status = STATUS_CONFIG[episode.status] || STATUS_CONFIG.draft;
 
-/**
- * CardBody - Metadata, description, and tags
- */
-const CardBody = ({ episode }) => {
+  // Parse evaluation
+  let evalData = null;
+  if (episode.evaluation_json) {
+    evalData = typeof episode.evaluation_json === 'string' ? JSON.parse(episode.evaluation_json) : episode.evaluation_json;
+  }
+  const tier = evalData?.tier_final ? TIER_CONFIG[evalData.tier_final] : null;
+
+  // Financial
+  const income = parseFloat(episode.total_income) || 0;
+  const expenses = parseFloat(episode.total_expenses) || 0;
+  const net = income - expenses;
+
+  // Categories
+  let categories = episode.categories;
+  if (typeof categories === 'string') try { categories = JSON.parse(categories); } catch { categories = []; }
+  if (!Array.isArray(categories)) categories = [];
+
   return (
-    <div className="card-meta-area">
-      {/* Meta Row */}
-      <MetaRow 
-        episodeNumber={episode.episode_number}
-        airDate={episode.air_date}
-        show={episode.show}
-      />
-      
-      {/* Description - 2 line clamp */}
-      {episode.description && (
-        <p className="card-description">
-          {episode.description}
-        </p>
-      )}
-      
-      {/* Categories/Tags */}
-      {episode.categories && episode.categories.length > 0 && (
-        <div className="card-tags">
-          {episode.categories.slice(0, 3).map((category, index) => (
-            <span key={index} className="tag-chip">
-              {category}
-            </span>
-          ))}
-          {episode.categories.length > 3 && (
-            <span className="tag-chip tag-more">
-              +{episode.categories.length - 3}
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-/**
- * CardFooter - Normalized actions (Primary, Secondary, Tertiary)
- */
-const CardFooter = ({ episodeId, onView, onEdit, onDelete }) => (
-  <div className="card-footer-actions">
-    {/* Primary Action */}
-    {onView && (
-      <button 
-        className="btn-action btn-primary-action" 
-        onClick={() => onView(episodeId)}
-        aria-label="Open episode"
-      >
-        Open Episode
-      </button>
-    )}
-    
-    {/* Secondary Action */}
-    {onEdit && (
-      <button 
-        className="btn-action btn-secondary-action" 
-        onClick={() => onEdit(episodeId)}
-        aria-label="Edit episode"
-      >
-        Edit
-      </button>
-    )}
-    
-    {/* Tertiary/Danger Action - Icon only */}
-    {onDelete && (
-      <button 
-        className="btn-action btn-danger-action" 
-        onClick={() => onDelete(episodeId)}
-        aria-label="Delete episode"
-        title="Delete"
-      >
-        <svg 
-          width="18" 
-          height="18" 
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
-          strokeWidth="2" 
-          strokeLinecap="round" 
-          strokeLinejoin="round"
-        >
-          <polyline points="3 6 5 6 21 6"></polyline>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          <line x1="10" y1="11" x2="10" y2="17"></line>
-          <line x1="14" y1="11" x2="14" y2="17"></line>
-        </svg>
-      </button>
-    )}
-  </div>
-);
-
-/**
- * EpisodeCard - Main card component
- */
-const EpisodeCard = ({ episode, onEdit, onDelete, onView, isSelected, onSelect, viewMode = 'grid' }) => {
-  return (
-    <div className={`episode-card-modern ${isSelected ? 'is-selected' : ''} view-${viewMode}`}>
-      {/* Status Badge - Top Right */}
-      <StatusBadge status={episode.status} />
-      
-      {/* Checkbox for bulk selection */}
-      {onSelect && (
-        <div className="episode-card-checkbox">
-          <input
-            type="checkbox"
-            checked={isSelected || false}
-            onChange={() => onSelect(episode.id)}
-            aria-label={`Select ${episode.title}`}
-          />
-        </div>
-      )}
-      
-      {/* Card Content - Wrapped for list view */}
-      {viewMode === 'list' ? (
-        <div className="episode-card-header">
-          <h3 className="episode-title">{episode.title}</h3>
-          <MetaRow 
-            episodeNumber={episode.episode_number}
-            airDate={episode.air_date}
-            show={episode.show}
-          />
+    <div
+      onClick={() => onView && onView(episode.id)}
+      style={{
+        background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0',
+        overflow: 'hidden', cursor: 'pointer', transition: 'all 0.15s',
+        display: 'flex', flexDirection: 'column',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
+    >
+      {/* Header: tier banner or status bar */}
+      {tier ? (
+        <div style={{ padding: '8px 14px', background: tier.bg, borderBottom: `2px solid ${tier.color}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 16 }}>{tier.emoji}</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: tier.color }}>{tier.label}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>{evalData.score}/100</span>
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 600, color: status.color }}>{status.emoji} {status.label}</span>
         </div>
       ) : (
-        <>
-          <CardHeader title={episode.title} />
-          <CardBody episode={episode} />
-        </>
+        <div style={{ padding: '6px 14px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: status.color }}>{status.emoji} {status.label}</span>
+          {episode.episode_number && <span style={{ fontSize: 10, color: '#94a3b8' }}>Ep {episode.episode_number}</span>}
+        </div>
       )}
-      
-      <CardFooter 
-        episodeId={episode.id}
-        onView={onView}
-        onEdit={onEdit}
-        onDelete={onDelete}
-      />
+
+      {/* Body */}
+      <div style={{ padding: '12px 14px', flex: 1 }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.3 }}>
+          {episode.title || 'Untitled Episode'}
+        </h3>
+
+        {episode.description && (
+          <p style={{ margin: '0 0 8px', fontSize: 11, color: '#64748b', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {episode.description}
+          </p>
+        )}
+
+        {/* Tags */}
+        {categories.length > 0 && (
+          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 8 }}>
+            {categories.slice(0, 3).map((cat, i) => (
+              <span key={i} style={{ padding: '1px 6px', background: '#f1f5f9', borderRadius: 4, fontSize: 9, color: '#64748b', fontWeight: 500 }}>{cat}</span>
+            ))}
+          </div>
+        )}
+
+        {/* Financial row */}
+        {(income > 0 || expenses > 0) && (
+          <div style={{ display: 'flex', gap: 8, fontSize: 10, marginTop: 4 }}>
+            {income > 0 && <span style={{ color: '#16a34a', fontWeight: 600 }}>+{income.toLocaleString()}</span>}
+            {expenses > 0 && <span style={{ color: '#dc2626', fontWeight: 600 }}>-{expenses.toLocaleString()}</span>}
+            <span style={{ fontWeight: 700, color: net >= 0 ? '#16a34a' : '#dc2626' }}>
+              Net: {net >= 0 ? '+' : ''}{net.toLocaleString()}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding: '8px 14px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 6, justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {onView && <button onClick={e => { e.stopPropagation(); onView(episode.id); }} style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#6366f1', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Open</button>}
+          {onEdit && <button onClick={e => { e.stopPropagation(); onEdit(episode.id); }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Edit</button>}
+        </div>
+        {onDelete && (
+          <button onClick={e => { e.stopPropagation(); onDelete(episode.id); }} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontSize: 11, cursor: 'pointer' }} title="Delete">🗑</button>
+        )}
+      </div>
     </div>
   );
-};
+}
 
 export default EpisodeCard;

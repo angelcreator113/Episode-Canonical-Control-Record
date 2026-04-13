@@ -163,13 +163,15 @@ async function loadScriptContext(episodeId, showId, models) {
 
   // 6. Show Brain franchise laws
   context.franchiseLaws = [];
+  context.franchiseLawIds = [];
   if (FranchiseKnowledge) {
     try {
       context.franchiseLaws = await FranchiseKnowledge.findAll({
         where: { status: 'active', always_inject: true },
-        attributes: ['title', 'content', 'category'],
+        attributes: ['id', 'title', 'content', 'category'],
         limit: 50,
       }).then(laws => laws.map(l => l.toJSON()));
+      context.franchiseLawIds = context.franchiseLaws.map(l => l.id);
     } catch { /* non-blocking */ }
   }
 
@@ -204,6 +206,80 @@ async function loadScriptContext(episodeId, showId, models) {
     );
     context.worldState = rows?.[0] || null;
   } catch { /* non-blocking */ }
+
+  // 10. Social profiles — host + guests for real character voices
+  context.socialProfiles = [];
+  try {
+    const auto = context.event?.canon_consequences?.automation || {};
+    const profileIds = [auto.host_profile_id, ...(auto.guest_profiles || []).map(g => g.profile_id)].filter(Boolean);
+    if (profileIds.length > 0) {
+      const [rows] = await sequelize.query(
+        `SELECT id, handle, display_name, creator_name, platform, archetype, posting_voice,
+                content_persona, lala_relevance_score, celebrity_tier, follow_motivation
+         FROM social_profiles WHERE id IN (:ids) AND deleted_at IS NULL`,
+        { replacements: { ids: profileIds } }
+      );
+      context.socialProfiles = rows || [];
+    }
+  } catch { /* non-blocking */ }
+
+  // 11. Social tasks — what content Lala needs to create during the event
+  context.socialTasks = [];
+  try {
+    const [todoList] = await sequelize.query(
+      `SELECT social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (todoList?.social_tasks) {
+      context.socialTasks = typeof todoList.social_tasks === 'string' ? JSON.parse(todoList.social_tasks) : todoList.social_tasks;
+    }
+  } catch { /* non-blocking */ }
+
+  // 12. Previous episode outcome — continuity callbacks
+  context.previousEpisode = null;
+  try {
+    const [prev] = await sequelize.query(
+      `SELECT title, evaluation_json, episode_number FROM episodes
+       WHERE show_id = :showId AND episode_number < (SELECT episode_number FROM episodes WHERE id = :episodeId)
+       AND deleted_at IS NULL ORDER BY episode_number DESC LIMIT 1`,
+      { replacements: { showId, episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (prev?.evaluation_json) {
+      const evalJson = typeof prev.evaluation_json === 'string' ? JSON.parse(prev.evaluation_json) : prev.evaluation_json;
+      context.previousEpisode = {
+        title: prev.title,
+        episode_number: prev.episode_number,
+        tier: evalJson.tier_final,
+        score: evalJson.score,
+        narrative: evalJson.narrative_lines?.short,
+      };
+    }
+  } catch { /* non-blocking */ }
+
+  // 13. Arc / season phase — emotional temperature
+  context.arcPhase = null;
+  try {
+    const [arc] = await sequelize.query(
+      `SELECT name, current_phase, phase_title, emotional_temperature FROM show_arcs
+       WHERE show_id = :showId AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    context.arcPhase = arc || null;
+  } catch { /* non-blocking */ }
+
+  // 14. Character state — exact coin balance for internal monologue
+  context.characterState = null;
+  try {
+    const [state] = await sequelize.query(
+      `SELECT coins, reputation, brand_trust, influence, stress FROM character_state
+       WHERE show_id = :showId AND character_key = 'justawoman' LIMIT 1`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    context.characterState = state || null;
+  } catch { /* non-blocking */ }
+
+  // 15. Designed intent from brief — SLAY/PASS/SAFE/FAIL direction
+  context.designedIntent = context.brief?.designed_intent || null;
 
   return context;
 }
@@ -371,6 +447,69 @@ ${stateContext}
 ═══ WARDROBE ═══
 ${wardrobeContext}
 
+${(() => {
+  // Social profiles — host + guests with real voices
+  let socialBlock = '';
+  if (context.socialProfiles?.length > 0) {
+    socialBlock = '═══ CHARACTERS AT THE EVENT ═══\n';
+    socialBlock += context.socialProfiles.map(p =>
+      `${p.creator_name || p.display_name || p.handle} (@${p.handle}, ${p.platform})
+  Archetype: ${p.archetype || 'unknown'} | Tier: ${p.celebrity_tier || 'accessible'}
+  Voice: ${p.posting_voice || 'Standard social media voice'}
+  Lala follows because: ${p.follow_motivation || 'general interest'}
+  SCRIPT DIRECTIVE: When this character speaks, use THEIR voice — not generic dialogue.`
+    ).join('\n\n');
+    socialBlock += '\n';
+  }
+
+  // Social tasks — content Lala needs to create
+  let taskBlock = '';
+  if (context.socialTasks?.length > 0) {
+    const required = context.socialTasks.filter(t => t.required);
+    const before = context.socialTasks.filter(t => t.timing === 'before');
+    const during = context.socialTasks.filter(t => t.timing === 'during');
+    const after = context.socialTasks.filter(t => t.timing === 'after');
+    taskBlock = `═══ SOCIAL MEDIA TASKS (${context.socialTasks.length} total, ${required.length} required) ═══\n`;
+    if (before.length > 0) taskBlock += `BEFORE: ${before.map(t => t.label).join(', ')}\n`;
+    if (during.length > 0) taskBlock += `DURING: ${during.map(t => t.label).join(', ')}\n`;
+    if (after.length > 0) taskBlock += `AFTER: ${after.map(t => t.label).join(', ')}\n`;
+    taskBlock += 'SCRIPT DIRECTIVE: Lala must reference creating this content — filming stories, going live, angling her phone. The content tasks are part of the episode action.\n';
+  }
+
+  // Previous episode continuity
+  let prevBlock = '';
+  if (context.previousEpisode) {
+    const p = context.previousEpisode;
+    prevBlock = `═══ PREVIOUS EPISODE ═══\n"${p.title}" (Episode ${p.episode_number}) — ${p.tier?.toUpperCase()} (${p.score}/100)\n${p.narrative || ''}\nSCRIPT DIRECTIVE: Reference what happened last time — ${p.tier === 'slay' ? 'Lala is riding high from her win' : p.tier === 'fail' ? 'Lala has something to prove after last week' : 'Lala is building momentum'}.\n`;
+  }
+
+  // Arc phase
+  let arcBlock = '';
+  if (context.arcPhase) {
+    arcBlock = `═══ SEASON ARC ═══\n${context.arcPhase.name || 'Current Arc'} — Phase: ${context.arcPhase.phase_title || context.arcPhase.current_phase}\nEmotional Temperature: ${context.arcPhase.emotional_temperature || 'neutral'}\nSCRIPT DIRECTIVE: The emotional tone of this episode should match the season phase.\n`;
+  }
+
+  // Designed intent direction
+  let intentBlock = '';
+  if (context.designedIntent) {
+    const directions = {
+      slay: 'This episode is DESIGNED TO SLAY. Build toward triumph. Outfit lands, content kills, event goes perfectly. But make the audience feel the stakes — success was not guaranteed.',
+      pass: 'This episode should land solidly. Good but not perfect. Small wins, small missteps. Lala grows but the room doesn\'t part for her.',
+      safe: 'This is a transitional episode. Nothing dramatic. But plant seeds — a look from someone, a notification she ignores, a price she doesn\'t check.',
+      fail: 'This episode is DESIGNED TO FAIL. Build toward it gradually — a wrong outfit choice, a social faux pas, content that doesn\'t land. Make the audience feel it coming.',
+    };
+    intentBlock = `═══ EPISODE DIRECTION ═══\n${directions[context.designedIntent] || ''}\n`;
+  }
+
+  // Character state — exact numbers for internal monologue
+  let charBlock = '';
+  if (context.characterState) {
+    const cs = context.characterState;
+    charBlock = `═══ LALA'S STATS ═══\n🪙 ${cs.coins} coins | ⭐ ${cs.reputation}/10 rep | 🤝 ${cs.brand_trust}/10 trust | 📣 ${cs.influence}/10 influence | 😰 ${cs.stress}/10 stress\nSCRIPT DIRECTIVE: Use the exact coin number in Lala's internal monologue when she checks her balance.\n`;
+  }
+
+  return [socialBlock, taskBlock, prevBlock, arcBlock, intentBlock, charBlock].filter(Boolean).join('\n');
+})()}
 ═══ 14-BEAT SCENE PLAN ═══
 ${beatContext}
 
@@ -504,7 +643,78 @@ async function generateEpisodeScript(episodeId, showId, models) {
     );
   } catch { /* non-blocking */ }
 
-  return script;
+  // Track which franchise laws were injected
+  if (context.franchiseLawIds?.length > 0 && models.FranchiseKnowledge) {
+    try {
+      await models.sequelize.query(
+        `UPDATE franchise_knowledge
+         SET injection_count = COALESCE(injection_count, 0) + 1,
+             last_injected_at = NOW(),
+             updated_at = NOW()
+         WHERE id IN (:ids)`,
+        { replacements: { ids: context.franchiseLawIds } }
+      );
+      console.log(`[ScriptWriter] Updated injection_count for ${context.franchiseLawIds.length} franchise entries`);
+    } catch (trackErr) {
+      console.warn('[ScriptWriter] Injection tracking failed:', trackErr.message);
+    }
+  }
+
+  // Auto-run franchise guard on generated script
+  let guardResult = null;
+  try {
+    const guardEntries = await models.FranchiseKnowledge.findAll({
+      where: { status: 'active' },
+      attributes: ['id', 'title', 'content', 'severity'],
+      limit: 100,
+    });
+
+    if (guardEntries.length > 0 && scriptText.length > 100) {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const guardClient = new Anthropic();
+      const rulesText = guardEntries.map(e => `[${e.severity}] ${e.title}: ${typeof e.content === 'string' ? e.content.slice(0, 200) : JSON.stringify(e.content).slice(0, 200)}`).join('\n');
+
+      const guardRes = await guardClient.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: `Check this script against these franchise rules. Report any violations.
+
+RULES:
+${rulesText}
+
+SCRIPT (first 3000 chars):
+${scriptText.slice(0, 3000)}
+
+Return JSON: { "violations": [{"rule": "rule title", "explanation": "what's wrong"}], "passed": true/false, "rules_checked": ${guardEntries.length} }
+Return ONLY the JSON.` }],
+      });
+
+      const guardText = guardRes.content?.[0]?.text || '';
+      const guardMatch = guardText.match(/\{[\s\S]*\}/);
+      if (guardMatch) {
+        guardResult = JSON.parse(guardMatch[0]);
+        guardResult.rules_checked = guardEntries.length;
+      }
+    }
+  } catch (guardErr) {
+    console.warn('[ScriptWriter] Auto-guard failed (non-blocking):', guardErr.message);
+  }
+
+  // Store guard result and injected entries on the script record
+  try {
+    await script.update({
+      context_snapshot: {
+        ...script.context_snapshot,
+        franchise_laws_injected: context.franchiseLawIds,
+        franchise_laws_count: context.franchiseLawIds?.length || 0,
+        guard_result: guardResult,
+        guard_passed: guardResult?.passed ?? null,
+        guard_violations: guardResult?.violations?.length || 0,
+      },
+    });
+  } catch { /* non-blocking */ }
+
+  return { ...script.toJSON(), guardResult };
 }
 
 /**

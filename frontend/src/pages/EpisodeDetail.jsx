@@ -26,19 +26,65 @@ const EpisodeDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTabState] = useState(searchParams.get('tab') || 'overview');
+  const [epSubTab, setEpSubTab] = useState(null);
 
   const [sceneView, setSceneView] = useState('composer');
   const [tabLoading, setTabLoading] = useState(false);
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [episodeScenes, setEpisodeScenes] = useState([]);
 
+  // Tab structure: 4 main tabs with sub-tabs
+  const EP_TABS = [
+    { key: 'overview', icon: '📋', label: 'Overview' },
+    { key: 'scripts', icon: '📝', label: 'Script' },
+    { key: 'production', icon: '🎬', label: 'Production', subs: [
+      { key: 'assets', label: 'Assets' },
+      { key: 'scenes', label: 'Scenes' },
+      { key: 'wardrobe', label: 'Wardrobe' },
+      { key: 'checklist', label: 'Checklist' },
+    ]},
+    { key: 'results', icon: '👑', label: 'Results', subs: [
+      { key: 'evaluation', label: 'Evaluation' },
+      { key: 'distribution', label: 'Distribution' },
+    ]},
+  ];
+
+  // Map old tab keys to new structure
+  const resolveEpTab = (tab) => {
+    const map = {
+      'assets': ['production', 'assets'],
+      'scenes': ['production', 'scenes'],
+      'wardrobe': ['production', 'wardrobe'],
+      'checklist': ['production', 'checklist'],
+      'production': ['production', 'assets'],
+      'evaluation': ['results', 'evaluation'],
+      'distribution': ['results', 'distribution'],
+    };
+    return map[tab] || [tab, null];
+  };
+
   // Tab management with URL persistence
   const setActiveTab = (tab) => {
     setTabLoading(true);
     setActiveTabState(tab);
+    const epTab = EP_TABS.find(t => t.key === tab);
+    setEpSubTab(epTab?.subs?.[0]?.key || null);
     setSearchParams({ tab });
     setTimeout(() => setTabLoading(false), 300);
   };
+
+  // Resolve initial tab on mount
+  React.useEffect(() => {
+    const initial = searchParams.get('tab') || 'overview';
+    const [main, sub] = resolveEpTab(initial);
+    if (main !== initial) {
+      setActiveTabState(main);
+      if (sub) setEpSubTab(sub);
+    } else {
+      const epTab = EP_TABS.find(t => t.key === main);
+      if (epTab?.subs && !epSubTab) setEpSubTab(epTab.subs[0].key);
+    }
+  }, []);
 
   // Keyboard shortcuts for tab navigation
   useEffect(() => {
@@ -611,76 +657,39 @@ const EpisodeDetail = () => {
       {/* Main Content Wrapper */}
       <div className="ed-wrap">
 
-        {/* Compact Tabs with Icons */}
+        {/* Main Tabs */}
         <div className="ed-tabs-modern">
-          <button
-            className={`ed-tab ${activeTab === 'overview' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('overview')}
-            title="Overview"
-          >
-            <span className="ed-tab-icon">📋</span>
-            <span className="ed-tab-label">Overview</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'scripts' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('scripts')}
-            title="Scripts"
-          >
-            <span className="ed-tab-icon">📝</span>
-            <span className="ed-tab-label">Script</span>
-          </button>
-
-          <button
-            className={`ed-tab ${activeTab === 'assets' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('assets')}
-            title="Assets"
-          >
-            <span className="ed-tab-icon">🎨</span>
-            <span className="ed-tab-label">Assets</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'scenes' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('scenes')}
-            title="Scenes"
-          >
-            <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">Scenes</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'wardrobe' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('wardrobe')}
-            title="Wardrobe"
-          >
-            <span className="ed-tab-icon">👗</span>
-            <span className="ed-tab-label">Wardrobe</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'distribution' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('distribution')}
-            title="Distribution"
-          >
-            <span className="ed-tab-icon">📤</span>
-            <span className="ed-tab-label">Distribution</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'production' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('production')}
-            title="Production Checklist"
-          >
-            <span className="ed-tab-icon">✅</span>
-            <span className="ed-tab-label">Production</span>
-          </button>
-          {/* TEMPORARILY DISABLED - YouTube Training feature in development
-          <button
-            className={`ed-tab ${activeTab === 'youtube' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('youtube')}
-            title="YouTube Training"
-          >
-            <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">YouTube Training</span>
-          </button>
-          */}
+          {EP_TABS.map(t => (
+            <button key={t.key}
+              className={`ed-tab ${activeTab === t.key ? 'ed-tab-active' : ''}`}
+              onClick={() => setActiveTab(t.key)}
+              title={t.label}
+            >
+              <span className="ed-tab-icon">{t.icon}</span>
+              <span className="ed-tab-label">{t.label}</span>
+            </button>
+          ))}
         </div>
+        {/* Sub-tabs */}
+        {(() => {
+          const currentTab = EP_TABS.find(t => t.key === activeTab);
+          if (!currentTab?.subs) return null;
+          return (
+            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid rgba(0,0,0,0.04)', paddingLeft: 8 }}>
+              {currentTab.subs.map(s => (
+                <button key={s.key} onClick={() => setEpSubTab(s.key)} style={{
+                  padding: '6px 14px', background: 'transparent', border: 'none',
+                  borderBottom: epSubTab === s.key ? '2px solid #6366f1' : '2px solid transparent',
+                  color: epSubTab === s.key ? '#6366f1' : '#94a3b8',
+                  fontSize: 12, fontWeight: epSubTab === s.key ? 600 : 500,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Content Area */}
         <div className="ed-content">
@@ -703,7 +712,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Assets Tab */}
-        {activeTab === 'assets' && (
+        {activeTab === 'production' && epSubTab === 'assets' && (
           episode.show ? (
             <EpisodeAssetsTab episode={episode} show={episode.show} />
           ) : (
@@ -727,7 +736,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Scenes Tab */}
-        {activeTab === 'scenes' && (
+        {activeTab === 'production' && epSubTab === 'scenes' && (
           <EpisodeScenesTab
             episode={episode}
             onToast={(msg, type) => toast && toast[type] ? toast[type](msg) : console.log(msg)}
@@ -735,7 +744,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Wardrobe Tab */}
-        {activeTab === 'wardrobe' && (
+        {activeTab === 'production' && epSubTab === 'wardrobe' && (
           <div>
             {/* Unified wardrobe — event picker + outfit builder */}
             {episodeEvents.length > 0 ? (
@@ -789,18 +798,151 @@ const EpisodeDetail = () => {
         )}
 
         {/* Distribution Tab */}
-        {activeTab === 'distribution' && (
+        {activeTab === 'results' && epSubTab === 'distribution' && (
           <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
         )}
 
         {/* Production Tab */}
-        {activeTab === 'production' && (
+        {activeTab === 'production' && epSubTab === 'checklist' && (
           <EpisodeTodoList
             episodeId={episode.id}
             showId={episode?.show_id || episode?.showId}
             onAllRequiredComplete={() => console.log('Episode ready!')}
           />
         )}
+
+        {/* Evaluation Tab */}
+        {activeTab === 'results' && epSubTab === 'evaluation' && (() => {
+          const evalJson = episode.evaluation_json
+            ? (typeof episode.evaluation_json === 'string' ? JSON.parse(episode.evaluation_json) : episode.evaluation_json)
+            : null;
+
+          const TIER_STYLES = {
+            slay: { color: '#FFD700', bg: '#FFFBEB', emoji: '👑', label: 'SLAY' },
+            pass: { color: '#22c55e', bg: '#f0fdf4', emoji: '✨', label: 'PASS' },
+            safe: { color: '#eab308', bg: '#fefce8', emoji: '😐', label: 'SAFE' },
+            fail: { color: '#dc2626', bg: '#fef2f2', emoji: '💔', label: 'FAIL' },
+          };
+
+          if (!evalJson) {
+            return (
+              <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center', padding: 40 }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>👑</div>
+                <h3 style={{ margin: '0 0 8px', fontSize: 18, color: '#1a1a2e' }}>Not Evaluated Yet</h3>
+                <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
+                  Complete this episode from the event panel to evaluate it.
+                  Evaluation scores outfit match, event performance, social tasks, and financials.
+                </p>
+              </div>
+            );
+          }
+
+          const tier = TIER_STYLES[evalJson.tier_final] || TIER_STYLES.safe;
+          const breakdown = evalJson.breakdown || {};
+          const deltas = evalJson.stat_deltas || {};
+          const narrative = evalJson.narrative_lines || {};
+          const socialBonuses = evalJson.social_task_bonuses?.detail || {};
+          const wardrobeBonuses = evalJson.wardrobe_bonuses?.detail || {};
+          const financials = evalJson.financial_summary || {};
+
+          return (
+            <div style={{ maxWidth: 800, margin: '0 auto' }}>
+              {/* Tier Banner */}
+              <div style={{ background: tier.bg, border: `2px solid ${tier.color}`, borderRadius: 12, padding: '20px 24px', marginBottom: 16, textAlign: 'center' }}>
+                <div style={{ fontSize: 48 }}>{tier.emoji}</div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: tier.color }}>{tier.label}</div>
+                <div style={{ fontSize: 40, fontWeight: 800, color: '#1a1a2e', margin: '4px 0' }}>{evalJson.score}/100</div>
+                <p style={{ fontSize: 14, color: '#64748b', margin: '8px 0 0', fontStyle: 'italic' }}>
+                  {narrative.short || narrative.dramatic || ''}
+                </p>
+              </div>
+
+              {/* Score Breakdown */}
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '16px 20px', marginBottom: 12 }}>
+                <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>Score Breakdown</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {Object.entries(breakdown).map(([key, entry]) => (
+                    <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                      <span style={{ fontSize: 13, color: '#1a1a2e', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{entry.detail}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: entry.value >= 0 ? '#16a34a' : '#dc2626', minWidth: 40, textAlign: 'right' }}>
+                          {entry.value >= 0 ? '+' : ''}{entry.value}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>Total</span>
+                    <span style={{ fontSize: 18, fontWeight: 800, color: tier.color }}>{evalJson.score}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stat Deltas */}
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '16px 20px', marginBottom: 12 }}>
+                <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>Character Stat Changes</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+                  {[
+                    { key: 'coins', label: 'Coins', icon: '🪙' },
+                    { key: 'reputation', label: 'Reputation', icon: '⭐' },
+                    { key: 'brand_trust', label: 'Brand Trust', icon: '🤝' },
+                    { key: 'influence', label: 'Influence', icon: '📣' },
+                    { key: 'stress', label: 'Stress', icon: '😰' },
+                  ].map(stat => {
+                    const val = deltas[stat.key] || 0;
+                    const isGood = stat.key === 'stress' ? val < 0 : val > 0;
+                    const isBad = stat.key === 'stress' ? val > 0 : val < 0;
+                    return (
+                      <div key={stat.key} style={{ textAlign: 'center', padding: '8px 0', borderRadius: 8, background: isGood ? '#f0fdf4' : isBad ? '#fef2f2' : '#f8f8f8' }}>
+                        <div style={{ fontSize: 16 }}>{stat.icon}</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: isGood ? '#16a34a' : isBad ? '#dc2626' : '#94a3b8' }}>
+                          {val > 0 ? '+' : ''}{val}
+                        </div>
+                        <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase' }}>{stat.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Social + Wardrobe + Financial Context */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                {socialBonuses.total > 0 && (
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>📱 Social Tasks</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#6366f1' }}>{socialBonuses.completed}/{socialBonuses.total}</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8' }}>
+                      {socialBonuses.completion_rate}% complete
+                      {socialBonuses.all_required_done && <span style={{ color: '#16a34a' }}> · All required done</span>}
+                    </div>
+                  </div>
+                )}
+                {wardrobeBonuses.brands?.length > 0 && (
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>👗 Outfit</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>
+                      Brands: {wardrobeBonuses.brands.join(', ')}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
+                      Tier gap: {wardrobeBonuses.tier_gap > 0 ? 'overdressed' : wardrobeBonuses.tier_gap < 0 ? 'underdressed' : 'perfect match'}
+                    </div>
+                  </div>
+                )}
+                {financials.total_income > 0 || financials.total_expenses > 0 ? (
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>💰 Financials</div>
+                    <div style={{ fontSize: 11, color: '#16a34a' }}>+{financials.total_income || 0} income</div>
+                    <div style={{ fontSize: 11, color: '#dc2626' }}>-{financials.total_expenses || 0} expenses</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: (financials.total_income || 0) - (financials.total_expenses || 0) >= 0 ? '#16a34a' : '#dc2626', marginTop: 2 }}>
+                      Net: {(financials.total_income || 0) - (financials.total_expenses || 0) >= 0 ? '+' : ''}{(financials.total_income || 0) - (financials.total_expenses || 0)}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Scene Library Picker Modal */}

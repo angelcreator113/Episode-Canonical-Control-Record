@@ -20,8 +20,7 @@ function buildNav(shows) {
       zone: 'FRANCHISE',
       items: [
         { icon: '◈', label: 'LalaVerse', route: '/universe' },
-        { icon: '🧠', label: 'Show Brain', route: '/intelligence/show-brain' },
-        { icon: '⬡', label: 'Franchise Brain', route: '/intelligence/franchise-brain' },
+        { icon: '📖', label: 'Show Bible', route: '/show-bible' },
       ],
     },
     {

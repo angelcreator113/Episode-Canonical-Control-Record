@@ -171,13 +171,25 @@ export default function EpisodeScriptTab({ episode, show }) {
 
   const handleApprove = (beatId) => setBeats(prev => prev.map(b => b.id === beatId ? { ...b, approved: !b.approved } : b));
 
+  const [guardResult, setGuardResult] = useState(null);
+
   const handleGenerate = async () => {
-    setGenerating(true); setGenError(null);
+    setGenerating(true); setGenError(null); setGuardResult(null);
     try {
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/generate-script`, { showId });
-      setScriptText(res.data.script); setDevScript(res.data.script);
-      try { await api.put(`/api/v1/episodes/${episodeId}`, { script_content: res.data.script }); } catch {}
-      setToast({ msg: '✦ Script generated!', type: 'success' }); setTimeout(() => setToast(null), 4000);
+      const script = res.data.script || res.data.script_text || '';
+      setScriptText(script); setDevScript(script);
+      try { await api.put(`/api/v1/episodes/${episodeId}`, { script_content: script }); } catch {}
+
+      // Check for auto-guard results
+      if (res.data.guardResult) {
+        setGuardResult(res.data.guardResult);
+        const v = res.data.guardResult.violations?.length || 0;
+        setToast({ msg: v > 0 ? `✦ Script generated — ⚠️ ${v} franchise violation(s)` : '✦ Script generated — ✅ Passed franchise guard', type: v > 0 ? 'error' : 'success' });
+      } else {
+        setToast({ msg: '✦ Script generated!', type: 'success' });
+      }
+      setTimeout(() => setToast(null), 5000);
     } catch (err) { setGenError(err.response?.data?.error || 'Generation failed'); }
     finally { setGenerating(false); }
   };
@@ -187,7 +199,7 @@ export default function EpisodeScriptTab({ episode, show }) {
   const hasScript = !!scriptText?.trim();
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 0' }}>
+    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 0' }}>
       <style>{`.script-line-hover:hover{background:#F9F5FF}.script-line-hover:hover .rewrite-btn{opacity:1!important}.rewrite-btn{transition:opacity .15s}`}</style>
       {toast && <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9', color: toast.type === 'error' ? '#C62828' : '#16a34a', border: `1px solid ${toast.type === 'error' ? '#FFCDD2' : '#A5D6A7'}`, borderRadius: 10, padding: '12px 18px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>{toast.msg}</div>}
 
@@ -198,8 +210,8 @@ export default function EpisodeScriptTab({ episode, show }) {
             <p style={{ margin: '4px 0 0', fontSize: 13, color: '#888' }}>{beats.length} beats · {approvedCount} approved{allApproved && <span style={{ marginLeft: 8, color: '#16a34a', fontWeight: 600 }}>✓ Complete</span>}</p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setDeveloperMode(d => !d)} style={{ background: '#F5F5F5', color: '#888', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 11, cursor: 'pointer' }}>{developerMode ? '← Reader' : 'Developer ↗'}</button>
-            <button onClick={() => { setScriptText(''); setBeats([]); }} style={{ background: '#F5F0FF', color: '#5C3D8F', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>↺ Regenerate</button>
+            <button onClick={() => setDeveloperMode(d => !d)} style={{ background: developerMode ? '#5C3D8F' : '#F5F5F5', color: developerMode ? '#FFF' : '#888', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 11, cursor: 'pointer', fontWeight: developerMode ? 600 : 400 }}>{developerMode ? '📖 Beat View' : '✎ Raw Editor'}</button>
+            <button onClick={() => { if (!window.confirm('Regenerate the entire script? Your current script will be replaced.')) return; handleGenerate(); }} disabled={generating} style={{ background: '#F5F0FF', color: '#5C3D8F', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: generating ? 'not-allowed' : 'pointer', fontWeight: 600 }}>{generating ? '⏳ Generating...' : '✦ Regenerate'}</button>
             <button onClick={handleSave} disabled={saving} style={{ background: saved ? '#E8F5E9' : 'linear-gradient(135deg, #C9A83A, #B8962E)', color: saved ? '#16a34a' : '#FFF', border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 12, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>{saving ? '⏳' : saved ? '✓ Saved' : '💾 Save'}</button>
           </div>
         </div>
@@ -210,6 +222,25 @@ export default function EpisodeScriptTab({ episode, show }) {
       {!developerMode && (hasScript ? (
         <div>
           {beats.map(beat => <BeatSection key={beat.id} beat={beat} scenePlan={scenePlan} expanded={expandedBeat === beat.id} onToggle={() => setExpandedBeat(expandedBeat === beat.id ? null : beat.id)} onApprove={handleApprove} onEdit={handleEditLine} onRewrite={handleRewriteLine} rewritingLine={rewritingLine} />)}
+          {/* Franchise Guard Results */}
+          {guardResult && (
+            <div style={{
+              marginTop: 16, borderRadius: 10, padding: '14px 18px',
+              background: guardResult.violations?.length > 0 ? '#fef2f2' : '#f0fdf4',
+              border: `1px solid ${guardResult.violations?.length > 0 ? '#fecaca' : '#bbf7d0'}`,
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: guardResult.violations?.length > 0 ? '#dc2626' : '#16a34a', marginBottom: 6 }}>
+                {guardResult.violations?.length > 0 ? `🛡️ ${guardResult.violations.length} franchise violation(s)` : '🛡️ Passed franchise guard'}
+                <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8', marginLeft: 8 }}>({guardResult.rules_checked || '?'} rules checked)</span>
+              </div>
+              {guardResult.violations?.map((v, i) => (
+                <div key={i} style={{ padding: '6px 10px', background: '#fff', borderRadius: 6, marginBottom: 4, fontSize: 12, color: '#dc2626', border: '1px solid #fecaca' }}>
+                  <strong>{v.rule}:</strong> {v.explanation}
+                </div>
+              ))}
+            </div>
+          )}
+
           {allApproved && (
             <div style={{ background: 'linear-gradient(135deg, #E8F5E9, #F1F8E9)', border: '1px solid #A5D6A7', borderRadius: 12, padding: '20px 24px', marginTop: 16, textAlign: 'center' }}>
               <p style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#16a34a' }}>✦ All beats approved — script is ready</p>
@@ -218,12 +249,46 @@ export default function EpisodeScriptTab({ episode, show }) {
           )}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 40px', textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.5 }}>📝</div>
-          <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 700 }}>No script yet</h2>
-          <p style={{ margin: '0 0 32px', fontSize: 14, color: '#888', maxWidth: 400, lineHeight: 1.6 }}>Generate from your Episode Brief, Scene Plan, Event, and Wardrobe.</p>
-          {genError && <div style={{ background: '#FFEBEE', color: '#C62828', border: '1px solid #FFCDD2', borderRadius: 8, padding: '10px 16px', fontSize: 13, marginBottom: 16, maxWidth: 400 }}>{genError}</div>}
-          <button onClick={handleGenerate} disabled={generating} style={{ background: generating ? '#EEE' : 'linear-gradient(135deg, #C9A83A, #B8962E)', color: generating ? '#999' : '#FFF', border: 'none', borderRadius: 12, padding: '14px 40px', fontSize: 16, fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer', boxShadow: generating ? 'none' : '0 2px 8px rgba(184,150,46,0.25)' }}>{generating ? '⏳ Generating...' : '✦ Generate Script'}</button>
+        <div style={{ maxWidth: 500, margin: '0 auto', padding: '40px 20px' }}>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>📝</div>
+            <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Generate Episode Script</h2>
+            <p style={{ margin: 0, fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>
+              AI writes a 14-beat script using your event, outfit, and character data.
+            </p>
+          </div>
+
+          {/* What feeds the script */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Script will use</div>
+            {[
+              { icon: '💌', label: 'Event + host + guests', ok: !!episode?.description },
+              { icon: '👗', label: 'Wardrobe + brand intelligence', ok: true },
+              { icon: '📍', label: 'Scene plan + locations', ok: scenePlan.length > 0 },
+              { icon: '🪙', label: 'Financial pressure + coin balance', ok: true },
+              { icon: '📱', label: 'Social tasks (content to create)', ok: true },
+              { icon: '👥', label: 'Character voices + archetypes', ok: true },
+              { icon: '📺', label: 'Previous episode continuity', ok: true },
+              { icon: '🎯', label: 'Designed intent (SLAY/PASS/FAIL)', ok: !!episode?.evaluation_json || true },
+              { icon: '📊', label: 'Season arc + emotional phase', ok: true },
+            ].map(item => (
+              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 12 }}>
+                <span style={{ color: item.ok ? '#16a34a' : '#f59e0b' }}>{item.ok ? '✓' : '○'}</span>
+                <span>{item.icon} {item.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {genError && <div style={{ background: '#FFEBEE', color: '#C62828', border: '1px solid #FFCDD2', borderRadius: 8, padding: '10px 16px', fontSize: 13, marginBottom: 16 }}>{genError}</div>}
+
+          <button onClick={handleGenerate} disabled={generating} style={{
+            width: '100%', background: generating ? '#EEE' : 'linear-gradient(135deg, #C9A83A, #B8962E)',
+            color: generating ? '#999' : '#FFF', border: 'none', borderRadius: 10, padding: '12px 0',
+            fontSize: 15, fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer',
+            boxShadow: generating ? 'none' : '0 2px 8px rgba(184,150,46,0.25)',
+          }}>
+            {generating ? '⏳ Generating 14-beat script...' : '✦ Generate Script'}
+          </button>
         </div>
       ))}
     </div>

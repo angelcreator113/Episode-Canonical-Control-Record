@@ -136,6 +136,7 @@ const CulturalMemory = lazy(() => import('./pages/CulturalMemory'));
 const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
 const WorldLocations = lazy(() => import('./pages/WorldLocations'));
 const ShowBrain = lazy(() => import('./pages/ShowBrain'));
+const ShowBiblePage = lazy(() => import('./pages/ShowBiblePage'));
 const TextureReviewPage = lazy(() => import('./pages/TextureReviewPage'));
 // WorldView merged into CharacterRegistryPage
 
@@ -307,9 +308,10 @@ function AppContent() {
           <Route path="/universe/world-state" element={<UniverseWorldStatePage />} />
           <Route path="/universe/tensions" element={<UniverseTensionsPage />} />
           <Route path="/universe/story-dashboard" element={<StoryDashboardPage />} />
-          <Route path="/universe/knowledge" element={<Navigate to="/intelligence/franchise-brain" replace />} />
-          <Route path="/intelligence/franchise-brain" element={<FranchiseBrainPage />} />
-          <Route path="/intelligence/show-brain" element={<ShowBrain />} />
+          <Route path="/show-bible" element={<ShowBiblePage />} />
+          <Route path="/universe/knowledge" element={<Navigate to="/show-bible" replace />} />
+          <Route path="/intelligence/franchise-brain" element={<Navigate to="/show-bible?tab=decisions" replace />} />
+          <Route path="/intelligence/show-brain" element={<Navigate to="/show-bible?tab=knowledge" replace />} />
           <Route path="/universe/writing-rhythm" element={<WritingRhythmPage />} />
 
           {/* ===== PRE-PRODUCTION ROUTES ===== */}
