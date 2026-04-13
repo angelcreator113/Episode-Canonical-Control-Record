@@ -25,6 +25,8 @@ import { EventInvitePreview } from './feed/FeedEnhancements';
 import './WorldAdmin.css';
 
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
+const SceneSetsTab = lazy(() => import('./SceneSetsTab'));
+const UIOverlaysTab = lazy(() => import('./UIOverlaysTab'));
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
 const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', safe: '#eab308', fail: '#dc2626' };
@@ -79,16 +81,25 @@ const EVENT_STATUS_CONFIG = {
 
 const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
-  { key: 'season', icon: '📖', label: 'Season' },
-  { key: 'episodes', icon: '📋', label: 'Episode Ledger' },
-  { key: 'feed', icon: '👥', label: "Lala's Feed" },
-  { key: 'feed-events', icon: '🎭', label: 'Feed Events' },
-  { key: 'events', icon: '💌', label: 'Events Library' },
-  // Opportunities tab removed — managed from Feed Events now
-  { key: 'goals', icon: '🎯', label: 'Career Goals' },
-  { key: 'wardrobe', icon: '👗', label: 'Wardrobe' },
-  { key: 'characters', icon: '👑', label: 'Characters' },
-  { key: 'decisions', icon: '🧠', label: 'Decision Log' },
+  { key: 'episodes', icon: '📺', label: 'Episodes', subs: [
+    { key: 'season', label: 'Season Arc' },
+    { key: 'episodes-ledger', label: 'Episode Ledger' },
+  ]},
+  { key: 'feed', icon: '🎭', label: 'Feed & Events', subs: [
+    { key: 'feed-timeline', label: "Lala's Feed" },
+    { key: 'feed-events', label: 'Feed Events' },
+    { key: 'events', label: 'Events Library' },
+  ]},
+  { key: 'wardrobe', icon: '🎬', label: 'Assets', subs: [
+    { key: 'scene-sets', label: 'Scene Sets' },
+    { key: 'overlays-tab', label: 'UI Overlays' },
+    { key: 'wardrobe-items', label: 'Wardrobe' },
+    { key: 'goals', label: 'Career Goals' },
+  ]},
+  { key: 'characters', icon: '👑', label: 'Characters', subs: [
+    { key: 'characters-list', label: 'Character Stats' },
+    { key: 'decisions', label: 'Decision Log' },
+  ]},
 ];
 
 function WorldAdmin() {
@@ -106,6 +117,7 @@ function WorldAdmin() {
   const [sceneSets, setSceneSets] = useState([]);
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
+  const [overlayData, setOverlayData] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
   const [oppQuickForm, setOppQuickForm] = useState(null);
   const [worldLocations, setWorldLocations] = useState([]);
@@ -129,6 +141,41 @@ function WorldAdmin() {
   const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [subTab, setSubTab] = useState(null);
+
+  // Map old tab keys to new structure for URL backwards compat
+  const resolveTab = (tab) => {
+    const oldToNew = {
+      'season': ['episodes', 'season'],
+      'episodes': ['episodes', 'episodes-ledger'],
+      'feed': ['feed', 'feed-timeline'],
+      'feed-events': ['feed', 'feed-events'],
+      'events': ['feed', 'events'],
+      'scene-sets': ['wardrobe', 'scene-sets'],
+      'overlays': ['wardrobe', 'overlays-tab'],
+      'overlays-tab': ['wardrobe', 'overlays-tab'],
+      'goals': ['wardrobe', 'goals'],
+      'wardrobe': ['wardrobe', 'scene-sets'],
+      'characters': ['characters', 'characters-list'],
+      'decisions': ['characters', 'decisions'],
+    };
+    return oldToNew[tab] || [tab, null];
+  };
+
+  // On mount, resolve initial tab
+  useEffect(() => {
+    const [main, sub] = resolveTab(initialTab);
+    if (main !== initialTab) {
+      setActiveTab(main);
+      if (sub) setSubTab(sub);
+    }
+  }, []);
+
+  const switchTab = (tabKey) => {
+    setActiveTab(tabKey);
+    const tab = TABS.find(t => t.key === tabKey);
+    setSubTab(tab?.subs?.[0]?.key || null);
+  };
   const [expandedEpisode, setExpandedEpisode] = useState(null);
   const [episodeBlueprint, setEpisodeBlueprint] = useState(null); // holds generated episode data for modal
 
@@ -206,6 +253,7 @@ function WorldAdmin() {
         api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(() => setDecisions([])),
         api.get(`/api/v1/world/${showId}/events`).then(r => { console.log('[LoadData] Events loaded:', r.data?.events?.length || 0); setWorldEvents(r.data?.events || []); }).catch(err => { console.error('[LoadData] Events load FAILED:', err.response?.status, err.response?.data || err.message); setWorldEvents([]); }),
         api.get(`/api/v1/scene-sets?show_id=${showId}&limit=50`).then(r => setSceneSets(r.data?.data || [])).catch(() => setSceneSets([])),
+        api.get(`/api/v1/ui-overlays/${showId}`).then(r => setOverlayData(r.data?.data || [])).catch(() => setOverlayData([])),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
         api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
         api.get(`/api/v1/opportunities/${showId}`).then(r => setOpportunities(r.data?.opportunities || [])).catch(() => setOpportunities([])),
@@ -899,11 +947,31 @@ The revised event should feel like a completely different experience from the si
       {/* ─── TABS ─── */}
       <div className="wa-tab-bar" style={S.tabBar}>
         {TABS.map(t => (
-          <button key={t.key} onClick={() => setActiveTab(t.key)} style={activeTab === t.key ? S.tabActive : S.tab}>
+          <button key={t.key} onClick={() => switchTab(t.key)} style={activeTab === t.key ? S.tabActive : S.tab}>
             {t.icon} {t.label}
           </button>
         ))}
       </div>
+      {/* ─── SUB-TABS ─── */}
+      {(() => {
+        const currentTab = TABS.find(t => t.key === activeTab);
+        if (!currentTab?.subs) return null;
+        return (
+          <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+            {currentTab.subs.map(s => (
+              <button key={s.key} onClick={() => setSubTab(s.key)} style={{
+                padding: '6px 14px', background: 'transparent', border: 'none',
+                borderBottom: subTab === s.key ? '2px solid #6366f1' : '2px solid transparent',
+                color: subTab === s.key ? '#6366f1' : '#94a3b8',
+                fontSize: 12, fontWeight: subTab === s.key ? 600 : 500,
+                cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
+              }}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* ════════════════════════ OVERVIEW ════════════════════════ */}
       {activeTab === 'overview' && (
@@ -1008,12 +1076,12 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {/* ════════════════════════ SEASON ════════════════════════ */}
-      {activeTab === 'season' && (
+      {activeTab === 'episodes' && subTab === 'season' && (
         <SeasonTab showId={showId} api={api} S={S} episodes={episodes} setToast={setToast} />
       )}
 
       {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
-      {activeTab === 'episodes' && (
+      {activeTab === 'episodes' && subTab === 'episodes-ledger' && (
         <div style={S.content}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>Episode Ledger</h2>
@@ -1340,14 +1408,14 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {/* ════════════════════════ LALA'S FEED ════════════════════════ */}
-      {activeTab === 'feed' && (
+      {activeTab === 'feed' && subTab === 'feed-timeline' && (
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Feed...</div>}>
           <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" onNavigateToTab={(tab, ev) => { setActiveTab(tab); if (ev) setEventDetailModal(ev); }} />
         </Suspense>
       )}
 
       {/* ════════════════════════ FEED EVENTS ════════════════════════ */}
-      {activeTab === 'feed-events' && (
+      {activeTab === 'feed' && subTab === 'feed-events' && (
         <div style={S.content}>
           <div style={{ marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Feed Events</h2>
@@ -1636,7 +1704,7 @@ The revised event should feel like a completely different experience from the si
       )}
 
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
-      {activeTab === 'events' && (
+      {activeTab === 'feed' && subTab === 'events' && (
         <div style={S.content}>
           {/* Header — simplified with primary auto-fill action */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
@@ -3358,7 +3426,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
 
       {/* ════════════════════════ CAREER GOALS ════════════════════════ */}
-      {activeTab === 'goals' && (
+      {activeTab === 'wardrobe' && subTab === 'goals' && (
         <div style={S.content}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>🎯 Career Goals</h2>
@@ -3795,8 +3863,24 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
         document.body
       )}
 
+      {/* ════════════════════════ SCENE SETS ════════════════════════ */}
+      {activeTab === 'wardrobe' && subTab === 'scene-sets' && (
+        <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading scene sets...</div>}>
+          <SceneSetsTab showId={showId} />
+        </Suspense>
+      )}
+
+      {/* ════════════════════════ UI OVERLAYS ════════════════════════ */}
+      {activeTab === 'wardrobe' && subTab === 'overlays-tab' && (
+        <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading overlays...</div>}>
+          <UIOverlaysTab showId={showId} />
+        </Suspense>
+      )}
+
+      {/* Old custom scene sets + overlays removed — using SceneSetsTab and UIOverlaysTab components */}
+
       {/* ════════════════════════ WARDROBE ════════════════════════ */}
-      {activeTab === 'wardrobe' && (() => {
+      {activeTab === 'wardrobe' && subTab === 'wardrobe-items' && (() => {
         // Group items by type for summary
         const typeGroups = {};
         wardrobeItems.forEach(item => {
@@ -4280,7 +4364,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       })()}
 
       {/* ════════════════════════ CHARACTERS ════════════════════════ */}
-      {activeTab === 'characters' && (
+      {activeTab === 'characters' && subTab === 'characters-list' && (
         <div style={S.content}>
           {/* Lala */}
           <div style={S.card}>
@@ -4392,7 +4476,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
       )}
 
       {/* ════════════════════════ DECISIONS ════════════════════════ */}
-      {activeTab === 'decisions' && (
+      {activeTab === 'characters' && subTab === 'decisions' && (
         <div style={S.content}>
           <div style={S.card}>
             <h2 style={S.cardTitle}>🧠 Decision Log</h2>
