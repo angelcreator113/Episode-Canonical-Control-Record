@@ -41,7 +41,7 @@ export default function UniversePage() {
         api.get(`/api/v1/wardrobe?show_id=${firstShow.id}&limit=500`),
         api.get(`/api/v1/episodes?show_id=${firstShow.id}&limit=100`),
         api.get(`/api/v1/ui-overlays/${firstShow.id}`),
-        api.get(`/api/v1/character-registry?show_id=${firstShow.id}&limit=100`).catch(() => ({ data: {} })),
+        api.get('/api/v1/character-registry/registries?limit=50').catch(() => ({ data: {} })),
         api.get('/api/v1/storyteller/books').catch(() => ({ data: {} })),
       ]);
 
@@ -49,7 +49,8 @@ export default function UniversePage() {
       const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.data?.data || []) : [];
       const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value.data?.data || episodesRes.value.data || []) : [];
       const overlays = overlaysRes.status === 'fulfilled' ? (overlaysRes.value.data?.data || []) : [];
-      const characters = charsRes.status === 'fulfilled' ? (charsRes.value.data?.data || charsRes.value.data?.characters || []) : [];
+      const registries = charsRes.status === 'fulfilled' ? (charsRes.value.data?.registries || []) : [];
+      const characters = registries.flatMap(r => r.characters || []);
       const booksData = booksRes.status === 'fulfilled' ? (booksRes.value.data?.books || []) : [];
 
       setBooks(booksData);
@@ -96,8 +97,11 @@ export default function UniversePage() {
 
       {/* Hero */}
       <div style={{ background: 'linear-gradient(135deg, #F5F0E8, #EDE4D3)', borderRadius: 12, padding: '24px 28px', marginBottom: 16, border: '1px solid rgba(184,150,46,0.15)' }}>
-        <h1 style={{ margin: '0 0 4px', fontSize: 24, fontWeight: 700, color: '#1a1a2e' }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: '#B8962E', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
           {universe?.name || 'The LalaVerse'}
+        </div>
+        <h1 style={{ margin: '0 0 4px', fontSize: 24, fontWeight: 700, color: '#1a1a2e' }}>
+          {show?.name || 'Styling Adventures with Lala'}
         </h1>
         <p style={{ margin: '0 0 12px', fontSize: 14, color: '#6B5E4F', lineHeight: 1.5 }}>
           {show?.description || universe?.description || 'A narrative-driven luxury fashion life simulator. Fashion is strategy. Reputation is currency. Legacy is built episode by episode.'}
