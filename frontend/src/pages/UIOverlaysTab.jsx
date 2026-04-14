@@ -38,6 +38,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const undoStackRef = useRef([]);  // undo history for activeScreen changes
+  const frameRemovedRef = useRef(false);  // tracks if user explicitly removed the custom frame
   const [batchUploading, setBatchUploading] = useState(false);
   const fileInputRef = useRef(null);
   const variantInputRef = useRef(null);
@@ -89,8 +90,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // Load saved phone frame + global fit settings
   useEffect(() => {
     if (!showId) return;
+    frameRemovedRef.current = false;  // reset on show change
     api.get(`/api/v1/ui-overlays/${showId}/frame`).then(r => {
-      if (r.data?.frame_url) setCustomFrameUrl(r.data.frame_url);
+      if (!frameRemovedRef.current && r.data?.frame_url) setCustomFrameUrl(r.data.frame_url);
       if (r.data?.global_fit) setGlobalFit(r.data.global_fit);
     }).catch(err => {
       console.warn('[PhoneHub] Failed to load frame/fit settings:', err.message);
@@ -101,6 +103,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const handleFrameUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !showId) return;
+    frameRemovedRef.current = false;
     const prevUrl = customFrameUrl;
     const previewUrl = URL.createObjectURL(file);
     setCustomFrameUrl(previewUrl);
@@ -659,7 +662,16 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
             <Monitor size={13} /> <span className="btn-label">{customFrameUrl ? 'Change Frame' : 'Upload Frame'}</span>
           </button>
           {customFrameUrl && (
-            <button onClick={() => { setCustomFrameUrl(null); if (showId) api.delete(`/api/v1/ui-overlays/${showId}/frame`).catch(() => {}); flash('Using built-in frame'); }} style={{ ...headerBtnStyle, color: '#dc2626', border: '1px solid #dc262620' }}>
+            <button onClick={async () => {
+              frameRemovedRef.current = true;
+              setCustomFrameUrl(null);
+              flash('Using built-in frame');
+              if (showId) {
+                try { await api.delete(`/api/v1/ui-overlays/${showId}/frame`); } catch (err) {
+                  console.warn('[PhoneHub] Failed to delete frame:', err.message);
+                }
+              }
+            }} style={{ ...headerBtnStyle, color: '#dc2626', border: '1px solid #dc262620' }}>
               <X size={13} /> <span className="btn-label">Remove Frame</span>
             </button>
           )}

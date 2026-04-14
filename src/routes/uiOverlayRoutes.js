@@ -427,6 +427,23 @@ router.get('/:showId/frame', optionalAuth, async (req, res) => {
   }
 });
 
+// DELETE /api/v1/ui-overlays/:showId/frame — remove custom phone frame, revert to built-in
+router.delete('/:showId/frame', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const showId = req.params.showId;
+    const PageContent = models.PageContent;
+
+    if (PageContent) {
+      await PageContent.destroy({ where: { page_name: `phone_hub_${showId}`, constant_key: 'FRAME_URL' } });
+    }
+
+    return res.json({ success: true, frame_url: null });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // PUT /api/v1/ui-overlays/:showId/global-fit — save global image fit settings for all screens
 router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
   try {
