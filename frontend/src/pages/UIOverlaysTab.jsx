@@ -7,10 +7,11 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers, Play, Copy, Info, Monitor } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub, { SCREEN_TYPES } from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
+import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 
 export default function UIOverlaysTab({ showId: propShowId }) {
   const [showId, setShowId] = useState(propShowId || null);
@@ -30,6 +31,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [activeVariantIdx, setActiveVariantIdx] = useState(0);
   const [addingVariant, setAddingVariant] = useState(false);
   const [newVariantLabel, setNewVariantLabel] = useState('');
+  const [previewMode, setPreviewMode] = useState(false);
+  const [showSizeGuide, setShowSizeGuide] = useState(false);
+  const [showFlowMap, setShowFlowMap] = useState(false);
   const [batchUploading, setBatchUploading] = useState(false);
   const fileInputRef = useRef(null);
   const variantInputRef = useRef(null);
@@ -478,18 +482,73 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
-  // Change custom screen's type (screen vs icon)
+  // Change screen's type (screen vs icon)
   const handleChangeScreenType = async (category) => {
-    if (!activeScreen?.custom || !activeScreen.custom_id || !showId) return;
+    if (!activeScreen || !showId) return;
     try {
-      await api.put(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`, { category });
-      setActiveScreen(prev => prev ? { ...prev, category } : prev);
-      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, category } : o));
+      if (activeScreen.custom && activeScreen.custom_id) {
+        await api.put(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`, { category });
+      }
+      if (activeScreen.asset_id) {
+        await api.put(`/api/v1/ui-overlays/${showId}/category/${activeScreen.asset_id}`, { category });
+      }
+      const typeField = category === 'phone_icon' ? 'icon' : 'screen';
+      setActiveScreen(prev => prev ? { ...prev, category, type: typeField } : prev);
+      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, category, type: typeField } : o));
       flash(category === 'phone_icon' ? 'Set as Icon' : 'Set as Screen');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // Duplicate screen settings to another screen
+  const handleDuplicateSettings = async (targetScreenId) => {
+    if (!activeScreen || !showId) return;
+    const target = overlays.find(o => o.id === targetScreenId);
+    if (!target?.asset_id) { flash('Target screen has no asset', 'error'); return; }
+    const fit = activeScreen.image_fit || activeScreen.metadata?.image_fit;
+    const links = activeScreen.screen_links || activeScreen.metadata?.screen_links;
+    try {
+      if (fit) await api.put(`/api/v1/ui-overlays/${showId}/image-fit/${target.asset_id}`, { image_fit: fit });
+      if (links?.length) await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${target.asset_id}`, { screen_links: links });
+      loadOverlays(false);
+      flash(`Settings copied to ${target.name}!`);
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
+  // Export contact sheet — download all screen thumbnails
+  const handleExportContactSheet = async () => {
+    const generated = overlays.filter(o => o.generated && o.url);
+    if (!generated.length) { flash('No screens to export', 'error'); return; }
+    // Create a simple HTML table of images and download as page
+    const html = `<!DOCTYPE html><html><head><title>Phone Screens - Contact Sheet</title>
+<style>body{background:#1a1a2e;margin:40px;font-family:'DM Mono',monospace;color:#fff}
+h1{color:#B8962E;font-size:20px;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+.card{background:#2a2a4a;border-radius:12px;overflow:hidden;text-align:center}
+.card img{width:100%;aspect-ratio:9/16;object-fit:cover}
+.card p{padding:8px;font-size:11px;color:#aaa;margin:0}</style></head>
+<body><h1>Phone Screens Contact Sheet</h1><div class="grid">
+${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></div>`).join('')}
+</div></body></html>`;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'phone-screens-contact-sheet.html';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    flash('Contact sheet downloaded!');
+  };
+
   const generatedCount = overlays.filter(o => o.generated).length;
+
+  const headerBtnStyle = {
+    padding: '6px 12px', border: '1px solid #e8e0d0', borderRadius: 6,
+    background: '#fff', color: '#2C2C2C', fontSize: 10, fontWeight: 600,
+    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+    fontFamily: "'DM Mono', monospace",
+  };
 
   return (
     <div style={{ padding: '20px 0' }}>
@@ -501,38 +560,59 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#2C2C2C' }}>Phone Hub</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 11, color: '#888', fontFamily: "'DM Mono', monospace" }}>
-            {generatedCount}/{overlays.length} screens ready
-          </p>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif" }}>Phone Hub</h2>
+            <p style={{ margin: '2px 0 0', fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>
+              {generatedCount}/{overlays.length} screens ready
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+            <button onClick={() => setShowSizeGuide(!showSizeGuide)} title="Upload size guide" style={{ ...headerBtnStyle, color: '#aaa', border: '1px solid #eee' }}>
+              <Info size={12} />
+            </button>
+            <button onClick={() => setPreviewMode(true)} disabled={!generatedCount} title="Preview mode" style={{ ...headerBtnStyle, color: '#B8962E', border: '1px solid #B8962E30' }}>
+              <Play size={12} /> Preview
+            </button>
+            <button onClick={handleExportContactSheet} disabled={!generatedCount} title="Export contact sheet" style={{ ...headerBtnStyle, color: '#6bba9a', border: '1px solid #6bba9a30' }}>
+              <Download size={12} /> Export
+            </button>
+          </div>
         </div>
+
+        {/* Size guide */}
+        {showSizeGuide && (
+          <div style={{ background: '#faf8f5', border: '1px solid #e8e0d0', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 10, fontFamily: "'DM Mono', monospace", color: '#666' }}>
+            <div style={{ fontWeight: 700, color: '#B8962E', marginBottom: 6, fontSize: 11 }}>Recommended Upload Sizes</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 12px' }}>
+              <span style={{ color: '#999' }}>Screens (HD):</span><span><strong>1080 x 1920</strong> px (9:16)</span>
+              <span style={{ color: '#999' }}>Screens (Retina):</span><span><strong>1170 x 2532</strong> px (iPhone 15 Pro)</span>
+              <span style={{ color: '#999' }}>App Icons:</span><span><strong>512 x 512</strong> px (square)</span>
+              <span style={{ color: '#999' }}>Phone Frame:</span><span><strong>1170 x 2532</strong> px (match screen)</span>
+            </div>
+            <div style={{ marginTop: 6, color: '#aaa', fontSize: 9 }}>PNG with transparency recommended for icons. JPG/PNG for screens.</div>
+          </div>
+        )}
+
+        {/* Action buttons row */}
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          <button onClick={() => frameInputRef.current?.click()} style={{
-            padding: '8px 14px', border: '1px solid #e8e0d0', borderRadius: 8,
-            background: '#fff', color: '#888', fontSize: 11, fontWeight: 600,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-          }}>{customFrameUrl ? 'Change Frame' : 'Upload Frame'}</button>
-          <button onClick={() => setShowCreateModal(true)} disabled={!showId} style={{
-            padding: '8px 14px', border: '1px solid #e8e0d0', borderRadius: 8,
-            background: '#fff', color: '#2C2C2C', fontSize: 11, fontWeight: 600,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-          }}>+ New Screen</button>
-          <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId} style={{
-            padding: '8px 14px', border: '1px solid #e8e0d0', borderRadius: 8,
-            background: '#fff', color: '#2C2C2C', fontSize: 11, fontWeight: 600,
-            cursor: batchUploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-          }}>{batchUploading ? 'Uploading...' : 'Batch Upload'}</button>
+          <button onClick={() => frameInputRef.current?.click()} style={headerBtnStyle}>
+            <Monitor size={11} /> {customFrameUrl ? 'Change Frame' : 'Upload Frame'}
+          </button>
+          <button onClick={() => setShowCreateModal(true)} disabled={!showId} style={headerBtnStyle}>
+            + New Screen
+          </button>
+          <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId} style={headerBtnStyle}>
+            <Upload size={11} /> {batchUploading ? 'Uploading...' : 'Batch Upload'}
+          </button>
           <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
           <button onClick={handleGenerateAll} disabled={generating || !showId} style={{
-            padding: '8px 16px', border: 'none', borderRadius: 8,
-            background: generating ? '#eee' : '#2C2C2C', color: generating ? '#999' : '#fff',
-            fontSize: 11, fontWeight: 600, cursor: generating ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', gap: 5,
+            ...headerBtnStyle, background: generating ? '#eee' : '#2C2C2C',
+            color: generating ? '#999' : '#fff', border: 'none',
           }}>
-            {generating ? <><Loader size={12} className="spin" /> Generating...</> : <><Sparkles size={12} /> Generate All</>}
+            {generating ? <><Loader size={11} className="spin" /> Generating...</> : <><Sparkles size={11} /> Generate All</>}
           </button>
         </div>
       </div>
@@ -586,8 +666,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 </button>
               </div>
 
-              {/* Type selector for custom screens */}
-              {activeScreen.custom && activeScreen.asset_id && (
+              {/* Type selector — Screen vs Icon */}
+              {activeScreen.asset_id && (
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 9, fontWeight: 600, color: '#888', fontFamily: "'DM Mono', monospace", marginBottom: 3 }}>TYPE</div>
                   <div style={{ display: 'flex', gap: 4 }}>
@@ -737,6 +817,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             </div>
           )}
         </div>
+      )}
+
+      {/* Preview Mode */}
+      {previewMode && (
+        <PhonePreviewMode
+          screens={overlays}
+          initialScreen={overlays.find(o => o.id === 'home' && o.generated) || overlays.find(o => o.generated)}
+          onClose={() => setPreviewMode(false)}
+          globalFit={globalFit}
+          phoneSkin={phoneSkin}
+        />
       )}
 
       {/* Create Screen Modal */}
