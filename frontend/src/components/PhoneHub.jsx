@@ -407,15 +407,16 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       {/* Screen Slots Grid */}
       <div className="phone-hub-grid-section">
         {/* Screens Section */}
-        <div style={{ fontSize: 11, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ background: '#B8962E', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 9 }}>SCREENS</span>
+            <span style={{ background: '#B8962E', color: '#fff', padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700 }}>SCREENS</span>
             Full phone views
           </div>
           {hiddenScreens.length > 0 && onToggleShowHidden && (
             <button onClick={onToggleShowHidden} style={{
-              fontSize: 9, color: '#999', background: 'none', border: '1px solid #eee',
-              borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontFamily: "'DM Mono', monospace",
+              fontSize: 11, color: '#666', background: showHidden ? '#fdf8ee' : '#fff', border: `1px solid ${showHidden ? '#B8962E' : '#ddd'}`,
+              borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontFamily: "'DM Mono', monospace",
+              minHeight: 36, fontWeight: 600,
             }}>{showHidden ? 'Hide removed' : `Show removed (${hiddenScreens.length})`}</button>
           )}
         </div>
@@ -431,8 +432,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         {/* Icons Section */}
         {(gridFilter === 'all' || gridFilter === 'icon') && (
           <>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#a889c8', fontFamily: "'DM Mono', monospace", marginBottom: 8, marginTop: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ background: '#a889c8', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 9 }}>ICONS</span>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#a889c8', fontFamily: "'DM Mono', monospace", marginBottom: 10, marginTop: 20, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ background: '#a889c8', color: '#fff', padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700 }}>ICONS</span>
               App icons for home screen links
             </div>
             <div className="phone-hub-icon-grid">

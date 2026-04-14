@@ -933,16 +933,16 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
               {/* ── Type Toggle ── */}
               {activeScreen.asset_id && (
-                <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                   <button onClick={() => handleChangeScreenType('phone')} style={{
-                    flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 700, border: '1px solid #e0d9ce',
-                    borderRadius: 6, cursor: 'pointer', minHeight: 36,
+                    flex: 1, padding: '10px 0', fontSize: 13, fontWeight: 700, border: '1px solid #e0d9ce',
+                    borderRadius: 8, cursor: 'pointer', minHeight: 44,
                     background: activeScreen.category !== 'phone_icon' ? '#B8962E' : '#fff',
                     color: activeScreen.category !== 'phone_icon' ? '#fff' : '#888',
                   }}>Screen</button>
                   <button onClick={() => handleChangeScreenType('phone_icon')} style={{
-                    flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 700, border: '1px solid #e0d9ce',
-                    borderRadius: 6, cursor: 'pointer', minHeight: 36,
+                    flex: 1, padding: '10px 0', fontSize: 13, fontWeight: 700, border: '1px solid #e0d9ce',
+                    borderRadius: 8, cursor: 'pointer', minHeight: 44,
                     background: activeScreen.category === 'phone_icon' ? '#a889c8' : '#fff',
                     color: activeScreen.category === 'phone_icon' ? '#fff' : '#888',
                   }}>Icon</button>
@@ -951,34 +951,35 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
               {/* ── Variants ── */}
               {(activeScreen.variants?.length > 1 || activeScreen.url) && (
-                <div style={{ marginBottom: 10 }}>
+                <div style={{ marginBottom: 12 }}>
                   {activeScreen.variants?.length > 1 && (
-                    <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
                       {activeScreen.variants.map((v, i) => (
                         <button key={v.asset_id} onClick={() => setActiveVariantIdx(i)} style={{
-                          padding: '5px 10px', fontSize: 10, fontWeight: 600,
+                          padding: '8px 14px', fontSize: 12, fontWeight: 600,
                           border: `1px solid ${activeVariantIdx === i ? '#B8962E' : '#e0d9ce'}`,
-                          borderRadius: 6, cursor: 'pointer', minHeight: 30,
+                          borderRadius: 8, cursor: 'pointer', minHeight: 36,
                           background: activeVariantIdx === i ? '#B8962E' : '#fff',
                           color: activeVariantIdx === i ? '#fff' : '#888',
+                          maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>{v.variant_label}</button>
                       ))}
                       <button onClick={() => setAddingVariant(!addingVariant)} style={{
-                        padding: '5px 8px', fontSize: 10, fontWeight: 600,
-                        border: '1px dashed #ccc', borderRadius: 6, cursor: 'pointer',
-                        background: 'transparent', color: '#aaa', minHeight: 30,
+                        padding: '8px 12px', fontSize: 14, fontWeight: 600,
+                        border: '1px dashed #ccc', borderRadius: 8, cursor: 'pointer',
+                        background: 'transparent', color: '#aaa', minHeight: 36, minWidth: 36,
                       }}>+</button>
                     </div>
                   )}
                   {addingVariant && (
-                    <div style={{ display: 'flex', gap: 4, marginBottom: 6, alignItems: 'center' }}>
-                      <input value={newVariantLabel} onChange={e => setNewVariantLabel(e.target.value)} placeholder="e.g. Locked" style={{ flex: 1, padding: '6px 8px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 11 }} />
-                      <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} style={{ padding: '6px 10px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 6, minHeight: 32, background: newVariantLabel.trim() ? '#b89060' : '#eee', color: newVariantLabel.trim() ? '#fff' : '#ccc', cursor: newVariantLabel.trim() ? 'pointer' : 'not-allowed' }}>Upload</button>
-                      <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} style={{ padding: '4px', border: 'none', background: 'none', cursor: 'pointer', color: '#ccc' }}><X size={12} /></button>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+                      <input value={newVariantLabel} onChange={e => setNewVariantLabel(e.target.value)} placeholder="e.g. Locked, Dark Mode" style={{ flex: 1, padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36 }} />
+                      <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} style={{ padding: '8px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 6, minHeight: 36, background: newVariantLabel.trim() ? '#b89060' : '#eee', color: newVariantLabel.trim() ? '#fff' : '#ccc', cursor: newVariantLabel.trim() ? 'pointer' : 'not-allowed' }}>Upload</button>
+                      <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} style={{ padding: '6px', border: 'none', background: 'none', cursor: 'pointer', color: '#ccc', minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
                     </div>
                   )}
                   {!activeScreen.variants && activeScreen.url && !addingVariant && (
-                    <button onClick={() => setAddingVariant(true)} style={{ padding: '5px 10px', fontSize: 10, fontWeight: 600, border: '1px dashed #b89060', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: '#b89060', display: 'flex', alignItems: 'center', gap: 4, minHeight: 30 }}><Layers size={11} /> Add Variant</button>
+                    <button onClick={() => setAddingVariant(true)} style={{ padding: '8px 14px', fontSize: 12, fontWeight: 600, border: '1px dashed #b89060', borderRadius: 8, cursor: 'pointer', background: 'transparent', color: '#b89060', display: 'flex', alignItems: 'center', gap: 6, minHeight: 36 }}><Layers size={14} /> Add Variant</button>
                   )}
                   <input ref={variantInputRef} type="file" accept="image/*" onChange={handleVariantUpload} style={{ display: 'none' }} />
                 </div>
