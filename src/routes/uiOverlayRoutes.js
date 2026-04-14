@@ -725,6 +725,10 @@ router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
     if (!Asset) return res.status(500).json({ success: false, error: 'Asset model not available' });
     const asset = await Asset.findByPk(req.params.assetId);
     if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
+    // Verify asset belongs to this show
+    if (asset.show_id && asset.show_id !== req.params.showId) {
+      return res.status(403).json({ success: false, error: 'Asset does not belong to this show' });
+    }
     await asset.destroy(); // paranoid soft-delete
     return res.json({ success: true, message: 'Asset deleted' });
   } catch (err) {

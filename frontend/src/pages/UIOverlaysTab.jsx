@@ -80,7 +80,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         e.preventDefault();
         handleUndo();
       }
+      // Escape closes panel — but not if user is in an input/textarea (let the input handle it)
       if (e.key === 'Escape' && activeScreen) {
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         setActiveScreen(null);
         setEditingLinks(false);
         undoStackRef.current = [];
@@ -90,9 +93,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     return () => window.removeEventListener('keydown', handler);
   }, [handleUndo, activeScreen]);
 
-  // Lock body scroll when detail panel is open (mobile bottom sheet)
+  // Lock body scroll when detail panel is open — mobile only (bottom sheet)
   useEffect(() => {
-    if (activeScreen) {
+    if (activeScreen && window.innerWidth <= 768) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => { document.body.style.overflow = prev; };
@@ -207,14 +210,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   }, [showId]);
 
   useEffect(() => { loadOverlays(true); }, [loadOverlays]);
-
-  // Auto-select home screen on first load
-  useEffect(() => {
-    if (!activeScreen && overlays.length > 0) {
-      const home = overlays.find(o => o.id === 'home') || overlays[0];
-      if (home) setActiveScreen(home);
-    }
-  }, [overlays]);
   useEffect(() => { return () => { if (pollRef.current) clearInterval(pollRef.current); }; }, []);
 
   // Generate all
@@ -743,8 +738,8 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
       {/* ── Slide-over Detail Panel ── */}
       {activeScreen && (
         <>
-          {/* Scrim */}
-          <div className="panel-scrim panel-scrim-visible" onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} />
+          {/* Scrim — mobile only (bottom sheet needs backdrop), desktop has no scrim so grid stays clickable */}
+          <div className="panel-scrim" onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} />
 
           {/* Panel */}
           <div className="detail-panel detail-panel-open">
@@ -991,17 +986,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
         /* ── Slide-over Panel (Desktop: right drawer, Mobile: bottom sheet) ── */
         .panel-scrim {
-          position: fixed; inset: 0; z-index: 900;
-          background: rgba(0,0,0,0); pointer-events: none;
-          transition: background 0.3s ease;
-        }
-        .panel-scrim-visible {
-          background: rgba(0,0,0,0.35); pointer-events: auto;
-          animation: scrimFadeIn 0.3s ease forwards;
-        }
-        @keyframes scrimFadeIn {
-          from { background: rgba(0,0,0,0); }
-          to { background: rgba(0,0,0,0.35); }
+          display: none; /* hidden on desktop — grid stays fully interactive */
         }
 
         .detail-panel {
@@ -1039,6 +1024,15 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
         /* ── Mobile: bottom sheet ── */
         @media (max-width: 768px) {
+          .panel-scrim {
+            display: block; position: fixed; inset: 0; z-index: 900;
+            background: rgba(0,0,0,0.35); pointer-events: auto;
+            animation: scrimFadeIn 0.3s ease forwards;
+          }
+          @keyframes scrimFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
           .detail-panel {
             top: auto; right: 0; bottom: 0; left: 0;
             width: 100%; max-width: 100%;
