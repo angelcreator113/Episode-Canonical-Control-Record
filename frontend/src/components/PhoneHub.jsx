@@ -3,11 +3,15 @@
  *
  * Shows a phone device with the currently selected screen overlay.
  * Clicking screen slots on the side switches the active screen.
+ * Supports screen_links: clickable tap zones with icon overlays that navigate between screens.
  *
  * Props:
  *   screens       — array of overlay objects (the phone screens)
  *   activeScreen  — currently displayed screen overlay
  *   onSelectScreen(overlay) — callback when a screen slot is clicked
+ *   onNavigate(screenKey)   — callback when a tap zone is clicked (navigates to target screen)
+ *   navigationHistory       — array of previous screen keys for back navigation
+ *   onBack()                — callback for back button (pops navigation history)
  *   deviceFrame   — optional custom device frame image URL
  */
 import React from 'react';
@@ -40,7 +44,47 @@ const PHONE_SKINS = [
 
 export { SCREEN_TYPES, PHONE_SKINS };
 
-export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, skin = 'midnight', onChangeSkin, customFrameUrl }) {
+// Renders interactive tap zone overlays on the phone screen
+function ScreenLinkOverlay({ links = [], onNavigate }) {
+  if (!links.length || !onNavigate) return null;
+  return (
+    <>
+      {links.map(link => (
+        <div
+          key={link.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (link.target) onNavigate(link.target);
+          }}
+          title={link.label || link.target}
+          style={{
+            position: 'absolute',
+            left: `${link.x}%`, top: `${link.y}%`,
+            width: `${link.w}%`, height: `${link.h}%`,
+            cursor: link.target ? 'pointer' : 'default',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 6,
+            transition: 'background 0.15s',
+            zIndex: 2,
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(184,150,46,0.12)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          {link.icon_url && (
+            <img
+              src={link.icon_url}
+              alt={link.label || link.target}
+              style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }}
+              draggable={false}
+            />
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
 
   // Match screens to screen types
@@ -66,11 +110,22 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, s
             borderRadius: 16, overflow: 'hidden',
           }}>
             {activeScreen?.url ? (
-              <img src={activeScreen.url} alt={activeScreen.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <>
+                <img src={activeScreen.url} alt={activeScreen.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+              </>
             ) : (
               <div style={{ width: '100%', height: '100%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>
                 <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{activeScreen ? 'Not generated' : 'Select a screen'}</span>
               </div>
+            )}
+            {navigationHistory.length > 0 && onBack && (
+              <button onClick={onBack} style={{
+                position: 'absolute', top: 6, left: 6, zIndex: 10,
+                padding: '3px 8px', fontSize: 9, fontWeight: 700, border: 'none',
+                borderRadius: 10, background: 'rgba(0,0,0,0.5)', color: '#fff',
+                cursor: 'pointer', backdropFilter: 'blur(4px)',
+              }}>← Back</button>
             )}
           </div>
         </div>
@@ -98,11 +153,14 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, s
           position: 'relative',
         }}>
           {activeScreen?.url ? (
-            <img
-              src={activeScreen.url}
-              alt={activeScreen.name}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
+            <>
+              <img
+                src={activeScreen.url}
+                alt={activeScreen.name}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+            </>
           ) : (
             <div style={{
               position: 'absolute', inset: 0,
@@ -115,6 +173,16 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, s
                 {activeScreen ? 'Not generated yet' : 'Select a screen'}
               </span>
             </div>
+          )}
+
+          {/* Back button for navigation */}
+          {navigationHistory.length > 0 && onBack && (
+            <button onClick={onBack} style={{
+              position: 'absolute', top: 6, left: 6, zIndex: 10,
+              padding: '3px 8px', fontSize: 9, fontWeight: 700, border: 'none',
+              borderRadius: 10, background: 'rgba(0,0,0,0.5)', color: '#fff',
+              cursor: 'pointer', backdropFilter: 'blur(4px)',
+            }}>← Back</button>
           )}
 
           {/* Screen name overlay */}
