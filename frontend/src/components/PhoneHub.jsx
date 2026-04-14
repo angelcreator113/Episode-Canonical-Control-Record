@@ -351,8 +351,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           )}
         </div>
         <div className="phone-hub-screen-grid">
-          {SCREEN_TYPES.filter(t => t.type === 'screen').filter(t => showHidden || !hiddenScreens.includes(t.key)).map(type => (
-            <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(type.key)} globalFit={globalFit} />
+          {SCREEN_TYPES.filter(t => t.type === 'screen').map(type => (
+            <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} />
           ))}
           {customScreens.map(s => (
             <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📄', desc: s.description || 'Custom screen' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} />
@@ -367,8 +367,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
               App icons for home screen links
             </div>
             <div className="phone-hub-icon-grid">
-              {SCREEN_TYPES.filter(t => t.type === 'icon').filter(t => showHidden || !hiddenScreens.includes(t.key)).map(type => (
-                <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(type.key)} globalFit={globalFit} isIcon />
+              {SCREEN_TYPES.filter(t => t.type === 'icon').map(type => (
+                <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} isIcon />
               ))}
               {customIcons.map(s => (
                 <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || 'Custom icon' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} isIcon />
@@ -413,10 +413,6 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); }
           .phone-hub-icon-grid { grid-template-columns: repeat(2, 1fr); }
         }
-        .screen-card:hover .screen-card-delete { opacity: 1 !important; }
-        @media (hover: none) {
-          .screen-card-delete { opacity: 0.7 !important; }
-        }
       `}</style>
     </div>
   );
@@ -435,15 +431,14 @@ function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHi
       }}
       className="screen-card"
       style={{
-        background: isHidden ? '#f5f3f0' : isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
-        border: `1px solid ${isHidden ? '#e8e0d0' : isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
+        background: isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
+        border: `1px solid ${isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
         borderRadius: isIcon ? 10 : 12, padding: isIcon ? 8 : 10,
         cursor: 'pointer',
         transition: 'all 0.15s',
         position: 'relative',
         overflow: 'hidden',
         minHeight: isIcon ? 44 : 'auto',
-        opacity: isHidden ? 0.45 : 1,
       }}
     >
       {/* Quick delete — visible on hover (for cards with images) */}

@@ -751,11 +751,59 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
           </div>
         </div>
 
-      {/* ── Slide-over Detail Panel ── */}
-      {activeScreen && (
-        <>
-          {/* Scrim — mobile only (bottom sheet needs backdrop), desktop has no scrim so grid stays clickable */}
-          <div className="panel-scrim" onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} />
+          {/* Right: Detail Panel (sticky sidebar on desktop, below on mobile) */}
+          {activeScreen && (
+            <div className="phone-hub-detail-panel">
+              {/* Header with name, badge, undo, close */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, borderBottom: '1px solid #f0ece4', paddingBottom: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {editingName ? (
+                      <input
+                        autoFocus
+                        value={editNameValue}
+                        onChange={e => setEditNameValue(e.target.value)}
+                        onBlur={() => { handleRename(editNameValue); }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleRename(editNameValue);
+                          if (e.key === 'Escape') setEditingName(false);
+                        }}
+                        style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", border: '1px solid #B8962E', borderRadius: 6, padding: '4px 8px', outline: 'none', width: '100%' }}
+                      />
+                    ) : (
+                      <div
+                        onClick={() => { setEditNameValue(activeScreen.name || ''); setEditingName(true); }}
+                        title="Click to rename"
+                        style={{ fontSize: 16, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", cursor: 'text', borderBottom: '1px dashed transparent', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderBottomColor = '#B8962E40'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
+                      >{activeScreen.name}</div>
+                    )}
+                    <span style={{
+                      fontSize: 8, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                      background: (activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? '#a889c8' : '#B8962E',
+                      color: '#fff', letterSpacing: 0.5, flexShrink: 0,
+                    }}>
+                      {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'ICON' : 'SCREEN'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#aaa', marginTop: 3, fontFamily: "'DM Mono', monospace" }}>
+                    {activeScreen.beat && <span style={{ marginRight: 6 }}>{activeScreen.beat}</span>}
+                    {activeScreen.description?.slice(0, 50)}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+                  <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title="Undo (Ctrl+Z)" style={{
+                    background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer',
+                    color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '4px 6px', minWidth: 30, minHeight: 30,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}><Undo2 size={14} /></button>
+                  <button onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} style={{
+                    background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '4px 6px', minWidth: 30, minHeight: 30,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}><X size={14} /></button>
+                </div>
+              </div>
 
           {/* Panel */}
           <div className="detail-panel detail-panel-open">
@@ -848,7 +896,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
               {/* ── Type Toggle ── */}
               {activeScreen.asset_id && (
-                <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
                   <button onClick={() => handleChangeScreenType('phone')} style={{
                     flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 700, border: '1px solid #e0d9ce',
                     borderRadius: 6, cursor: 'pointer', minHeight: 36,
@@ -899,7 +947,29 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                 </div>
               )}
 
-              {/* ── Image Fit ── */}
+              {/* ── Actions (collapsible) ── */}
+              <SectionHeader label="Actions" expanded={expandedSections.actions} onToggle={() => toggleSection('actions')} />
+              {expandedSections.actions && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {!activeScreen.placeholder ? (
+                    <>
+                      <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" />
+                      <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#7ab3d4" />
+                      {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
+                      {activeScreen.asset_id && <ActionBtn icon={Eraser} label="Remove BG" onClick={handleRemoveBg} color="#a889c8" />}
+                      {activeScreen.url && <ActionBtn icon={Link2} label={editingLinks ? 'Done' : 'Links'} onClick={() => setEditingLinks(!editingLinks)} color={editingLinks ? '#2C2C2C' : '#b89060'} />}
+                      <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
+                    </>
+                  ) : (
+                    <>
+                      <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#7ab3d4" />
+                      <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} color="#B8962E" />
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── Image Fit (collapsible) ── */}
               {activeScreen?.url && !activeScreen.placeholder && (
                 <>
                   <SectionHeader label="Image Fit" expanded={expandedSections.fit} onToggle={() => toggleSection('fit')} />
@@ -994,49 +1064,16 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
         /* ── Main Layout ── */
         .phone-hub-layout {
-          display: block;
-          transition: margin-right 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-        }
-        .phone-hub-layout.panel-open {
-          margin-right: 410px; /* 400px panel + 10px breathing room */
+          display: flex; gap: 20px; align-items: flex-start;
         }
         .phone-hub-main {
-          width: 100%;
+          flex: 1; min-width: 0;
         }
-
-        /* ── Slide-over Panel (Desktop: right drawer, Mobile: bottom sheet) ── */
-        .panel-scrim {
-          display: none; /* hidden on desktop — grid stays fully interactive */
-        }
-
-        .detail-panel {
-          position: fixed; z-index: 950;
-          background: #fff;
-          display: flex; flex-direction: column;
-          /* Desktop: right drawer */
-          top: 0; right: 0; bottom: 0;
-          width: 400px; max-width: 90vw;
-          box-shadow: -4px 0 24px rgba(0,0,0,0.12);
-          transform: translateX(100%);
-          transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-        }
-        .detail-panel-open {
-          transform: translateX(0);
-        }
-
-        .detail-panel-drag-handle {
-          display: none; /* hidden on desktop */
-        }
-
-        .detail-panel-header {
-          display: flex; align-items: flex-start; gap: 12px;
-          padding: 20px 20px 14px;
-          border-bottom: 1px solid #f0ece4;
-          flex-shrink: 0;
-        }
-
-        .detail-panel-body {
-          flex: 1; overflow-y: auto; padding: 16px 20px 24px;
+        .phone-hub-detail-panel {
+          width: 340px; flex-shrink: 0;
+          position: sticky; top: 20px; max-height: calc(100vh - 60px); overflow-y: auto;
+          background: #fff; border: 1px solid #e8e0d0;
+          border-radius: 14px; padding: 16px;
           scrollbar-width: thin; scrollbar-color: #e8e0d0 transparent;
         }
         .detail-panel-body::-webkit-scrollbar { width: 4px; }
@@ -1079,7 +1116,18 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
           .detail-panel-body { padding: 12px 16px 24px; }
         }
 
-        /* ── Responsive header ── */
+        /* ── Small Tablet / Large Phone ── */
+        @media (max-width: 900px) {
+          .phone-hub-layout {
+            flex-direction: column;
+          }
+          .phone-hub-detail-panel {
+            width: 100%; position: static; max-height: none;
+            margin-top: 16px;
+          }
+        }
+
+        /* ── Phone ── */
         @media (max-width: 600px) {
           .overlays-header-top { flex-wrap: wrap; }
           .overlays-header-actions { width: 100%; justify-content: flex-start; }
