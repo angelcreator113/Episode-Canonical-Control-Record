@@ -105,7 +105,7 @@ const TABS = [
 function WorldAdmin() {
   const { id: showId } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'overview';
 
   const [show, setShow] = useState(null);
@@ -174,7 +174,9 @@ function WorldAdmin() {
   const switchTab = (tabKey) => {
     setActiveTab(tabKey);
     const tab = TABS.find(t => t.key === tabKey);
-    setSubTab(tab?.subs?.[0]?.key || null);
+    const firstSub = tab?.subs?.[0]?.key || null;
+    setSubTab(firstSub);
+    setSearchParams({ tab: firstSub || tabKey });
   };
   const [expandedEpisode, setExpandedEpisode] = useState(null);
   const [episodeBlueprint, setEpisodeBlueprint] = useState(null); // holds generated episode data for modal
@@ -959,7 +961,7 @@ The revised event should feel like a completely different experience from the si
         return (
           <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
             {currentTab.subs.map(s => (
-              <button key={s.key} onClick={() => setSubTab(s.key)} style={{
+              <button key={s.key} onClick={() => { setSubTab(s.key); setSearchParams({ tab: s.key }); }} style={{
                 padding: '6px 14px', background: 'transparent', border: 'none',
                 borderBottom: subTab === s.key ? '2px solid #6366f1' : '2px solid transparent',
                 color: subTab === s.key ? '#6366f1' : '#94a3b8',
