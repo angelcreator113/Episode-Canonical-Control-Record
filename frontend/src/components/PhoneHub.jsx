@@ -193,10 +193,14 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   const isIcon = (s) => s?.type === 'icon' || s?.category === 'phone_icon' || (s?.id && s.id.startsWith('icon_')) || (s?.name && /icon$/i.test((s.name || '').trim()));
 
   const isIconType = isIcon(activeScreen);
-  const phoneScreen = isIconType ? null : activeScreen;
+
+  // Find home screen — used as persistent fallback
+  const homeScreen = screens.find(s => s.id === 'home' && s.generated && s.url);
+
+  // What to show on the phone: active screen > home screen > nothing
+  const phoneScreen = isIconType ? homeScreen : (activeScreen || homeScreen);
 
   // Find persistent icons from the home screen that should show on ALL screens
-  const homeScreen = screens.find(s => s.id === 'home' && s.generated && s.url);
   const persistentLinks = React.useMemo(() => {
     if (!homeScreen) return [];
     const links = homeScreen.screen_links || homeScreen.metadata?.screen_links || [];
@@ -296,7 +300,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         <div style={{
           width: '100%', aspectRatio: '9/19.5',
           borderRadius: 24, overflow: 'hidden',
-          background: activeScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
+          background: phoneScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
           position: 'relative',
           border: '2.5px solid #111',
           boxShadow: 'inset 0 0 6px rgba(0,0,0,0.4)',
