@@ -14,7 +14,8 @@
  *   onBack()                — callback for back button (pops navigation history)
  *   deviceFrame   — optional custom device frame image URL
  */
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { MoreVertical, Trash2, EyeOff, Edit3 } from 'lucide-react';
 import ScreenContentRenderer from './ScreenContentRenderer';
 
 // type: 'screen' = full phone screen frame, 'icon' = app icon for home screen link editor
@@ -481,9 +482,10 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
           .phone-hub-icon-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
         }
-        .screen-card:hover .screen-card-delete { opacity: 1 !important; }
+        .screen-card:hover .screen-card-menu { opacity: 1 !important; }
+        .screen-card-menu { opacity: 0; transition: opacity 0.15s; }
         @media (hover: none) {
-          .screen-card-delete { opacity: 0.7 !important; }
+          .screen-card-menu { opacity: 0.8 !important; }
         }
       `}</style>
     </div>
@@ -494,11 +496,23 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
+  }, [menuOpen]);
 
   return (
     <div
       onClick={() => {
-        if (isHidden && onHide) { onHide(type.key); return; } // click to restore
+        if (menuOpen) return;
+        if (isHidden && onHide) { onHide(type.key); return; }
         screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
       }}
       className="screen-card"
@@ -509,51 +523,81 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
         cursor: 'pointer',
         transition: 'all 0.15s',
         position: 'relative',
-        overflow: 'hidden',
+        overflow: 'visible',
         minHeight: isIcon ? 44 : 'auto',
         opacity: isHidden ? 0.45 : 1,
       }}
     >
-      {/* Quick delete — visible on hover (for cards with images) */}
-      {hasImage && onDelete && !isHidden && (
-        <button
-          className="screen-card-delete"
-          onClick={(e) => { e.stopPropagation(); onDelete(screen); }}
-          title="Delete image"
-          style={{
-            position: 'absolute', top: 4, right: 4, zIndex: 3,
-            width: 22, height: 22, borderRadius: '50%',
-            background: 'rgba(220,38,38,0.85)', border: 'none',
-            color: '#fff', fontSize: 11, fontWeight: 700,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: 0, transition: 'opacity 0.15s',
-          }}
-        >×</button>
+      {/* 3-dot menu — replaces old delete/hide buttons */}
+      {!isHidden && (onDelete || onHide) && (
+        <div ref={menuRef} style={{ position: 'absolute', top: 4, right: 4, zIndex: 5 }}>
+          <button
+            className="screen-card-menu"
+            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+            aria-label="Screen options"
+            style={{
+              width: 28, height: 28, borderRadius: 6,
+              background: hasImage ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)',
+              border: 'none', color: hasImage ? '#fff' : '#999',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              backdropFilter: hasImage ? 'blur(4px)' : 'none',
+            }}
+          >
+            <MoreVertical size={14} />
+          </button>
+
+          {menuOpen && (
+            <div style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 20,
+              minWidth: 150, overflow: 'hidden',
+            }}>
+              {/* Edit — opens the detail panel */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
+                }}
+                style={menuItemStyle}
+              >
+                <Edit3 size={14} /> Edit
+              </button>
+
+              {/* Hide from grid */}
+              {onHide && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onHide(type.key); }}
+                  style={menuItemStyle}
+                >
+                  <EyeOff size={14} /> Hide
+                </button>
+              )}
+
+              {/* Delete */}
+              {hasImage && onDelete && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }}
+                  style={{ ...menuItemStyle, color: '#dc2626' }}
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       )}
-      {/* Hide/remove slot — visible on hover (for all cards without images) */}
-      {!hasImage && onHide && !isHidden && (
-        <button
-          className="screen-card-delete"
-          onClick={(e) => { e.stopPropagation(); onHide(type.key); }}
-          title="Remove from grid"
-          style={{
-            position: 'absolute', top: 4, right: 4, zIndex: 3,
-            width: 22, height: 22, borderRadius: '50%',
-            background: 'rgba(0,0,0,0.4)', border: 'none',
-            color: '#fff', fontSize: 11, fontWeight: 700,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: 0, transition: 'opacity 0.15s',
-          }}
-        >×</button>
-      )}
+
       {/* Restore badge for hidden cards */}
       {isHidden && (
         <div style={{
           position: 'absolute', top: 4, right: 4, zIndex: 3,
-          fontSize: 8, color: '#999', fontFamily: "'DM Mono', monospace",
-          background: '#fff', padding: '1px 5px', borderRadius: 3, border: '1px solid #ddd',
+          fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace",
+          background: '#fff', padding: '2px 8px', borderRadius: 4, border: '1px solid #ddd',
         }}>restore</div>
       )}
+
       {/* Thumbnail preview */}
       {hasImage && (
         <div style={{
@@ -568,7 +612,7 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
 
       <div style={{ display: 'flex', alignItems: 'center', gap: isIcon ? 5 : 6, minWidth: 0 }}>
         <span style={{ fontSize: isIcon ? 14 : 18, flexShrink: 0 }}>{type.icon}</span>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: isIcon ? 10 : 12, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {type.label}
           </div>
@@ -581,11 +625,23 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
       </div>
 
       {/* Status dot */}
-      <div style={{
-        position: 'absolute', top: isIcon ? 5 : 8, right: isIcon ? 5 : 8,
-        width: 7, height: 7, borderRadius: '50%',
-        background: hasImage ? '#16a34a' : screen ? '#eab308' : '#e0e0e0',
-      }} />
+      {!menuOpen && (
+        <div style={{
+          position: 'absolute', top: isIcon ? 5 : 8, left: isIcon ? 5 : 8,
+          width: 7, height: 7, borderRadius: '50%',
+          background: hasImage ? '#16a34a' : screen ? '#eab308' : '#e0e0e0',
+        }} />
+      )}
     </div>
   );
 });
+
+const menuItemStyle = {
+  display: 'flex', alignItems: 'center', gap: 8,
+  width: '100%', padding: '12px 14px',
+  border: 'none', background: 'none', cursor: 'pointer',
+  fontSize: 13, fontWeight: 500, color: '#2C2C2C',
+  textAlign: 'left', minHeight: 44,
+  borderBottom: '1px solid #f5f3ee',
+  transition: 'background 0.1s',
+};

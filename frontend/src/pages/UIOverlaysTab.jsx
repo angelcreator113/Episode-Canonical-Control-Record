@@ -104,7 +104,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleUndo, activeScreen]);
+  }, [handleUndo, panelOpen, closePanel]);
 
   // Lock body scroll when detail panel is open — mobile only (bottom sheet)
   useEffect(() => {
@@ -891,14 +891,14 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
               </div>
               <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
                 <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title={undoStackRef.current.length > 0 ? `Undo (${undoStackRef.current.length} changes)` : 'Nothing to undo'} aria-label="Undo" style={{
-                  background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer',
-                  color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '6px 8px', minWidth: 36, minHeight: 36,
+                  background: 'none', border: '1px solid #eee', borderRadius: 8, cursor: 'pointer',
+                  color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '8px', minWidth: 44, minHeight: 44,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}><Undo2 size={14} /></button>
+                }}><Undo2 size={18} /></button>
                 <button onClick={closePanel} aria-label="Close panel" style={{
-                  background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '6px 8px', minWidth: 36, minHeight: 36,
+                  background: 'none', border: '1px solid #eee', borderRadius: 8, cursor: 'pointer', color: '#999', padding: '8px', minWidth: 44, minHeight: 44,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}><X size={14} /></button>
+                }}><X size={18} /></button>
               </div>
             </div>
 
