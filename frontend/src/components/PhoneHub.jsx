@@ -138,7 +138,7 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
   );
 }
 
-export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
+export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [frameError, setFrameError] = useState(false);
@@ -344,10 +344,10 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         </div>
         <div className="phone-hub-screen-grid">
           {SCREEN_TYPES.filter(t => t.type === 'screen').map(type => (
-            <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} />
+            <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} />
           ))}
           {customScreens.map(s => (
-            <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📄', desc: s.description || 'Custom screen' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} />
+            <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📄', desc: s.description || 'Custom screen' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} />
           ))}
         </div>
 
@@ -360,10 +360,10 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             </div>
             <div className="phone-hub-icon-grid">
               {SCREEN_TYPES.filter(t => t.type === 'icon').map(type => (
-                <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} isIcon />
+                <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} isIcon />
               ))}
               {customIcons.map(s => (
-                <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || 'Custom icon' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} isIcon />
+                <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || 'Custom icon' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} isIcon />
               ))}
             </div>
           </>
@@ -405,12 +405,16 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); }
           .phone-hub-icon-grid { grid-template-columns: repeat(2, 1fr); }
         }
+        .screen-card:hover .screen-card-delete { opacity: 1 !important; }
+        @media (hover: none) {
+          .screen-card-delete { opacity: 0.7 !important; }
+        }
       `}</style>
     </div>
   );
 }
 
-function ScreenCard({ type, screen, activeScreen, onSelectScreen, globalFit, isIcon }) {
+function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, globalFit, isIcon }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';
@@ -418,6 +422,7 @@ function ScreenCard({ type, screen, activeScreen, onSelectScreen, globalFit, isI
   return (
     <div
       onClick={() => screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true })}
+      className="screen-card"
       style={{
         background: isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
         border: `1px solid ${isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
@@ -429,6 +434,22 @@ function ScreenCard({ type, screen, activeScreen, onSelectScreen, globalFit, isI
         minHeight: isIcon ? 44 : 'auto',
       }}
     >
+      {/* Quick delete — visible on hover */}
+      {hasImage && onDelete && (
+        <button
+          className="screen-card-delete"
+          onClick={(e) => { e.stopPropagation(); onDelete(screen); }}
+          title="Delete"
+          style={{
+            position: 'absolute', top: 4, right: 4, zIndex: 3,
+            width: 22, height: 22, borderRadius: '50%',
+            background: 'rgba(220,38,38,0.85)', border: 'none',
+            color: '#fff', fontSize: 11, fontWeight: 700,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: 0, transition: 'opacity 0.15s',
+          }}
+        >×</button>
+      )}
       {/* Thumbnail preview */}
       {hasImage && (
         <div style={{

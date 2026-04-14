@@ -319,15 +319,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   };
 
   // Delete screen + clean up any links pointing to it from other screens
-  const handleDelete = async () => {
-    if (!activeScreen) return;
-    if (!confirm(`Delete "${activeScreen.name}"? Any links pointing to this screen from other screens will be removed.`)) return;
+  const handleDeleteScreen = async (screen) => {
+    if (!screen) return;
+    if (!confirm(`Delete "${screen.name}"? Any links pointing to this screen will be removed.`)) return;
     try {
-      const deletedKey = activeScreen.id;
-      if (activeScreen.custom && activeScreen.custom_id) {
-        await api.delete(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`);
-      } else if (activeScreen.asset_id) {
-        await api.delete(`/api/v1/assets/${activeScreen.asset_id}`);
+      const deletedKey = screen.id;
+      if (screen.custom && screen.custom_id) {
+        await api.delete(`/api/v1/ui-overlays/${showId}/types/${screen.custom_id}`);
+      } else if (screen.asset_id) {
+        await api.delete(`/api/v1/assets/${screen.asset_id}`);
       }
       // Clean orphaned links: remove any screen_links targeting the deleted screen
       for (const overlay of overlays) {
@@ -338,12 +338,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: cleaned }).catch(() => {});
         }
       }
-      setActiveScreen(null);
-      setEditingLinks(false);
+      if (activeScreen?.id === deletedKey) { setActiveScreen(null); setEditingLinks(false); }
       loadOverlays(false);
       flash('Deleted');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
+  const handleDelete = () => handleDeleteScreen(activeScreen);
 
   // Download
   const handleDownload = () => {
@@ -728,6 +728,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
               screens={overlays}
               activeScreen={activeScreen}
               onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); }}
+              onDelete={handleDeleteScreen}
               onNavigate={handleNavigate}
               navigationHistory={navHistory}
               onBack={handleBack}
