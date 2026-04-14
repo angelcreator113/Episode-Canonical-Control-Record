@@ -91,6 +91,8 @@ router.get('/:showId', optionalAuth, async (req, res) => {
         custom_prompt: primary?.custom_prompt || null,
         screen_links: primary?.metadata?.screen_links || null,
         image_fit: primary?.metadata?.image_fit || null,
+        // Category override from asset metadata (for built-in types reassigned by user)
+        ...(primary?.metadata?.overlay_category ? { category: primary.metadata.overlay_category } : {}),
         variants,
       };
     });
@@ -441,6 +443,33 @@ router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
     }
 
     return res.json({ success: true, global_fit });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── CATEGORY OVERRIDE (screen vs icon for built-in types) ───────────────
+
+// PUT /api/v1/ui-overlays/:showId/category/:assetId — set category on asset metadata
+router.put('/:showId/category/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { category } = req.body;
+    if (!category) return res.status(400).json({ success: false, error: 'category is required' });
+
+    await models.sequelize.query(
+      `UPDATE assets
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
+           updated_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: {
+        assetId: req.params.assetId,
+        showId: req.params.showId,
+        patch: JSON.stringify({ overlay_category: category }),
+      } }
+    );
+
+    return res.json({ success: true, category });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
