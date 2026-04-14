@@ -994,6 +994,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                         links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
                         screenTypes={SCREEN_TYPES.filter(t => t.type === 'screen')}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                        iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
                         onSave={handleSaveLinks}
                         onUploadIcon={handleUploadIcon}
                       />
