@@ -102,20 +102,22 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     const prevUrl = customFrameUrl;
     const previewUrl = URL.createObjectURL(file);
     setCustomFrameUrl(previewUrl);
+    flash('Uploading frame...');
     try {
       const fd = new FormData();
       fd.append('frame', file);
-      const res = await api.post(`/api/v1/ui-overlays/${showId}/frame`, fd);
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/frame`, fd, { timeout: 30000 });
       if (res.data?.frame_url) {
         setCustomFrameUrl(res.data.frame_url);
+        flash('Frame uploaded!');
+      } else {
+        flash('Frame preview set (upload may still be processing)');
       }
-      flash('Frame uploaded!');
     } catch (err) {
-      // Revert to previous frame on failure
-      setCustomFrameUrl(prevUrl);
-      flash(err.response?.data?.error || 'Frame upload failed', 'error');
+      // Keep the preview URL so the user can still see the frame locally
+      console.error('[PhoneHub] Frame upload failed:', err.message);
+      flash(err.response?.data?.error || 'Frame upload failed — preview only', 'error');
     }
-    URL.revokeObjectURL(previewUrl);
     if (frameInputRef.current) frameInputRef.current.value = '';
   };
 

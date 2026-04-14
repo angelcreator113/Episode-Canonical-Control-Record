@@ -335,7 +335,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       <style>{`
         .phone-hub-inner { display: flex; gap: 24px; align-items: flex-start; }
         .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; }
-        .phone-hub-frame { width: 280px; }
+        .phone-hub-frame { width: 280px; position: relative; }
         @media (max-width: 768px) {
           .phone-hub-inner { flex-direction: column; align-items: stretch; }
           .phone-hub-device { align-items: center; }
