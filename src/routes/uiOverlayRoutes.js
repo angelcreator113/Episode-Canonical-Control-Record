@@ -62,18 +62,18 @@ router.get('/:showId', optionalAuth, async (req, res) => {
       const otName = ot.name.toLowerCase();
       const lifecycle = ot.lifecycle || 'permanent';
 
-      // Find ALL matching assets (variants) — STRICT matching only
+      // Find ALL matching assets — strict overlay_type, name fallback only when type is missing
       const allMatches = existing.filter(e => {
         const eType = (e.overlay_type || '').toLowerCase();
 
-        // Primary match: exact overlay_type match (most reliable)
-        if (eType === otId) return true;
+        // Primary: exact overlay_type match
+        if (eType && eType === otId) return true;
 
-        // Legacy fallback: match by exact name pattern "UI Overlay: {TypeName}"
-        const eName = (e.name || '').toLowerCase();
-        const nameOnly = eName.replace(/^ui overlay:\s*/i, '').replace(/\s*\(.*\)$/, '').trim();
-        if (nameOnly === otName) return true;
-        if (eName === `ui overlay: ${otName}`) return true;
+        // Only use name fallback when asset has NO overlay_type (truly legacy)
+        if (!eType) {
+          const nameOnly = (e.name || '').replace(/^ui overlay:\s*/i, '').replace(/\s*\(.*\)$/, '').trim().toLowerCase();
+          if (nameOnly === otName) return true;
+        }
 
         // Special case
         if (otId === 'wardrobe_list' && eType === 'todo_checklist') return true;
@@ -493,25 +493,9 @@ router.put('/:showId/category/:assetId', optionalAuth, async (req, res) => {
     const { category } = req.body;
     if (!category) return res.status(400).json({ success: false, error: 'category is required' });
 
-    // Read current overlay_type so we can adjust it to match the new category
-    const [current] = await models.sequelize.query(
-      `SELECT metadata::text as metadata_text FROM assets WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
-      { replacements: { assetId: req.params.assetId, showId: req.params.showId } }
-    );
-    let patch = { overlay_category: category };
-    if (current?.length) {
-      let meta = {};
-      try { meta = JSON.parse(current[0].metadata_text || '{}'); } catch {}
-      const currentType = meta.overlay_type || '';
-      // If switching to icon category and overlay_type doesn't start with 'icon_', prefix it
-      if (category === 'phone_icon' && !currentType.startsWith('icon_')) {
-        patch.overlay_type = 'icon_' + currentType;
-      }
-      // If switching to screen category and overlay_type starts with 'icon_', strip the prefix
-      if (category === 'phone' && currentType.startsWith('icon_')) {
-        patch.overlay_type = currentType.replace(/^icon_/, '');
-      }
-    }
+    // Only update overlay_category — overlay_type stays the same since there's
+    // no reliable mapping between screen/icon type IDs (e.g., wardrobe ≠ icon_closet)
+    const patch = { overlay_category: category };
 
     await models.sequelize.query(
       `UPDATE assets
