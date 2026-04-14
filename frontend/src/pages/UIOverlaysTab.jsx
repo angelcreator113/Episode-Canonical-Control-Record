@@ -26,6 +26,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [generatingId, setGeneratingId] = useState(null);
   const [toast, setToast] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createMode, setCreateMode] = useState('phone'); // 'phone' or 'phone_icon'
   const [phoneSkin, setPhoneSkin] = useState('rosegold');
   const [customFrameUrl, setCustomFrameUrl] = useState(null);
   const [editingLinks, setEditingLinks] = useState(false);
@@ -403,13 +404,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     document.body.removeChild(link);
   };
 
-  // Create custom screen
+  // Create custom screen or icon
   const handleCreateScreen = async (form) => {
     try {
-      await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: 'phone' });
+      await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
       loadOverlays(false);
       setShowCreateModal(false);
-      flash('Screen type created');
+      flash(createMode === 'phone_icon' ? 'Icon type created' : 'Screen type created');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -778,8 +779,11 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
               <X size={13} /> <span className="btn-label">Remove Frame</span>
             </button>
           )}
-          <button onClick={() => setShowCreateModal(true)} disabled={!showId} style={headerBtnStyle}>
+          <button onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId} style={headerBtnStyle}>
             + <span className="btn-label">New Screen</span>
+          </button>
+          <button onClick={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }} disabled={!showId} style={headerBtnStyle}>
+            + <span className="btn-label">New Icon</span>
           </button>
           <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId} style={headerBtnStyle}>
             <Upload size={13} /> <span className="btn-label">{batchUploading ? 'Uploading...' : 'Batch Upload'}</span>
@@ -1094,6 +1098,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         <CreateScreenModal
           onClose={() => setShowCreateModal(false)}
           onCreate={handleCreateScreen}
+          isIcon={createMode === 'phone_icon'}
         />
       )}
 
@@ -1276,10 +1281,10 @@ function DuplicateSettingsBtn({ screens, onDuplicate }) {
   );
 }
 
-function CreateScreenModal({ onClose, onCreate }) {
+function CreateScreenModal({ onClose, onCreate, isIcon = false }) {
   const [form, setForm] = useState({ name: '', beat: '', description: '', prompt: '' });
   const [saving, setSaving] = useState(false);
-  const fieldStyle = { width: '100%', padding: '10px 12px', border: '1px solid #e8e0d0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', minHeight: 40 };
+  const fieldStyle = { width: '100%', padding: '10px 12px', border: '1px solid #e8e0d0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', minHeight: 44 };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1293,14 +1298,14 @@ function CreateScreenModal({ onClose, onCreate }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
       <div style={{ background: '#fff', borderRadius: 16, maxWidth: 440, width: '100%', overflow: 'hidden', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>New Phone Screen</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{isIcon ? 'New App Icon' : 'New Phone Screen'}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 8, minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Screen Name</label>
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Feed View, DM Conversation" style={fieldStyle} />
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>{isIcon ? 'Icon Name' : 'Screen Name'}</label>
+              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isIcon ? 'e.g., Spotify, TikTok, Custom App' : 'e.g., Feed View, DM Conversation'} style={fieldStyle} />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Beat / Trigger</label>

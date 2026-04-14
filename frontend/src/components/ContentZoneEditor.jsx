@@ -46,16 +46,19 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
   const getRelativePos = useCallback((e) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     return {
-      x: ((e.clientX - rect.left) / rect.width) * 100,
-      y: ((e.clientY - rect.top) / rect.height) * 100,
+      x: ((clientX - rect.left) / rect.width) * 100,
+      y: ((clientY - rect.top) / rect.height) * 100,
     };
   }, []);
 
-  // Drawing
-  const handleMouseDown = (e) => {
+  // Drawing — works for mouse and touch via pointer events
+  const handlePointerDown = (e) => {
     if (readOnly) return;
     if (e.target.closest('[data-zone-id]')) return;
+    e.preventDefault();
     const pos = getRelativePos(e);
     setDrawing(true);
     setDrawStart(pos);
@@ -63,12 +66,13 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
     setSelectedZone(null);
   };
 
-  const handleMouseMove = (e) => {
+  const handlePointerMove = (e) => {
     if (!drawing) return;
+    e.preventDefault();
     setDrawCurrent(getRelativePos(e));
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     if (!drawing || !drawStart || !drawCurrent) { setDrawing(false); return; }
     const x = Math.min(drawStart.x, drawCurrent.x);
     const y = Math.min(drawStart.y, drawCurrent.y);
@@ -125,14 +129,15 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
       {/* Screen with content zones */}
       <div
         ref={containerRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => { if (drawing) handleMouseUp(); }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={() => { if (drawing) handlePointerUp(); }}
         style={{
           position: 'relative',
           width: '100%', maxWidth: 320,
           margin: '0 auto',
+          touchAction: 'none',
           aspectRatio: '9/16',
           borderRadius: 12, overflow: 'hidden',
           cursor: readOnly ? 'default' : 'crosshair',
@@ -215,7 +220,7 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 'min(360px, 50vh)', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 'min(360px, 35vh)', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {localZones.map((zone, i) => {
               const typeMeta = CONTENT_TYPE_MAP[zone.content_type];
               const isSelected = selectedZone === zone.id;

@@ -28,20 +28,23 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
 
   useEffect(() => { setZones(links); setIsDirty(false); }, [links]);
 
+  // Unified position getter — works for mouse, touch, and pointer events
   const getRelativePos = useCallback((e) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     return {
-      x: ((e.clientX - rect.left) / rect.width) * 100,
-      y: ((e.clientY - rect.top) / rect.height) * 100,
+      x: ((clientX - rect.left) / rect.width) * 100,
+      y: ((clientY - rect.top) / rect.height) * 100,
     };
   }, []);
 
-  // Drawing new zones
-  const handleMouseDown = (e) => {
+  // Drawing new zones — works for mouse and touch
+  const handlePointerDown = (e) => {
     if (readOnly || dragging) return;
-    // Ignore if clicking on an existing zone
     if (e.target.closest('[data-zone-id]')) return;
+    e.preventDefault(); // prevent scroll on touch
     const pos = getRelativePos(e);
     setDrawing(true);
     setDrawStart(pos);
@@ -49,8 +52,9 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
     setSelectedZone(null);
   };
 
-  const handleMouseMove = (e) => {
+  const handlePointerMove = (e) => {
     if (dragging) {
+      e.preventDefault();
       const pos = getRelativePos(e);
       setZones(prev => prev.map(z => z.id === dragging.id ? {
         ...z,
@@ -61,10 +65,11 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
       return;
     }
     if (!drawing) return;
+    e.preventDefault();
     setDrawCurrent(getRelativePos(e));
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     if (dragging) {
       setDragging(null);
       return;
@@ -100,6 +105,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
 
   const handleZoneDragStart = (e, zone) => {
     e.stopPropagation();
+    e.preventDefault();
     const pos = getRelativePos(e);
     setDragging({ id: zone.id, startX: pos.x, startY: pos.y, origX: zone.x, origY: zone.y });
     setSelectedZone(zone.id);
@@ -150,10 +156,10 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
       {/* Screen with overlay zones */}
       <div
         ref={containerRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => { if (drawing) handleMouseUp(); if (dragging) setDragging(null); }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={() => { if (drawing) handlePointerUp(); if (dragging) setDragging(null); }}
         style={{
           position: 'relative',
           width: '100%',
@@ -161,6 +167,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
           margin: '0 auto',
           aspectRatio: '9/16',
           borderRadius: 12,
+          touchAction: 'none',
           overflow: 'hidden',
           cursor: readOnly ? 'default' : 'crosshair',
           userSelect: 'none',
@@ -180,7 +187,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
           <div
             key={zone.id}
             data-zone-id={zone.id}
-            onMouseDown={(e) => !readOnly && handleZoneDragStart(e, zone)}
+            onPointerDown={(e) => !readOnly && handleZoneDragStart(e, zone)}
             onClick={(e) => { e.stopPropagation(); setSelectedZone(zone.id); }}
             style={{
               position: 'absolute',
@@ -242,7 +249,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 'min(400px, 50vh)', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 'min(400px, 35vh)', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {zones.map((zone, i) => (
               <div
                 key={zone.id}
