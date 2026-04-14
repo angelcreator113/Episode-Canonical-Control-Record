@@ -89,6 +89,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     flash('Undone');
   }, []);
 
+  // Close detail panel — revert phone display to home screen
+  const closePanel = useCallback(() => {
+    setPanelOpen(false);
+    setEditingLinks(false);
+    undoStackRef.current = [];
+    const home = overlays.find(o => o.id === 'home' && o.generated && o.url);
+    if (home) setActiveScreen(home);
+  }, [overlays]);
+
   // Ctrl+Z and Escape listener
   useEffect(() => {
     const handler = (e) => {
@@ -96,7 +105,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         e.preventDefault();
         handleUndo();
       }
-      // Escape closes panel — but not if user is in an input/textarea (let the input handle it)
       if (e.key === 'Escape' && panelOpen) {
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -117,16 +125,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   }, [panelOpen]);
 
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
-
-  // Close detail panel — revert phone display to home screen
-  const closePanel = useCallback(() => {
-    setPanelOpen(false);
-    setEditingLinks(false);
-    undoStackRef.current = [];
-    // Revert to home screen on the phone
-    const home = overlays.find(o => o.id === 'home' && o.generated && o.url);
-    if (home) setActiveScreen(home);
-  }, [overlays]);
 
   // Load saved phone frame + global fit settings
   useEffect(() => {
