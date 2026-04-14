@@ -432,3 +432,72 @@ Minimal — mostly frontend work:
 7. Export pipeline — device export modes
 8. Template seeding — 5 phone screen templates
 9. `TextTab` phone UI presets
+
+---
+
+### Phone Hub Screen Expansion
+
+The Phone Hub (`PhoneHub.jsx` + `UIOverlaysTab.jsx`) currently has 13 screen slots. Expand to **26 screens** covering Lala's full phone experience. Each screen is a designed overlay image (like the glassmorphism Messages mockup) that gets uploaded or AI-generated.
+
+#### Current 13 Screens (in `SCREEN_TYPES` array)
+`home`, `feed`, `dm`, `invite`, `wardrobe`, `comments`, `story`, `profile`, `notif`, `camera`, `shop`, `live`, `map`
+
+#### New Screens to Add (13 more)
+
+```javascript
+// Add to SCREEN_TYPES in PhoneHub.jsx:
+{ key: 'messages',    label: 'Messages',    icon: '✉️',  desc: 'Text conversations' },
+{ key: 'calls',       label: 'Calls',       icon: '📞', desc: 'Call history & FaceTime' },
+{ key: 'contacts',    label: 'Contacts',    icon: '👥', desc: 'Contact list' },
+{ key: 'tasks',       label: 'Tasks',       icon: '✅', desc: 'To-do & reminders' },
+{ key: 'brand_deals', label: 'Brand Deals', icon: '🤝', desc: 'Sponsorship offers' },
+{ key: 'deadlines',   label: 'Deadlines',   icon: '⏰', desc: 'Upcoming due dates' },
+{ key: 'stats',       label: 'Stats',       icon: '📊', desc: 'Analytics & metrics' },
+{ key: 'creator_hub', label: 'Creator Hub', icon: '🎨', desc: 'Content management' },
+{ key: 'settings',    label: 'Settings',    icon: '⚙️',  desc: 'Phone settings' },
+{ key: 'accessories', label: 'Accessories', icon: '💎', desc: 'Jewelry & extras' },
+{ key: 'gallery',     label: 'Gallery',     icon: '🖼️',  desc: 'Photo gallery' },
+{ key: 'music',       label: 'Music',       icon: '🎵', desc: 'Now playing' },
+{ key: 'wallet',      label: 'Wallet',      icon: '💳', desc: 'Payments & cards' },
+```
+
+#### Visual Style — Glassmorphism Theme
+
+All screens follow the dreamy, sparkly aesthetic (reference: Messages mockup):
+- **Background:** soft pink/lavender gradient with sparkle particles
+- **Cards/rows:** frosted glass (`backdrop-filter: blur`, white 10-15% opacity)
+- **Corners:** large radius (16-20px) on glass cards
+- **Typography:** elegant serif for titles (like "Messages" in script), DM Mono for UI labels
+- **Chrome:** rose gold bezel, status bar with time/signal/battery
+- **Bottom nav:** frosted glass pill-shaped icons
+- **Glow accents:** subtle gold/pink light effects at edges
+
+#### Upload Workflow (already works, just needs more slots)
+
+The upload flow in `UIOverlaysTab.jsx` already supports:
+1. Click a screen slot card
+2. Upload button opens file picker
+3. Image uploads to S3 via `/api/v1/ui-overlays/:showId` route
+4. Phone preview updates with the uploaded image
+5. Generate button creates an AI-designed screen via Claude
+
+The only code change needed: expand `SCREEN_TYPES` array in `PhoneHub.jsx` and organize the grid into sections.
+
+#### Screen Grid Organization
+
+Group the 26 screens in the UI grid by category:
+
+| Section | Screens |
+|---------|---------|
+| **Core** | Home, Feed, Messages, DMs, Stories, Profile |
+| **Communication** | Calls, Contacts, Comments, Live, Alerts |
+| **Business** | Brand Deals, Stats, Creator Hub, Deadlines, Tasks |
+| **Lifestyle** | Closet, Accessories, Shopping, Camera, Gallery |
+| **World** | Map, Invitation, Music, Wallet, Settings |
+
+#### File Changes
+
+| File | Change |
+|------|--------|
+| `PhoneHub.jsx` | Add 13 new entries to `SCREEN_TYPES`, add `SCREEN_CATEGORIES` grouping |
+| `UIOverlaysTab.jsx` | Render screen grid grouped by category with section headers |
