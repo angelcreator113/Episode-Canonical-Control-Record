@@ -17,19 +17,34 @@
 import React from 'react';
 
 const SCREEN_TYPES = [
+  // ── Core ──
   { key: 'home', label: 'Home', icon: '📱', desc: 'App icons & notifications' },
   { key: 'feed', label: 'Feed', icon: '📰', desc: 'Scrolling posts' },
+  { key: 'messages', label: 'Messages', icon: '✉️', desc: 'Text conversations' },
   { key: 'dm', label: 'DMs', icon: '💬', desc: 'Private messages' },
-  { key: 'invite', label: 'Invitation', icon: '💌', desc: 'Event invitations' },
-  { key: 'wardrobe', label: 'Closet', icon: '👗', desc: 'Outfit selection' },
-  { key: 'comments', label: 'Comments', icon: '💭', desc: 'Post reactions' },
   { key: 'story', label: 'Stories', icon: '⭕', desc: 'Watching stories' },
   { key: 'profile', label: 'Profile', icon: '👤', desc: 'Viewing someone' },
-  { key: 'notif', label: 'Alerts', icon: '🔔', desc: 'Notification center' },
-  { key: 'camera', label: 'Camera', icon: '📸', desc: 'Taking content' },
-  { key: 'shop', label: 'Shopping', icon: '🛍️', desc: 'Browsing items' },
+  // ── Communication ──
+  { key: 'calls', label: 'Calls', icon: '📞', desc: 'Call history & FaceTime' },
+  { key: 'contacts', label: 'Contacts', icon: '👥', desc: 'Contact list' },
+  { key: 'comments', label: 'Comments', icon: '💭', desc: 'Post reactions' },
   { key: 'live', label: 'Live', icon: '🔴', desc: 'Going live' },
+  { key: 'notif', label: 'Alerts', icon: '🔔', desc: 'Notification center' },
+  // ── Business ──
+  { key: 'brand_deals', label: 'Brand Deals', icon: '🤝', desc: 'Sponsorship offers' },
+  { key: 'stats', label: 'Stats', icon: '📊', desc: 'Analytics & metrics' },
+  { key: 'creator_hub', label: 'Creator Hub', icon: '🎨', desc: 'Content management' },
+  { key: 'deadlines', label: 'Deadlines', icon: '⏰', desc: 'Upcoming due dates' },
+  { key: 'tasks', label: 'Tasks', icon: '✅', desc: 'To-do & reminders' },
+  // ── Lifestyle ──
+  { key: 'wardrobe', label: 'Closet', icon: '👗', desc: 'Outfit selection' },
+  { key: 'accessories', label: 'Accessories', icon: '💎', desc: 'Jewelry & extras' },
+  { key: 'shop', label: 'Shopping', icon: '🛍️', desc: 'Browsing items' },
+  { key: 'camera', label: 'Camera', icon: '📸', desc: 'Taking content' },
+  // ── World ──
   { key: 'map', label: 'Map', icon: '🗺️', desc: 'DREAM map' },
+  { key: 'invite', label: 'Invitation', icon: '💌', desc: 'Event invitations' },
+  { key: 'settings', label: 'Settings', icon: '⚙️', desc: 'Phone settings' },
 ];
 
 const PHONE_SKINS = [

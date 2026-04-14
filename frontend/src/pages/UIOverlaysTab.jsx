@@ -41,13 +41,30 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     localStorage.setItem('phone_hub_skin', skin);
   };
 
-  // Upload custom phone frame
+  // Load saved phone frame
+  useEffect(() => {
+    if (!showId) return;
+    api.get(`/api/v1/ui-overlays/${showId}/frame`).then(r => {
+      if (r.data?.frame_url) setCustomFrameUrl(r.data.frame_url);
+    }).catch(() => {});
+  }, [showId]);
+
+  // Upload custom phone frame (persists to S3)
   const handleFrameUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    // Use object URL for immediate preview (no S3 needed for frame)
-    const url = URL.createObjectURL(file);
-    setCustomFrameUrl(url);
+    if (!file || !showId) return;
+    // Show immediate preview
+    const previewUrl = URL.createObjectURL(file);
+    setCustomFrameUrl(previewUrl);
+    try {
+      const fd = new FormData();
+      fd.append('frame', file);
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/frame`, fd);
+      if (res.data?.frame_url) setCustomFrameUrl(res.data.frame_url);
+      flash('Frame uploaded!');
+    } catch (err) {
+      flash(err.response?.data?.error || 'Frame upload failed', 'error');
+    }
     if (frameInputRef.current) frameInputRef.current.value = '';
   };
 
