@@ -21,6 +21,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [overlays, setOverlays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeScreen, setActiveScreen] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatingId, setGeneratingId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -95,12 +96,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         handleUndo();
       }
       // Escape closes panel — but not if user is in an input/textarea (let the input handle it)
-      if (e.key === 'Escape' && activeScreen) {
+      if (e.key === 'Escape' && panelOpen) {
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-        setActiveScreen(null);
-        setEditingLinks(false);
-        undoStackRef.current = [];
+        closePanel();
       }
     };
     window.addEventListener('keydown', handler);
@@ -109,14 +108,24 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
   // Lock body scroll when detail panel is open — mobile only (bottom sheet)
   useEffect(() => {
-    if (activeScreen && window.innerWidth <= 768) {
+    if (panelOpen && window.innerWidth <= 768) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => { document.body.style.overflow = prev; };
     }
-  }, [activeScreen]);
+  }, [panelOpen]);
 
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // Close detail panel — revert phone display to home screen
+  const closePanel = useCallback(() => {
+    setPanelOpen(false);
+    setEditingLinks(false);
+    undoStackRef.current = [];
+    // Revert to home screen on the phone
+    const home = overlays.find(o => o.id === 'home' && o.generated && o.url);
+    if (home) setActiveScreen(home);
+  }, [overlays]);
 
   // Load saved phone frame + global fit settings
   useEffect(() => {
@@ -368,7 +377,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: cleaned }).catch(() => {});
         }
       }
-      if (activeScreen?.id === deletedKey) { setActiveScreen(null); setEditingLinks(false); }
+      if (activeScreen?.id === deletedKey) { closePanel(); }
       loadOverlays(false);
       flash('Deleted');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
@@ -786,13 +795,13 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         </div>
       ) : (
         <>
-        <div className={`phone-hub-layout${activeScreen ? ' panel-open' : ''}`}>
+        <div className={`phone-hub-layout${panelOpen ? ' panel-open' : ''}`}>
           {/* Phone Hub (phone + grid) — takes full width now */}
           <div className="phone-hub-main">
             <PhoneHub
               screens={overlays}
               activeScreen={activeScreen}
-              onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); }}
+              onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); }}
               onDelete={handleDeleteScreen}
               onHideScreen={handleHideScreen}
               hiddenScreens={hiddenScreens}
@@ -810,10 +819,10 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         </div>
 
       {/* ── Slide-over Detail Panel ── */}
-      {activeScreen && (
+      {activeScreen && panelOpen && (
         <>
           {/* Scrim — mobile only (bottom sheet needs backdrop), desktop has no scrim so grid stays clickable */}
-          <div className="panel-scrim" onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} />
+          <div className="panel-scrim" onClick={closePanel} />
 
           {/* Panel */}
           <div className="detail-panel detail-panel-open">
@@ -879,7 +888,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                   color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '6px 8px', minWidth: 36, minHeight: 36,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}><Undo2 size={14} /></button>
-                <button onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} aria-label="Close panel" style={{
+                <button onClick={closePanel} aria-label="Close panel" style={{
                   background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '6px 8px', minWidth: 36, minHeight: 36,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}><X size={14} /></button>
