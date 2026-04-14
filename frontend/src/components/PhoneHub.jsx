@@ -173,11 +173,10 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       {customFrameUrl ? (
         /* Custom uploaded phone frame */
         <div className="phone-hub-frame">
-          <img src={customFrameUrl} alt="Phone frame" style={{ width: '100%', borderRadius: 24 }} />
-          {/* Screen overlay positioned inside the frame */}
+          {/* Screen content — rendered first, sits behind the frame */}
           <div style={{
             position: 'absolute', top: '6%', left: '6%', right: '6%', bottom: '6%',
-            borderRadius: 16, overflow: 'hidden',
+            borderRadius: 16, overflow: 'hidden', zIndex: 1,
           }}>
             {activeScreen?.url ? (
               <>
@@ -198,6 +197,11 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
               }}>← Back</button>
             )}
           </div>
+          {/* Frame image — on top so it visually wraps the screen content */}
+          <img src={customFrameUrl} alt="Phone frame" style={{
+            width: '100%', borderRadius: 24, display: 'block',
+            position: 'relative', zIndex: 2, pointerEvents: 'none',
+          }} />
         </div>
       ) : (
         /* Built-in phone frame with skin */
