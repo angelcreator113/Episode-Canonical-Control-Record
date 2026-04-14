@@ -21,6 +21,7 @@ const CompositionLibrary = lazy(() => import('./pages/CompositionLibrary'));
 const CompositionDetail = lazy(() => import('./pages/CompositionDetail'));
 const SceneLibrary = lazy(() => import('./pages/SceneLibrary'));
 const SceneDetail = lazy(() => import('./pages/SceneDetail'));
+const UIOverlaysTab = lazy(() => import('./pages/UIOverlaysTab'));
 const AdminPanel = lazy(() => import('./pages/AdminPanel'));
 const TemplateManagement = lazy(() => import('./pages/TemplateManagement'));
 const AuditLogViewer = lazy(() => import('./pages/AuditLogViewer'));
@@ -349,6 +350,7 @@ function AppContent() {
           
           {/* Scene Library */}
           <Route path="/scene-library" element={<SceneLibrary />} />
+          <Route path="/phone-hub" element={<UIOverlaysTab />} />
           <Route path="/episodes/:episodeId/plan" element={<ScenePlannerPage />} />
           <Route path="/episodes/:episodeId/script-writer" element={<EpisodeScriptWriterPage />} />
           <Route path="/shows/:showId/feed-timeline" element={<FeedTimelinePage />} />

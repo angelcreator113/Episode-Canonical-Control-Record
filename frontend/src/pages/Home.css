@@ -475,7 +475,7 @@
 /* ── Quick Actions Row ── */
 .hp-actions {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 14px;
   margin-bottom: 28px;
 }
@@ -525,6 +525,11 @@
   box-shadow: 0 6px 20px rgba(130,200,190,0.1);
 }
 
+.hp-action-card--rose:hover {
+  border-color: rgba(212,120,154,0.3);
+  box-shadow: 0 6px 20px rgba(212,120,154,0.1);
+}
+
 .hp-action-icon {
   width: 48px;
   height: 48px;
@@ -540,6 +545,7 @@
 .hp-action-icon--blue   { background: rgba(223,234,245,0.5); }
 .hp-action-icon--gold   { background: rgba(245,235,210,0.5); }
 .hp-action-icon--teal   { background: rgba(210,240,235,0.5); }
+.hp-action-icon--rose   { background: rgba(245,200,220,0.5); }
 
 .hp-action-label {
   font-family: 'DM Mono', monospace;
