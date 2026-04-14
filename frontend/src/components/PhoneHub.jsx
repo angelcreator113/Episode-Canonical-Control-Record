@@ -138,7 +138,7 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
   );
 }
 
-export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
+export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [frameError, setFrameError] = useState(false);
@@ -338,13 +338,21 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       {/* Screen Slots Grid */}
       <div className="phone-hub-grid-section">
         {/* Screens Section */}
-        <div style={{ fontSize: 11, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ background: '#B8962E', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 9 }}>SCREENS</span>
-          Full phone views
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ background: '#B8962E', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 9 }}>SCREENS</span>
+            Full phone views
+          </div>
+          {hiddenScreens.length > 0 && onToggleShowHidden && (
+            <button onClick={onToggleShowHidden} style={{
+              fontSize: 9, color: '#999', background: 'none', border: '1px solid #eee',
+              borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontFamily: "'DM Mono', monospace",
+            }}>{showHidden ? 'Hide removed' : `Show removed (${hiddenScreens.length})`}</button>
+          )}
         </div>
         <div className="phone-hub-screen-grid">
-          {SCREEN_TYPES.filter(t => t.type === 'screen').map(type => (
-            <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} />
+          {SCREEN_TYPES.filter(t => t.type === 'screen').filter(t => showHidden || !hiddenScreens.includes(t.key)).map(type => (
+            <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(type.key)} globalFit={globalFit} />
           ))}
           {customScreens.map(s => (
             <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📄', desc: s.description || 'Custom screen' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} />
@@ -359,8 +367,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
               App icons for home screen links
             </div>
             <div className="phone-hub-icon-grid">
-              {SCREEN_TYPES.filter(t => t.type === 'icon').map(type => (
-                <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} isIcon />
+              {SCREEN_TYPES.filter(t => t.type === 'icon').filter(t => showHidden || !hiddenScreens.includes(t.key)).map(type => (
+                <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(type.key)} globalFit={globalFit} isIcon />
               ))}
               {customIcons.map(s => (
                 <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || 'Custom icon' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} isIcon />
@@ -414,32 +422,36 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   );
 }
 
-function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, globalFit, isIcon }) {
+function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';
 
   return (
     <div
-      onClick={() => screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true })}
+      onClick={() => {
+        if (isHidden && onHide) { onHide(type.key); return; } // click to restore
+        screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
+      }}
       className="screen-card"
       style={{
-        background: isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
-        border: `1px solid ${isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
+        background: isHidden ? '#f5f3f0' : isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
+        border: `1px solid ${isHidden ? '#e8e0d0' : isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
         borderRadius: isIcon ? 10 : 12, padding: isIcon ? 8 : 10,
         cursor: 'pointer',
         transition: 'all 0.15s',
         position: 'relative',
         overflow: 'hidden',
         minHeight: isIcon ? 44 : 'auto',
+        opacity: isHidden ? 0.45 : 1,
       }}
     >
-      {/* Quick delete — visible on hover */}
-      {hasImage && onDelete && (
+      {/* Quick delete — visible on hover (for cards with images) */}
+      {hasImage && onDelete && !isHidden && (
         <button
           className="screen-card-delete"
           onClick={(e) => { e.stopPropagation(); onDelete(screen); }}
-          title="Delete"
+          title="Delete image"
           style={{
             position: 'absolute', top: 4, right: 4, zIndex: 3,
             width: 22, height: 22, borderRadius: '50%',
@@ -449,6 +461,30 @@ function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, glob
             opacity: 0, transition: 'opacity 0.15s',
           }}
         >×</button>
+      )}
+      {/* Hide/remove slot — visible on hover (for all cards without images) */}
+      {!hasImage && onHide && !isHidden && (
+        <button
+          className="screen-card-delete"
+          onClick={(e) => { e.stopPropagation(); onHide(type.key); }}
+          title="Remove from grid"
+          style={{
+            position: 'absolute', top: 4, right: 4, zIndex: 3,
+            width: 22, height: 22, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.4)', border: 'none',
+            color: '#fff', fontSize: 11, fontWeight: 700,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: 0, transition: 'opacity 0.15s',
+          }}
+        >×</button>
+      )}
+      {/* Restore badge for hidden cards */}
+      {isHidden && (
+        <div style={{
+          position: 'absolute', top: 4, right: 4, zIndex: 3,
+          fontSize: 8, color: '#999', fontFamily: "'DM Mono', monospace",
+          background: '#fff', padding: '1px 5px', borderRadius: 3, border: '1px solid #ddd',
+        }}>restore</div>
       )}
       {/* Thumbnail preview */}
       {hasImage && (

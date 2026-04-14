@@ -40,6 +40,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const undoStackRef = useRef([]);  // undo history for activeScreen changes
   const frameRemovedRef = useRef(false);  // tracks if user explicitly removed the custom frame
   const [batchUploading, setBatchUploading] = useState(false);
+  const [hiddenScreens, setHiddenScreens] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('phone_hub_hidden') || '[]'); } catch { return []; }
+  });
+  const [showHidden, setShowHidden] = useState(false);
   const fileInputRef = useRef(null);
   const variantInputRef = useRef(null);
   const frameInputRef = useRef(null);
@@ -51,6 +55,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     const saved = localStorage.getItem('phone_hub_skin');
     if (saved) setPhoneSkin(saved);
   }, []);
+
+  const handleHideScreen = (key) => {
+    setHiddenScreens(prev => {
+      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
+      localStorage.setItem('phone_hub_hidden', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const handleChangeSkin = (skin) => {
     setPhoneSkin(skin);
@@ -724,6 +736,10 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
               activeScreen={activeScreen}
               onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); }}
               onDelete={handleDeleteScreen}
+              onHideScreen={handleHideScreen}
+              hiddenScreens={hiddenScreens}
+              showHidden={showHidden}
+              onToggleShowHidden={() => setShowHidden(h => !h)}
               onNavigate={handleNavigate}
               navigationHistory={navHistory}
               onBack={handleBack}
