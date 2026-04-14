@@ -21,8 +21,32 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [generatingId, setGeneratingId] = useState(null);
   const [toast, setToast] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [phoneSkin, setPhoneSkin] = useState('rosegold');
+  const [customFrameUrl, setCustomFrameUrl] = useState(null);
   const fileInputRef = useRef(null);
+  const frameInputRef = useRef(null);
   const pollRef = useRef(null);
+
+  // Load phone skin preference
+  useEffect(() => {
+    const saved = localStorage.getItem('phone_hub_skin');
+    if (saved) setPhoneSkin(saved);
+  }, []);
+
+  const handleChangeSkin = (skin) => {
+    setPhoneSkin(skin);
+    localStorage.setItem('phone_hub_skin', skin);
+  };
+
+  // Upload custom phone frame
+  const handleFrameUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Use object URL for immediate preview (no S3 needed for frame)
+    const url = URL.createObjectURL(file);
+    setCustomFrameUrl(url);
+    if (frameInputRef.current) frameInputRef.current.value = '';
+  };
 
   const flash = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
@@ -176,11 +200,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => frameInputRef.current?.click()} style={{
+            padding: '8px 14px', border: '1px solid #e8e0d0', borderRadius: 8,
+            background: '#fff', color: '#888', fontSize: 11, fontWeight: 600,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+          }}>{customFrameUrl ? 'Change Frame' : 'Upload Frame'}</button>
           <button onClick={() => setShowCreateModal(true)} disabled={!showId} style={{
             padding: '8px 14px', border: '1px solid #e8e0d0', borderRadius: 8,
             background: '#fff', color: '#2C2C2C', fontSize: 11, fontWeight: 600,
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
           }}>+ New Screen</button>
+          <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
           <button onClick={handleGenerateAll} disabled={generating || !showId} style={{
             padding: '8px 16px', border: 'none', borderRadius: 8,
             background: generating ? '#eee' : '#2C2C2C', color: generating ? '#999' : '#fff',
@@ -204,6 +234,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             screens={overlays}
             activeScreen={activeScreen}
             onSelectScreen={setActiveScreen}
+            skin={phoneSkin}
+            onChangeSkin={handleChangeSkin}
+            customFrameUrl={customFrameUrl}
           />
 
           {/* Active Screen Detail Panel */}

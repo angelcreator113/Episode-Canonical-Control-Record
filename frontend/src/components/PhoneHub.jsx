@@ -28,9 +28,21 @@ const SCREEN_TYPES = [
   { key: 'map', label: 'Map', icon: '🗺️', desc: 'DREAM map' },
 ];
 
-export { SCREEN_TYPES };
+const PHONE_SKINS = [
+  { key: 'midnight', label: 'Midnight', body: '#1a1a2e', notch: '#333', btn: '#444', shadow: 'rgba(0,0,0,0.3)', accent: 'rgba(255,255,255,0.1)' },
+  { key: 'rosegold', label: 'Rose Gold', body: 'linear-gradient(135deg, #e8c4b8, #d4a090)', notch: '#c99585', btn: '#c99585', shadow: 'rgba(180,120,100,0.3)', accent: 'rgba(255,255,255,0.25)' },
+  { key: 'gold', label: 'Gold', body: 'linear-gradient(135deg, #d4b896, #c9a84c)', notch: '#b89060', btn: '#b89060', shadow: 'rgba(184,150,46,0.3)', accent: 'rgba(255,255,255,0.2)' },
+  { key: 'silver', label: 'Silver', body: 'linear-gradient(135deg, #e8e8ec, #c0c0c8)', notch: '#b0b0b8', btn: '#b0b0b8', shadow: 'rgba(100,100,120,0.2)', accent: 'rgba(255,255,255,0.4)' },
+  { key: 'white', label: 'White', body: '#f5f5f7', notch: '#e0e0e4', btn: '#e0e0e4', shadow: 'rgba(0,0,0,0.1)', accent: 'rgba(255,255,255,0.6)' },
+  { key: 'pink', label: 'Pink', body: 'linear-gradient(135deg, #f0c4d4, #d4789a)', notch: '#c06888', btn: '#c06888', shadow: 'rgba(212,120,154,0.3)', accent: 'rgba(255,255,255,0.2)' },
+  { key: 'lavender', label: 'Lavender', body: 'linear-gradient(135deg, #d4c4e8, #a889c8)', notch: '#9878b8', btn: '#9878b8', shadow: 'rgba(168,137,200,0.3)', accent: 'rgba(255,255,255,0.2)' },
+];
 
-export default function PhoneHub({ screens = [], activeScreen, onSelectScreen }) {
+export { SCREEN_TYPES, PHONE_SKINS };
+
+export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, skin = 'midnight', onChangeSkin, customFrameUrl }) {
+  const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
+
   // Match screens to screen types
   const getScreenForType = (type) => {
     return screens.find(s =>
@@ -43,18 +55,39 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen })
   return (
     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
       {/* Phone Device */}
-      <div style={{
-        width: 280, flexShrink: 0,
-        background: '#1a1a2e',
-        borderRadius: 32,
-        padding: '12px 8px',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
-        position: 'relative',
-      }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+      {customFrameUrl ? (
+        /* Custom uploaded phone frame */
+        <div style={{ width: 280, position: 'relative' }}>
+          <img src={customFrameUrl} alt="Phone frame" style={{ width: '100%', borderRadius: 24 }} />
+          {/* Screen overlay positioned inside the frame */}
+          <div style={{
+            position: 'absolute', top: '6%', left: '6%', right: '6%', bottom: '6%',
+            borderRadius: 16, overflow: 'hidden',
+          }}>
+            {activeScreen?.url ? (
+              <img src={activeScreen.url} alt={activeScreen.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <div style={{ width: '100%', height: '100%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>
+                <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{activeScreen ? 'Not generated' : 'Select a screen'}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Built-in phone frame with skin */
+        <div style={{
+          width: 280,
+          background: currentSkin.body,
+          borderRadius: 32,
+          padding: '12px 8px',
+          boxShadow: `0 8px 32px ${currentSkin.shadow}, inset 0 1px 0 ${currentSkin.accent}`,
+          position: 'relative',
+        }}>
         {/* Notch */}
         <div style={{
           width: 80, height: 6, borderRadius: 3,
-          background: '#333', margin: '0 auto 8px',
+          background: currentSkin.notch, margin: '0 auto 8px',
         }} />
 
         {/* Screen */}
@@ -102,8 +135,29 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen })
         {/* Home button */}
         <div style={{
           width: 36, height: 4, borderRadius: 2,
-          background: '#444', margin: '8px auto 0',
+          background: currentSkin.btn, margin: '8px auto 0',
         }} />
+      </div>
+      )}
+
+      {/* Skin picker */}
+      {onChangeSkin && (
+        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+          {PHONE_SKINS.map(s => (
+            <button
+              key={s.key}
+              title={s.label}
+              onClick={() => onChangeSkin(s.key)}
+              style={{
+                width: 20, height: 20, borderRadius: '50%', border: skin === s.key ? '2px solid #B8962E' : '1px solid #ddd',
+                background: typeof s.body === 'string' && s.body.startsWith('linear') ? undefined : s.body,
+                backgroundImage: typeof s.body === 'string' && s.body.startsWith('linear') ? s.body : undefined,
+                cursor: 'pointer', padding: 0,
+              }}
+            />
+          ))}
+        </div>
+      )}
       </div>
 
       {/* Screen Slots Grid */}
