@@ -52,9 +52,11 @@ router.get('/:showId', optionalAuth, async (req, res) => {
       console.error('[UIOverlay] Asset query failed:', queryErr.message);
     }
 
+    // Build a name-to-type lookup for legacy fallback matching
+    const typesByName = {};
+    allTypes.forEach(ot => { typesByName[ot.name.toLowerCase()] = ot.id; });
+
     // Map all overlay types to show which are generated vs missing
-    // Use case-insensitive matching to find assets for each overlay type.
-    // STRICT: icon types only match icon assets, screen types only match screen assets.
     const status = allTypes.map(ot => {
       const otId = ot.id.toLowerCase();
       const otName = ot.name.toLowerCase();
@@ -67,11 +69,11 @@ router.get('/:showId', optionalAuth, async (req, res) => {
         // Primary match: exact overlay_type match (most reliable)
         if (eType === otId) return true;
 
-        // Legacy fallback: exact asset name match for old assets without overlay_type
-        if (!eType) {
-          const eName = (e.name || '').toLowerCase();
-          if (eName === `ui overlay: ${otName}`) return true;
-        }
+        // Legacy fallback: match by exact name pattern "UI Overlay: {TypeName}"
+        const eName = (e.name || '').toLowerCase();
+        const nameOnly = eName.replace(/^ui overlay:\s*/i, '').replace(/\s*\(.*\)$/, '').trim();
+        if (nameOnly === otName) return true;
+        if (eName === `ui overlay: ${otName}`) return true;
 
         // Special case
         if (otId === 'wardrobe_list' && eType === 'todo_checklist') return true;
