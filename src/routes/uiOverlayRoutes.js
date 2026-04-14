@@ -58,7 +58,9 @@ router.get('/:showId', optionalAuth, async (req, res) => {
       const otId = ot.id.toLowerCase();
       const otName = ot.name.toLowerCase();
       const lifecycle = ot.lifecycle || 'permanent';
-      const found = existing.find(e => {
+
+      // Find ALL matching assets (variants)
+      const allMatches = existing.filter(e => {
         const eType = (e.overlay_type || '').toLowerCase();
         const eName = (e.name || '').toLowerCase();
         return eType === otId
@@ -66,16 +68,30 @@ router.get('/:showId', optionalAuth, async (req, res) => {
           || eName.includes(otId.replace(/_/g, ' '))
           || (otId === 'wardrobe_list' && eType === 'todo_checklist');
       });
+
+      // Primary = the one without a variant_label, or first match
+      const primary = allMatches.find(e => !e.metadata?.variant_label) || allMatches[0] || null;
+
+      // Build variants array
+      const variants = allMatches.length > 1 ? allMatches.map(e => ({
+        asset_id: e.id,
+        url: e.url,
+        variant_label: e.metadata?.variant_label || 'Default',
+        screen_links: e.metadata?.screen_links || null,
+        image_fit: e.metadata?.image_fit || null,
+      })) : null;
+
       return {
         ...ot,
         lifecycle,
-        generated: !!found,
-        url: found?.url || null,
-        asset_id: found?.id || null,
-        bg_removed: found?.bg_removed || false,
-        custom_prompt: found?.custom_prompt || null,
-        screen_links: found?.metadata?.screen_links || null,
-        image_fit: found?.metadata?.image_fit || null,
+        generated: !!primary,
+        url: primary?.url || null,
+        asset_id: primary?.id || null,
+        bg_removed: primary?.bg_removed || false,
+        custom_prompt: primary?.custom_prompt || null,
+        screen_links: primary?.metadata?.screen_links || null,
+        image_fit: primary?.metadata?.image_fit || null,
+        variants,
       };
     });
 
@@ -294,24 +310,34 @@ router.post('/:showId/remove-bg/:assetId', optionalAuth, async (req, res) => {
 });
 
 // POST /api/v1/ui-overlays/:showId/upload/:overlayType — upload custom image for an overlay
+// Optional body field: variant_label (e.g. "Locked", "Unlocked") — defaults to replacing the single asset
 router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image'), async (req, res) => {
   try {
     const models = require('../models');
     const { getAllOverlayTypes, uploadOverlayToS3 } = require('../services/uiOverlayService');
     const { v4: uuidv4 } = require('uuid');
     const showId = req.params.showId;
+    const variantLabel = req.body?.variant_label || null;
 
     const allTypes = await getAllOverlayTypes(showId, models);
     const overlayType = allTypes.find(ot => ot.id === req.params.overlayType);
     if (!overlayType) return res.status(404).json({ success: false, error: `Unknown overlay type: ${req.params.overlayType}` });
     if (!req.file) return res.status(400).json({ success: false, error: 'No image file uploaded' });
 
-    // Soft-delete existing asset
-    await models.sequelize.query(
-      `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-       AND metadata->>'overlay_type' = :overlayId AND deleted_at IS NULL`,
-      { replacements: { showId, overlayId: overlayType.id } }
-    );
+    // Soft-delete existing asset for this variant (or all if no variant specified)
+    if (variantLabel) {
+      await models.sequelize.query(
+        `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+         AND metadata->>'overlay_type' = :overlayId AND metadata->>'variant_label' = :variantLabel AND deleted_at IS NULL`,
+        { replacements: { showId, overlayId: overlayType.id, variantLabel } }
+      );
+    } else {
+      await models.sequelize.query(
+        `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+         AND metadata->>'overlay_type' = :overlayId AND (metadata->>'variant_label' IS NULL OR metadata->>'variant_label' = '') AND deleted_at IS NULL`,
+        { replacements: { showId, overlayId: overlayType.id } }
+      );
+    }
 
     // Upload to S3
     const url = await uploadOverlayToS3(req.file.buffer, overlayType.id, showId, req.file.mimetype);
@@ -325,13 +351,14 @@ router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image')
          VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
         { replacements: {
           id: assetUuid,
-          name: `UI Overlay: ${overlayType.name}`,
+          name: `UI Overlay: ${overlayType.name}${variantLabel ? ` (${variantLabel})` : ''}`,
           url,
           showId,
           metadata: JSON.stringify({
             source: 'custom-upload', overlay_type: overlayType.id,
             overlay_beat: overlayType.beat, overlay_category: overlayType.category,
             uploaded_at: new Date().toISOString(), original_filename: req.file.originalname,
+            ...(variantLabel ? { variant_label: variantLabel } : {}),
           }),
         } }
       );
