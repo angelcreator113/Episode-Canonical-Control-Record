@@ -38,7 +38,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const undoStackRef = useRef([]);  // undo history for activeScreen changes
+  const frameRemovedRef = useRef(false);  // tracks if user explicitly removed the custom frame
   const [batchUploading, setBatchUploading] = useState(false);
+  const [hiddenScreens, setHiddenScreens] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('phone_hub_hidden') || '[]'); } catch { return []; }
+  });
+  const [showHidden, setShowHidden] = useState(false);
   const fileInputRef = useRef(null);
   const variantInputRef = useRef(null);
   const frameInputRef = useRef(null);
@@ -50,6 +55,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     const saved = localStorage.getItem('phone_hub_skin');
     if (saved) setPhoneSkin(saved);
   }, []);
+
+  const handleHideScreen = (key) => {
+    setHiddenScreens(prev => {
+      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
+      localStorage.setItem('phone_hub_hidden', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const handleChangeSkin = (skin) => {
     setPhoneSkin(skin);
@@ -72,25 +85,43 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     flash('Undone');
   }, []);
 
-  // Ctrl+Z listener
+  // Ctrl+Z and Escape listener
   useEffect(() => {
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         handleUndo();
       }
+      // Escape closes panel — but not if user is in an input/textarea (let the input handle it)
+      if (e.key === 'Escape' && activeScreen) {
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        setActiveScreen(null);
+        setEditingLinks(false);
+        undoStackRef.current = [];
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleUndo]);
+  }, [handleUndo, activeScreen]);
+
+  // Lock body scroll when detail panel is open — mobile only (bottom sheet)
+  useEffect(() => {
+    if (activeScreen && window.innerWidth <= 768) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [activeScreen]);
 
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
 
   // Load saved phone frame + global fit settings
   useEffect(() => {
     if (!showId) return;
+    frameRemovedRef.current = false;  // reset on show change
     api.get(`/api/v1/ui-overlays/${showId}/frame`).then(r => {
-      if (r.data?.frame_url) setCustomFrameUrl(r.data.frame_url);
+      if (!frameRemovedRef.current && r.data?.frame_url) setCustomFrameUrl(r.data.frame_url);
       if (r.data?.global_fit) setGlobalFit(r.data.global_fit);
     }).catch(err => {
       console.warn('[PhoneHub] Failed to load frame/fit settings:', err.message);
@@ -101,6 +132,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const handleFrameUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !showId) return;
+    frameRemovedRef.current = false;
     const prevUrl = customFrameUrl;
     const previewUrl = URL.createObjectURL(file);
     setCustomFrameUrl(previewUrl);
@@ -294,15 +326,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   };
 
   // Delete screen + clean up any links pointing to it from other screens
-  const handleDelete = async () => {
-    if (!activeScreen) return;
-    if (!confirm(`Delete "${activeScreen.name}"? Any links pointing to this screen from other screens will be removed.`)) return;
+  const handleDeleteScreen = async (screen) => {
+    if (!screen) return;
+    if (!confirm(`Delete "${screen.name}"? Any links pointing to this screen will be removed.`)) return;
     try {
-      const deletedKey = activeScreen.id;
-      if (activeScreen.custom && activeScreen.custom_id) {
-        await api.delete(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`);
-      } else if (activeScreen.asset_id) {
-        await api.delete(`/api/v1/assets/${activeScreen.asset_id}`);
+      const deletedKey = screen.id;
+      if (screen.custom && screen.custom_id) {
+        await api.delete(`/api/v1/ui-overlays/${showId}/types/${screen.custom_id}`);
+      } else if (screen.asset_id) {
+        await api.delete(`/api/v1/ui-overlays/${showId}/asset/${screen.asset_id}`);
       }
       // Clean orphaned links: remove any screen_links targeting the deleted screen
       for (const overlay of overlays) {
@@ -313,12 +345,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: cleaned }).catch(() => {});
         }
       }
-      setActiveScreen(null);
-      setEditingLinks(false);
+      if (activeScreen?.id === deletedKey) { setActiveScreen(null); setEditingLinks(false); }
       loadOverlays(false);
       flash('Deleted');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
+  const handleDelete = () => handleDeleteScreen(activeScreen);
 
   // Download
   const handleDownload = () => {
@@ -658,6 +690,20 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
           <button onClick={() => frameInputRef.current?.click()} style={headerBtnStyle}>
             <Monitor size={13} /> <span className="btn-label">{customFrameUrl ? 'Change Frame' : 'Upload Frame'}</span>
           </button>
+          {customFrameUrl && (
+            <button onClick={async () => {
+              frameRemovedRef.current = true;
+              setCustomFrameUrl(null);
+              flash('Using built-in frame');
+              if (showId) {
+                try { await api.delete(`/api/v1/ui-overlays/${showId}/frame`); } catch (err) {
+                  console.warn('[PhoneHub] Failed to delete frame:', err.message);
+                }
+              }
+            }} style={{ ...headerBtnStyle, color: '#dc2626', border: '1px solid #dc262620' }}>
+              <X size={13} /> <span className="btn-label">Remove Frame</span>
+            </button>
+          )}
           <button onClick={() => setShowCreateModal(true)} disabled={!showId} style={headerBtnStyle}>
             + <span className="btn-label">New Screen</span>
           </button>
@@ -681,13 +727,19 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
           <p style={{ marginTop: 12, fontSize: 13 }}>Loading phone screens...</p>
         </div>
       ) : (
-        <div className="phone-hub-layout">
-          {/* Left: Phone Hub (phone + grid) */}
+        <>
+        <div className={`phone-hub-layout${activeScreen ? ' panel-open' : ''}`}>
+          {/* Phone Hub (phone + grid) — takes full width now */}
           <div className="phone-hub-main">
             <PhoneHub
               screens={overlays}
               activeScreen={activeScreen}
               onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); }}
+              onDelete={handleDeleteScreen}
+              onHideScreen={handleHideScreen}
+              hiddenScreens={hiddenScreens}
+              showHidden={showHidden}
+              onToggleShowHidden={() => setShowHidden(h => !h)}
               onNavigate={handleNavigate}
               navigationHistory={navHistory}
               onBack={handleBack}
@@ -697,86 +749,106 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
               globalFit={globalFit}
             />
           </div>
+        </div>
 
-          {/* Right: Detail Panel (sticky sidebar on desktop, below on mobile) */}
-          {activeScreen && (
-            <div className="phone-hub-detail-panel">
-              {/* Header with name, badge, undo, close */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, borderBottom: '1px solid #f0ece4', paddingBottom: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {editingName ? (
-                      <input
-                        autoFocus
-                        value={editNameValue}
-                        onChange={e => setEditNameValue(e.target.value)}
-                        onBlur={() => { handleRename(editNameValue); }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') handleRename(editNameValue);
-                          if (e.key === 'Escape') setEditingName(false);
-                        }}
-                        style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", border: '1px solid #B8962E', borderRadius: 6, padding: '4px 8px', outline: 'none', width: '100%' }}
-                      />
-                    ) : (
-                      <div
-                        onClick={() => { setEditNameValue(activeScreen.name || ''); setEditingName(true); }}
-                        title="Click to rename"
-                        style={{ fontSize: 16, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", cursor: 'text', borderBottom: '1px dashed transparent', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderBottomColor = '#B8962E40'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
-                      >{activeScreen.name}</div>
-                    )}
-                    <span style={{
-                      fontSize: 8, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                      background: (activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? '#a889c8' : '#B8962E',
-                      color: '#fff', letterSpacing: 0.5, flexShrink: 0,
-                    }}>
-                      {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'ICON' : 'SCREEN'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 10, color: '#aaa', marginTop: 3, fontFamily: "'DM Mono', monospace" }}>
-                    {activeScreen.beat && <span style={{ marginRight: 6 }}>{activeScreen.beat}</span>}
-                    {activeScreen.description?.slice(0, 50)}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
-                  <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title="Undo (Ctrl+Z)" style={{
-                    background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer',
-                    color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '4px 6px', minWidth: 30, minHeight: 30,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}><Undo2 size={14} /></button>
-                  <button onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} style={{
-                    background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '4px 6px', minWidth: 30, minHeight: 30,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}><X size={14} /></button>
-                </div>
-              </div>
+      {/* ── Slide-over Detail Panel ── */}
+      {activeScreen && (
+        <>
+          {/* Scrim — mobile only (bottom sheet needs backdrop), desktop has no scrim so grid stays clickable */}
+          <div className="panel-scrim" onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} />
 
-              {/* Preview — larger, with active variant or default */}
+          {/* Panel */}
+          <div className="detail-panel detail-panel-open">
+            {/* Mobile drag handle */}
+            <div className="detail-panel-drag-handle"><div className="drag-bar" /></div>
+
+            {/* ── Header: thumbnail + name + close ── */}
+            <div className="detail-panel-header">
               {(() => {
                 const displayUrl = activeScreen.variants?.[activeVariantIdx]?.url || activeScreen.url;
                 const isIcon = activeScreen.category === 'phone_icon' || activeScreen.type === 'icon';
                 return displayUrl ? (
                   <div style={{
-                    width: '100%', aspectRatio: isIcon ? '1/1' : '9/16',
-                    borderRadius: 10, overflow: 'hidden', marginBottom: 10, background: '#f5f3ee',
-                    maxHeight: 280, border: '1px solid #eee',
+                    width: 48, height: isIcon ? 48 : 80, borderRadius: 8, overflow: 'hidden',
+                    background: '#f5f3ee', border: '1px solid #eee', flexShrink: 0,
                   }}>
-                    <img src={displayUrl} alt={activeScreen.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    <img src={displayUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                 ) : (
                   <div style={{
-                    width: '100%', aspectRatio: '9/16', maxHeight: 160, borderRadius: 10,
-                    background: 'linear-gradient(135deg, #f5f3ee, #e8e0d0)', marginBottom: 10,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc', fontSize: 11,
-                    border: '1px dashed #ddd',
-                  }}>No image uploaded</div>
+                    width: 48, height: 80, borderRadius: 8, background: '#f0ece4', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+                  }}>📱</div>
                 );
               })()}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {editingName ? (
+                    <input
+                      autoFocus
+                      value={editNameValue}
+                      onChange={e => setEditNameValue(e.target.value)}
+                      onBlur={() => handleRename(editNameValue)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleRename(editNameValue);
+                        if (e.key === 'Escape') setEditingName(false);
+                      }}
+                      style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", border: '1px solid #B8962E', borderRadius: 6, padding: '4px 8px', outline: 'none', width: '100%' }}
+                    />
+                  ) : (
+                    <div
+                      onClick={() => { setEditNameValue(activeScreen.name || ''); setEditingName(true); }}
+                      title="Click to rename"
+                      style={{ fontSize: 16, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >{activeScreen.name}</div>
+                  )}
+                  <span style={{
+                    fontSize: 8, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                    background: (activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? '#a889c8' : '#B8962E',
+                    color: '#fff', letterSpacing: 0.5, flexShrink: 0,
+                  }}>
+                    {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'ICON' : 'SCREEN'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 10, color: '#aaa', marginTop: 2, fontFamily: "'DM Mono', monospace" }}>
+                  {activeScreen.beat && <span style={{ marginRight: 6 }}>{activeScreen.beat}</span>}
+                  {activeScreen.description?.slice(0, 60)}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
+                <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title="Undo (Ctrl+Z)" style={{
+                  background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer',
+                  color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '4px 6px', minWidth: 30, minHeight: 30,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}><Undo2 size={14} /></button>
+                <button onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} style={{
+                  background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '4px 6px', minWidth: 30, minHeight: 30,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}><X size={14} /></button>
+              </div>
+            </div>
+
+            {/* ── Scrollable body ── */}
+            <div className="detail-panel-body">
+
+              {/* ── Primary Actions ── */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                {!activeScreen.placeholder ? (
+                  <>
+                    <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
+                    <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#7ab3d4" primary />
+                  </>
+                ) : (
+                  <>
+                    <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#7ab3d4" primary />
+                    <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
+                  </>
+                )}
+              </div>
 
               {/* ── Type Toggle ── */}
               {activeScreen.asset_id && (
-                <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
                   <button onClick={() => handleChangeScreenType('phone')} style={{
                     flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 700, border: '1px solid #e0d9ce',
                     borderRadius: 6, cursor: 'pointer', minHeight: 36,
@@ -794,62 +866,40 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
               {/* ── Variants ── */}
               {(activeScreen.variants?.length > 1 || activeScreen.url) && (
-                <div style={{ marginBottom: 6 }}>
+                <div style={{ marginBottom: 10 }}>
                   {activeScreen.variants?.length > 1 && (
-                    <div style={{ display: 'flex', gap: 3, marginBottom: 4, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
                       {activeScreen.variants.map((v, i) => (
                         <button key={v.asset_id} onClick={() => setActiveVariantIdx(i)} style={{
-                          padding: '3px 8px', fontSize: 8, fontWeight: 600,
+                          padding: '5px 10px', fontSize: 10, fontWeight: 600,
                           border: `1px solid ${activeVariantIdx === i ? '#B8962E' : '#e0d9ce'}`,
-                          borderRadius: 4, cursor: 'pointer',
+                          borderRadius: 6, cursor: 'pointer', minHeight: 30,
                           background: activeVariantIdx === i ? '#B8962E' : '#fff',
                           color: activeVariantIdx === i ? '#fff' : '#888',
                         }}>{v.variant_label}</button>
                       ))}
                       <button onClick={() => setAddingVariant(!addingVariant)} style={{
-                        padding: '3px 6px', fontSize: 8, fontWeight: 600,
-                        border: '1px dashed #ccc', borderRadius: 4, cursor: 'pointer',
-                        background: 'transparent', color: '#aaa',
+                        padding: '5px 8px', fontSize: 10, fontWeight: 600,
+                        border: '1px dashed #ccc', borderRadius: 6, cursor: 'pointer',
+                        background: 'transparent', color: '#aaa', minHeight: 30,
                       }}>+</button>
                     </div>
                   )}
                   {addingVariant && (
-                    <div style={{ display: 'flex', gap: 3, marginBottom: 4, alignItems: 'center' }}>
-                      <input value={newVariantLabel} onChange={e => setNewVariantLabel(e.target.value)} placeholder="e.g. Locked" style={{ flex: 1, padding: '3px 6px', border: '1px solid #e0d9ce', borderRadius: 4, fontSize: 9 }} />
-                      <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} style={{ padding: '3px 6px', fontSize: 8, fontWeight: 600, border: 'none', borderRadius: 4, background: newVariantLabel.trim() ? '#b89060' : '#eee', color: newVariantLabel.trim() ? '#fff' : '#ccc', cursor: newVariantLabel.trim() ? 'pointer' : 'not-allowed' }}>Upload</button>
-                      <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} style={{ padding: '2px', border: 'none', background: 'none', cursor: 'pointer', color: '#ccc' }}><X size={10} /></button>
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 6, alignItems: 'center' }}>
+                      <input value={newVariantLabel} onChange={e => setNewVariantLabel(e.target.value)} placeholder="e.g. Locked" style={{ flex: 1, padding: '6px 8px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 11 }} />
+                      <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} style={{ padding: '6px 10px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 6, minHeight: 32, background: newVariantLabel.trim() ? '#b89060' : '#eee', color: newVariantLabel.trim() ? '#fff' : '#ccc', cursor: newVariantLabel.trim() ? 'pointer' : 'not-allowed' }}>Upload</button>
+                      <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} style={{ padding: '4px', border: 'none', background: 'none', cursor: 'pointer', color: '#ccc' }}><X size={12} /></button>
                     </div>
                   )}
                   {!activeScreen.variants && activeScreen.url && !addingVariant && (
-                    <button onClick={() => setAddingVariant(true)} style={{ padding: '3px 8px', fontSize: 8, fontWeight: 600, border: '1px dashed #b89060', borderRadius: 4, cursor: 'pointer', background: 'transparent', color: '#b89060', display: 'flex', alignItems: 'center', gap: 3 }}><Layers size={9} /> Add Variant</button>
+                    <button onClick={() => setAddingVariant(true)} style={{ padding: '5px 10px', fontSize: 10, fontWeight: 600, border: '1px dashed #b89060', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: '#b89060', display: 'flex', alignItems: 'center', gap: 4, minHeight: 30 }}><Layers size={11} /> Add Variant</button>
                   )}
                   <input ref={variantInputRef} type="file" accept="image/*" onChange={handleVariantUpload} style={{ display: 'none' }} />
                 </div>
               )}
 
-              {/* ── Actions (collapsible) ── */}
-              <SectionHeader label="Actions" expanded={expandedSections.actions} onToggle={() => toggleSection('actions')} />
-              {expandedSections.actions && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                  {!activeScreen.placeholder ? (
-                    <>
-                      <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" />
-                      <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#7ab3d4" />
-                      {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
-                      {activeScreen.asset_id && <ActionBtn icon={Eraser} label="Remove BG" onClick={handleRemoveBg} color="#a889c8" />}
-                      {activeScreen.url && <ActionBtn icon={Link2} label={editingLinks ? 'Done' : 'Links'} onClick={() => setEditingLinks(!editingLinks)} color={editingLinks ? '#2C2C2C' : '#b89060'} />}
-                      <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
-                    </>
-                  ) : (
-                    <>
-                      <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#7ab3d4" />
-                      <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} color="#B8962E" />
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* ── Image Fit (collapsible) ── */}
+              {/* ── Image Fit ── */}
               {activeScreen?.url && !activeScreen.placeholder && (
                 <>
                   <SectionHeader label="Image Fit" expanded={expandedSections.fit} onToggle={() => toggleSection('fit')} />
@@ -868,7 +918,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                 </>
               )}
 
-              {/* ── Screen Links (collapsible) ── */}
+              {/* ── Screen Links ── */}
               {activeScreen?.url && !activeScreen.placeholder && (
                 <>
                   <SectionHeader label="Tap Zone Links" expanded={expandedSections.links} onToggle={() => toggleSection('links')} badge={(activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null} />
@@ -887,10 +937,22 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                 </>
               )}
 
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
+              {/* ── Secondary Actions ── */}
+              {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
+                <div style={{ borderTop: '1px solid #f0ece4', paddingTop: 12, marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
+                  {activeScreen.asset_id && <ActionBtn icon={Eraser} label="Remove BG" onClick={handleRemoveBg} color="#a889c8" />}
+                  {activeScreen.url && <ActionBtn icon={Link2} label={editingLinks ? 'Done' : 'Links'} onClick={() => setEditingLinks(!editingLinks)} color={editingLinks ? '#2C2C2C' : '#b89060'} />}
+                  <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
+                </div>
+              )}
             </div>
-          )}
-        </div>
+
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
+          </div>
+        </>
+      )}
+      </>
       )}
 
       {/* Preview Mode */}
@@ -932,52 +994,99 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
         /* ── Main Layout ── */
         .phone-hub-layout {
-          display: flex; gap: 20px; align-items: flex-start;
+          display: block;
+          transition: margin-right 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+        .phone-hub-layout.panel-open {
+          margin-right: 410px; /* 400px panel + 10px breathing room */
         }
         .phone-hub-main {
-          flex: 1; min-width: 0;
+          width: 100%;
         }
-        .phone-hub-detail-panel {
-          width: 340px; flex-shrink: 0;
-          position: sticky; top: 20px; max-height: calc(100vh - 60px); overflow-y: auto;
-          background: #fff; border: 1px solid #e8e0d0;
-          border-radius: 14px; padding: 16px;
+
+        /* ── Slide-over Panel (Desktop: right drawer, Mobile: bottom sheet) ── */
+        .panel-scrim {
+          display: none; /* hidden on desktop — grid stays fully interactive */
+        }
+
+        .detail-panel {
+          position: fixed; z-index: 950;
+          background: #fff;
+          display: flex; flex-direction: column;
+          /* Desktop: right drawer */
+          top: 0; right: 0; bottom: 0;
+          width: 400px; max-width: 90vw;
+          box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+          transform: translateX(100%);
+          transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+        .detail-panel-open {
+          transform: translateX(0);
+        }
+
+        .detail-panel-drag-handle {
+          display: none; /* hidden on desktop */
+        }
+
+        .detail-panel-header {
+          display: flex; align-items: flex-start; gap: 12px;
+          padding: 20px 20px 14px;
+          border-bottom: 1px solid #f0ece4;
+          flex-shrink: 0;
+        }
+
+        .detail-panel-body {
+          flex: 1; overflow-y: auto; padding: 16px 20px 24px;
           scrollbar-width: thin; scrollbar-color: #e8e0d0 transparent;
         }
-        .phone-hub-detail-panel::-webkit-scrollbar { width: 4px; }
-        .phone-hub-detail-panel::-webkit-scrollbar-thumb { background: #e8e0d0; border-radius: 4px; }
+        .detail-panel-body::-webkit-scrollbar { width: 4px; }
+        .detail-panel-body::-webkit-scrollbar-thumb { background: #e8e0d0; border-radius: 4px; }
 
-        /* ── Tablet ── */
-        @media (max-width: 1100px) {
-          .phone-hub-detail-panel {
-            width: 300px; padding: 14px;
+        /* ── Mobile: bottom sheet ── */
+        @media (max-width: 768px) {
+          .panel-scrim {
+            display: block; position: fixed; inset: 0; z-index: 900;
+            background: rgba(0,0,0,0.35); pointer-events: auto;
+            animation: scrimFadeIn 0.3s ease forwards;
           }
+          @keyframes scrimFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          .detail-panel {
+            top: auto; right: 0; bottom: 0; left: 0;
+            width: 100%; max-width: 100%;
+            height: 85vh; max-height: 85vh;
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
+            transform: translateY(100%);
+          }
+          .detail-panel-open {
+            transform: translateY(0);
+          }
+          .phone-hub-layout.panel-open {
+            margin-right: 0; /* no margin on mobile — bottom sheet doesn't block grid */
+          }
+          .detail-panel-drag-handle {
+            display: flex; justify-content: center; padding: 10px 0 4px;
+            cursor: grab; flex-shrink: 0;
+          }
+          .drag-bar {
+            width: 36px; height: 4px; border-radius: 2px;
+            background: #d0d0d0;
+          }
+          .detail-panel-header { padding: 12px 16px 12px; }
+          .detail-panel-body { padding: 12px 16px 24px; }
         }
 
-        /* ── Small Tablet / Large Phone ── */
-        @media (max-width: 900px) {
-          .phone-hub-layout {
-            flex-direction: column;
-          }
-          .phone-hub-detail-panel {
-            width: 100%; position: static; max-height: none;
-            margin-top: 16px;
-          }
-        }
-
-        /* ── Phone ── */
+        /* ── Responsive header ── */
         @media (max-width: 600px) {
           .overlays-header-top { flex-wrap: wrap; }
           .overlays-header-actions { width: 100%; justify-content: flex-start; }
           .overlays-toolbar { gap: 5px; }
           .overlays-toolbar button { flex: 1 1 auto; justify-content: center; min-width: 0; }
-          .phone-hub-layout { gap: 12px; }
-          .phone-hub-detail-panel { padding: 12px; border-radius: 10px; }
         }
-
         @media (max-width: 480px) {
-          .phone-hub-layout { gap: 8px; }
-          .phone-hub-detail-panel { padding: 10px; border-radius: 8px; }
           .btn-label { display: none; }
           .overlays-toolbar button { padding: 8px 10px !important; }
         }
@@ -1113,16 +1222,20 @@ function SectionHeader({ label, expanded, onToggle, badge }) {
   );
 }
 
-function ActionBtn({ icon: Icon, label, onClick, disabled, color }) {
+function ActionBtn({ icon: Icon, label, onClick, disabled, color, primary }) {
   return (
     <button onClick={onClick} disabled={disabled} style={{
-      display: 'flex', alignItems: 'center', gap: 6,
-      padding: '8px 14px', border: `1px solid ${color}20`, borderRadius: 8,
-      background: `${color}08`, color, fontSize: 12, fontWeight: 600,
+      display: 'flex', alignItems: 'center', justifyContent: primary ? 'center' : 'flex-start', gap: 6,
+      padding: primary ? '10px 16px' : '8px 14px',
+      border: primary ? 'none' : `1px solid ${color}20`, borderRadius: 8,
+      background: primary ? color : `${color}08`,
+      color: primary ? '#fff' : color,
+      fontSize: primary ? 13 : 12, fontWeight: 600,
       cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
-      minHeight: 36, whiteSpace: 'nowrap',
+      minHeight: primary ? 42 : 36, whiteSpace: 'nowrap',
+      flex: primary ? 1 : undefined,
     }}>
-      <Icon size={14} /> {label}
+      <Icon size={primary ? 16 : 14} /> {label}
     </button>
   );
 }
