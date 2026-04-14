@@ -327,14 +327,16 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
 
       {/* Skin picker — only shown for built-in frame (skins don't apply to custom frames) */}
       {onChangeSkin && !useCustomFrame && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
           {PHONE_SKINS.map(s => (
             <button
               key={s.key}
               title={s.label}
+              aria-label={`Phone skin: ${s.label}`}
               onClick={() => onChangeSkin(s.key)}
+              className="phone-hub-skin-btn"
               style={{
-                width: 28, height: 28, borderRadius: '50%', border: skin === s.key ? '2.5px solid #B8962E' : '1.5px solid #ddd',
+                width: 36, height: 36, borderRadius: '50%', border: skin === s.key ? '2.5px solid #B8962E' : '1.5px solid #ddd',
                 background: typeof s.body === 'string' && s.body.startsWith('linear') ? undefined : s.body,
                 backgroundImage: typeof s.body === 'string' && s.body.startsWith('linear') ? s.body : undefined,
                 cursor: 'pointer', padding: 0, transition: 'transform 0.15s',
@@ -420,9 +422,9 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           .phone-hub-icon-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
         }
         @media (max-width: 375px) {
-          .phone-hub-frame { width: 170px; }
-          .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); }
-          .phone-hub-icon-grid { grid-template-columns: repeat(2, 1fr); }
+          .phone-hub-frame { width: 180px; }
+          .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
+          .phone-hub-icon-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
         }
         .screen-card:hover .screen-card-delete { opacity: 1 !important; }
         @media (hover: none) {
@@ -433,7 +435,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   );
 }
 
-function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
+const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';
@@ -531,4 +533,4 @@ function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHi
       }} />
     </div>
   );
-}
+});

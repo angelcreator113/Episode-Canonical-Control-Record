@@ -165,10 +165,21 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const handleBatchUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length || !showId) return;
+    // Warn if any existing screens will be overwritten
+    const screenKeys = SCREEN_TYPES.filter(t => t.type === 'screen').map(t => t.key);
+    const matchCount = files.filter(f => {
+      const name = f.name.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '_');
+      return screenKeys.find(k => name.includes(k) || name.includes(k.replace(/_/g, '')));
+    }).length;
+    if (matchCount > 0 && overlays.some(o => o.generated)) {
+      if (!confirm(`Upload ${files.length} files? This may overwrite ${matchCount} existing screens.`)) {
+        if (batchInputRef.current) batchInputRef.current.value = '';
+        return;
+      }
+    }
     setBatchUploading(true);
     let uploaded = 0;
     let failed = 0;
-    const screenKeys = SCREEN_TYPES.filter(t => t.type === 'screen').map(t => t.key);
 
     for (const file of files) {
       const name = file.name.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '_');
@@ -694,7 +705,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
             )}
           </div>
           <div className="overlays-header-actions">
-            <button onClick={() => setShowSizeGuide(!showSizeGuide)} title="Upload size guide" style={{ ...headerBtnStyle, color: '#aaa', border: '1px solid #eee' }}>
+            <button onClick={() => setShowSizeGuide(!showSizeGuide)} title="Upload size guide" aria-label="Toggle upload size guide" style={{ ...headerBtnStyle, color: '#aaa', border: '1px solid #eee' }}>
               <Info size={13} />
             </button>
             <button onClick={() => setShowFlowMap(true)} disabled={!generatedCount} title="Screen flow map" style={{ ...headerBtnStyle, color: '#a889c8', border: '1px solid #a889c830' }}>
@@ -730,6 +741,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
           </button>
           {customFrameUrl && (
             <button onClick={async () => {
+              if (!confirm('Remove custom phone frame?')) return;
               frameRemovedRef.current = true;
               setCustomFrameUrl(null);
               flash('Using built-in frame');
@@ -854,13 +866,13 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
-                <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title="Undo (Ctrl+Z)" style={{
+                <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title={undoStackRef.current.length > 0 ? `Undo (${undoStackRef.current.length} changes)` : 'Nothing to undo'} aria-label="Undo" style={{
                   background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer',
-                  color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '4px 6px', minWidth: 30, minHeight: 30,
+                  color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '6px 8px', minWidth: 36, minHeight: 36,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}><Undo2 size={14} /></button>
-                <button onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} style={{
-                  background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '4px 6px', minWidth: 30, minHeight: 30,
+                <button onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} aria-label="Close panel" style={{
+                  background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '6px 8px', minWidth: 36, minHeight: 36,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}><X size={14} /></button>
               </div>
@@ -868,6 +880,13 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
             {/* ── Scrollable body ── */}
             <div className="detail-panel-body">
+
+              {/* Placeholder indicator */}
+              {activeScreen.placeholder && (
+                <div style={{ fontSize: 11, background: '#f3e8ff', color: '#7c3aed', padding: '6px 10px', borderRadius: 6, marginBottom: 10, fontFamily: "'DM Mono', monospace", fontWeight: 600 }}>
+                  New screen — upload an image or generate one to get started
+                </div>
+              )}
 
               {/* ── Primary Actions ── */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>

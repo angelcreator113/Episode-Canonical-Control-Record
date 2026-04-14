@@ -25,8 +25,8 @@
 }
 
 .overlays-toast--error {
-  background: #ffebee;
-  color: #c62828;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 /* ── Header ── */
@@ -58,7 +58,7 @@
 
 /* ── Header Button ── */
 .overlays-header-btn {
-  padding: 8px 14px;
+  padding: 10px 16px;
   border: 1px solid #e8e0d0;
   border-radius: 8px;
   background: #fff;
@@ -70,7 +70,7 @@
   align-items: center;
   gap: 5px;
   font-family: 'DM Mono', monospace;
-  min-height: 36px;
+  min-height: 44px;
   white-space: nowrap;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -275,9 +275,9 @@
 }
 
 .overlays-section-header__label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  color: #888;
+  color: #666;
   font-family: 'DM Mono', monospace;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -463,8 +463,8 @@
     left: 0;
     width: 100%;
     max-width: 100%;
-    height: 85vh;
-    max-height: 85vh;
+    height: 75vh;
+    max-height: 80vh;
     border-radius: 20px 20px 0 0;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
     transform: translateY(100%);
@@ -487,10 +487,10 @@
   }
 
   .drag-bar {
-    width: 36px;
-    height: 4px;
-    border-radius: 2px;
-    background: #d0d0d0;
+    width: 40px;
+    height: 5px;
+    border-radius: 2.5px;
+    background: #999;
   }
 
   .detail-panel-header {
@@ -530,6 +530,36 @@
   }
 
   .overlays-toolbar button {
-    padding: 8px 10px !important;
+    padding: 10px 12px !important;
+    min-height: 44px;
+  }
+
+  .overlays-dup-dropdown {
+    position: fixed;
+    bottom: auto;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9998;
+    min-width: 240px;
+    max-height: 60vh;
+  }
+}
+
+/* ── Very small screens (iPhone SE gen 1, 320px) ── */
+@media (max-width: 375px) {
+  .overlays-modal {
+    margin: 8px;
+    max-width: none;
+  }
+
+  .overlays-modal__body,
+  .overlays-modal__header {
+    padding: 12px 14px;
+  }
+
+  .detail-panel {
+    height: 80vh;
+    max-height: 85vh;
   }
 }

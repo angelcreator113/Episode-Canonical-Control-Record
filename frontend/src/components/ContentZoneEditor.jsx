@@ -28,6 +28,7 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
   const [isDirty, setIsDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [profiles, setProfiles] = useState([]);
+  const [profilesLoading, setProfilesLoading] = useState(false);
   const containerRef = useRef(null);
 
   useEffect(() => { setLocalZones(zones); setIsDirty(false); }, [zones]);
@@ -35,9 +36,11 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
   // Load social profiles for picker dropdowns
   useEffect(() => {
     if (!showId) return;
+    setProfilesLoading(true);
     api.get(`/api/v1/social-profiles?show_id=${showId}`)
       .then(r => setProfiles(r.data?.data || r.data?.profiles || []))
-      .catch(() => {});
+      .catch(() => setProfiles([]))
+      .finally(() => setProfilesLoading(false));
   }, [showId]);
 
   const getRelativePos = useCallback((e) => {
@@ -211,7 +214,7 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 360, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 'min(360px, 50vh)', overflowY: 'auto' }}>
             {localZones.map((zone, i) => {
               const typeMeta = CONTENT_TYPE_MAP[zone.content_type];
               const isSelected = selectedZone === zone.id;
@@ -246,6 +249,7 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
                     <ZoneConfigPanel
                       zone={zone}
                       profiles={profiles}
+                      profilesLoading={profilesLoading}
                       onUpdate={(changes) => updateZone(zone.id, changes)}
                     />
                   )}
@@ -260,7 +264,7 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
 }
 
 // ── Zone configuration panel — type picker + type-specific config fields ──
-function ZoneConfigPanel({ zone, profiles, onUpdate }) {
+function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate }) {
   const config = zone.content_config || {};
 
   const handleTypeChange = (content_type) => {
@@ -308,16 +312,22 @@ function ZoneConfigPanel({ zone, profiles, onUpdate }) {
           {['profile_header', 'profile_stats'].includes(zone.content_type) && (
             <div>
               <label style={labelStyle}>PROFILE</label>
-              <select
-                value={config.profile_id || ''}
-                onChange={(e) => handleConfigChange('profile_id', e.target.value ? parseInt(e.target.value) : null)}
-                style={fieldStyle}
-              >
-                <option value="">— Select profile —</option>
-                {profiles.map(p => (
-                  <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.creator_name}</option>
-                ))}
-              </select>
+              {profilesLoading ? (
+                <div style={{ fontSize: 10, color: '#999', padding: '6px 0', fontFamily: "'DM Mono', monospace" }}>Loading profiles...</div>
+              ) : profiles.length === 0 ? (
+                <div style={{ fontSize: 10, color: '#b45309', padding: '6px 0' }}>No social profiles found for this show</div>
+              ) : (
+                <select
+                  value={config.profile_id || ''}
+                  onChange={(e) => handleConfigChange('profile_id', e.target.value ? parseInt(e.target.value) : null)}
+                  style={fieldStyle}
+                >
+                  <option value="">— Select profile —</option>
+                  {profiles.map(p => (
+                    <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.creator_name}</option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 

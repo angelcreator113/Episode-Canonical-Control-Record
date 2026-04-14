@@ -143,23 +143,23 @@ function FeedPostsRenderer({ showId, episodeId, config }) {
           {/* Post header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 2 }}>
             <div style={{ width: 14, height: 14, borderRadius: '50%', background: 'linear-gradient(135deg, #e8a0b4, #b8a9d4)', flexShrink: 0 }} />
-            <span style={{ fontSize: 7, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {post.poster_handle || post.poster_display_name || 'user'}
             </span>
             <MoreHorizontal size={7} color="rgba(255,255,255,0.4)" style={{ marginLeft: 'auto', flexShrink: 0 }} />
           </div>
           {/* Post content */}
           {post.content_text && (
-            <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.85)', lineHeight: 1.3, marginBottom: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.85)', lineHeight: 1.3, marginBottom: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
               {post.content_text}
             </div>
           )}
           {/* Engagement row */}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <Heart size={7} color="rgba(255,255,255,0.5)" />
-            <span style={{ fontSize: 6, color: 'rgba(255,255,255,0.4)' }}>{post.likes || 0}</span>
+            <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.4)' }}>{post.likes || 0}</span>
             <MessageCircle size={7} color="rgba(255,255,255,0.5)" />
-            <span style={{ fontSize: 6, color: 'rgba(255,255,255,0.4)' }}>{post.comments_count || 0}</span>
+            <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.4)' }}>{post.comments_count || 0}</span>
           </div>
         </div>
       ))}
@@ -185,11 +185,11 @@ function ProfileHeaderRenderer({ showId, config }) {
       <div style={{ fontSize: 8, fontWeight: 700, color: '#fff', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
         {profile.display_name || profile.handle}
       </div>
-      <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
+      <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
         @{profile.handle}
       </div>
       {profile.vibe_sentence && (
-        <div style={{ fontSize: 5, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 2, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 2, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {profile.vibe_sentence}
         </div>
       )}
@@ -218,7 +218,7 @@ function ProfileStatsRenderer({ showId, config }) {
       {stats.map(s => (
         <div key={s.label} style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 8, fontWeight: 700, color: '#fff', lineHeight: 1 }}>{s.value}</div>
-          <div style={{ fontSize: 5, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>{s.label}</div>
+          <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>{s.label}</div>
         </div>
       ))}
     </div>
@@ -250,12 +250,12 @@ function DMThreadRenderer({ showId, episodeId, config }) {
             padding: '3px 5px',
             borderRadius: 6,
             background: isOutgoing ? 'rgba(88,101,242,0.7)' : 'rgba(255,255,255,0.12)',
-            fontSize: 6,
+            fontSize: 8,
             color: '#fff',
             lineHeight: 1.3,
           }}>
             {!isOutgoing && (
-              <div style={{ fontSize: 5, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 1 }}>
+              <div style={{ fontSize: 7, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 1 }}>
                 {m.trigger_handle || 'them'}
               </div>
             )}
@@ -288,14 +288,14 @@ function NotificationsRenderer({ showId, episodeId, config }) {
           display: 'flex', alignItems: 'center', gap: 4, padding: '3px 4px',
           background: config.bg || 'rgba(0,0,0,0.35)', borderBottom: '1px solid rgba(255,255,255,0.05)',
         }}>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(232,160,180,0.6)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 6 }}>
+          <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'rgba(232,160,180,0.6)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8 }}>
             🔔
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 6, color: '#fff', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 8, color: '#fff', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {n.trigger_handle || 'Someone'}
             </div>
-            <div style={{ fontSize: 5, color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {n.screen_content || n.trigger_action || 'notification'}
             </div>
           </div>
@@ -331,7 +331,7 @@ function StoryRingRenderer({ showId, config }) {
               {(p.display_name || p.handle || '?')[0].toUpperCase()}
             </div>
           </div>
-          <span style={{ fontSize: 4, color: 'rgba(255,255,255,0.5)', maxWidth: 26, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
+          <span style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)', maxWidth: 26, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
             {p.handle || p.display_name}
           </span>
         </div>
@@ -383,14 +383,14 @@ function OutfitCardRenderer({ showId, config }) {
 
   return (
     <div style={{ width: '100%', height: '100%', padding: 4, background: config.bg || 'rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ fontSize: 7, fontWeight: 700, color: '#fff', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#fff', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {outfit.name}
       </div>
-      <div style={{ fontSize: 5, color: 'rgba(255,255,255,0.5)', marginBottom: 3 }}>
+      <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.5)', marginBottom: 3 }}>
         {outfit.occasion || outfit.season || 'Outfit'}
       </div>
       {outfit.synergy_score !== undefined && (
-        <div style={{ fontSize: 6, color: '#a8d5a2', fontWeight: 600 }}>
+        <div style={{ fontSize: 8, color: '#a8d5a2', fontWeight: 600 }}>
           {outfit.synergy_score}% match
         </div>
       )}
@@ -424,8 +424,8 @@ function CommentsRenderer({ showId, config }) {
         <div key={i} style={{ display: 'flex', gap: 3, padding: '2px 4px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 6, fontWeight: 700, color: '#fff', marginRight: 3 }}>{c.handle || c.user || 'user'}</span>
-            <span style={{ fontSize: 6, color: 'rgba(255,255,255,0.7)' }}>{c.text || c.content || ''}</span>
+            <span style={{ fontSize: 8, fontWeight: 700, color: '#fff', marginRight: 3 }}>{c.handle || c.user || 'user'}</span>
+            <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.7)' }}>{c.text || c.content || ''}</span>
           </div>
         </div>
       ))}
@@ -463,8 +463,8 @@ function EngagementStatsRenderer({ showId, config }) {
 function StatRow({ label, value }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)' }}>{label}</span>
-      <span style={{ fontSize: 7, fontWeight: 700, color: '#fff' }}>{value}</span>
+      <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.5)' }}>{label}</span>
+      <span style={{ fontSize: 9, fontWeight: 700, color: '#fff' }}>{value}</span>
     </div>
   );
 }
@@ -502,7 +502,7 @@ function ZoneLoader() {
 function ZoneEmpty({ label }) {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: 3 }}>
-      <span style={{ fontSize: 6, color: 'rgba(255,255,255,0.35)', fontFamily: "'DM Mono', monospace" }}>{label}</span>
+      <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.35)', fontFamily: "'DM Mono', monospace" }}>{label}</span>
     </div>
   );
 }
