@@ -730,9 +730,17 @@ router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
     if (asset.show_id && asset.show_id !== req.params.showId) {
       return res.status(403).json({ success: false, error: 'Asset does not belong to this show' });
     }
-    await asset.destroy(); // paranoid soft-delete
+    // Use AssetService for proper cleanup of associations
+    try {
+      const AssetService = require('../services/AssetService');
+      await AssetService.bulkDeleteAssets([req.params.assetId]);
+    } catch {
+      // Fallback to direct destroy if service unavailable
+      await asset.destroy();
+    }
     return res.json({ success: true, message: 'Asset deleted' });
   } catch (err) {
+    console.error('[UI Overlay] Delete asset failed:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -184,14 +184,14 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             position: 'absolute', top: '6%', left: '6%', right: '6%', bottom: '6%',
             borderRadius: 16, overflow: 'hidden', zIndex: 1,
           }}>
-            {activeScreen?.url ? (
+            {phoneScreen?.url ? (
               <>
-                <img src={activeScreen.url} alt={activeScreen.name} style={getScreenImageStyle(activeScreen, globalFit)} />
-                <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+                <img src={phoneScreen.url} alt={phoneScreen.name} style={getScreenImageStyle(phoneScreen, globalFit)} />
+                <ScreenLinkOverlay links={phoneScreen.screen_links || phoneScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
               </>
             ) : (
               <div style={{ width: '100%', height: '100%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>
-                <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{activeScreen ? 'Not generated' : 'Select a screen'}</span>
+                <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{phoneScreen ? 'Not generated' : 'Select a screen'}</span>
               </div>
             )}
             {navigationHistory.length > 0 && onBack && (
@@ -235,7 +235,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         <div style={{
           width: '100%', aspectRatio: '9/19.5',
           borderRadius: 24, overflow: 'hidden',
-          background: activeScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
+          background: phoneScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
           position: 'relative',
           border: '2.5px solid #111',
           boxShadow: 'inset 0 0 6px rgba(0,0,0,0.4)',
@@ -256,14 +256,14 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             }} />
           </div>
 
-          {activeScreen?.url ? (
+          {phoneScreen?.url ? (
             <>
               <img
-                src={activeScreen.url}
-                alt={activeScreen.name}
-                style={getScreenImageStyle(activeScreen, globalFit)}
+                src={phoneScreen.url}
+                alt={phoneScreen.name}
+                style={getScreenImageStyle(phoneScreen, globalFit)}
               />
-              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+              <ScreenLinkOverlay links={phoneScreen.screen_links || phoneScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
             </>
           ) : (
             <div style={{
@@ -274,7 +274,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             }}>
               <span style={{ fontSize: 32 }}>📱</span>
               <span style={{ fontSize: 11, marginTop: 8, fontFamily: "'DM Mono', monospace" }}>
-                {activeScreen ? 'Not generated yet' : 'Select a screen'}
+                {phoneScreen ? 'Not generated yet' : 'Select a screen'}
               </span>
             </div>
           )}
@@ -290,15 +290,15 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           )}
 
           {/* Screen name overlay */}
-          {activeScreen && (
+          {phoneScreen && (
             <div style={{
               position: 'absolute', bottom: 0, left: 0, right: 0,
               background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
               padding: '20px 12px 10px',
             }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{activeScreen.name}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{phoneScreen.name}</div>
               <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', fontFamily: "'DM Mono', monospace" }}>
-                {activeScreen.beat || activeScreen.description?.slice(0, 40)}
+                {phoneScreen.beat || phoneScreen.description?.slice(0, 40)}
               </div>
             </div>
           )}
