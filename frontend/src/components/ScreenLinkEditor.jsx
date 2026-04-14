@@ -146,7 +146,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
   const sel = selectedZone ? zones.find(z => z.id === selectedZone) : null;
 
   return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
       {/* Screen with overlay zones */}
       <div
         ref={containerRef}
@@ -156,7 +156,8 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
         onMouseLeave={() => { if (drawing) handleMouseUp(); if (dragging) setDragging(null); }}
         style={{
           position: 'relative',
-          width: 260,
+          width: 220,
+          minWidth: 150,
           flexShrink: 0,
           aspectRatio: '9/16',
           borderRadius: 12,
