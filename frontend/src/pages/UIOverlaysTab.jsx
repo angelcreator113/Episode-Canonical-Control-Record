@@ -602,10 +602,10 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
   const generatedCount = overlays.filter(o => o.generated).length;
 
   const headerBtnStyle = {
-    padding: '6px 12px', border: '1px solid #e8e0d0', borderRadius: 6,
-    background: '#fff', color: '#2C2C2C', fontSize: 10, fontWeight: 600,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-    fontFamily: "'DM Mono', monospace",
+    padding: '8px 14px', border: '1px solid #e8e0d0', borderRadius: 8,
+    background: '#fff', color: '#2C2C2C', fontSize: 11, fontWeight: 600,
+    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+    fontFamily: "'DM Mono', monospace", minHeight: 36, whiteSpace: 'nowrap',
   };
 
   return (
@@ -618,32 +618,32 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
       )}
 
       {/* Header */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+      <div className="overlays-header">
+        <div className="overlays-header-top">
           <div>
             <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif" }}>Phone Hub</h2>
-            <p style={{ margin: '2px 0 0', fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>
+            <p style={{ margin: '2px 0 0', fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>
               {generatedCount}/{overlays.length} screens ready
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+          <div className="overlays-header-actions">
             <button onClick={() => setShowSizeGuide(!showSizeGuide)} title="Upload size guide" style={{ ...headerBtnStyle, color: '#aaa', border: '1px solid #eee' }}>
-              <Info size={12} />
+              <Info size={13} />
             </button>
             <button onClick={() => setPreviewMode(true)} disabled={!generatedCount} title="Preview mode" style={{ ...headerBtnStyle, color: '#B8962E', border: '1px solid #B8962E30' }}>
-              <Play size={12} /> Preview
+              <Play size={13} /> <span className="btn-label">Preview</span>
             </button>
             <button onClick={handleExportContactSheet} disabled={!generatedCount} title="Export contact sheet" style={{ ...headerBtnStyle, color: '#6bba9a', border: '1px solid #6bba9a30' }}>
-              <Download size={12} /> Export
+              <Download size={13} /> <span className="btn-label">Export</span>
             </button>
           </div>
         </div>
 
         {/* Size guide */}
         {showSizeGuide && (
-          <div style={{ background: '#faf8f5', border: '1px solid #e8e0d0', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 10, fontFamily: "'DM Mono', monospace", color: '#666' }}>
-            <div style={{ fontWeight: 700, color: '#B8962E', marginBottom: 6, fontSize: 11 }}>Recommended Upload Sizes</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 12px' }}>
+          <div style={{ background: '#faf8f5', border: '1px solid #e8e0d0', borderRadius: 8, padding: '10px 14px', marginBottom: 10, fontSize: 11, fontFamily: "'DM Mono', monospace", color: '#666' }}>
+            <div style={{ fontWeight: 700, color: '#B8962E', marginBottom: 6, fontSize: 12 }}>Recommended Upload Sizes</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '3px 12px' }}>
               <span style={{ color: '#999' }}>Screens (HD):</span><span><strong>1080 x 1920</strong> px (9:16)</span>
               <span style={{ color: '#999' }}>Screens (Retina):</span><span><strong>1170 x 2532</strong> px (iPhone 15 Pro)</span>
               <span style={{ color: '#999' }}>App Icons:</span><span><strong>512 x 512</strong> px (square)</span>
@@ -654,15 +654,15 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         )}
 
         {/* Action buttons row */}
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <div className="overlays-toolbar">
           <button onClick={() => frameInputRef.current?.click()} style={headerBtnStyle}>
-            <Monitor size={11} /> {customFrameUrl ? 'Change Frame' : 'Upload Frame'}
+            <Monitor size={13} /> <span className="btn-label">{customFrameUrl ? 'Change Frame' : 'Upload Frame'}</span>
           </button>
           <button onClick={() => setShowCreateModal(true)} disabled={!showId} style={headerBtnStyle}>
-            + New Screen
+            + <span className="btn-label">New Screen</span>
           </button>
           <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId} style={headerBtnStyle}>
-            <Upload size={11} /> {batchUploading ? 'Uploading...' : 'Batch Upload'}
+            <Upload size={13} /> <span className="btn-label">{batchUploading ? 'Uploading...' : 'Batch Upload'}</span>
           </button>
           <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
@@ -670,7 +670,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
             ...headerBtnStyle, background: generating ? '#eee' : '#2C2C2C',
             color: generating ? '#999' : '#fff', border: 'none',
           }}>
-            {generating ? <><Loader size={11} className="spin" /> Generating...</> : <><Sparkles size={11} /> Generate All</>}
+            {generating ? <><Loader size={13} className="spin" /> Generating...</> : <><Sparkles size={13} /> Generate All</>}
           </button>
         </div>
       </div>
@@ -698,13 +698,13 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
             />
           </div>
 
-          {/* Right: Detail Panel (sticky sidebar on desktop, stacked on mobile) */}
+          {/* Right: Detail Panel (sticky sidebar on desktop, below on mobile) */}
           {activeScreen && (
             <div className="phone-hub-detail-panel">
               {/* Header with name, badge, undo, close */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, borderBottom: '1px solid #f0ece4', paddingBottom: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, borderBottom: '1px solid #f0ece4', paddingBottom: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     {editingName ? (
                       <input
                         autoFocus
@@ -715,38 +715,40 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                           if (e.key === 'Enter') handleRename(editNameValue);
                           if (e.key === 'Escape') setEditingName(false);
                         }}
-                        style={{ fontSize: 14, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", border: '1px solid #B8962E', borderRadius: 4, padding: '1px 4px', outline: 'none', width: '100%' }}
+                        style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", border: '1px solid #B8962E', borderRadius: 6, padding: '4px 8px', outline: 'none', width: '100%' }}
                       />
                     ) : (
                       <div
                         onClick={() => { setEditNameValue(activeScreen.name || ''); setEditingName(true); }}
                         title="Click to rename"
-                        style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", cursor: 'text', borderBottom: '1px dashed transparent' }}
+                        style={{ fontSize: 16, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", cursor: 'text', borderBottom: '1px dashed transparent', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         onMouseEnter={e => { e.currentTarget.style.borderBottomColor = '#B8962E40'; }}
                         onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
                       >{activeScreen.name}</div>
                     )}
                     <span style={{
-                      fontSize: 7, fontWeight: 700, padding: '2px 5px', borderRadius: 3,
+                      fontSize: 8, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
                       background: (activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? '#a889c8' : '#B8962E',
                       color: '#fff', letterSpacing: 0.5, flexShrink: 0,
                     }}>
                       {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'ICON' : 'SCREEN'}
                     </span>
                   </div>
-                  <div style={{ fontSize: 9, color: '#aaa', marginTop: 2, fontFamily: "'DM Mono', monospace" }}>
+                  <div style={{ fontSize: 10, color: '#aaa', marginTop: 3, fontFamily: "'DM Mono', monospace" }}>
                     {activeScreen.beat && <span style={{ marginRight: 6 }}>{activeScreen.beat}</span>}
                     {activeScreen.description?.slice(0, 50)}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 2 }}>
+                <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
                   <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title="Undo (Ctrl+Z)" style={{
-                    background: 'none', border: '1px solid #eee', borderRadius: 4, cursor: 'pointer',
-                    color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '2px 4px',
-                  }}><Undo2 size={12} /></button>
+                    background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer',
+                    color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '4px 6px', minWidth: 30, minHeight: 30,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}><Undo2 size={14} /></button>
                   <button onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} style={{
-                    background: 'none', border: '1px solid #eee', borderRadius: 4, cursor: 'pointer', color: '#999', padding: '2px 4px',
-                  }}><X size={12} /></button>
+                    background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '4px 6px', minWidth: 30, minHeight: 30,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}><X size={14} /></button>
                 </div>
               </div>
 
@@ -774,16 +776,16 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
               {/* ── Type Toggle ── */}
               {activeScreen.asset_id && (
-                <div style={{ display: 'flex', gap: 3, marginBottom: 8 }}>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
                   <button onClick={() => handleChangeScreenType('phone')} style={{
-                    flex: 1, padding: '5px 0', fontSize: 9, fontWeight: 700, border: '1px solid #e0d9ce',
-                    borderRadius: 5, cursor: 'pointer',
+                    flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 700, border: '1px solid #e0d9ce',
+                    borderRadius: 6, cursor: 'pointer', minHeight: 36,
                     background: activeScreen.category !== 'phone_icon' ? '#B8962E' : '#fff',
                     color: activeScreen.category !== 'phone_icon' ? '#fff' : '#888',
                   }}>Screen</button>
                   <button onClick={() => handleChangeScreenType('phone_icon')} style={{
-                    flex: 1, padding: '5px 0', fontSize: 9, fontWeight: 700, border: '1px solid #e0d9ce',
-                    borderRadius: 5, cursor: 'pointer',
+                    flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 700, border: '1px solid #e0d9ce',
+                    borderRadius: 6, cursor: 'pointer', minHeight: 36,
                     background: activeScreen.category === 'phone_icon' ? '#a889c8' : '#fff',
                     color: activeScreen.category === 'phone_icon' ? '#fff' : '#888',
                   }}>Icon</button>
@@ -828,7 +830,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
               {/* ── Actions (collapsible) ── */}
               <SectionHeader label="Actions" expanded={expandedSections.actions} onToggle={() => toggleSection('actions')} />
               {expandedSections.actions && (
-                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 8 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                   {!activeScreen.placeholder ? (
                     <>
                       <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" />
@@ -914,8 +916,23 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        /* ── Header ── */
+        .overlays-header { margin-bottom: 20px; }
+        .overlays-header-top {
+          display: flex; justify-content: space-between; align-items: center;
+          margin-bottom: 12px; gap: 12px;
+        }
+        .overlays-header-actions {
+          display: flex; gap: 6px; align-items: center; flex-shrink: 0;
+        }
+        .overlays-toolbar {
+          display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+        }
+        .btn-label { /* visible by default */ }
+
+        /* ── Main Layout ── */
         .phone-hub-layout {
-          display: flex; gap: 16px; align-items: flex-start;
+          display: flex; gap: 20px; align-items: flex-start;
         }
         .phone-hub-main {
           flex: 1; min-width: 0;
@@ -924,26 +941,45 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
           width: 340px; flex-shrink: 0;
           position: sticky; top: 20px; max-height: calc(100vh - 60px); overflow-y: auto;
           background: #fff; border: 1px solid #e8e0d0;
-          border-radius: 12px; padding: 14px;
+          border-radius: 14px; padding: 16px;
+          scrollbar-width: thin; scrollbar-color: #e8e0d0 transparent;
         }
+        .phone-hub-detail-panel::-webkit-scrollbar { width: 4px; }
+        .phone-hub-detail-panel::-webkit-scrollbar-thumb { background: #e8e0d0; border-radius: 4px; }
 
+        /* ── Tablet ── */
         @media (max-width: 1100px) {
           .phone-hub-detail-panel {
-            width: 300px; padding: 10px;
+            width: 300px; padding: 14px;
           }
         }
+
+        /* ── Small Tablet / Large Phone ── */
         @media (max-width: 900px) {
           .phone-hub-layout {
             flex-direction: column;
           }
           .phone-hub-detail-panel {
             width: 100%; position: static; max-height: none;
-            order: -1; margin-bottom: 12px;
+            margin-top: 16px;
           }
         }
+
+        /* ── Phone ── */
+        @media (max-width: 600px) {
+          .overlays-header-top { flex-wrap: wrap; }
+          .overlays-header-actions { width: 100%; justify-content: flex-start; }
+          .overlays-toolbar { gap: 5px; }
+          .overlays-toolbar button { flex: 1 1 auto; justify-content: center; min-width: 0; }
+          .phone-hub-layout { gap: 12px; }
+          .phone-hub-detail-panel { padding: 12px; border-radius: 10px; }
+        }
+
         @media (max-width: 480px) {
           .phone-hub-layout { gap: 8px; }
           .phone-hub-detail-panel { padding: 10px; border-radius: 8px; }
+          .btn-label { display: none; }
+          .overlays-toolbar button { padding: 8px 10px !important; }
         }
       `}</style>
     </div>
@@ -970,24 +1006,24 @@ function ImageFitControls({ fit, hasScreenOverride, onChange, onSave, onClearOve
   return (
     <div style={{ marginTop: 10, padding: '10px 0', borderTop: '1px solid #f0ece4' }}>
       {/* Mode toggle: global vs per-screen */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 6, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4 }}>
           <button onClick={() => setEditMode('global')} style={{
-            padding: '3px 8px', fontSize: 9, fontWeight: 600, border: '1px solid #e0d9ce',
-            borderRadius: 4, cursor: 'pointer',
+            padding: '6px 10px', fontSize: 10, fontWeight: 600, border: '1px solid #e0d9ce',
+            borderRadius: 6, cursor: 'pointer', minHeight: 32,
             background: editMode === 'global' ? '#B8962E' : '#fff',
             color: editMode === 'global' ? '#fff' : '#888',
           }}>All Screens</button>
           <button onClick={() => setEditMode('screen')} style={{
-            padding: '3px 8px', fontSize: 9, fontWeight: 600, border: '1px solid #e0d9ce',
-            borderRadius: 4, cursor: 'pointer',
+            padding: '6px 10px', fontSize: 10, fontWeight: 600, border: '1px solid #e0d9ce',
+            borderRadius: 6, cursor: 'pointer', minHeight: 32,
             background: editMode === 'screen' ? '#B8962E' : '#fff',
             color: editMode === 'screen' ? '#fff' : '#888',
-          }}>This Screen Only</button>
+          }}>This Screen</button>
         </div>
         <button onClick={activeSave} style={{
-          padding: '3px 8px', fontSize: 9, fontWeight: 600, border: 'none',
-          borderRadius: 5, background: '#B8962E', color: '#fff', cursor: 'pointer',
+          padding: '6px 12px', fontSize: 10, fontWeight: 600, border: 'none',
+          borderRadius: 6, background: '#B8962E', color: '#fff', cursor: 'pointer', minHeight: 32,
         }}>Save</button>
       </div>
 
@@ -1006,8 +1042,8 @@ function ImageFitControls({ fit, hasScreenOverride, onChange, onSave, onClearOve
             key={m.key}
             onClick={() => activeChange({ mode: m.key })}
             style={{
-              flex: 1, padding: '5px 0', fontSize: 10, fontWeight: 600, border: '1px solid #e0d9ce',
-              borderRadius: 5, cursor: 'pointer',
+              flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9ce',
+              borderRadius: 6, cursor: 'pointer', minHeight: 34,
               background: mode === m.key ? '#2C2C2C' : '#fff',
               color: mode === m.key ? '#fff' : '#888',
             }}
@@ -1045,15 +1081,15 @@ function ImageFitControls({ fit, hasScreenOverride, onChange, onSave, onClearOve
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
         <button onClick={() => activeChange({ mode: 'cover', scale: 100, offsetX: 0, offsetY: 0 })} style={{
-          padding: '3px 8px', fontSize: 9, color: '#999', background: 'none',
-          border: '1px solid #eee', borderRadius: 4, cursor: 'pointer',
+          padding: '6px 10px', fontSize: 10, color: '#999', background: 'none',
+          border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', minHeight: 32,
         }}>Reset</button>
         {editMode === 'screen' && hasScreenOverride && (
           <button onClick={onClearOverride} style={{
-            padding: '3px 8px', fontSize: 9, color: '#B8962E', background: 'none',
-            border: '1px solid #B8962E30', borderRadius: 4, cursor: 'pointer',
+            padding: '6px 10px', fontSize: 10, color: '#B8962E', background: 'none',
+            border: '1px solid #B8962E30', borderRadius: 6, cursor: 'pointer', minHeight: 32,
           }}>Use Global Fit</button>
         )}
       </div>
@@ -1064,15 +1100,15 @@ function ImageFitControls({ fit, hasScreenOverride, onChange, onSave, onClearOve
 function SectionHeader({ label, expanded, onToggle, badge }) {
   return (
     <button onClick={onToggle} style={{
-      display: 'flex', alignItems: 'center', gap: 4, width: '100%',
-      padding: '6px 0', border: 'none', background: 'none', cursor: 'pointer',
-      borderTop: '1px solid #f0ece4', marginTop: 4,
+      display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+      padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
+      borderTop: '1px solid #f0ece4', marginTop: 4, minHeight: 36,
     }}>
-      {expanded ? <ChevronDown size={10} color="#aaa" /> : <ChevronRight size={10} color="#aaa" />}
-      <span style={{ fontSize: 9, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, textTransform: 'uppercase' }}>
+      {expanded ? <ChevronDown size={12} color="#aaa" /> : <ChevronRight size={12} color="#aaa" />}
+      <span style={{ fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, textTransform: 'uppercase' }}>
         {label}
       </span>
-      {badge && <span style={{ fontSize: 8, background: '#B8962E20', color: '#B8962E', padding: '0 4px', borderRadius: 3, fontWeight: 700 }}>{badge}</span>}
+      {badge && <span style={{ fontSize: 9, background: '#B8962E20', color: '#B8962E', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>{badge}</span>}
     </button>
   );
 }
@@ -1080,12 +1116,13 @@ function SectionHeader({ label, expanded, onToggle, badge }) {
 function ActionBtn({ icon: Icon, label, onClick, disabled, color }) {
   return (
     <button onClick={onClick} disabled={disabled} style={{
-      display: 'flex', alignItems: 'center', gap: 5,
-      padding: '7px 14px', border: `1px solid ${color}20`, borderRadius: 8,
-      background: `${color}08`, color, fontSize: 11, fontWeight: 600,
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '8px 14px', border: `1px solid ${color}20`, borderRadius: 8,
+      background: `${color}08`, color, fontSize: 12, fontWeight: 600,
       cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
+      minHeight: 36, whiteSpace: 'nowrap',
     }}>
-      <Icon size={13} /> {label}
+      <Icon size={14} /> {label}
     </button>
   );
 }
@@ -1093,7 +1130,7 @@ function ActionBtn({ icon: Icon, label, onClick, disabled, color }) {
 function CreateScreenModal({ onClose, onCreate }) {
   const [form, setForm] = useState({ name: '', beat: '', description: '', prompt: '' });
   const [saving, setSaving] = useState(false);
-  const fieldStyle = { width: '100%', padding: '8px 10px', border: '1px solid #e8e0d0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' };
+  const fieldStyle = { width: '100%', padding: '10px 12px', border: '1px solid #e8e0d0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', minHeight: 40 };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1104,36 +1141,34 @@ function CreateScreenModal({ onClose, onCreate }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 16, maxWidth: 440, width: '100%', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>New Phone Screen</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}><X size={16} /></button>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, maxWidth: 440, width: '100%', overflow: 'hidden', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>New Phone Screen</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Screen Name</label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Screen Name</label>
               <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Feed View, DM Conversation" style={fieldStyle} />
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Beat / Trigger</label>
-                <input value={form.beat} onChange={e => setForm(f => ({ ...f, beat: e.target.value }))} placeholder="e.g., Beat 2, Login" style={fieldStyle} />
-              </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Beat / Trigger</label>
+              <input value={form.beat} onChange={e => setForm(f => ({ ...f, beat: e.target.value }))} placeholder="e.g., Beat 2, Login" style={fieldStyle} />
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Description</label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Description</label>
               <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What the screen shows" style={fieldStyle} />
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Generation Prompt</label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Generation Prompt</label>
               <textarea value={form.prompt} onChange={e => setForm(f => ({ ...f, prompt: e.target.value }))} rows={3} placeholder="Describe the screen for AI generation..." style={{ ...fieldStyle, resize: 'vertical' }} />
             </div>
             <button type="submit" disabled={saving || !form.name.trim() || !form.prompt.trim()} style={{
-              padding: '10px 0', border: 'none', borderRadius: 8,
-              background: '#2C2C2C', color: '#fff', fontSize: 13, fontWeight: 600,
-              cursor: saving ? 'not-allowed' : 'pointer',
+              padding: '12px 0', border: 'none', borderRadius: 8,
+              background: '#2C2C2C', color: '#fff', fontSize: 14, fontWeight: 600,
+              cursor: saving ? 'not-allowed' : 'pointer', minHeight: 44,
             }}>{saving ? 'Creating...' : 'Create Screen'}</button>
           </div>
         </form>
