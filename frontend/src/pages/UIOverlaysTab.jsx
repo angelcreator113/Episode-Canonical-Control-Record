@@ -632,10 +632,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (activeScreen.asset_id) {
         await api.put(`/api/v1/ui-overlays/${showId}/category/${activeScreen.asset_id}`, { category });
       }
-      const typeField = category === 'phone_icon' ? 'icon' : 'screen';
-      setActiveScreen(prev => prev ? { ...prev, category, type: typeField } : prev);
-      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, category, type: typeField } : o));
       flash(category === 'phone_icon' ? 'Set as Icon' : 'Set as Screen');
+      // Reload to get fresh data from server
+      loadOverlays(false);
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -930,7 +929,8 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
               </div>
 
               {/* ── Type Toggle ── */}
-              {activeScreen.asset_id && (
+              {/* ── Type Toggle — only for custom types (built-in types can't switch) ── */}
+              {activeScreen.asset_id && activeScreen.custom && (
                 <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                   <button onClick={() => handleChangeScreenType('phone')} style={{
                     flex: 1, padding: '10px 0', fontSize: 13, fontWeight: 700, border: '1px solid #e0d9ce',
