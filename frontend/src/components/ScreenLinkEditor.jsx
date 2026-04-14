@@ -319,24 +319,33 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                     {/* Icon picker — choose from existing icon overlays or upload */}
                     <div>
                       {iconOverlays.length > 0 && (
-                        <div style={{ marginBottom: 6 }}>
+                        <div style={{ marginBottom: 8 }}>
                           <div style={{ fontSize: 11, fontWeight: 600, color: '#888', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>
-                            USE ICON OVERLAY
+                            USE ICON OVERLAY ({iconOverlays.length})
                           </div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <div style={{
+                            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))',
+                            gap: 6, maxHeight: 200, overflowY: 'auto', padding: 2,
+                            WebkitOverflowScrolling: 'touch',
+                          }}>
                             {iconOverlays.map(ico => (
                               <button
                                 key={ico.id}
                                 onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url }); }}
                                 title={ico.name}
                                 style={{
-                                  width: 44, height: 44, borderRadius: 8, border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
+                                  width: '100%', aspectRatio: '1/1', borderRadius: 8,
+                                  border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
                                   background: zone.icon_url === ico.url ? '#fdf8ee' : '#fff',
-                                  cursor: 'pointer', padding: 3, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  cursor: 'pointer', padding: 4,
+                                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
                                   transition: 'border-color 0.15s',
                                 }}
                               >
-                                <img src={ico.url} alt={ico.name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 4 }} draggable={false} />
+                                <img src={ico.url} alt={ico.name} style={{ width: '100%', flex: 1, objectFit: 'contain', borderRadius: 4 }} draggable={false} />
+                                <span style={{ fontSize: 7, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center', lineHeight: 1 }}>
+                                  {(ico.name || '').replace(/\s*Icon$/i, '')}
+                                </span>
                               </button>
                             ))}
                           </div>
