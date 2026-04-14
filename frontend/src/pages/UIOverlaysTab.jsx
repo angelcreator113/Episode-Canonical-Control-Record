@@ -4,15 +4,30 @@ import api from '../services/api';
 
 // ── Overlay Detail Modal ────────────────────────────────────────────────────
 
-function OverlayModal({ overlay, showId, onClose, onUpdate }) {
-  const [editPrompt, setEditPrompt] = useState(overlay.custom_prompt || overlay.prompt || '');
+function OverlayModal({ overlay: initialOverlay, showId, onClose, onUpdate }) {
+  const [overlay, setOverlay] = useState(initialOverlay);
+  const [editPrompt, setEditPrompt] = useState(initialOverlay.custom_prompt || initialOverlay.prompt || '');
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isRemovingBg, setIsRemovingBg] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const fileInputRef = useRef(null);
+
+  const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(null), 4000); };
+
+  // Refresh this overlay's data without closing the modal
+  const refreshOverlay = async () => {
+    try {
+      const res = await api.get(`/api/v1/ui-overlays/${showId}`);
+      const all = res.data?.data || [];
+      const updated = all.find(o => o.id === overlay.id);
+      if (updated) setOverlay(updated);
+      onUpdate(); // also refresh the parent list
+    } catch { /* silent */ }
+  };
 
   const handleDeleteCustom = async () => {
     if (!overlay.custom || !overlay.custom_id) return;
@@ -34,8 +49,8 @@ function OverlayModal({ overlay, showId, onClose, onUpdate }) {
     try {
       const body = prompt ? { prompt } : {};
       await api.post(`/api/v1/ui-overlays/${showId}/generate/${overlay.id}`, body);
-      onUpdate();
-      onClose();
+      showSuccess('Generated! Preview updated.');
+      await refreshOverlay();
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
@@ -48,8 +63,8 @@ function OverlayModal({ overlay, showId, onClose, onUpdate }) {
     setError(null);
     try {
       await api.post(`/api/v1/ui-overlays/${showId}/remove-bg/${overlay.asset_id}`);
-      onUpdate();
-      onClose();
+      showSuccess('Background removed!');
+      await refreshOverlay();
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
@@ -65,8 +80,8 @@ function OverlayModal({ overlay, showId, onClose, onUpdate }) {
       const formData = new FormData();
       formData.append('image', file);
       await api.post(`/api/v1/ui-overlays/${showId}/upload/${overlay.id}`, formData);
-      onUpdate();
-      onClose();
+      showSuccess('Image uploaded!');
+      await refreshOverlay();
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
@@ -106,6 +121,14 @@ function OverlayModal({ overlay, showId, onClose, onUpdate }) {
         }}>
           <X size={16} />
         </button>
+
+        {/* Success/Error banners */}
+        {successMsg && (
+          <div style={{ position: 'absolute', top: 12, left: 12, right: 52, zIndex: 3, background: '#e8f5e9', color: '#2e7d32', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>{successMsg}</div>
+        )}
+        {error && (
+          <div style={{ position: 'absolute', top: 12, left: 12, right: 52, zIndex: 3, background: '#ffebee', color: '#c62828', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>{error}</div>
+        )}
 
         {/* Preview */}
         <div style={{
