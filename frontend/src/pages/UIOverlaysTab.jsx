@@ -7,9 +7,10 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2 } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub, { SCREEN_TYPES } from '../components/PhoneHub';
+import ScreenLinkEditor from '../components/ScreenLinkEditor';
 
 export default function UIOverlaysTab({ showId: propShowId }) {
   const [showId, setShowId] = useState(propShowId || null);
@@ -23,6 +24,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [phoneSkin, setPhoneSkin] = useState('rosegold');
   const [customFrameUrl, setCustomFrameUrl] = useState(null);
+  const [editingLinks, setEditingLinks] = useState(false);
+  const [navHistory, setNavHistory] = useState([]);  // stack of screen keys for back navigation
   const fileInputRef = useRef(null);
   const frameInputRef = useRef(null);
   const pollRef = useRef(null);
@@ -254,6 +257,65 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
+  // ── Screen link navigation ──
+
+  const handleNavigate = (targetKey) => {
+    // Find the overlay matching the target screen key
+    const target = overlays.find(o => {
+      const id = (o.id || '').toLowerCase();
+      const name = (o.name || '').toLowerCase();
+      const key = targetKey.toLowerCase();
+      return id === key || name.includes(key) || (o.overlay_type || '').toLowerCase() === key;
+    });
+    if (target) {
+      // Push current screen to history for back navigation
+      if (activeScreen) {
+        setNavHistory(prev => [...prev, activeScreen.id || activeScreen.key]);
+      }
+      setActiveScreen(target);
+    }
+  };
+
+  const handleBack = () => {
+    if (navHistory.length === 0) return;
+    const prevKey = navHistory[navHistory.length - 1];
+    setNavHistory(prev => prev.slice(0, -1));
+    const prevScreen = overlays.find(o => o.id === prevKey || (o.name || '').toLowerCase().includes(prevKey));
+    if (prevScreen) setActiveScreen(prevScreen);
+  };
+
+  // ── Screen link editing ──
+
+  const handleSaveLinks = async (links) => {
+    if (!activeScreen?.asset_id || !showId) return;
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${activeScreen.asset_id}`, { screen_links: links });
+      // Update local state
+      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, screen_links: links, metadata: { ...(o.metadata || {}), screen_links: links } } : o));
+      setActiveScreen(prev => prev ? { ...prev, screen_links: links, metadata: { ...(prev.metadata || {}), screen_links: links } } : prev);
+      flash('Links saved!');
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
+  const handleUploadIcon = async (linkId, file) => {
+    if (!activeScreen?.asset_id || !showId) return;
+    try {
+      const fd = new FormData();
+      fd.append('icon', file);
+      fd.append('link_id', linkId);
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/screen-links/${activeScreen.asset_id}/icon`, fd);
+      const iconUrl = res.data?.icon_url;
+      if (iconUrl) {
+        // Update the link's icon_url locally
+        const currentLinks = activeScreen.screen_links || activeScreen.metadata?.screen_links || [];
+        const updated = currentLinks.map(l => l.id === linkId ? { ...l, icon_url: iconUrl } : l);
+        setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, screen_links: updated, metadata: { ...(o.metadata || {}), screen_links: updated } } : o));
+        setActiveScreen(prev => prev ? { ...prev, screen_links: updated, metadata: { ...(prev.metadata || {}), screen_links: updated } } : prev);
+        flash('Icon uploaded!');
+      }
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
   const generatedCount = overlays.filter(o => o.generated).length;
 
   return (
@@ -307,7 +369,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           <PhoneHub
             screens={overlays}
             activeScreen={activeScreen}
-            onSelectScreen={setActiveScreen}
+            onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); }}
+            onNavigate={handleNavigate}
+            navigationHistory={navHistory}
+            onBack={handleBack}
             skin={phoneSkin}
             onChangeSkin={handleChangeSkin}
             customFrameUrl={customFrameUrl}
@@ -348,6 +413,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                     <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#7ab3d4" />
                     {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
                     {activeScreen.asset_id && <ActionBtn icon={Eraser} label="Remove BG" onClick={handleRemoveBg} color="#a889c8" />}
+                    {activeScreen.url && <ActionBtn icon={Link2} label={editingLinks ? 'Done Editing' : 'Edit Links'} onClick={() => setEditingLinks(!editingLinks)} color={editingLinks ? '#2C2C2C' : '#b89060'} />}
                     <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
                   </>
                 ) : (
@@ -357,6 +423,22 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   </>
                 )}
               </div>
+
+              {/* Screen Link Editor */}
+              {editingLinks && activeScreen?.url && (
+                <div style={{ marginTop: 12, padding: '12px 0', borderTop: '1px solid #f0ece4' }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#b89060', fontFamily: "'DM Mono', monospace", marginBottom: 8 }}>
+                    SCREEN LINKS — Draw tap zones on the screen, assign targets, upload icon images
+                  </div>
+                  <ScreenLinkEditor
+                    screenUrl={activeScreen.url}
+                    links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
+                    screenTypes={SCREEN_TYPES}
+                    onSave={handleSaveLinks}
+                    onUploadIcon={handleUploadIcon}
+                  />
+                </div>
+              )}
 
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
             </div>

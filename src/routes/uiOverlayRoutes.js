@@ -345,57 +345,6 @@ router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image')
   }
 });
 
-// ── PHONE FRAME (custom device frame image) ────────────────────────────────
-
-// POST /api/v1/ui-overlays/:showId/frame — upload a custom phone frame image
-router.post('/:showId/frame', optionalAuth, upload.single('frame'), async (req, res) => {
-  try {
-    const models = require('../models');
-    const { uploadOverlayToS3 } = require('../services/uiOverlayService');
-    const showId = req.params.showId;
-
-    if (!req.file) return res.status(400).json({ success: false, error: 'No frame file uploaded' });
-
-    // Upload to S3
-    const url = await uploadOverlayToS3(req.file.buffer, 'phone-frame', showId, req.file.mimetype);
-
-    // Save frame URL in PageContent for persistence
-    await models.sequelize.query(
-      `INSERT INTO page_contents (id, show_id, page_key, content, created_at, updated_at)
-       VALUES (gen_random_uuid(), :showId, 'phone_hub_frame', CAST(:content AS jsonb), NOW(), NOW())
-       ON CONFLICT (show_id, page_key) WHERE deleted_at IS NULL
-       DO UPDATE SET content = CAST(:content AS jsonb), updated_at = NOW()`,
-      { replacements: { showId, content: JSON.stringify({ frame_url: url }) } }
-    );
-
-    return res.json({ success: true, frame_url: url });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// GET /api/v1/ui-overlays/:showId/frame — get saved phone frame URL
-router.get('/:showId/frame', optionalAuth, async (req, res) => {
-  try {
-    const models = require('../models');
-    const [rows] = await models.sequelize.query(
-      `SELECT content::text as content_text FROM page_contents
-       WHERE show_id = :showId AND page_key = 'phone_hub_frame' AND deleted_at IS NULL
-       LIMIT 1`,
-      { replacements: { showId: req.params.showId } }
-    );
-
-    if (!rows?.length) return res.json({ success: true, frame_url: null });
-
-    let content = {};
-    try { content = JSON.parse(rows[0].content_text || '{}'); } catch { /* skip */ }
-
-    return res.json({ success: true, frame_url: content.frame_url || null });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 // ── SCREEN LINKS (tap zones with icon overlays) ───────────────────────────
 
 // PUT /api/v1/ui-overlays/:showId/screen-links/:assetId — save screen links for an overlay
