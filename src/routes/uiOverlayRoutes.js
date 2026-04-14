@@ -52,20 +52,29 @@ router.get('/:showId', optionalAuth, async (req, res) => {
     }
 
     // Map all overlay types to show which are generated vs missing
-    // Use case-insensitive matching and check name patterns to handle
-    // assets stored with different naming conventions
+    // Use case-insensitive matching to find assets for each overlay type.
+    // STRICT: icon types only match icon assets, screen types only match screen assets.
     const status = allTypes.map(ot => {
       const otId = ot.id.toLowerCase();
       const otName = ot.name.toLowerCase();
       const lifecycle = ot.lifecycle || 'permanent';
+      const isIconType = ot.category === 'phone_icon' || ot.category === 'icon' || otId.startsWith('icon_');
 
       // Find ALL matching assets (variants)
       const allMatches = existing.filter(e => {
         const eType = (e.overlay_type || '').toLowerCase();
         const eName = (e.name || '').toLowerCase();
+        const eCategory = (e.metadata?.overlay_category || '').toLowerCase();
+        const eIsIcon = eCategory === 'phone_icon' || eCategory === 'icon' || eType.startsWith('icon_');
+
+        // Don't cross-match: icons only match icons, screens only match screens
+        if (isIconType !== eIsIcon) {
+          // Exception: exact type match always wins regardless of category
+          if (eType !== otId) return false;
+        }
+
         return eType === otId
           || eName === `ui overlay: ${otName}`
-          || eName.includes(otId.replace(/_/g, ' '))
           || (otId === 'wardrobe_list' && eType === 'todo_checklist');
       });
 
