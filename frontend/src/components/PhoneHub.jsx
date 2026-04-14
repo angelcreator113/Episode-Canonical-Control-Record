@@ -208,32 +208,41 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         <div className="phone-hub-frame" style={{
           background: currentSkin.body,
           borderRadius: 44,
-          padding: '18px 14px 22px',
-          boxShadow: `0 8px 32px ${currentSkin.shadow}, inset 0 1px 0 ${currentSkin.accent}`,
+          padding: '16px 12px 20px',
+          boxShadow: `0 8px 32px ${currentSkin.shadow}, inset 0 1px 0 ${currentSkin.accent}, 0 0 0 2px rgba(0,0,0,0.3)`,
           position: 'relative',
-          border: `3px solid rgba(0,0,0,0.15)`,
+          border: '2px solid rgba(0,0,0,0.5)',
         }}>
         {/* Side buttons — volume + power */}
-        <div style={{ position: 'absolute', left: -3, top: '18%', width: 3, height: 28, background: currentSkin.btn, borderRadius: '3px 0 0 3px' }} />
-        <div style={{ position: 'absolute', left: -3, top: '26%', width: 3, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px' }} />
-        <div style={{ position: 'absolute', left: -3, top: '34%', width: 3, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px' }} />
-        <div style={{ position: 'absolute', right: -3, top: '24%', width: 3, height: 64, background: currentSkin.btn, borderRadius: '0 3px 3px 0' }} />
+        <div style={{ position: 'absolute', left: -5, top: '18%', width: 4, height: 28, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
+        <div style={{ position: 'absolute', left: -5, top: '26%', width: 4, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
+        <div style={{ position: 'absolute', left: -5, top: '34%', width: 4, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
+        <div style={{ position: 'absolute', right: -5, top: '24%', width: 4, height: 64, background: currentSkin.btn, borderRadius: '0 3px 3px 0', border: '1px solid rgba(0,0,0,0.3)', borderLeft: 'none' }} />
 
-        {/* Screen area with inner border */}
+        {/* Screen area — hard dark border ensures visibility against any content */}
         <div style={{
           width: '100%', aspectRatio: '9/19.5',
-          borderRadius: 28, overflow: 'hidden',
+          borderRadius: 24, overflow: 'hidden',
           background: activeScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
           position: 'relative',
-          boxShadow: 'inset 0 0 0 2px rgba(0,0,0,0.2)',
+          border: '2.5px solid #111',
+          boxShadow: 'inset 0 0 6px rgba(0,0,0,0.4)',
         }}>
           {/* Dynamic Island */}
           <div style={{
-            position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
-            width: 84, height: 22, borderRadius: 14,
+            position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
+            width: 90, height: 24, borderRadius: 14,
             background: '#000', zIndex: 5,
-            boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
-          }} />
+            border: '1.5px solid #333',
+          }}>
+            {/* Camera dot */}
+            <div style={{
+              position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+              width: 8, height: 8, borderRadius: '50%',
+              background: '#1a1a2e',
+              border: '1px solid #333',
+            }} />
+          </div>
 
           {activeScreen?.url ? (
             <>
@@ -286,7 +295,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           <div style={{
             position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)',
             width: 100, height: 4, borderRadius: 2,
-            background: 'rgba(255,255,255,0.4)', zIndex: 5,
+            background: 'rgba(0,0,0,0.35)', zIndex: 5,
+            boxShadow: '0 0 4px rgba(0,0,0,0.2)',
           }} />
         </div>
       </div>
