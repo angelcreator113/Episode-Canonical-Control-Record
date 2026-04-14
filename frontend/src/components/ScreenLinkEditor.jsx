@@ -10,7 +10,7 @@
  *   readOnly        — if true, hide editing controls (used in preview mode)
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin } from 'lucide-react';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
@@ -257,6 +257,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: selectedZone === zone.id ? 8 : 0 }}>
                   <div style={{ width: 10, height: 10, borderRadius: 3, background: ZONE_COLORS[i % ZONE_COLORS.length], flexShrink: 0 }} />
+                  {zone.persistent && <Pin size={11} color="#B8962E" style={{ flexShrink: 0 }} />}
                   {zone.icon_url && <img src={zone.icon_url} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain' }} />}
                   <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{zone.label || zone.target || 'Untitled'}</span>
                   <span style={{ fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
@@ -314,6 +315,21 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                         {Math.round(zone.x)}%, {Math.round(zone.y)}%
                       </span>
                     </div>
+                    {/* Persistent toggle — pin icon to show on all screens */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { persistent: !zone.persistent }); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '8px 12px', fontSize: 12, fontWeight: 600,
+                        border: `1px solid ${zone.persistent ? '#B8962E' : '#e0d9ce'}`,
+                        borderRadius: 6, cursor: 'pointer', minHeight: 36,
+                        background: zone.persistent ? '#fdf8ee' : '#fff',
+                        color: zone.persistent ? '#B8962E' : '#888',
+                        width: '100%',
+                      }}
+                    >
+                      <Pin size={12} /> {zone.persistent ? 'Pinned — shows on all screens' : 'Pin to all screens'}
+                    </button>
                   </div>
                 )}
               </div>

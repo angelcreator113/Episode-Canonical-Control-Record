@@ -226,12 +226,20 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }).catch(() => {});
   }, [propShowId]);
 
-  // Load overlays
+  // Load overlays — auto-select home screen as default
   const loadOverlays = useCallback((showLoader) => {
     if (!showId) return;
     if (showLoader) setLoading(true);
     api.get(`/api/v1/ui-overlays/${showId}`)
-      .then(r => setOverlays(r.data?.data || []))
+      .then(r => {
+        const data = r.data?.data || [];
+        setOverlays(data);
+        // Auto-select home screen on first load if nothing is selected
+        if (!activeScreen) {
+          const home = data.find(o => o.id === 'home' && o.generated && o.url);
+          if (home) setActiveScreen(home);
+        }
+      })
       .catch(() => setOverlays([]))
       .finally(() => setLoading(false));
   }, [showId]);
