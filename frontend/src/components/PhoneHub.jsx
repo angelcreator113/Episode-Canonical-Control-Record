@@ -16,35 +16,47 @@
  */
 import React from 'react';
 
+// type: 'screen' = full phone screen frame, 'icon' = app icon for home screen link editor
 const SCREEN_TYPES = [
-  // ── Core ──
-  { key: 'home', label: 'Home', icon: '📱', desc: 'App icons & notifications' },
-  { key: 'feed', label: 'Feed', icon: '📰', desc: 'Scrolling posts' },
-  { key: 'messages', label: 'Messages', icon: '✉️', desc: 'Text conversations' },
-  { key: 'dm', label: 'DMs', icon: '💬', desc: 'Private messages' },
-  { key: 'story', label: 'Stories', icon: '⭕', desc: 'Watching stories' },
-  { key: 'profile', label: 'Profile', icon: '👤', desc: 'Viewing someone' },
-  // ── Communication ──
-  { key: 'calls', label: 'Calls', icon: '📞', desc: 'Call history & FaceTime' },
-  { key: 'contacts', label: 'Contacts', icon: '👥', desc: 'Contact list' },
-  { key: 'comments', label: 'Comments', icon: '💭', desc: 'Post reactions' },
-  { key: 'live', label: 'Live', icon: '🔴', desc: 'Going live' },
-  { key: 'notif', label: 'Alerts', icon: '🔔', desc: 'Notification center' },
-  // ── Business ──
-  { key: 'brand_deals', label: 'Brand Deals', icon: '🤝', desc: 'Sponsorship offers' },
-  { key: 'stats', label: 'Stats', icon: '📊', desc: 'Analytics & metrics' },
-  { key: 'creator_hub', label: 'Creator Hub', icon: '🎨', desc: 'Content management' },
-  { key: 'deadlines', label: 'Deadlines', icon: '⏰', desc: 'Upcoming due dates' },
-  { key: 'tasks', label: 'Tasks', icon: '✅', desc: 'To-do & reminders' },
-  // ── Lifestyle ──
-  { key: 'wardrobe', label: 'Closet', icon: '👗', desc: 'Outfit selection' },
-  { key: 'accessories', label: 'Accessories', icon: '💎', desc: 'Jewelry & extras' },
-  { key: 'shop', label: 'Shopping', icon: '🛍️', desc: 'Browsing items' },
-  { key: 'camera', label: 'Camera', icon: '📸', desc: 'Taking content' },
-  // ── World ──
-  { key: 'map', label: 'Map', icon: '🗺️', desc: 'DREAM map' },
-  { key: 'invite', label: 'Invitation', icon: '💌', desc: 'Event invitations' },
-  { key: 'settings', label: 'Settings', icon: '⚙️', desc: 'Phone settings' },
+  // ── Screens (full phone views — upload designed screen images) ──
+  { key: 'home', label: 'Home', icon: '📱', desc: 'App icons & notifications', type: 'screen' },
+  { key: 'feed', label: 'Feed', icon: '📰', desc: 'Scrolling posts', type: 'screen' },
+  { key: 'messages', label: 'Messages', icon: '✉️', desc: 'Text conversations', type: 'screen' },
+  { key: 'dm', label: 'DMs', icon: '💬', desc: 'Private messages', type: 'screen' },
+  { key: 'story', label: 'Stories', icon: '⭕', desc: 'Watching stories', type: 'screen' },
+  { key: 'profile', label: 'Profile', icon: '👤', desc: 'Viewing someone', type: 'screen' },
+  { key: 'calls', label: 'Calls', icon: '📞', desc: 'Call history & FaceTime', type: 'screen' },
+  { key: 'contacts', label: 'Contacts', icon: '👥', desc: 'Contact list', type: 'screen' },
+  { key: 'comments', label: 'Comments', icon: '💭', desc: 'Post reactions', type: 'screen' },
+  { key: 'live', label: 'Live', icon: '🔴', desc: 'Going live', type: 'screen' },
+  { key: 'notif', label: 'Alerts', icon: '🔔', desc: 'Notification center', type: 'screen' },
+  { key: 'brand_deals', label: 'Brand Deals', icon: '🤝', desc: 'Sponsorship offers', type: 'screen' },
+  { key: 'stats', label: 'Stats', icon: '📊', desc: 'Analytics & metrics', type: 'screen' },
+  { key: 'creator_hub', label: 'Creator Hub', icon: '🎨', desc: 'Content management', type: 'screen' },
+  { key: 'deadlines', label: 'Deadlines', icon: '⏰', desc: 'Upcoming due dates', type: 'screen' },
+  { key: 'tasks', label: 'Tasks', icon: '✅', desc: 'To-do & reminders', type: 'screen' },
+  { key: 'wardrobe', label: 'Closet', icon: '👗', desc: 'Outfit selection', type: 'screen' },
+  { key: 'accessories', label: 'Accessories', icon: '💎', desc: 'Jewelry & extras', type: 'screen' },
+  { key: 'shop', label: 'Shopping', icon: '🛍️', desc: 'Browsing items', type: 'screen' },
+  { key: 'camera', label: 'Camera', icon: '📸', desc: 'Taking content', type: 'screen' },
+  { key: 'map', label: 'Map', icon: '🗺️', desc: 'DREAM map', type: 'screen' },
+  { key: 'invite', label: 'Invitation', icon: '💌', desc: 'Event invitations', type: 'screen' },
+  { key: 'settings', label: 'Settings', icon: '⚙️', desc: 'Phone settings', type: 'screen' },
+  // ── App Icons (small icons placed on the home screen via link editor) ──
+  { key: 'icon_feed', label: 'Feed Icon', icon: '📰', desc: 'App icon for Feed', type: 'icon' },
+  { key: 'icon_messages', label: 'Messages Icon', icon: '✉️', desc: 'App icon for Messages', type: 'icon' },
+  { key: 'icon_dm', label: 'DMs Icon', icon: '💬', desc: 'App icon for DMs', type: 'icon' },
+  { key: 'icon_camera', label: 'Camera Icon', icon: '📸', desc: 'App icon for Camera', type: 'icon' },
+  { key: 'icon_closet', label: 'Closet Icon', icon: '👗', desc: 'App icon for Closet', type: 'icon' },
+  { key: 'icon_shop', label: 'Shop Icon', icon: '🛍️', desc: 'App icon for Shopping', type: 'icon' },
+  { key: 'icon_stats', label: 'Stats Icon', icon: '📊', desc: 'App icon for Stats', type: 'icon' },
+  { key: 'icon_settings', label: 'Settings Icon', icon: '⚙️', desc: 'App icon for Settings', type: 'icon' },
+  { key: 'icon_brand_deals', label: 'Deals Icon', icon: '🤝', desc: 'App icon for Brand Deals', type: 'icon' },
+  { key: 'icon_creator_hub', label: 'Hub Icon', icon: '🎨', desc: 'App icon for Creator Hub', type: 'icon' },
+  { key: 'icon_calls', label: 'Calls Icon', icon: '📞', desc: 'App icon for Calls', type: 'icon' },
+  { key: 'icon_contacts', label: 'Contacts Icon', icon: '👥', desc: 'App icon for Contacts', type: 'icon' },
+  { key: 'icon_tasks', label: 'Tasks Icon', icon: '✅', desc: 'App icon for Tasks', type: 'icon' },
+  { key: 'icon_accessories', label: 'Accessories Icon', icon: '💎', desc: 'App icon for Accessories', type: 'icon' },
 ];
 
 const PHONE_SKINS = [
@@ -60,8 +72,10 @@ const PHONE_SKINS = [
 export { SCREEN_TYPES, PHONE_SKINS, getScreenImageStyle };
 
 // Build image style from screen's fit settings (metadata.image_fit)
-function getScreenImageStyle(screen) {
-  const fit = screen?.image_fit || screen?.metadata?.image_fit || {};
+// globalFit is the device-level default applied when screen has no per-screen override
+function getScreenImageStyle(screen, globalFit) {
+  const screenFit = screen?.image_fit || screen?.metadata?.image_fit;
+  const fit = screenFit || globalFit || {};
   const mode = fit.mode || 'cover'; // cover | contain | fill
   const scale = fit.scale || 100;   // percentage, 100 = normal
   const offsetX = fit.offsetX || 0; // percentage offset
@@ -121,7 +135,7 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
   );
 }
 
-export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl }) {
+export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
 
   // Match screens to screen types
@@ -148,7 +162,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           }}>
             {activeScreen?.url ? (
               <>
-                <img src={activeScreen.url} alt={activeScreen.name} style={getScreenImageStyle(activeScreen)} />
+                <img src={activeScreen.url} alt={activeScreen.name} style={getScreenImageStyle(activeScreen, globalFit)} />
                 <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
               </>
             ) : (
@@ -194,7 +208,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
               <img
                 src={activeScreen.url}
                 alt={activeScreen.name}
-                style={getScreenImageStyle(activeScreen)}
+                style={getScreenImageStyle(activeScreen, globalFit)}
               />
               <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
             </>
@@ -267,64 +281,86 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
 
       {/* Screen Slots Grid */}
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 8 }}>
-          PHONE SCREENS
+        {/* Screens Section */}
+        <div style={{ fontSize: 10, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ background: '#B8962E', color: '#fff', padding: '1px 6px', borderRadius: 3, fontSize: 8 }}>SCREENS</span>
+          Full phone views
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6 }}>
-          {SCREEN_TYPES.map(type => {
-            const screen = getScreenForType(type);
-            const isActive = activeScreen?.id === screen?.id && screen;
-            const hasImage = screen?.generated && screen?.url;
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6, marginBottom: 16 }}>
+          {SCREEN_TYPES.filter(t => t.type === 'screen').map(type => (
+            <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} />
+          ))}
+        </div>
 
-            return (
-              <div
-                key={type.key}
-                onClick={() => screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true })}
-                style={{
-                  background: isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
-                  border: `1px solid ${isActive ? '#B8962E' : hasImage ? '#e8e0d0' : '#f0ece4'}`,
-                  borderRadius: 10, padding: 8,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-              >
-                {/* Thumbnail preview */}
-                {hasImage && (
-                  <div style={{
-                    width: '100%', aspectRatio: '9/16',
-                    borderRadius: 6, overflow: 'hidden',
-                    marginBottom: 6, background: '#f0f0f0',
-                  }}>
-                    <img src={screen.url} alt={type.label}
-                      style={getScreenImageStyle(screen)} />
-                  </div>
-                )}
+        {/* Icons Section */}
+        {(gridFilter === 'all' || gridFilter === 'icon') && (
+          <>
+            <div style={{ fontSize: 10, fontWeight: 600, color: '#a889c8', fontFamily: "'DM Mono', monospace", marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ background: '#a889c8', color: '#fff', padding: '1px 6px', borderRadius: 3, fontSize: 8 }}>ICONS</span>
+              App icons for home screen links
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 6 }}>
+              {SCREEN_TYPES.filter(t => t.type === 'icon').map(type => (
+                <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} isIcon />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 16 }}>{type.icon}</span>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C' }}>
-                      {type.label}
-                    </div>
-                    <div style={{ fontSize: 8, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace" }}>
-                      {type.desc}
-                    </div>
-                  </div>
-                </div>
+function ScreenCard({ type, screen, activeScreen, onSelectScreen, globalFit, isIcon }) {
+  const isActive = activeScreen?.id === screen?.id && screen;
+  const hasImage = screen?.generated && screen?.url;
+  const accentColor = isIcon ? '#a889c8' : '#B8962E';
 
-                {/* Status dot */}
-                <div style={{
-                  position: 'absolute', top: 6, right: 6,
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: hasImage ? '#16a34a' : screen ? '#eab308' : '#e0e0e0',
-                }} />
-              </div>
-            );
-          })}
+  return (
+    <div
+      onClick={() => screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true })}
+      style={{
+        background: isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
+        border: `1px solid ${isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
+        borderRadius: isIcon ? 8 : 10, padding: isIcon ? 6 : 8,
+        cursor: 'pointer',
+        transition: 'all 0.15s',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Thumbnail preview */}
+      {hasImage && (
+        <div style={{
+          width: '100%', aspectRatio: isIcon ? '1/1' : '9/16',
+          borderRadius: 6, overflow: 'hidden',
+          marginBottom: 4, background: '#f0f0f0',
+        }}>
+          <img src={screen.url} alt={type.label}
+            style={isIcon ? { width: '100%', height: '100%', objectFit: 'contain' } : getScreenImageStyle(screen, globalFit)} />
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: isIcon ? 4 : 6 }}>
+        <span style={{ fontSize: isIcon ? 12 : 16 }}>{type.icon}</span>
+        <div>
+          <div style={{ fontSize: isIcon ? 9 : 11, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C' }}>
+            {type.label}
+          </div>
+          {!isIcon && (
+            <div style={{ fontSize: 8, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace" }}>
+              {type.desc}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Status dot */}
+      <div style={{
+        position: 'absolute', top: isIcon ? 4 : 6, right: isIcon ? 4 : 6,
+        width: 6, height: 6, borderRadius: '50%',
+        background: hasImage ? '#16a34a' : screen ? '#eab308' : '#e0e0e0',
+      }} />
     </div>
   );
 }
