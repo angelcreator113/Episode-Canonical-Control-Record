@@ -139,6 +139,46 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
   );
 }
 
+// Renders persistent icons (from home screen) that stay visible on all screens
+function PersistentOverlay({ links = [], onNavigate }) {
+  if (!links.length || !onNavigate) return null;
+  return (
+    <>
+      {links.map(link => (
+        <div
+          key={link.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (link.target) onNavigate(link.target);
+          }}
+          title={link.label || link.target}
+          style={{
+            position: 'absolute',
+            left: `${link.x}%`, top: `${link.y}%`,
+            width: `${link.w}%`, height: `${link.h}%`,
+            cursor: link.target ? 'pointer' : 'default',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 6,
+            zIndex: 4,
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(184,150,46,0.15)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          {link.icon_url && (
+            <img
+              src={link.icon_url}
+              alt={link.label || link.target}
+              style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }}
+              draggable={false}
+            />
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
 export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
   const [frameLoaded, setFrameLoaded] = useState(false);
@@ -150,6 +190,14 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   // Don't show icons in the phone device — only screens
   const isIconType = activeScreen?.type === 'icon' || activeScreen?.category === 'phone_icon';
   const phoneScreen = isIconType ? null : activeScreen;
+
+  // Find persistent icons from the home screen that should show on ALL screens
+  const homeScreen = screens.find(s => s.id === 'home' && s.generated && s.url);
+  const persistentLinks = React.useMemo(() => {
+    if (!homeScreen) return [];
+    const links = homeScreen.screen_links || homeScreen.metadata?.screen_links || [];
+    return links.filter(l => l.persistent && l.icon_url);
+  }, [homeScreen]);
 
   // Match screens to screen types
   const getScreenForType = (type) => {
@@ -194,6 +242,9 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                   interactive={false}
                 />
                 <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+                {activeScreen.id !== 'home' && persistentLinks.length > 0 && (
+                  <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
+                )}
               </>
             ) : (
               <div style={{ width: '100%', height: '100%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>
@@ -275,6 +326,10 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 interactive={false}
               />
               <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+              {/* Persistent icons from home screen — show on non-home screens */}
+              {activeScreen.id !== 'home' && persistentLinks.length > 0 && (
+                <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
+              )}
             </>
           ) : (
             <div style={{
