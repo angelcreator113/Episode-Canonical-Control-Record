@@ -235,7 +235,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         <div style={{
           width: '100%', aspectRatio: '9/19.5',
           borderRadius: 24, overflow: 'hidden',
-          background: phoneScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
+          background: activeScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
           position: 'relative',
           border: '2.5px solid #111',
           boxShadow: 'inset 0 0 6px rgba(0,0,0,0.4)',
