@@ -14,7 +14,7 @@
  *   onBack()                — callback for back button (pops navigation history)
  *   deviceFrame   — optional custom device frame image URL
  */
-import React from 'react';
+import React, { useState } from 'react';
 
 // type: 'screen' = full phone screen frame, 'icon' = app icon for home screen link editor
 const SCREEN_TYPES = [
@@ -57,6 +57,7 @@ const SCREEN_TYPES = [
   { key: 'icon_contacts', label: 'Contacts Icon', icon: '👥', desc: 'App icon for Contacts', type: 'icon' },
   { key: 'icon_tasks', label: 'Tasks Icon', icon: '✅', desc: 'App icon for Tasks', type: 'icon' },
   { key: 'icon_accessories', label: 'Accessories Icon', icon: '💎', desc: 'App icon for Accessories', type: 'icon' },
+  { key: 'icon_phone', label: 'Phone Icon', icon: '📱', desc: 'App icon for Phone', type: 'icon' },
 ];
 
 const PHONE_SKINS = [
@@ -137,8 +138,13 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
   );
 }
 
-export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
+export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
+  const [frameLoaded, setFrameLoaded] = useState(false);
+  const [frameError, setFrameError] = useState(false);
+
+  // Only use custom frame if we have a URL AND it hasn't errored
+  const useCustomFrame = customFrameUrl && !frameError;
 
   // Don't show icons in the phone device — only screens
   const isIconType = activeScreen?.type === 'icon' || activeScreen?.category === 'phone_icon';
@@ -170,7 +176,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
     <div className="phone-hub-inner">
       {/* Phone Device */}
       <div className="phone-hub-device">
-      {customFrameUrl ? (
+      {useCustomFrame ? (
         /* Custom uploaded phone frame */
         <div className="phone-hub-frame">
           {/* Screen content — rendered first, sits behind the frame */}
@@ -198,42 +204,57 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             )}
           </div>
           {/* Frame image — on top so it visually wraps the screen content */}
-          <img src={customFrameUrl} alt="Phone frame" style={{
-            width: '100%', borderRadius: 24, display: 'block',
-            position: 'relative', zIndex: 2, pointerEvents: 'none',
-          }} />
+          <img
+            src={customFrameUrl}
+            alt="Phone frame"
+            onLoad={() => setFrameLoaded(true)}
+            onError={() => { setFrameError(true); setFrameLoaded(false); }}
+            style={{
+              width: '100%', borderRadius: 24, display: 'block',
+              position: 'relative', zIndex: 2, pointerEvents: 'none',
+            }}
+          />
         </div>
       ) : (
         /* Built-in iPhone-style phone frame with skin */
         <div className="phone-hub-frame" style={{
           background: currentSkin.body,
           borderRadius: 44,
-          padding: '18px 14px 22px',
-          boxShadow: `0 8px 32px ${currentSkin.shadow}, inset 0 1px 0 ${currentSkin.accent}`,
+          padding: '16px 12px 20px',
+          boxShadow: `0 8px 32px ${currentSkin.shadow}, inset 0 1px 0 ${currentSkin.accent}, 0 0 0 2px rgba(0,0,0,0.3)`,
           position: 'relative',
-          border: `3px solid rgba(0,0,0,0.15)`,
+          border: '2px solid rgba(0,0,0,0.5)',
         }}>
         {/* Side buttons — volume + power */}
-        <div style={{ position: 'absolute', left: -3, top: '18%', width: 3, height: 28, background: currentSkin.btn, borderRadius: '3px 0 0 3px' }} />
-        <div style={{ position: 'absolute', left: -3, top: '26%', width: 3, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px' }} />
-        <div style={{ position: 'absolute', left: -3, top: '34%', width: 3, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px' }} />
-        <div style={{ position: 'absolute', right: -3, top: '24%', width: 3, height: 64, background: currentSkin.btn, borderRadius: '0 3px 3px 0' }} />
+        <div style={{ position: 'absolute', left: -5, top: '18%', width: 4, height: 28, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
+        <div style={{ position: 'absolute', left: -5, top: '26%', width: 4, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
+        <div style={{ position: 'absolute', left: -5, top: '34%', width: 4, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
+        <div style={{ position: 'absolute', right: -5, top: '24%', width: 4, height: 64, background: currentSkin.btn, borderRadius: '0 3px 3px 0', border: '1px solid rgba(0,0,0,0.3)', borderLeft: 'none' }} />
 
-        {/* Screen area with inner border */}
+        {/* Screen area — hard dark border ensures visibility against any content */}
         <div style={{
           width: '100%', aspectRatio: '9/19.5',
-          borderRadius: 28, overflow: 'hidden',
+          borderRadius: 24, overflow: 'hidden',
           background: activeScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
           position: 'relative',
-          boxShadow: 'inset 0 0 0 2px rgba(0,0,0,0.2)',
+          border: '2.5px solid #111',
+          boxShadow: 'inset 0 0 6px rgba(0,0,0,0.4)',
         }}>
           {/* Dynamic Island */}
           <div style={{
-            position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
-            width: 84, height: 22, borderRadius: 14,
+            position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
+            width: 90, height: 24, borderRadius: 14,
             background: '#000', zIndex: 5,
-            boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
-          }} />
+            border: '1.5px solid #333',
+          }}>
+            {/* Camera dot */}
+            <div style={{
+              position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+              width: 8, height: 8, borderRadius: '50%',
+              background: '#1a1a2e',
+              border: '1px solid #333',
+            }} />
+          </div>
 
           {activeScreen?.url ? (
             <>
@@ -286,14 +307,15 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           <div style={{
             position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)',
             width: 100, height: 4, borderRadius: 2,
-            background: 'rgba(255,255,255,0.4)', zIndex: 5,
+            background: 'rgba(0,0,0,0.35)', zIndex: 5,
+            boxShadow: '0 0 4px rgba(0,0,0,0.2)',
           }} />
         </div>
       </div>
       )}
 
-      {/* Skin picker */}
-      {onChangeSkin && (
+      {/* Skin picker — only shown for built-in frame (skins don't apply to custom frames) */}
+      {onChangeSkin && !useCustomFrame && (
         <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
           {PHONE_SKINS.map(s => (
             <button
@@ -316,16 +338,24 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       {/* Screen Slots Grid */}
       <div className="phone-hub-grid-section">
         {/* Screens Section */}
-        <div style={{ fontSize: 11, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ background: '#B8962E', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 9 }}>SCREENS</span>
-          Full phone views
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ background: '#B8962E', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 9 }}>SCREENS</span>
+            Full phone views
+          </div>
+          {hiddenScreens.length > 0 && onToggleShowHidden && (
+            <button onClick={onToggleShowHidden} style={{
+              fontSize: 9, color: '#999', background: 'none', border: '1px solid #eee',
+              borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontFamily: "'DM Mono', monospace",
+            }}>{showHidden ? 'Hide removed' : `Show removed (${hiddenScreens.length})`}</button>
+          )}
         </div>
         <div className="phone-hub-screen-grid">
-          {SCREEN_TYPES.filter(t => t.type === 'screen').map(type => (
-            <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} />
+          {SCREEN_TYPES.filter(t => t.type === 'screen').filter(t => showHidden || !hiddenScreens.includes(t.key)).map(type => (
+            <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(type.key)} globalFit={globalFit} />
           ))}
           {customScreens.map(s => (
-            <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📄', desc: s.description || 'Custom screen' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} />
+            <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📄', desc: s.description || 'Custom screen' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} />
           ))}
         </div>
 
@@ -337,11 +367,11 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
               App icons for home screen links
             </div>
             <div className="phone-hub-icon-grid">
-              {SCREEN_TYPES.filter(t => t.type === 'icon').map(type => (
-                <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} isIcon />
+              {SCREEN_TYPES.filter(t => t.type === 'icon').filter(t => showHidden || !hiddenScreens.includes(t.key)).map(type => (
+                <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(type.key)} globalFit={globalFit} isIcon />
               ))}
               {customIcons.map(s => (
-                <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || 'Custom icon' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} isIcon />
+                <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || 'Custom icon' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} isIcon />
               ))}
             </div>
           </>
@@ -350,7 +380,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
 
       <style>{`
         .phone-hub-inner { display: flex; gap: 24px; align-items: flex-start; }
-        .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; }
+        .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; position: sticky; top: 20px; align-self: flex-start; }
         .phone-hub-frame { width: 280px; position: relative; }
         .phone-hub-grid-section { flex: 1; min-width: 0; }
         .phone-hub-screen-grid {
@@ -367,7 +397,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         }
         @media (max-width: 768px) {
           .phone-hub-inner { flex-direction: column; align-items: stretch; }
-          .phone-hub-device { align-items: center; }
+          .phone-hub-device { align-items: center; position: static; }
           .phone-hub-frame { width: 240px; }
           .phone-hub-screen-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
           .phone-hub-icon-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; }
@@ -383,30 +413,79 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); }
           .phone-hub-icon-grid { grid-template-columns: repeat(2, 1fr); }
         }
+        .screen-card:hover .screen-card-delete { opacity: 1 !important; }
+        @media (hover: none) {
+          .screen-card-delete { opacity: 0.7 !important; }
+        }
       `}</style>
     </div>
   );
 }
 
-function ScreenCard({ type, screen, activeScreen, onSelectScreen, globalFit, isIcon }) {
+function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';
 
   return (
     <div
-      onClick={() => screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true })}
+      onClick={() => {
+        if (isHidden && onHide) { onHide(type.key); return; } // click to restore
+        screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
+      }}
+      className="screen-card"
       style={{
-        background: isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
-        border: `1px solid ${isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
+        background: isHidden ? '#f5f3f0' : isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
+        border: `1px solid ${isHidden ? '#e8e0d0' : isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
         borderRadius: isIcon ? 10 : 12, padding: isIcon ? 8 : 10,
         cursor: 'pointer',
         transition: 'all 0.15s',
         position: 'relative',
         overflow: 'hidden',
         minHeight: isIcon ? 44 : 'auto',
+        opacity: isHidden ? 0.45 : 1,
       }}
     >
+      {/* Quick delete — visible on hover (for cards with images) */}
+      {hasImage && onDelete && !isHidden && (
+        <button
+          className="screen-card-delete"
+          onClick={(e) => { e.stopPropagation(); onDelete(screen); }}
+          title="Delete image"
+          style={{
+            position: 'absolute', top: 4, right: 4, zIndex: 3,
+            width: 22, height: 22, borderRadius: '50%',
+            background: 'rgba(220,38,38,0.85)', border: 'none',
+            color: '#fff', fontSize: 11, fontWeight: 700,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: 0, transition: 'opacity 0.15s',
+          }}
+        >×</button>
+      )}
+      {/* Hide/remove slot — visible on hover (for all cards without images) */}
+      {!hasImage && onHide && !isHidden && (
+        <button
+          className="screen-card-delete"
+          onClick={(e) => { e.stopPropagation(); onHide(type.key); }}
+          title="Remove from grid"
+          style={{
+            position: 'absolute', top: 4, right: 4, zIndex: 3,
+            width: 22, height: 22, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.4)', border: 'none',
+            color: '#fff', fontSize: 11, fontWeight: 700,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: 0, transition: 'opacity 0.15s',
+          }}
+        >×</button>
+      )}
+      {/* Restore badge for hidden cards */}
+      {isHidden && (
+        <div style={{
+          position: 'absolute', top: 4, right: 4, zIndex: 3,
+          fontSize: 8, color: '#999', fontFamily: "'DM Mono', monospace",
+          background: '#fff', padding: '1px 5px', borderRadius: 3, border: '1px solid #ddd',
+        }}>restore</div>
+      )}
       {/* Thumbnail preview */}
       {hasImage && (
         <div style={{

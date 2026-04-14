@@ -427,6 +427,23 @@ router.get('/:showId/frame', optionalAuth, async (req, res) => {
   }
 });
 
+// DELETE /api/v1/ui-overlays/:showId/frame — remove custom phone frame, revert to built-in
+router.delete('/:showId/frame', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const showId = req.params.showId;
+    const PageContent = models.PageContent;
+
+    if (PageContent) {
+      await PageContent.destroy({ where: { page_name: `phone_hub_${showId}`, constant_key: 'FRAME_URL' } });
+    }
+
+    return res.json({ success: true, frame_url: null });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // PUT /api/v1/ui-overlays/:showId/global-fit — save global image fit settings for all screens
 router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
   try {
@@ -483,8 +500,9 @@ router.put('/:showId/image-fit/:assetId', optionalAuth, async (req, res) => {
     const models = require('../models');
     const { image_fit } = req.body;
 
-    if (!image_fit || typeof image_fit !== 'object') {
-      return res.status(400).json({ success: false, error: 'image_fit must be an object' });
+    // Allow null to clear per-screen override, otherwise must be an object
+    if (image_fit !== null && (!image_fit || typeof image_fit !== 'object')) {
+      return res.status(400).json({ success: false, error: 'image_fit must be an object or null' });
     }
 
     await models.sequelize.query(
@@ -695,6 +713,25 @@ router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
       { replacements: { typeId: req.params.typeId, showId: req.params.showId } }
     );
     return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/v1/ui-overlays/:showId/asset/:assetId — soft-delete an overlay asset
+router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const Asset = models.Asset;
+    if (!Asset) return res.status(500).json({ success: false, error: 'Asset model not available' });
+    const asset = await Asset.findByPk(req.params.assetId);
+    if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
+    // Verify asset belongs to this show
+    if (asset.show_id && asset.show_id !== req.params.showId) {
+      return res.status(403).json({ success: false, error: 'Asset does not belong to this show' });
+    }
+    await asset.destroy(); // paranoid soft-delete
+    return res.json({ success: true, message: 'Asset deleted' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
