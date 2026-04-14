@@ -279,17 +279,18 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
 
       {/* Skin picker */}
       {onChangeSkin && (
-        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
           {PHONE_SKINS.map(s => (
             <button
               key={s.key}
               title={s.label}
               onClick={() => onChangeSkin(s.key)}
               style={{
-                width: 20, height: 20, borderRadius: '50%', border: skin === s.key ? '2px solid #B8962E' : '1px solid #ddd',
+                width: 28, height: 28, borderRadius: '50%', border: skin === s.key ? '2.5px solid #B8962E' : '1.5px solid #ddd',
                 background: typeof s.body === 'string' && s.body.startsWith('linear') ? undefined : s.body,
                 backgroundImage: typeof s.body === 'string' && s.body.startsWith('linear') ? s.body : undefined,
-                cursor: 'pointer', padding: 0,
+                cursor: 'pointer', padding: 0, transition: 'transform 0.15s',
+                transform: skin === s.key ? 'scale(1.15)' : 'scale(1)',
               }}
             />
           ))}
@@ -298,13 +299,13 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       </div>
 
       {/* Screen Slots Grid */}
-      <div style={{ flex: 1 }}>
+      <div className="phone-hub-grid-section">
         {/* Screens Section */}
-        <div style={{ fontSize: 10, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ background: '#B8962E', color: '#fff', padding: '1px 6px', borderRadius: 3, fontSize: 8 }}>SCREENS</span>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ background: '#B8962E', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 9 }}>SCREENS</span>
           Full phone views
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6, marginBottom: 16 }}>
+        <div className="phone-hub-screen-grid">
           {SCREEN_TYPES.filter(t => t.type === 'screen').map(type => (
             <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} />
           ))}
@@ -316,11 +317,11 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         {/* Icons Section */}
         {(gridFilter === 'all' || gridFilter === 'icon') && (
           <>
-            <div style={{ fontSize: 10, fontWeight: 600, color: '#a889c8', fontFamily: "'DM Mono', monospace", marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ background: '#a889c8', color: '#fff', padding: '1px 6px', borderRadius: 3, fontSize: 8 }}>ICONS</span>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#a889c8', fontFamily: "'DM Mono', monospace", marginBottom: 8, marginTop: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ background: '#a889c8', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 9 }}>ICONS</span>
               App icons for home screen links
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 6 }}>
+            <div className="phone-hub-icon-grid">
               {SCREEN_TYPES.filter(t => t.type === 'icon').map(type => (
                 <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} isIcon />
               ))}
@@ -336,22 +337,36 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         .phone-hub-inner { display: flex; gap: 24px; align-items: flex-start; }
         .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; }
         .phone-hub-frame { width: 280px; position: relative; }
+        .phone-hub-grid-section { flex: 1; min-width: 0; }
+        .phone-hub-screen-grid {
+          display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 16px;
+        }
+        .phone-hub-icon-grid {
+          display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px;
+        }
 
         @media (max-width: 1024px) {
           .phone-hub-inner { gap: 16px; }
           .phone-hub-frame { width: 240px; }
+          .phone-hub-screen-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
         }
         @media (max-width: 768px) {
-          .phone-hub-inner { flex-direction: column; align-items: center; }
+          .phone-hub-inner { flex-direction: column; align-items: stretch; }
           .phone-hub-device { align-items: center; }
           .phone-hub-frame { width: 240px; }
+          .phone-hub-screen-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+          .phone-hub-icon-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; }
         }
         @media (max-width: 480px) {
           .phone-hub-frame { width: 200px; }
           .phone-hub-inner { gap: 12px; }
+          .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+          .phone-hub-icon-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
         }
         @media (max-width: 375px) {
           .phone-hub-frame { width: 170px; }
+          .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); }
+          .phone-hub-icon-grid { grid-template-columns: repeat(2, 1fr); }
         }
       `}</style>
     </div>
@@ -369,33 +384,34 @@ function ScreenCard({ type, screen, activeScreen, onSelectScreen, globalFit, isI
       style={{
         background: isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
         border: `1px solid ${isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
-        borderRadius: isIcon ? 8 : 10, padding: isIcon ? 6 : 8,
+        borderRadius: isIcon ? 10 : 12, padding: isIcon ? 8 : 10,
         cursor: 'pointer',
         transition: 'all 0.15s',
         position: 'relative',
         overflow: 'hidden',
+        minHeight: isIcon ? 44 : 'auto',
       }}
     >
       {/* Thumbnail preview */}
       {hasImage && (
         <div style={{
           width: '100%', aspectRatio: isIcon ? '1/1' : '9/16',
-          borderRadius: 6, overflow: 'hidden',
-          marginBottom: 4, background: '#f0f0f0',
+          borderRadius: 8, overflow: 'hidden',
+          marginBottom: 6, background: '#f0f0f0',
         }}>
           <img src={screen.url} alt={type.label}
             style={isIcon ? { width: '100%', height: '100%', objectFit: 'contain' } : getScreenImageStyle(screen, globalFit)} />
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: isIcon ? 4 : 6 }}>
-        <span style={{ fontSize: isIcon ? 12 : 16 }}>{type.icon}</span>
-        <div>
-          <div style={{ fontSize: isIcon ? 9 : 11, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isIcon ? 5 : 6, minWidth: 0 }}>
+        <span style={{ fontSize: isIcon ? 14 : 18, flexShrink: 0 }}>{type.icon}</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: isIcon ? 10 : 12, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {type.label}
           </div>
           {!isIcon && (
-            <div style={{ fontSize: 8, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace" }}>
+            <div style={{ fontSize: 9, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {type.desc}
             </div>
           )}
@@ -404,8 +420,8 @@ function ScreenCard({ type, screen, activeScreen, onSelectScreen, globalFit, isI
 
       {/* Status dot */}
       <div style={{
-        position: 'absolute', top: isIcon ? 4 : 6, right: isIcon ? 4 : 6,
-        width: 6, height: 6, borderRadius: '50%',
+        position: 'absolute', top: isIcon ? 5 : 8, right: isIcon ? 5 : 8,
+        width: 7, height: 7, borderRadius: '50%',
         background: hasImage ? '#16a34a' : screen ? '#eab308' : '#e0e0e0',
       }} />
     </div>
