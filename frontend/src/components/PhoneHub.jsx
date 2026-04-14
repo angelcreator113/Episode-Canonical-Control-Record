@@ -459,6 +459,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         .phone-hub-icon-grid {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px;
         }
+        .screen-card-thumb { aspect-ratio: 9/16; }
 
         @media (max-width: 1024px) {
           .phone-hub-inner { gap: 16px; }
@@ -468,25 +469,27 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         @media (max-width: 768px) {
           .phone-hub-inner { flex-direction: column; align-items: stretch; }
           .phone-hub-device { align-items: center; position: static; }
-          .phone-hub-frame { width: 240px; }
-          .phone-hub-screen-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
-          .phone-hub-icon-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; }
+          .phone-hub-frame { width: 220px; }
+          .phone-hub-screen-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+          .phone-hub-icon-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+          .screen-card-thumb { aspect-ratio: 3/4; }
         }
         @media (max-width: 480px) {
-          .phone-hub-frame { width: 200px; }
-          .phone-hub-inner { gap: 12px; }
-          .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
-          .phone-hub-icon-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+          .phone-hub-frame { width: 180px; }
+          .phone-hub-inner { gap: 10px; }
+          .phone-hub-screen-grid { grid-template-columns: repeat(3, 1fr); gap: 5px; }
+          .phone-hub-icon-grid { grid-template-columns: repeat(4, 1fr); gap: 5px; }
+          .screen-card-thumb { aspect-ratio: 3/4; }
         }
         @media (max-width: 375px) {
-          .phone-hub-frame { width: 180px; }
+          .phone-hub-frame { width: 160px; }
           .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
-          .phone-hub-icon-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
+          .phone-hub-icon-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
         }
         .screen-card:hover .screen-card-menu { opacity: 1 !important; }
         .screen-card-menu { opacity: 0; transition: opacity 0.15s; }
         @media (hover: none) {
-          .screen-card-menu { opacity: 0.8 !important; }
+          .screen-card-menu { opacity: 0.7 !important; }
         }
       `}</style>
     </div>
@@ -520,12 +523,12 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
       style={{
         background: isHidden ? '#f5f3f0' : isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
         border: `1px solid ${isHidden ? '#e8e0d0' : isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
-        borderRadius: isIcon ? 10 : 12, padding: isIcon ? 8 : 10,
+        borderRadius: isIcon ? 8 : 10, padding: isIcon ? 6 : 8,
         cursor: 'pointer',
         transition: 'all 0.15s',
         position: 'relative',
         overflow: 'visible',
-        minHeight: isIcon ? 44 : 'auto',
+        minHeight: isIcon ? 40 : 'auto',
         opacity: isHidden ? 0.45 : 1,
       }}
     >
@@ -549,10 +552,10 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
 
           {menuOpen && (
             <div style={{
-              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              position: 'absolute', top: '100%', right: isIcon ? 'auto' : 0, left: isIcon ? 0 : 'auto', marginTop: 4,
               background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 20,
-              minWidth: 150, overflow: 'hidden',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20,
+              minWidth: 140, overflow: 'hidden',
             }}>
               {/* Edit — opens the detail panel */}
               <button
@@ -601,8 +604,8 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
 
       {/* Thumbnail preview */}
       {hasImage && (
-        <div style={{
-          width: '100%', aspectRatio: isIcon ? '1/1' : '9/16',
+        <div className="screen-card-thumb" style={{
+          width: '100%',
           borderRadius: 8, overflow: 'hidden',
           marginBottom: 6, background: '#f0f0f0',
         }}>
@@ -611,14 +614,14 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: isIcon ? 5 : 6, minWidth: 0 }}>
-        <span style={{ fontSize: isIcon ? 14 : 18, flexShrink: 0 }}>{type.icon}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+        <span style={{ fontSize: isIcon ? 12 : 14, flexShrink: 0 }}>{type.icon}</span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: isIcon ? 10 : 12, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: isIcon ? 9 : 11, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
             {type.label}
           </div>
           {!isIcon && (
-            <div style={{ fontSize: 9, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div className="screen-card-desc" style={{ fontSize: 8, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
               {type.desc}
             </div>
           )}
@@ -639,10 +642,9 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
 
 const menuItemStyle = {
   display: 'flex', alignItems: 'center', gap: 8,
-  width: '100%', padding: '12px 14px',
+  width: '100%', padding: '11px 14px',
   border: 'none', background: 'none', cursor: 'pointer',
   fontSize: 13, fontWeight: 500, color: '#2C2C2C',
   textAlign: 'left', minHeight: 44,
   borderBottom: '1px solid #f5f3ee',
-  transition: 'background 0.1s',
 };
