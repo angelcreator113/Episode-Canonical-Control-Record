@@ -161,12 +161,12 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   );
 
   return (
-    <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+    <div className="phone-hub-inner">
       {/* Phone Device */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+      <div className="phone-hub-device">
       {customFrameUrl ? (
         /* Custom uploaded phone frame */
-        <div style={{ width: 280, position: 'relative' }}>
+        <div className="phone-hub-frame">
           <img src={customFrameUrl} alt="Phone frame" style={{ width: '100%', borderRadius: 24 }} />
           {/* Screen overlay positioned inside the frame */}
           <div style={{
@@ -195,8 +195,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         </div>
       ) : (
         /* Built-in phone frame with skin */
-        <div style={{
-          width: 280,
+        <div className="phone-hub-frame" style={{
           background: currentSkin.body,
           borderRadius: 32,
           padding: '12px 8px',
@@ -326,6 +325,20 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           </>
         )}
       </div>
+
+      <style>{`
+        .phone-hub-inner { display: flex; gap: 24px; align-items: flex-start; }
+        .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; }
+        .phone-hub-frame { width: 280px; }
+        @media (max-width: 768px) {
+          .phone-hub-inner { flex-direction: column; align-items: stretch; }
+          .phone-hub-device { align-items: center; }
+          .phone-hub-frame { width: 220px; }
+        }
+        @media (max-width: 480px) {
+          .phone-hub-frame { width: 180px; }
+        }
+      `}</style>
     </div>
   );
 }
