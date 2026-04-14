@@ -7,7 +7,7 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub, { SCREEN_TYPES } from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
@@ -27,8 +27,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [editingLinks, setEditingLinks] = useState(false);
   const [navHistory, setNavHistory] = useState([]);  // stack of screen keys for back navigation
   const [globalFit, setGlobalFit] = useState({});    // device-level fit applied to all screens
+  const [activeVariantIdx, setActiveVariantIdx] = useState(0);
+  const [addingVariant, setAddingVariant] = useState(false);
+  const [newVariantLabel, setNewVariantLabel] = useState('');
   const [batchUploading, setBatchUploading] = useState(false);
   const fileInputRef = useRef(null);
+  const variantInputRef = useRef(null);
   const frameInputRef = useRef(null);
   const batchInputRef = useRef(null);
   const pollRef = useRef(null);
@@ -208,6 +212,31 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (updated) setActiveScreen(updated);
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Upload variant
+  const handleVariantUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeScreen?.id || !newVariantLabel.trim() || !showId) return;
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      fd.append('variant_label', newVariantLabel.trim());
+      await api.post(`/api/v1/ui-overlays/${showId}/upload/${activeScreen.id}`, fd);
+      flash(`Variant "${newVariantLabel.trim()}" uploaded!`);
+      setNewVariantLabel('');
+      setAddingVariant(false);
+      const res = await api.get(`/api/v1/ui-overlays/${showId}`);
+      const all = res.data?.data || [];
+      setOverlays(all);
+      const updated = all.find(o => o.id === activeScreen.id);
+      if (updated) {
+        setActiveScreen(updated);
+        // Switch to the new variant
+        if (updated.variants) setActiveVariantIdx(updated.variants.length - 1);
+      }
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+    if (variantInputRef.current) variantInputRef.current.value = '';
   };
 
   // Remove background
@@ -520,7 +549,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             <PhoneHub
               screens={overlays}
               activeScreen={activeScreen}
-              onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); setEditingLinks(false); }}
+              onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); }}
               onNavigate={handleNavigate}
               navigationHistory={navHistory}
               onBack={handleBack}
@@ -578,16 +607,73 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 </div>
               )}
 
-              {/* Thumbnail preview */}
-              {activeScreen.url && (
-                <div style={{
-                  width: '100%', aspectRatio: (activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? '1/1' : '9/16',
-                  borderRadius: 8, overflow: 'hidden', marginBottom: 10, background: '#f5f3ee',
-                  maxHeight: 200,
-                }}>
-                  <img src={activeScreen.url} alt={activeScreen.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              {/* Variants + Thumbnail preview */}
+              {activeScreen.variants && activeScreen.variants.length > 1 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', gap: 3, marginBottom: 6, flexWrap: 'wrap' }}>
+                    {activeScreen.variants.map((v, i) => (
+                      <button key={v.asset_id} onClick={() => setActiveVariantIdx(i)} style={{
+                        padding: '3px 8px', fontSize: 9, fontWeight: 600,
+                        border: `1px solid ${activeVariantIdx === i ? '#B8962E' : '#e0d9ce'}`,
+                        borderRadius: 4, cursor: 'pointer',
+                        background: activeVariantIdx === i ? '#B8962E' : '#fff',
+                        color: activeVariantIdx === i ? '#fff' : '#888',
+                      }}>{v.variant_label}</button>
+                    ))}
+                    <button onClick={() => setAddingVariant(!addingVariant)} style={{
+                      padding: '3px 6px', fontSize: 9, fontWeight: 600,
+                      border: '1px dashed #ccc', borderRadius: 4, cursor: 'pointer',
+                      background: 'transparent', color: '#aaa',
+                    }}>+</button>
+                  </div>
                 </div>
               )}
+
+              {/* Add variant form */}
+              {(addingVariant || (!activeScreen.variants && activeScreen.url)) && (
+                <div style={{ display: 'flex', gap: 4, marginBottom: 8, alignItems: 'center' }}>
+                  {!activeScreen.variants && activeScreen.url && !addingVariant ? (
+                    <button onClick={() => setAddingVariant(true)} style={{
+                      padding: '3px 8px', fontSize: 9, fontWeight: 600,
+                      border: '1px dashed #b89060', borderRadius: 4, cursor: 'pointer',
+                      background: 'transparent', color: '#b89060',
+                      display: 'flex', alignItems: 'center', gap: 3,
+                    }}><Layers size={10} /> Add Variant</button>
+                  ) : addingVariant ? (
+                    <>
+                      <input
+                        value={newVariantLabel}
+                        onChange={e => setNewVariantLabel(e.target.value)}
+                        placeholder="e.g. Locked, Unlocked"
+                        style={{ flex: 1, padding: '3px 6px', border: '1px solid #e0d9ce', borderRadius: 4, fontSize: 10 }}
+                      />
+                      <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} style={{
+                        padding: '3px 8px', fontSize: 9, fontWeight: 600, border: 'none',
+                        borderRadius: 4, background: newVariantLabel.trim() ? '#b89060' : '#eee',
+                        color: newVariantLabel.trim() ? '#fff' : '#ccc', cursor: newVariantLabel.trim() ? 'pointer' : 'not-allowed',
+                      }}>Upload</button>
+                      <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} style={{
+                        padding: '3px 6px', fontSize: 9, border: 'none', background: 'none', cursor: 'pointer', color: '#999',
+                      }}><X size={10} /></button>
+                    </>
+                  ) : null}
+                  <input ref={variantInputRef} type="file" accept="image/*" onChange={handleVariantUpload} style={{ display: 'none' }} />
+                </div>
+              )}
+
+              {/* Thumbnail preview — show active variant or default */}
+              {(() => {
+                const displayUrl = activeScreen.variants?.[activeVariantIdx]?.url || activeScreen.url;
+                return displayUrl ? (
+                  <div style={{
+                    width: '100%', aspectRatio: (activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? '1/1' : '9/16',
+                    borderRadius: 8, overflow: 'hidden', marginBottom: 10, background: '#f5f3ee',
+                    maxHeight: 200,
+                  }}>
+                    <img src={displayUrl} alt={activeScreen.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  </div>
+                ) : null;
+              })()}
 
               {/* Prompt */}
               {(activeScreen.prompt || activeScreen.custom_prompt) && (
