@@ -341,6 +341,7 @@ function CreateOverlayModal({ showId, onClose, onCreated }) {
                   style={{ ...fieldStyle, cursor: 'pointer' }}>
                   <option value="icon">Icon</option>
                   <option value="frame">Frame</option>
+                  <option value="phone">Phone Screen</option>
                 </select>
               </div>
               <div style={{ flex: 1 }}>
@@ -588,6 +589,7 @@ export default function UIOverlaysTab() {
           { key: 'all', label: 'All', icon: null },
           { key: 'frame', label: 'Frames', icon: Layout },
           { key: 'icon', label: 'Icons', icon: Image },
+          { key: 'phone', label: 'Phone Screens', icon: Sparkles },
         ].map(f => (
           <button key={f.key} onClick={() => setFilter(f.key)} style={{
             padding: '5px 14px', border: '1px solid #e0d9cc', borderRadius: 20,
@@ -639,8 +641,8 @@ export default function UIOverlaysTab() {
                   <span style={{
                     padding: '2px 6px', borderRadius: 4, fontSize: 8,
                     fontFamily: "'DM Mono', monospace", textTransform: 'uppercase',
-                    background: overlay.category === 'frame' ? '#dbeafe' : '#fef3c7',
-                    color: overlay.category === 'frame' ? '#1e40af' : '#92400e',
+                    background: overlay.category === 'frame' ? '#dbeafe' : overlay.category === 'phone' ? '#fce8f0' : '#fef3c7',
+                    color: overlay.category === 'frame' ? '#1e40af' : overlay.category === 'phone' ? '#9c3d62' : '#92400e',
                   }}>{overlay.category}</span>
                   {overlay.custom && <span style={{
                     padding: '2px 6px', borderRadius: 4, fontSize: 8,
@@ -695,6 +697,39 @@ export default function UIOverlaysTab() {
                     {generatingId === overlay.id ? 'Generating...' : 'Generate'}
                   </button>
                 )}
+
+                {/* Delete button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!confirm(`Delete overlay "${overlay.name}"?`)) return;
+                    (async () => {
+                      try {
+                        if (overlay.custom && overlay.custom_id) {
+                          await api.delete(`/api/v1/ui-overlays/${showId}/types/${overlay.custom_id}`);
+                        } else if (overlay.asset_id) {
+                          await api.delete(`/api/v1/assets/${overlay.asset_id}`);
+                        } else if (overlay.id) {
+                          await api.delete(`/api/v1/ui-overlays/${showId}/types/${overlay.id}`).catch(() => {});
+                        }
+                        loadOverlays(false);
+                      } catch (err) {
+                        console.warn('[overlay] delete failed:', err?.message);
+                        alert('Delete failed: ' + (err?.response?.data?.error || err?.message));
+                      }
+                    })();
+                  }}
+                  style={{
+                    width: '100%', padding: '4px 0', border: 'none', borderRadius: 4,
+                    background: 'transparent', color: '#dc2626', fontSize: 10,
+                    cursor: 'pointer', fontWeight: 500, marginTop: 4,
+                    opacity: 0.5, transition: 'opacity 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '0.5'}
+                >
+                  Delete
+                </button>
               </div>
             </div>
           ))}
