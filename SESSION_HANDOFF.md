@@ -1,215 +1,333 @@
-# Session Handoff — World Building + Phone Hub
+# Session Handoff Document
 
-## Branch
-`claude/financial-transaction-service-Sh6du`
-
-## What Was Built This Session
-
-### DREAM City System
-- **5 unified cities** spelling D·R·E·A·M: Dazzle District (Fashion), Radiance Row (Beauty), Echo Park (Entertainment), Ascent Tower (Tech), Maverick Harbor (Creator Economy)
-- **Migration** `20260725000000` renames old city enums (nova_prime → dazzle_district, etc.) across SocialProfile model
-- **Backend** `CITY_CULTURE` mappings updated in `socialProfileRoutes.js`
-- **Frontend** `feedConstants.js` LALAVERSE_CITIES updated
-- **Data files** created in `frontend/src/data/`: dreamCities.js, influencerData.js, calendarData.js, memoryData.js
-
-### Interactive DREAM Map (`frontend/src/components/DreamMap.jsx`)
-- Image-based world map with uploadable background (S3)
-- 5 city hotspots with pan/zoom (CSS transforms + wheel events)
-- Draggable city repositioning (Edit Positions mode)
-- City sidebar with location list + scene set thumbnails
-- Opens as modal from 📍 in script beats (`EpisodeScriptTab.jsx`)
-- **Backend routes** in `worldStudio.js`:
-  - `POST /world/map/upload` — upload map image to S3
-  - `GET /world/map` — get map image URL
-  - `GET /world/map/positions` — get city positions
-  - `PUT /world/map/positions` — save city positions
-  - All use `PageContent` model with `conflictFields` upsert
-
-### World Building Pages (7 → 4 consolidation)
-All under FRANCHISE in sidebar:
-
-| Page | Route | File | Content |
-|------|-------|------|---------|
-| World Dashboard | `/world-dashboard` | `WorldDashboard.jsx` | Setup progress (7 steps), world state snapshots, timeline, tension scanner |
-| World Foundation | `/world-foundation` | `WorldFoundation.jsx` | DREAM map, city cards, universities, corporations, locations CRUD, The Loop |
-| Social Systems | `/social-systems` | `SocialSystems.jsx` | 15 archetypes, 50 legends, famous 25, celebrity hierarchy, media outlets, relationships, economy, trends, algorithm, drama |
-| Culture & Events | `/culture-events` | `CultureEvents.jsx` | Events by DREAM city, awards & media, history (memory + legacy) |
-
-Culture & Events uses 3 sub-components:
-- `frontend/src/components/Culture/EventsTab.jsx`
-- `frontend/src/components/Culture/AwardsMediaTab.jsx`
-- `frontend/src/components/Culture/HistoryTab.jsx`
-
-### Feed → World Foundation Connection
-- **Migration** `20260725000001`: `home_location_id` (UUID FK) + `frequent_venues` (JSONB) on social_profiles
-- **Profile generation** (`socialProfileRoutes.js`): auto-creates signature venue per creator based on content category (fashion→Showroom, beauty→Studio, music→Studio, etc.)
-- **Event automation** (`eventAutomationService.js`): `findVenue()` now checks host's frequent venues → host's city → category match → fallback
-- **WorldLocation model**: `hasMany(SocialProfile, { as: 'residents' })`
-- **Seed infrastructure** (`worldStudio.js`): 30 locations across 5 DREAM cities with addresses
-
-### Cultural Events → DREAM Cities
-- `calendarRoutes.js`: `CATEGORY_TO_DREAM_CITY` mapping + `dreamCityFromEvent()` helper
-- Events tab shows By City (default) or By Month view
-- Each event card shows city letter badge
-
-### Franchise Brain Auto-Push
-- `episodeCompletionService.js` Step 16: auto-creates franchise_knowledge entries on episode completion
-- Pushes episode result + character state snapshot
-- Supersedes previous state snapshot
-- `franchiseBrainRoutes.js`: seed route checks table existence before counting
-
-### Phone Hub (`frontend/src/components/PhoneHub.jsx`)
-- Visual phone device with screen preview
-- 13 screen type slots (Home, Feed, DMs, Invitation, Closet, Comments, Stories, Profile, Alerts, Camera, Shopping, Live, Map)
-- 7 phone skins (Midnight, Rose Gold, Gold, Silver, White, Pink, Lavender)
-- Custom frame upload
-- Existing overlays map to screen slots by name/beat matching
-
-### UI Overlays Tab Rewrite (`frontend/src/pages/UIOverlaysTab.jsx`)
-- Phone Hub design: device preview left, screen grid right
-- Detail panel with Generate, Upload, Download, Remove BG, Delete
-- Modal stays open after actions (no scroll-to-top)
-- Delete button on all overlay cards
-- Tab persistence in URL (`?tab=overlays-tab`)
-
-### Wardrobe Improvements
-- `wardrobeLibraryController.js`: auto-remove-bg on upload via Remove.bg API (non-blocking)
-- CSS: `object-fit: contain`, padding, warm gradient background, hover zoom
-
-### Other Fixes
-- `UniversePage.jsx`: load universe from `show.universe_id` instead of hardcoded UUID
-- `WorldDashboard.jsx`: `safeFetch` for page-content checks, correct URL (`/page-content/` not `/page-data/`)
-- `SidebarProgress.jsx`: light pink background
-- `FranchiseBrain.jsx`: routes point to new consolidated pages
-- `WorldSetupGuide.jsx`: step routes point to new pages
-- Silent catch linting fixes in episodeCompletionService
+**Date:** 2026-04-14
+**Status:** Ready for next session pickup
 
 ---
 
-## What's Next: Screen Layer System
+## Part 1: What Was Built This Session
 
-### Vision
-**Canva for interactive mobile UI scenes** — a canvas-based editor where you compose phone screen overlays by layering elements, snapping to safe areas, and exporting production-ready images.
+### 1. DREAM Cities System
 
-### Features to Build
+Created the unified LalaVerse geography — 5 cities forming the D.R.E.A.M. acronym:
 
-#### 1. Canvas Engine
-- Use **Fabric.js** or **HTML5 Canvas** for layer compositing
-- Each screen overlay becomes a canvas with multiple layers
-- Layers: background, UI elements, text, icons, character images
-- Render to PNG/WebP for export
+| Letter | City | Domain | Color |
+|--------|------|--------|-------|
+| **D** | Dazzle District | Fashion & Luxury | `#d4789a` |
+| **R** | Radiance Row | Beauty & Wellness | `#a889c8` |
+| **E** | Echo Park | Entertainment & Nightlife | `#c9a84c` |
+| **A** | Ascent Tower | Tech & Innovation | `#6bba9a` |
+| **M** | Maverick Harbor | Creator Economy & Counter-culture | `#7ab3d4` |
 
-#### 2. Safe Area System
-- Toggle safe area overlay showing usable screen bounds
-- Different safe areas per device (iPhone notch, Android status bar)
-- Visual guides: top bar, bottom bar, side margins
-- Prevents UI from getting cut off in video
+Each city has: neighborhoods/pins, universities, corporations, major events, resident archetypes, and cultural energy descriptions.
 
-#### 3. Snap-to-Screen Placement
-- Drag UI elements within the phone screen bounds
-- Snap to grid (8px or 16px grid)
-- Snap to edges and center lines
-- Lock to phone screen boundaries
+**Key files:**
+- `frontend/src/data/dreamCities.js` — DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS data
+- `frontend/src/components/DreamMap.jsx` — Interactive pan/zoom map with city hotspots, location pins, scene set thumbnails, Lala position indicator, edit mode for repositioning
 
-#### 4. Layer Management
-- Layer panel: reorder (drag), hide (eye icon), lock (lock icon)
-- Layer types: image, text, shape, icon, gradient
-- Opacity per layer
-- Blend modes (normal, multiply, overlay)
-- Group layers
+**Backend:**
+- `GET /api/v1/world/map/positions` — Load saved city positions
+- `PUT /api/v1/world/map/positions` — Save custom city layouts (stored in PageContent)
 
-#### 5. Preset Frames
-- iPhone 15 Pro (Dynamic Island)
-- iPhone SE (Home button)
-- Android (status bar + nav bar)
-- Fantasy Phone (custom brand device — LalaVerse branded)
-- Each preset has correct safe areas + aspect ratio
+---
 
-#### 6. Export Pipeline
-- Clean export: no guides, no frame, just the screen content
-- Framed export: screen + device frame
-- Video-ready: correct resolution for 1080p/4K
-- Batch export: all screens at once
-- Format options: PNG (transparent), JPEG, WebP
+### 2. Interactive World Map
 
-#### 7. Text Tool
-- Add text layers with font picker (Lora for prose, DM Mono for UI)
-- Text styling: size, color, weight, alignment
-- Text presets: notification text, DM message, username, caption
+`DreamMap.jsx` — Full interactive map component with:
+- Pan (drag) and zoom (mouse wheel) controls
+- City zone hotspots with glow effects and letter badges
+- Location pins showing scene sets on hover
+- Lala's position indicator with pulse animation
+- Creator distribution by city sidebar
+- Edit mode to reposition cities and persist to DB
+- Gradient placeholder map (awaiting uploaded world render)
 
-#### 8. Template System
-- Save screen compositions as reusable templates
-- Pre-built templates: Instagram feed, DM conversation, notification center
-- Templates reference show data (character names, event titles)
+---
 
-### Architecture Suggestion
+### 3. Four Consolidated Pages
+
+Merged scattered world-building pages into 4 focused pages:
+
+| New Page | Merges | Route | Tabs |
+|----------|--------|-------|------|
+| **WorldDashboard** | WorldSetupGuide + UniverseWorldState | `/world-dashboard` | Setup Progress, World State, Tensions |
+| **WorldFoundation** | WorldInfrastructure + WorldLocations | `/world-foundation` | The Map, Locations, The Loop |
+| **SocialSystems** | InfluencerSystems + Legends + Society | `/social-systems` | Archetypes, Legends/Society, Rules, Trends |
+| **CultureEvents** | CulturalCalendar + CulturalMemory | `/culture-events` | Calendar, Memory, Legacy |
+
+**WorldDashboard** provides a 7-step setup wizard:
+1. World Foundation (DREAM cities, companies, universities)
+2. Social Systems (influence, archetypes, economy)
+3. Culture & Events (yearly rhythm, auto-spawn events)
+4. Cultural Memory (legends, feuds, archives)
+5. Locations & Venues (map, venues, scene sets)
+6. Generate Feed (influencers, rivals, friends)
+7. Create World Events (calendar auto-spawn)
+
+---
+
+### 4. Feed-to-Location Connection
+
+Added location awareness to the social feed system:
+
+- **Migration:** `20260725000001-add-location-to-social-profiles.js`
+  - `home_location_id` FK on social_profiles → world_locations (where a creator lives)
+  - `frequent_venues` JSONB array of location IDs they visit
+- Location types: city, district, street, venue, property, interior, exterior, landmark, virtual, transitional
+- Venue types: restaurant, club, bar, cafe, salon, spa, gallery, museum, boutique, gym, hotel, office, park, rooftop, theater
+- Property types: penthouse, mansion, apartment, townhouse, studio, villa, loft, cottage
+
+---
+
+### 5. Phone Screen Renderer
+
+`src/services/phoneScreenRenderer.js` + `src/models/FeedMoment.js`
+
+Generates phone mockup PNGs showing what Lala sees on her phone during scenes:
+- Types: notification, post, story, dm, live, ui_interaction
+- Canvas-rendered with custom fonts, notch, status bar, rounded corners
+- Each FeedMoment captures: trigger (profile, handle, action), screen content, dual voice script (JustAWoman vs Lala internal), narrative impact, financial context
+- Stored in `feed_moments` table with associations to episodes, events, social_profiles
+
+---
+
+### 6. Auto-Remove-BG
+
+Background removal integrated across asset pipeline:
+- Primary: remove.bg API (via `REMOVEBG_API_KEY`)
+- Fallback: RunwayML `removeBackground()`
+- Applied when `removeBackground: true` flag is set during object/asset generation
+- Used in wardrobe controller and scene studio controller
+- **Key files:**
+  - `src/services/objectGenerationService.js`
+  - `src/services/AssetProcessingService.js`
+  - `src/services/RunwayMLService.js`
+  - `src/controllers/wardrobeController.js`
+  - `src/controllers/sceneStudioController.js`
+
+---
+
+### 7. Culture & Events Redesign
+
+`frontend/src/pages/CultureEvents.jsx` — Unified culture page with three tabs:
+
+- **Calendar tab:** Yearly cultural events (award shows, birthdays, micro-events), event categories (fashion/beauty/entertainment/lifestyle/community/technology), auto-spawn world events with host/guest generation
+- **Memory tab:** Cultural memory, legends, feuds, archives, anniversaries, nostalgia waves
+- **Legacy tab:** How the world remembers significant moments
+- Connected to world events via `location_id`
+- Integrated with Feed via auto-generation of social posts about events
+
+---
+
+### 8. Franchise Brain Auto-Push
+
+`frontend/src/components/PushToBrain.jsx` — Reusable "Push to Brain" button:
+- Sends any page's `usePageData` state to the franchise brain ingest pipeline
+- Creates entries as "Pending Review" status
+- Available on: CultureEvents, SocialSystems, WorldFoundation, and other world-building pages
+- **Route:** `POST /franchise-brain/push-from-page`
+
+**Knowledge categories:** Franchise Laws, Character, Narrative, Locked Decision, Technical, Brand, World
+
+---
+
+### 9. All Fixes
+
+- Feed profile generation connected to DREAM city locations
+- Event auto-spawn linked to venue locations
+- World state snapshots and timeline events in WorldDashboard
+- Tension pairs tracking between characters/factions
+- Setup status checks across all world-building subsystems
+
+---
+
+## Part 2: Screen Layer System Spec (Next Session Build)
+
+### Current State
+
+The Scene Studio already has a **production Canva-like editor** built on **Konva.js** (not Fabric.js):
+
+**Existing infrastructure:**
+- `frontend/src/components/SceneStudio/SceneStudio.jsx` — Main editor (~1000 lines)
+- `frontend/src/components/SceneStudio/Canvas/StudioCanvas.jsx` — Konva canvas (~709 lines)
+- `frontend/src/components/SceneStudio/Toolbar.jsx` — Tools, zoom, platform presets
+- `frontend/src/components/SceneStudio/useSceneStudioState.js` — State + undo/redo (50 history)
+
+**Canvas objects:** `Canvas/objects/` — ImageObject, VideoObject, TextObject, ShapeObject
+**Mask/paint:** `Canvas/MaskLayer.jsx` — Brush painting for erase/inpaint
+**Parallax:** `Canvas/ParallaxLayer.jsx` — Depth-based parallax effects
+
+**Panels:**
+- `panels/CreationPanel.jsx` — Asset creation
+- `panels/InspectorPanel.jsx` (~800 lines) — Transform, appearance, layer controls, depth, color grading
+- `panels/ObjectsPanel.jsx` — Object list/ordering
+- `panels/SmartSuggestions.jsx` — AI suggestions
+
+**Tabs:** TemplatesTab, GenerateTab (~1000 lines), LibraryTab, DecorTab, TextTab, ShapesTab, SceneStatesTab, UploadTab
+
+**Existing platform presets:**
+```javascript
+youtube:   1920x1080  (16:9)
+instagram: 1080x1920  (9:16)
+tiktok:    1080x1920  (9:16)
+square:    1080x1080  (1:1)
+cinema:    2560x1440  (16:9)
+```
+
+**Backend models:**
+- `src/models/Layer.js` — layer_number (1-5), type, opacity, blend_mode, z_index
+- `src/models/SceneLayerConfiguration.js` — 5-layer JSONB structure, complexity tracking
+- `src/models/LayerAsset.js` — Assets assigned to layers
+- `src/models/LayerPreset.js` — System and user-created presets
+
+**Migration:** `20260701000000-add-canvas-settings-to-scenes.js` — `canvas_settings` JSONB on scenes/scene_sets
+
+---
+
+### What to Build: Screen Layer System Extension
+
+The next session should extend the existing SceneStudio with phone/device screen framing capabilities. Since Konva.js is already in use (NOT Fabric.js), build on the existing stack.
+
+#### A. Safe Area Guides
+
+Add device-specific safe area overlays to StudioCanvas:
 
 ```
-frontend/src/
-  components/
-    ScreenEditor/
-      ScreenCanvas.jsx      — Fabric.js canvas wrapper
-      LayerPanel.jsx         — layer list with reorder/hide/lock
-      ToolBar.jsx            — tools: select, text, image, shape
-      SafeAreaOverlay.jsx    — device-specific safe area guides
-      FrameSelector.jsx      — device frame picker
-      ExportModal.jsx        — export options + download
-  pages/
-    UIOverlaysTab.jsx        — integrates ScreenEditor into Phone Hub
+┌─────────────────────────────────┐
+│  Status bar zone (top 44px)     │
+│  ┌───────────────────────────┐  │
+│  │                           │  │
+│  │    Content safe area      │  │
+│  │                           │  │
+│  │                           │  │
+│  └───────────────────────────┘  │
+│  Home indicator zone (bot 34px) │
+└─────────────────────────────────┘
 ```
+
+- Toggle on/off from Toolbar
+- Semi-transparent overlays with dashed borders
+- Different zones per device preset
+
+#### B. Snap-to-Grid Enhancement
+
+Extend existing grid system in StudioCanvas:
+- Configurable grid size (8px, 16px, 24px, 32px)
+- Snap threshold setting
+- Smart guides between objects (already partially implemented)
+- Grid visible toggle already exists in Toolbar
+
+#### C. Device Frame Presets
+
+Add 4 new frame presets to `PLATFORM_PRESETS` in Toolbar.jsx:
+
+```javascript
+iphone_15:     393x852   (iPhone 15 / 15 Pro)
+iphone_15_max: 430x932   (iPhone 15 Pro Max)
+android_pixel: 412x915   (Pixel 8)
+fantasy_phone: 400x880   (LalaVerse custom device)
+```
+
+Each preset includes:
+- Canvas dimensions
+- Safe area insets (top, bottom, left, right)
+- Notch/dynamic island shape data
+- Home indicator style
+- Corner radius
+
+#### D. Layer Management Extensions
+
+Extend the existing InspectorPanel layer controls:
+- **Screen chrome layer** (status bar, notch, home indicator) — always on top
+- **Content layers** — user-editable, between chrome and background
+- **Background layer** — wallpaper/gradient behind content
+- Layer grouping for device frame elements
+- Lock device chrome layers by default
+
+#### E. Export Pipeline
+
+Extend the existing `onExport` in SceneStudio:
+- Export with device frame overlay (PNG, 2x/3x)
+- Export content only (no frame)
+- Export as device mockup (with shadow, perspective, floating device render)
+- Batch export all presets at once
+- Quality settings (1x, 2x, 3x)
+
+#### F. Text Tool Enhancement
+
+Extend existing TextTab and TextObject:
+- System font presets (San Francisco for iOS, Roboto for Android, custom for Fantasy)
+- Text styles matching device UI (notification title, body, caption, badge)
+- Auto-sizing to fit safe area width
+- Text shadow and outline options
+
+#### G. Template System Integration
+
+Connect to existing TemplateStudio infrastructure:
+- Save screen layouts as templates via `src/routes/sceneTemplates.js`
+- Pre-seeded phone screen templates:
+  - "Lala's Home Screen" — app grid layout
+  - "Notification Stack" — notification center mockup
+  - "DM Conversation" — chat bubbles layout
+  - "Feed Post" — social media post frame
+  - "Story View" — full-screen story with UI overlays
+
+---
+
+### Suggested File Architecture
+
+New files to create (extending existing structure):
+
+```
+frontend/src/components/SceneStudio/
+  frames/
+    DeviceFrame.jsx          # Konva group rendering device chrome
+    SafeAreaGuide.jsx        # Semi-transparent safe area overlay
+    devicePresets.js         # Frame data (dimensions, insets, shapes)
+  Canvas/
+    objects/
+      DeviceChromeObject.jsx # Renders notch, status bar, home indicator
+  panels/
+    tabs/
+      FrameTab.jsx           # New tab: pick device frame, toggle safe areas
+```
+
+Extend existing files:
+- `Toolbar.jsx` — Add phone presets to PLATFORM_PRESETS, safe area toggle
+- `useSceneStudioState.js` — Add frame state, safe area state
+- `StudioCanvas.jsx` — Render SafeAreaGuide and DeviceFrame layers
+- `InspectorPanel.jsx` — Device chrome layer controls
+
+---
 
 ### Backend Needs
-- Store layer compositions as JSONB on overlay records
-- Export endpoint that renders canvas server-side (optional — can be client-only)
-- Template CRUD (save/load screen templates)
 
-### Key Dependencies
-- `fabric` npm package (canvas manipulation)
-- Possibly `html2canvas` for fallback rendering
-- Device frame SVGs/PNGs for preset frames
+Minimal backend additions — mostly frontend work:
+
+1. **No new models needed** — use existing Layer, LayerPreset, SceneTemplate
+2. **Seed data** — Add phone frame presets to LayerPreset table
+3. **Template seeding** — Pre-create phone screen templates via existing `/api/v1/scene-templates`
+4. **Asset storage** — Device frame PNGs (notch shapes, bezels) uploaded to S3 via existing asset pipeline
 
 ---
 
-## Key Files Modified This Session
+### Dependencies
 
-### New Files Created
-- `frontend/src/data/dreamCities.js`
-- `frontend/src/data/influencerData.js`
-- `frontend/src/data/calendarData.js`
-- `frontend/src/data/memoryData.js`
-- `frontend/src/components/DreamMap.jsx`
-- `frontend/src/components/PhoneHub.jsx`
-- `frontend/src/components/Culture/EventsTab.jsx`
-- `frontend/src/components/Culture/AwardsMediaTab.jsx`
-- `frontend/src/components/Culture/HistoryTab.jsx`
-- `frontend/src/pages/WorldFoundation.jsx`
-- `frontend/src/pages/SocialSystems.jsx`
-- `frontend/src/pages/CultureEvents.jsx`
-- `frontend/src/pages/WorldDashboard.jsx`
-- `src/migrations/20260725000000-unify-dream-cities.js`
-- `src/migrations/20260725000001-add-location-to-social-profiles.js`
+Already installed (no new packages needed):
+- `konva` ^10.2.0
+- `react-konva` ^18.2.14
+- `canvas` ^3.2.1 (backend)
+- `html2canvas` ^1.4.1
 
-### Significantly Modified
-- `frontend/src/pages/UIOverlaysTab.jsx` — full rewrite as Phone Hub
-- `frontend/src/components/layout/Sidebar.jsx` — world building under FRANCHISE
-- `frontend/src/App.jsx` — new routes + lazy imports
-- `src/routes/worldStudio.js` — map upload, positions, DREAM seed infrastructure
-- `src/routes/socialProfileRoutes.js` — DREAM cities, auto-location assignment
-- `src/routes/calendarRoutes.js` — DREAM city mapping for events
-- `src/services/eventAutomationService.js` — venue finding with host preference
-- `src/services/episodeCompletionService.js` — franchise brain auto-push
-- `src/models/SocialProfile.js` — DREAM city enum + location fields
-- `src/models/WorldLocation.js` — residents association
-- `src/controllers/wardrobeLibraryController.js` — auto-remove-bg
-- `frontend/src/pages/WardrobeBrowser.css` — card styling improvements
-- `frontend/src/pages/WorldAdmin.jsx` — tab URL persistence
+---
 
-### CLAUDE.md Rules Followed
-- Backend: Node.js/Express, Sequelize ORM, PostgreSQL
-- Frontend: React 18 + Vite, vanilla CSS / inline styles
-- Auth: optionalAuth middleware
-- All models soft-delete (paranoid mode, deleted_at)
-- Design tokens: parchment #FAF7F0, gold #B8962E, ink #2C2C2C
-- Typography: DM Mono for UI labels
-- Icons: lucide-react
-- State: React hooks only
+### Priority Order
+
+1. Device frame presets + `devicePresets.js` data file
+2. `DeviceFrame.jsx` Konva component rendering chrome
+3. `SafeAreaGuide.jsx` overlay
+4. `FrameTab.jsx` panel tab for frame selection
+5. Wire into StudioCanvas + Toolbar
+6. Export pipeline extension
+7. Template seeding
+8. Text tool device font presets
