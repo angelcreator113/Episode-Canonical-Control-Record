@@ -716,7 +716,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         </div>
       ) : (
         <>
-        <div className="phone-hub-layout">
+        <div className={`phone-hub-layout${activeScreen ? ' panel-open' : ''}`}>
           {/* Phone Hub (phone + grid) — takes full width now */}
           <div className="phone-hub-main">
             <PhoneHub
@@ -979,6 +979,10 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         /* ── Main Layout ── */
         .phone-hub-layout {
           display: block;
+          transition: margin-right 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+        .phone-hub-layout.panel-open {
+          margin-right: 410px; /* 400px panel + 10px breathing room */
         }
         .phone-hub-main {
           width: 100%;
@@ -1043,6 +1047,9 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
           }
           .detail-panel-open {
             transform: translateY(0);
+          }
+          .phone-hub-layout.panel-open {
+            margin-right: 0; /* no margin on mobile — bottom sheet doesn't block grid */
           }
           .detail-panel-drag-handle {
             display: flex; justify-content: center; padding: 10px 0 4px;

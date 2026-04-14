@@ -500,8 +500,9 @@ router.put('/:showId/image-fit/:assetId', optionalAuth, async (req, res) => {
     const models = require('../models');
     const { image_fit } = req.body;
 
-    if (!image_fit || typeof image_fit !== 'object') {
-      return res.status(400).json({ success: false, error: 'image_fit must be an object' });
+    // Allow null to clear per-screen override, otherwise must be an object
+    if (image_fit !== null && (!image_fit || typeof image_fit !== 'object')) {
+      return res.status(400).json({ success: false, error: 'image_fit must be an object or null' });
     }
 
     await models.sequelize.query(
