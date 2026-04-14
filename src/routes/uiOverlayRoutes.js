@@ -41,7 +41,8 @@ router.get('/:showId', optionalAuth, async (req, res) => {
           id: r.id,
           name: r.name,
           metadata: meta,
-          overlay_type: meta.overlay_type || r.name,
+          overlay_type: meta.overlay_type || '',
+          overlay_category: meta.overlay_category || '',
           url: r.s3_url_processed || r.s3_url_raw,
           bg_removed: meta.bg_removed || false,
           custom_prompt: meta.custom_prompt || null,
@@ -58,24 +59,24 @@ router.get('/:showId', optionalAuth, async (req, res) => {
       const otId = ot.id.toLowerCase();
       const otName = ot.name.toLowerCase();
       const lifecycle = ot.lifecycle || 'permanent';
-      const isIconType = ot.category === 'phone_icon' || ot.category === 'icon' || otId.startsWith('icon_');
 
-      // Find ALL matching assets (variants)
+      // Find ALL matching assets (variants) — STRICT matching only
       const allMatches = existing.filter(e => {
         const eType = (e.overlay_type || '').toLowerCase();
-        const eName = (e.name || '').toLowerCase();
-        const eCategory = (e.metadata?.overlay_category || '').toLowerCase();
-        const eIsIcon = eCategory === 'phone_icon' || eCategory === 'icon' || eType.startsWith('icon_');
 
-        // Don't cross-match: icons only match icons, screens only match screens
-        if (isIconType !== eIsIcon) {
-          // Exception: exact type match always wins regardless of category
-          if (eType !== otId) return false;
+        // Primary match: exact overlay_type match (most reliable)
+        if (eType === otId) return true;
+
+        // Legacy fallback: exact asset name match for old assets without overlay_type
+        if (!eType) {
+          const eName = (e.name || '').toLowerCase();
+          if (eName === `ui overlay: ${otName}`) return true;
         }
 
-        return eType === otId
-          || eName === `ui overlay: ${otName}`
-          || (otId === 'wardrobe_list' && eType === 'todo_checklist');
+        // Special case
+        if (otId === 'wardrobe_list' && eType === 'todo_checklist') return true;
+
+        return false;
       });
 
       // Primary = the one without a variant_label, or first match
