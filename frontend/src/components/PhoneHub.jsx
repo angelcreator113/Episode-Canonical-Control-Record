@@ -372,7 +372,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
 
       <style>{`
         .phone-hub-inner { display: flex; gap: 24px; align-items: flex-start; }
-        .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; }
+        .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; position: sticky; top: 20px; align-self: flex-start; }
         .phone-hub-frame { width: 280px; position: relative; }
         .phone-hub-grid-section { flex: 1; min-width: 0; }
         .phone-hub-screen-grid {
@@ -389,7 +389,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         }
         @media (max-width: 768px) {
           .phone-hub-inner { flex-direction: column; align-items: stretch; }
-          .phone-hub-device { align-items: center; }
+          .phone-hub-device { align-items: center; position: static; }
           .phone-hub-frame { width: 240px; }
           .phone-hub-screen-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
           .phone-hub-icon-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; }
