@@ -81,18 +81,20 @@ function getScreenImageStyle(screen, globalFit) {
   const offsetX = fit.offsetX || 0; // percentage offset
   const offsetY = fit.offsetY || 0;
 
-  if (scale === 100 && offsetX === 0 && offsetY === 0) {
-    return { width: '100%', height: '100%', objectFit: mode };
+  // Use transform for scaling — keeps image centered and works with all objectFit modes
+  const style = {
+    width: '100%',
+    height: '100%',
+    objectFit: mode,
+    objectPosition: `${50 + offsetX}% ${50 + offsetY}%`,
+  };
+
+  if (scale !== 100) {
+    style.transform = `scale(${scale / 100})`;
+    style.transformOrigin = `${50 + offsetX}% ${50 + offsetY}%`;
   }
 
-  return {
-    width: `${scale}%`,
-    height: `${scale}%`,
-    objectFit: mode,
-    position: 'absolute',
-    left: `${50 - scale / 2 + offsetX}%`,
-    top: `${50 - scale / 2 + offsetY}%`,
-  };
+  return style;
 }
 
 // Renders interactive tap zone overlays on the phone screen
@@ -137,6 +139,10 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
 
 export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
+
+  // Don't show icons in the phone device — only screens
+  const isIconType = activeScreen?.type === 'icon' || activeScreen?.category === 'phone_icon';
+  const phoneScreen = isIconType ? null : activeScreen;
 
   // Match screens to screen types
   const getScreenForType = (type) => {
