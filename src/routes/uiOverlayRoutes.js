@@ -19,7 +19,19 @@ router.get('/:showId', optionalAuth, async (req, res) => {
     const showId = req.params.showId;
 
     // Merge hardcoded defaults + custom overlay types from DB
-    const allTypes = await getAllOverlayTypes(showId, models);
+    let allTypes = await getAllOverlayTypes(showId, models);
+
+    // Filter out permanently excluded types for this show
+    try {
+      const PageContent = models.PageContent;
+      if (PageContent) {
+        const excludedRow = await PageContent.findOne({ where: { page_name: `phone_hub_${showId}`, constant_key: 'EXCLUDED_TYPES' } });
+        const excluded = new Set(excludedRow?.data?.excluded_types || []);
+        if (excluded.size > 0) {
+          allTypes = allTypes.filter(ot => !excluded.has(ot.id));
+        }
+      }
+    } catch { /* continue without filtering */ }
 
     // Direct SQL query — cast metadata to text to avoid JSONB driver issues
     // This is the same pattern used by the /debug endpoint which works reliably
@@ -430,6 +442,7 @@ router.get('/:showId/frame', optionalAuth, async (req, res) => {
 
     let frame_url = null;
     let global_fit = null;
+    let excluded_types = [];
 
     if (PageContent) {
       const frameRow = await PageContent.findOne({ where: { page_name: `phone_hub_${showId}`, constant_key: 'FRAME_URL' } });
@@ -437,9 +450,12 @@ router.get('/:showId/frame', optionalAuth, async (req, res) => {
 
       const fitRow = await PageContent.findOne({ where: { page_name: `phone_hub_${showId}`, constant_key: 'GLOBAL_FIT' } });
       if (fitRow?.data) global_fit = fitRow.data.global_fit || null;
+
+      const excludedRow = await PageContent.findOne({ where: { page_name: `phone_hub_${showId}`, constant_key: 'EXCLUDED_TYPES' } });
+      if (excludedRow?.data) excluded_types = excludedRow.data.excluded_types || [];
     }
 
-    return res.json({ success: true, frame_url, global_fit });
+    return res.json({ success: true, frame_url, global_fit, excluded_types });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -478,6 +494,27 @@ router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
     }
 
     return res.json({ success: true, global_fit });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/v1/ui-overlays/:showId/excluded-types — permanently exclude built-in types for this show
+router.put('/:showId/excluded-types', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const showId = req.params.showId;
+    const { excluded_types } = req.body;
+    if (!Array.isArray(excluded_types)) return res.status(400).json({ success: false, error: 'excluded_types must be an array' });
+
+    const PageContent = models.PageContent;
+    if (PageContent) {
+      await PageContent.upsert(
+        { page_name: `phone_hub_${showId}`, constant_key: 'EXCLUDED_TYPES', data: { excluded_types } },
+        { conflictFields: ['page_name', 'constant_key'] }
+      );
+    }
+    return res.json({ success: true, excluded_types });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

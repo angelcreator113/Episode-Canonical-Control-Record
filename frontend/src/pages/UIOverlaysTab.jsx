@@ -44,9 +44,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const undoStackRef = useRef([]);  // undo history for activeScreen changes
   const frameRemovedRef = useRef(false);  // tracks if user explicitly removed the custom frame
   const [batchUploading, setBatchUploading] = useState(false);
-  const [hiddenScreens, setHiddenScreens] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('phone_hub_hidden') || '[]'); } catch { return []; }
-  });
+  const [hiddenScreens, setHiddenScreens] = useState([]);
   const [showHidden, setShowHidden] = useState(false);
   const fileInputRef = useRef(null);
   const variantInputRef = useRef(null);
@@ -63,7 +61,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const handleHideScreen = (key) => {
     setHiddenScreens(prev => {
       const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
-      localStorage.setItem('phone_hub_hidden', JSON.stringify(next));
+      // Persist to server so it survives refresh and works across devices
+      if (showId) {
+        api.put(`/api/v1/ui-overlays/${showId}/excluded-types`, { excluded_types: next }).catch(() => {});
+      }
       return next;
     });
   };
@@ -133,6 +134,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     api.get(`/api/v1/ui-overlays/${showId}/frame`).then(r => {
       if (!frameRemovedRef.current && r.data?.frame_url) setCustomFrameUrl(r.data.frame_url);
       if (r.data?.global_fit) setGlobalFit(r.data.global_fit);
+      if (r.data?.excluded_types?.length) setHiddenScreens(r.data.excluded_types);
     }).catch(err => {
       console.warn('[PhoneHub] Failed to load frame/fit settings:', err.message);
     });
