@@ -58,7 +58,9 @@ router.get('/:showId', optionalAuth, async (req, res) => {
       const otId = ot.id.toLowerCase();
       const otName = ot.name.toLowerCase();
       const lifecycle = ot.lifecycle || 'permanent';
-      const found = existing.find(e => {
+
+      // Find ALL matching assets (variants)
+      const allMatches = existing.filter(e => {
         const eType = (e.overlay_type || '').toLowerCase();
         const eName = (e.name || '').toLowerCase();
         return eType === otId
@@ -66,15 +68,32 @@ router.get('/:showId', optionalAuth, async (req, res) => {
           || eName.includes(otId.replace(/_/g, ' '))
           || (otId === 'wardrobe_list' && eType === 'todo_checklist');
       });
+
+      // Primary = the one without a variant_label, or first match
+      const primary = allMatches.find(e => !e.metadata?.variant_label) || allMatches[0] || null;
+
+      // Build variants array
+      const variants = allMatches.length > 1 ? allMatches.map(e => ({
+        asset_id: e.id,
+        url: e.url,
+        variant_label: e.metadata?.variant_label || 'Default',
+        screen_links: e.metadata?.screen_links || null,
+        image_fit: e.metadata?.image_fit || null,
+      })) : null;
+
       return {
         ...ot,
         lifecycle,
-        generated: !!found,
-        url: found?.url || null,
-        asset_id: found?.id || null,
-        bg_removed: found?.bg_removed || false,
-        custom_prompt: found?.custom_prompt || null,
-        screen_links: found?.metadata?.screen_links || null,
+        generated: !!primary,
+        url: primary?.url || null,
+        asset_id: primary?.id || null,
+        bg_removed: primary?.bg_removed || false,
+        custom_prompt: primary?.custom_prompt || null,
+        screen_links: primary?.metadata?.screen_links || null,
+        image_fit: primary?.metadata?.image_fit || null,
+        // Category override from asset metadata (for built-in types reassigned by user)
+        ...(primary?.metadata?.overlay_category ? { category: primary.metadata.overlay_category } : {}),
+        variants,
       };
     });
 
@@ -293,24 +312,34 @@ router.post('/:showId/remove-bg/:assetId', optionalAuth, async (req, res) => {
 });
 
 // POST /api/v1/ui-overlays/:showId/upload/:overlayType — upload custom image for an overlay
+// Optional body field: variant_label (e.g. "Locked", "Unlocked") — defaults to replacing the single asset
 router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image'), async (req, res) => {
   try {
     const models = require('../models');
     const { getAllOverlayTypes, uploadOverlayToS3 } = require('../services/uiOverlayService');
     const { v4: uuidv4 } = require('uuid');
     const showId = req.params.showId;
+    const variantLabel = req.body?.variant_label || null;
 
     const allTypes = await getAllOverlayTypes(showId, models);
     const overlayType = allTypes.find(ot => ot.id === req.params.overlayType);
     if (!overlayType) return res.status(404).json({ success: false, error: `Unknown overlay type: ${req.params.overlayType}` });
     if (!req.file) return res.status(400).json({ success: false, error: 'No image file uploaded' });
 
-    // Soft-delete existing asset
-    await models.sequelize.query(
-      `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-       AND metadata->>'overlay_type' = :overlayId AND deleted_at IS NULL`,
-      { replacements: { showId, overlayId: overlayType.id } }
-    );
+    // Soft-delete existing asset for this variant (or all if no variant specified)
+    if (variantLabel) {
+      await models.sequelize.query(
+        `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+         AND metadata->>'overlay_type' = :overlayId AND metadata->>'variant_label' = :variantLabel AND deleted_at IS NULL`,
+        { replacements: { showId, overlayId: overlayType.id, variantLabel } }
+      );
+    } else {
+      await models.sequelize.query(
+        `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+         AND metadata->>'overlay_type' = :overlayId AND (metadata->>'variant_label' IS NULL OR metadata->>'variant_label' = '') AND deleted_at IS NULL`,
+        { replacements: { showId, overlayId: overlayType.id } }
+      );
+    }
 
     // Upload to S3
     const url = await uploadOverlayToS3(req.file.buffer, overlayType.id, showId, req.file.mimetype);
@@ -324,13 +353,14 @@ router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image')
          VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
         { replacements: {
           id: assetUuid,
-          name: `UI Overlay: ${overlayType.name}`,
+          name: `UI Overlay: ${overlayType.name}${variantLabel ? ` (${variantLabel})` : ''}`,
           url,
           showId,
           metadata: JSON.stringify({
             source: 'custom-upload', overlay_type: overlayType.id,
             overlay_beat: overlayType.beat, overlay_category: overlayType.category,
             uploaded_at: new Date().toISOString(), original_filename: req.file.originalname,
+            ...(variantLabel ? { variant_label: variantLabel } : {}),
           }),
         } }
       );
@@ -356,17 +386,16 @@ router.post('/:showId/frame', optionalAuth, upload.single('frame'), async (req, 
 
     if (!req.file) return res.status(400).json({ success: false, error: 'No frame file uploaded' });
 
-    // Upload to S3
     const url = await uploadOverlayToS3(req.file.buffer, 'phone-frame', showId, req.file.mimetype);
 
-    // Save frame URL in PageContent for persistence
-    await models.sequelize.query(
-      `INSERT INTO page_contents (id, show_id, page_key, content, created_at, updated_at)
-       VALUES (gen_random_uuid(), :showId, 'phone_hub_frame', CAST(:content AS jsonb), NOW(), NOW())
-       ON CONFLICT (show_id, page_key) WHERE deleted_at IS NULL
-       DO UPDATE SET content = CAST(:content AS jsonb), updated_at = NOW()`,
-      { replacements: { showId, content: JSON.stringify({ frame_url: url }) } }
-    );
+    // Save frame URL using PageContent model
+    const PageContent = models.PageContent;
+    if (PageContent) {
+      await PageContent.upsert(
+        { page_name: `phone_hub_${showId}`, constant_key: 'FRAME_URL', data: { frame_url: url } },
+        { conflictFields: ['page_name', 'constant_key'] }
+      );
+    }
 
     return res.json({ success: true, frame_url: url });
   } catch (err) {
@@ -374,23 +403,103 @@ router.post('/:showId/frame', optionalAuth, upload.single('frame'), async (req, 
   }
 });
 
-// GET /api/v1/ui-overlays/:showId/frame — get saved phone frame URL
+// GET /api/v1/ui-overlays/:showId/frame — get saved phone frame URL + global fit
 router.get('/:showId/frame', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const [rows] = await models.sequelize.query(
-      `SELECT content::text as content_text FROM page_contents
-       WHERE show_id = :showId AND page_key = 'phone_hub_frame' AND deleted_at IS NULL
-       LIMIT 1`,
-      { replacements: { showId: req.params.showId } }
+    const showId = req.params.showId;
+    const PageContent = models.PageContent;
+
+    let frame_url = null;
+    let global_fit = null;
+
+    if (PageContent) {
+      const frameRow = await PageContent.findOne({ where: { page_name: `phone_hub_${showId}`, constant_key: 'FRAME_URL' } });
+      if (frameRow?.data) frame_url = frameRow.data.frame_url || null;
+
+      const fitRow = await PageContent.findOne({ where: { page_name: `phone_hub_${showId}`, constant_key: 'GLOBAL_FIT' } });
+      if (fitRow?.data) global_fit = fitRow.data.global_fit || null;
+    }
+
+    return res.json({ success: true, frame_url, global_fit });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/v1/ui-overlays/:showId/global-fit — save global image fit settings for all screens
+router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const showId = req.params.showId;
+    const { global_fit } = req.body;
+
+    const PageContent = models.PageContent;
+    if (PageContent) {
+      await PageContent.upsert(
+        { page_name: `phone_hub_${showId}`, constant_key: 'GLOBAL_FIT', data: { global_fit } },
+        { conflictFields: ['page_name', 'constant_key'] }
+      );
+    }
+
+    return res.json({ success: true, global_fit });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── CATEGORY OVERRIDE (screen vs icon for built-in types) ───────────────
+
+// PUT /api/v1/ui-overlays/:showId/category/:assetId — set category on asset metadata
+router.put('/:showId/category/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { category } = req.body;
+    if (!category) return res.status(400).json({ success: false, error: 'category is required' });
+
+    await models.sequelize.query(
+      `UPDATE assets
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
+           updated_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: {
+        assetId: req.params.assetId,
+        showId: req.params.showId,
+        patch: JSON.stringify({ overlay_category: category }),
+      } }
     );
 
-    if (!rows?.length) return res.json({ success: true, frame_url: null });
+    return res.json({ success: true, category });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    let content = {};
-    try { content = JSON.parse(rows[0].content_text || '{}'); } catch { /* skip */ }
+// ── IMAGE FIT (resize/position settings) ────────────────────────────────
 
-    return res.json({ success: true, frame_url: content.frame_url || null });
+// PUT /api/v1/ui-overlays/:showId/image-fit/:assetId — save image fit settings
+router.put('/:showId/image-fit/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { image_fit } = req.body;
+
+    if (!image_fit || typeof image_fit !== 'object') {
+      return res.status(400).json({ success: false, error: 'image_fit must be an object' });
+    }
+
+    await models.sequelize.query(
+      `UPDATE assets
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
+           updated_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: {
+        assetId: req.params.assetId,
+        showId: req.params.showId,
+        patch: JSON.stringify({ image_fit }),
+      } }
+    );
+
+    return res.json({ success: true, image_fit });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
