@@ -26,6 +26,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [customFrameUrl, setCustomFrameUrl] = useState(null);
   const [editingLinks, setEditingLinks] = useState(false);
   const [navHistory, setNavHistory] = useState([]);  // stack of screen keys for back navigation
+  const [globalFit, setGlobalFit] = useState({});    // device-level fit applied to all screens
   const fileInputRef = useRef(null);
   const frameInputRef = useRef(null);
   const pollRef = useRef(null);
@@ -41,11 +42,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     localStorage.setItem('phone_hub_skin', skin);
   };
 
-  // Load saved phone frame
+  // Load saved phone frame + global fit settings
   useEffect(() => {
     if (!showId) return;
     api.get(`/api/v1/ui-overlays/${showId}/frame`).then(r => {
       if (r.data?.frame_url) setCustomFrameUrl(r.data.frame_url);
+      if (r.data?.global_fit) setGlobalFit(r.data.global_fit);
     }).catch(() => {});
   }, [showId]);
 
@@ -335,12 +337,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
   // ── Image fit controls ──
 
+  // Per-screen fit
   const handleUpdateFit = async (fitChanges) => {
-    if (!activeScreen?.asset_id || !showId) return;
+    if (!activeScreen) return;
     const currentFit = activeScreen.image_fit || activeScreen.metadata?.image_fit || {};
     const newFit = { ...currentFit, ...fitChanges };
-
-    // Update locally immediately for responsive preview
     setActiveScreen(prev => prev ? { ...prev, image_fit: newFit, metadata: { ...(prev.metadata || {}), image_fit: newFit } } : prev);
     setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, image_fit: newFit, metadata: { ...(o.metadata || {}), image_fit: newFit } } : o));
   };
@@ -349,12 +350,31 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     if (!activeScreen?.asset_id || !showId) return;
     const fit = activeScreen.image_fit || activeScreen.metadata?.image_fit || {};
     try {
-      await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${activeScreen.asset_id}`, {
-        screen_links: activeScreen.screen_links || activeScreen.metadata?.screen_links || [],
-      });
-      // Save image_fit to metadata
       await api.put(`/api/v1/ui-overlays/${showId}/image-fit/${activeScreen.asset_id}`, { image_fit: fit });
-      flash('Fit saved!');
+      flash('Fit saved for this screen!');
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
+  const handleClearScreenFit = async () => {
+    if (!activeScreen?.asset_id || !showId) return;
+    setActiveScreen(prev => prev ? { ...prev, image_fit: null, metadata: { ...(prev.metadata || {}), image_fit: null } } : prev);
+    setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, image_fit: null, metadata: { ...(o.metadata || {}), image_fit: null } } : o));
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/image-fit/${activeScreen.asset_id}`, { image_fit: null });
+      flash('Using global fit');
+    } catch { /* silent */ }
+  };
+
+  // Global fit (applies to all screens that don't have a per-screen override)
+  const handleUpdateGlobalFit = (fitChanges) => {
+    setGlobalFit(prev => ({ ...prev, ...fitChanges }));
+  };
+
+  const handleSaveGlobalFit = async () => {
+    if (!showId) return;
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/global-fit`, { global_fit: globalFit });
+      flash('Global fit saved for all screens!');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -418,6 +438,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             skin={phoneSkin}
             onChangeSkin={handleChangeSkin}
             customFrameUrl={customFrameUrl}
+            globalFit={globalFit}
           />
 
           {/* Active Screen Detail Panel */}
@@ -469,9 +490,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
               {/* Image Fit Controls */}
               {activeScreen?.url && !activeScreen.placeholder && (
                 <ImageFitControls
-                  fit={activeScreen.image_fit || activeScreen.metadata?.image_fit || {}}
+                  fit={activeScreen.image_fit || activeScreen.metadata?.image_fit || globalFit || {}}
+                  hasScreenOverride={!!(activeScreen.image_fit || activeScreen.metadata?.image_fit)}
                   onChange={handleUpdateFit}
                   onSave={handleSaveFit}
+                  onClearOverride={handleClearScreenFit}
+                  globalFit={globalFit}
+                  onChangeGlobal={handleUpdateGlobalFit}
+                  onSaveGlobal={handleSaveGlobalFit}
                 />
               )}
 
@@ -516,23 +542,47 @@ const FIT_MODES = [
   { key: 'fill', label: 'Stretch' },
 ];
 
-function ImageFitControls({ fit, onChange, onSave }) {
-  const mode = fit.mode || 'cover';
-  const scale = fit.scale || 100;
-  const offsetX = fit.offsetX || 0;
-  const offsetY = fit.offsetY || 0;
-  const isDirty = mode !== 'cover' || scale !== 100 || offsetX !== 0 || offsetY !== 0;
+function ImageFitControls({ fit, hasScreenOverride, onChange, onSave, onClearOverride, globalFit, onChangeGlobal, onSaveGlobal }) {
+  const [editMode, setEditMode] = useState(hasScreenOverride ? 'screen' : 'global');
+  const activeFit = editMode === 'global' ? (globalFit || {}) : fit;
+  const activeChange = editMode === 'global' ? onChangeGlobal : onChange;
+  const activeSave = editMode === 'global' ? onSaveGlobal : onSave;
+
+  const mode = activeFit.mode || 'cover';
+  const scale = activeFit.scale || 100;
+  const offsetX = activeFit.offsetX || 0;
+  const offsetY = activeFit.offsetY || 0;
 
   return (
     <div style={{ marginTop: 10, padding: '10px 0', borderTop: '1px solid #f0ece4' }}>
+      {/* Mode toggle: global vs per-screen */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
-          IMAGE FIT
-        </span>
-        <button onClick={onSave} style={{
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button onClick={() => setEditMode('global')} style={{
+            padding: '3px 8px', fontSize: 9, fontWeight: 600, border: '1px solid #e0d9ce',
+            borderRadius: 4, cursor: 'pointer',
+            background: editMode === 'global' ? '#B8962E' : '#fff',
+            color: editMode === 'global' ? '#fff' : '#888',
+          }}>All Screens</button>
+          <button onClick={() => setEditMode('screen')} style={{
+            padding: '3px 8px', fontSize: 9, fontWeight: 600, border: '1px solid #e0d9ce',
+            borderRadius: 4, cursor: 'pointer',
+            background: editMode === 'screen' ? '#B8962E' : '#fff',
+            color: editMode === 'screen' ? '#fff' : '#888',
+          }}>This Screen Only</button>
+        </div>
+        <button onClick={activeSave} style={{
           padding: '3px 8px', fontSize: 9, fontWeight: 600, border: 'none',
           borderRadius: 5, background: '#B8962E', color: '#fff', cursor: 'pointer',
-        }}>Save Fit</button>
+        }}>Save</button>
+      </div>
+
+      <div style={{ fontSize: 9, color: '#999', marginBottom: 6, fontFamily: "'DM Mono', monospace" }}>
+        {editMode === 'global'
+          ? 'These settings apply to all screens by default.'
+          : hasScreenOverride
+            ? 'This screen has a custom fit override.'
+            : 'No override \u2014 using global fit. Change here to override.'}
       </div>
 
       {/* Fit mode */}
@@ -540,7 +590,7 @@ function ImageFitControls({ fit, onChange, onSave }) {
         {FIT_MODES.map(m => (
           <button
             key={m.key}
-            onClick={() => onChange({ mode: m.key })}
+            onClick={() => activeChange({ mode: m.key })}
             style={{
               flex: 1, padding: '5px 0', fontSize: 10, fontWeight: 600, border: '1px solid #e0d9ce',
               borderRadius: 5, cursor: 'pointer',
@@ -557,7 +607,7 @@ function ImageFitControls({ fit, onChange, onSave }) {
           <span style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace" }}>Scale</span>
           <span style={{ fontSize: 9, color: '#666', fontFamily: "'DM Mono', monospace" }}>{scale}%</span>
         </div>
-        <input type="range" min={50} max={200} value={scale} onChange={e => onChange({ scale: parseInt(e.target.value) })}
+        <input type="range" min={50} max={200} value={scale} onChange={e => activeChange({ scale: parseInt(e.target.value) })}
           style={{ width: '100%', height: 4, cursor: 'pointer' }} />
       </div>
 
@@ -568,7 +618,7 @@ function ImageFitControls({ fit, onChange, onSave }) {
             <span style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace" }}>X Offset</span>
             <span style={{ fontSize: 9, color: '#666', fontFamily: "'DM Mono', monospace" }}>{offsetX}%</span>
           </div>
-          <input type="range" min={-50} max={50} value={offsetX} onChange={e => onChange({ offsetX: parseInt(e.target.value) })}
+          <input type="range" min={-50} max={50} value={offsetX} onChange={e => activeChange({ offsetX: parseInt(e.target.value) })}
             style={{ width: '100%', height: 4, cursor: 'pointer' }} />
         </div>
         <div style={{ flex: 1 }}>
@@ -576,17 +626,23 @@ function ImageFitControls({ fit, onChange, onSave }) {
             <span style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace" }}>Y Offset</span>
             <span style={{ fontSize: 9, color: '#666', fontFamily: "'DM Mono', monospace" }}>{offsetY}%</span>
           </div>
-          <input type="range" min={-50} max={50} value={offsetY} onChange={e => onChange({ offsetY: parseInt(e.target.value) })}
+          <input type="range" min={-50} max={50} value={offsetY} onChange={e => activeChange({ offsetY: parseInt(e.target.value) })}
             style={{ width: '100%', height: 4, cursor: 'pointer' }} />
         </div>
       </div>
 
-      {isDirty && (
-        <button onClick={() => onChange({ mode: 'cover', scale: 100, offsetX: 0, offsetY: 0 })} style={{
-          marginTop: 6, padding: '3px 8px', fontSize: 9, color: '#999', background: 'none',
+      <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+        <button onClick={() => activeChange({ mode: 'cover', scale: 100, offsetX: 0, offsetY: 0 })} style={{
+          padding: '3px 8px', fontSize: 9, color: '#999', background: 'none',
           border: '1px solid #eee', borderRadius: 4, cursor: 'pointer',
-        }}>Reset to Default</button>
-      )}
+        }}>Reset</button>
+        {editMode === 'screen' && hasScreenOverride && (
+          <button onClick={onClearOverride} style={{
+            padding: '3px 8px', fontSize: 9, color: '#B8962E', background: 'none',
+            border: '1px solid #B8962E30', borderRadius: 4, cursor: 'pointer',
+          }}>Use Global Fit</button>
+        )}
+      </div>
     </div>
   );
 }
