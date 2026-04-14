@@ -14,7 +14,7 @@
  *   onBack()                — callback for back button (pops navigation history)
  *   deviceFrame   — optional custom device frame image URL
  */
-import React from 'react';
+import React, { useState } from 'react';
 
 // type: 'screen' = full phone screen frame, 'icon' = app icon for home screen link editor
 const SCREEN_TYPES = [
@@ -139,6 +139,11 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
 
 export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
+  const [frameLoaded, setFrameLoaded] = useState(false);
+  const [frameError, setFrameError] = useState(false);
+
+  // Only use custom frame if we have a URL AND it hasn't errored
+  const useCustomFrame = customFrameUrl && !frameError;
 
   // Don't show icons in the phone device — only screens
   const isIconType = activeScreen?.type === 'icon' || activeScreen?.category === 'phone_icon';
@@ -170,7 +175,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
     <div className="phone-hub-inner">
       {/* Phone Device */}
       <div className="phone-hub-device">
-      {customFrameUrl ? (
+      {useCustomFrame ? (
         /* Custom uploaded phone frame */
         <div className="phone-hub-frame">
           {/* Screen content — rendered first, sits behind the frame */}
@@ -198,10 +203,16 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             )}
           </div>
           {/* Frame image — on top so it visually wraps the screen content */}
-          <img src={customFrameUrl} alt="Phone frame" style={{
-            width: '100%', borderRadius: 24, display: 'block',
-            position: 'relative', zIndex: 2, pointerEvents: 'none',
-          }} />
+          <img
+            src={customFrameUrl}
+            alt="Phone frame"
+            onLoad={() => setFrameLoaded(true)}
+            onError={() => { setFrameError(true); setFrameLoaded(false); }}
+            style={{
+              width: '100%', borderRadius: 24, display: 'block',
+              position: 'relative', zIndex: 2, pointerEvents: 'none',
+            }}
+          />
         </div>
       ) : (
         /* Built-in iPhone-style phone frame with skin */
@@ -302,8 +313,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       </div>
       )}
 
-      {/* Skin picker */}
-      {onChangeSkin && (
+      {/* Skin picker — only shown for built-in frame (skins don't apply to custom frames) */}
+      {onChangeSkin && !useCustomFrame && (
         <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
           {PHONE_SKINS.map(s => (
             <button

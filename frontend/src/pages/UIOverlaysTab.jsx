@@ -658,6 +658,11 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
           <button onClick={() => frameInputRef.current?.click()} style={headerBtnStyle}>
             <Monitor size={13} /> <span className="btn-label">{customFrameUrl ? 'Change Frame' : 'Upload Frame'}</span>
           </button>
+          {customFrameUrl && (
+            <button onClick={() => { setCustomFrameUrl(null); if (showId) api.delete(`/api/v1/ui-overlays/${showId}/frame`).catch(() => {}); flash('Using built-in frame'); }} style={{ ...headerBtnStyle, color: '#dc2626', border: '1px solid #dc262620' }}>
+              <X size={13} /> <span className="btn-label">Remove Frame</span>
+            </button>
+          )}
           <button onClick={() => setShowCreateModal(true)} disabled={!showId} style={headerBtnStyle}>
             + <span className="btn-label">New Screen</span>
           </button>
