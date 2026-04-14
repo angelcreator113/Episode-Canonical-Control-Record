@@ -7,7 +7,7 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2 } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub, { SCREEN_TYPES } from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
@@ -333,6 +333,31 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // ── Image fit controls ──
+
+  const handleUpdateFit = async (fitChanges) => {
+    if (!activeScreen?.asset_id || !showId) return;
+    const currentFit = activeScreen.image_fit || activeScreen.metadata?.image_fit || {};
+    const newFit = { ...currentFit, ...fitChanges };
+
+    // Update locally immediately for responsive preview
+    setActiveScreen(prev => prev ? { ...prev, image_fit: newFit, metadata: { ...(prev.metadata || {}), image_fit: newFit } } : prev);
+    setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, image_fit: newFit, metadata: { ...(o.metadata || {}), image_fit: newFit } } : o));
+  };
+
+  const handleSaveFit = async () => {
+    if (!activeScreen?.asset_id || !showId) return;
+    const fit = activeScreen.image_fit || activeScreen.metadata?.image_fit || {};
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${activeScreen.asset_id}`, {
+        screen_links: activeScreen.screen_links || activeScreen.metadata?.screen_links || [],
+      });
+      // Save image_fit to metadata
+      await api.put(`/api/v1/ui-overlays/${showId}/image-fit/${activeScreen.asset_id}`, { image_fit: fit });
+      flash('Fit saved!');
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
   const generatedCount = overlays.filter(o => o.generated).length;
 
   return (
@@ -441,6 +466,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 )}
               </div>
 
+              {/* Image Fit Controls */}
+              {activeScreen?.url && !activeScreen.placeholder && (
+                <ImageFitControls
+                  fit={activeScreen.image_fit || activeScreen.metadata?.image_fit || {}}
+                  onChange={handleUpdateFit}
+                  onSave={handleSaveFit}
+                />
+              )}
+
               {/* Screen Link Editor */}
               {editingLinks && activeScreen?.url && (
                 <div style={{ marginTop: 12, padding: '12px 0', borderTop: '1px solid #f0ece4' }}>
@@ -472,6 +506,87 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       )}
 
       <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+const FIT_MODES = [
+  { key: 'cover', label: 'Fill & Crop' },
+  { key: 'contain', label: 'Fit Inside' },
+  { key: 'fill', label: 'Stretch' },
+];
+
+function ImageFitControls({ fit, onChange, onSave }) {
+  const mode = fit.mode || 'cover';
+  const scale = fit.scale || 100;
+  const offsetX = fit.offsetX || 0;
+  const offsetY = fit.offsetY || 0;
+  const isDirty = mode !== 'cover' || scale !== 100 || offsetX !== 0 || offsetY !== 0;
+
+  return (
+    <div style={{ marginTop: 10, padding: '10px 0', borderTop: '1px solid #f0ece4' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+          IMAGE FIT
+        </span>
+        <button onClick={onSave} style={{
+          padding: '3px 8px', fontSize: 9, fontWeight: 600, border: 'none',
+          borderRadius: 5, background: '#B8962E', color: '#fff', cursor: 'pointer',
+        }}>Save Fit</button>
+      </div>
+
+      {/* Fit mode */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+        {FIT_MODES.map(m => (
+          <button
+            key={m.key}
+            onClick={() => onChange({ mode: m.key })}
+            style={{
+              flex: 1, padding: '5px 0', fontSize: 10, fontWeight: 600, border: '1px solid #e0d9ce',
+              borderRadius: 5, cursor: 'pointer',
+              background: mode === m.key ? '#2C2C2C' : '#fff',
+              color: mode === m.key ? '#fff' : '#888',
+            }}
+          >{m.label}</button>
+        ))}
+      </div>
+
+      {/* Scale slider */}
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+          <span style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace" }}>Scale</span>
+          <span style={{ fontSize: 9, color: '#666', fontFamily: "'DM Mono', monospace" }}>{scale}%</span>
+        </div>
+        <input type="range" min={50} max={200} value={scale} onChange={e => onChange({ scale: parseInt(e.target.value) })}
+          style={{ width: '100%', height: 4, cursor: 'pointer' }} />
+      </div>
+
+      {/* Position offsets */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+            <span style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace" }}>X Offset</span>
+            <span style={{ fontSize: 9, color: '#666', fontFamily: "'DM Mono', monospace" }}>{offsetX}%</span>
+          </div>
+          <input type="range" min={-50} max={50} value={offsetX} onChange={e => onChange({ offsetX: parseInt(e.target.value) })}
+            style={{ width: '100%', height: 4, cursor: 'pointer' }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+            <span style={{ fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace" }}>Y Offset</span>
+            <span style={{ fontSize: 9, color: '#666', fontFamily: "'DM Mono', monospace" }}>{offsetY}%</span>
+          </div>
+          <input type="range" min={-50} max={50} value={offsetY} onChange={e => onChange({ offsetY: parseInt(e.target.value) })}
+            style={{ width: '100%', height: 4, cursor: 'pointer' }} />
+        </div>
+      </div>
+
+      {isDirty && (
+        <button onClick={() => onChange({ mode: 'cover', scale: 100, offsetX: 0, offsetY: 0 })} style={{
+          marginTop: 6, padding: '3px 8px', fontSize: 9, color: '#999', background: 'none',
+          border: '1px solid #eee', borderRadius: 4, cursor: 'pointer',
+        }}>Reset to Default</button>
+      )}
     </div>
   );
 }

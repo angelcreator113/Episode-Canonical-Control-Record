@@ -75,6 +75,7 @@ router.get('/:showId', optionalAuth, async (req, res) => {
         bg_removed: found?.bg_removed || false,
         custom_prompt: found?.custom_prompt || null,
         screen_links: found?.metadata?.screen_links || null,
+        image_fit: found?.metadata?.image_fit || null,
       };
     });
 
@@ -391,6 +392,36 @@ router.get('/:showId/frame', optionalAuth, async (req, res) => {
     try { content = JSON.parse(rows[0].content_text || '{}'); } catch { /* skip */ }
 
     return res.json({ success: true, frame_url: content.frame_url || null });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── IMAGE FIT (resize/position settings) ────────────────────────────────
+
+// PUT /api/v1/ui-overlays/:showId/image-fit/:assetId — save image fit settings
+router.put('/:showId/image-fit/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { image_fit } = req.body;
+
+    if (!image_fit || typeof image_fit !== 'object') {
+      return res.status(400).json({ success: false, error: 'image_fit must be an object' });
+    }
+
+    await models.sequelize.query(
+      `UPDATE assets
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
+           updated_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: {
+        assetId: req.params.assetId,
+        showId: req.params.showId,
+        patch: JSON.stringify({ image_fit }),
+      } }
+    );
+
+    return res.json({ success: true, image_fit });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
