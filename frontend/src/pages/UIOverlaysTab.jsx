@@ -35,6 +35,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [showFlowMap, setShowFlowMap] = useState(false);
   const [expandedSections, setExpandedSections] = useState({ actions: true, fit: false, links: false, variants: true });
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
   const undoStackRef = useRef([]);  // undo history for activeScreen changes
   const [batchUploading, setBatchUploading] = useState(false);
   const fileInputRef = useRef(null);
@@ -517,6 +519,26 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // Rename screen
+  const handleRename = async (newName) => {
+    if (!newName?.trim() || !activeScreen || !showId) return;
+    const trimmed = newName.trim();
+    pushUndo();
+    try {
+      if (activeScreen.custom && activeScreen.custom_id) {
+        await api.put(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`, { name: trimmed });
+      }
+      if (activeScreen.asset_id) {
+        // Update asset name in metadata
+        await api.put(`/api/v1/ui-overlays/${showId}/category/${activeScreen.asset_id}`, { category: activeScreen.category || 'phone' });
+      }
+      setActiveScreen(prev => prev ? { ...prev, name: trimmed } : prev);
+      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, name: trimmed } : o));
+      flash(`Renamed to "${trimmed}"`);
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+    setEditingName(false);
+  };
+
   // Change screen's type (screen vs icon)
   const handleChangeScreenType = async (category) => {
     if (!activeScreen || !showId) return;
@@ -665,7 +687,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
             <PhoneHub
               screens={overlays}
               activeScreen={activeScreen}
-              onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); }}
+              onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); }}
               onNavigate={handleNavigate}
               navigationHistory={navHistory}
               onBack={handleBack}
@@ -683,11 +705,31 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, borderBottom: '1px solid #f0ece4', paddingBottom: 8 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif" }}>{activeScreen.name}</div>
+                    {editingName ? (
+                      <input
+                        autoFocus
+                        value={editNameValue}
+                        onChange={e => setEditNameValue(e.target.value)}
+                        onBlur={() => { handleRename(editNameValue); }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleRename(editNameValue);
+                          if (e.key === 'Escape') setEditingName(false);
+                        }}
+                        style={{ fontSize: 14, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", border: '1px solid #B8962E', borderRadius: 4, padding: '1px 4px', outline: 'none', width: '100%' }}
+                      />
+                    ) : (
+                      <div
+                        onClick={() => { setEditNameValue(activeScreen.name || ''); setEditingName(true); }}
+                        title="Click to rename"
+                        style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", cursor: 'text', borderBottom: '1px dashed transparent' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderBottomColor = '#B8962E40'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
+                      >{activeScreen.name}</div>
+                    )}
                     <span style={{
                       fontSize: 7, fontWeight: 700, padding: '2px 5px', borderRadius: 3,
                       background: (activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? '#a889c8' : '#B8962E',
-                      color: '#fff', letterSpacing: 0.5,
+                      color: '#fff', letterSpacing: 0.5, flexShrink: 0,
                     }}>
                       {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'ICON' : 'SCREEN'}
                     </span>
