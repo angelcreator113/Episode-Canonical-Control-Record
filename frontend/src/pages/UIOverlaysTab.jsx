@@ -472,14 +472,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#2C2C2C' }}>Phone Hub</h2>
-          <p style={{ margin: '4px 0 0', fontSize: 12, color: '#888', fontFamily: "'DM Mono', monospace" }}>
-            {generatedCount}/{overlays.length} screens ready — the phone is the show's interface
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#2C2C2C' }}>Phone Hub</h2>
+          <p style={{ margin: '4px 0 0', fontSize: 11, color: '#888', fontFamily: "'DM Mono', monospace" }}>
+            {generatedCount}/{overlays.length} screens ready
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <button onClick={() => frameInputRef.current?.click()} style={{
             padding: '8px 14px', border: '1px solid #e8e0d0', borderRadius: 8,
             background: '#fff', color: '#888', fontSize: 11, fontWeight: 600,
@@ -514,9 +514,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           <p style={{ marginTop: 12, fontSize: 13 }}>Loading phone screens...</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div className="phone-hub-layout">
           {/* Left: Phone Hub (phone + grid) */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="phone-hub-main">
             <PhoneHub
               screens={overlays}
               activeScreen={activeScreen}
@@ -531,14 +531,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             />
           </div>
 
-          {/* Right: Detail Panel (sticky sidebar) */}
+          {/* Right: Detail Panel (sticky sidebar on desktop, stacked on mobile) */}
           {activeScreen && (
-            <div style={{
-              width: 340, flexShrink: 0,
-              position: 'sticky', top: 20, maxHeight: 'calc(100vh - 60px)', overflowY: 'auto',
-              background: '#fff', border: '1px solid #e8e0d0',
-              borderRadius: 12, padding: 14,
-            }}>
+            <div className="phone-hub-detail-panel">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -666,7 +661,33 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         />
       )}
 
-      <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .phone-hub-layout {
+          display: flex; gap: 16px; align-items: flex-start;
+        }
+        .phone-hub-main {
+          flex: 1; min-width: 0;
+        }
+        .phone-hub-detail-panel {
+          width: 340px; flex-shrink: 0;
+          position: sticky; top: 20px; max-height: calc(100vh - 60px); overflow-y: auto;
+          background: #fff; border: 1px solid #e8e0d0;
+          border-radius: 12px; padding: 14px;
+        }
+
+        @media (max-width: 900px) {
+          .phone-hub-layout {
+            flex-direction: column;
+          }
+          .phone-hub-detail-panel {
+            width: 100%; position: static; max-height: none;
+            order: -1; margin-bottom: 12px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
