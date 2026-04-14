@@ -375,7 +375,7 @@ router.post('/:showId/frame', optionalAuth, upload.single('frame'), async (req, 
   }
 });
 
-// GET /api/v1/ui-overlays/:showId/frame — get saved phone frame URL
+// GET /api/v1/ui-overlays/:showId/frame — get saved phone frame URL + global fit
 router.get('/:showId/frame', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
@@ -386,12 +386,47 @@ router.get('/:showId/frame', optionalAuth, async (req, res) => {
       { replacements: { showId: req.params.showId } }
     );
 
-    if (!rows?.length) return res.json({ success: true, frame_url: null });
+    if (!rows?.length) return res.json({ success: true, frame_url: null, global_fit: null });
 
     let content = {};
     try { content = JSON.parse(rows[0].content_text || '{}'); } catch { /* skip */ }
 
-    return res.json({ success: true, frame_url: content.frame_url || null });
+    return res.json({ success: true, frame_url: content.frame_url || null, global_fit: content.global_fit || null });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/v1/ui-overlays/:showId/global-fit — save global image fit settings for all screens
+router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const showId = req.params.showId;
+    const { global_fit } = req.body;
+
+    // Read existing content, merge global_fit
+    const [rows] = await models.sequelize.query(
+      `SELECT content::text as content_text FROM page_contents
+       WHERE show_id = :showId AND page_key = 'phone_hub_frame' AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { showId } }
+    );
+
+    let existing = {};
+    if (rows?.length) {
+      try { existing = JSON.parse(rows[0].content_text || '{}'); } catch { /* skip */ }
+    }
+
+    const merged = { ...existing, global_fit };
+
+    await models.sequelize.query(
+      `INSERT INTO page_contents (id, show_id, page_key, content, created_at, updated_at)
+       VALUES (gen_random_uuid(), :showId, 'phone_hub_frame', CAST(:content AS jsonb), NOW(), NOW())
+       ON CONFLICT (show_id, page_key) WHERE deleted_at IS NULL
+       DO UPDATE SET content = CAST(:content AS jsonb), updated_at = NOW()`,
+      { replacements: { showId, content: JSON.stringify(merged) } }
+    );
+
+    return res.json({ success: true, global_fit });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
