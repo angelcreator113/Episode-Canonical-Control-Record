@@ -57,7 +57,29 @@ const PHONE_SKINS = [
   { key: 'lavender', label: 'Lavender', body: 'linear-gradient(135deg, #d4c4e8, #a889c8)', notch: '#9878b8', btn: '#9878b8', shadow: 'rgba(168,137,200,0.3)', accent: 'rgba(255,255,255,0.2)' },
 ];
 
-export { SCREEN_TYPES, PHONE_SKINS };
+export { SCREEN_TYPES, PHONE_SKINS, getScreenImageStyle };
+
+// Build image style from screen's fit settings (metadata.image_fit)
+function getScreenImageStyle(screen) {
+  const fit = screen?.image_fit || screen?.metadata?.image_fit || {};
+  const mode = fit.mode || 'cover'; // cover | contain | fill
+  const scale = fit.scale || 100;   // percentage, 100 = normal
+  const offsetX = fit.offsetX || 0; // percentage offset
+  const offsetY = fit.offsetY || 0;
+
+  if (scale === 100 && offsetX === 0 && offsetY === 0) {
+    return { width: '100%', height: '100%', objectFit: mode };
+  }
+
+  return {
+    width: `${scale}%`,
+    height: `${scale}%`,
+    objectFit: mode,
+    position: 'absolute',
+    left: `${50 - scale / 2 + offsetX}%`,
+    top: `${50 - scale / 2 + offsetY}%`,
+  };
+}
 
 // Renders interactive tap zone overlays on the phone screen
 function ScreenLinkOverlay({ links = [], onNavigate }) {
@@ -126,7 +148,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           }}>
             {activeScreen?.url ? (
               <>
-                <img src={activeScreen.url} alt={activeScreen.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={activeScreen.url} alt={activeScreen.name} style={getScreenImageStyle(activeScreen)} />
                 <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
               </>
             ) : (
@@ -172,7 +194,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
               <img
                 src={activeScreen.url}
                 alt={activeScreen.name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                style={getScreenImageStyle(activeScreen)}
               />
               <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
             </>
@@ -276,7 +298,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                     marginBottom: 6, background: '#f0f0f0',
                   }}>
                     <img src={screen.url} alt={type.label}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      style={getScreenImageStyle(screen)} />
                   </div>
                 )}
 
