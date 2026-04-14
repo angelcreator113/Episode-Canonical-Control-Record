@@ -207,6 +207,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   }, [showId]);
 
   useEffect(() => { loadOverlays(true); }, [loadOverlays]);
+
+  // Auto-select home screen on first load
+  useEffect(() => {
+    if (!activeScreen && overlays.length > 0) {
+      const home = overlays.find(o => o.id === 'home') || overlays[0];
+      if (home) setActiveScreen(home);
+    }
+  }, [overlays]);
   useEffect(() => { return () => { if (pollRef.current) clearInterval(pollRef.current); }; }, []);
 
   // Generate all
