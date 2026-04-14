@@ -28,20 +28,27 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
 
   useEffect(() => { setZones(links); setIsDirty(false); }, [links]);
 
+  // Unified position getter — works for mouse, touch, and pointer events
   const getRelativePos = useCallback((e) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     return {
-      x: ((e.clientX - rect.left) / rect.width) * 100,
-      y: ((e.clientY - rect.top) / rect.height) * 100,
+      x: ((clientX - rect.left) / rect.width) * 100,
+      y: ((clientY - rect.top) / rect.height) * 100,
     };
   }, []);
 
-  // Drawing new zones
-  const handleMouseDown = (e) => {
+  // Drawing new zones — works for mouse and touch via pointer capture
+  const handlePointerDown = (e) => {
     if (readOnly || dragging) return;
-    // Ignore if clicking on an existing zone
     if (e.target.closest('[data-zone-id]')) return;
+    e.preventDefault();
+    // Capture pointer so we keep getting events even if finger moves fast
+    if (e.target.setPointerCapture) {
+      try { e.target.setPointerCapture(e.pointerId); } catch {}
+    }
     const pos = getRelativePos(e);
     setDrawing(true);
     setDrawStart(pos);
@@ -49,8 +56,9 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
     setSelectedZone(null);
   };
 
-  const handleMouseMove = (e) => {
+  const handlePointerMove = (e) => {
     if (dragging) {
+      e.preventDefault();
       const pos = getRelativePos(e);
       setZones(prev => prev.map(z => z.id === dragging.id ? {
         ...z,
@@ -61,10 +69,15 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
       return;
     }
     if (!drawing) return;
+    e.preventDefault();
     setDrawCurrent(getRelativePos(e));
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = (e) => {
+    // Release pointer capture
+    if (e?.target?.releasePointerCapture && e?.pointerId !== undefined) {
+      try { e.target.releasePointerCapture(e.pointerId); } catch {}
+    }
     if (dragging) {
       setDragging(null);
       return;
@@ -100,6 +113,10 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
 
   const handleZoneDragStart = (e, zone) => {
     e.stopPropagation();
+    e.preventDefault();
+    if (containerRef.current?.setPointerCapture) {
+      try { containerRef.current.setPointerCapture(e.pointerId); } catch {}
+    }
     const pos = getRelativePos(e);
     setDragging({ id: zone.id, startX: pos.x, startY: pos.y, origX: zone.x, origY: zone.y });
     setSelectedZone(zone.id);
@@ -150,10 +167,11 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
       {/* Screen with overlay zones */}
       <div
         ref={containerRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => { if (drawing) handleMouseUp(); if (dragging) setDragging(null); }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={() => { if (!drawing && !dragging) return; /* captured pointers don't fire leave */ }}
         style={{
           position: 'relative',
           width: '100%',
@@ -161,6 +179,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
           margin: '0 auto',
           aspectRatio: '9/16',
           borderRadius: 12,
+          touchAction: 'none',
           overflow: 'hidden',
           cursor: readOnly ? 'default' : 'crosshair',
           userSelect: 'none',
@@ -180,7 +199,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
           <div
             key={zone.id}
             data-zone-id={zone.id}
-            onMouseDown={(e) => !readOnly && handleZoneDragStart(e, zone)}
+            onPointerDown={(e) => !readOnly && handleZoneDragStart(e, zone)}
             onClick={(e) => { e.stopPropagation(); setSelectedZone(zone.id); }}
             style={{
               position: 'absolute',
@@ -242,7 +261,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 'min(400px, 50vh)', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 'min(400px, 35vh)', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
             {zones.map((zone, i) => (
               <div
                 key={zone.id}
@@ -300,24 +319,33 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                     {/* Icon picker — choose from existing icon overlays or upload */}
                     <div>
                       {iconOverlays.length > 0 && (
-                        <div style={{ marginBottom: 6 }}>
+                        <div style={{ marginBottom: 8 }}>
                           <div style={{ fontSize: 11, fontWeight: 600, color: '#888', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>
-                            USE ICON OVERLAY
+                            USE ICON OVERLAY ({iconOverlays.length})
                           </div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <div style={{
+                            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))',
+                            gap: 6, maxHeight: 200, overflowY: 'auto', padding: 2,
+                            WebkitOverflowScrolling: 'touch',
+                          }}>
                             {iconOverlays.map(ico => (
                               <button
                                 key={ico.id}
                                 onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url }); }}
                                 title={ico.name}
                                 style={{
-                                  width: 44, height: 44, borderRadius: 8, border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
+                                  width: '100%', aspectRatio: '1/1', borderRadius: 8,
+                                  border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
                                   background: zone.icon_url === ico.url ? '#fdf8ee' : '#fff',
-                                  cursor: 'pointer', padding: 3, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  cursor: 'pointer', padding: 4,
+                                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
                                   transition: 'border-color 0.15s',
                                 }}
                               >
-                                <img src={ico.url} alt={ico.name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 4 }} draggable={false} />
+                                <img src={ico.url} alt={ico.name} style={{ width: '100%', flex: 1, objectFit: 'contain', borderRadius: 4 }} draggable={false} />
+                                <span style={{ fontSize: 7, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center', lineHeight: 1 }}>
+                                  {(ico.name || '').replace(/\s*Icon$/i, '')}
+                                </span>
                               </button>
                             ))}
                           </div>

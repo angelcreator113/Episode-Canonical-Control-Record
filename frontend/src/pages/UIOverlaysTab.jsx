@@ -26,6 +26,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [generatingId, setGeneratingId] = useState(null);
   const [toast, setToast] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createMode, setCreateMode] = useState('phone'); // 'phone' or 'phone_icon'
   const [phoneSkin, setPhoneSkin] = useState('rosegold');
   const [customFrameUrl, setCustomFrameUrl] = useState(null);
   const [editingLinks, setEditingLinks] = useState(false);
@@ -88,6 +89,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     flash('Undone');
   }, []);
 
+  // Close detail panel — revert phone display to home screen
+  const closePanel = useCallback(() => {
+    setPanelOpen(false);
+    setEditingLinks(false);
+    undoStackRef.current = [];
+    const home = overlays.find(o => o.id === 'home' && o.generated && o.url);
+    if (home) setActiveScreen(home);
+  }, [overlays]);
+
   // Ctrl+Z and Escape listener
   useEffect(() => {
     const handler = (e) => {
@@ -95,7 +105,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         e.preventDefault();
         handleUndo();
       }
-      // Escape closes panel — but not if user is in an input/textarea (let the input handle it)
       if (e.key === 'Escape' && panelOpen) {
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -104,7 +113,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleUndo, activeScreen]);
+  }, [handleUndo, panelOpen, closePanel]);
 
   // Lock body scroll when detail panel is open — mobile only (bottom sheet)
   useEffect(() => {
@@ -116,16 +125,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   }, [panelOpen]);
 
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
-
-  // Close detail panel — revert phone display to home screen
-  const closePanel = useCallback(() => {
-    setPanelOpen(false);
-    setEditingLinks(false);
-    undoStackRef.current = [];
-    // Revert to home screen on the phone
-    const home = overlays.find(o => o.id === 'home' && o.generated && o.url);
-    if (home) setActiveScreen(home);
-  }, [overlays]);
 
   // Load saved phone frame + global fit settings
   useEffect(() => {
@@ -364,9 +363,16 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     try {
       const deletedKey = screen.id;
       if (screen.custom && screen.custom_id) {
+        // Custom screen: delete the type definition (removes it from the list entirely)
         await api.delete(`/api/v1/ui-overlays/${showId}/types/${screen.custom_id}`);
-      } else if (screen.asset_id) {
+      }
+      if (screen.asset_id) {
+        // Delete the asset (image)
         await api.delete(`/api/v1/ui-overlays/${showId}/asset/${screen.asset_id}`);
+      }
+      // For built-in screen types, hide them so they don't reappear as placeholders
+      if (!screen.custom) {
+        handleHideScreen(deletedKey);
       }
       // Clean orphaned links: remove any screen_links targeting the deleted screen
       for (const overlay of overlays) {
@@ -396,13 +402,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     document.body.removeChild(link);
   };
 
-  // Create custom screen
+  // Create custom screen or icon
   const handleCreateScreen = async (form) => {
     try {
-      await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: 'phone' });
+      await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
       loadOverlays(false);
       setShowCreateModal(false);
-      flash('Screen type created');
+      flash(createMode === 'phone_icon' ? 'Icon type created' : 'Screen type created');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -771,8 +777,11 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
               <X size={13} /> <span className="btn-label">Remove Frame</span>
             </button>
           )}
-          <button onClick={() => setShowCreateModal(true)} disabled={!showId} style={headerBtnStyle}>
+          <button onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId} style={headerBtnStyle}>
             + <span className="btn-label">New Screen</span>
+          </button>
+          <button onClick={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }} disabled={!showId} style={headerBtnStyle}>
+            + <span className="btn-label">New Icon</span>
           </button>
           <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId} style={headerBtnStyle}>
             <Upload size={13} /> <span className="btn-label">{batchUploading ? 'Uploading...' : 'Batch Upload'}</span>
@@ -884,14 +893,14 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
               </div>
               <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
                 <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title={undoStackRef.current.length > 0 ? `Undo (${undoStackRef.current.length} changes)` : 'Nothing to undo'} aria-label="Undo" style={{
-                  background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer',
-                  color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '6px 8px', minWidth: 36, minHeight: 36,
+                  background: 'none', border: '1px solid #eee', borderRadius: 8, cursor: 'pointer',
+                  color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '8px', minWidth: 44, minHeight: 44,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}><Undo2 size={14} /></button>
+                }}><Undo2 size={18} /></button>
                 <button onClick={closePanel} aria-label="Close panel" style={{
-                  background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '6px 8px', minWidth: 36, minHeight: 36,
+                  background: 'none', border: '1px solid #eee', borderRadius: 8, cursor: 'pointer', color: '#999', padding: '8px', minWidth: 44, minHeight: 44,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}><X size={14} /></button>
+                }}><X size={18} /></button>
               </div>
             </div>
 
@@ -922,16 +931,16 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
               {/* ── Type Toggle ── */}
               {activeScreen.asset_id && (
-                <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                   <button onClick={() => handleChangeScreenType('phone')} style={{
-                    flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 700, border: '1px solid #e0d9ce',
-                    borderRadius: 6, cursor: 'pointer', minHeight: 36,
+                    flex: 1, padding: '10px 0', fontSize: 13, fontWeight: 700, border: '1px solid #e0d9ce',
+                    borderRadius: 8, cursor: 'pointer', minHeight: 44,
                     background: activeScreen.category !== 'phone_icon' ? '#B8962E' : '#fff',
                     color: activeScreen.category !== 'phone_icon' ? '#fff' : '#888',
                   }}>Screen</button>
                   <button onClick={() => handleChangeScreenType('phone_icon')} style={{
-                    flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 700, border: '1px solid #e0d9ce',
-                    borderRadius: 6, cursor: 'pointer', minHeight: 36,
+                    flex: 1, padding: '10px 0', fontSize: 13, fontWeight: 700, border: '1px solid #e0d9ce',
+                    borderRadius: 8, cursor: 'pointer', minHeight: 44,
                     background: activeScreen.category === 'phone_icon' ? '#a889c8' : '#fff',
                     color: activeScreen.category === 'phone_icon' ? '#fff' : '#888',
                   }}>Icon</button>
@@ -940,34 +949,35 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
               {/* ── Variants ── */}
               {(activeScreen.variants?.length > 1 || activeScreen.url) && (
-                <div style={{ marginBottom: 10 }}>
+                <div style={{ marginBottom: 12 }}>
                   {activeScreen.variants?.length > 1 && (
-                    <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
                       {activeScreen.variants.map((v, i) => (
                         <button key={v.asset_id} onClick={() => setActiveVariantIdx(i)} style={{
-                          padding: '5px 10px', fontSize: 10, fontWeight: 600,
+                          padding: '8px 14px', fontSize: 12, fontWeight: 600,
                           border: `1px solid ${activeVariantIdx === i ? '#B8962E' : '#e0d9ce'}`,
-                          borderRadius: 6, cursor: 'pointer', minHeight: 30,
+                          borderRadius: 8, cursor: 'pointer', minHeight: 36,
                           background: activeVariantIdx === i ? '#B8962E' : '#fff',
                           color: activeVariantIdx === i ? '#fff' : '#888',
+                          maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>{v.variant_label}</button>
                       ))}
                       <button onClick={() => setAddingVariant(!addingVariant)} style={{
-                        padding: '5px 8px', fontSize: 10, fontWeight: 600,
-                        border: '1px dashed #ccc', borderRadius: 6, cursor: 'pointer',
-                        background: 'transparent', color: '#aaa', minHeight: 30,
+                        padding: '8px 12px', fontSize: 14, fontWeight: 600,
+                        border: '1px dashed #ccc', borderRadius: 8, cursor: 'pointer',
+                        background: 'transparent', color: '#aaa', minHeight: 36, minWidth: 36,
                       }}>+</button>
                     </div>
                   )}
                   {addingVariant && (
-                    <div style={{ display: 'flex', gap: 4, marginBottom: 6, alignItems: 'center' }}>
-                      <input value={newVariantLabel} onChange={e => setNewVariantLabel(e.target.value)} placeholder="e.g. Locked" style={{ flex: 1, padding: '6px 8px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 11 }} />
-                      <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} style={{ padding: '6px 10px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 6, minHeight: 32, background: newVariantLabel.trim() ? '#b89060' : '#eee', color: newVariantLabel.trim() ? '#fff' : '#ccc', cursor: newVariantLabel.trim() ? 'pointer' : 'not-allowed' }}>Upload</button>
-                      <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} style={{ padding: '4px', border: 'none', background: 'none', cursor: 'pointer', color: '#ccc' }}><X size={12} /></button>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+                      <input value={newVariantLabel} onChange={e => setNewVariantLabel(e.target.value)} placeholder="e.g. Locked, Dark Mode" style={{ flex: 1, padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36 }} />
+                      <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} style={{ padding: '8px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 6, minHeight: 36, background: newVariantLabel.trim() ? '#b89060' : '#eee', color: newVariantLabel.trim() ? '#fff' : '#ccc', cursor: newVariantLabel.trim() ? 'pointer' : 'not-allowed' }}>Upload</button>
+                      <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} style={{ padding: '6px', border: 'none', background: 'none', cursor: 'pointer', color: '#ccc', minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
                     </div>
                   )}
                   {!activeScreen.variants && activeScreen.url && !addingVariant && (
-                    <button onClick={() => setAddingVariant(true)} style={{ padding: '5px 10px', fontSize: 10, fontWeight: 600, border: '1px dashed #b89060', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: '#b89060', display: 'flex', alignItems: 'center', gap: 4, minHeight: 30 }}><Layers size={11} /> Add Variant</button>
+                    <button onClick={() => setAddingVariant(true)} style={{ padding: '8px 14px', fontSize: 12, fontWeight: 600, border: '1px dashed #b89060', borderRadius: 8, cursor: 'pointer', background: 'transparent', color: '#b89060', display: 'flex', alignItems: 'center', gap: 6, minHeight: 36 }}><Layers size={14} /> Add Variant</button>
                   )}
                   <input ref={variantInputRef} type="file" accept="image/*" onChange={handleVariantUpload} style={{ display: 'none' }} />
                 </div>
@@ -1087,6 +1097,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         <CreateScreenModal
           onClose={() => setShowCreateModal(false)}
           onCreate={handleCreateScreen}
+          isIcon={createMode === 'phone_icon'}
         />
       )}
 
@@ -1269,10 +1280,10 @@ function DuplicateSettingsBtn({ screens, onDuplicate }) {
   );
 }
 
-function CreateScreenModal({ onClose, onCreate }) {
+function CreateScreenModal({ onClose, onCreate, isIcon = false }) {
   const [form, setForm] = useState({ name: '', beat: '', description: '', prompt: '' });
   const [saving, setSaving] = useState(false);
-  const fieldStyle = { width: '100%', padding: '10px 12px', border: '1px solid #e8e0d0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', minHeight: 40 };
+  const fieldStyle = { width: '100%', padding: '10px 12px', border: '1px solid #e8e0d0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', minHeight: 44 };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1286,14 +1297,14 @@ function CreateScreenModal({ onClose, onCreate }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
       <div style={{ background: '#fff', borderRadius: 16, maxWidth: 440, width: '100%', overflow: 'hidden', maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>New Phone Screen</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{isIcon ? 'New App Icon' : 'New Phone Screen'}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 8, minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Screen Name</label>
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Feed View, DM Conversation" style={fieldStyle} />
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>{isIcon ? 'Icon Name' : 'Screen Name'}</label>
+              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isIcon ? 'e.g., Spotify, TikTok, Custom App' : 'e.g., Feed View, DM Conversation'} style={fieldStyle} />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Beat / Trigger</label>

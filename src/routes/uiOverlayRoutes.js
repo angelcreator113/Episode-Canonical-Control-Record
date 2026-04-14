@@ -757,12 +757,12 @@ router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/v1/ui-overlays/:showId/types/:typeId — soft-delete a custom overlay type
+// DELETE /api/v1/ui-overlays/:showId/types/:typeId — permanently delete a custom overlay type
 router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     await models.sequelize.query(
-      `UPDATE ui_overlay_types SET deleted_at = NOW() WHERE id = :typeId AND show_id = :showId AND deleted_at IS NULL`,
+      `DELETE FROM ui_overlay_types WHERE id = :typeId AND show_id = :showId`,
       { replacements: { typeId: req.params.typeId, showId: req.params.showId } }
     );
     return res.json({ success: true });
@@ -771,26 +771,25 @@ router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/v1/ui-overlays/:showId/asset/:assetId — soft-delete an overlay asset
+// DELETE /api/v1/ui-overlays/:showId/asset/:assetId — permanently delete an overlay asset
 router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { showId, assetId } = req.params;
 
-    // Verify asset exists and belongs to this show, then soft-delete via raw query
-    // (avoids Sequelize association hooks that can cause cascade errors)
+    // Hard delete — permanently remove from database
     const [rows] = await models.sequelize.query(
-      `UPDATE assets SET deleted_at = NOW()
-       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL
+      `DELETE FROM assets
+       WHERE id = :assetId AND show_id = :showId
        RETURNING id`,
       { replacements: { assetId, showId } }
     );
 
     if (!rows?.length) {
-      return res.status(404).json({ success: false, error: 'Asset not found or already deleted' });
+      return res.status(404).json({ success: false, error: 'Asset not found' });
     }
 
-    return res.json({ success: true, message: 'Asset deleted' });
+    return res.json({ success: true, message: 'Asset permanently deleted' });
   } catch (err) {
     console.error('[UIOverlays] Delete asset error:', err.message);
     return res.status(500).json({ success: false, error: err.message });

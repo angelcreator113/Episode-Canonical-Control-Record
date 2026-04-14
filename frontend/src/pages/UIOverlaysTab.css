@@ -531,7 +531,11 @@
 
   .overlays-toolbar button {
     padding: 10px 12px !important;
-    min-height: 44px;
+    min-height: 44px !important;
+  }
+
+  .detail-panel-body {
+    -webkit-overflow-scrolling: touch;
   }
 
   .overlays-dup-dropdown {
