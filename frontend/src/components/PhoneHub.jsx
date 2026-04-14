@@ -57,6 +57,7 @@ const SCREEN_TYPES = [
   { key: 'icon_contacts', label: 'Contacts Icon', icon: '👥', desc: 'App icon for Contacts', type: 'icon' },
   { key: 'icon_tasks', label: 'Tasks Icon', icon: '✅', desc: 'App icon for Tasks', type: 'icon' },
   { key: 'icon_accessories', label: 'Accessories Icon', icon: '💎', desc: 'App icon for Accessories', type: 'icon' },
+  { key: 'icon_phone', label: 'Phone Icon', icon: '📱', desc: 'App icon for Phone', type: 'icon' },
 ];
 
 const PHONE_SKINS = [
