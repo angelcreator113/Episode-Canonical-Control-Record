@@ -501,3 +501,55 @@ Group the 26 screens in the UI grid by category:
 |------|--------|
 | `PhoneHub.jsx` | Add 13 new entries to `SCREEN_TYPES`, add `SCREEN_CATEGORIES` grouping |
 | `UIOverlaysTab.jsx` | Render screen grid grouped by category with section headers |
+
+---
+
+### Screen Link System (Built This Session)
+
+Interactive tap zones with icon overlays — lets you link app icons on the home screen (or any screen) to navigate between phone screens.
+
+#### How It Works
+
+1. Upload your home screen image (glassmorphism design with app icon placeholders)
+2. Click **"Edit Links"** in the detail panel
+3. **Draw rectangles** over each app icon on the screen image
+4. For each zone: assign a **target screen** (dropdown of all SCREEN_TYPES) + upload a custom **icon overlay image**
+5. **Save Links** persists to the overlay's asset metadata as JSONB
+6. In the phone preview, tapping a zone **navigates to that screen** with a **back button** to return
+
+#### Data Model
+
+Screen links stored as JSONB array on the asset's `metadata.screen_links`:
+
+```javascript
+{
+  screen_links: [
+    { id: 'link-abc', x: 12, y: 45, w: 18, h: 10, target: 'messages', label: 'Messages', icon_url: 'https://s3.../icon.png' },
+    { id: 'link-def', x: 38, y: 45, w: 18, h: 10, target: 'feed', label: 'Feed', icon_url: 'https://s3.../feed-icon.png' },
+  ]
+}
+```
+
+Positions are **percentages** (0-100) so they work at any resolution.
+
+#### Backend Routes
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/api/v1/ui-overlays/:showId/screen-links/:assetId` | `PUT` | Save screen_links array to asset metadata |
+| `/api/v1/ui-overlays/:showId/screen-links/:assetId` | `GET` | Load screen_links from asset metadata |
+| `/api/v1/ui-overlays/:showId/screen-links/:assetId/icon` | `POST` | Upload icon image for a specific link zone (multipart, fields: `icon`, `link_id`) |
+
+#### New Files
+
+| File | Purpose |
+|------|---------|
+| `frontend/src/components/ScreenLinkEditor.jsx` | Draw zones on screen, assign targets, upload icons, drag to reposition |
+
+#### Modified Files
+
+| File | Changes |
+|------|---------|
+| `frontend/src/components/PhoneHub.jsx` | `ScreenLinkOverlay` renders icon images + clickable hotspots, back button with nav history |
+| `frontend/src/pages/UIOverlaysTab.jsx` | "Edit Links" button, `ScreenLinkEditor` panel, navigation state (handleNavigate/handleBack), link save/upload handlers |
+| `src/routes/uiOverlayRoutes.js` | 3 new routes for screen links CRUD + icon upload, list endpoint returns `screen_links` |
