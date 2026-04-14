@@ -364,9 +364,16 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     try {
       const deletedKey = screen.id;
       if (screen.custom && screen.custom_id) {
+        // Custom screen: delete the type definition (removes it from the list entirely)
         await api.delete(`/api/v1/ui-overlays/${showId}/types/${screen.custom_id}`);
-      } else if (screen.asset_id) {
+      }
+      if (screen.asset_id) {
+        // Delete the asset (image)
         await api.delete(`/api/v1/ui-overlays/${showId}/asset/${screen.asset_id}`);
+      }
+      // For built-in screen types, hide them so they don't reappear as placeholders
+      if (!screen.custom) {
+        handleHideScreen(deletedKey);
       }
       // Clean orphaned links: remove any screen_links targeting the deleted screen
       for (const overlay of overlays) {
