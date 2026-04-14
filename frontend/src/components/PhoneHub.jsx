@@ -567,7 +567,7 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
               </button>
 
               {/* Hide from grid */}
-              {onHide && (
+              {onHide && !hasImage && (
                 <button
                   onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onHide(type.key); }}
                   style={menuItemStyle}
@@ -576,11 +576,11 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
                 </button>
               )}
 
-              {/* Delete */}
-              {hasImage && onDelete && (
+              {/* Delete — available for any screen with an image or asset */}
+              {onDelete && (screen?.generated || screen?.asset_id || screen?.url) && (
                 <button
                   onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }}
-                  style={{ ...menuItemStyle, color: '#dc2626' }}
+                  style={{ ...menuItemStyle, color: '#dc2626', borderBottom: 'none' }}
                 >
                   <Trash2 size={14} /> Delete
                 </button>
