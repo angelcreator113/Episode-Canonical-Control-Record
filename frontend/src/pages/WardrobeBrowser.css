@@ -566,16 +566,18 @@
 /* ---- Item Card ---- */
 .item-card {
   background: #ffffff;
-  border: 1px solid #e8e5de;
-  border-radius: 12px;
+  border: 1px solid #f0ece4;
+  border-radius: 14px;
   overflow: hidden;
-  transition: all 0.25s;
+  transition: all 0.3s ease;
   position: relative;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .item-card:hover {
-  border-color: #C9A84C;
-  box-shadow: 0 4px 16px rgba(201, 168, 76, 0.12);
+  border-color: #d4c4a0;
+  box-shadow: 0 8px 24px rgba(201, 168, 76, 0.12);
+  transform: translateY(-2px);
 }
 
 .item-card.selected {
@@ -601,8 +603,8 @@
 .item-image {
   position: relative;
   width: 100%;
-  padding-top: 120%;
-  background: #f9fafb;
+  padding-top: 125%;
+  background: linear-gradient(180deg, #faf8f5 0%, #f5f0ea 100%);
   overflow: hidden;
 }
 
@@ -612,7 +614,13 @@
   left: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  padding: 12px;
+  transition: transform 0.4s ease;
+}
+
+.item-card:hover .item-image img {
+  transform: scale(1.05);
 }
 
 .placeholder-image {
@@ -624,7 +632,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f0eee8;
+  background: linear-gradient(180deg, #faf8f5 0%, #f0eee8 100%);
 }
 
 .placeholder-card {
