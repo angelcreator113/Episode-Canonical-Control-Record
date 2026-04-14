@@ -91,6 +91,7 @@ router.get('/:showId', optionalAuth, async (req, res) => {
         custom_prompt: primary?.custom_prompt || null,
         screen_links: primary?.metadata?.screen_links || null,
         image_fit: primary?.metadata?.image_fit || null,
+        content_zones: primary?.metadata?.content_zones || null,
         // Category override from asset metadata (for built-in types reassigned by user)
         ...(primary?.metadata?.overlay_category ? { category: primary.metadata.overlay_category } : {}),
         variants,
@@ -626,6 +627,58 @@ router.post('/:showId/screen-links/:assetId/icon', optionalAuth, upload.single('
   }
 });
 
+// ── CONTENT ZONES (Live data rendering on templates) ────────────────────────
+
+// PUT /api/v1/ui-overlays/:showId/content-zones/:assetId — save content zones for an overlay
+router.put('/:showId/content-zones/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { content_zones } = req.body;
+
+    if (!Array.isArray(content_zones)) {
+      return res.status(400).json({ success: false, error: 'content_zones must be an array' });
+    }
+
+    await models.sequelize.query(
+      `UPDATE assets
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
+           updated_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: {
+        assetId: req.params.assetId,
+        showId: req.params.showId,
+        patch: JSON.stringify({ content_zones }),
+      } }
+    );
+
+    return res.json({ success: true, content_zones });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/v1/ui-overlays/:showId/content-zones/:assetId — get content zones for an overlay
+router.get('/:showId/content-zones/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+
+    const [rows] = await models.sequelize.query(
+      `SELECT metadata::text as metadata_text FROM assets
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { assetId: req.params.assetId, showId: req.params.showId } }
+    );
+
+    if (!rows?.length) return res.status(404).json({ success: false, error: 'Asset not found' });
+
+    let meta = {};
+    try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch { /* skip */ }
+
+    return res.json({ success: true, content_zones: meta.content_zones || [] });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── CUSTOM OVERLAY TYPE CRUD ────────────────────────────────────────────────
 
 // POST /api/v1/ui-overlays/:showId/types — create a custom overlay type
@@ -722,17 +775,24 @@ router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
 router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const Asset = models.Asset;
-    if (!Asset) return res.status(500).json({ success: false, error: 'Asset model not available' });
-    const asset = await Asset.findByPk(req.params.assetId);
-    if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
-    // Verify asset belongs to this show
-    if (asset.show_id && asset.show_id !== req.params.showId) {
-      return res.status(403).json({ success: false, error: 'Asset does not belong to this show' });
+    const { showId, assetId } = req.params;
+
+    // Verify asset exists and belongs to this show, then soft-delete via raw query
+    // (avoids Sequelize association hooks that can cause cascade errors)
+    const [rows] = await models.sequelize.query(
+      `UPDATE assets SET deleted_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL
+       RETURNING id`,
+      { replacements: { assetId, showId } }
+    );
+
+    if (!rows?.length) {
+      return res.status(404).json({ success: false, error: 'Asset not found or already deleted' });
     }
-    await asset.destroy(); // paranoid soft-delete
+
     return res.json({ success: true, message: 'Asset deleted' });
   } catch (err) {
+    console.error('[UIOverlays] Delete asset error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

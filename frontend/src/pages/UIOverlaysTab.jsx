@@ -7,11 +7,13 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, GitBranch } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub, { SCREEN_TYPES } from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
+import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
+import './UIOverlaysTab.css';
 
 export default function UIOverlaysTab({ showId: propShowId }) {
   const [showId, setShowId] = useState(propShowId || null);
@@ -19,6 +21,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [overlays, setOverlays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeScreen, setActiveScreen] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatingId, setGeneratingId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -34,7 +37,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [previewMode, setPreviewMode] = useState(false);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [showFlowMap, setShowFlowMap] = useState(false);
-  const [expandedSections, setExpandedSections] = useState({ actions: true, fit: false, links: false, variants: true });
+  const [expandedSections, setExpandedSections] = useState({ actions: true, fit: false, links: false, content: false, variants: true });
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const undoStackRef = useRef([]);  // undo history for activeScreen changes
@@ -93,12 +96,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         handleUndo();
       }
       // Escape closes panel — but not if user is in an input/textarea (let the input handle it)
-      if (e.key === 'Escape' && activeScreen) {
+      if (e.key === 'Escape' && panelOpen) {
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-        setActiveScreen(null);
-        setEditingLinks(false);
-        undoStackRef.current = [];
+        closePanel();
       }
     };
     window.addEventListener('keydown', handler);
@@ -107,14 +108,24 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
   // Lock body scroll when detail panel is open — mobile only (bottom sheet)
   useEffect(() => {
-    if (activeScreen && window.innerWidth <= 768) {
+    if (panelOpen && window.innerWidth <= 768) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => { document.body.style.overflow = prev; };
     }
-  }, [activeScreen]);
+  }, [panelOpen]);
 
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // Close detail panel — revert phone display to home screen
+  const closePanel = useCallback(() => {
+    setPanelOpen(false);
+    setEditingLinks(false);
+    undoStackRef.current = [];
+    // Revert to home screen on the phone
+    const home = overlays.find(o => o.id === 'home' && o.generated && o.url);
+    if (home) setActiveScreen(home);
+  }, [overlays]);
 
   // Load saved phone frame + global fit settings
   useEffect(() => {
@@ -135,6 +146,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     frameRemovedRef.current = false;
     const prevUrl = customFrameUrl;
     const previewUrl = URL.createObjectURL(file);
+    // Revoke old blob URL to prevent memory leak
+    if (prevUrl && prevUrl.startsWith('blob:')) URL.revokeObjectURL(prevUrl);
     setCustomFrameUrl(previewUrl);
     flash('Uploading frame...');
     try {
@@ -161,10 +174,21 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const handleBatchUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length || !showId) return;
+    // Warn if any existing screens will be overwritten
+    const screenKeys = SCREEN_TYPES.filter(t => t.type === 'screen').map(t => t.key);
+    const matchCount = files.filter(f => {
+      const name = f.name.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '_');
+      return screenKeys.find(k => name.includes(k) || name.includes(k.replace(/_/g, '')));
+    }).length;
+    if (matchCount > 0 && overlays.some(o => o.generated)) {
+      if (!confirm(`Upload ${files.length} files? This may overwrite ${matchCount} existing screens.`)) {
+        if (batchInputRef.current) batchInputRef.current.value = '';
+        return;
+      }
+    }
     setBatchUploading(true);
     let uploaded = 0;
     let failed = 0;
-    const screenKeys = SCREEN_TYPES.filter(t => t.type === 'screen').map(t => t.key);
 
     for (const file of files) {
       const name = file.name.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '_');
@@ -211,12 +235,20 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }).catch(() => {});
   }, [propShowId]);
 
-  // Load overlays
+  // Load overlays — auto-select home screen as default
   const loadOverlays = useCallback((showLoader) => {
     if (!showId) return;
     if (showLoader) setLoading(true);
     api.get(`/api/v1/ui-overlays/${showId}`)
-      .then(r => setOverlays(r.data?.data || []))
+      .then(r => {
+        const data = r.data?.data || [];
+        setOverlays(data);
+        // Auto-select home screen on first load if nothing is selected
+        if (!activeScreen) {
+          const home = data.find(o => o.id === 'home' && o.generated && o.url);
+          if (home) setActiveScreen(home);
+        }
+      })
       .catch(() => setOverlays([]))
       .finally(() => setLoading(false));
   }, [showId]);
@@ -345,7 +377,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: cleaned }).catch(() => {});
         }
       }
-      if (activeScreen?.id === deletedKey) { setActiveScreen(null); setEditingLinks(false); }
+      if (activeScreen?.id === deletedKey) { closePanel(); }
       loadOverlays(false);
       flash('Deleted');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
@@ -507,6 +539,18 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // ── Content zones (live data rendering on templates) ──
+
+  const handleSaveContentZones = async (zones) => {
+    if (!activeScreen?.asset_id || !showId) return;
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/content-zones/${activeScreen.asset_id}`, { content_zones: zones });
+      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, content_zones: zones, metadata: { ...(o.metadata || {}), content_zones: zones } } : o));
+      setActiveScreen(prev => prev ? { ...prev, content_zones: zones, metadata: { ...(prev.metadata || {}), content_zones: zones } } : prev);
+      flash('Content zones saved!');
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
   // ── Image fit controls ──
 
   // Per-screen fit
@@ -644,7 +688,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
     <div style={{ padding: '20px 0' }}>
       {/* Toast */}
       {toast && (
-        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '10px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: toast.type === 'error' ? '#ffebee' : '#e8f5e9', color: toast.type === 'error' ? '#c62828' : '#2e7d32', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+        <div className={`overlays-toast overlays-toast--${toast.type === 'error' ? 'error' : 'success'}`}>
           {toast.msg}
         </div>
       )}
@@ -652,15 +696,37 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
       {/* Header */}
       <div className="overlays-header">
         <div className="overlays-header-top">
-          <div>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif" }}>Phone Hub</h2>
-            <p style={{ margin: '2px 0 0', fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>
-              {generatedCount}/{overlays.length} screens ready
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif" }}>Phone Hub</h2>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>
+                {generatedCount}/{overlays.length} screens ready
+              </p>
+            </div>
+            {/* Show selector — visible when no propShowId so user can switch shows */}
+            {!propShowId && shows.length > 0 && (
+              <select
+                value={showId || ''}
+                onChange={(e) => setShowId(e.target.value)}
+                style={{
+                  padding: '6px 10px', border: '1px solid #e8e0d0', borderRadius: 8,
+                  fontSize: 12, fontFamily: "'DM Mono', monospace", color: '#2C2C2C',
+                  background: '#fff', cursor: 'pointer', minHeight: 36,
+                }}
+              >
+                <option value="" disabled>Select show...</option>
+                {shows.map(s => (
+                  <option key={s.id} value={s.id}>{s.name || s.title}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="overlays-header-actions">
-            <button onClick={() => setShowSizeGuide(!showSizeGuide)} title="Upload size guide" style={{ ...headerBtnStyle, color: '#aaa', border: '1px solid #eee' }}>
+            <button onClick={() => setShowSizeGuide(!showSizeGuide)} title="Upload size guide" aria-label="Toggle upload size guide" style={{ ...headerBtnStyle, color: '#aaa', border: '1px solid #eee' }}>
               <Info size={13} />
+            </button>
+            <button onClick={() => setShowFlowMap(true)} disabled={!generatedCount} title="Screen flow map" style={{ ...headerBtnStyle, color: '#a889c8', border: '1px solid #a889c830' }}>
+              <GitBranch size={13} /> <span className="btn-label">Flow Map</span>
             </button>
             <button onClick={() => setPreviewMode(true)} disabled={!generatedCount} title="Preview mode" style={{ ...headerBtnStyle, color: '#B8962E', border: '1px solid #B8962E30' }}>
               <Play size={13} /> <span className="btn-label">Preview</span>
@@ -692,6 +758,7 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
           </button>
           {customFrameUrl && (
             <button onClick={async () => {
+              if (!confirm('Remove custom phone frame?')) return;
               frameRemovedRef.current = true;
               setCustomFrameUrl(null);
               flash('Using built-in frame');
@@ -728,13 +795,13 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         </div>
       ) : (
         <>
-        <div className={`phone-hub-layout${activeScreen ? ' panel-open' : ''}`}>
+        <div className={`phone-hub-layout${panelOpen ? ' panel-open' : ''}`}>
           {/* Phone Hub (phone + grid) — takes full width now */}
           <div className="phone-hub-main">
             <PhoneHub
               screens={overlays}
               activeScreen={activeScreen}
-              onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); }}
+              onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); }}
               onDelete={handleDeleteScreen}
               onHideScreen={handleHideScreen}
               hiddenScreens={hiddenScreens}
@@ -752,10 +819,10 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         </div>
 
       {/* ── Slide-over Detail Panel ── */}
-      {activeScreen && (
+      {activeScreen && panelOpen && (
         <>
           {/* Scrim — mobile only (bottom sheet needs backdrop), desktop has no scrim so grid stays clickable */}
-          <div className="panel-scrim" onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} />
+          <div className="panel-scrim" onClick={closePanel} />
 
           {/* Panel */}
           <div className="detail-panel detail-panel-open">
@@ -816,13 +883,13 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
-                <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title="Undo (Ctrl+Z)" style={{
+                <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title={undoStackRef.current.length > 0 ? `Undo (${undoStackRef.current.length} changes)` : 'Nothing to undo'} aria-label="Undo" style={{
                   background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer',
-                  color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '4px 6px', minWidth: 30, minHeight: 30,
+                  color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '6px 8px', minWidth: 36, minHeight: 36,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}><Undo2 size={14} /></button>
-                <button onClick={() => { setActiveScreen(null); setEditingLinks(false); undoStackRef.current = []; }} style={{
-                  background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '4px 6px', minWidth: 30, minHeight: 30,
+                <button onClick={closePanel} aria-label="Close panel" style={{
+                  background: 'none', border: '1px solid #eee', borderRadius: 6, cursor: 'pointer', color: '#999', padding: '6px 8px', minWidth: 36, minHeight: 36,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}><X size={14} /></button>
               </div>
@@ -830,6 +897,13 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
 
             {/* ── Scrollable body ── */}
             <div className="detail-panel-body">
+
+              {/* Placeholder indicator */}
+              {activeScreen.placeholder && (
+                <div style={{ fontSize: 11, background: '#f3e8ff', color: '#7c3aed', padding: '6px 10px', borderRadius: 6, marginBottom: 10, fontFamily: "'DM Mono', monospace", fontWeight: 600 }}>
+                  New screen — upload an image or generate one to get started
+                </div>
+              )}
 
               {/* ── Primary Actions ── */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
@@ -929,8 +1003,34 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                         links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
                         screenTypes={SCREEN_TYPES.filter(t => t.type === 'screen')}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                        iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
                         onSave={handleSaveLinks}
                         onUploadIcon={handleUploadIcon}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── Content Zones (Live Data Templates) ── */}
+              {activeScreen?.url && !activeScreen.placeholder && (
+                <>
+                  <SectionHeader
+                    label="Live Content Zones"
+                    expanded={expandedSections.content}
+                    onToggle={() => toggleSection('content')}
+                    badge={(activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length || null}
+                  />
+                  {expandedSections.content && (
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 10, color: '#999', marginBottom: 8, lineHeight: 1.5, fontFamily: "'DM Mono', monospace" }}>
+                        Draw zones on the template to render live show data (feed posts, profiles, DMs, wardrobe, etc.)
+                      </div>
+                      <ContentZoneEditor
+                        screenUrl={activeScreen.url}
+                        zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                        showId={showId}
+                        onSave={handleSaveContentZones}
                       />
                     </div>
                   )}
@@ -943,6 +1043,13 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                   {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
                   {activeScreen.asset_id && <ActionBtn icon={Eraser} label="Remove BG" onClick={handleRemoveBg} color="#a889c8" />}
                   {activeScreen.url && <ActionBtn icon={Link2} label={editingLinks ? 'Done' : 'Links'} onClick={() => setEditingLinks(!editingLinks)} color={editingLinks ? '#2C2C2C' : '#b89060'} />}
+                  {/* Duplicate fit + link settings to another screen */}
+                  {activeScreen.url && overlays.filter(o => o.id !== activeScreen.id && o.generated).length > 0 && (
+                    <DuplicateSettingsBtn
+                      screens={overlays.filter(o => o.id !== activeScreen.id && o.generated)}
+                      onDuplicate={handleDuplicateSettings}
+                    />
+                  )}
                   <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
                 </div>
               )}
@@ -966,6 +1073,15 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         />
       )}
 
+      {/* Flow Map — visual graph of screen-to-screen links */}
+      {showFlowMap && (
+        <ScreenFlowMap
+          screens={overlays}
+          onClose={() => setShowFlowMap(false)}
+          onSelectScreen={(s) => { setActiveScreen(s); setShowFlowMap(false); }}
+        />
+      )}
+
       {/* Create Screen Modal */}
       {showCreateModal && (
         <CreateScreenModal
@@ -974,123 +1090,6 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
         />
       )}
 
-      <style>{`
-        .spin { animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* ── Header ── */
-        .overlays-header { margin-bottom: 20px; }
-        .overlays-header-top {
-          display: flex; justify-content: space-between; align-items: center;
-          margin-bottom: 12px; gap: 12px;
-        }
-        .overlays-header-actions {
-          display: flex; gap: 6px; align-items: center; flex-shrink: 0;
-        }
-        .overlays-toolbar {
-          display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
-        }
-        .btn-label { /* visible by default */ }
-
-        /* ── Main Layout ── */
-        .phone-hub-layout {
-          display: block;
-          transition: margin-right 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-        }
-        .phone-hub-layout.panel-open {
-          margin-right: 410px; /* 400px panel + 10px breathing room */
-        }
-        .phone-hub-main {
-          width: 100%;
-        }
-
-        /* ── Slide-over Panel (Desktop: right drawer, Mobile: bottom sheet) ── */
-        .panel-scrim {
-          display: none; /* hidden on desktop — grid stays fully interactive */
-        }
-
-        .detail-panel {
-          position: fixed; z-index: 950;
-          background: #fff;
-          display: flex; flex-direction: column;
-          /* Desktop: right drawer */
-          top: 0; right: 0; bottom: 0;
-          width: 400px; max-width: 90vw;
-          box-shadow: -4px 0 24px rgba(0,0,0,0.12);
-          transform: translateX(100%);
-          transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-        }
-        .detail-panel-open {
-          transform: translateX(0);
-        }
-
-        .detail-panel-drag-handle {
-          display: none; /* hidden on desktop */
-        }
-
-        .detail-panel-header {
-          display: flex; align-items: flex-start; gap: 12px;
-          padding: 20px 20px 14px;
-          border-bottom: 1px solid #f0ece4;
-          flex-shrink: 0;
-        }
-
-        .detail-panel-body {
-          flex: 1; overflow-y: auto; padding: 16px 20px 24px;
-          scrollbar-width: thin; scrollbar-color: #e8e0d0 transparent;
-        }
-        .detail-panel-body::-webkit-scrollbar { width: 4px; }
-        .detail-panel-body::-webkit-scrollbar-thumb { background: #e8e0d0; border-radius: 4px; }
-
-        /* ── Mobile: bottom sheet ── */
-        @media (max-width: 768px) {
-          .panel-scrim {
-            display: block; position: fixed; inset: 0; z-index: 900;
-            background: rgba(0,0,0,0.35); pointer-events: auto;
-            animation: scrimFadeIn 0.3s ease forwards;
-          }
-          @keyframes scrimFadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-          .detail-panel {
-            top: auto; right: 0; bottom: 0; left: 0;
-            width: 100%; max-width: 100%;
-            height: 85vh; max-height: 85vh;
-            border-radius: 20px 20px 0 0;
-            box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
-            transform: translateY(100%);
-          }
-          .detail-panel-open {
-            transform: translateY(0);
-          }
-          .phone-hub-layout.panel-open {
-            margin-right: 0; /* no margin on mobile — bottom sheet doesn't block grid */
-          }
-          .detail-panel-drag-handle {
-            display: flex; justify-content: center; padding: 10px 0 4px;
-            cursor: grab; flex-shrink: 0;
-          }
-          .drag-bar {
-            width: 36px; height: 4px; border-radius: 2px;
-            background: #d0d0d0;
-          }
-          .detail-panel-header { padding: 12px 16px 12px; }
-          .detail-panel-body { padding: 12px 16px 24px; }
-        }
-
-        /* ── Responsive header ── */
-        @media (max-width: 600px) {
-          .overlays-header-top { flex-wrap: wrap; }
-          .overlays-header-actions { width: 100%; justify-content: flex-start; }
-          .overlays-toolbar { gap: 5px; }
-          .overlays-toolbar button { flex: 1 1 auto; justify-content: center; min-width: 0; }
-        }
-        @media (max-width: 480px) {
-          .btn-label { display: none; }
-          .overlays-toolbar button { padding: 8px 10px !important; }
-        }
-      `}</style>
     </div>
   );
 }
@@ -1237,6 +1236,36 @@ function ActionBtn({ icon: Icon, label, onClick, disabled, color, primary }) {
     }}>
       <Icon size={primary ? 16 : 14} /> {label}
     </button>
+  );
+}
+
+function DuplicateSettingsBtn({ screens, onDuplicate }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: 'relative' }}>
+      <ActionBtn icon={Copy} label="Copy To" onClick={() => setOpen(!open)} color="#7ab3d4" />
+      {open && (
+        <div style={{
+          position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
+          background: '#fff', border: '1px solid #e8e0d0', borderRadius: 8,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100,
+          maxHeight: 200, overflowY: 'auto', minWidth: 180,
+        }}>
+          <div style={{ padding: '6px 10px', fontSize: 9, fontWeight: 700, color: '#aaa', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid #f0ece4' }}>
+            Copy fit & links to:
+          </div>
+          {screens.map(s => (
+            <button key={s.id} onClick={() => { onDuplicate(s.id); setOpen(false); }} style={{
+              display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px',
+              border: 'none', background: 'none', cursor: 'pointer', fontSize: 12,
+              fontWeight: 500, color: '#2C2C2C', minHeight: 36,
+            }}>
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

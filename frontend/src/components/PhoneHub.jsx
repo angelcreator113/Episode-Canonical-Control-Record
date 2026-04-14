@@ -15,6 +15,7 @@
  *   deviceFrame   — optional custom device frame image URL
  */
 import React, { useState } from 'react';
+import ScreenContentRenderer from './ScreenContentRenderer';
 
 // type: 'screen' = full phone screen frame, 'icon' = app icon for home screen link editor
 const SCREEN_TYPES = [
@@ -138,6 +139,46 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
   );
 }
 
+// Renders persistent icons (from home screen) that stay visible on all screens
+function PersistentOverlay({ links = [], onNavigate }) {
+  if (!links.length || !onNavigate) return null;
+  return (
+    <>
+      {links.map(link => (
+        <div
+          key={link.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (link.target) onNavigate(link.target);
+          }}
+          title={link.label || link.target}
+          style={{
+            position: 'absolute',
+            left: `${link.x}%`, top: `${link.y}%`,
+            width: `${link.w}%`, height: `${link.h}%`,
+            cursor: link.target ? 'pointer' : 'default',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 6,
+            zIndex: 4,
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(184,150,46,0.15)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          {link.icon_url && (
+            <img
+              src={link.icon_url}
+              alt={link.label || link.target}
+              style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }}
+              draggable={false}
+            />
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
 export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
   const [frameLoaded, setFrameLoaded] = useState(false);
@@ -149,6 +190,14 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   // Don't show icons in the phone device — only screens
   const isIconType = activeScreen?.type === 'icon' || activeScreen?.category === 'phone_icon';
   const phoneScreen = isIconType ? null : activeScreen;
+
+  // Find persistent icons from the home screen that should show on ALL screens
+  const homeScreen = screens.find(s => s.id === 'home' && s.generated && s.url);
+  const persistentLinks = React.useMemo(() => {
+    if (!homeScreen) return [];
+    const links = homeScreen.screen_links || homeScreen.metadata?.screen_links || [];
+    return links.filter(l => l.persistent && l.icon_url);
+  }, [homeScreen]);
 
   // Match screens to screen types
   const getScreenForType = (type) => {
@@ -184,14 +233,22 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             position: 'absolute', top: '6%', left: '6%', right: '6%', bottom: '6%',
             borderRadius: 16, overflow: 'hidden', zIndex: 1,
           }}>
-            {activeScreen?.url ? (
+            {phoneScreen?.url ? (
               <>
                 <img src={activeScreen.url} alt={activeScreen.name} style={getScreenImageStyle(activeScreen, globalFit)} />
+                <ScreenContentRenderer
+                  zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                  showId={activeScreen.show_id}
+                  interactive={false}
+                />
                 <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+                {activeScreen.id !== 'home' && persistentLinks.length > 0 && (
+                  <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
+                )}
               </>
             ) : (
               <div style={{ width: '100%', height: '100%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>
-                <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{activeScreen ? 'Not generated' : 'Select a screen'}</span>
+                <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{phoneScreen ? 'Not generated' : 'Select a screen'}</span>
               </div>
             )}
             {navigationHistory.length > 0 && onBack && (
@@ -256,14 +313,23 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             }} />
           </div>
 
-          {activeScreen?.url ? (
+          {phoneScreen?.url ? (
             <>
               <img
-                src={activeScreen.url}
-                alt={activeScreen.name}
-                style={getScreenImageStyle(activeScreen, globalFit)}
+                src={phoneScreen.url}
+                alt={phoneScreen.name}
+                style={getScreenImageStyle(phoneScreen, globalFit)}
+              />
+              <ScreenContentRenderer
+                zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                showId={activeScreen.show_id}
+                interactive={false}
               />
               <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+              {/* Persistent icons from home screen — show on non-home screens */}
+              {activeScreen.id !== 'home' && persistentLinks.length > 0 && (
+                <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
+              )}
             </>
           ) : (
             <div style={{
@@ -274,7 +340,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             }}>
               <span style={{ fontSize: 32 }}>📱</span>
               <span style={{ fontSize: 11, marginTop: 8, fontFamily: "'DM Mono', monospace" }}>
-                {activeScreen ? 'Not generated yet' : 'Select a screen'}
+                {phoneScreen ? 'Not generated yet' : 'Select a screen'}
               </span>
             </div>
           )}
@@ -290,15 +356,15 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           )}
 
           {/* Screen name overlay */}
-          {activeScreen && (
+          {phoneScreen && (
             <div style={{
               position: 'absolute', bottom: 0, left: 0, right: 0,
               background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
               padding: '20px 12px 10px',
             }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{activeScreen.name}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{phoneScreen.name}</div>
               <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', fontFamily: "'DM Mono', monospace" }}>
-                {activeScreen.beat || activeScreen.description?.slice(0, 40)}
+                {phoneScreen.beat || phoneScreen.description?.slice(0, 40)}
               </div>
             </div>
           )}
@@ -316,14 +382,16 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
 
       {/* Skin picker — only shown for built-in frame (skins don't apply to custom frames) */}
       {onChangeSkin && !useCustomFrame && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
           {PHONE_SKINS.map(s => (
             <button
               key={s.key}
               title={s.label}
+              aria-label={`Phone skin: ${s.label}`}
               onClick={() => onChangeSkin(s.key)}
+              className="phone-hub-skin-btn"
               style={{
-                width: 28, height: 28, borderRadius: '50%', border: skin === s.key ? '2.5px solid #B8962E' : '1.5px solid #ddd',
+                width: 36, height: 36, borderRadius: '50%', border: skin === s.key ? '2.5px solid #B8962E' : '1.5px solid #ddd',
                 background: typeof s.body === 'string' && s.body.startsWith('linear') ? undefined : s.body,
                 backgroundImage: typeof s.body === 'string' && s.body.startsWith('linear') ? s.body : undefined,
                 cursor: 'pointer', padding: 0, transition: 'transform 0.15s',
@@ -409,9 +477,9 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           .phone-hub-icon-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
         }
         @media (max-width: 375px) {
-          .phone-hub-frame { width: 170px; }
-          .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); }
-          .phone-hub-icon-grid { grid-template-columns: repeat(2, 1fr); }
+          .phone-hub-frame { width: 180px; }
+          .phone-hub-screen-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
+          .phone-hub-icon-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; }
         }
         .screen-card:hover .screen-card-delete { opacity: 1 !important; }
         @media (hover: none) {
@@ -422,7 +490,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   );
 }
 
-function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
+const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';
@@ -520,4 +588,4 @@ function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHi
       }} />
     </div>
   );
-}
+});

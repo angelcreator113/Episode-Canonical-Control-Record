@@ -269,6 +269,10 @@ function Home() {
             <div className="hp-action-icon hp-action-icon--teal">🧠</div>
             <span className="hp-action-label">Memory Bank</span>
           </div>
+          <div className="hp-action-card hp-action-card--rose" onClick={() => navigate('/phone-hub')}>
+            <div className="hp-action-icon hp-action-icon--rose">📱</div>
+            <span className="hp-action-label">Phone Hub</span>
+          </div>
         </section>
 
         {/* ─── Character Roster ─── */}

@@ -10,11 +10,11 @@
  *   readOnly        — if true, hide editing controls (used in preview mode)
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin } from 'lucide-react';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
-export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], generatedScreenKeys, onSave, onUploadIcon, readOnly = false }) {
+export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], generatedScreenKeys, iconOverlays = [], onSave, onUploadIcon, readOnly = false }) {
   const [zones, setZones] = useState(links);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -146,7 +146,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
   const sel = selectedZone ? zones.find(z => z.id === selectedZone) : null;
 
   return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Screen with overlay zones */}
       <div
         ref={containerRef}
@@ -156,13 +156,13 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
         onMouseLeave={() => { if (drawing) handleMouseUp(); if (dragging) setDragging(null); }}
         style={{
           position: 'relative',
-          width: 220,
-          minWidth: 150,
-          flexShrink: 0,
+          width: '100%',
+          maxWidth: 320,
+          margin: '0 auto',
           aspectRatio: '9/16',
           borderRadius: 12,
           overflow: 'hidden',
-          cursor: readOnly ? 'default' : drawing ? 'crosshair' : 'crosshair',
+          cursor: readOnly ? 'default' : 'crosshair',
           userSelect: 'none',
           border: '1px solid #e8e0d0',
         }}
@@ -222,16 +222,16 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
       {!readOnly && (
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 10, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
               TAP ZONES ({zones.length})
             </span>
             {isDirty && (
               <button onClick={handleSave} style={{
-                padding: '4px 10px', fontSize: 10, fontWeight: 600, border: 'none',
+                padding: '8px 14px', fontSize: 12, fontWeight: 600, border: 'none',
                 borderRadius: 6, background: '#B8962E', color: '#fff', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 4,
+                display: 'flex', alignItems: 'center', gap: 4, minHeight: 36,
               }}>
-                <Save size={10} /> Save Links
+                <Save size={12} /> Save Links
               </button>
             )}
           </div>
@@ -242,40 +242,41 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 300, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 'min(400px, 50vh)', overflowY: 'auto' }}>
             {zones.map((zone, i) => (
               <div
                 key={zone.id}
                 onClick={() => setSelectedZone(zone.id)}
                 style={{
-                  padding: '6px 8px',
+                  padding: '10px 12px',
                   background: selectedZone === zone.id ? '#fdf8ee' : '#fff',
                   border: `1px solid ${selectedZone === zone.id ? '#B8962E' : '#eee'}`,
-                  borderRadius: 6,
-                  fontSize: 11,
+                  borderRadius: 8,
+                  fontSize: 13,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: selectedZone === zone.id ? 6 : 0 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: 2, background: ZONE_COLORS[i % ZONE_COLORS.length], flexShrink: 0 }} />
-                  {zone.icon_url && <img src={zone.icon_url} alt="" style={{ width: 16, height: 16, borderRadius: 3, objectFit: 'contain' }} />}
-                  <span style={{ fontWeight: 600, flex: 1 }}>{zone.label || zone.target || 'Untitled'}</span>
-                  <span style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: selectedZone === zone.id ? 8 : 0 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 3, background: ZONE_COLORS[i % ZONE_COLORS.length], flexShrink: 0 }} />
+                  {zone.persistent && <Pin size={11} color="#B8962E" style={{ flexShrink: 0 }} />}
+                  {zone.icon_url && <img src={zone.icon_url} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain' }} />}
+                  <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{zone.label || zone.target || 'Untitled'}</span>
+                  <span style={{ fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
                     {zone.target ? `→ ${zone.target}` : 'no target'}
                   </span>
-                  <button onClick={(e) => { e.stopPropagation(); removeZone(zone.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 2 }}>
-                    <Trash2 size={11} />
+                  <button onClick={(e) => { e.stopPropagation(); removeZone(zone.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 4, minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Trash2 size={14} />
                   </button>
                 </div>
 
                 {/* Expanded editor for selected zone */}
                 {selectedZone === zone.id && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 4, borderTop: '1px solid #f0ece4' }}>
-                    <div style={{ display: 'flex', gap: 4 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8, borderTop: '1px solid #f0ece4' }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <input
                         value={zone.label || ''}
                         onChange={(e) => updateZone(zone.id, { label: e.target.value })}
                         placeholder="Label (e.g. Messages)"
-                        style={{ flex: 1, padding: '4px 6px', border: '1px solid #e0d9ce', borderRadius: 4, fontSize: 11 }}
+                        style={{ flex: 1, padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, minWidth: 120 }}
                       />
                       <select
                         value={zone.target || ''}
@@ -283,7 +284,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                           const t = screenTypes.find(s => s.key === e.target.value);
                           updateZone(zone.id, { target: e.target.value, label: zone.label || t?.label || '' });
                         }}
-                        style={{ padding: '4px 6px', border: '1px solid #e0d9ce', borderRadius: 4, fontSize: 11, minWidth: 100 }}
+                        style={{ padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, minWidth: 120, flex: 1 }}
                       >
                         <option value="">— Target —</option>
                         {screenTypes.map(st => {
@@ -296,24 +297,74 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                         })}
                       </select>
                     </div>
-                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                      <button
-                        onClick={() => handleIconUpload(zone.id)}
-                        style={{
-                          padding: '3px 8px', fontSize: 10, fontWeight: 600, border: '1px solid #e0d9ce',
-                          borderRadius: 4, background: '#fff', cursor: 'pointer', color: '#7ab3d4',
-                          display: 'flex', alignItems: 'center', gap: 3,
-                        }}
-                      >
-                        <Upload size={10} /> {zone.icon_url ? 'Replace Icon' : 'Upload Icon'}
-                      </button>
-                      {zone.icon_url && (
-                        <img src={zone.icon_url} alt="icon" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain', border: '1px solid #eee' }} />
+                    {/* Icon picker — choose from existing icon overlays or upload */}
+                    <div>
+                      {iconOverlays.length > 0 && (
+                        <div style={{ marginBottom: 6 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: '#888', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>
+                            USE ICON OVERLAY
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {iconOverlays.map(ico => (
+                              <button
+                                key={ico.id}
+                                onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url }); }}
+                                title={ico.name}
+                                style={{
+                                  width: 44, height: 44, borderRadius: 8, border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
+                                  background: zone.icon_url === ico.url ? '#fdf8ee' : '#fff',
+                                  cursor: 'pointer', padding: 3, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  transition: 'border-color 0.15s',
+                                }}
+                              >
+                                <img src={ico.url} alt={ico.name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 4 }} draggable={false} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       )}
-                      <span style={{ fontSize: 9, color: '#bbb', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>
-                        {Math.round(zone.x)}%, {Math.round(zone.y)}% — {Math.round(zone.w)}x{Math.round(zone.h)}
-                      </span>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => handleIconUpload(zone.id)}
+                          style={{
+                            padding: '8px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #e0d9ce',
+                            borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#7ab3d4',
+                            display: 'flex', alignItems: 'center', gap: 4, minHeight: 36,
+                          }}
+                        >
+                          <Upload size={12} /> {zone.icon_url ? 'Replace' : 'Upload Custom'}
+                        </button>
+                        {zone.icon_url && (
+                          <>
+                            <img src={zone.icon_url} alt="icon" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />
+                            <button
+                              onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: null }); }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 4, fontSize: 11 }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </>
+                        )}
+                        <span style={{ fontSize: 11, color: '#bbb', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>
+                          {Math.round(zone.x)}%, {Math.round(zone.y)}%
+                        </span>
+                      </div>
                     </div>
+                    {/* Persistent toggle — pin icon to show on all screens */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { persistent: !zone.persistent }); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '8px 12px', fontSize: 12, fontWeight: 600,
+                        border: `1px solid ${zone.persistent ? '#B8962E' : '#e0d9ce'}`,
+                        borderRadius: 6, cursor: 'pointer', minHeight: 36,
+                        background: zone.persistent ? '#fdf8ee' : '#fff',
+                        color: zone.persistent ? '#B8962E' : '#888',
+                        width: '100%',
+                      }}
+                    >
+                      <Pin size={12} /> {zone.persistent ? 'Pinned — shows on all screens' : 'Pin to all screens'}
+                    </button>
                   </div>
                 )}
               </div>
