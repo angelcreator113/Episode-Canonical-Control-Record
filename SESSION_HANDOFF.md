@@ -195,191 +195,240 @@ Background removal integrated across asset pipeline:
 
 ## Part 2: Screen Layer System Spec (Next Session Build)
 
-### Current State
+### Vision
 
-The Scene Studio already has a **production Canva-like editor** built on **Konva.js** (not Fabric.js):
+**Canva for phone screens** — extend the existing Scene Studio with device framing so you can compose what Lala sees on her phone as layered, exportable screen overlays.
 
-**Existing infrastructure:**
-- `frontend/src/components/SceneStudio/SceneStudio.jsx` — Main editor (~1000 lines)
-- `frontend/src/components/SceneStudio/Canvas/StudioCanvas.jsx` — Konva canvas (~709 lines)
-- `frontend/src/components/SceneStudio/Toolbar.jsx` — Tools, zoom, platform presets
-- `frontend/src/components/SceneStudio/useSceneStudioState.js` — State + undo/redo (50 history)
+### Current State — What Already Exists
 
-**Canvas objects:** `Canvas/objects/` — ImageObject, VideoObject, TextObject, ShapeObject
-**Mask/paint:** `Canvas/MaskLayer.jsx` — Brush painting for erase/inpaint
-**Parallax:** `Canvas/ParallaxLayer.jsx` — Depth-based parallax effects
+The Scene Studio is a **production Canva-like editor** built on **Konva.js** (`konva` ^10.2.0, `react-konva` ^18.2.14). Do NOT introduce Fabric.js — everything builds on Konva.
 
-**Panels:**
-- `panels/CreationPanel.jsx` — Asset creation
-- `panels/InspectorPanel.jsx` (~800 lines) — Transform, appearance, layer controls, depth, color grading
-- `panels/ObjectsPanel.jsx` — Object list/ordering
-- `panels/SmartSuggestions.jsx` — AI suggestions
+#### Canvas Engine (already working)
+| File | What it does |
+|------|-------------|
+| `SceneStudio/SceneStudio.jsx` (~1000 lines) | Main orchestrator — loads from API, manages panels, keyboard shortcuts, auto-save |
+| `SceneStudio/Canvas/StudioCanvas.jsx` (~709 lines) | Konva `<Stage>` + `<Layer>` — renders objects, selection, zoom/pan, snap guides, background |
+| `SceneStudio/Toolbar.jsx` | Tools (Select/Pan/Erase), zoom controls, platform presets, grid toggle, export |
+| `SceneStudio/useSceneStudioState.js` (~639 lines) | Central state hook — all state + actions below |
 
-**Tabs:** TemplatesTab, GenerateTab (~1000 lines), LibraryTab, DecorTab, TextTab, ShapesTab, SceneStatesTab, UploadTab
-
-**Existing platform presets:**
+#### State Hook — Key API (`useSceneStudioState`)
 ```javascript
-youtube:   1920x1080  (16:9)
-instagram: 1080x1920  (9:16)
-tiktok:    1080x1920  (9:16)
-square:    1080x1080  (1:1)
-cinema:    2560x1440  (16:9)
+// State you'll extend:
+canvasSettings: { zoom, panX, panY, gridVisible, snapEnabled, backgroundColor, sceneStates }
+objects: [{ id, type, x, y, width, height, rotation, opacity, layerOrder, isVisible, isLocked, groupId, depthLayer, ... }]
+
+// Actions you'll call:
+addObject(obj)              // adds to canvas, auto-increments layerOrder
+updateCanvasSettings(changes) // merges into canvasSettings, marks dirty for data keys
+serializeForSave()          // returns { objects, canvas_settings } for API save
+loadFromApi(data, type)     // hydrates from GET response
+groupObjects(ids)           // groups objects under shared groupId
 ```
 
-**Backend models:**
-- `src/models/Layer.js` — layer_number (1-5), type, opacity, blend_mode, z_index
-- `src/models/SceneLayerConfiguration.js` — 5-layer JSONB structure, complexity tracking
-- `src/models/LayerAsset.js` — Assets assigned to layers
-- `src/models/LayerPreset.js` — System and user-created presets
+#### Existing Object Types (`Canvas/objects/`)
+- `ImageObject.jsx`, `VideoObject.jsx`, `TextObject.jsx`, `ShapeObject.jsx`
+- Object type map in StudioCanvas: `{ image, video, text, shape, decor, overlay }`
 
-**Migration:** `20260701000000-add-canvas-settings-to-scenes.js` — `canvas_settings` JSONB on scenes/scene_sets
+#### Existing Panels & Tabs
+- `InspectorPanel.jsx` (~800 lines) — Transform, opacity, blend modes (normal/multiply/screen/overlay/soft-light), depth layers (FG/MG/BG), time-of-day color grading, visibility/lock toggles
+- `ObjectsPanel.jsx` — Layer list with reorder/hide/lock
+- Tabs: `TemplatesTab`, `GenerateTab`, `LibraryTab`, `DecorTab`, `TextTab`, `ShapesTab`, `SceneStatesTab`, `UploadTab`
+
+#### Existing Platform Presets (in `Toolbar.jsx`, exported as `PLATFORM_PRESETS`)
+```javascript
+youtube:   { width: 1920, height: 1080, label: 'YouTube 16:9' }
+instagram: { width: 1080, height: 1920, label: 'Instagram 9:16' }
+tiktok:    { width: 1080, height: 1920, label: 'TikTok 9:16' }
+square:    { width: 1080, height: 1080, label: 'Square 1:1' }
+cinema:    { width: 2560, height: 1440, label: 'Cinema 16:9' }
+```
+
+#### Existing Backend Models
+- `Layer.js` — layer_number (1-5), type, opacity, blend_mode, z_index
+- `SceneLayerConfiguration.js` — 5-layer JSONB, complexity tracking
+- `LayerAsset.js` — Assets per layer
+- `LayerPreset.js` — System + user presets with versioning, usage stats
+- Migration `20260701000000` — `canvas_settings` JSONB column on scenes + scene_sets
+
+#### Already Installed (no new packages)
+- `konva` ^10.2.0, `react-konva` ^18.2.14, `canvas` ^3.2.1, `html2canvas` ^1.4.1
 
 ---
 
-### What to Build: Screen Layer System Extension
+### What to Build
 
-The next session should extend the existing SceneStudio with phone/device screen framing capabilities. Since Konva.js is already in use (NOT Fabric.js), build on the existing stack.
+#### A. Device Frame Presets — `frames/devicePresets.js`
 
-#### A. Safe Area Guides
+Add 4 phone presets. These extend `PLATFORM_PRESETS` but include safe area and chrome data:
 
-Add device-specific safe area overlays to StudioCanvas:
+```javascript
+export const DEVICE_PRESETS = {
+  iphone_15: {
+    width: 393, height: 852,
+    label: 'iPhone 15',
+    cornerRadius: 55,
+    safeArea: { top: 59, bottom: 34, left: 0, right: 0 },
+    notch: 'dynamic_island',    // shape key for DeviceFrame
+    homeIndicator: true,
+  },
+  iphone_15_max: {
+    width: 430, height: 932,
+    label: 'iPhone 15 Pro Max',
+    cornerRadius: 55,
+    safeArea: { top: 59, bottom: 34, left: 0, right: 0 },
+    notch: 'dynamic_island',
+    homeIndicator: true,
+  },
+  android_pixel: {
+    width: 412, height: 915,
+    label: 'Android Pixel 8',
+    cornerRadius: 28,
+    safeArea: { top: 36, bottom: 24, left: 0, right: 0 },
+    notch: 'punch_hole',
+    homeIndicator: false,        // uses nav bar
+    navBar: { height: 48, style: 'gesture' },
+  },
+  fantasy_phone: {
+    width: 400, height: 880,
+    label: 'LalaVerse Phone',
+    cornerRadius: 40,
+    safeArea: { top: 44, bottom: 30, left: 0, right: 0 },
+    notch: 'none',
+    homeIndicator: true,
+    brandColor: '#B8962E',       // gold accent
+  },
+};
+```
+
+**Integration:** Import into `Toolbar.jsx`, merge with `PLATFORM_PRESETS`. Add a visual separator between video presets and phone presets in the dropdown.
+
+#### B. Safe Area Guides — `frames/SafeAreaGuide.jsx`
+
+Konva `<Group>` rendered inside `StudioCanvas` above the background but below content objects:
 
 ```
 ┌─────────────────────────────────┐
-│  Status bar zone (top 44px)     │
+│  Status bar zone (top inset)    │  ← semi-transparent overlay
 │  ┌───────────────────────────┐  │
 │  │                           │  │
-│  │    Content safe area      │  │
-│  │                           │  │
+│  │    Content safe area      │  │  ← dashed border
 │  │                           │  │
 │  └───────────────────────────┘  │
-│  Home indicator zone (bot 34px) │
+│  Home indicator zone (bottom)   │  ← semi-transparent overlay
 └─────────────────────────────────┘
 ```
 
-- Toggle on/off from Toolbar
-- Semi-transparent overlays with dashed borders
-- Different zones per device preset
+- Reads `safeArea` insets from active device preset
+- Toggle via new `safeAreaVisible` key in `canvasSettings` (add to `VIEW_ONLY_KEYS` in state hook so it doesn't trigger save)
+- Toolbar gets a new phone-shaped icon button next to the grid toggle
+- Semi-transparent `rgba(0,0,0,0.15)` fill for unsafe zones, dashed stroke for safe area border
 
-#### B. Snap-to-Grid Enhancement
+#### C. Device Frame Chrome — `frames/DeviceFrame.jsx`
 
-Extend existing grid system in StudioCanvas:
-- Configurable grid size (8px, 16px, 24px, 32px)
-- Snap threshold setting
-- Smart guides between objects (already partially implemented)
-- Grid visible toggle already exists in Toolbar
+Konva `<Group>` rendered on top of everything in `StudioCanvas`:
 
-#### C. Device Frame Presets
+- **Status bar** — time, signal, battery icons as Konva `<Text>` elements positioned in the top safe area
+- **Dynamic Island / Punch Hole / None** — drawn based on preset's `notch` key
+- **Home Indicator** — thin rounded `<Rect>` centered at bottom
+- **Device bezel** — rounded `<Rect>` with `cornerRadius` from preset, stroke only, no fill
 
-Add 4 new frame presets to `PLATFORM_PRESETS` in Toolbar.jsx:
-
-```javascript
-iphone_15:     393x852   (iPhone 15 / 15 Pro)
-iphone_15_max: 430x932   (iPhone 15 Pro Max)
-android_pixel: 412x915   (Pixel 8)
-fantasy_phone: 400x880   (LalaVerse custom device)
-```
-
-Each preset includes:
-- Canvas dimensions
-- Safe area insets (top, bottom, left, right)
-- Notch/dynamic island shape data
-- Home indicator style
-- Corner radius
+Toggled via `deviceFrameVisible` in `canvasSettings` (also a `VIEW_ONLY_KEYS` entry).
 
 #### D. Layer Management Extensions
 
-Extend the existing InspectorPanel layer controls:
-- **Screen chrome layer** (status bar, notch, home indicator) — always on top
-- **Content layers** — user-editable, between chrome and background
-- **Background layer** — wallpaper/gradient behind content
-- Layer grouping for device frame elements
-- Lock device chrome layers by default
+Extend `InspectorPanel.jsx` and `ObjectsPanel.jsx`:
 
-#### E. Export Pipeline
+- When a device preset is active, auto-inject a locked "Device Chrome" group at the top of the layer stack
+- Chrome group objects get `isLocked: true`, `groupId: 'device-chrome'` — they're visible in ObjectsPanel but greyed out / non-draggable
+- Add a "Background" section in InspectorPanel when device mode is active: wallpaper image picker or gradient (stores in `canvasSettings.deviceBackground`)
+- Existing `groupObjects`/`ungroupObjects` actions in state hook already support grouping
 
-Extend the existing `onExport` in SceneStudio:
-- Export with device frame overlay (PNG, 2x/3x)
-- Export content only (no frame)
-- Export as device mockup (with shadow, perspective, floating device render)
-- Batch export all presets at once
-- Quality settings (1x, 2x, 3x)
+#### E. Export Pipeline Extension
 
-#### F. Text Tool Enhancement
+Extend the existing `onExport` callback in `SceneStudio.jsx`:
 
-Extend existing TextTab and TextObject:
-- System font presets (San Francisco for iOS, Roboto for Android, custom for Fantasy)
-- Text styles matching device UI (notification title, body, caption, badge)
-- Auto-sizing to fit safe area width
-- Text shadow and outline options
+| Export Mode | What it includes |
+|-------------|-----------------|
+| **Screen only** | Content layers — no chrome, no bezel |
+| **With chrome** | Content + status bar + notch + home indicator |
+| **Device mockup** | Full device with bezel, shadow, slight perspective tilt |
+| **Batch** | All 4 device presets at once (ZIP download) |
+
+- Quality: 1x (actual pixels), 2x, 3x multiplier
+- Format: PNG (with alpha for mockup), JPEG, WebP
+- Uses Konva's `stage.toDataURL()` — already available, just needs to toggle chrome layer visibility before capture
+
+#### F. Text Tool — Device Font Presets
+
+Extend `TextTab.jsx` and `TextObject.jsx`:
+
+Add a "Phone UI" section with preset text styles:
+- **Notification title** — SF Pro / Roboto, 15px, semibold
+- **Notification body** — SF Pro / Roboto, 13px, regular
+- **App label** — SF Pro / Roboto, 11px, regular
+- **Badge count** — SF Pro / Roboto, 12px, bold, white on red circle
+- **DM message** — system font, 16px, in chat bubble shape
+- **Username** — DM Mono, 14px, bold (LalaVerse style)
+
+Each preset creates a `TextObject` with pre-set `styleData` including font, size, weight, color.
 
 #### G. Template System Integration
 
-Connect to existing TemplateStudio infrastructure:
-- Save screen layouts as templates via `src/routes/sceneTemplates.js`
-- Pre-seeded phone screen templates:
-  - "Lala's Home Screen" — app grid layout
-  - "Notification Stack" — notification center mockup
-  - "DM Conversation" — chat bubbles layout
-  - "Feed Post" — social media post frame
-  - "Story View" — full-screen story with UI overlays
+Connect to existing `src/routes/sceneTemplates.js` and `TemplatesTab.jsx`:
+
+Pre-seed 5 phone screen templates (saved as SceneTemplate records):
+1. **"Lala's Home Screen"** — App grid layout with wallpaper
+2. **"Notification Stack"** — Notification center with 3 stacked cards
+3. **"DM Conversation"** — Chat bubbles with typing indicator
+4. **"Feed Post"** — Social media post frame (profile pic, image, likes, caption)
+5. **"Story View"** — Full-screen story with top progress bar, username, reply input
+
+Templates store their device preset key so loading a template auto-selects the right frame.
 
 ---
 
-### Suggested File Architecture
-
-New files to create (extending existing structure):
+### New Files to Create
 
 ```
 frontend/src/components/SceneStudio/
   frames/
-    DeviceFrame.jsx          # Konva group rendering device chrome
-    SafeAreaGuide.jsx        # Semi-transparent safe area overlay
-    devicePresets.js         # Frame data (dimensions, insets, shapes)
-  Canvas/
-    objects/
-      DeviceChromeObject.jsx # Renders notch, status bar, home indicator
+    devicePresets.js         # DEVICE_PRESETS data (dimensions, insets, notch type)
+    DeviceFrame.jsx          # Konva <Group> — status bar, notch, home indicator, bezel
+    SafeAreaGuide.jsx        # Konva <Group> — safe area overlay + dashed border
   panels/
     tabs/
-      FrameTab.jsx           # New tab: pick device frame, toggle safe areas
+      FrameTab.jsx           # Panel tab — device picker, safe area toggle, background
 ```
 
-Extend existing files:
-- `Toolbar.jsx` — Add phone presets to PLATFORM_PRESETS, safe area toggle
-- `useSceneStudioState.js` — Add frame state, safe area state
-- `StudioCanvas.jsx` — Render SafeAreaGuide and DeviceFrame layers
-- `InspectorPanel.jsx` — Device chrome layer controls
+### Files to Extend
 
----
+| File | Changes |
+|------|---------|
+| `Toolbar.jsx` | Merge `DEVICE_PRESETS` into platform dropdown, add safe area toggle button |
+| `useSceneStudioState.js` | Add `safeAreaVisible`, `deviceFrameVisible`, `deviceBackground` to `canvasSettings`; add all three to `VIEW_ONLY_KEYS` |
+| `StudioCanvas.jsx` | Render `<SafeAreaGuide>` between background and objects layer; render `<DeviceFrame>` above all objects |
+| `InspectorPanel.jsx` | Add device background section (wallpaper/gradient) when device preset active |
+| `ObjectsPanel.jsx` | Show locked chrome group when device preset active |
+| `SceneStudio.jsx` | Add `FrameTab` to left panel tabs; extend export modal with device export modes |
+| `TextTab.jsx` | Add "Phone UI" preset section |
 
 ### Backend Needs
 
-Minimal backend additions — mostly frontend work:
+Minimal — mostly frontend work:
 
-1. **No new models needed** — use existing Layer, LayerPreset, SceneTemplate
-2. **Seed data** — Add phone frame presets to LayerPreset table
-3. **Template seeding** — Pre-create phone screen templates via existing `/api/v1/scene-templates`
-4. **Asset storage** — Device frame PNGs (notch shapes, bezels) uploaded to S3 via existing asset pipeline
-
----
-
-### Dependencies
-
-Already installed (no new packages needed):
-- `konva` ^10.2.0
-- `react-konva` ^18.2.14
-- `canvas` ^3.2.1 (backend)
-- `html2canvas` ^1.4.1
-
----
+1. **No new models** — use existing Layer, LayerPreset, SceneTemplate
+2. **Seed data** — Add phone frame presets to LayerPreset table via existing seed infrastructure
+3. **Template seeding** — Pre-create 5 phone screen templates via `POST /api/v1/scene-templates`
+4. **Assets** — Device frame PNGs (if using raster notch shapes) uploaded to S3 via existing asset pipeline; alternatively draw all chrome with Konva shapes (no assets needed)
 
 ### Priority Order
 
-1. Device frame presets + `devicePresets.js` data file
-2. `DeviceFrame.jsx` Konva component rendering chrome
-3. `SafeAreaGuide.jsx` overlay
-4. `FrameTab.jsx` panel tab for frame selection
-5. Wire into StudioCanvas + Toolbar
-6. Export pipeline extension
-7. Template seeding
-8. Text tool device font presets
+1. `devicePresets.js` — data file, no UI needed, unblocks everything
+2. `SafeAreaGuide.jsx` + wire into `StudioCanvas` — immediate visual value
+3. `DeviceFrame.jsx` — chrome rendering
+4. `FrameTab.jsx` — device picker panel tab
+5. Toolbar integration — presets dropdown + toggle buttons
+6. State hook updates — `canvasSettings` keys + `VIEW_ONLY_KEYS`
+7. Export pipeline — device export modes
+8. Template seeding — 5 phone screen templates
+9. `TextTab` phone UI presets
