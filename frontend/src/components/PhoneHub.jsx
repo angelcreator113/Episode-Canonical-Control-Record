@@ -189,7 +189,10 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   const useCustomFrame = customFrameUrl && !frameError;
 
   // Don't show icons in the phone device — only screens
-  const isIconType = activeScreen?.type === 'icon' || activeScreen?.category === 'phone_icon';
+  // Helper to detect if a screen/overlay is an icon type
+  const isIcon = (s) => s?.type === 'icon' || s?.category === 'phone_icon' || (s?.id && s.id.startsWith('icon_')) || (s?.name && /icon$/i.test((s.name || '').trim()));
+
+  const isIconType = isIcon(activeScreen);
   const phoneScreen = isIconType ? null : activeScreen;
 
   // Find persistent icons from the home screen that should show on ALL screens
@@ -216,10 +219,10 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   // Find custom overlays not matching any SCREEN_TYPE key
   const knownKeys = new Set(SCREEN_TYPES.map(t => t.key));
   const customScreens = screens.filter(s =>
-    s.custom && !knownKeys.has(s.id) && s.category !== 'phone_icon'
+    s.custom && !knownKeys.has(s.id) && !isIcon(s)
   );
   const customIcons = screens.filter(s =>
-    s.custom && !knownKeys.has(s.id) && s.category === 'phone_icon'
+    s.custom && !knownKeys.has(s.id) && isIcon(s)
   );
 
   return (

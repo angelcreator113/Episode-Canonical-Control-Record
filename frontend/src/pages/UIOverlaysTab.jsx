@@ -1013,7 +1013,14 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                         links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
                         screenTypes={SCREEN_TYPES.filter(t => t.type === 'screen')}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                        iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
+                        iconOverlays={overlays.filter(o => {
+                          if (!o.generated || !o.url) return false;
+                          // Match by category, type, id prefix, or name pattern
+                          return o.category === 'phone_icon'
+                            || o.type === 'icon'
+                            || (o.id && o.id.startsWith('icon_'))
+                            || (o.name && /icon$/i.test(o.name.trim()));
+                        })}
                         onSave={handleSaveLinks}
                         onUploadIcon={handleUploadIcon}
                       />
