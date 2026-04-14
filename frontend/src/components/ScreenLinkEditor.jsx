@@ -331,12 +331,12 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                             {iconOverlays.map(ico => (
                               <button
                                 key={ico.id}
-                                onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url }); }}
+                                onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url, icon_overlay_id: ico.id }); }}
                                 title={ico.name}
                                 style={{
                                   width: '100%', aspectRatio: '1/1', borderRadius: 8,
-                                  border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
-                                  background: zone.icon_url === ico.url ? '#fdf8ee' : '#fff',
+                                  border: (zone.icon_url === ico.url || zone.icon_overlay_id === ico.id) ? '2px solid #B8962E' : '1px solid #e0d9ce',
+                                  background: (zone.icon_url === ico.url || zone.icon_overlay_id === ico.id) ? '#fdf8ee' : '#fff',
                                   cursor: 'pointer', padding: 4,
                                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
                                   transition: 'border-color 0.15s',

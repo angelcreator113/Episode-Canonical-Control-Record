@@ -201,11 +201,31 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   const phoneScreen = isIconType ? homeScreen : (activeScreen || homeScreen);
 
   // Find persistent icons from the home screen that should show on ALL screens
+  // Build a lookup of icon overlay IDs to their current URLs (handles bg removal)
+  const iconUrlMap = React.useMemo(() => {
+    const map = {};
+    screens.forEach(s => {
+      if (isIcon(s) && s.url) map[s.id] = s.url;
+    });
+    return map;
+  }, [screens]);
+
+  // Resolve tap zone icon URLs — if an icon_overlay_id is set, use the overlay's current URL
+  const resolveLinks = (links) => {
+    if (!links?.length) return links;
+    return links.map(l => {
+      if (l.icon_overlay_id && iconUrlMap[l.icon_overlay_id]) {
+        return { ...l, icon_url: iconUrlMap[l.icon_overlay_id] };
+      }
+      return l;
+    });
+  };
+
   const persistentLinks = React.useMemo(() => {
     if (!homeScreen) return [];
     const links = homeScreen.screen_links || homeScreen.metadata?.screen_links || [];
-    return links.filter(l => l.persistent && l.icon_url);
-  }, [homeScreen]);
+    return resolveLinks(links.filter(l => l.persistent && l.icon_url));
+  }, [homeScreen, iconUrlMap]);
 
   // Match screens to screen types — strict matching only (no fuzzy name includes)
   const getScreenForType = (type) => {
@@ -249,7 +269,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                   showId={activeScreen.show_id}
                   interactive={false}
                 />
-                <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+                <ScreenLinkOverlay links={resolveLinks(activeScreen.screen_links || activeScreen.metadata?.screen_links || [])} onNavigate={onNavigate} />
                 {activeScreen.id !== 'home' && persistentLinks.length > 0 && (
                   <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
                 )}
@@ -333,7 +353,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 showId={activeScreen.show_id}
                 interactive={false}
               />
-              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+              <ScreenLinkOverlay links={resolveLinks(activeScreen.screen_links || activeScreen.metadata?.screen_links || [])} onNavigate={onNavigate} />
               {/* Persistent icons from home screen — show on non-home screens */}
               {activeScreen.id !== 'home' && persistentLinks.length > 0 && (
                 <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
