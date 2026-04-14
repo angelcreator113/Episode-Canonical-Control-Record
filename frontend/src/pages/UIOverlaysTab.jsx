@@ -885,6 +885,11 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
           border-radius: 12px; padding: 14px;
         }
 
+        @media (max-width: 1100px) {
+          .phone-hub-detail-panel {
+            width: 300px; padding: 10px;
+          }
+        }
         @media (max-width: 900px) {
           .phone-hub-layout {
             flex-direction: column;
@@ -893,6 +898,10 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
             width: 100%; position: static; max-height: none;
             order: -1; margin-bottom: 12px;
           }
+        }
+        @media (max-width: 480px) {
+          .phone-hub-layout { gap: 8px; }
+          .phone-hub-detail-panel { padding: 10px; border-radius: 8px; }
         }
       `}</style>
     </div>

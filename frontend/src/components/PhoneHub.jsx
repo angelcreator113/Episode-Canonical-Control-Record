@@ -336,13 +336,22 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         .phone-hub-inner { display: flex; gap: 24px; align-items: flex-start; }
         .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; }
         .phone-hub-frame { width: 280px; position: relative; }
+
+        @media (max-width: 1024px) {
+          .phone-hub-inner { gap: 16px; }
+          .phone-hub-frame { width: 240px; }
+        }
         @media (max-width: 768px) {
-          .phone-hub-inner { flex-direction: column; align-items: stretch; }
+          .phone-hub-inner { flex-direction: column; align-items: center; }
           .phone-hub-device { align-items: center; }
-          .phone-hub-frame { width: 220px; }
+          .phone-hub-frame { width: 240px; }
         }
         @media (max-width: 480px) {
-          .phone-hub-frame { width: 180px; }
+          .phone-hub-frame { width: 200px; }
+          .phone-hub-inner { gap: 12px; }
+        }
+        @media (max-width: 375px) {
+          .phone-hub-frame { width: 170px; }
         }
       `}</style>
     </div>
