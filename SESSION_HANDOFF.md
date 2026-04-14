@@ -22,12 +22,19 @@ Created the unified LalaVerse geography — 5 cities forming the D.R.E.A.M. acro
 Each city has: neighborhoods/pins, universities, corporations, major events, resident archetypes, and cultural energy descriptions.
 
 **Key files:**
-- `frontend/src/data/dreamCities.js` — DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS data
-- `frontend/src/components/DreamMap.jsx` — Interactive pan/zoom map with city hotspots, location pins, scene set thumbnails, Lala position indicator, edit mode for repositioning
+- `frontend/src/data/dreamCities.js` — DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS
+- `frontend/src/data/influencerData.js` — Archetypes, relationships, economy, trends
+- `frontend/src/data/calendarData.js` — Award shows, celebrity hierarchy, media outlets
+- `frontend/src/data/memoryData.js` — Memory types, archives, legends, feuds
+- `frontend/src/components/DreamMap.jsx` — Interactive map component
 
 **Backend:**
-- `GET /api/v1/world/map/positions` — Load saved city positions
-- `PUT /api/v1/world/map/positions` — Save custom city layouts (stored in PageContent)
+- **Migration** `20260725000000` — Renames old city enums (nova_prime → dazzle_district, etc.) across SocialProfile model
+- `CITY_CULTURE` mappings updated in `socialProfileRoutes.js`
+- `feedConstants.js` LALAVERSE_CITIES updated
+- `GET/PUT /api/v1/world/map/positions` — Load/save city layouts (PageContent model)
+- `POST /api/v1/world/map/upload` — Upload map image to S3
+- `GET /api/v1/world/map` — Get map image URL
 
 ---
 
@@ -41,6 +48,7 @@ Each city has: neighborhoods/pins, universities, corporations, major events, res
 - Creator distribution by city sidebar
 - Edit mode to reposition cities and persist to DB
 - Gradient placeholder map (awaiting uploaded world render)
+- Opens as modal from map pin icon in script beats (`EpisodeScriptTab.jsx`)
 
 ---
 
@@ -54,6 +62,12 @@ Merged scattered world-building pages into 4 focused pages:
 | **WorldFoundation** | WorldInfrastructure + WorldLocations | `/world-foundation` | The Map, Locations, The Loop |
 | **SocialSystems** | InfluencerSystems + Legends + Society | `/social-systems` | Archetypes, Legends/Society, Rules, Trends |
 | **CultureEvents** | CulturalCalendar + CulturalMemory | `/culture-events` | Calendar, Memory, Legacy |
+
+All under FRANCHISE in sidebar.
+
+Culture & Events uses 3 sub-components: `Culture/EventsTab.jsx`, `Culture/AwardsMediaTab.jsx`, `Culture/HistoryTab.jsx`
+
+SocialSystems covers: 15 archetypes, 50 legends, famous 25, celebrity hierarchy, media outlets, relationships, economy, trends, algorithm, drama mechanics.
 
 **WorldDashboard** provides a 7-step setup wizard:
 1. World Foundation (DREAM cities, companies, universities)
@@ -73,17 +87,34 @@ Added location awareness to the social feed system:
 - **Migration:** `20260725000001-add-location-to-social-profiles.js`
   - `home_location_id` FK on social_profiles → world_locations (where a creator lives)
   - `frequent_venues` JSONB array of location IDs they visit
+- **Profile generation** (`socialProfileRoutes.js`): auto-creates signature venue per creator based on content category (fashion→Showroom, beauty→Studio, music→Studio, etc.)
+- **Event automation** (`eventAutomationService.js`): `findVenue()` checks host's frequent venues → host's city → category match → fallback
+- **WorldLocation model**: `hasMany(SocialProfile, { as: 'residents' })`
+- **Seed infrastructure** (`worldStudio.js`): 30 locations across 5 DREAM cities with addresses
 - Location types: city, district, street, venue, property, interior, exterior, landmark, virtual, transitional
 - Venue types: restaurant, club, bar, cafe, salon, spa, gallery, museum, boutique, gym, hotel, office, park, rooftop, theater
 - Property types: penthouse, mansion, apartment, townhouse, studio, villa, loft, cottage
 
 ---
 
-### 5. Phone Screen Renderer
+### 5. Phone Hub + Screen Renderer
 
-`src/services/phoneScreenRenderer.js` + `src/models/FeedMoment.js`
+**Phone Hub** (`frontend/src/components/PhoneHub.jsx`):
+- Visual phone device with screen preview
+- 13 screen type slots: Home, Feed, DMs, Invitation, Closet, Comments, Stories, Profile, Alerts, Camera, Shopping, Live, Map
+- 7 phone skins: Midnight, Rose Gold, Gold, Silver, White, Pink, Lavender
+- Custom frame upload
+- Existing overlays map to screen slots by name/beat matching
 
-Generates phone mockup PNGs showing what Lala sees on her phone during scenes:
+**UI Overlays Tab** (`frontend/src/pages/UIOverlaysTab.jsx`) — full rewrite:
+- Phone Hub design: device preview left, screen grid right
+- Detail panel with Generate, Upload, Download, Remove BG, Delete
+- Modal stays open after actions (no scroll-to-top)
+- Delete button on all overlay cards
+- Tab persistence in URL (`?tab=overlays-tab`)
+
+**Phone Screen Renderer** (`src/services/phoneScreenRenderer.js` + `src/models/FeedMoment.js`):
+- Generates phone mockup PNGs showing what Lala sees on her phone during scenes
 - Types: notification, post, story, dm, live, ui_interaction
 - Canvas-rendered with custom fonts, notch, status bar, rounded corners
 - Each FeedMoment captures: trigger (profile, handle, action), screen content, dual voice script (JustAWoman vs Lala internal), narrative impact, financial context
@@ -114,6 +145,8 @@ Background removal integrated across asset pipeline:
 - **Calendar tab:** Yearly cultural events (award shows, birthdays, micro-events), event categories (fashion/beauty/entertainment/lifestyle/community/technology), auto-spawn world events with host/guest generation
 - **Memory tab:** Cultural memory, legends, feuds, archives, anniversaries, nostalgia waves
 - **Legacy tab:** How the world remembers significant moments
+- `calendarRoutes.js`: `CATEGORY_TO_DREAM_CITY` mapping + `dreamCityFromEvent()` helper
+- Events tab shows By City (default) or By Month view — each event card shows city letter badge
 - Connected to world events via `location_id`
 - Integrated with Feed via auto-generation of social posts about events
 
@@ -121,23 +154,42 @@ Background removal integrated across asset pipeline:
 
 ### 8. Franchise Brain Auto-Push
 
-`frontend/src/components/PushToBrain.jsx` — Reusable "Push to Brain" button:
-- Sends any page's `usePageData` state to the franchise brain ingest pipeline
+**Manual push** — `frontend/src/components/PushToBrain.jsx`:
+- Reusable "Push to Brain" button on any world-building page
+- Sends page's `usePageData` state to the franchise brain ingest pipeline
 - Creates entries as "Pending Review" status
-- Available on: CultureEvents, SocialSystems, WorldFoundation, and other world-building pages
+- Available on: CultureEvents, SocialSystems, WorldFoundation, and other pages
 - **Route:** `POST /franchise-brain/push-from-page`
+
+**Auto-push on episode completion** — `episodeCompletionService.js` Step 16:
+- Auto-creates franchise_knowledge entries when an episode completes
+- Pushes episode result + character state snapshot
+- Supersedes previous state snapshot automatically
+- `franchiseBrainRoutes.js`: seed route checks table existence before counting
 
 **Knowledge categories:** Franchise Laws, Character, Narrative, Locked Decision, Technical, Brand, World
 
 ---
 
-### 9. All Fixes
+### 9. Wardrobe Improvements
 
+- `wardrobeLibraryController.js`: auto-remove-bg on upload via Remove.bg API (non-blocking)
+- CSS: `object-fit: contain`, padding, warm gradient background, hover zoom
+
+---
+
+### 10. All Fixes
+
+- `UniversePage.jsx`: load universe from `show.universe_id` instead of hardcoded UUID
+- `WorldDashboard.jsx`: `safeFetch` for page-content checks, correct URL (`/page-content/` not `/page-data/`)
+- `SidebarProgress.jsx`: light pink background
+- `FranchiseBrain.jsx`: routes point to new consolidated pages
+- `WorldSetupGuide.jsx`: step routes point to new pages
+- Silent catch linting fixes in episodeCompletionService
 - Feed profile generation connected to DREAM city locations
 - Event auto-spawn linked to venue locations
 - World state snapshots and timeline events in WorldDashboard
 - Tension pairs tracking between characters/factions
-- Setup status checks across all world-building subsystems
 
 ---
 
