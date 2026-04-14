@@ -775,17 +775,24 @@ router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
 router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const Asset = models.Asset;
-    if (!Asset) return res.status(500).json({ success: false, error: 'Asset model not available' });
-    const asset = await Asset.findByPk(req.params.assetId);
-    if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
-    // Verify asset belongs to this show
-    if (asset.show_id && asset.show_id !== req.params.showId) {
-      return res.status(403).json({ success: false, error: 'Asset does not belong to this show' });
+    const { showId, assetId } = req.params;
+
+    // Verify asset exists and belongs to this show, then soft-delete via raw query
+    // (avoids Sequelize association hooks that can cause cascade errors)
+    const [rows] = await models.sequelize.query(
+      `UPDATE assets SET deleted_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL
+       RETURNING id`,
+      { replacements: { assetId, showId } }
+    );
+
+    if (!rows?.length) {
+      return res.status(404).json({ success: false, error: 'Asset not found or already deleted' });
     }
-    await asset.destroy(); // paranoid soft-delete
+
     return res.json({ success: true, message: 'Asset deleted' });
   } catch (err) {
+    console.error('[UIOverlays] Delete asset error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
