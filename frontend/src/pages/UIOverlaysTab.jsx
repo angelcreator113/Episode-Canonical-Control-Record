@@ -11,6 +11,7 @@ import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2
 import api from '../services/api';
 import PhoneHub, { SCREEN_TYPES } from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
+import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import './UIOverlaysTab.css';
 
@@ -35,7 +36,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [previewMode, setPreviewMode] = useState(false);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [showFlowMap, setShowFlowMap] = useState(false);
-  const [expandedSections, setExpandedSections] = useState({ actions: true, fit: false, links: false, variants: true });
+  const [expandedSections, setExpandedSections] = useState({ actions: true, fit: false, links: false, content: false, variants: true });
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const undoStackRef = useRef([]);  // undo history for activeScreen changes
@@ -510,6 +511,18 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // ── Content zones (live data rendering on templates) ──
+
+  const handleSaveContentZones = async (zones) => {
+    if (!activeScreen?.asset_id || !showId) return;
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/content-zones/${activeScreen.asset_id}`, { content_zones: zones });
+      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, content_zones: zones, metadata: { ...(o.metadata || {}), content_zones: zones } } : o));
+      setActiveScreen(prev => prev ? { ...prev, content_zones: zones, metadata: { ...(prev.metadata || {}), content_zones: zones } } : prev);
+      flash('Content zones saved!');
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
   // ── Image fit controls ──
 
   // Per-screen fit
@@ -956,6 +969,31 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                         onSave={handleSaveLinks}
                         onUploadIcon={handleUploadIcon}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── Content Zones (Live Data Templates) ── */}
+              {activeScreen?.url && !activeScreen.placeholder && (
+                <>
+                  <SectionHeader
+                    label="Live Content Zones"
+                    expanded={expandedSections.content}
+                    onToggle={() => toggleSection('content')}
+                    badge={(activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length || null}
+                  />
+                  {expandedSections.content && (
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 10, color: '#999', marginBottom: 8, lineHeight: 1.5, fontFamily: "'DM Mono', monospace" }}>
+                        Draw zones on the template to render live show data (feed posts, profiles, DMs, wardrobe, etc.)
+                      </div>
+                      <ContentZoneEditor
+                        screenUrl={activeScreen.url}
+                        zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                        showId={showId}
+                        onSave={handleSaveContentZones}
                       />
                     </div>
                   )}

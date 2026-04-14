@@ -15,6 +15,7 @@
  *   deviceFrame   — optional custom device frame image URL
  */
 import React, { useState } from 'react';
+import ScreenContentRenderer from './ScreenContentRenderer';
 
 // type: 'screen' = full phone screen frame, 'icon' = app icon for home screen link editor
 const SCREEN_TYPES = [
@@ -187,6 +188,11 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             {activeScreen?.url ? (
               <>
                 <img src={activeScreen.url} alt={activeScreen.name} style={getScreenImageStyle(activeScreen, globalFit)} />
+                <ScreenContentRenderer
+                  zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                  showId={activeScreen.show_id}
+                  interactive={false}
+                />
                 <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
               </>
             ) : (
@@ -262,6 +268,11 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 src={activeScreen.url}
                 alt={activeScreen.name}
                 style={getScreenImageStyle(activeScreen, globalFit)}
+              />
+              <ScreenContentRenderer
+                zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                showId={activeScreen.show_id}
+                interactive={false}
               />
               <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
             </>
