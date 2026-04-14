@@ -27,8 +27,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [editingLinks, setEditingLinks] = useState(false);
   const [navHistory, setNavHistory] = useState([]);  // stack of screen keys for back navigation
   const [globalFit, setGlobalFit] = useState({});    // device-level fit applied to all screens
+  const [batchUploading, setBatchUploading] = useState(false);
   const fileInputRef = useRef(null);
   const frameInputRef = useRef(null);
+  const batchInputRef = useRef(null);
   const pollRef = useRef(null);
 
   // Load phone skin preference
@@ -48,29 +50,80 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     api.get(`/api/v1/ui-overlays/${showId}/frame`).then(r => {
       if (r.data?.frame_url) setCustomFrameUrl(r.data.frame_url);
       if (r.data?.global_fit) setGlobalFit(r.data.global_fit);
-    }).catch(() => {});
+    }).catch(err => {
+      console.warn('[PhoneHub] Failed to load frame/fit settings:', err.message);
+    });
   }, [showId]);
 
   // Upload custom phone frame (persists to S3)
   const handleFrameUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !showId) return;
-    // Show immediate preview
+    const prevUrl = customFrameUrl;
     const previewUrl = URL.createObjectURL(file);
     setCustomFrameUrl(previewUrl);
     try {
       const fd = new FormData();
       fd.append('frame', file);
       const res = await api.post(`/api/v1/ui-overlays/${showId}/frame`, fd);
-      if (res.data?.frame_url) setCustomFrameUrl(res.data.frame_url);
+      if (res.data?.frame_url) {
+        setCustomFrameUrl(res.data.frame_url);
+      }
       flash('Frame uploaded!');
     } catch (err) {
+      // Revert to previous frame on failure
+      setCustomFrameUrl(prevUrl);
       flash(err.response?.data?.error || 'Frame upload failed', 'error');
     }
+    URL.revokeObjectURL(previewUrl);
     if (frameInputRef.current) frameInputRef.current.value = '';
   };
 
-  const flash = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+  const flash = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 4000); };
+
+  // Batch upload — match files to screen types by filename
+  const handleBatchUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length || !showId) return;
+    setBatchUploading(true);
+    let uploaded = 0;
+    let failed = 0;
+    const screenKeys = SCREEN_TYPES.filter(t => t.type === 'screen').map(t => t.key);
+
+    for (const file of files) {
+      const name = file.name.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '_');
+      // Try to match filename to a screen key
+      const match = screenKeys.find(k => name.includes(k) || name.includes(k.replace(/_/g, '')));
+      if (!match) {
+        console.warn(`[BatchUpload] No screen match for: ${file.name}`);
+        failed++;
+        continue;
+      }
+      // Ensure overlay type exists
+      const existing = overlays.find(o => o.id === match);
+      if (!existing) {
+        try {
+          const st = SCREEN_TYPES.find(t => t.key === match);
+          await api.post(`/api/v1/ui-overlays/${showId}/types`, {
+            name: st?.label || match, beat: match, description: st?.desc || '',
+            prompt: `Phone screen for ${st?.label || match}`, category: 'phone',
+          });
+        } catch { /* type may already exist */ }
+      }
+      // Upload
+      try {
+        const fd = new FormData();
+        fd.append('image', file);
+        await api.post(`/api/v1/ui-overlays/${showId}/upload/${match}`, fd);
+        uploaded++;
+      } catch { failed++; }
+    }
+
+    loadOverlays(false);
+    setBatchUploading(false);
+    flash(`Batch upload: ${uploaded} uploaded${failed ? `, ${failed} failed/unmatched` : ''}`, failed && !uploaded ? 'error' : 'success');
+    if (batchInputRef.current) batchInputRef.current.value = '';
+  };
 
   // Load shows
   useEffect(() => {
@@ -136,6 +189,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !activeScreen?.id) return;
+    // Confirm overwrite if screen already has an image
+    if (activeScreen.url && activeScreen.generated) {
+      if (!confirm(`"${activeScreen.name}" already has an image. Replace it?`)) {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+    }
     try {
       const fd = new FormData();
       fd.append('image', file);
@@ -164,17 +224,28 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
-  // Delete screen
+  // Delete screen + clean up any links pointing to it from other screens
   const handleDelete = async () => {
     if (!activeScreen) return;
-    if (!confirm(`Delete "${activeScreen.name}"?`)) return;
+    if (!confirm(`Delete "${activeScreen.name}"? Any links pointing to this screen from other screens will be removed.`)) return;
     try {
+      const deletedKey = activeScreen.id;
       if (activeScreen.custom && activeScreen.custom_id) {
         await api.delete(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`);
       } else if (activeScreen.asset_id) {
         await api.delete(`/api/v1/assets/${activeScreen.asset_id}`);
       }
+      // Clean orphaned links: remove any screen_links targeting the deleted screen
+      for (const overlay of overlays) {
+        const links = overlay.screen_links || overlay.metadata?.screen_links || [];
+        const orphans = links.filter(l => l.target === deletedKey);
+        if (orphans.length > 0 && overlay.asset_id) {
+          const cleaned = links.filter(l => l.target !== deletedKey);
+          api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: cleaned }).catch(() => {});
+        }
+      }
       setActiveScreen(null);
+      setEditingLinks(false);
       loadOverlays(false);
       flash('Deleted');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
@@ -408,6 +479,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
             background: '#fff', color: '#2C2C2C', fontSize: 11, fontWeight: 600,
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
           }}>+ New Screen</button>
+          <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId} style={{
+            padding: '8px 14px', border: '1px solid #e8e0d0', borderRadius: 8,
+            background: '#fff', color: '#2C2C2C', fontSize: 11, fontWeight: 600,
+            cursor: batchUploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+          }}>{batchUploading ? 'Uploading...' : 'Batch Upload'}</button>
+          <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
           <button onClick={handleGenerateAll} disabled={generating || !showId} style={{
             padding: '8px 16px', border: 'none', borderRadius: 8,
@@ -510,7 +587,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                   <ScreenLinkEditor
                     screenUrl={activeScreen.url}
                     links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                    screenTypes={SCREEN_TYPES}
+                    screenTypes={SCREEN_TYPES.filter(t => t.type === 'screen')}
+                    generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                     onSave={handleSaveLinks}
                     onUploadIcon={handleUploadIcon}
                   />

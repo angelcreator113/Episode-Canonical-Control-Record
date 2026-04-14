@@ -14,7 +14,7 @@ import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical } from 'lucide
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
-export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], onSave, onUploadIcon, readOnly = false }) {
+export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], generatedScreenKeys, onSave, onUploadIcon, readOnly = false }) {
   const [zones, setZones] = useState(links);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -76,8 +76,8 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
     const w = Math.abs(drawCurrent.x - drawStart.x);
     const h = Math.abs(drawCurrent.y - drawStart.y);
 
-    // Minimum size threshold — ignore tiny accidental clicks
-    if (w > 3 && h > 3) {
+    // Minimum size threshold — ignore tiny accidental clicks (5% min)
+    if (w > 5 && h > 5) {
       const newZone = {
         id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
         x: Math.round(x * 10) / 10,
@@ -194,7 +194,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
             }}
           >
             {zone.icon_url ? (
-              <img src={zone.icon_url} alt={zone.label || zone.target} style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
+              <img src={zone.icon_url} alt={zone.label || zone.target} style={{ width: '80%', height: '80%', maxWidth: 64, maxHeight: 64, objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
             ) : (
               <span style={{ fontSize: 7, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.6)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2 }}>
                 {zone.label || zone.target || '?'}
@@ -285,9 +285,14 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                         style={{ padding: '4px 6px', border: '1px solid #e0d9ce', borderRadius: 4, fontSize: 11, minWidth: 100 }}
                       >
                         <option value="">— Target —</option>
-                        {screenTypes.map(st => (
-                          <option key={st.key} value={st.key}>{st.icon} {st.label}</option>
-                        ))}
+                        {screenTypes.map(st => {
+                          const hasImage = generatedScreenKeys?.has(st.key);
+                          return (
+                            <option key={st.key} value={st.key}>
+                              {st.icon} {st.label}{hasImage ? ' \u2713' : ''}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
