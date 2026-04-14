@@ -207,7 +207,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
     return links.filter(l => l.persistent && l.icon_url);
   }, [homeScreen]);
 
-  // Match screens to screen types
+  // Match screens to screen types — strict matching only (no fuzzy name includes)
   const getScreenForType = (type) => {
     return screens.find(s => {
       const sId = (s.id || '').toLowerCase();
@@ -215,8 +215,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       const sName = (s.name || '').toLowerCase();
       const key = type.key.toLowerCase();
       const label = type.label.toLowerCase();
-      return sId === key || sBeat === key || sName === label
-        || sBeat.includes(key) || sName.includes(key) || sName.includes(label);
+      // Strict: exact id match, exact beat match, or exact name match
+      return sId === key || sBeat === key || sName === label || sName === `ui overlay: ${label}`;
     });
   };
 

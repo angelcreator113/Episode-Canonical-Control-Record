@@ -101,8 +101,8 @@ router.get('/:showId', optionalAuth, async (req, res) => {
         screen_links: primary?.metadata?.screen_links || null,
         image_fit: primary?.metadata?.image_fit || null,
         content_zones: primary?.metadata?.content_zones || null,
-        // Category override from asset metadata (for built-in types reassigned by user)
-        ...(primary?.metadata?.overlay_category ? { category: primary.metadata.overlay_category } : {}),
+        // Include overlay_type from asset metadata for debugging
+        overlay_type: primary?.metadata?.overlay_type || ot.id,
         variants,
       };
     });
@@ -478,11 +478,32 @@ router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
 // ── CATEGORY OVERRIDE (screen vs icon for built-in types) ───────────────
 
 // PUT /api/v1/ui-overlays/:showId/category/:assetId — set category on asset metadata
+// When switching between screen and icon, also update overlay_type to match
 router.put('/:showId/category/:assetId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { category } = req.body;
     if (!category) return res.status(400).json({ success: false, error: 'category is required' });
+
+    // Read current overlay_type so we can adjust it to match the new category
+    const [current] = await models.sequelize.query(
+      `SELECT metadata::text as metadata_text FROM assets WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { assetId: req.params.assetId, showId: req.params.showId } }
+    );
+    let patch = { overlay_category: category };
+    if (current?.length) {
+      let meta = {};
+      try { meta = JSON.parse(current[0].metadata_text || '{}'); } catch {}
+      const currentType = meta.overlay_type || '';
+      // If switching to icon category and overlay_type doesn't start with 'icon_', prefix it
+      if (category === 'phone_icon' && !currentType.startsWith('icon_')) {
+        patch.overlay_type = 'icon_' + currentType;
+      }
+      // If switching to screen category and overlay_type starts with 'icon_', strip the prefix
+      if (category === 'phone' && currentType.startsWith('icon_')) {
+        patch.overlay_type = currentType.replace(/^icon_/, '');
+      }
+    }
 
     await models.sequelize.query(
       `UPDATE assets
@@ -492,7 +513,7 @@ router.put('/:showId/category/:assetId', optionalAuth, async (req, res) => {
       { replacements: {
         assetId: req.params.assetId,
         showId: req.params.showId,
-        patch: JSON.stringify({ overlay_category: category }),
+        patch: JSON.stringify(patch),
       } }
     );
 
