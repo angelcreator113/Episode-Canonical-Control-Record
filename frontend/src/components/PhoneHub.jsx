@@ -140,12 +140,25 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
 
   // Match screens to screen types
   const getScreenForType = (type) => {
-    return screens.find(s =>
-      (s.beat || '').toLowerCase().includes(type.key) ||
-      (s.name || '').toLowerCase().includes(type.key) ||
-      (s.name || '').toLowerCase().includes(type.label.toLowerCase())
-    );
+    return screens.find(s => {
+      const sId = (s.id || '').toLowerCase();
+      const sBeat = (s.beat || '').toLowerCase();
+      const sName = (s.name || '').toLowerCase();
+      const key = type.key.toLowerCase();
+      const label = type.label.toLowerCase();
+      return sId === key || sBeat === key || sName === label
+        || sBeat.includes(key) || sName.includes(key) || sName.includes(label);
+    });
   };
+
+  // Find custom overlays not matching any SCREEN_TYPE key
+  const knownKeys = new Set(SCREEN_TYPES.map(t => t.key));
+  const customScreens = screens.filter(s =>
+    s.custom && !knownKeys.has(s.id) && s.category !== 'phone_icon'
+  );
+  const customIcons = screens.filter(s =>
+    s.custom && !knownKeys.has(s.id) && s.category === 'phone_icon'
+  );
 
   return (
     <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
@@ -290,6 +303,9 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           {SCREEN_TYPES.filter(t => t.type === 'screen').map(type => (
             <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} />
           ))}
+          {customScreens.map(s => (
+            <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📄', desc: s.description || 'Custom screen' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} />
+          ))}
         </div>
 
         {/* Icons Section */}
@@ -302,6 +318,9 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 6 }}>
               {SCREEN_TYPES.filter(t => t.type === 'icon').map(type => (
                 <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} isIcon />
+              ))}
+              {customIcons.map(s => (
+                <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || 'Custom icon' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} globalFit={globalFit} isIcon />
               ))}
             </div>
           </>

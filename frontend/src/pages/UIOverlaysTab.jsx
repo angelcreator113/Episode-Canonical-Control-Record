@@ -449,6 +449,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // Change custom screen's type (screen vs icon)
+  const handleChangeScreenType = async (category) => {
+    if (!activeScreen?.custom || !activeScreen.custom_id || !showId) return;
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`, { category });
+      setActiveScreen(prev => prev ? { ...prev, category } : prev);
+      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, category } : o));
+      flash(category === 'phone_icon' ? 'Set as Icon' : 'Set as Screen');
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
   const generatedCount = overlays.filter(o => o.generated).length;
 
   return (
@@ -503,57 +514,103 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           <p style={{ marginTop: 12, fontSize: 13 }}>Loading phone screens...</p>
         </div>
       ) : (
-        <>
-          {/* Phone Hub */}
-          <PhoneHub
-            screens={overlays}
-            activeScreen={activeScreen}
-            onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); }}
-            onNavigate={handleNavigate}
-            navigationHistory={navHistory}
-            onBack={handleBack}
-            skin={phoneSkin}
-            onChangeSkin={handleChangeSkin}
-            customFrameUrl={customFrameUrl}
-            globalFit={globalFit}
-          />
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          {/* Left: Phone Hub (phone + grid) */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <PhoneHub
+              screens={overlays}
+              activeScreen={activeScreen}
+              onSelectScreen={(s) => { setActiveScreen(s); setNavHistory([]); setEditingLinks(false); }}
+              onNavigate={handleNavigate}
+              navigationHistory={navHistory}
+              onBack={handleBack}
+              skin={phoneSkin}
+              onChangeSkin={handleChangeSkin}
+              customFrameUrl={customFrameUrl}
+              globalFit={globalFit}
+            />
+          </div>
 
-          {/* Active Screen Detail Panel */}
+          {/* Right: Detail Panel (sticky sidebar) */}
           {activeScreen && (
             <div style={{
-              marginTop: 20, background: '#fff', border: '1px solid #e8e0d0',
-              borderRadius: 12, padding: 16,
+              width: 340, flexShrink: 0,
+              position: 'sticky', top: 20, maxHeight: 'calc(100vh - 60px)', overflowY: 'auto',
+              background: '#fff', border: '1px solid #e8e0d0',
+              borderRadius: 12, padding: 14,
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C' }}>{activeScreen.name}</div>
-                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
-                    {activeScreen.beat && <span style={{ fontFamily: "'DM Mono', monospace", marginRight: 8 }}>{activeScreen.beat}</span>}
-                    {activeScreen.description}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#2C2C2C' }}>{activeScreen.name}</div>
+                    {/* Type badge */}
+                    <span style={{
+                      fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                      background: (activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? '#a889c8' : '#B8962E',
+                      color: '#fff',
+                    }}>
+                      {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'ICON' : 'SCREEN'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>
+                    {activeScreen.beat && <span style={{ fontFamily: "'DM Mono', monospace", marginRight: 6 }}>{activeScreen.beat}</span>}
+                    {activeScreen.description?.slice(0, 60)}
                   </div>
                 </div>
-                <button onClick={() => setActiveScreen(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}>
-                  <X size={16} />
+                <button onClick={() => { setActiveScreen(null); setEditingLinks(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 2 }}>
+                  <X size={14} />
                 </button>
               </div>
 
+              {/* Type selector for custom screens */}
+              {activeScreen.custom && activeScreen.asset_id && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: '#888', fontFamily: "'DM Mono', monospace", marginBottom: 3 }}>TYPE</div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => handleChangeScreenType('phone')} style={{
+                      flex: 1, padding: '4px 0', fontSize: 9, fontWeight: 600, border: '1px solid #e0d9ce',
+                      borderRadius: 4, cursor: 'pointer',
+                      background: activeScreen.category !== 'phone_icon' ? '#B8962E' : '#fff',
+                      color: activeScreen.category !== 'phone_icon' ? '#fff' : '#888',
+                    }}>Screen</button>
+                    <button onClick={() => handleChangeScreenType('phone_icon')} style={{
+                      flex: 1, padding: '4px 0', fontSize: 9, fontWeight: 600, border: '1px solid #e0d9ce',
+                      borderRadius: 4, cursor: 'pointer',
+                      background: activeScreen.category === 'phone_icon' ? '#a889c8' : '#fff',
+                      color: activeScreen.category === 'phone_icon' ? '#fff' : '#888',
+                    }}>Icon</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Thumbnail preview */}
+              {activeScreen.url && (
+                <div style={{
+                  width: '100%', aspectRatio: (activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? '1/1' : '9/16',
+                  borderRadius: 8, overflow: 'hidden', marginBottom: 10, background: '#f5f3ee',
+                  maxHeight: 200,
+                }}>
+                  <img src={activeScreen.url} alt={activeScreen.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
+              )}
+
               {/* Prompt */}
               {(activeScreen.prompt || activeScreen.custom_prompt) && (
-                <div style={{ background: '#faf8f5', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 11, color: '#666', lineHeight: 1.5 }}>
-                  <span style={{ fontSize: 9, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>PROMPT</span>
-                  <p style={{ margin: '4px 0 0' }}>{activeScreen.custom_prompt || activeScreen.prompt}</p>
+                <div style={{ background: '#faf8f5', borderRadius: 6, padding: '6px 10px', marginBottom: 10, fontSize: 10, color: '#666', lineHeight: 1.5 }}>
+                  <span style={{ fontSize: 8, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>PROMPT</span>
+                  <p style={{ margin: '3px 0 0' }}>{(activeScreen.custom_prompt || activeScreen.prompt || '').slice(0, 120)}...</p>
                 </div>
               )}
 
               {/* Actions */}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
                 {!activeScreen.placeholder ? (
                   <>
                     <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? 'Generating...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" />
                     <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#7ab3d4" />
                     {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
                     {activeScreen.asset_id && <ActionBtn icon={Eraser} label="Remove BG" onClick={handleRemoveBg} color="#a889c8" />}
-                    {activeScreen.url && <ActionBtn icon={Link2} label={editingLinks ? 'Done Editing' : 'Edit Links'} onClick={() => setEditingLinks(!editingLinks)} color={editingLinks ? '#2C2C2C' : '#b89060'} />}
+                    {activeScreen.url && <ActionBtn icon={Link2} label={editingLinks ? 'Done' : 'Links'} onClick={() => setEditingLinks(!editingLinks)} color={editingLinks ? '#2C2C2C' : '#b89060'} />}
                     <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
                   </>
                 ) : (
@@ -598,7 +655,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Create Screen Modal */}
