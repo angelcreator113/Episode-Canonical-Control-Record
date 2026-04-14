@@ -180,6 +180,80 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // Auto-create a screen type from a placeholder, then trigger upload
+  const handleAutoCreateAndUpload = async () => {
+    if (!activeScreen?.placeholder || !showId) return;
+    try {
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, {
+        name: activeScreen.name,
+        beat: activeScreen.beat || activeScreen.key || '',
+        description: activeScreen.description || activeScreen.desc || '',
+        prompt: `A luxury phone screen overlay for "${activeScreen.name}". Dreamy glassmorphism aesthetic with soft pink and lavender gradients. Frosted glass UI elements with sparkle particle effects. Rose gold accents. Elegant typography. Premium mobile UI design. Isolated on plain background.`,
+        category: 'phone',
+      });
+      // Reload overlays so the new type appears, then open file picker
+      const listRes = await api.get(`/api/v1/ui-overlays/${showId}`);
+      const all = listRes.data?.data || [];
+      setOverlays(all);
+      const created = all.find(o => o.name === activeScreen.name || o.id === (res.data?.data?.type_key));
+      if (created) {
+        setActiveScreen(created);
+        // Small delay so state updates before file picker opens
+        setTimeout(() => fileInputRef.current?.click(), 100);
+      } else {
+        fileInputRef.current?.click();
+      }
+    } catch (err) {
+      // If type already exists (409), just proceed with upload
+      if (err.response?.status === 409) {
+        const listRes = await api.get(`/api/v1/ui-overlays/${showId}`);
+        const all = listRes.data?.data || [];
+        setOverlays(all);
+        const existing = all.find(o => (o.name || '').toLowerCase().includes(activeScreen.name.toLowerCase()));
+        if (existing) setActiveScreen(existing);
+        setTimeout(() => fileInputRef.current?.click(), 100);
+      } else {
+        flash(err.response?.data?.error || err.message, 'error');
+      }
+    }
+  };
+
+  // Auto-create a screen type from a placeholder, then generate
+  const handleAutoCreateAndGenerate = async () => {
+    if (!activeScreen?.placeholder || !showId) return;
+    try {
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, {
+        name: activeScreen.name,
+        beat: activeScreen.beat || activeScreen.key || '',
+        description: activeScreen.description || activeScreen.desc || '',
+        prompt: `A luxury phone screen overlay for "${activeScreen.name}". Dreamy glassmorphism aesthetic with soft pink and lavender gradients. Frosted glass UI elements with sparkle particle effects. Rose gold accents. Elegant typography. Premium mobile UI design. Isolated on plain background.`,
+        category: 'phone',
+      });
+      // Reload and generate
+      const listRes = await api.get(`/api/v1/ui-overlays/${showId}`);
+      const all = listRes.data?.data || [];
+      setOverlays(all);
+      const created = all.find(o => o.name === activeScreen.name || o.id === (res.data?.data?.type_key));
+      if (created) {
+        setActiveScreen(created);
+        handleGenerateOne(created.id);
+      }
+    } catch (err) {
+      if (err.response?.status === 409) {
+        const listRes = await api.get(`/api/v1/ui-overlays/${showId}`);
+        const all = listRes.data?.data || [];
+        setOverlays(all);
+        const existing = all.find(o => (o.name || '').toLowerCase().includes(activeScreen.name.toLowerCase()));
+        if (existing) {
+          setActiveScreen(existing);
+          handleGenerateOne(existing.id);
+        }
+      } else {
+        flash(err.response?.data?.error || err.message, 'error');
+      }
+    }
+  };
+
   const generatedCount = overlays.filter(o => o.generated).length;
 
   return (
@@ -268,7 +342,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {!activeScreen.placeholder && (
+                {!activeScreen.placeholder ? (
                   <>
                     <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? 'Generating...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" />
                     <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#7ab3d4" />
@@ -276,11 +350,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                     {activeScreen.asset_id && <ActionBtn icon={Eraser} label="Remove BG" onClick={handleRemoveBg} color="#a889c8" />}
                     <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
                   </>
-                )}
-                {activeScreen.placeholder && (
-                  <div style={{ fontSize: 12, color: '#888', padding: '8px 0' }}>
-                    This screen type doesn't have an overlay yet. <button onClick={() => setShowCreateModal(true)} style={{ background: 'none', border: 'none', color: '#B8962E', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>Create it →</button>
-                  </div>
+                ) : (
+                  <>
+                    <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#7ab3d4" />
+                    <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} color="#B8962E" />
+                  </>
                 )}
               </div>
 
