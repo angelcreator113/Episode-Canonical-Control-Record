@@ -717,4 +717,19 @@ router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
   }
 });
 
+// DELETE /api/v1/ui-overlays/:showId/asset/:assetId — soft-delete an overlay asset
+router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const Asset = models.Asset;
+    if (!Asset) return res.status(500).json({ success: false, error: 'Asset model not available' });
+    const asset = await Asset.findByPk(req.params.assetId);
+    if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
+    await asset.destroy(); // paranoid soft-delete
+    return res.json({ success: true, message: 'Asset deleted' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

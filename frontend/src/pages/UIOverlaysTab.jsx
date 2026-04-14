@@ -327,7 +327,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (screen.custom && screen.custom_id) {
         await api.delete(`/api/v1/ui-overlays/${showId}/types/${screen.custom_id}`);
       } else if (screen.asset_id) {
-        await api.delete(`/api/v1/assets/${screen.asset_id}`);
+        await api.delete(`/api/v1/ui-overlays/${showId}/asset/${screen.asset_id}`);
       }
       // Clean orphaned links: remove any screen_links targeting the deleted screen
       for (const overlay of overlays) {
