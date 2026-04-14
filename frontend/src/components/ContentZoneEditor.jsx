@@ -54,11 +54,14 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
     };
   }, []);
 
-  // Drawing — works for mouse and touch via pointer events
+  // Drawing — works for mouse and touch via pointer capture
   const handlePointerDown = (e) => {
     if (readOnly) return;
     if (e.target.closest('[data-zone-id]')) return;
     e.preventDefault();
+    if (e.target.setPointerCapture) {
+      try { e.target.setPointerCapture(e.pointerId); } catch {}
+    }
     const pos = getRelativePos(e);
     setDrawing(true);
     setDrawStart(pos);
@@ -72,7 +75,10 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
     setDrawCurrent(getRelativePos(e));
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e) => {
+    if (e?.target?.releasePointerCapture && e?.pointerId !== undefined) {
+      try { e.target.releasePointerCapture(e.pointerId); } catch {}
+    }
     if (!drawing || !drawStart || !drawCurrent) { setDrawing(false); return; }
     const x = Math.min(drawStart.x, drawCurrent.x);
     const y = Math.min(drawStart.y, drawCurrent.y);
@@ -132,7 +138,8 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerLeave={() => { if (drawing) handlePointerUp(); }}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={() => { if (!drawing) return; }}
         style={{
           position: 'relative',
           width: '100%', maxWidth: 320,

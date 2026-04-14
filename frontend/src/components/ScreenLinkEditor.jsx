@@ -40,11 +40,15 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
     };
   }, []);
 
-  // Drawing new zones — works for mouse and touch
+  // Drawing new zones — works for mouse and touch via pointer capture
   const handlePointerDown = (e) => {
     if (readOnly || dragging) return;
     if (e.target.closest('[data-zone-id]')) return;
-    e.preventDefault(); // prevent scroll on touch
+    e.preventDefault();
+    // Capture pointer so we keep getting events even if finger moves fast
+    if (e.target.setPointerCapture) {
+      try { e.target.setPointerCapture(e.pointerId); } catch {}
+    }
     const pos = getRelativePos(e);
     setDrawing(true);
     setDrawStart(pos);
@@ -69,7 +73,11 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
     setDrawCurrent(getRelativePos(e));
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e) => {
+    // Release pointer capture
+    if (e?.target?.releasePointerCapture && e?.pointerId !== undefined) {
+      try { e.target.releasePointerCapture(e.pointerId); } catch {}
+    }
     if (dragging) {
       setDragging(null);
       return;
@@ -106,6 +114,9 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
   const handleZoneDragStart = (e, zone) => {
     e.stopPropagation();
     e.preventDefault();
+    if (containerRef.current?.setPointerCapture) {
+      try { containerRef.current.setPointerCapture(e.pointerId); } catch {}
+    }
     const pos = getRelativePos(e);
     setDragging({ id: zone.id, startX: pos.x, startY: pos.y, origX: zone.x, origY: zone.y });
     setSelectedZone(zone.id);
@@ -159,7 +170,8 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerLeave={() => { if (drawing) handlePointerUp(); if (dragging) setDragging(null); }}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={() => { if (!drawing && !dragging) return; /* captured pointers don't fire leave */ }}
         style={{
           position: 'relative',
           width: '100%',
