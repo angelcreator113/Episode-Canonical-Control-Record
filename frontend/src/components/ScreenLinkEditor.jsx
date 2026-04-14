@@ -14,7 +14,7 @@ import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin } from 'l
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
-export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], generatedScreenKeys, onSave, onUploadIcon, readOnly = false }) {
+export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], generatedScreenKeys, iconOverlays = [], onSave, onUploadIcon, readOnly = false }) {
   const [zones, setZones] = useState(links);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -297,23 +297,58 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                         })}
                       </select>
                     </div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <button
-                        onClick={() => handleIconUpload(zone.id)}
-                        style={{
-                          padding: '8px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #e0d9ce',
-                          borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#7ab3d4',
-                          display: 'flex', alignItems: 'center', gap: 4, minHeight: 36,
-                        }}
-                      >
-                        <Upload size={12} /> {zone.icon_url ? 'Replace Icon' : 'Upload Icon'}
-                      </button>
-                      {zone.icon_url && (
-                        <img src={zone.icon_url} alt="icon" style={{ width: 24, height: 24, borderRadius: 4, objectFit: 'contain', border: '1px solid #eee' }} />
+                    {/* Icon picker — choose from existing icon overlays or upload */}
+                    <div>
+                      {iconOverlays.length > 0 && (
+                        <div style={{ marginBottom: 6 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: '#888', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>
+                            USE ICON OVERLAY
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {iconOverlays.map(ico => (
+                              <button
+                                key={ico.id}
+                                onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url }); }}
+                                title={ico.name}
+                                style={{
+                                  width: 44, height: 44, borderRadius: 8, border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
+                                  background: zone.icon_url === ico.url ? '#fdf8ee' : '#fff',
+                                  cursor: 'pointer', padding: 3, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  transition: 'border-color 0.15s',
+                                }}
+                              >
+                                <img src={ico.url} alt={ico.name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 4 }} draggable={false} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       )}
-                      <span style={{ fontSize: 11, color: '#bbb', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>
-                        {Math.round(zone.x)}%, {Math.round(zone.y)}%
-                      </span>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => handleIconUpload(zone.id)}
+                          style={{
+                            padding: '8px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #e0d9ce',
+                            borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#7ab3d4',
+                            display: 'flex', alignItems: 'center', gap: 4, minHeight: 36,
+                          }}
+                        >
+                          <Upload size={12} /> {zone.icon_url ? 'Replace' : 'Upload Custom'}
+                        </button>
+                        {zone.icon_url && (
+                          <>
+                            <img src={zone.icon_url} alt="icon" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />
+                            <button
+                              onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: null }); }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 4, fontSize: 11 }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </>
+                        )}
+                        <span style={{ fontSize: 11, color: '#bbb', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>
+                          {Math.round(zone.x)}%, {Math.round(zone.y)}%
+                        </span>
+                      </div>
                     </div>
                     {/* Persistent toggle — pin icon to show on all screens */}
                     <button
