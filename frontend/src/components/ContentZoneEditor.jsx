@@ -121,7 +121,7 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
   const sel = selectedZone ? localZones.find(z => z.id === selectedZone) : null;
 
   return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Screen with content zones */}
       <div
         ref={containerRef}
@@ -131,7 +131,8 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
         onMouseLeave={() => { if (drawing) handleMouseUp(); }}
         style={{
           position: 'relative',
-          width: 220, minWidth: 150, flexShrink: 0,
+          width: '100%', maxWidth: 320,
+          margin: '0 auto',
           aspectRatio: '9/16',
           borderRadius: 12, overflow: 'hidden',
           cursor: readOnly ? 'default' : 'crosshair',
@@ -192,17 +193,17 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
       {!readOnly && (
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 6 }}>
-            <span style={{ fontSize: 10, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
               CONTENT ZONES ({localZones.length})
             </span>
             <div style={{ display: 'flex', gap: 4 }}>
               {isDirty && (
                 <button onClick={handleSave} style={{
-                  padding: '4px 10px', fontSize: 10, fontWeight: 600, border: 'none',
+                  padding: '8px 14px', fontSize: 12, fontWeight: 600, border: 'none',
                   borderRadius: 6, background: '#B8962E', color: '#fff', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 4, minHeight: 28,
+                  display: 'flex', alignItems: 'center', gap: 4, minHeight: 36,
                 }}>
-                  <Save size={10} /> Save
+                  <Save size={12} /> Save
                 </button>
               )}
             </div>
@@ -223,24 +224,24 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
                   key={zone.id}
                   onClick={() => setSelectedZone(zone.id)}
                   style={{
-                    padding: '6px 8px',
+                    padding: '10px 12px',
                     background: isSelected ? '#fdf8ee' : '#fff',
                     border: `1px solid ${isSelected ? '#B8962E' : '#eee'}`,
-                    borderRadius: 6,
-                    fontSize: 11,
+                    borderRadius: 8,
+                    fontSize: 13,
                   }}
                 >
                   {/* Zone header */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: isSelected ? 6 : 0 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: 2, background: ZONE_COLORS[i % ZONE_COLORS.length], flexShrink: 0 }} />
-                    <span style={{ fontWeight: 600, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: isSelected ? 8 : 0 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: 3, background: ZONE_COLORS[i % ZONE_COLORS.length], flexShrink: 0 }} />
+                    <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {typeMeta ? `${typeMeta.icon} ${typeMeta.label}` : zone.content_type || 'Unassigned'}
                     </span>
-                    <span style={{ fontSize: 9, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>
+                    <span style={{ fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
                       {Math.round(zone.x)}%,{Math.round(zone.y)}%
                     </span>
-                    <button onClick={(e) => { e.stopPropagation(); removeZone(zone.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 2 }}>
-                      <Trash2 size={11} />
+                    <button onClick={(e) => { e.stopPropagation(); removeZone(zone.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 4, minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Trash2 size={14} />
                     </button>
                   </div>
 
@@ -286,13 +287,13 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6, borderTop: '1px solid #f0ece4' }}>
       {/* Content type picker */}
       <div>
-        <label style={{ fontSize: 9, fontWeight: 700, color: '#999', fontFamily: "'DM Mono', monospace", display: 'block', marginBottom: 3 }}>
+        <label style={labelStyle}>
           CONTENT TYPE
         </label>
         <select
           value={zone.content_type || ''}
           onChange={(e) => handleTypeChange(e.target.value)}
-          style={{ width: '100%', padding: '5px 6px', border: '1px solid #e0d9ce', borderRadius: 4, fontSize: 11, minHeight: 30 }}
+          style={fieldStyle}
         >
           <option value="">— Select type —</option>
           {Object.entries(groups).map(([group, types]) => (
@@ -458,12 +459,12 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate }) {
 }
 
 const labelStyle = {
-  fontSize: 8, fontWeight: 700, color: '#aaa',
+  fontSize: 11, fontWeight: 700, color: '#888',
   fontFamily: "'DM Mono', monospace", textTransform: 'uppercase',
-  letterSpacing: 0.5, display: 'block', marginBottom: 2,
+  letterSpacing: 0.5, display: 'block', marginBottom: 4,
 };
 
 const fieldStyle = {
-  width: '100%', padding: '4px 6px', border: '1px solid #e0d9ce',
-  borderRadius: 4, fontSize: 11, minHeight: 26, boxSizing: 'border-box',
+  width: '100%', padding: '8px 10px', border: '1px solid #e0d9ce',
+  borderRadius: 6, fontSize: 13, minHeight: 36, boxSizing: 'border-box',
 };
