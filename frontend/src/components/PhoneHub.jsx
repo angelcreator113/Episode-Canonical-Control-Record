@@ -15,6 +15,7 @@
  *   deviceFrame   — optional custom device frame image URL
  */
 import React, { useState } from 'react';
+import ScreenContentRenderer from './ScreenContentRenderer';
 
 // type: 'screen' = full phone screen frame, 'icon' = app icon for home screen link editor
 const SCREEN_TYPES = [
@@ -186,8 +187,13 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           }}>
             {phoneScreen?.url ? (
               <>
-                <img src={phoneScreen.url} alt={phoneScreen.name} style={getScreenImageStyle(phoneScreen, globalFit)} />
-                <ScreenLinkOverlay links={phoneScreen.screen_links || phoneScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+                <img src={activeScreen.url} alt={activeScreen.name} style={getScreenImageStyle(activeScreen, globalFit)} />
+                <ScreenContentRenderer
+                  zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                  showId={activeScreen.show_id}
+                  interactive={false}
+                />
+                <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
               </>
             ) : (
               <div style={{ width: '100%', height: '100%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>
@@ -263,7 +269,12 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 alt={phoneScreen.name}
                 style={getScreenImageStyle(phoneScreen, globalFit)}
               />
-              <ScreenLinkOverlay links={phoneScreen.screen_links || phoneScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+              <ScreenContentRenderer
+                zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                showId={activeScreen.show_id}
+                interactive={false}
+              />
+              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
             </>
           ) : (
             <div style={{

@@ -91,6 +91,7 @@ router.get('/:showId', optionalAuth, async (req, res) => {
         custom_prompt: primary?.custom_prompt || null,
         screen_links: primary?.metadata?.screen_links || null,
         image_fit: primary?.metadata?.image_fit || null,
+        content_zones: primary?.metadata?.content_zones || null,
         // Category override from asset metadata (for built-in types reassigned by user)
         ...(primary?.metadata?.overlay_category ? { category: primary.metadata.overlay_category } : {}),
         variants,
@@ -621,6 +622,58 @@ router.post('/:showId/screen-links/:assetId/icon', optionalAuth, upload.single('
     }
 
     return res.json({ success: true, icon_url: url, link_id });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── CONTENT ZONES (Live data rendering on templates) ────────────────────────
+
+// PUT /api/v1/ui-overlays/:showId/content-zones/:assetId — save content zones for an overlay
+router.put('/:showId/content-zones/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { content_zones } = req.body;
+
+    if (!Array.isArray(content_zones)) {
+      return res.status(400).json({ success: false, error: 'content_zones must be an array' });
+    }
+
+    await models.sequelize.query(
+      `UPDATE assets
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
+           updated_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: {
+        assetId: req.params.assetId,
+        showId: req.params.showId,
+        patch: JSON.stringify({ content_zones }),
+      } }
+    );
+
+    return res.json({ success: true, content_zones });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/v1/ui-overlays/:showId/content-zones/:assetId — get content zones for an overlay
+router.get('/:showId/content-zones/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+
+    const [rows] = await models.sequelize.query(
+      `SELECT metadata::text as metadata_text FROM assets
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { assetId: req.params.assetId, showId: req.params.showId } }
+    );
+
+    if (!rows?.length) return res.status(404).json({ success: false, error: 'Asset not found' });
+
+    let meta = {};
+    try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch { /* skip */ }
+
+    return res.json({ success: true, content_zones: meta.content_zones || [] });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
