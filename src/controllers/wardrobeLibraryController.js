@@ -184,6 +184,51 @@ module.exports = {
 
       console.log(`✅ Created wardrobe library item: ${libraryItem.id}`);
 
+      // Auto-remove background (non-blocking) if image was uploaded
+      if (req.file && imageUrl.startsWith('http')) {
+        (async () => {
+          try {
+            const removeBgApiKey = process.env.REMOVE_BG_API_KEY || process.env.REMOVEBG_API_KEY;
+            if (!removeBgApiKey) { console.log('[wardrobe] No REMOVE_BG_API_KEY — skipping auto bg removal'); return; }
+
+            console.log(`🎨 Auto-removing background for wardrobe item: ${libraryItem.id}`);
+            const { default: fetch } = await import('node-fetch');
+            const FormData = (await import('form-data')).default;
+
+            const formData = new FormData();
+            formData.append('image_url', imageUrl);
+            formData.append('size', 'auto');
+
+            const bgRes = await fetch('https://api.remove.bg/v1.0/removebg', {
+              method: 'POST',
+              headers: { 'X-Api-Key': removeBgApiKey },
+              body: formData,
+            });
+
+            if (!bgRes.ok) { console.warn('[wardrobe] Remove.bg failed:', bgRes.status); return; }
+
+            const bgBuffer = Buffer.from(await bgRes.arrayBuffer());
+            const noBgKey = `wardrobe/no-bg/${Date.now()}-${libraryItem.id}.png`;
+            const s3 = getS3Client();
+            await s3.send(new PutObjectCommand({
+              Bucket: BUCKET_NAME,
+              Key: noBgKey,
+              Body: bgBuffer,
+              ContentType: 'image/png',
+            }));
+
+            const noBgUrl = `https://${BUCKET_NAME}.s3.amazonaws.com/${noBgKey}`;
+            await WardrobeLibrary.update(
+              { imageUrl: noBgUrl },
+              { where: { id: libraryItem.id } }
+            );
+            console.log(`✅ Background removed for wardrobe item: ${libraryItem.id}`);
+          } catch (bgErr) {
+            console.warn('[wardrobe] Auto bg removal failed (non-blocking):', bgErr?.message);
+          }
+        })();
+      }
+
       res.status(201).json({
         success: true,
         data: libraryItem,
