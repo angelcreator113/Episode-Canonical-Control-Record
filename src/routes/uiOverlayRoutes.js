@@ -74,6 +74,7 @@ router.get('/:showId', optionalAuth, async (req, res) => {
         asset_id: found?.id || null,
         bg_removed: found?.bg_removed || false,
         custom_prompt: found?.custom_prompt || null,
+        screen_links: found?.metadata?.screen_links || null,
       };
     });
 
@@ -339,6 +340,109 @@ router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image')
     }
 
     return res.json({ success: true, data: { ...overlayType, url, asset_id: assetId, generated: true } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── SCREEN LINKS (tap zones with icon overlays) ───────────────────────────
+
+// PUT /api/v1/ui-overlays/:showId/screen-links/:assetId — save screen links for an overlay
+router.put('/:showId/screen-links/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { screen_links } = req.body;
+
+    if (!Array.isArray(screen_links)) {
+      return res.status(400).json({ success: false, error: 'screen_links must be an array' });
+    }
+
+    // Merge screen_links into existing metadata
+    await models.sequelize.query(
+      `UPDATE assets
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
+           updated_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: {
+        assetId: req.params.assetId,
+        showId: req.params.showId,
+        patch: JSON.stringify({ screen_links }),
+      } }
+    );
+
+    return res.json({ success: true, screen_links });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/v1/ui-overlays/:showId/screen-links/:assetId — get screen links for an overlay
+router.get('/:showId/screen-links/:assetId', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+
+    const [rows] = await models.sequelize.query(
+      `SELECT metadata::text as metadata_text FROM assets
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { assetId: req.params.assetId, showId: req.params.showId } }
+    );
+
+    if (!rows?.length) return res.status(404).json({ success: false, error: 'Asset not found' });
+
+    let meta = {};
+    try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch { /* skip */ }
+
+    return res.json({ success: true, screen_links: meta.screen_links || [] });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/v1/ui-overlays/:showId/screen-links/:assetId/icon — upload icon image for a link zone
+router.post('/:showId/screen-links/:assetId/icon', optionalAuth, upload.single('icon'), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { uploadOverlayToS3 } = require('../services/uiOverlayService');
+    const { link_id } = req.body;
+
+    if (!req.file) return res.status(400).json({ success: false, error: 'No icon file uploaded' });
+    if (!link_id) return res.status(400).json({ success: false, error: 'link_id is required' });
+
+    // Upload icon to S3
+    const url = await uploadOverlayToS3(
+      req.file.buffer,
+      `screen-icon-${link_id}`,
+      req.params.showId,
+      req.file.mimetype
+    );
+
+    // Update the matching link's icon_url in the asset metadata
+    const [rows] = await models.sequelize.query(
+      `SELECT metadata::text as metadata_text FROM assets
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { assetId: req.params.assetId, showId: req.params.showId } }
+    );
+
+    if (rows?.length) {
+      let meta = {};
+      try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch { /* skip */ }
+      const links = meta.screen_links || [];
+      const link = links.find(l => l.id === link_id);
+      if (link) {
+        link.icon_url = url;
+        await models.sequelize.query(
+          `UPDATE assets SET metadata = CAST(:metadata AS jsonb), updated_at = NOW()
+           WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+          { replacements: {
+            assetId: req.params.assetId,
+            showId: req.params.showId,
+            metadata: JSON.stringify(meta),
+          } }
+        );
+      }
+    }
+
+    return res.json({ success: true, icon_url: url, link_id });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
