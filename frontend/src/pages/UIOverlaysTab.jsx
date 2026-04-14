@@ -25,7 +25,6 @@ function OverlayModal({ overlay: initialOverlay, showId, onClose, onUpdate }) {
       const all = res.data?.data || [];
       const updated = all.find(o => o.id === overlay.id);
       if (updated) setOverlay(updated);
-      onUpdate(); // also refresh the parent list
     } catch { /* silent */ }
   };
 
@@ -417,9 +416,9 @@ export default function UIOverlaysTab() {
   }, []);
 
   // Load overlays
-  const loadOverlays = useCallback(() => {
+  const loadOverlays = useCallback((showLoader) => {
     if (!showId) return;
-    setLoading(true);
+    if (showLoader) setLoading(true);
     api.get(`/api/v1/ui-overlays/${showId}`)
       .then(r => {
         setOverlays(r.data?.data || []);
@@ -431,7 +430,7 @@ export default function UIOverlaysTab() {
       .finally(() => setLoading(false));
   }, [showId]);
 
-  useEffect(() => { loadOverlays(); }, [loadOverlays]);
+  useEffect(() => { loadOverlays(true); }, [loadOverlays]);
 
   useEffect(() => {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
@@ -714,7 +713,7 @@ export default function UIOverlaysTab() {
         <OverlayModal
           overlay={selectedOverlay}
           showId={showId}
-          onClose={() => setSelectedOverlay(null)}
+          onClose={() => { setSelectedOverlay(null); loadOverlays(); }}
           onUpdate={loadOverlays}
         />
       )}
