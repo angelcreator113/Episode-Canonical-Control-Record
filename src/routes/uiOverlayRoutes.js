@@ -11,14 +11,14 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 // Tracks progress/errors so the frontend can display feedback
 const generationStatus = {};
 
-// GET /api/v1/ui-overlays/:showId — list existing overlays (hardcoded + custom)
+// GET /api/v1/ui-overlays/:showId — list existing overlays (all from DB)
 router.get('/:showId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getAllOverlayTypes } = require('../services/uiOverlayService');
     const showId = req.params.showId;
 
-    // Merge hardcoded defaults + custom overlay types from DB
+    // All overlay types come from the DB
     const allTypes = await getAllOverlayTypes(showId, models);
 
     // Direct SQL query — cast metadata to text to avoid JSONB driver issues
@@ -687,15 +687,29 @@ router.get('/:showId/content-zones/:assetId', optionalAuth, async (req, res) => 
   }
 });
 
-// ── CUSTOM OVERLAY TYPE CRUD ────────────────────────────────────────────────
+// ── SUGGEST LINKED SCREENS ─────────────────────────────────────────────────
 
-// POST /api/v1/ui-overlays/:showId/types — create a custom overlay type
+// GET /api/v1/ui-overlays/:showId/types/suggest-links/:iconName — suggest screens for an icon to link to
+router.get('/:showId/types/suggest-links/:iconName', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { suggestLinkedScreens } = require('../services/uiOverlayService');
+    const suggestions = await suggestLinkedScreens(req.params.showId, decodeURIComponent(req.params.iconName), models);
+    return res.json({ success: true, data: suggestions });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── OVERLAY TYPE CRUD ─────────────────────────────────────────────────────
+
+// POST /api/v1/ui-overlays/:showId/types — create an overlay type
 router.post('/:showId/types', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { v4: uuidv4 } = require('uuid');
     const showId = req.params.showId;
-    const { name, category, beat, description, prompt, type_key } = req.body;
+    const { name, category, beat, description, prompt, type_key, opens_screen } = req.body;
 
     if (!name || !prompt) {
       return res.status(400).json({ success: false, error: 'name and prompt are required' });
@@ -715,19 +729,20 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
 
     const id = uuidv4();
     await models.sequelize.query(
-      `INSERT INTO ui_overlay_types (id, show_id, type_key, name, category, beat, description, prompt, sort_order, created_at, updated_at)
-       VALUES (:id, :showId, :key, :name, :category, :beat, :description, :prompt, :sortOrder, NOW(), NOW())`,
+      `INSERT INTO ui_overlay_types (id, show_id, type_key, name, category, beat, description, prompt, sort_order, opens_screen, created_at, updated_at)
+       VALUES (:id, :showId, :key, :name, :category, :beat, :description, :prompt, :sortOrder, :opensScreen, NOW(), NOW())`,
       { replacements: {
         id, showId, key, name,
-        category: category || 'icon',
+        category: category || 'phone',
         beat: beat || 'Various',
         description: description || '',
         prompt,
         sortOrder: req.body.sort_order || 100,
+        opensScreen: opens_screen || null,
       } }
     );
 
-    return res.json({ success: true, data: { id, type_key: key, name, category: category || 'icon', beat: beat || 'Various', description, prompt } });
+    return res.json({ success: true, data: { id, type_key: key, name, category: category || 'phone', beat: beat || 'Various', description, prompt, opens_screen: opens_screen || null } });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -737,7 +752,7 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
 router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const { name, category, beat, description, prompt, sort_order } = req.body;
+    const { name, category, beat, description, prompt, sort_order, opens_screen } = req.body;
 
     const sets = [];
     const replacements = { typeId: req.params.typeId, showId: req.params.showId };
@@ -748,6 +763,7 @@ router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
     if (description !== undefined) { sets.push('description = :description'); replacements.description = description; }
     if (prompt !== undefined) { sets.push('prompt = :prompt'); replacements.prompt = prompt; }
     if (sort_order !== undefined) { sets.push('sort_order = :sortOrder'); replacements.sortOrder = sort_order; }
+    if (opens_screen !== undefined) { sets.push('opens_screen = :opensScreen'); replacements.opensScreen = opens_screen; }
 
     if (sets.length === 0) {
       return res.status(400).json({ success: false, error: 'No fields to update' });
