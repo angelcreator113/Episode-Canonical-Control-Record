@@ -378,6 +378,25 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                         </span>
                       </div>
                     </div>
+                    {/* Zone size controls */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: 100 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                          <span style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>Width</span>
+                          <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(zone.w)}%</span>
+                        </div>
+                        <input type="range" min={3} max={50} value={Math.round(zone.w)} onChange={e => updateZone(zone.id, { w: parseInt(e.target.value) })}
+                          style={{ width: '100%', height: 4, cursor: 'pointer' }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 100 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                          <span style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>Height</span>
+                          <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(zone.h)}%</span>
+                        </div>
+                        <input type="range" min={3} max={50} value={Math.round(zone.h)} onChange={e => updateZone(zone.id, { h: parseInt(e.target.value) })}
+                          style={{ width: '100%', height: 4, cursor: 'pointer' }} />
+                      </div>
+                    </div>
                     {/* Persistent toggle — pin icon to show on all screens */}
                     <button
                       onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { persistent: !zone.persistent }); }}
