@@ -177,7 +177,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
           width: '100%',
           maxWidth: 320,
           margin: '0 auto',
-          aspectRatio: '9/16',
+          aspectRatio: '9/19.5',
           borderRadius: 12,
           touchAction: 'none',
           overflow: 'hidden',
