@@ -151,10 +151,10 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   const isIconType = activeScreen?.type === 'icon' || activeScreen?.category === 'phone_icon';
   const phoneScreen = isIconType ? null : activeScreen;
 
-  // Find the first screen (used as default/home) — lowest sort_order or first generated
+  // Find the home screen — prefer is_home flag, then first generated screen
   const firstScreen = React.useMemo(() => {
     const generated = screens.filter(s => s.generated && s.url && s.category !== 'phone_icon' && s.category !== 'icon');
-    return generated[0] || null;
+    return generated.find(s => s.is_home) || generated[0] || null;
   }, [screens]);
 
   // Find persistent icons from the first/home screen that should show on ALL screens

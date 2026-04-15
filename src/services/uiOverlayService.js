@@ -17,8 +17,21 @@ const S3_BUCKET = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const s3 = new S3Client({ region: AWS_REGION });
 
-// ── SHARED STYLE PREFIX (used in phone screen prompts) ──────────────────────
-const STYLE_PREFIX = 'Luxury fashion app UI element. Gold (#B8962E) metallic finish, parchment (#FAF7F0) tones, dark ink (#2C2C2C) accents. Clean, minimal, high-end. Think Chanel meets Apple. ';
+// ── DEFAULT STYLE PREFIX (fallback when show has no custom style_prefix) ────
+const DEFAULT_STYLE_PREFIX = 'Luxury fashion app UI element. Gold (#B8962E) metallic finish, parchment (#FAF7F0) tones, dark ink (#2C2C2C) accents. Clean, minimal, high-end. Think Chanel meets Apple. ';
+
+// Fetch show's custom style_prefix, falling back to default
+async function getStylePrefix(showId, models) {
+  try {
+    const [rows] = await models.sequelize.query(
+      `SELECT style_prefix FROM shows WHERE id = :showId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { showId } }
+    );
+    return (rows?.[0]?.style_prefix || DEFAULT_STYLE_PREFIX).trim() + ' ';
+  } catch {
+    return DEFAULT_STYLE_PREFIX;
+  }
+}
 
 // ── GET ALL OVERLAY TYPES (DB-only) ─────────────────────────────────────────
 
@@ -26,9 +39,9 @@ async function getAllOverlayTypes(showId, models) {
   try {
     const [rows] = await models.sequelize.query(
       `SELECT id, type_key, name, category, beat, description, prompt, sort_order,
-              lifecycle, opens_screen
+              lifecycle, opens_screen, is_home
        FROM ui_overlay_types WHERE show_id = :showId AND deleted_at IS NULL
-       ORDER BY sort_order ASC, name ASC`,
+       ORDER BY is_home DESC, sort_order ASC, name ASC`,
       { replacements: { showId } }
     );
     return (rows || []).map(r => ({
@@ -41,6 +54,7 @@ async function getAllOverlayTypes(showId, models) {
       sort_order: r.sort_order,
       lifecycle: r.lifecycle || 'permanent',
       opens_screen: r.opens_screen || null,
+      is_home: !!r.is_home,
       custom: true,
       custom_id: r.id,
     }));
@@ -127,7 +141,8 @@ function suggestOverlaysForEvent(event) {
 
 async function generateOverlay(overlayType, showId, options = {}) {
   const customPrompt = options.customPrompt || overlayType.prompt;
-  const prompt = STYLE_PREFIX + customPrompt;
+  const stylePrefix = options.stylePrefix || DEFAULT_STYLE_PREFIX;
+  const prompt = stylePrefix + customPrompt;
   const size = overlayType.size || (overlayType.category === 'icon' || overlayType.category === 'phone_icon' ? 'square' : 'portrait');
   const skipBgRemoval = options.skipBgRemoval || false;
   const useCase = (overlayType.category === 'icon' || overlayType.category === 'phone_icon') ? 'icon' : 'overlay';
@@ -228,6 +243,9 @@ async function generateAllOverlays(showId, models, options = {}) {
   const { skipExisting = true, batchSize = 3, episodeId = null } = options;
   const results = [];
 
+  // Fetch per-show style prefix
+  const stylePrefix = await getStylePrefix(showId, models);
+
   // Check which overlays already exist
   let existingTypes = new Set();
   if (skipExisting) {
@@ -253,7 +271,7 @@ async function generateAllOverlays(showId, models, options = {}) {
     const batchResults = await Promise.allSettled(
       batch.map(async (overlayType) => {
         console.log(`[UIOverlay] Generating: ${overlayType.name}...`);
-        const { url, bg_removed } = await generateOverlay(overlayType, showId);
+        const { url, bg_removed } = await generateOverlay(overlayType, showId, { stylePrefix });
 
         const lifecycle = overlayType.lifecycle || 'permanent';
         let assetId = null;
@@ -399,7 +417,8 @@ function mapOverlayRows(rows) {
 }
 
 module.exports = {
-  STYLE_PREFIX,
+  DEFAULT_STYLE_PREFIX,
+  getStylePrefix,
   generateOverlay,
   generateAllOverlays,
   getAllOverlayTypes,

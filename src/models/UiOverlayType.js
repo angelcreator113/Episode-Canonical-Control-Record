@@ -50,6 +50,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: 'type_key of the screen this icon navigates to (same show)',
       },
+      is_home: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: 'Whether this screen is the phone home screen (only one per show)',
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: true,
