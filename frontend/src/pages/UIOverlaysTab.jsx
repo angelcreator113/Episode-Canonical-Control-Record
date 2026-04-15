@@ -100,6 +100,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     localStorage.setItem('phone_hub_skin', skin);
   };
 
+  const flash = useCallback((msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 4000); }, []);
+
   // ── Undo system ──
   const pushUndo = useCallback(() => {
     if (activeScreen) {
@@ -197,8 +199,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
     if (frameInputRef.current) frameInputRef.current.value = '';
   };
-
-  const flash = useCallback((msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 4000); }, []);
 
   // Batch upload — match files to existing screen types by filename
   const handleBatchUpload = async (e) => {
