@@ -11,6 +11,7 @@ import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2
 import api from '../services/api';
 import PhoneHub, { SCREEN_TYPES } from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
+import IconPlacementMode from '../components/IconPlacementMode';
 import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import './UIOverlaysTab.css';
@@ -1004,27 +1005,24 @@ ${generated.map(s => `<div class="card"><img src="${s.url}"/><p>${s.name}</p></d
                 </>
               )}
 
-              {/* ── Screen Links ── */}
+              {/* ── Icon Placement ── */}
               {activeScreen?.url && !activeScreen.placeholder && (
                 <>
-                  <SectionHeader label="Tap Zone Links" expanded={expandedSections.links} onToggle={() => toggleSection('links')} badge={(activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null} />
+                  <SectionHeader label="Icon Placement" expanded={expandedSections.links} onToggle={() => toggleSection('links')} badge={(activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null} />
                   {expandedSections.links && (
                     <div style={{ marginBottom: 8 }}>
-                      <ScreenLinkEditor
-                        screenUrl={activeScreen.url}
+                      <IconPlacementMode
                         links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                        screenTypes={SCREEN_TYPES.filter(t => t.type === 'screen')}
-                        generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                         iconOverlays={overlays.filter(o => {
                           if (!o.generated || !o.url) return false;
-                          // Match by category, type, id prefix, or name pattern
                           return o.category === 'phone_icon'
                             || o.type === 'icon'
                             || (o.id && o.id.startsWith('icon_'))
                             || (o.name && /icon$/i.test(o.name.trim()));
                         })}
+                        screenTypes={SCREEN_TYPES.filter(t => t.type === 'screen')}
+                        generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                         onSave={handleSaveLinks}
-                        onUploadIcon={handleUploadIcon}
                       />
                     </div>
                   )}
