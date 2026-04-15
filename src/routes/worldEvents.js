@@ -2747,11 +2747,12 @@ router.post('/world/:showId/episodes/:episodeId/generate-title-overlay', optiona
       { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
     ).catch(() => []);
 
-    const { STYLE_PREFIX } = require('../services/uiOverlayService');
+    const { getStylePrefix } = require('../services/uiOverlayService');
     const { generateImageUrl } = require('../services/imageGenerationService');
 
+    const stylePrefix = await getStylePrefix(episode.show_id, models);
     const title = episode.title || `Episode ${episode.episode_number}`;
-    const prompt = `${STYLE_PREFIX}A luxury episode title card overlay. Elegant dark background (#1A1A1A) with thin gold (#B8962E) border frame. Center text reading "${title}" in refined gold serif typography. Below: "Episode ${episode.episode_number}" in smaller gold text. Subtle gold sparkle particles around text. The text MUST be clearly readable — this is a title card. Luxury fashion show episode intro. Isolated on dark background.`;
+    const prompt = `${stylePrefix}A luxury episode title card overlay. Elegant dark background (#1A1A1A) with thin gold (#B8962E) border frame. Center text reading "${title}" in refined gold serif typography. Below: "Episode ${episode.episode_number}" in smaller gold text. Subtle gold sparkle particles around text. The text MUST be clearly readable — this is a title card. Luxury fashion show episode intro. Isolated on dark background.`;
 
     const imageUrl = await generateImageUrl(prompt, { size: 'landscape', quality: 'hd', useCase: 'invitation' });
 

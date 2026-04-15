@@ -102,8 +102,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     setPanelOpen(false);
     setEditingLinks(false);
     undoStackRef.current = [];
-    const first = overlays.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
-    if (first) setActiveScreen(first);
+    const home = overlays.find(o => o.is_home && o.generated && o.url)
+      || overlays.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+    if (home) setActiveScreen(home);
   }, [overlays]);
 
   // Close detail panel — revert phone display to home screen
@@ -263,10 +264,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       .then(r => {
         const data = r.data?.data || [];
         setOverlays(data);
-        // Auto-select first screen on initial load if nothing is selected
+        // Auto-select home screen (or first screen) on initial load if nothing is selected
         if (!activeScreenRef.current) {
-          const first = data.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
-          if (first) setActiveScreen(first);
+          const home = data.find(o => o.is_home && o.generated && o.url)
+            || data.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+          if (home) setActiveScreen(home);
         }
       })
       .catch(() => setOverlays([]))
@@ -415,8 +417,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: cleaned }).catch(() => {});
         }
       }
+      // Optimistic removal from local state
+      setOverlays(prev => prev.filter(o => o.id !== deletedKey));
       if (activeScreen?.id === deletedKey) { closePanel(); }
-      loadOverlays(false);
       flash('Deleted');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
@@ -446,8 +449,19 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // Create custom screen or icon
   const handleCreateScreen = async (form) => {
     try {
-      await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
-      loadOverlays(false);
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
+      // Optimistic add, then reconcile with API response
+      const newType = res.data?.data;
+      if (newType) {
+        setOverlays(prev => [...prev, {
+          id: newType.type_key, name: newType.name, category: newType.category,
+          beat: newType.beat, description: newType.description, prompt: newType.prompt,
+          opens_screen: newType.opens_screen, is_home: !!newType.is_home,
+          custom: true, custom_id: newType.id, generated: false, url: null,
+        }]);
+      } else {
+        loadOverlays(false);
+      }
       setShowCreateModal(false);
       flash(createMode === 'phone_icon' ? 'Icon type created' : 'Screen type created');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
@@ -646,6 +660,19 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // Toggle home screen
+  const handleSetHome = async () => {
+    if (!activeScreen?.custom_id || !showId) return;
+    const newValue = !activeScreen.is_home;
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`, { is_home: newValue });
+      // Optimistic: unset all others, set this one
+      setOverlays(prev => prev.map(o => ({ ...o, is_home: o.id === activeScreen.id ? newValue : false })));
+      setActiveScreen(prev => prev ? { ...prev, is_home: newValue } : prev);
+      flash(newValue ? `"${activeScreen.name}" set as Home Screen` : 'Home screen unset');
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
   // Duplicate screen settings to another screen
   const handleDuplicateSettings = async (targetScreenId) => {
     if (!activeScreen || !showId) return;
@@ -656,7 +683,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     try {
       if (fit) await api.put(`/api/v1/ui-overlays/${showId}/image-fit/${target.asset_id}`, { image_fit: fit });
       if (links?.length) await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${target.asset_id}`, { screen_links: links });
-      loadOverlays(false);
+      // Optimistic update
+      setOverlays(prev => prev.map(o => o.id === targetScreenId ? {
+        ...o,
+        ...(fit ? { image_fit: fit, metadata: { ...(o.metadata || {}), image_fit: fit } } : {}),
+        ...(links?.length ? { screen_links: links, metadata: { ...(o.metadata || {}), screen_links: links } } : {}),
+      } : o));
       flash(`Settings copied to ${target.name}!`);
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
@@ -946,6 +978,18 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 </div>
               )}
 
+              {/* ── Home Screen Toggle ── */}
+              {activeScreen.custom_id && activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' && (
+                <button onClick={handleSetHome} style={{
+                  width: '100%', padding: '8px 14px', fontSize: 12, fontWeight: 600,
+                  border: activeScreen.is_home ? '1px solid #B8962E' : '1px dashed #ccc',
+                  borderRadius: 8, cursor: 'pointer', marginBottom: 12, minHeight: 36,
+                  background: activeScreen.is_home ? '#B8962E10' : 'transparent',
+                  color: activeScreen.is_home ? '#B8962E' : '#999',
+                  fontFamily: "'DM Mono', monospace",
+                }}>{activeScreen.is_home ? '★ Home Screen' : 'Set as Home Screen'}</button>
+              )}
+
               {/* ── Variants ── */}
               {(activeScreen.variants?.length > 1 || activeScreen.url) && (
                 <div style={{ marginBottom: 12 }}>
@@ -1072,7 +1116,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
       {previewMode && (
         <PhonePreviewMode
           screens={overlays}
-          initialScreen={overlays.find(o => o.generated && o.category !== 'phone_icon' && o.category !== 'icon') || overlays.find(o => o.generated)}
+          initialScreen={overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && o.category !== 'phone_icon' && o.category !== 'icon') || overlays.find(o => o.generated)}
           onClose={() => setPreviewMode(false)}
           globalFit={globalFit}
           phoneSkin={phoneSkin}
