@@ -145,7 +145,7 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
           width: '100%', maxWidth: 320,
           margin: '0 auto',
           touchAction: 'none',
-          aspectRatio: '9/19.5',
+          aspectRatio: '9/16',
           borderRadius: 12, overflow: 'hidden',
           cursor: readOnly ? 'default' : 'crosshair',
           userSelect: 'none',
