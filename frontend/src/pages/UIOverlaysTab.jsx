@@ -11,7 +11,6 @@ import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
-import IconPlacementMode from '../components/IconPlacementMode';
 import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import './UIOverlaysTab.css';
@@ -46,7 +45,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const frameRemovedRef = useRef(false);  // tracks if user explicitly removed the custom frame
   const activeScreenRef = useRef(null);  // ref mirror of activeScreen for stable closures
   const [batchUploading, setBatchUploading] = useState(false);
-  const [hiddenScreens, setHiddenScreens] = useState([]);
+  const [hiddenScreens, setHiddenScreens] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('phone_hub_hidden') || '[]'); } catch { return []; }
+  });
   const [showHidden, setShowHidden] = useState(false);
   const fileInputRef = useRef(null);
   const variantInputRef = useRef(null);
@@ -68,10 +69,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const handleHideScreen = (key) => {
     setHiddenScreens(prev => {
       const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
-      // Persist to server so it survives refresh and works across devices
-      if (showId) {
-        api.put(`/api/v1/ui-overlays/${showId}/excluded-types`, { excluded_types: next }).catch(() => {});
-      }
+      localStorage.setItem('phone_hub_hidden', JSON.stringify(next));
       return next;
     });
   };
@@ -104,15 +102,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     undoStackRef.current = [];
     const home = overlays.find(o => o.is_home && o.generated && o.url)
       || overlays.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
-    if (home) setActiveScreen(home);
-  }, [overlays]);
-
-  // Close detail panel — revert phone display to home screen
-  const closePanel = useCallback(() => {
-    setPanelOpen(false);
-    setEditingLinks(false);
-    undoStackRef.current = [];
-    const home = overlays.find(o => o.id === 'home' && o.generated && o.url);
     if (home) setActiveScreen(home);
   }, [overlays]);
 
@@ -154,7 +143,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     api.get(`/api/v1/ui-overlays/${showId}/frame`).then(r => {
       if (!frameRemovedRef.current && r.data?.frame_url) setCustomFrameUrl(r.data.frame_url);
       if (r.data?.global_fit) setGlobalFit(r.data.global_fit);
-      if (r.data?.excluded_types?.length) setHiddenScreens(r.data.excluded_types);
     }).catch(err => {
       console.warn('[PhoneHub] Failed to load frame/fit settings:', err.message);
     });
@@ -654,9 +642,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (activeScreen.asset_id) {
         await api.put(`/api/v1/ui-overlays/${showId}/category/${activeScreen.asset_id}`, { category });
       }
+      const typeField = category === 'phone_icon' ? 'icon' : 'screen';
+      setActiveScreen(prev => prev ? { ...prev, category, type: typeField } : prev);
+      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, category, type: typeField } : o));
       flash(category === 'phone_icon' ? 'Set as Icon' : 'Set as Screen');
-      // Reload to get fresh data from server
-      loadOverlays(false);
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -1045,17 +1034,20 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 </>
               )}
 
-              {/* ── Icon Placement ── */}
+              {/* ── Screen Links ── */}
               {activeScreen?.url && !activeScreen.placeholder && (
                 <>
-                  <SectionHeader label="Icon Placement" expanded={expandedSections.links} onToggle={() => toggleSection('links')} badge={(activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null} />
+                  <SectionHeader label="Tap Zone Links" expanded={expandedSections.links} onToggle={() => toggleSection('links')} badge={(activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null} />
                   {expandedSections.links && (
                     <div style={{ marginBottom: 8 }}>
-                      <IconPlacementMode
+                      <ScreenLinkEditor
+                        screenUrl={activeScreen.url}
                         links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
                         screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                        iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
                         onSave={handleSaveLinks}
+                        onUploadIcon={handleUploadIcon}
                       />
                     </div>
                   )}

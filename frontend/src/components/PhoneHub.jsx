@@ -148,16 +148,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   const useCustomFrame = customFrameUrl && !frameError;
 
   // Don't show icons in the phone device — only screens
-  // Helper to detect if a screen/overlay is an icon type
-  const isIcon = (s) => s?.type === 'icon' || s?.category === 'phone_icon' || (s?.id && s.id.startsWith('icon_')) || (s?.name && /icon$/i.test((s.name || '').trim()));
-
-  const isIconType = isIcon(activeScreen);
-
-  // Find home screen — used as persistent fallback
-  const homeScreen = screens.find(s => s.id === 'home' && s.generated && s.url);
-
-  // What to show on the phone: active screen > home screen > nothing
-  const phoneScreen = isIconType ? homeScreen : (activeScreen || homeScreen);
+  const isIconType = activeScreen?.type === 'icon' || activeScreen?.category === 'phone_icon';
+  const phoneScreen = isIconType ? null : activeScreen;
 
   // Find the home screen — prefer is_home flag, then first generated screen
   const firstScreen = React.useMemo(() => {
@@ -247,7 +239,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         <div style={{
           width: '100%', aspectRatio: '9/19.5',
           borderRadius: 24, overflow: 'hidden',
-          background: phoneScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
+          background: activeScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
           position: 'relative',
           border: '2.5px solid #111',
           boxShadow: 'inset 0 0 6px rgba(0,0,0,0.4)',
@@ -280,7 +272,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 showId={activeScreen.show_id}
                 interactive={false}
               />
-              <ScreenLinkOverlay links={resolveLinks(activeScreen.screen_links || activeScreen.metadata?.screen_links || [])} onNavigate={onNavigate} />
+              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
               {/* Persistent icons from home screen — show on non-home screens */}
               {activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && (
                 <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
