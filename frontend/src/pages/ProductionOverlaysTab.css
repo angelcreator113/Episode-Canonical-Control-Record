@@ -1,0 +1,308 @@
+/* ── ProductionOverlaysTab ── */
+
+/* Toast */
+.prod-overlays-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+  z-index: 9999;
+  animation: prodToastIn 0.3s ease;
+}
+.prod-overlays-toast--success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+.prod-overlays-toast--error   { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+@keyframes prodToastIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Header */
+.prod-overlays-header {
+  margin-bottom: 20px;
+}
+
+.prod-overlays-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.prod-overlays-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.prod-overlays-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 36px;
+  transition: opacity 0.15s;
+}
+.prod-overlays-btn:hover { opacity: 0.85; }
+.prod-overlays-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.prod-overlays-select {
+  padding: 6px 10px;
+  border: 1px solid #e0d9ce;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: 'DM Mono', monospace;
+  background: #fff;
+  cursor: pointer;
+}
+
+/* Size guide */
+.prod-overlays-size-guide {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #faf7f0;
+  border: 1px solid #e8e0d0;
+  border-radius: 8px;
+}
+
+.prod-overlays-size-guide-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  font-size: 11px;
+  font-family: 'DM Mono', monospace;
+}
+
+/* Loading */
+.prod-overlays-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #aaa;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+}
+
+/* Empty state */
+.prod-overlays-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+/* Grid */
+.prod-overlays-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+/* Card */
+.prod-overlay-card {
+  background: #fff;
+  border: 1px solid #e8e0d0;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.prod-overlay-card:hover {
+  border-color: #B8962E80;
+  box-shadow: 0 2px 8px rgba(184, 150, 46, 0.08);
+}
+.prod-overlay-card.selected {
+  border-color: #B8962E;
+  box-shadow: 0 0 0 2px #B8962E20;
+}
+
+/* Card thumbnail (16:9) */
+.prod-overlay-card-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #f5f3ee;
+  overflow: hidden;
+}
+.prod-overlay-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.prod-overlay-card-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0ece4;
+}
+
+/* Status badge */
+.prod-overlay-card-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.prod-overlay-card-badge.ready {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+.prod-overlay-card-badge.empty {
+  background: #faf7f0;
+  color: #B8962E;
+}
+
+/* Card info */
+.prod-overlay-card-info {
+  padding: 10px 12px 6px;
+}
+.prod-overlay-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #2C2C2C;
+  font-family: 'Lora', serif;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prod-overlay-card-desc {
+  font-size: 10px;
+  color: #aaa;
+  font-family: 'DM Mono', monospace;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Card actions */
+.prod-overlay-card-actions {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 10px;
+  border-top: 1px solid #f0ece4;
+}
+
+.prod-overlay-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.prod-overlay-action:hover { background: #f5f3ee; }
+.prod-overlay-action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Modal */
+.prod-overlays-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.prod-overlays-modal {
+  background: #fff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.prod-overlays-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0ece4;
+}
+
+.prod-overlays-modal-body {
+  padding: 20px;
+}
+
+.prod-overlays-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+  margin-bottom: 4px;
+  font-family: 'DM Mono', monospace;
+}
+
+.prod-overlays-field {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e0d9ce;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: 'DM Mono', monospace;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.prod-overlays-field:focus {
+  border-color: #B8962E;
+}
+
+.prod-overlays-submit {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #B8962E;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Lora', serif;
+  cursor: pointer;
+  margin-top: 4px;
+  min-height: 44px;
+  transition: opacity 0.15s;
+}
+.prod-overlays-submit:hover { opacity: 0.9; }
+.prod-overlays-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Spin animation (shared) */
+@keyframes spin { to { transform: rotate(360deg); } }
+.prod-overlays .spin { animation: spin 1s linear infinite; }
+
+/* Mobile */
+@media (max-width: 600px) {
+  .prod-overlays-grid {
+    grid-template-columns: 1fr;
+  }
+}

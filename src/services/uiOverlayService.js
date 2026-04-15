@@ -143,7 +143,10 @@ async function generateOverlay(overlayType, showId, options = {}) {
   const customPrompt = options.customPrompt || overlayType.prompt;
   const stylePrefix = options.stylePrefix || DEFAULT_STYLE_PREFIX;
   const prompt = stylePrefix + customPrompt;
-  const size = overlayType.size || (overlayType.category === 'icon' || overlayType.category === 'phone_icon' ? 'square' : 'portrait');
+  const size = overlayType.size || (
+    (overlayType.category === 'icon' || overlayType.category === 'phone_icon') ? 'square' :
+    overlayType.category === 'production' ? 'landscape' : 'portrait'
+  );
   const skipBgRemoval = options.skipBgRemoval || false;
   const useCase = (overlayType.category === 'icon' || overlayType.category === 'phone_icon') ? 'icon' : 'overlay';
   const imageUrl = await generateImageUrl(prompt, { size, quality: 'hd', useCase });
