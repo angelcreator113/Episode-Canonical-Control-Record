@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useRef, Component } from 'react';
 import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, GitBranch } from 'lucide-react';
 import api from '../services/api';
-import PhoneHub, { SCREEN_TYPES } from '../components/PhoneHub';
+import PhoneHub from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import IconPlacementMode from '../components/IconPlacementMode';
 import ContentZoneEditor from '../components/ContentZoneEditor';
@@ -102,8 +102,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     setPanelOpen(false);
     setEditingLinks(false);
     undoStackRef.current = [];
-    const home = overlays.find(o => o.id === 'home' && o.generated && o.url);
-    if (home) setActiveScreen(home);
+    const first = overlays.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+    if (first) setActiveScreen(first);
   }, [overlays]);
 
   // Close detail panel — revert phone display to home screen
@@ -190,12 +190,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
   const flash = useCallback((msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 4000); }, []);
 
-  // Batch upload — match files to screen types by filename
+  // Batch upload — match files to existing screen types by filename
   const handleBatchUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length || !showId) return;
-    // Warn if any existing screens will be overwritten
-    const screenKeys = SCREEN_TYPES.filter(t => t.type === 'screen').map(t => t.key);
+    // Match against the show's DB-defined screen keys
+    const screenKeys = overlays.map(o => o.id);
     const matchCount = files.filter(f => {
       const name = f.name.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '_');
       return screenKeys.find(k => name.includes(k) || name.includes(k.replace(/_/g, '')));
@@ -212,25 +212,25 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
     for (const file of files) {
       const name = file.name.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '_');
-      // Try to match filename to a screen key
+      // Try to match filename to an existing screen key
       const match = screenKeys.find(k => name.includes(k) || name.includes(k.replace(/_/g, '')));
       if (!match) {
-        console.warn(`[BatchUpload] No screen match for: ${file.name}`);
-        failed++;
+        // No existing type matches — create a new type from the filename
+        const cleanName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+        const typeKey = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+        try {
+          await api.post(`/api/v1/ui-overlays/${showId}/types`, {
+            name: cleanName, beat: 'Various', description: `Uploaded from ${file.name}`,
+            prompt: `Phone screen for ${cleanName}`, category: 'phone',
+          });
+          const fd = new FormData();
+          fd.append('image', file);
+          await api.post(`/api/v1/ui-overlays/${showId}/upload/${typeKey}`, fd);
+          uploaded++;
+        } catch { failed++; }
         continue;
       }
-      // Ensure overlay type exists
-      const existing = overlays.find(o => o.id === match);
-      if (!existing) {
-        try {
-          const st = SCREEN_TYPES.find(t => t.key === match);
-          await api.post(`/api/v1/ui-overlays/${showId}/types`, {
-            name: st?.label || match, beat: match, description: st?.desc || '',
-            prompt: `Phone screen for ${st?.label || match}`, category: 'phone',
-          });
-        } catch { /* type may already exist */ }
-      }
-      // Upload
+      // Upload to existing type
       try {
         const fd = new FormData();
         fd.append('image', file);
@@ -263,10 +263,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       .then(r => {
         const data = r.data?.data || [];
         setOverlays(data);
-        // Auto-select home screen on first load if nothing is selected
+        // Auto-select first screen on initial load if nothing is selected
         if (!activeScreenRef.current) {
-          const home = data.find(o => o.id === 'home' && o.generated && o.url);
-          if (home) setActiveScreen(home);
+          const first = data.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+          if (first) setActiveScreen(first);
         }
       })
       .catch(() => setOverlays([]))
@@ -1009,14 +1009,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     <div style={{ marginBottom: 8 }}>
                       <IconPlacementMode
                         links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                        iconOverlays={overlays.filter(o => {
-                          if (!o.generated || !o.url) return false;
-                          return o.category === 'phone_icon'
-                            || o.type === 'icon'
-                            || (o.id && o.id.startsWith('icon_'))
-                            || (o.name && /icon$/i.test(o.name.trim()));
-                        })}
-                        screenTypes={SCREEN_TYPES.filter(t => t.type === 'screen')}
+                        screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                         onSave={handleSaveLinks}
                       />
@@ -1079,7 +1072,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
       {previewMode && (
         <PhonePreviewMode
           screens={overlays}
-          initialScreen={overlays.find(o => o.id === 'home' && o.generated) || overlays.find(o => o.generated)}
+          initialScreen={overlays.find(o => o.generated && o.category !== 'phone_icon' && o.category !== 'icon') || overlays.find(o => o.generated)}
           onClose={() => setPreviewMode(false)}
           globalFit={globalFit}
           phoneSkin={phoneSkin}
@@ -1101,6 +1094,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           onClose={() => setShowCreateModal(false)}
           onCreate={handleCreateScreen}
           isIcon={createMode === 'phone_icon'}
+          showId={showId}
+          existingScreens={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon'))}
         />
       )}
 
@@ -1287,9 +1282,28 @@ function DuplicateSettingsBtn({ screens, onDuplicate }) {
   );
 }
 
-function CreateScreenModal({ onClose, onCreate, isIcon = false }) {
-  const [form, setForm] = useState({ name: '', beat: '', description: '', prompt: '' });
+function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existingScreens = [] }) {
+  const [form, setForm] = useState({ name: '', beat: '', description: '', prompt: '', opens_screen: '' });
   const [saving, setSaving] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+
+  // Auto-suggest linked screen when creating an icon
+  useEffect(() => {
+    if (!isIcon || !form.name.trim() || !showId) { setSuggestions([]); return; }
+    const timer = setTimeout(() => {
+      api.get(`/api/v1/ui-overlays/${showId}/types/suggest-links/${encodeURIComponent(form.name.trim())}`)
+        .then(r => {
+          const data = r.data?.data || [];
+          setSuggestions(data);
+          // Auto-select first suggestion if user hasn't picked one
+          if (data.length > 0 && !form.opens_screen) {
+            setForm(f => ({ ...f, opens_screen: data[0].id }));
+          }
+        })
+        .catch(() => setSuggestions([]));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [isIcon, form.name, showId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1310,8 +1324,36 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>{isIcon ? 'Icon Name' : 'Screen Name'}</label>
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isIcon ? 'e.g., Spotify, TikTok, Custom App' : 'e.g., Feed View, DM Conversation'} className="overlays-modal__field" />
+              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isIcon ? 'e.g., Social Feed Icon, Camera Icon' : 'e.g., Feed View, DM Conversation'} className="overlays-modal__field" />
             </div>
+            {isIcon && (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Opens Screen</label>
+                <select
+                  value={form.opens_screen}
+                  onChange={e => setForm(f => ({ ...f, opens_screen: e.target.value }))}
+                  className="overlays-modal__field"
+                  style={{ cursor: 'pointer' }}
+                >
+                  <option value="">None (no navigation)</option>
+                  {/* Show suggestions first, highlighted */}
+                  {suggestions.length > 0 && <optgroup label="Suggested">
+                    {suggestions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </optgroup>}
+                  {/* All screens */}
+                  <optgroup label="All Screens">
+                    {existingScreens.filter(s => !suggestions.find(sg => sg.id === s.id)).map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </optgroup>
+                </select>
+                {suggestions.length > 0 && (
+                  <div style={{ fontSize: 10, color: '#B8962E', marginTop: 3, fontFamily: "'DM Mono', monospace" }}>
+                    Auto-suggested based on icon name
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Beat / Trigger</label>
               <input value={form.beat} onChange={e => setForm(f => ({ ...f, beat: e.target.value }))} placeholder="e.g., Beat 2, Login" className="overlays-modal__field" />
@@ -1325,7 +1367,7 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false }) {
               <textarea value={form.prompt} onChange={e => setForm(f => ({ ...f, prompt: e.target.value }))} rows={3} placeholder="Describe the screen for AI generation..." className="overlays-modal__field" style={{ resize: 'vertical' }} />
             </div>
             <button type="submit" disabled={saving || !form.name.trim() || !form.prompt.trim()} className="overlays-modal__submit">
-              {saving ? 'Creating...' : 'Create Screen'}
+              {saving ? 'Creating...' : isIcon ? 'Create Icon' : 'Create Screen'}
             </button>
           </div>
         </form>

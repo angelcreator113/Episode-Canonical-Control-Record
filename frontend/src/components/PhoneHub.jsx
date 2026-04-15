@@ -18,49 +18,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MoreVertical, Trash2, EyeOff, Edit3 } from 'lucide-react';
 import ScreenContentRenderer from './ScreenContentRenderer';
 
-// type: 'screen' = full phone screen frame, 'icon' = app icon for home screen link editor
-const SCREEN_TYPES = [
-  // ── Screens (full phone views — upload designed screen images) ──
-  { key: 'home', label: 'Home', icon: '📱', desc: 'App icons & notifications', type: 'screen' },
-  { key: 'feed', label: 'Feed', icon: '📰', desc: 'Scrolling posts', type: 'screen' },
-  { key: 'messages', label: 'Messages', icon: '✉️', desc: 'Text conversations', type: 'screen' },
-  { key: 'dm', label: 'DMs', icon: '💬', desc: 'Private messages', type: 'screen' },
-  { key: 'story', label: 'Stories', icon: '⭕', desc: 'Watching stories', type: 'screen' },
-  { key: 'profile', label: 'Profile', icon: '👤', desc: 'Viewing someone', type: 'screen' },
-  { key: 'calls', label: 'Calls', icon: '📞', desc: 'Call history & FaceTime', type: 'screen' },
-  { key: 'contacts', label: 'Contacts', icon: '👥', desc: 'Contact list', type: 'screen' },
-  { key: 'comments', label: 'Comments', icon: '💭', desc: 'Post reactions', type: 'screen' },
-  { key: 'live', label: 'Live', icon: '🔴', desc: 'Going live', type: 'screen' },
-  { key: 'notif', label: 'Alerts', icon: '🔔', desc: 'Notification center', type: 'screen' },
-  { key: 'brand_deals', label: 'Brand Deals', icon: '🤝', desc: 'Sponsorship offers', type: 'screen' },
-  { key: 'stats', label: 'Stats', icon: '📊', desc: 'Analytics & metrics', type: 'screen' },
-  { key: 'creator_hub', label: 'Creator Hub', icon: '🎨', desc: 'Content management', type: 'screen' },
-  { key: 'deadlines', label: 'Deadlines', icon: '⏰', desc: 'Upcoming due dates', type: 'screen' },
-  { key: 'tasks', label: 'Tasks', icon: '✅', desc: 'To-do & reminders', type: 'screen' },
-  { key: 'wardrobe', label: 'Closet', icon: '👗', desc: 'Outfit selection', type: 'screen' },
-  { key: 'accessories', label: 'Accessories', icon: '💎', desc: 'Jewelry & extras', type: 'screen' },
-  { key: 'shop', label: 'Shopping', icon: '🛍️', desc: 'Browsing items', type: 'screen' },
-  { key: 'camera', label: 'Camera', icon: '📸', desc: 'Taking content', type: 'screen' },
-  { key: 'map', label: 'Map', icon: '🗺️', desc: 'DREAM map', type: 'screen' },
-  { key: 'invite', label: 'Invitation', icon: '💌', desc: 'Event invitations', type: 'screen' },
-  { key: 'settings', label: 'Settings', icon: '⚙️', desc: 'Phone settings', type: 'screen' },
-  // ── App Icons (small icons placed on the home screen via link editor) ──
-  { key: 'icon_feed', label: 'Feed Icon', icon: '📰', desc: 'App icon for Feed', type: 'icon' },
-  { key: 'icon_messages', label: 'Messages Icon', icon: '✉️', desc: 'App icon for Messages', type: 'icon' },
-  { key: 'icon_dm', label: 'DMs Icon', icon: '💬', desc: 'App icon for DMs', type: 'icon' },
-  { key: 'icon_camera', label: 'Camera Icon', icon: '📸', desc: 'App icon for Camera', type: 'icon' },
-  { key: 'icon_closet', label: 'Closet Icon', icon: '👗', desc: 'App icon for Closet', type: 'icon' },
-  { key: 'icon_shop', label: 'Shop Icon', icon: '🛍️', desc: 'App icon for Shopping', type: 'icon' },
-  { key: 'icon_stats', label: 'Stats Icon', icon: '📊', desc: 'App icon for Stats', type: 'icon' },
-  { key: 'icon_settings', label: 'Settings Icon', icon: '⚙️', desc: 'App icon for Settings', type: 'icon' },
-  { key: 'icon_brand_deals', label: 'Deals Icon', icon: '🤝', desc: 'App icon for Brand Deals', type: 'icon' },
-  { key: 'icon_creator_hub', label: 'Hub Icon', icon: '🎨', desc: 'App icon for Creator Hub', type: 'icon' },
-  { key: 'icon_calls', label: 'Calls Icon', icon: '📞', desc: 'App icon for Calls', type: 'icon' },
-  { key: 'icon_contacts', label: 'Contacts Icon', icon: '👥', desc: 'App icon for Contacts', type: 'icon' },
-  { key: 'icon_tasks', label: 'Tasks Icon', icon: '✅', desc: 'App icon for Tasks', type: 'icon' },
-  { key: 'icon_accessories', label: 'Accessories Icon', icon: '💎', desc: 'App icon for Accessories', type: 'icon' },
-  { key: 'icon_phone', label: 'Phone Icon', icon: '📱', desc: 'App icon for Phone', type: 'icon' },
-];
+// Screen types are now fully dynamic — defined per-show in the database.
+// The `screens` prop already contains all type data from the API.
 
 const PHONE_SKINS = [
   { key: 'midnight', label: 'Midnight', body: '#1a1a2e', notch: '#333', btn: '#444', shadow: 'rgba(0,0,0,0.3)', accent: 'rgba(255,255,255,0.1)' },
@@ -72,7 +31,7 @@ const PHONE_SKINS = [
   { key: 'lavender', label: 'Lavender', body: 'linear-gradient(135deg, #d4c4e8, #a889c8)', notch: '#9878b8', btn: '#9878b8', shadow: 'rgba(168,137,200,0.3)', accent: 'rgba(255,255,255,0.2)' },
 ];
 
-export { SCREEN_TYPES, PHONE_SKINS, getScreenImageStyle };
+export { PHONE_SKINS, getScreenImageStyle };
 
 // Build image style from screen's fit settings (metadata.image_fit)
 // globalFit is the device-level default applied when screen has no per-screen override
@@ -200,54 +159,22 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   // What to show on the phone: active screen > home screen > nothing
   const phoneScreen = isIconType ? homeScreen : (activeScreen || homeScreen);
 
-  // Find persistent icons from the home screen that should show on ALL screens
-  // Build a lookup of icon overlay IDs to their current URLs (handles bg removal)
-  const iconUrlMap = React.useMemo(() => {
-    const map = {};
-    screens.forEach(s => {
-      if (isIcon(s) && s.url) map[s.id] = s.url;
-    });
-    return map;
+  // Find the first screen (used as default/home) — lowest sort_order or first generated
+  const firstScreen = React.useMemo(() => {
+    const generated = screens.filter(s => s.generated && s.url && s.category !== 'phone_icon' && s.category !== 'icon');
+    return generated[0] || null;
   }, [screens]);
 
-  // Resolve tap zone icon URLs — if an icon_overlay_id is set, use the overlay's current URL
-  const resolveLinks = (links) => {
-    if (!links?.length) return links;
-    return links.map(l => {
-      if (l.icon_overlay_id && iconUrlMap[l.icon_overlay_id]) {
-        return { ...l, icon_url: iconUrlMap[l.icon_overlay_id] };
-      }
-      return l;
-    });
-  };
-
+  // Find persistent icons from the first/home screen that should show on ALL screens
   const persistentLinks = React.useMemo(() => {
-    if (!homeScreen) return [];
-    const links = homeScreen.screen_links || homeScreen.metadata?.screen_links || [];
-    return resolveLinks(links.filter(l => l.persistent && l.icon_url));
-  }, [homeScreen, iconUrlMap]);
+    if (!firstScreen) return [];
+    const links = firstScreen.screen_links || firstScreen.metadata?.screen_links || [];
+    return links.filter(l => l.persistent && l.icon_url);
+  }, [firstScreen]);
 
-  // Match screens to screen types — strict matching only (no fuzzy name includes)
-  const getScreenForType = (type) => {
-    return screens.find(s => {
-      const sId = (s.id || '').toLowerCase();
-      const sBeat = (s.beat || '').toLowerCase();
-      const sName = (s.name || '').toLowerCase();
-      const key = type.key.toLowerCase();
-      const label = type.label.toLowerCase();
-      // Strict: exact id match, exact beat match, or exact name match
-      return sId === key || sBeat === key || sName === label || sName === `ui overlay: ${label}`;
-    });
-  };
-
-  // Find custom overlays not matching any SCREEN_TYPE key
-  const knownKeys = new Set(SCREEN_TYPES.map(t => t.key));
-  const customScreens = screens.filter(s =>
-    s.custom && !knownKeys.has(s.id) && !isIcon(s)
-  );
-  const customIcons = screens.filter(s =>
-    s.custom && !knownKeys.has(s.id) && isIcon(s)
-  );
+  // Split screens by category — all from the DB, no hardcoded keys
+  const screenTypes = screens.filter(s => s.category !== 'phone_icon' && s.category !== 'icon');
+  const iconTypes = screens.filter(s => s.category === 'phone_icon' || s.category === 'icon');
 
   return (
     <div className="phone-hub-inner">
@@ -269,8 +196,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                   showId={activeScreen.show_id}
                   interactive={false}
                 />
-                <ScreenLinkOverlay links={resolveLinks(activeScreen.screen_links || activeScreen.metadata?.screen_links || [])} onNavigate={onNavigate} />
-                {activeScreen.id !== 'home' && persistentLinks.length > 0 && (
+                <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+                {activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && (
                   <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
                 )}
               </>
@@ -355,7 +282,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
               />
               <ScreenLinkOverlay links={resolveLinks(activeScreen.screen_links || activeScreen.metadata?.screen_links || [])} onNavigate={onNavigate} />
               {/* Persistent icons from home screen — show on non-home screens */}
-              {activeScreen.id !== 'home' && persistentLinks.length > 0 && (
+              {activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && (
                 <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
               )}
             </>
@@ -448,27 +375,21 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           )}
         </div>
         <div className="phone-hub-screen-grid">
-          {SCREEN_TYPES.filter(t => t.type === 'screen').filter(t => showHidden || !hiddenScreens.includes(t.key)).map(type => (
-            <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(type.key)} globalFit={globalFit} />
-          ))}
-          {customScreens.map(s => (
-            <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📄', desc: s.description || 'Custom screen' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} />
+          {screenTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
+            <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} />
           ))}
         </div>
 
         {/* Icons Section */}
-        {(gridFilter === 'all' || gridFilter === 'icon') && (
+        {(gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
           <>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#a889c8', fontFamily: "'DM Mono', monospace", marginBottom: 10, marginTop: 20, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ background: '#a889c8', color: '#fff', padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700 }}>ICONS</span>
               App icons for home screen links
             </div>
             <div className="phone-hub-icon-grid">
-              {SCREEN_TYPES.filter(t => t.type === 'icon').filter(t => showHidden || !hiddenScreens.includes(t.key)).map(type => (
-                <ScreenCard key={type.key} type={type} screen={getScreenForType(type)} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(type.key)} globalFit={globalFit} isIcon />
-              ))}
-              {customIcons.map(s => (
-                <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || 'Custom icon' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} globalFit={globalFit} isIcon />
+              {iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
+                <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon />
               ))}
             </div>
           </>

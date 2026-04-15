@@ -45,6 +45,11 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: 100,
       },
+      opens_screen: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'type_key of the screen this icon navigates to (same show)',
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: true,
