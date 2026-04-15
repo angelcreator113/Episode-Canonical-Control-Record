@@ -11,14 +11,14 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 // Tracks progress/errors so the frontend can display feedback
 const generationStatus = {};
 
-// GET /api/v1/ui-overlays/:showId — list existing overlays (hardcoded + custom)
+// GET /api/v1/ui-overlays/:showId — list existing overlays (all from DB)
 router.get('/:showId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getAllOverlayTypes } = require('../services/uiOverlayService');
     const showId = req.params.showId;
 
-    // Merge hardcoded defaults + custom overlay types from DB
+    // All overlay types come from the DB
     const allTypes = await getAllOverlayTypes(showId, models);
 
     // Direct SQL query — cast metadata to text to avoid JSONB driver issues
@@ -466,28 +466,67 @@ router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
   }
 });
 
+// ── STYLE PREFIX (per-show design language for AI generation) ────────────
+
+// GET /api/v1/ui-overlays/:showId/style-prefix — get show's style prefix
+router.get('/:showId/style-prefix', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { getStylePrefix, DEFAULT_STYLE_PREFIX } = require('../services/uiOverlayService');
+    const prefix = await getStylePrefix(req.params.showId, models);
+    return res.json({ success: true, style_prefix: prefix.trim(), default_prefix: DEFAULT_STYLE_PREFIX.trim() });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/v1/ui-overlays/:showId/style-prefix — set show's style prefix
+router.put('/:showId/style-prefix', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { style_prefix } = req.body;
+    if (style_prefix === undefined) return res.status(400).json({ success: false, error: 'style_prefix is required' });
+
+    await models.sequelize.query(
+      `UPDATE shows SET style_prefix = :prefix, updated_at = NOW() WHERE id = :showId AND deleted_at IS NULL`,
+      { replacements: { prefix: style_prefix || null, showId: req.params.showId } }
+    );
+    return res.json({ success: true, style_prefix: style_prefix || null });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── CATEGORY OVERRIDE (screen vs icon for built-in types) ───────────────
 
 // PUT /api/v1/ui-overlays/:showId/category/:assetId — set category on asset metadata
 router.put('/:showId/category/:assetId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const { category } = req.body;
-    if (!category) return res.status(400).json({ success: false, error: 'category is required' });
+    const { category, name } = req.body;
+    if (!category && !name) return res.status(400).json({ success: false, error: 'category or name is required' });
+
+    const patch = {};
+    if (category) patch.overlay_category = category;
+
+    const setClauses = ['updated_at = NOW()'];
+    const replacements = { assetId: req.params.assetId, showId: req.params.showId };
+
+    if (Object.keys(patch).length > 0) {
+      setClauses.push(`metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb)`);
+      replacements.patch = JSON.stringify(patch);
+    }
+    if (name) {
+      setClauses.push('name = :name');
+      replacements.name = name;
+    }
 
     await models.sequelize.query(
-      `UPDATE assets
-       SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
-           updated_at = NOW()
-       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
-      { replacements: {
-        assetId: req.params.assetId,
-        showId: req.params.showId,
-        patch: JSON.stringify({ overlay_category: category }),
-      } }
+      `UPDATE assets SET ${setClauses.join(', ')} WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements }
     );
 
-    return res.json({ success: true, category });
+    return res.json({ success: true, category, name });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -679,15 +718,29 @@ router.get('/:showId/content-zones/:assetId', optionalAuth, async (req, res) => 
   }
 });
 
-// ── CUSTOM OVERLAY TYPE CRUD ────────────────────────────────────────────────
+// ── SUGGEST LINKED SCREENS ─────────────────────────────────────────────────
 
-// POST /api/v1/ui-overlays/:showId/types — create a custom overlay type
+// GET /api/v1/ui-overlays/:showId/types/suggest-links/:iconName — suggest screens for an icon to link to
+router.get('/:showId/types/suggest-links/:iconName', optionalAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const { suggestLinkedScreens } = require('../services/uiOverlayService');
+    const suggestions = await suggestLinkedScreens(req.params.showId, decodeURIComponent(req.params.iconName), models);
+    return res.json({ success: true, data: suggestions });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── OVERLAY TYPE CRUD ─────────────────────────────────────────────────────
+
+// POST /api/v1/ui-overlays/:showId/types — create an overlay type
 router.post('/:showId/types', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { v4: uuidv4 } = require('uuid');
     const showId = req.params.showId;
-    const { name, category, beat, description, prompt, type_key } = req.body;
+    const { name, category, beat, description, prompt, type_key, opens_screen, is_home } = req.body;
 
     if (!name || !prompt) {
       return res.status(400).json({ success: false, error: 'name and prompt are required' });
@@ -695,6 +748,14 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
 
     // Generate type_key from name if not provided
     const key = type_key || name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+
+    // If marking as home, unset any existing home screen for this show
+    if (is_home) {
+      await models.sequelize.query(
+        `UPDATE ui_overlay_types SET is_home = false, updated_at = NOW() WHERE show_id = :showId AND is_home = true AND deleted_at IS NULL`,
+        { replacements: { showId } }
+      );
+    }
 
     // Check for duplicate key
     const [existing] = await models.sequelize.query(
@@ -707,19 +768,21 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
 
     const id = uuidv4();
     await models.sequelize.query(
-      `INSERT INTO ui_overlay_types (id, show_id, type_key, name, category, beat, description, prompt, sort_order, created_at, updated_at)
-       VALUES (:id, :showId, :key, :name, :category, :beat, :description, :prompt, :sortOrder, NOW(), NOW())`,
+      `INSERT INTO ui_overlay_types (id, show_id, type_key, name, category, beat, description, prompt, sort_order, opens_screen, is_home, created_at, updated_at)
+       VALUES (:id, :showId, :key, :name, :category, :beat, :description, :prompt, :sortOrder, :opensScreen, :isHome, NOW(), NOW())`,
       { replacements: {
         id, showId, key, name,
-        category: category || 'icon',
+        category: category || 'phone',
         beat: beat || 'Various',
         description: description || '',
         prompt,
         sortOrder: req.body.sort_order || 100,
+        opensScreen: opens_screen || null,
+        isHome: !!is_home,
       } }
     );
 
-    return res.json({ success: true, data: { id, type_key: key, name, category: category || 'icon', beat: beat || 'Various', description, prompt } });
+    return res.json({ success: true, data: { id, type_key: key, name, category: category || 'phone', beat: beat || 'Various', description, prompt, opens_screen: opens_screen || null } });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -729,7 +792,7 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
 router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const { name, category, beat, description, prompt, sort_order } = req.body;
+    const { name, category, beat, description, prompt, sort_order, opens_screen, is_home } = req.body;
 
     const sets = [];
     const replacements = { typeId: req.params.typeId, showId: req.params.showId };
@@ -740,6 +803,17 @@ router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
     if (description !== undefined) { sets.push('description = :description'); replacements.description = description; }
     if (prompt !== undefined) { sets.push('prompt = :prompt'); replacements.prompt = prompt; }
     if (sort_order !== undefined) { sets.push('sort_order = :sortOrder'); replacements.sortOrder = sort_order; }
+    if (opens_screen !== undefined) { sets.push('opens_screen = :opensScreen'); replacements.opensScreen = opens_screen; }
+    if (is_home !== undefined) {
+      sets.push('is_home = :isHome'); replacements.isHome = !!is_home;
+      // If marking as home, unset any existing home screen first
+      if (is_home) {
+        await models.sequelize.query(
+          `UPDATE ui_overlay_types SET is_home = false, updated_at = NOW() WHERE show_id = :showId AND is_home = true AND deleted_at IS NULL AND id != :typeId`,
+          { replacements: { showId: req.params.showId, typeId: req.params.typeId } }
+        );
+      }
+    }
 
     if (sets.length === 0) {
       return res.status(400).json({ success: false, error: 'No fields to update' });
@@ -757,30 +831,47 @@ router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/v1/ui-overlays/:showId/types/:typeId — permanently delete a custom overlay type
+// DELETE /api/v1/ui-overlays/:showId/types/:typeId — soft-delete a custom overlay type
 router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    await models.sequelize.query(
-      `DELETE FROM ui_overlay_types WHERE id = :typeId AND show_id = :showId`,
-      { replacements: { typeId: req.params.typeId, showId: req.params.showId } }
+    const showId = req.params.showId;
+
+    // Get the type_key before deleting (needed for orphan cleanup)
+    const [rows] = await models.sequelize.query(
+      `UPDATE ui_overlay_types SET deleted_at = NOW() WHERE id = :typeId AND show_id = :showId AND deleted_at IS NULL RETURNING id, type_key`,
+      { replacements: { typeId: req.params.typeId, showId } }
     );
+    if (!rows?.length) {
+      return res.status(404).json({ success: false, error: 'Overlay type not found' });
+    }
+
+    // Clean up stale opens_screen references pointing to the deleted type
+    const deletedKey = rows[0].type_key;
+    if (deletedKey) {
+      await models.sequelize.query(
+        `UPDATE ui_overlay_types SET opens_screen = NULL, updated_at = NOW()
+         WHERE show_id = :showId AND opens_screen = :deletedKey AND deleted_at IS NULL`,
+        { replacements: { showId, deletedKey } }
+      );
+    }
+
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// DELETE /api/v1/ui-overlays/:showId/asset/:assetId — permanently delete an overlay asset
+// DELETE /api/v1/ui-overlays/:showId/asset/:assetId — soft-delete an overlay asset
 router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { showId, assetId } = req.params;
 
-    // Hard delete — permanently remove from database
     const [rows] = await models.sequelize.query(
-      `DELETE FROM assets
-       WHERE id = :assetId AND show_id = :showId
+      `UPDATE assets
+       SET deleted_at = NOW(), updated_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL
        RETURNING id`,
       { replacements: { assetId, showId } }
     );
@@ -789,7 +880,7 @@ router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Asset not found' });
     }
 
-    return res.json({ success: true, message: 'Asset permanently deleted' });
+    return res.json({ success: true, message: 'Asset deleted' });
   } catch (err) {
     console.error('[UIOverlays] Delete asset error:', err.message);
     return res.status(500).json({ success: false, error: err.message });

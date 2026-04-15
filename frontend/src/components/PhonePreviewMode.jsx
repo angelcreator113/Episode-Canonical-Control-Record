@@ -25,12 +25,9 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   const findScreen = useCallback((key) => {
     if (!key) return null;
     const k = key.toLowerCase();
-    return screens.find(s => {
-      const id = (s.id || '').toLowerCase();
-      const beat = (s.beat || '').toLowerCase();
-      const name = (s.name || '').toLowerCase();
-      return id === k || beat === k || name === k || beat.includes(k) || name.includes(k);
-    });
+    // Exact match first, then fall back to name match
+    return screens.find(s => (s.id || '').toLowerCase() === k)
+      || screens.find(s => (s.name || '').toLowerCase() === k);
   }, [screens]);
 
   const navigateTo = useCallback((targetKey, direction = 'left') => {
@@ -181,6 +178,15 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
               </div>
             )}
 
+            {/* opens_screen navigation — if this screen type auto-opens another screen, show a tap target */}
+            {activeScreen?.opens_screen && (
+              <div
+                onClick={(e) => { e.stopPropagation(); navigateTo(activeScreen.opens_screen, 'left'); }}
+                style={{ position: 'absolute', inset: 0, cursor: 'pointer', zIndex: 2 }}
+                title={`Opens ${activeScreen.opens_screen}`}
+              />
+            )}
+
             {/* Tap zone hotspots */}
             {links.map(link => (
               <div
@@ -276,30 +282,41 @@ function ScreenFlowMap({ screens = [], onSelectScreen, selectedScreen }) {
     return map;
   }, [nodes, cols]);
 
-  // Build edges
+  // Build edges from screen_links AND opens_screen
   const edges = useMemo(() => {
     const result = [];
+    const findNode = (key) => {
+      if (!key) return null;
+      const k = key.toLowerCase();
+      return nodes.find(n => (n.id || '').toLowerCase() === k)
+        || nodes.find(n => (n.name || '').toLowerCase() === k);
+    };
     nodes.forEach(s => {
-      const links = getLinks(s);
       const fromKey = s.id || s.beat || s.name;
       const from = positions[fromKey];
       if (!from) return;
+
+      // Edges from screen_links (tap zones)
+      const links = getLinks(s);
       links.forEach(link => {
         if (!link.target) return;
-        // find target position
-        const targetScreen = nodes.find(n => {
-          const k = link.target.toLowerCase();
-          const id = (n.id || '').toLowerCase();
-          const beat = (n.beat || '').toLowerCase();
-          const name = (n.name || '').toLowerCase();
-          return id === k || beat === k || name === k || beat.includes(k) || name.includes(k);
-        });
+        const targetScreen = findNode(link.target);
         if (!targetScreen) return;
         const toKey = targetScreen.id || targetScreen.beat || targetScreen.name;
         const to = positions[toKey];
         if (!to) return;
         result.push({ from, to, label: link.label });
       });
+
+      // Edge from opens_screen (icon→screen link)
+      if (s.opens_screen) {
+        const targetScreen = findNode(s.opens_screen);
+        if (targetScreen) {
+          const toKey = targetScreen.id || targetScreen.beat || targetScreen.name;
+          const to = positions[toKey];
+          if (to) result.push({ from, to, label: 'opens', dashed: true });
+        }
+      }
     });
     return result;
   }, [nodes, positions]);
@@ -325,7 +342,8 @@ function ScreenFlowMap({ screens = [], onSelectScreen, selectedScreen }) {
             key={i}
             x1={edge.from.x + nodeW / 2} y1={edge.from.y + nodeH / 2}
             x2={edge.to.x + nodeW / 2} y2={edge.to.y + nodeH / 2}
-            stroke={TOKENS.gold} strokeWidth={1.5} opacity={0.5}
+            stroke={edge.dashed ? '#a889c8' : TOKENS.gold} strokeWidth={1.5} opacity={0.5}
+            strokeDasharray={edge.dashed ? '4 3' : undefined}
             markerEnd="url(#arrowhead)"
           />
         ))}

@@ -2747,11 +2747,12 @@ router.post('/world/:showId/episodes/:episodeId/generate-title-overlay', optiona
       { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
     ).catch(() => []);
 
-    const { STYLE_PREFIX } = require('../services/uiOverlayService');
+    const { getStylePrefix } = require('../services/uiOverlayService');
     const { generateImageUrl } = require('../services/imageGenerationService');
 
+    const stylePrefix = await getStylePrefix(episode.show_id, models);
     const title = episode.title || `Episode ${episode.episode_number}`;
-    const prompt = `${STYLE_PREFIX}A luxury episode title card overlay. Elegant dark background (#1A1A1A) with thin gold (#B8962E) border frame. Center text reading "${title}" in refined gold serif typography. Below: "Episode ${episode.episode_number}" in smaller gold text. Subtle gold sparkle particles around text. The text MUST be clearly readable — this is a title card. Luxury fashion show episode intro. Isolated on dark background.`;
+    const prompt = `${stylePrefix}A luxury episode title card overlay. Elegant dark background (#1A1A1A) with thin gold (#B8962E) border frame. Center text reading "${title}" in refined gold serif typography. Below: "Episode ${episode.episode_number}" in smaller gold text. Subtle gold sparkle particles around text. The text MUST be clearly readable — this is a title card. Luxury fashion show episode intro. Isolated on dark background.`;
 
     const imageUrl = await generateImageUrl(prompt, { size: 'landscape', quality: 'hd', useCase: 'invitation' });
 
@@ -2823,18 +2824,23 @@ router.get('/world/:showId/events/:eventId/overlay-suggestions', optionalAuth, a
       try { event.outfit_pieces = JSON.parse(event.outfit_pieces); } catch { event.outfit_pieces = []; }
     }
 
-    const { SHOW_OVERLAYS, EPISODE_OVERLAYS, suggestOverlaysForEvent } = require('../services/uiOverlayService');
+    const { getAllOverlayTypes, suggestOverlaysForEvent } = require('../services/uiOverlayService');
     const suggestions = suggestOverlaysForEvent(event);
 
     // Get current selections from required_ui_overlays
     let currentSelections = event.required_ui_overlays;
     if (typeof currentSelections === 'string') try { currentSelections = JSON.parse(currentSelections); } catch { currentSelections = null; }
 
+    // Get all overlay types from DB for this show
+    const allTypes = await getAllOverlayTypes(event.show_id, models);
+    const showOverlays = allTypes.filter(o => o.lifecycle === 'permanent');
+    const episodeOverlays = allTypes.filter(o => o.lifecycle === 'per_episode' || o.lifecycle === 'variant');
+
     return res.json({
       success: true,
       data: {
-        show_overlays: SHOW_OVERLAYS.map(o => ({ id: o.id, name: o.name, category: o.category })),
-        episode_overlays: EPISODE_OVERLAYS.map(o => {
+        show_overlays: showOverlays.map(o => ({ id: o.id, name: o.name, category: o.category })),
+        episode_overlays: episodeOverlays.map(o => {
           const suggestion = suggestions.find(s => s.id === o.id);
           const selected = currentSelections ? currentSelections.includes(o.id) : !!suggestion;
           return { id: o.id, name: o.name, category: o.category, selected, suggested: !!suggestion, reason: suggestion?.reason || null };
