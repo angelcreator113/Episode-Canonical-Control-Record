@@ -15,6 +15,27 @@ import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import './UIOverlaysTab.css';
 
+class OverlayErrorBoundary extends Component {
+  state = { hasError: false, error: null };
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error('[PhoneHub] Component error:', error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: '#dc2626', marginBottom: 8 }}>Something went wrong in this section.</p>
+          <p style={{ fontSize: 12 }}>{this.state.error?.message}</p>
+          <button onClick={() => this.setState({ hasError: false, error: null })} style={{
+            marginTop: 12, padding: '8px 16px', border: '1px solid #e8e0d0', borderRadius: 8,
+            background: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+          }}>Try Again</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function UIOverlaysTab({ showId: propShowId }) {
   const [showId, setShowId] = useState(propShowId || null);
   const [shows, setShows] = useState([]);
@@ -1410,25 +1431,4 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existing
       </div>
     </div>
   );
-}
-
-class OverlayErrorBoundary extends Component {
-  state = { hasError: false, error: null };
-  static getDerivedStateFromError(error) { return { hasError: true, error }; }
-  componentDidCatch(error, info) { console.error('[PhoneHub] Component error:', error, info); }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: '#dc2626', marginBottom: 8 }}>Something went wrong in this section.</p>
-          <p style={{ fontSize: 12 }}>{this.state.error?.message}</p>
-          <button onClick={() => this.setState({ hasError: false, error: null })} style={{
-            marginTop: 12, padding: '8px 16px', border: '1px solid #e8e0d0', borderRadius: 8,
-            background: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-          }}>Try Again</button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
 }
