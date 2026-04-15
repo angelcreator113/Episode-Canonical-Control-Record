@@ -138,7 +138,7 @@ export default function UniversePage() {
           {[
             { label: 'Episodes Created', value: stats?.episodes || 0 },
             { label: 'Episodes Completed', value: stats?.completed || 0 },
-            { label: 'UI Overlays', value: `${stats?.overlays || 0}/${stats?.overlaysTotal || 0}` },
+            { label: "Lala's Phone", value: `${stats?.overlays || 0}/${stats?.overlaysTotal || 0}` },
             { label: 'Wardrobe Value', value: `$${(stats?.wardrobeValue || 0).toLocaleString()}` },
           ].map(row => (
             <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13 }}>

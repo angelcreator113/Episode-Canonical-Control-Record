@@ -10,7 +10,7 @@ import api from '../../services/api';
 
 const SECTION_CONFIG = {
   scene_sets: { icon: '📍', label: 'Scene Sets', desc: 'Venue exteriors, interiors, and camera angles', color: '#6366f1', link: 'scene-library', actionLabel: 'Scene Library' },
-  overlays: { icon: '✨', label: 'UI Overlays', desc: 'Frames, icons, title cards — generated from DALL-E and Flux', color: '#B8962E', link: 'scene-library?tab=overlays', actionLabel: 'Manage Overlays' },
+  overlays: { icon: '📱', label: "Lala's Phone", desc: 'Phone screen designs and app icons — generated from DALL-E and Flux', color: '#B8962E', link: 'scene-library?tab=overlays', actionLabel: 'Manage Overlays' },
   wardrobe: { icon: '👗', label: 'Wardrobe', desc: 'Clothing, shoes, accessories, jewelry, perfume', color: '#ec4899', link: 'world?tab=wardrobe', actionLabel: 'Wardrobe Library' },
   invitations: { icon: '💌', label: 'Invitations', desc: 'Event invitation letters — per episode', color: '#f59e0b', link: 'world?tab=events', actionLabel: 'Events' },
   uploads: { icon: '📁', label: 'Uploads', desc: 'Logos, music, intros, outros, custom assets', color: '#64748b', link: null, actionLabel: null },

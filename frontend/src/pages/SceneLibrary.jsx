@@ -268,14 +268,14 @@ const SceneLibrary = () => {
           className={`scene-library-tab${activeTab === 'overlays' ? ' active' : ''}`}
           onClick={() => setActiveTab('overlays')}
         >
-          <Sparkles size={15} /> UI Overlays
+          <Sparkles size={15} /> Lala's Phone
         </button>
       </div>
 
       {/* Scene Sets Tab */}
       {activeTab === 'sets' && <SceneSetsTab />}
 
-      {/* UI Overlays Tab */}
+      {/* Lala's Phone Tab */}
       {activeTab === 'overlays' && <UIOverlaysTab />}
 
       {/* Clips Tab */}

@@ -278,7 +278,7 @@ function ShowInsightsTab({ show }) {
           <div style={S.sectionTitle}>🎬 Production Progress</div>
           {[
             { label: 'Events', value: data.events, sub: `${data.eventsReady} ready`, color: '#f59e0b' },
-            { label: 'UI Overlays', value: data.overlaysGenerated, sub: `of ${data.overlaysTotal}`, color: '#B8962E', pct: data.overlaysTotal > 0 ? Math.round((data.overlaysGenerated / data.overlaysTotal) * 100) : 0 },
+            { label: "Lala's Phone", value: data.overlaysGenerated, sub: `of ${data.overlaysTotal}`, color: '#B8962E', pct: data.overlaysTotal > 0 ? Math.round((data.overlaysGenerated / data.overlaysTotal) * 100) : 0 },
             { label: 'Episodes', value: data.episodes, sub: `${data.completed} completed`, color: '#6366f1' },
             { label: 'Wardrobe Items', value: data.wardrobe, sub: `$${data.wardrobeValue.toLocaleString()} value`, color: '#ec4899' },
           ].map(item => (
