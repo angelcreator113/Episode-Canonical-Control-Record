@@ -27,6 +27,7 @@ import './WorldAdmin.css';
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
 const SceneSetsTab = lazy(() => import('./SceneSetsTab'));
 const UIOverlaysTab = lazy(() => import('./UIOverlaysTab'));
+const ProductionOverlaysTab = lazy(() => import('./ProductionOverlaysTab'));
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
 const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', safe: '#eab308', fail: '#dc2626' };
@@ -92,7 +93,8 @@ const TABS = [
   ]},
   { key: 'wardrobe', icon: '🎬', label: 'Assets', subs: [
     { key: 'scene-sets', label: 'Scene Sets' },
-    { key: 'overlays-tab', label: 'UI Overlays' },
+    { key: 'overlays-tab', label: "Lala's Phone" },
+    { key: 'production-overlays', label: 'UI Overlays' },
     { key: 'wardrobe-items', label: 'Wardrobe' },
     { key: 'goals', label: 'Career Goals' },
   ]},
@@ -154,6 +156,7 @@ function WorldAdmin() {
       'scene-sets': ['wardrobe', 'scene-sets'],
       'overlays': ['wardrobe', 'overlays-tab'],
       'overlays-tab': ['wardrobe', 'overlays-tab'],
+      'production-overlays': ['wardrobe', 'production-overlays'],
       'goals': ['wardrobe', 'goals'],
       'wardrobe': ['wardrobe', 'scene-sets'],
       'characters': ['characters', 'characters-list'],
@@ -3872,14 +3875,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
         </Suspense>
       )}
 
-      {/* ════════════════════════ UI OVERLAYS ════════════════════════ */}
+      {/* ════════════════════════ LALA'S PHONE ════════════════════════ */}
       {activeTab === 'wardrobe' && subTab === 'overlays-tab' && (
-        <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading overlays...</div>}>
+        <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading phone screens...</div>}>
           <UIOverlaysTab showId={showId} />
         </Suspense>
       )}
 
-      {/* Old custom scene sets + overlays removed — using SceneSetsTab and UIOverlaysTab components */}
+      {/* ════════════════════════ UI OVERLAYS (PRODUCTION) ════════════════════════ */}
+      {activeTab === 'wardrobe' && subTab === 'production-overlays' && (
+        <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading overlays...</div>}>
+          <ProductionOverlaysTab showId={showId} />
+        </Suspense>
+      )}
 
       {/* ════════════════════════ WARDROBE ════════════════════════ */}
       {activeTab === 'wardrobe' && subTab === 'wardrobe-items' && (() => {

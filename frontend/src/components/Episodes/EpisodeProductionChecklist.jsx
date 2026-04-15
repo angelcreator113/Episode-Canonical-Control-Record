@@ -54,10 +54,10 @@ const CHECKLIST_SECTIONS = [
   },
   {
     id: 'overlays',
-    icon: '✨',
-    label: 'UI Overlays',
+    icon: '📱',
+    label: "Lala's Phone",
     items: [
-      { id: 'overlays_generated', label: 'UI overlays generated',     required: false },
+      { id: 'overlays_generated', label: 'Phone screens generated',   required: false },
     ],
   },
   {
