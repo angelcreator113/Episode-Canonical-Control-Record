@@ -139,6 +139,82 @@ function PersistentOverlay({ links = [], onNavigate }) {
   );
 }
 
+const menuItemStyle = {
+  display: 'flex', alignItems: 'center', gap: 8,
+  width: '100%', padding: '11px 14px',
+  border: 'none', background: 'none', cursor: 'pointer',
+  fontSize: 13, fontWeight: 500, color: '#2C2C2C',
+  textAlign: 'left', minHeight: 44,
+  borderBottom: '1px solid #f5f3ee',
+};
+
+const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
+  const isActive = activeScreen?.id === screen?.id && screen;
+  const hasImage = screen?.generated && screen?.url;
+  const accentColor = isIcon ? '#a889c8' : '#B8962E';
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
+  }, [menuOpen]);
+
+  return (
+    <div
+      onClick={() => {
+        if (menuOpen) return;
+        if (isHidden && onHide) { onHide(type.key); return; }
+        screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
+      }}
+      className="screen-card"
+      style={{
+        background: isHidden ? '#f5f3f0' : isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
+        border: `1px solid ${isHidden ? '#e8e0d0' : isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
+        borderRadius: isIcon ? 8 : 10, padding: isIcon ? 6 : 8,
+        cursor: 'pointer', transition: 'all 0.15s', position: 'relative', overflow: 'visible',
+        minHeight: isIcon ? 40 : 'auto', opacity: isHidden ? 0.45 : 1,
+      }}
+    >
+      {!isHidden && (onDelete || onHide) && (
+        <div ref={menuRef} style={{ position: 'absolute', top: 4, right: 4, zIndex: 5 }}>
+          <button className="screen-card-menu" onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} aria-label="Screen options" style={{
+            width: 28, height: 28, borderRadius: 6,
+            background: hasImage ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)',
+            border: 'none', color: hasImage ? '#fff' : '#999',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: hasImage ? 'blur(4px)' : 'none',
+          }}><MoreVertical size={14} /></button>
+          {menuOpen && (
+            <div style={{ position: 'absolute', top: '100%', right: isIcon ? 'auto' : 0, left: isIcon ? 0 : 'auto', marginTop: 4, background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, minWidth: 140, overflow: 'hidden' }}>
+              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true }); }} style={menuItemStyle}><Edit3 size={14} /> Edit</button>
+              {onHide && !hasImage && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onHide(type.key); }} style={menuItemStyle}><EyeOff size={14} /> Hide</button>)}
+              {onDelete && (screen?.generated || screen?.asset_id || screen?.url) && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }} style={{ ...menuItemStyle, color: '#dc2626', borderBottom: 'none' }}><Trash2 size={14} /> Delete</button>)}
+            </div>
+          )}
+        </div>
+      )}
+      {isHidden && (<div style={{ position: 'absolute', top: 4, right: 4, zIndex: 3, fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace", background: '#fff', padding: '2px 8px', borderRadius: 4, border: '1px solid #ddd' }}>restore</div>)}
+      {hasImage && (
+        <div className="screen-card-thumb" style={{ width: '100%', borderRadius: 8, overflow: 'hidden', marginBottom: 6, background: '#f0f0f0' }}>
+          <img src={screen.url} alt={type.label} style={isIcon ? { width: '100%', height: '100%', objectFit: 'contain' } : getScreenImageStyle(screen, globalFit)} />
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+        <span style={{ fontSize: isIcon ? 12 : 14, flexShrink: 0 }}>{type.icon}</span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: isIcon ? 9 : 11, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{type.label}</div>
+          {!isIcon && (<div className="screen-card-desc" style={{ fontSize: 8, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{type.desc}</div>)}
+        </div>
+      </div>
+      {!menuOpen && (<div style={{ position: 'absolute', top: isIcon ? 5 : 8, left: isIcon ? 5 : 8, width: 7, height: 7, borderRadius: '50%', background: hasImage ? '#16a34a' : screen ? '#eab308' : '#e0e0e0' }} />)}
+    </div>
+  );
+});
+
 export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
   const [frameLoaded, setFrameLoaded] = useState(false);
@@ -436,155 +512,3 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   );
 }
 
-const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
-  const isActive = activeScreen?.id === screen?.id && screen;
-  const hasImage = screen?.generated && screen?.url;
-  const accentColor = isIcon ? '#a889c8' : '#B8962E';
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
-
-  // Close menu on outside click
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler);
-    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
-  }, [menuOpen]);
-
-  return (
-    <div
-      onClick={() => {
-        if (menuOpen) return;
-        if (isHidden && onHide) { onHide(type.key); return; }
-        screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
-      }}
-      className="screen-card"
-      style={{
-        background: isHidden ? '#f5f3f0' : isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
-        border: `1px solid ${isHidden ? '#e8e0d0' : isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
-        borderRadius: isIcon ? 8 : 10, padding: isIcon ? 6 : 8,
-        cursor: 'pointer',
-        transition: 'all 0.15s',
-        position: 'relative',
-        overflow: 'visible',
-        minHeight: isIcon ? 40 : 'auto',
-        opacity: isHidden ? 0.45 : 1,
-      }}
-    >
-      {/* 3-dot menu — replaces old delete/hide buttons */}
-      {!isHidden && (onDelete || onHide) && (
-        <div ref={menuRef} style={{ position: 'absolute', top: 4, right: 4, zIndex: 5 }}>
-          <button
-            className="screen-card-menu"
-            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-            aria-label="Screen options"
-            style={{
-              width: 28, height: 28, borderRadius: 6,
-              background: hasImage ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)',
-              border: 'none', color: hasImage ? '#fff' : '#999',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              backdropFilter: hasImage ? 'blur(4px)' : 'none',
-            }}
-          >
-            <MoreVertical size={14} />
-          </button>
-
-          {menuOpen && (
-            <div style={{
-              position: 'absolute', top: '100%', right: isIcon ? 'auto' : 0, left: isIcon ? 0 : 'auto', marginTop: 4,
-              background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20,
-              minWidth: 140, overflow: 'hidden',
-            }}>
-              {/* Edit — opens the detail panel */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuOpen(false);
-                  screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
-                }}
-                style={menuItemStyle}
-              >
-                <Edit3 size={14} /> Edit
-              </button>
-
-              {/* Hide from grid */}
-              {onHide && !hasImage && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onHide(type.key); }}
-                  style={menuItemStyle}
-                >
-                  <EyeOff size={14} /> Hide
-                </button>
-              )}
-
-              {/* Delete — available for any screen with an image or asset */}
-              {onDelete && (screen?.generated || screen?.asset_id || screen?.url) && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }}
-                  style={{ ...menuItemStyle, color: '#dc2626', borderBottom: 'none' }}
-                >
-                  <Trash2 size={14} /> Delete
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Restore badge for hidden cards */}
-      {isHidden && (
-        <div style={{
-          position: 'absolute', top: 4, right: 4, zIndex: 3,
-          fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace",
-          background: '#fff', padding: '2px 8px', borderRadius: 4, border: '1px solid #ddd',
-        }}>restore</div>
-      )}
-
-      {/* Thumbnail preview */}
-      {hasImage && (
-        <div className="screen-card-thumb" style={{
-          width: '100%',
-          borderRadius: 8, overflow: 'hidden',
-          marginBottom: 6, background: '#f0f0f0',
-        }}>
-          <img src={screen.url} alt={type.label}
-            style={isIcon ? { width: '100%', height: '100%', objectFit: 'contain' } : getScreenImageStyle(screen, globalFit)} />
-        </div>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-        <span style={{ fontSize: isIcon ? 12 : 14, flexShrink: 0 }}>{type.icon}</span>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: isIcon ? 9 : 11, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
-            {type.label}
-          </div>
-          {!isIcon && (
-            <div className="screen-card-desc" style={{ fontSize: 8, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
-              {type.desc}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Status dot */}
-      {!menuOpen && (
-        <div style={{
-          position: 'absolute', top: isIcon ? 5 : 8, left: isIcon ? 5 : 8,
-          width: 7, height: 7, borderRadius: '50%',
-          background: hasImage ? '#16a34a' : screen ? '#eab308' : '#e0e0e0',
-        }} />
-      )}
-    </div>
-  );
-});
-
-const menuItemStyle = {
-  display: 'flex', alignItems: 'center', gap: 8,
-  width: '100%', padding: '11px 14px',
-  border: 'none', background: 'none', cursor: 'pointer',
-  fontSize: 13, fontWeight: 500, color: '#2C2C2C',
-  textAlign: 'left', minHeight: 44,
-  borderBottom: '1px solid #f5f3ee',
-};
