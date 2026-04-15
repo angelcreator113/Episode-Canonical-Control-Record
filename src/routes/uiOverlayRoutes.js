@@ -472,22 +472,30 @@ router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
 router.put('/:showId/category/:assetId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const { category } = req.body;
-    if (!category) return res.status(400).json({ success: false, error: 'category is required' });
+    const { category, name } = req.body;
+    if (!category && !name) return res.status(400).json({ success: false, error: 'category or name is required' });
+
+    const patch = {};
+    if (category) patch.overlay_category = category;
+
+    const setClauses = ['updated_at = NOW()'];
+    const replacements = { assetId: req.params.assetId, showId: req.params.showId };
+
+    if (Object.keys(patch).length > 0) {
+      setClauses.push(`metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb)`);
+      replacements.patch = JSON.stringify(patch);
+    }
+    if (name) {
+      setClauses.push('name = :name');
+      replacements.name = name;
+    }
 
     await models.sequelize.query(
-      `UPDATE assets
-       SET metadata = COALESCE(metadata, '{}'::jsonb) || CAST(:patch AS jsonb),
-           updated_at = NOW()
-       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
-      { replacements: {
-        assetId: req.params.assetId,
-        showId: req.params.showId,
-        patch: JSON.stringify({ overlay_category: category }),
-      } }
+      `UPDATE assets SET ${setClauses.join(', ')} WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL`,
+      { replacements }
     );
 
-    return res.json({ success: true, category });
+    return res.json({ success: true, category, name });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -757,30 +765,33 @@ router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/v1/ui-overlays/:showId/types/:typeId — permanently delete a custom overlay type
+// DELETE /api/v1/ui-overlays/:showId/types/:typeId — soft-delete a custom overlay type
 router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    await models.sequelize.query(
-      `DELETE FROM ui_overlay_types WHERE id = :typeId AND show_id = :showId`,
+    const [rows] = await models.sequelize.query(
+      `UPDATE ui_overlay_types SET deleted_at = NOW() WHERE id = :typeId AND show_id = :showId AND deleted_at IS NULL RETURNING id`,
       { replacements: { typeId: req.params.typeId, showId: req.params.showId } }
     );
+    if (!rows?.length) {
+      return res.status(404).json({ success: false, error: 'Overlay type not found' });
+    }
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// DELETE /api/v1/ui-overlays/:showId/asset/:assetId — permanently delete an overlay asset
+// DELETE /api/v1/ui-overlays/:showId/asset/:assetId — soft-delete an overlay asset
 router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { showId, assetId } = req.params;
 
-    // Hard delete — permanently remove from database
     const [rows] = await models.sequelize.query(
-      `DELETE FROM assets
-       WHERE id = :assetId AND show_id = :showId
+      `UPDATE assets
+       SET deleted_at = NOW(), updated_at = NOW()
+       WHERE id = :assetId AND show_id = :showId AND deleted_at IS NULL
        RETURNING id`,
       { replacements: { assetId, showId } }
     );
@@ -789,7 +800,7 @@ router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Asset not found' });
     }
 
-    return res.json({ success: true, message: 'Asset permanently deleted' });
+    return res.json({ success: true, message: 'Asset deleted' });
   } catch (err) {
     console.error('[UIOverlays] Delete asset error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
