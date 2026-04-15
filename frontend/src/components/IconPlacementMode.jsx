@@ -12,7 +12,7 @@
  *   screenTypes      — for target picker
  *   generatedScreenKeys — set of screen keys that have images
  */
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Plus, Trash2, Save, X, Pin, Move } from 'lucide-react';
 
 export default function IconPlacementMode({ links = [], iconOverlays = [], onSave, screenTypes = [], generatedScreenKeys }) {
@@ -23,6 +23,14 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
   const [dragging, setDragging] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const containerRef = useRef(null);
+
+  // Sync when links prop changes (switching screens)
+  useEffect(() => {
+    setZones(links);
+    setIsDirty(false);
+    setSelectedId(null);
+    setShowPicker(false);
+  }, [links]);
 
   const getRelativePos = useCallback((e) => {
     const rect = containerRef.current?.getBoundingClientRect();
