@@ -133,6 +133,10 @@ const missionPayloadSchema = Joi.object({
   icon_url: Joi.string().trim().max(500).allow('', null),
   start_condition: conditionsArraySchema.optional(),
   objectives: Joi.array().items(objectiveSchema).max(12).default([]),
+  // Rewards reuse the zone-action allowlist — same validator, same schema,
+  // same server-side guarantees. Defaults to an empty array so existing
+  // missions keep working.
+  reward_actions: actionsArraySchema.default([]),
   display_order: Joi.number().integer().min(0).default(0),
   is_active: Joi.boolean().default(true),
   episode_id: Joi.string().trim().max(64).allow(null),

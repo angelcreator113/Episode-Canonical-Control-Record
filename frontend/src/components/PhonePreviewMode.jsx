@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle } from 'lucide-react';
 import { getScreenImageStyle, PHONE_SKINS } from '../components/PhoneHub';
-import { filterZones, applyActions, actionsForZone, evaluateMissions } from '../lib/phoneRuntime';
+import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C' };
 const MONO = "'DM Mono', monospace";
@@ -42,6 +42,13 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   const [visitedScreens, setVisitedScreensRaw] = useState(() => new Set());
   const [toasts, setToasts] = useState([]);
   const [episodeComplete, setEpisodeComplete] = useState(false);
+  // Track mission ids that have already fired rewards this session so we don't
+  // re-fire them on every subsequent tap. In player mode the server owns this;
+  // we also keep a local copy for instant UI.
+  const [completedMissionIds, setCompletedMissionIds] = useState([]);
+  // Transient celebration banner — populated when a mission newly completes.
+  // Cleared after the banner's display window.
+  const [celebrations, setCelebrations] = useState([]);
 
   // Hydrate from playthrough whenever it changes (covers initial load + tap responses).
   useEffect(() => {
@@ -49,6 +56,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     setStateRaw(playthrough.state.state_flags || {});
     setVisitedScreensRaw(new Set(playthrough.state.visited_screens || []));
     setEpisodeComplete(Boolean(playthrough.state.completed_at));
+    setCompletedMissionIds(playthrough.state.completed_mission_ids || []);
   }, [playthrough?.state]);
 
   const evalContext = useMemo(() => ({ state, visitedScreens }), [state, visitedScreens]);
@@ -65,12 +73,27 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     } else {
       setStateRaw({});
       setVisitedScreensRaw(new Set());
+      setCompletedMissionIds([]);
     }
     setToasts([]);
+    setCelebrations([]);
     setEpisodeComplete(false);
     setHistory([]);
     setActiveScreen(initialScreen || screens[0] || null);
   }, [initialScreen, screens, playthrough]);
+
+  // Queue a celebration banner per newly-completed mission; auto-clears after 3s.
+  const celebrate = useCallback((missionsJustDone) => {
+    if (!missionsJustDone || !missionsJustDone.length) return;
+    const stamped = missionsJustDone.map((m, i) => ({ ...m, id: `${m.id}-${Date.now()}-${i}` }));
+    setCelebrations(prev => [...prev, ...stamped]);
+  }, []);
+
+  useEffect(() => {
+    if (celebrations.length === 0) return;
+    const t = setTimeout(() => setCelebrations(prev => prev.slice(1)), 3000);
+    return () => clearTimeout(t);
+  }, [celebrations]);
 
   const findScreen = useCallback((key) => {
     if (!key) return null;
@@ -110,28 +133,70 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
    */
   const handleZoneTap = useCallback(async (zone) => {
     if (playthrough?.tap && zone.id) {
-      // Player mode — server executes. Returns effects; state syncs via useEffect.
+      // Player mode — server executes (zone actions + mission rewards). The
+      // response already contains any reward-merged effects plus the list of
+      // missions that newly completed this tap. useEffect re-hydrates state.
       const result = await playthrough.tap(zone.id);
       const effects = result?.effects;
       if (effects?.toasts?.length) {
         setToasts(prev => [...prev, ...effects.toasts.map((t, i) => ({ ...t, id: Date.now() + i }))]);
+      }
+      // result shape comes from the route: { state, effects, newly_completed_missions }.
+      // The playthrough hook only returns { state, effects }, so we pull from its
+      // cached state if the hook was extended. For now, celebrate via state diff:
+      // completed_mission_ids grows → the new ones are the newly-completed.
+      if (result?.state?.completed_mission_ids) {
+        const prev = new Set(completedMissionIds);
+        const added = result.state.completed_mission_ids.filter(id => !prev.has(id));
+        if (added.length) {
+          const justDone = added
+            .map(id => missions.find(m => m.id === id))
+            .filter(Boolean)
+            .map(m => ({ id: m.id, name: m.name }));
+          celebrate(justDone);
+        }
       }
       if (effects?.navigate) navigateTo(effects.navigate, 'left');
       return;
     }
 
     // Author mode — in-memory. Implicit defaults apply (no actions → navigate target).
+    // We also run mission reward evaluation so authors can see the full loop
+    // in preview without needing to wire an episode.
     const actions = actionsForZone(zone);
+    // Stage mutations into a local copy of state so mission evaluation after
+    // the zone action sees the new flags (React state updates are async).
+    const stagedState = { ...state };
+    const stagedVisited = new Set(visitedScreens);
+    if (zone.id && zone.target) stagedVisited.add(zone.target);
     const writer = {
-      setState: (k, v) => setStateRaw(prev => ({ ...prev, [k]: v })),
+      setState: (k, v) => { stagedState[k] = v; },
       markEpisodeComplete: () => setEpisodeComplete(true),
     };
     const effects = applyActions(actions, evalContext, writer);
-    if (effects.toasts.length) {
-      setToasts(prev => [...prev, ...effects.toasts.map((t, i) => ({ ...t, id: Date.now() + i }))]);
+    // Now evaluate missions against stagedState and fire rewards for newly-complete ones.
+    const missionCtx = { state: stagedState, visitedScreens: stagedVisited };
+    const rewardResult = applyMissionRewards({
+      missions,
+      prevCompletedIds: completedMissionIds,
+      context: missionCtx,
+      writer,
+    });
+    // Commit staged flags to React state in one update.
+    setStateRaw(stagedState);
+    if (rewardResult.newlyCompletedIds.length) {
+      setCompletedMissionIds(prev => [...prev, ...rewardResult.newlyCompletedIds]);
+      celebrate(rewardResult.newlyCompletedMissions);
     }
-    if (effects.navigate) navigateTo(effects.navigate, 'left');
-  }, [evalContext, navigateTo, playthrough]);
+    // Merge reward effects into the primary effects collection.
+    const allToasts = [...effects.toasts, ...rewardResult.effects.toasts];
+    if (allToasts.length) {
+      setToasts(prev => [...prev, ...allToasts.map((t, i) => ({ ...t, id: Date.now() + i }))]);
+    }
+    if (rewardResult.effects.completeEpisode) setEpisodeComplete(true);
+    const finalNavigate = effects.navigate || rewardResult.effects.navigate;
+    if (finalNavigate) navigateTo(finalNavigate, 'left');
+  }, [evalContext, navigateTo, playthrough, state, visitedScreens, missions, completedMissionIds, celebrate]);
 
   // Auto-dismiss toasts after 2.5s
   useEffect(() => {
@@ -291,7 +356,40 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         </div>
       )}
 
-      {/* Episode-complete banner — PR2 will wire this to the real next-episode CTA */}
+      {/* Mission-complete celebration — transient gold banner per newly-done mission.
+          Stack up to 3 at a time (we auto-dismiss after 3s each). */}
+      {celebrations.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)', zIndex: 12,
+          display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none',
+        }}>
+          {celebrations.slice(0, 3).map(c => (
+            <div key={c.id} style={{
+              padding: '16px 28px', borderRadius: 14,
+              background: 'linear-gradient(135deg, #B8962E, #d4b96a)', color: '#fff',
+              fontFamily: PROSE, textAlign: 'center',
+              boxShadow: '0 12px 40px rgba(184,150,46,0.5), 0 0 0 2px rgba(255,255,255,0.2) inset',
+              animation: 'mission-pop 0.35s cubic-bezier(0.18, 1.2, 0.4, 1)',
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, fontFamily: MONO, opacity: 0.85 }}>
+                ★ MISSION COMPLETE
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 700, marginTop: 4 }}>
+                {c.name}
+              </div>
+            </div>
+          ))}
+          <style>{`
+            @keyframes mission-pop {
+              0%   { opacity: 0; transform: scale(0.7) translateY(-8px); }
+              70%  { opacity: 1; transform: scale(1.04) translateY(0); }
+              100% { opacity: 1; transform: scale(1) translateY(0); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* Episode-complete banner */}
       {episodeComplete && (
         <div style={{
           position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 11,

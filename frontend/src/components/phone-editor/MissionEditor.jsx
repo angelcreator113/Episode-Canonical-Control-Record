@@ -11,9 +11,10 @@
  * or PUTs via the host's `api` singleton; this component stays focused on UX.
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Save, X, Target, CheckCircle, Circle, Edit3 } from 'lucide-react';
+import { Plus, Trash2, Save, X, Target, CheckCircle, Circle, Edit3, Gift } from 'lucide-react';
 import api from '../../services/api';
 import ConditionRow from './ConditionRow';
+import ActionRow from './ActionRow';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C' };
 const MONO = "'DM Mono', monospace";
@@ -170,6 +171,7 @@ function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
   const [name, setName] = useState(initial?.name || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [objectives, setObjectives] = useState(initial?.objectives || []);
+  const [rewardActions, setRewardActions] = useState(initial?.reward_actions || []);
   const [scopeToEpisode, setScopeToEpisode] = useState(initial ? Boolean(initial.episode_id) : Boolean(episodeId));
   const [isActive, setIsActive] = useState(initial ? initial.is_active !== false : true);
   const [saving, setSaving] = useState(false);
@@ -196,6 +198,16 @@ function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
       name: name.trim(),
       description: description.trim() || null,
       objectives: cleanObjs,
+      // Drop actions whose required fields are still empty (e.g. navigate
+      // without a target) before sending — the server's Joi schema would
+      // reject them anyway and we'd rather not trip the error banner.
+      reward_actions: rewardActions.filter(a => {
+        if (!a.type) return false;
+        if (a.type === 'navigate') return Boolean(a.target);
+        if (a.type === 'set_state') return Boolean(a.key);
+        if (a.type === 'show_toast') return Boolean((a.text || '').trim());
+        return true;
+      }),
       is_active: isActive,
       episode_id: scopeToEpisode && episodeId ? episodeId : null,
     };
@@ -290,6 +302,38 @@ function MissionForm({ initial, showId, episodeId, onSaved, onCancel }) {
               }}
               style={addBtn}
             ><Plus size={11} /> condition</button>
+          </div>
+        ))}
+      </div>
+
+      {/* Rewards on complete — fires once per playthrough when all objectives pass. */}
+      <div style={{ paddingTop: 6, borderTop: '1px dashed #f0ece4' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <label style={{ ...labelStyle, display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 0 }}>
+            <Gift size={10} /> REWARDS ON COMPLETE {rewardActions.length > 0 && `(${rewardActions.length})`}
+          </label>
+          <button
+            onClick={() => setRewardActions(prev => [...prev, { type: 'set_state', key: '', value: true }])}
+            style={addBtn}
+          ><Plus size={11} /> reward</button>
+        </div>
+        {rewardActions.length === 0 && (
+          <div style={{ fontSize: 11, color: '#8a7e65', fontFamily: MONO, padding: '4px 0', lineHeight: 1.5 }}>
+            Optional. Actions here run once when all objectives complete — e.g. <em>set_state</em> unlocks a gated zone, <em>show_toast</em> congratulates, <em>navigate</em> jumps to a reward screen.
+          </div>
+        )}
+        {rewardActions.map((a, ai) => (
+          <div key={ai} style={{ marginBottom: 6 }}>
+            <ActionRow
+              action={a}
+              screenOptions={[]} /* MissionEditor isn't scoped to a screen list; navigate rewards use raw ids for now */
+              onChange={(next) => {
+                const arr = [...rewardActions];
+                arr[ai] = next;
+                setRewardActions(arr);
+              }}
+              onRemove={() => setRewardActions(rewardActions.filter((_, i) => i !== ai))}
+            />
           </div>
         ))}
       </div>

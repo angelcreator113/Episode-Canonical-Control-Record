@@ -166,6 +166,7 @@ module.exports = {
   resolveKey,
   evaluateMission,
   evaluateMissions,
+  applyMissionRewards,
 };
 
 // ── Mission progress ────────────────────────────────────────────────────────
@@ -218,4 +219,45 @@ function evaluateMissions(missions, context) {
     mission: m,
     progress: evaluateMission(m, context),
   }));
+}
+
+/**
+ * Fire rewards for missions that newly completed since the last evaluation.
+ * "Newly complete" = is_complete now AND not in `prevCompletedIds`. This guards
+ * against double-firing across multiple taps once the condition stays true.
+ *
+ * Returns:
+ *   {
+ *     newlyCompletedIds: string[]  — ids to merge into playthrough.completed_mission_ids
+ *     newlyCompletedMissions: [{id, name}]  — for UI celebration banners
+ *     effects: { navigate, toasts, completeEpisode }  — merged across all reward actions
+ *   }
+ *
+ * The caller persists `newlyCompletedIds` into the playthrough row so the next
+ * tap sees them as "already fired."
+ */
+function applyMissionRewards({ missions, prevCompletedIds = [], context, writer }) {
+  const out = { newlyCompletedIds: [], newlyCompletedMissions: [], effects: { navigate: null, toasts: [], completeEpisode: false } };
+  if (!Array.isArray(missions) || missions.length === 0) return out;
+  const prevSet = new Set(prevCompletedIds);
+
+  for (const mission of missions) {
+    if (!mission || !mission.id) continue;
+    if (mission.is_active === false) continue;
+    if (prevSet.has(mission.id)) continue;  // already fired once
+    const progress = evaluateMission(mission, context);
+    if (!progress.is_complete) continue;
+
+    out.newlyCompletedIds.push(mission.id);
+    out.newlyCompletedMissions.push({ id: mission.id, name: mission.name });
+
+    // Fire reward actions. Empty array → harmless no-op; unknown types are
+    // already dropped inside applyActions. Navigate is last-wins across rewards.
+    const rewardEffects = applyActions(mission.reward_actions || [], context, writer);
+    if (rewardEffects.navigate) out.effects.navigate = rewardEffects.navigate;
+    if (rewardEffects.toasts.length) out.effects.toasts.push(...rewardEffects.toasts);
+    if (rewardEffects.completeEpisode) out.effects.completeEpisode = true;
+  }
+
+  return out;
 }

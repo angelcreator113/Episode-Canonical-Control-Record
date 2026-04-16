@@ -78,6 +78,7 @@ function serializeState(state) {
     show_id: state.show_id,
     state_flags: state.state_flags || {},
     visited_screens: state.visited_screens || [],
+    completed_mission_ids: state.completed_mission_ids || [],
     last_screen_id: state.last_screen_id,
     started_at: state.started_at,
     updated_at: state.updated_at,
@@ -151,13 +152,57 @@ router.post('/tap', authenticate, async (req, res) => {
       if (nextVisited.length > 200) nextVisited.splice(0, nextVisited.length - 200);
     }
 
+    // Apply zone-action mutations up-front so mission evaluation sees the new
+    // state. Missions only fire rewards on the transition from incomplete →
+    // complete; completed_mission_ids is the "already fired" tracker.
     state.state_flags = nextFlags;
     state.visited_screens = nextVisited;
+
+    let newlyCompletedMissions = [];
+    try {
+      const [missionRows] = await models.sequelize.query(
+        `SELECT id, name, description, start_condition, objectives, reward_actions, is_active, episode_id
+         FROM phone_missions
+         WHERE show_id = :showId AND deleted_at IS NULL
+           AND (episode_id = :episodeId OR episode_id IS NULL)`,
+        { replacements: { showId, episodeId: req.params.episodeId } }
+      );
+      const missionCtx = { state: nextFlags, visitedScreens: new Set(nextVisited) };
+      const rewardWriter = {
+        setState: (k, v) => { nextFlags[k] = v; },
+        markEpisodeComplete: () => { if (!state.completed_at) state.completed_at = new Date(); },
+      };
+      const rewardResult = runtime.applyMissionRewards({
+        missions: missionRows || [],
+        prevCompletedIds: state.completed_mission_ids || [],
+        context: missionCtx,
+        writer: rewardWriter,
+      });
+      if (rewardResult.newlyCompletedIds.length) {
+        const next = [...(state.completed_mission_ids || []), ...rewardResult.newlyCompletedIds];
+        state.completed_mission_ids = next;
+        newlyCompletedMissions = rewardResult.newlyCompletedMissions;
+      }
+      // Merge reward-triggered effects into the response effects. Navigate
+      // prefers the zone's own navigate; rewards only override if the zone
+      // didn't set one (e.g. set_state zone triggers mission → navigate reward).
+      if (!effects.navigate && rewardResult.effects.navigate) effects.navigate = rewardResult.effects.navigate;
+      if (rewardResult.effects.toasts.length) effects.toasts.push(...rewardResult.effects.toasts);
+      if (rewardResult.effects.completeEpisode) effects.completeEpisode = true;
+
+      // Reward set_state mutations may have further changed nextFlags. Re-assign.
+      state.state_flags = nextFlags;
+    } catch (missionErr) {
+      // Fail open: if mission evaluation errors (e.g. table not yet migrated),
+      // don't fail the tap — the zone's primary action has already applied.
+      console.warn('[phonePlaythroughRoutes] mission reward eval skipped:', missionErr.message);
+    }
+
     if (effects.navigate) state.last_screen_id = effects.navigate;
     if (episodeNowComplete && !state.completed_at) state.completed_at = new Date();
     await state.save();
 
-    return res.json({ success: true, state: serializeState(state), effects });
+    return res.json({ success: true, state: serializeState(state), effects, newly_completed_missions: newlyCompletedMissions });
   } catch (err) {
     console.error('[phonePlaythroughRoutes] tap error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -175,6 +220,7 @@ router.post('/reset', authenticate, async (req, res) => {
     if (error) return res.status(404).json({ success: false, error });
     state.state_flags = {};
     state.visited_screens = [];
+    state.completed_mission_ids = [];
     state.last_screen_id = null;
     state.completed_at = null;
     state.started_at = new Date();

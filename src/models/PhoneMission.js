@@ -26,6 +26,10 @@ module.exports = (sequelize) => {
     // Array of { id, label, condition: [{key, op, value}, ...] }. An objective
     // is "complete" when its condition array ANDs to true.
     objectives: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
+    // Actions that fire ONCE when the mission transitions from incomplete →
+    // complete. Same allowlist as zone actions (navigate / set_state /
+    // show_toast / complete_episode). Tracked via playthrough.completed_mission_ids.
+    reward_actions: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
     display_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     created_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },

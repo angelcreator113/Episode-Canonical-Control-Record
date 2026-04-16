@@ -124,6 +124,35 @@ export function evaluateMissions(missions, context) {
   return missions.map(m => ({ mission: m, progress: evaluateMission(m, context) }));
 }
 
+/**
+ * Mirror of the backend applyMissionRewards. Fires reward actions for any
+ * mission that newly transitioned to complete. Caller merges newlyCompletedIds
+ * into its completed-ids tracker so subsequent taps don't double-fire.
+ */
+export function applyMissionRewards({ missions, prevCompletedIds = [], context, writer }) {
+  const out = { newlyCompletedIds: [], newlyCompletedMissions: [], effects: { navigate: null, toasts: [], completeEpisode: false } };
+  if (!Array.isArray(missions) || missions.length === 0) return out;
+  const prevSet = new Set(prevCompletedIds);
+
+  for (const mission of missions) {
+    if (!mission || !mission.id) continue;
+    if (mission.is_active === false) continue;
+    if (prevSet.has(mission.id)) continue;
+    const progress = evaluateMission(mission, context);
+    if (!progress.is_complete) continue;
+
+    out.newlyCompletedIds.push(mission.id);
+    out.newlyCompletedMissions.push({ id: mission.id, name: mission.name });
+
+    const rewardEffects = applyActions(mission.reward_actions || [], context, writer);
+    if (rewardEffects.navigate) out.effects.navigate = rewardEffects.navigate;
+    if (rewardEffects.toasts.length) out.effects.toasts.push(...rewardEffects.toasts);
+    if (rewardEffects.completeEpisode) out.effects.completeEpisode = true;
+  }
+
+  return out;
+}
+
 export function summarizeActions(actions, zone) {
   const list = (Array.isArray(actions) && actions.length > 0) ? actions : (zone?.target ? [{ type: 'navigate', target: zone.target }] : []);
   if (list.length === 0) return null;
