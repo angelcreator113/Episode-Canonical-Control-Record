@@ -18,8 +18,8 @@
  *   onUploadIcon(linkId, file) — callback to upload icon image for a zone
  *   readOnly        — if true, hide editing controls (used in preview mode)
  */
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle } from 'lucide-react';
 import { getScreenImageStyle } from './PhoneHub';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
@@ -31,7 +31,25 @@ const getIconUrls = (zone) => {
   return [];
 };
 
-export default function ScreenLinkEditor({
+// Grid defaults — 4 columns x 6 rows matches a typical phone home-screen app grid.
+const GRID_COLS = 4;
+const GRID_ROWS = 6;
+const snap = (v, step) => Math.round(v / step) * step;
+// When grid-snap is on, round to nearest grid cell edge.
+const snapZone = (z, enabled) => {
+  if (!enabled) return z;
+  const colW = 100 / GRID_COLS;
+  const rowH = 100 / GRID_ROWS;
+  return {
+    ...z,
+    x: Math.max(0, Math.min(100, snap(z.x, colW))),
+    y: Math.max(0, Math.min(100, snap(z.y, rowH))),
+    w: Math.max(colW, snap(z.w, colW)),
+    h: Math.max(rowH, snap(z.h, rowH)),
+  };
+};
+
+const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   screen,
   screenUrl,
   links = [],
@@ -43,9 +61,12 @@ export default function ScreenLinkEditor({
   phoneSkin,
   onSave,
   onUploadIcon,
+  onNavigate,
+  navigationHistory = [],
+  onBack,
   readOnly = false,
   compact = false,
-}) {
+}, ref) {
   // Resolve the image URL: prefer the full screen object, fall back to legacy screenUrl prop.
   const resolvedScreenUrl = screen?.url || screenUrl;
   // Build the exact same image style the phone uses, so the editor canvas is a visual twin.
@@ -64,6 +85,14 @@ export default function ScreenLinkEditor({
   const [preview, setPreview] = useState(false);
   // UX: toggle dashed guides showing the notch / home-indicator areas to avoid during placement.
   const [showSafeArea, setShowSafeArea] = useState(false);
+  // UX: toggle grid-snap — rounds zone positions/sizes to a 4x6 grid for clean home-screen layouts.
+  const [gridSnap, setGridSnap] = useState(() => {
+    try { return localStorage.getItem('screenLinkEditor.gridSnap') === '1'; } catch { return false; }
+  });
+  // Undo/redo stacks — snapshots of the zones array before each mutation.
+  const undoStack = useRef([]);
+  const redoStack = useRef([]);
+  const [undoTick, setUndoTick] = useState(0); // forces re-render so disabled-state updates
   // Migration notice state — dismissed per-screen and persisted in localStorage so it shows once.
   const MIGRATION_KEY = 'screenLinkEditor.migrationDismissed.v1';
   const [migrationDismissed, setMigrationDismissed] = useState(() => {
@@ -73,7 +102,63 @@ export default function ScreenLinkEditor({
   const iconInputRef = useRef(null);
   const uploadingLinkId = useRef(null);
 
-  useEffect(() => { setZones(links); setIsDirty(false); }, [links]);
+  useEffect(() => {
+    setZones(links); setIsDirty(false);
+    // Reset undo stacks when the screen changes (links prop identity changes per screen).
+    undoStack.current = [];
+    redoStack.current = [];
+    setUndoTick(t => t + 1);
+  }, [links]);
+
+  // Save a snapshot of current zones before mutating, clearing redo since the timeline branched.
+  const pushUndo = useCallback(() => {
+    undoStack.current.push(JSON.stringify(zones));
+    if (undoStack.current.length > 50) undoStack.current.shift();
+    redoStack.current = [];
+    setUndoTick(t => t + 1);
+  }, [zones]);
+
+  const undo = useCallback(() => {
+    if (!undoStack.current.length) return;
+    redoStack.current.push(JSON.stringify(zones));
+    const prev = JSON.parse(undoStack.current.pop());
+    setZones(prev);
+    setIsDirty(true);
+    setUndoTick(t => t + 1);
+  }, [zones]);
+
+  const redo = useCallback(() => {
+    if (!redoStack.current.length) return;
+    undoStack.current.push(JSON.stringify(zones));
+    const next = JSON.parse(redoStack.current.pop());
+    setZones(next);
+    setIsDirty(true);
+    setUndoTick(t => t + 1);
+  }, [zones]);
+
+  // Expose save/isDirty/undo/redo to the parent so it can coordinate screen switches.
+  useImperativeHandle(ref, () => ({
+    save: () => { if (onSave) onSave(zones); setIsDirty(false); },
+    isDirty: () => isDirty,
+    undo,
+    redo,
+  }), [onSave, zones, isDirty, undo, redo]);
+
+  // Keyboard shortcuts: Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z = redo. Only active while editor is mounted.
+  useEffect(() => {
+    if (readOnly) return;
+    const handler = (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod || e.key.toLowerCase() !== 'z') return;
+      // Don't hijack undo inside inputs — users expect native text-undo there.
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      e.preventDefault();
+      if (e.shiftKey) redo(); else undo();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [undo, redo, readOnly]);
 
   // Editing is disabled when parent forced readOnly OR the user flipped into preview mode.
   const editingDisabled = readOnly || preview;
@@ -137,6 +222,10 @@ export default function ScreenLinkEditor({
       try { e.target.releasePointerCapture(e.pointerId); } catch {}
     }
     if (dragging) {
+      // Snap the dragged zone to the grid on release.
+      if (gridSnap) {
+        setZones(prev => prev.map(z => z.id === dragging.id ? snapZone(z, true) : z));
+      }
       setDragging(null);
       return;
     }
@@ -149,7 +238,8 @@ export default function ScreenLinkEditor({
 
     // Minimum size threshold — ignore tiny accidental clicks (5% min)
     if (w > 5 && h > 5) {
-      const newZone = {
+      pushUndo();
+      const raw = {
         id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
         x: Math.round(x * 10) / 10,
         y: Math.round(y * 10) / 10,
@@ -160,6 +250,7 @@ export default function ScreenLinkEditor({
         icon_url: null,
         icon_urls: [],
       };
+      const newZone = snapZone(raw, gridSnap);
       setZones(prev => [...prev, newZone]);
       setSelectedZone(newZone.id);
       setIsDirty(true);
@@ -176,17 +267,20 @@ export default function ScreenLinkEditor({
     if (containerRef.current?.setPointerCapture) {
       try { containerRef.current.setPointerCapture(e.pointerId); } catch {}
     }
+    pushUndo();
     const pos = getRelativePos(e);
     setDragging({ id: zone.id, startX: pos.x, startY: pos.y, origX: zone.x, origY: zone.y });
     setSelectedZone(zone.id);
   };
 
   const updateZone = (id, changes) => {
+    pushUndo();
     setZones(prev => prev.map(z => z.id === id ? { ...z, ...changes } : z));
     setIsDirty(true);
   };
 
   const removeZone = (id) => {
+    pushUndo();
     setZones(prev => prev.filter(z => z.id !== id));
     if (selectedZone === id) setSelectedZone(null);
     setIsDirty(true);
@@ -238,12 +332,16 @@ export default function ScreenLinkEditor({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Toolbar — preview + safe-area toggles live here so they're visible above the canvas */}
+      {/* Toolbar — preview, safe-area, grid snap, and undo/redo live here so they're visible above the canvas */}
       {!readOnly && (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
             type="button"
-            onClick={() => setPreview(p => !p)}
+            onClick={() => {
+              // Auto-save pending work before entering preview so navigation doesn't silently discard it.
+              if (!preview && isDirty && onSave) { onSave(zones); setIsDirty(false); }
+              setPreview(p => !p);
+            }}
             title={preview ? 'Exit preview — back to editing' : 'Preview how this screen will look on the phone'}
             style={toolbarBtnStyle(preview)}
           >
@@ -258,6 +356,37 @@ export default function ScreenLinkEditor({
           >
             <Ruler size={12} />
             {showSafeArea ? 'Hide Guides' : 'Show Guides'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !gridSnap;
+              setGridSnap(next);
+              try { localStorage.setItem('screenLinkEditor.gridSnap', next ? '1' : '0'); } catch {}
+            }}
+            title={`Grid snap (${GRID_COLS}x${GRID_ROWS}) — aligns zones to a clean phone-grid layout`}
+            style={toolbarBtnStyle(gridSnap)}
+          >
+            <Grid3x3 size={12} />
+            {gridSnap ? 'Snap On' : 'Snap Off'}
+          </button>
+          <button
+            type="button"
+            onClick={undo}
+            disabled={!undoStack.current.length}
+            title="Undo (Ctrl+Z)"
+            style={{ ...toolbarBtnStyle(false), opacity: undoStack.current.length ? 1 : 0.4, cursor: undoStack.current.length ? 'pointer' : 'not-allowed' }}
+          >
+            <Undo2 size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={!redoStack.current.length}
+            title="Redo (Ctrl+Shift+Z)"
+            style={{ ...toolbarBtnStyle(false), opacity: redoStack.current.length ? 1 : 0.4, cursor: redoStack.current.length ? 'pointer' : 'not-allowed' }}
+          >
+            <Redo2 size={12} />
           </button>
         </div>
       )}
@@ -335,15 +464,30 @@ export default function ScreenLinkEditor({
             key={zone.id}
             data-zone-id={zone.id}
             onPointerDown={(e) => !editingDisabled && handleZoneDragStart(e, zone)}
-            onClick={(e) => { e.stopPropagation(); if (!preview) setSelectedZone(zone.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (preview) {
+                // In preview, clicking a zone walks the actual navigation flow — catches broken targets fast.
+                if (onNavigate && zone.target) onNavigate(zone.target);
+              } else {
+                setSelectedZone(zone.id);
+              }
+            }}
             style={{
               position: 'absolute',
               left: `${zone.x}%`, top: `${zone.y}%`,
               width: `${zone.w}%`, height: `${zone.h}%`,
-              border: preview ? 'none' : `2px solid ${selectedZone === zone.id ? '#B8962E' : ZONE_COLORS[i % ZONE_COLORS.length]}`,
+              // Zones without a target get a dashed red outline so broken links are obvious at a glance.
+              border: preview
+                ? 'none'
+                : selectedZone === zone.id
+                  ? '2px solid #B8962E'
+                  : !zone.target
+                    ? '2px dashed #dc2626'
+                    : `2px solid ${ZONE_COLORS[i % ZONE_COLORS.length]}`,
               borderRadius: 6,
               background: preview ? 'transparent' : (selectedZone === zone.id ? 'rgba(184,150,46,0.15)' : 'rgba(255,255,255,0.08)'),
-              cursor: editingDisabled ? 'default' : 'move',
+              cursor: editingDisabled ? (preview && zone.target ? 'pointer' : 'default') : 'move',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               overflow: 'hidden',
             }}
@@ -389,6 +533,17 @@ export default function ScreenLinkEditor({
             background: 'rgba(184,150,46,0.1)',
             pointerEvents: 'none',
           }} />
+        )}
+
+        {/* Back button — appears in preview mode when the user has navigated to a target screen. */}
+        {preview && navigationHistory.length > 0 && onBack && (
+          <button onClick={(e) => { e.stopPropagation(); onBack(); }} style={{
+            position: 'absolute', top: 38, left: 8, zIndex: 10,
+            padding: '4px 10px', fontSize: 9, fontWeight: 700, border: 'none',
+            borderRadius: 10, background: 'rgba(0,0,0,0.55)', color: '#fff',
+            cursor: 'pointer', backdropFilter: 'blur(4px)',
+            fontFamily: "'DM Mono', monospace",
+          }}>← Back</button>
         )}
 
         {/* Dynamic Island — matches PhoneHub exactly so it overlaps the same pixels
@@ -662,7 +817,9 @@ export default function ScreenLinkEditor({
       )}
     </div>
   );
-}
+});
+
+export default ScreenLinkEditor;
 
 // Shared style for the compact toolbar buttons above the canvas.
 function toolbarBtnStyle(active) {

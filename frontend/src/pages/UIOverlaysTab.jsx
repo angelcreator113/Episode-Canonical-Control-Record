@@ -77,6 +77,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const batchInputRef = useRef(null);
   const pollRef = useRef(null);
   const genTimeoutRef = useRef(null);  // tracks the 5-min generation timeout
+  const linkEditorRef = useRef(null);  // exposes save()/isDirty()/undo()/redo() from the inline zone editor
   const [removingBg, setRemovingBg] = useState(false);  // loading state for Remove BG
 
   // Keep activeScreenRef in sync with activeScreen state
@@ -848,30 +849,80 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         <div className="phone-hub-layout">
           {editingLinks && activeScreen?.url ? (
             /* ── Inline Zone Editor — replaces PhoneHub so users draw directly on the main display ── */
-            <div className="zone-editor-inline">
-              <div className="zone-editor-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                  <span className="zone-editor-title">Editing Zones</span>
-                  <span className="zone-editor-screen-name">{activeScreen.name}</span>
+            (() => {
+              // Computed once per render: the list of screens you can edit zones on (has image, not icon).
+              const editableScreens = overlays.filter(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+              const curIdx = editableScreens.findIndex(s => s.id === activeScreen.id);
+              const switchToScreen = (target) => {
+                if (!target || target.id === activeScreen.id) return;
+                // If the editor has unsaved work, persist it before switching so drags/edits aren't lost.
+                if (linkEditorRef.current?.isDirty?.()) {
+                  linkEditorRef.current.save();
+                }
+                setActiveScreen(target);
+                setNavHistory([]);  // fresh navigation stack on screen switch
+              };
+              const prevScreen = curIdx > 0 ? editableScreens[curIdx - 1] : null;
+              const nextScreen = curIdx >= 0 && curIdx < editableScreens.length - 1 ? editableScreens[curIdx + 1] : null;
+              return (
+                <div className="zone-editor-inline">
+                  <div className="zone-editor-header">
+                    <div className="zone-editor-switcher">
+                      <button
+                        onClick={() => switchToScreen(prevScreen)}
+                        disabled={!prevScreen}
+                        className="zone-editor-nav-btn"
+                        title={prevScreen ? `Previous: ${prevScreen.name}` : 'No previous screen'}
+                        aria-label="Previous screen"
+                      >◀</button>
+                      <select
+                        className="zone-editor-screen-select"
+                        value={activeScreen.id}
+                        onChange={(e) => {
+                          const target = editableScreens.find(s => s.id === e.target.value);
+                          switchToScreen(target);
+                        }}
+                      >
+                        {editableScreens.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => switchToScreen(nextScreen)}
+                        disabled={!nextScreen}
+                        className="zone-editor-nav-btn"
+                        title={nextScreen ? `Next: ${nextScreen.name}` : 'No next screen'}
+                        aria-label="Next screen"
+                      >▶</button>
+                    </div>
+                    <button onClick={() => {
+                      if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                      setEditingLinks(false);
+                      setNavHistory([]);
+                    }} className="zone-editor-done-btn">
+                      ✓ Done
+                    </button>
+                  </div>
+                  <ScreenLinkEditor
+                    ref={linkEditorRef}
+                    screen={activeScreen}
+                    screenUrl={activeScreen.url}
+                    links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
+                    screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
+                    generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                    iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
+                    globalFit={globalFit}
+                    customFrameUrl={customFrameUrl}
+                    phoneSkin={phoneSkin}
+                    onSave={handleSaveLinks}
+                    onUploadIcon={handleUploadIcon}
+                    onNavigate={handleNavigate}
+                    navigationHistory={navHistory}
+                    onBack={handleBack}
+                  />
                 </div>
-                <button onClick={() => setEditingLinks(false)} className="zone-editor-done-btn">
-                  ✓ Done
-                </button>
-              </div>
-              <ScreenLinkEditor
-                screen={activeScreen}
-                screenUrl={activeScreen.url}
-                links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
-                generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
-                globalFit={globalFit}
-                customFrameUrl={customFrameUrl}
-                phoneSkin={phoneSkin}
-                onSave={handleSaveLinks}
-                onUploadIcon={handleUploadIcon}
-              />
-            </div>
+              );
+            })()
           ) : (
             /* ── Phone Hub (phone + grid) ── */
             <div className="phone-hub-main">
