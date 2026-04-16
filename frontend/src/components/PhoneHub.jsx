@@ -282,6 +282,16 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 cursor: 'pointer', backdropFilter: 'blur(4px)',
               }}>← Back</button>
             )}
+            {/* Edit Zones button — also on custom-frame phones */}
+            {onEditZones && phoneScreen?.url && (
+              <button onClick={(e) => { e.stopPropagation(); onEditZones(); }} style={{
+                position: 'absolute', top: 6, right: 6, zIndex: 10,
+                padding: '4px 10px', fontSize: 9, fontWeight: 700, border: 'none',
+                borderRadius: 10, background: 'rgba(184,150,46,0.9)', color: '#fff',
+                cursor: 'pointer', backdropFilter: 'blur(4px)',
+                fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+              }}>✎ Edit Zones</button>
+            )}
           </div>
           {/* Frame image — on top so it visually wraps the screen content */}
           <img
@@ -412,6 +422,21 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           }} />
         </div>
       </div>
+      )}
+
+      {/* Edit Zones button — always visible below the phone, regardless of frame type */}
+      {onEditZones && phoneScreen?.url && (
+        <button onClick={onEditZones} style={{
+          marginTop: 10, padding: '10px 18px', fontSize: 12, fontWeight: 700,
+          border: 'none', borderRadius: 10,
+          background: '#B8962E', color: '#fff', cursor: 'pointer',
+          fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+          boxShadow: '0 2px 8px rgba(184,150,46,0.3)',
+          minHeight: 40, width: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        }}>
+          ✎ Edit Tap Zones
+        </button>
       )}
 
       {/* Skin picker — only shown for built-in frame (skins don't apply to custom frames) */}
