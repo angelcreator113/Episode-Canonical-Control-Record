@@ -84,7 +84,6 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   const [selectedZone, setSelectedZone] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [dragging, setDragging] = useState(null); // { id, startX, startY, origX, origY }
-  const [showIconPicker, setShowIconPicker] = useState(false);
   // UX: toggle into a preview that hides editor chrome so you see exactly what the user sees.
   const [preview, setPreview] = useState(false);
   // UX: toggle dashed guides showing the notch / home-indicator areas to avoid during placement.
@@ -687,7 +686,10 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...(!compact ? { maxHeight: 'min(400px, 35vh)', overflowY: 'auto', WebkitOverflowScrolling: 'touch' } : {}) }}>
+          {/* Zone list — no inner scroll cap so the expanded editor (with icon grid) can lay out
+              fully. Page scroll handles long lists. The nested-scroll version hid icons
+              and made the picker feel broken. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {zones.map((zone, i) => (
               <div
                 key={zone.id}
@@ -827,7 +829,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                       </div>
                       <div style={{
                         display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))',
-                        gap: 6, maxHeight: 220, overflowY: 'auto', padding: 2,
+                        gap: 6, padding: 2,
                       }}>
                         {/* Upload tile — always first so it's easy to find */}
                         <button
