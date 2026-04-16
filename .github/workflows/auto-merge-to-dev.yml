@@ -25,8 +25,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # GitHub App token is required so the push to dev triggers deploy-dev.yml.
-          # GITHUB_TOKEN pushes do NOT trigger other workflows (GitHub security rule).
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure git
@@ -34,31 +32,64 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge into dev
+      - name: Merge into dev (local)
+        id: merge
         run: |
           BRANCH="${{ github.ref_name }}"
-          echo "Merging $BRANCH into dev..."
+          echo "Merging $BRANCH into dev locally..."
 
           git checkout dev
           git pull origin dev
 
-          # Try clean merge first
+          echo "pre_merge_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
           if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev"; then
-            git push origin dev
-            echo "✅ Clean merge — pushed to dev."
+            echo "merge_type=clean" >> "$GITHUB_OUTPUT"
+            echo "✅ Clean merge."
             exit 0
           fi
 
-          echo "⚠️  Merge conflict detected. Resolving by preferring feature branch..."
+          echo "⚠️  Merge conflict detected. Resolving by preferring dev..."
           git merge --abort
 
-          # Retry with feature branch taking priority on conflicts
-          # This is safe because claude/* branches are the active development branch
-          if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev (resolved conflicts)" -X theirs; then
-            git push origin dev
-            echo "✅ Merged with conflict resolution (feature branch wins) — pushed to dev."
+          if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev (resolved conflicts, dev wins)" -X ours; then
+            echo "merge_type=conflicts-resolved" >> "$GITHUB_OUTPUT"
+            echo "✅ Merged with conflict resolution (dev wins)."
           else
-            echo "❌ Merge still failed even with -X theirs. Manual resolution needed."
+            echo "❌ Merge still failed even with -X ours. Manual resolution needed."
             git merge --abort
             exit 1
           fi
+
+      - name: Detect frontend changes
+        id: changes
+        run: |
+          if git diff --quiet "${{ steps.merge.outputs.pre_merge_sha }}" HEAD -- frontend/; then
+            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
+            echo "📦 No frontend changes in merge — skipping build verification."
+          else
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+            echo "🔨 Frontend changed — will verify build."
+          fi
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.frontend_changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify frontend build
+        if: steps.changes.outputs.frontend_changed == 'true'
+        run: |
+          echo "🔨 Verifying merged tree builds..."
+          cd frontend
+          npm ci --prefer-offline --no-audit --no-fund
+          npx vite build
+          echo "✅ Frontend build passed."
+
+      - name: Push to dev
+        run: |
+          git push origin dev
+          echo "✅ Pushed verified merge to dev."
