@@ -49,16 +49,23 @@ jobs:
             exit 0
           fi
 
-          echo "⚠️  Merge conflict detected. Resolving by preferring feature branch..."
+          echo "⚠️  Merge conflict detected. Resolving by preferring dev..."
           git merge --abort
 
-          # Retry with feature branch taking priority on conflicts
-          # This is safe because claude/* branches are the active development branch
-          if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev (resolved conflicts)" -X theirs; then
+          # Retry with dev taking priority on conflicts.
+          # Rationale: dev is the shared truth — if two claude/* sessions touch the
+          # same file, the one that reaches dev first is already being validated by
+          # CI and possibly running in the environment. Silently overwriting it with
+          # an older feature-branch view of the world produces broken half-merges
+          # (missing declarations for usages that landed earlier in dev).
+          # With -X ours, the later branch loses *its own* changes in conflicting
+          # hunks — which is visible to its author, easy to fix with a rebase+push,
+          # and doesn't corrupt the shared branch.
+          if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev (resolved conflicts, dev wins)" -X ours; then
             git push origin dev
-            echo "✅ Merged with conflict resolution (feature branch wins) — pushed to dev."
+            echo "✅ Merged with conflict resolution (dev wins) — pushed to dev."
           else
-            echo "❌ Merge still failed even with -X theirs. Manual resolution needed."
+            echo "❌ Merge still failed even with -X ours. Manual resolution needed."
             git merge --abort
             exit 1
           fi
