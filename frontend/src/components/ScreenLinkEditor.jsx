@@ -417,8 +417,8 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                       </div>
                       {showIconPicker && uniqueIcons.length > 0 && (
                         <div style={{
-                          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))',
-                          gap: 4, marginTop: 6, maxHeight: 140, overflowY: 'auto', padding: 2,
+                          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
+                          gap: 6, marginTop: 6, maxHeight: 200, overflowY: 'auto', padding: 2,
                         }}>
                           {uniqueIcons.map(ico => (
                             <button
@@ -426,10 +426,10 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                               onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url }); setShowIconPicker(false); }}
                               title={ico.name}
                               style={{
-                                width: '100%', aspectRatio: '1/1', borderRadius: 6,
+                                width: '100%', aspectRatio: '1/1', borderRadius: 8,
                                 border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
                                 background: zone.icon_url === ico.url ? '#fdf8ee' : '#fff',
-                                cursor: 'pointer', padding: 3,
+                                cursor: 'pointer', padding: 6,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                               }}
                             >
