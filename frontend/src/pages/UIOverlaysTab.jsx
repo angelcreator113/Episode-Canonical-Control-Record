@@ -11,6 +11,8 @@ import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
+import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
+import AIProposalReview from '../components/phone-editor/AIProposalReview';
 import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import './UIOverlaysTab.css';
@@ -571,6 +573,50 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
+  // ── AI panel state — the panel lives outside ScreenLinkEditor so it needs its
+  //    own proposal holder + review modal. Separate from ScreenLinkEditor's
+  //    toolbar AI flow so both entry points can coexist without fighting. ──
+  const [panelProposal, setPanelProposal] = useState(null);
+  const [panelAiBusy, setPanelAiBusy] = useState(false);
+
+  const handlePanelAddZones = async (hint) => {
+    if (!activeScreen?.asset_id || !showId || panelAiBusy) return;
+    setPanelAiBusy(true);
+    try {
+      const data = await handleRequestAiZones(hint);
+      if (data?.proposal) setPanelProposal(data);
+    } finally {
+      setPanelAiBusy(false);
+    }
+  };
+
+  // When the user approves a panel-generated proposal, merge the new zones with
+  // whatever the screen already has and save through the existing PUT.
+  const handleApprovePanelProposal = async () => {
+    if (!panelProposal?.proposal?.zones?.length || !activeScreen) return;
+    const existing = activeScreen.screen_links || activeScreen.metadata?.screen_links || [];
+    const merged = [...existing, ...panelProposal.proposal.zones];
+    await handleSaveLinks(merged);
+    setPanelProposal(null);
+  };
+
+  // Zone-level AI — called from ContentZoneEditor via prop. Returns the proposal;
+  // the editor renders an inline Apply/Discard surface and applies on approve.
+  const handleFillContentZone = async (zoneId, hint) => {
+    if (!activeScreen?.asset_id || !showId) return null;
+    try {
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/ai/fill-content-zone`, {
+        asset_id: activeScreen.asset_id,
+        zone_id: zoneId,
+        prompt_hint: hint || undefined,
+      });
+      return res.data;
+    } catch (err) {
+      flash(err.response?.data?.error || err.message, 'error');
+      return null;
+    }
+  };
+
   const handleUploadIcon = async (linkId, file) => {
     if (!activeScreen?.asset_id || !showId) return;
     try {
@@ -963,6 +1009,21 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   onEditZones={() => setEditingLinks(true)}
                 />
               </OverlayErrorBoundary>
+
+              {/* AI Assistant — scoped to the currently active screen (if it has
+                  an image). Show-level commands land as separate PRs; for now
+                  the panel is most useful when you're focused on one screen. */}
+              {activeScreen?.url && !activeScreen.placeholder && (
+                <div style={{ marginTop: 14, maxWidth: 640 }}>
+                  <AIAssistantPanel
+                    scope="screen"
+                    scopeLabel={`Screen: ${activeScreen.name}`}
+                    activeScreen={activeScreen}
+                    onRunAddZones={handlePanelAddZones}
+                    busy={panelAiBusy}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1178,6 +1239,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
                     showId={showId}
                     onSave={handleSaveContentZones}
+                    onAiFillZone={handleFillContentZone}
                     compact
                   />
                 </div>
@@ -1189,6 +1251,18 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         </>
       )}
       </>
+      )}
+
+      {/* AI proposal from the Assistant panel — separate modal from the one
+          ScreenLinkEditor's toolbar button uses so both entry points work. */}
+      {panelProposal && (
+        <AIProposalReview
+          proposal={panelProposal.proposal}
+          contextSummary={panelProposal.context_summary}
+          busy={panelAiBusy}
+          onReject={() => setPanelProposal(null)}
+          onApprove={handleApprovePanelProposal}
+        />
       )}
 
       {/* Preview Mode */}
