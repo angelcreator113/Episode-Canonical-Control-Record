@@ -10,7 +10,8 @@
  *   readOnly        — if true, hide editing controls (used in preview mode)
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Check } from 'lucide-react';
+import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Check, Eye, EyeOff, Ruler, Info } from 'lucide-react';
+import { getScreenImageStyle } from './PhoneHub';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
@@ -21,7 +22,11 @@ const getIconUrls = (zone) => {
   return [];
 };
 
-export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], generatedScreenKeys, iconOverlays = [], onSave, onUploadIcon, readOnly = false, compact = false }) {
+export default function ScreenLinkEditor({ screen, screenUrl, links = [], screenTypes = [], generatedScreenKeys, iconOverlays = [], globalFit, customFrameUrl, phoneSkin, onSave, onUploadIcon, readOnly = false, compact = false }) {
+  const resolvedScreenUrl = screen?.url || screenUrl;
+  const imageStyle = screen
+    ? getScreenImageStyle(screen, globalFit)
+    : { width: '100%', height: '100%', objectFit: 'cover' };
   const [zones, setZones] = useState(links);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -30,11 +35,26 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
   const [isDirty, setIsDirty] = useState(false);
   const [dragging, setDragging] = useState(null); // { id, startX, startY, origX, origY }
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const [showSafeArea, setShowSafeArea] = useState(false);
+  const MIGRATION_KEY = 'screenLinkEditor.migrationDismissed.v1';
+  const [migrationDismissed, setMigrationDismissed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(MIGRATION_KEY) || '{}'); } catch { return {}; }
+  });
   const containerRef = useRef(null);
   const iconInputRef = useRef(null);
   const uploadingLinkId = useRef(null);
 
   useEffect(() => { setZones(links); setIsDirty(false); }, [links]);
+
+  const editingDisabled = readOnly || preview;
+  const screenKey = screen?.id || resolvedScreenUrl || 'unknown';
+  const showMigrationNotice = !readOnly && links.length > 0 && !migrationDismissed[screenKey];
+  const dismissMigration = () => {
+    const next = { ...migrationDismissed, [screenKey]: true };
+    setMigrationDismissed(next);
+    try { localStorage.setItem(MIGRATION_KEY, JSON.stringify(next)); } catch {}
+  };
 
   // Unified position getter — works for mouse, touch, and pointer events
   const getRelativePos = useCallback((e) => {
@@ -50,7 +70,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
 
   // Drawing new zones — works for mouse and touch via pointer capture
   const handlePointerDown = (e) => {
-    if (readOnly || dragging) return;
+    if (editingDisabled || dragging) return;
     if (e.target.closest('[data-zone-id]')) return;
     e.preventDefault();
     // Capture pointer so we keep getting events even if finger moves fast
@@ -188,7 +208,28 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Screen with overlay zones */}
+      {!readOnly && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => setPreview(p => !p)} title={preview ? 'Exit preview' : 'Preview'} style={toolbarBtnStyle(preview)}>
+            {preview ? <EyeOff size={12} /> : <Eye size={12} />}
+            {preview ? 'Exit Preview' : 'Preview'}
+          </button>
+          <button type="button" onClick={() => setShowSafeArea(s => !s)} title="Toggle safe-area guides" style={toolbarBtnStyle(showSafeArea)}>
+            <Ruler size={12} />
+            {showSafeArea ? 'Hide Guides' : 'Show Guides'}
+          </button>
+        </div>
+      )}
+
+      {showMigrationNotice && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#fdf8ee', border: '1px solid #e6d9b8', fontSize: 12, color: '#6b5a28', lineHeight: 1.5 }}>
+          <Info size={14} style={{ flexShrink: 0, marginTop: 1, color: '#B8962E' }} />
+          <div style={{ flex: 1 }}>The editor now matches the phone&rsquo;s exact dimensions. Existing zones may need to be repositioned — drag into place, then Save.</div>
+          <button type="button" onClick={dismissMigration} aria-label="Dismiss" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B8962E', padding: 2, flexShrink: 0 }}><X size={14} /></button>
+        </div>
+      )}
+
+      <div style={{ width: '100%', maxWidth: compact ? 220 : 300, margin: '0 auto', padding: '10px 8px 14px', background: '#1a1a2e', borderRadius: 32, boxShadow: '0 4px 16px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.08)', border: '2px solid rgba(0,0,0,0.4)', position: 'relative' }}>
       <div
         ref={containerRef}
         onPointerDown={handlePointerDown}
@@ -199,19 +240,19 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: compact ? 'min(200px, 45vw)' : 320,
-          margin: '0 auto',
-          aspectRatio: '9/16',
-          borderRadius: 12,
+          aspectRatio: '9/19.5',
+          borderRadius: 20,
           touchAction: 'none',
           overflow: 'hidden',
-          cursor: readOnly ? 'default' : 'crosshair',
+          cursor: editingDisabled ? 'default' : 'crosshair',
           userSelect: 'none',
-          border: '1px solid #e8e0d0',
+          border: '2px solid #0a0a14',
+          background: '#000',
+          boxShadow: 'inset 0 0 6px rgba(0,0,0,0.4)',
         }}
       >
-        {screenUrl ? (
-          <img src={screenUrl} alt="Screen" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} draggable={false} />
+        {resolvedScreenUrl ? (
+          <img src={resolvedScreenUrl} alt="Screen" style={{ ...imageStyle, pointerEvents: 'none' }} draggable={false} />
         ) : (
           <div style={{ width: '100%', height: '100%', background: '#f5f3ee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 11 }}>
             No screen image
@@ -223,16 +264,16 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
           <div
             key={zone.id}
             data-zone-id={zone.id}
-            onPointerDown={(e) => !readOnly && handleZoneDragStart(e, zone)}
-            onClick={(e) => { e.stopPropagation(); setSelectedZone(zone.id); }}
+            onPointerDown={(e) => !editingDisabled && handleZoneDragStart(e, zone)}
+            onClick={(e) => { e.stopPropagation(); if (!preview) setSelectedZone(zone.id); }}
             style={{
               position: 'absolute',
               left: `${zone.x}%`, top: `${zone.y}%`,
               width: `${zone.w}%`, height: `${zone.h}%`,
-              border: `2px solid ${selectedZone === zone.id ? '#B8962E' : ZONE_COLORS[i % ZONE_COLORS.length]}`,
+              border: preview ? 'none' : `2px solid ${selectedZone === zone.id ? '#B8962E' : ZONE_COLORS[i % ZONE_COLORS.length]}`,
               borderRadius: 6,
-              background: selectedZone === zone.id ? 'rgba(184,150,46,0.15)' : 'rgba(255,255,255,0.08)',
-              cursor: readOnly ? 'pointer' : 'move',
+              background: preview ? 'transparent' : (selectedZone === zone.id ? 'rgba(184,150,46,0.15)' : 'rgba(255,255,255,0.08)'),
+              cursor: editingDisabled ? 'default' : 'move',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               overflow: 'hidden',
             }}
@@ -289,6 +330,17 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
             pointerEvents: 'none',
           }} />
         )}
+
+        <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', width: '28%', height: 18, borderRadius: 9, background: '#000', zIndex: 6, border: '1.5px solid #333', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: 5, left: '50%', transform: 'translateX(-50%)', width: '30%', height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.35)', zIndex: 6, pointerEvents: 'none' }} />
+
+        {showSafeArea && !preview && (
+          <>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '7%', border: '1px dashed rgba(220,180,60,0.9)', background: 'rgba(220,180,60,0.08)', pointerEvents: 'none', zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: 'rgba(220,180,60,1)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>notch area</div>
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3.5%', border: '1px dashed rgba(220,180,60,0.9)', background: 'rgba(220,180,60,0.08)', pointerEvents: 'none', zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: 'rgba(220,180,60,1)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>home indicator</div>
+          </>
+        )}
+      </div>
       </div>
 
       {/* Zone list + editor */}
@@ -516,4 +568,19 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
       )}
     </div>
   );
+}
+
+function toolbarBtnStyle(active) {
+  return {
+    display: 'inline-flex', alignItems: 'center', gap: 5,
+    padding: '6px 10px', fontSize: 11, fontWeight: 600,
+    border: `1px solid ${active ? '#B8962E' : '#e0d9ce'}`,
+    borderRadius: 6,
+    background: active ? '#fdf8ee' : '#fff',
+    color: active ? '#B8962E' : '#666',
+    cursor: 'pointer',
+    fontFamily: "'DM Mono', monospace",
+    letterSpacing: 0.3,
+    minHeight: 30,
+  };
 }
