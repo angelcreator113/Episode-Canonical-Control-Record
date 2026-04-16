@@ -1062,11 +1062,15 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   {expandedSections.links && (
                     <div style={{ marginBottom: 8 }}>
                       <ScreenLinkEditor
+                        screen={activeScreen}
                         screenUrl={activeScreen.url}
                         links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
                         screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                         iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
+                        globalFit={globalFit}
+                        customFrameUrl={customFrameUrl}
+                        phoneSkin={phoneSkin}
                         onSave={handleSaveLinks}
                         onUploadIcon={handleUploadIcon}
                       />
