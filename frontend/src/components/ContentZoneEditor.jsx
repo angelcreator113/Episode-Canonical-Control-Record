@@ -19,7 +19,7 @@ import api from '../services/api';
 
 const ZONE_COLORS = ['#e8a0b4', '#b8a9d4', '#7ab3d4', '#a8d5a2', '#c9a84c', '#6bba9a', '#e06060', '#b89060'];
 
-export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSave, readOnly = false }) {
+export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSave, readOnly = false, compact = false }) {
   const [localZones, setLocalZones] = useState(zones);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -142,7 +142,7 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
         onPointerLeave={() => { if (!drawing) return; }}
         style={{
           position: 'relative',
-          width: '100%', maxWidth: 320,
+          width: '100%', maxWidth: compact ? 240 : 320,
           margin: '0 auto',
           touchAction: 'none',
           aspectRatio: '9/16',
