@@ -43,6 +43,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [loading, setLoading] = useState(true);
   const [activeScreen, setActiveScreen] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [editorTab, setEditorTab] = useState('actions');
   const [generating, setGenerating] = useState(false);
   const [generatingId, setGeneratingId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -145,16 +146,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     return () => window.removeEventListener('keydown', handler);
   }, [handleUndo, panelOpen, closePanel]);
 
-  // Lock body scroll when detail panel is open — mobile only (bottom sheet)
+  // Lock body scroll when editor modal is open
   useEffect(() => {
     if (!panelOpen) return;
     const prev = document.body.style.overflow;
-    const update = () => {
-      document.body.style.overflow = window.innerWidth <= 768 ? 'hidden' : prev;
-    };
-    update();
-    window.addEventListener('resize', update);
-    return () => { document.body.style.overflow = prev; window.removeEventListener('resize', update); };
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
   }, [panelOpen]);
 
   const toggleSection = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -843,14 +840,14 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         </div>
       ) : (
         <>
-        <div className={`phone-hub-layout${panelOpen ? ' panel-open' : ''}`}>
+        <div className="phone-hub-layout">
           {/* Phone Hub (phone + grid) — takes full width now */}
           <div className="phone-hub-main">
             <OverlayErrorBoundary>
               <PhoneHub
                 screens={overlays}
                 activeScreen={activeScreen}
-                onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); }}
+                onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
                 onDelete={handleDeleteScreen}
                 onHideScreen={handleHideScreen}
                 hiddenScreens={hiddenScreens}
@@ -868,252 +865,224 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           </div>
         </div>
 
-      {/* ── Slide-over Detail Panel ── */}
+      {/* ── Floating Editor Modal ── */}
       {activeScreen && panelOpen && (
         <>
-          {/* Scrim — mobile only (bottom sheet needs backdrop), desktop has no scrim so grid stays clickable */}
-          <div className="panel-scrim" onClick={closePanel} />
-
-          {/* Panel */}
-          <div className="detail-panel detail-panel-open">
-            {/* Mobile drag handle */}
-            <div className="detail-panel-drag-handle"><div className="drag-bar" /></div>
-
-            {/* ── Header: thumbnail + name + close ── */}
-            <div className="detail-panel-header">
-              {(() => {
-                const displayUrl = activeScreen.variants?.[activeVariantIdx]?.url || activeScreen.url;
-                const isIcon = activeScreen.category === 'phone_icon' || activeScreen.type === 'icon';
-                return displayUrl ? (
-                  <div style={{
-                    width: 48, height: isIcon ? 48 : 80, borderRadius: 8, overflow: 'hidden',
-                    background: '#f5f3ee', border: '1px solid #eee', flexShrink: 0,
-                  }}>
-                    <img src={displayUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </div>
-                ) : (
-                  <div style={{
-                    width: 48, height: 80, borderRadius: 8, background: '#f0ece4', flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
-                  }}>📱</div>
-                );
-              })()}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {editingName ? (
-                    <input
-                      autoFocus
-                      value={editNameValue}
-                      onChange={e => setEditNameValue(e.target.value)}
-                      onBlur={() => handleRename(editNameValue)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') handleRename(editNameValue);
-                        if (e.key === 'Escape') setEditingName(false);
-                      }}
-                      style={{ fontSize: 15, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", border: '1px solid #B8962E', borderRadius: 6, padding: '4px 8px', outline: 'none', width: '100%' }}
-                    />
+          <div className="editor-modal-scrim" onClick={closePanel} />
+          <div className="editor-modal">
+            {/* ── Header ── */}
+            <div className="editor-modal-header">
+              <div className="editor-modal-header-left">
+                {(() => {
+                  const displayUrl = activeScreen.variants?.[activeVariantIdx]?.url || activeScreen.url;
+                  const isIcon = activeScreen.category === 'phone_icon' || activeScreen.type === 'icon';
+                  return displayUrl ? (
+                    <div className={`editor-modal-thumb ${isIcon ? 'icon' : 'screen'}`}>
+                      <img src={displayUrl} alt="" />
+                    </div>
                   ) : (
-                    <div
-                      onClick={() => { setEditNameValue(activeScreen.name || ''); setEditingName(true); }}
-                      title="Click to rename"
-                      style={{ fontSize: 16, fontWeight: 700, color: '#2C2C2C', fontFamily: "'Lora', serif", cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                    >{activeScreen.name}</div>
-                  )}
-                  <span style={{
-                    fontSize: 8, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                    background: (activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? '#a889c8' : '#B8962E',
-                    color: '#fff', letterSpacing: 0.5, flexShrink: 0,
-                  }}>
-                    {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'ICON' : 'SCREEN'}
-                  </span>
-                </div>
-                <div style={{ fontSize: 10, color: '#aaa', marginTop: 2, fontFamily: "'DM Mono', monospace" }}>
-                  {activeScreen.beat && <span style={{ marginRight: 6 }}>{activeScreen.beat}</span>}
-                  {activeScreen.description?.slice(0, 60)}
+                    <div className="editor-modal-thumb screen placeholder-thumb">📱</div>
+                  );
+                })()}
+                <div className="editor-modal-title">
+                  <div className="editor-modal-name-row">
+                    {editingName ? (
+                      <input
+                        autoFocus
+                        className="editor-modal-name-input"
+                        value={editNameValue}
+                        onChange={e => setEditNameValue(e.target.value)}
+                        onBlur={() => handleRename(editNameValue)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleRename(editNameValue);
+                          if (e.key === 'Escape') setEditingName(false);
+                        }}
+                      />
+                    ) : (
+                      <div
+                        className="editor-modal-name"
+                        onClick={() => { setEditNameValue(activeScreen.name || ''); setEditingName(true); }}
+                        title="Click to rename"
+                      >{activeScreen.name}</div>
+                    )}
+                    <span className={`editor-modal-badge ${(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'badge-icon' : 'badge-screen'}`}>
+                      {(activeScreen.category === 'phone_icon' || activeScreen.type === 'icon') ? 'ICON' : 'SCREEN'}
+                    </span>
+                  </div>
+                  <div className="editor-modal-meta">
+                    {activeScreen.beat && <span>{activeScreen.beat}</span>}
+                    {activeScreen.beat && activeScreen.description && <span className="meta-dot" />}
+                    {activeScreen.description && <span>{activeScreen.description.slice(0, 80)}</span>}
+                  </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
-                <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title={undoStackRef.current.length > 0 ? `Undo (${undoStackRef.current.length} changes)` : 'Nothing to undo'} aria-label="Undo" style={{
-                  background: 'none', border: '1px solid #eee', borderRadius: 8, cursor: 'pointer',
-                  color: undoStackRef.current.length > 0 ? '#B8962E' : '#ddd', padding: '8px', minWidth: 44, minHeight: 44,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}><Undo2 size={18} /></button>
-                <button onClick={closePanel} aria-label="Close panel" style={{
-                  background: 'none', border: '1px solid #eee', borderRadius: 8, cursor: 'pointer', color: '#999', padding: '8px', minWidth: 44, minHeight: 44,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}><X size={18} /></button>
+              <div className="editor-modal-header-actions">
+                <button onClick={handleUndo} disabled={undoStackRef.current.length === 0} title={undoStackRef.current.length > 0 ? `Undo (${undoStackRef.current.length})` : 'Nothing to undo'} className="editor-modal-icon-btn">
+                  <Undo2 size={16} />
+                </button>
+                <button onClick={closePanel} className="editor-modal-icon-btn close" aria-label="Close">
+                  <X size={16} />
+                </button>
               </div>
             </div>
 
-            {/* ── Scrollable body ── */}
-            <div className="detail-panel-body">
+            {/* ── Tab Bar ── */}
+            <div className="editor-modal-tabs">
+              {[
+                { key: 'actions', label: 'Actions' },
+                ...(activeScreen?.url && !activeScreen.placeholder ? [
+                  { key: 'fit', label: 'Image Fit' },
+                  { key: 'links', label: 'Tap Links', badge: (activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null },
+                  { key: 'content', label: 'Content', badge: (activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length || null },
+                ] : []),
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  className={`editor-tab ${editorTab === tab.key ? 'active' : ''}`}
+                  onClick={() => setEditorTab(tab.key)}
+                >
+                  {tab.label}
+                  {tab.badge > 0 && <span className="editor-tab-badge">{tab.badge}</span>}
+                </button>
+              ))}
+            </div>
 
-              {/* Placeholder indicator */}
-              {activeScreen.placeholder && (
-                <div style={{ fontSize: 11, background: '#f3e8ff', color: '#7c3aed', padding: '6px 10px', borderRadius: 6, marginBottom: 10, fontFamily: "'DM Mono', monospace", fontWeight: 600 }}>
-                  New screen — upload an image or generate one to get started
-                </div>
-              )}
+            {/* ── Tab Content ── */}
+            <div className="editor-modal-body">
 
-              {/* ── Primary Actions ── */}
-              <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                {!activeScreen.placeholder ? (
-                  <>
-                    <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
-                    <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#7ab3d4" primary />
-                  </>
-                ) : (
-                  <>
-                    <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#7ab3d4" primary />
-                    <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
-                  </>
-                )}
-              </div>
-
-              {/* ── Type Toggle ── */}
-              {activeScreen.asset_id && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                  <button onClick={() => handleChangeScreenType('phone')} style={{
-                    flex: 1, padding: '10px 0', fontSize: 13, fontWeight: 700, border: '1px solid #e0d9ce',
-                    borderRadius: 8, cursor: 'pointer', minHeight: 44,
-                    background: activeScreen.category !== 'phone_icon' ? '#B8962E' : '#fff',
-                    color: activeScreen.category !== 'phone_icon' ? '#fff' : '#888',
-                  }}>Screen</button>
-                  <button onClick={() => handleChangeScreenType('phone_icon')} style={{
-                    flex: 1, padding: '10px 0', fontSize: 13, fontWeight: 700, border: '1px solid #e0d9ce',
-                    borderRadius: 8, cursor: 'pointer', minHeight: 44,
-                    background: activeScreen.category === 'phone_icon' ? '#a889c8' : '#fff',
-                    color: activeScreen.category === 'phone_icon' ? '#fff' : '#888',
-                  }}>Icon</button>
-                </div>
-              )}
-
-              {/* ── Home Screen Toggle ── */}
-              {activeScreen.custom_id && activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' && (
-                <button onClick={handleSetHome} style={{
-                  width: '100%', padding: '8px 14px', fontSize: 12, fontWeight: 600,
-                  border: activeScreen.is_home ? '1px solid #B8962E' : '1px dashed #ccc',
-                  borderRadius: 8, cursor: 'pointer', marginBottom: 12, minHeight: 36,
-                  background: activeScreen.is_home ? '#B8962E10' : 'transparent',
-                  color: activeScreen.is_home ? '#B8962E' : '#999',
-                  fontFamily: "'DM Mono', monospace",
-                }}>{activeScreen.is_home ? '★ Home Screen' : 'Set as Home Screen'}</button>
-              )}
-
-              {/* ── Variants ── */}
-              {(activeScreen.variants?.length > 1 || activeScreen.url) && (
-                <div style={{ marginBottom: 12 }}>
-                  {activeScreen.variants?.length > 1 && (
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                      {activeScreen.variants.map((v, i) => (
-                        <button key={v.asset_id} onClick={() => setActiveVariantIdx(i)} style={{
-                          padding: '8px 14px', fontSize: 12, fontWeight: 600,
-                          border: `1px solid ${activeVariantIdx === i ? '#B8962E' : '#e0d9ce'}`,
-                          borderRadius: 8, cursor: 'pointer', minHeight: 36,
-                          background: activeVariantIdx === i ? '#B8962E' : '#fff',
-                          color: activeVariantIdx === i ? '#fff' : '#888',
-                          maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>{v.variant_label}</button>
-                      ))}
-                      <button onClick={() => setAddingVariant(!addingVariant)} style={{
-                        padding: '8px 12px', fontSize: 14, fontWeight: 600,
-                        border: '1px dashed #ccc', borderRadius: 8, cursor: 'pointer',
-                        background: 'transparent', color: '#aaa', minHeight: 36, minWidth: 36,
-                      }}>+</button>
+              {/* ── Actions Tab ── */}
+              {editorTab === 'actions' && (
+                <div className="editor-tab-content">
+                  {/* Placeholder indicator */}
+                  {activeScreen.placeholder && (
+                    <div className="editor-placeholder-notice">
+                      New screen — upload an image or generate one to get started
                     </div>
                   )}
-                  {addingVariant && (
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
-                      <input value={newVariantLabel} onChange={e => setNewVariantLabel(e.target.value)} placeholder="e.g. Locked, Dark Mode" style={{ flex: 1, padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36 }} />
-                      <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} style={{ padding: '8px 14px', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 6, minHeight: 36, background: newVariantLabel.trim() ? '#b89060' : '#eee', color: newVariantLabel.trim() ? '#fff' : '#ccc', cursor: newVariantLabel.trim() ? 'pointer' : 'not-allowed' }}>Upload</button>
-                      <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} style={{ padding: '6px', border: 'none', background: 'none', cursor: 'pointer', color: '#ccc', minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
-                    </div>
-                  )}
-                  {!activeScreen.variants && activeScreen.url && !addingVariant && (
-                    <button onClick={() => setAddingVariant(true)} style={{ padding: '8px 14px', fontSize: 12, fontWeight: 600, border: '1px dashed #b89060', borderRadius: 8, cursor: 'pointer', background: 'transparent', color: '#b89060', display: 'flex', alignItems: 'center', gap: 6, minHeight: 36 }}><Layers size={14} /> Add Variant</button>
-                  )}
-                  <input ref={variantInputRef} type="file" accept="image/*" onChange={handleVariantUpload} style={{ display: 'none' }} />
-                </div>
-              )}
 
-              {/* ── Image Fit ── */}
-              {activeScreen?.url && !activeScreen.placeholder && (
-                <>
-                  <SectionHeader label="Image Fit" expanded={expandedSections.fit} onToggle={() => toggleSection('fit')} />
-                  {expandedSections.fit && (
-                    <ImageFitControls
-                      fit={activeScreen.image_fit || activeScreen.metadata?.image_fit || globalFit || {}}
-                      hasScreenOverride={!!(activeScreen.image_fit || activeScreen.metadata?.image_fit)}
-                      onChange={handleUpdateFit}
-                      onSave={handleSaveFit}
-                      onClearOverride={handleClearScreenFit}
-                      globalFit={globalFit}
-                      onChangeGlobal={handleUpdateGlobalFit}
-                      onSaveGlobal={handleSaveGlobalFit}
-                    />
-                  )}
-                </>
-              )}
+                  {/* Primary Actions */}
+                  <div className="editor-primary-actions">
+                    {!activeScreen.placeholder ? (
+                      <>
+                        <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
+                        <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#7ab3d4" primary />
+                      </>
+                    ) : (
+                      <>
+                        <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#7ab3d4" primary />
+                        <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
+                      </>
+                    )}
+                  </div>
 
-              {/* ── Screen Links ── */}
-              {activeScreen?.url && !activeScreen.placeholder && (
-                <>
-                  <SectionHeader label="Tap Zone Links" expanded={expandedSections.links} onToggle={() => toggleSection('links')} badge={(activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null} />
-                  {expandedSections.links && (
-                    <div style={{ marginBottom: 8 }}>
-                      <ScreenLinkEditor
-                        screenUrl={activeScreen.url}
-                        links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                        screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
-                        generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                        iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
-                        onSave={handleSaveLinks}
-                        onUploadIcon={handleUploadIcon}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* ── Content Zones (Live Data Templates) ── */}
-              {activeScreen?.url && !activeScreen.placeholder && (
-                <>
-                  <SectionHeader
-                    label="Live Content Zones"
-                    expanded={expandedSections.content}
-                    onToggle={() => toggleSection('content')}
-                    badge={(activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length || null}
-                  />
-                  {expandedSections.content && (
-                    <div style={{ marginBottom: 8 }}>
-                      <div style={{ fontSize: 10, color: '#999', marginBottom: 8, lineHeight: 1.5, fontFamily: "'DM Mono', monospace" }}>
-                        Draw zones on the template to render live show data (feed posts, profiles, DMs, wardrobe, etc.)
+                  {/* Type Toggle */}
+                  {activeScreen.asset_id && (
+                    <div className="editor-section">
+                      <div className="editor-section-label">Type</div>
+                      <div className="editor-type-toggle">
+                        <button onClick={() => handleChangeScreenType('phone')} className={`editor-type-btn ${activeScreen.category !== 'phone_icon' ? 'active-screen' : ''}`}>Screen</button>
+                        <button onClick={() => handleChangeScreenType('phone_icon')} className={`editor-type-btn ${activeScreen.category === 'phone_icon' ? 'active-icon' : ''}`}>Icon</button>
                       </div>
-                      <ContentZoneEditor
-                        screenUrl={activeScreen.url}
-                        zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
-                        showId={showId}
-                        onSave={handleSaveContentZones}
-                      />
                     </div>
                   )}
-                </>
+
+                  {/* Home Screen Toggle */}
+                  {activeScreen.custom_id && activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' && (
+                    <div className="editor-section">
+                      <button onClick={handleSetHome} className={`editor-home-btn ${activeScreen.is_home ? 'is-home' : ''}`}>
+                        {activeScreen.is_home ? '★ Home Screen' : 'Set as Home Screen'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Variants */}
+                  {(activeScreen.variants?.length > 1 || activeScreen.url) && (
+                    <div className="editor-section">
+                      <div className="editor-section-label">Variants</div>
+                      {activeScreen.variants?.length > 1 && (
+                        <div className="editor-variant-pills">
+                          {activeScreen.variants.map((v, i) => (
+                            <button key={v.asset_id} onClick={() => setActiveVariantIdx(i)} className={`editor-variant-pill ${activeVariantIdx === i ? 'active' : ''}`}>
+                              {v.variant_label}
+                            </button>
+                          ))}
+                          <button onClick={() => setAddingVariant(!addingVariant)} className="editor-variant-pill add">+</button>
+                        </div>
+                      )}
+                      {addingVariant && (
+                        <div className="editor-variant-add">
+                          <input value={newVariantLabel} onChange={e => setNewVariantLabel(e.target.value)} placeholder="e.g. Locked, Dark Mode" className="editor-variant-input" />
+                          <button onClick={() => newVariantLabel.trim() && variantInputRef.current?.click()} disabled={!newVariantLabel.trim()} className="editor-variant-upload-btn">Upload</button>
+                          <button onClick={() => { setAddingVariant(false); setNewVariantLabel(''); }} className="editor-modal-icon-btn"><X size={14} /></button>
+                        </div>
+                      )}
+                      {!activeScreen.variants && activeScreen.url && !addingVariant && (
+                        <button onClick={() => setAddingVariant(true)} className="editor-add-variant-btn"><Layers size={14} /> Add Variant</button>
+                      )}
+                      <input ref={variantInputRef} type="file" accept="image/*" onChange={handleVariantUpload} style={{ display: 'none' }} />
+                    </div>
+                  )}
+
+                  {/* Secondary Actions */}
+                  {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
+                    <div className="editor-secondary-actions">
+                      {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
+                      {activeScreen.asset_id && <ActionBtn icon={removingBg ? Loader : Eraser} label={removingBg ? 'Removing...' : 'Remove BG'} onClick={handleRemoveBg} disabled={removingBg} color="#a889c8" />}
+                      {activeScreen.url && overlays.filter(o => o.id !== activeScreen.id && o.generated).length > 0 && (
+                        <DuplicateSettingsBtn
+                          screens={overlays.filter(o => o.id !== activeScreen.id && o.generated)}
+                          onDuplicate={handleDuplicateSettings}
+                        />
+                      )}
+                      <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
+                    </div>
+                  )}
+                </div>
               )}
 
-              {/* ── Secondary Actions ── */}
-              {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
-                <div style={{ borderTop: '1px solid #f0ece4', paddingTop: 12, marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
-                  {activeScreen.asset_id && <ActionBtn icon={removingBg ? Loader : Eraser} label={removingBg ? 'Removing...' : 'Remove BG'} onClick={handleRemoveBg} disabled={removingBg} color="#a889c8" />}
-                  {activeScreen.url && <ActionBtn icon={Link2} label={editingLinks ? 'Done' : 'Links'} onClick={() => setEditingLinks(!editingLinks)} color={editingLinks ? '#2C2C2C' : '#b89060'} />}
-                  {/* Duplicate fit + link settings to another screen */}
-                  {activeScreen.url && overlays.filter(o => o.id !== activeScreen.id && o.generated).length > 0 && (
-                    <DuplicateSettingsBtn
-                      screens={overlays.filter(o => o.id !== activeScreen.id && o.generated)}
-                      onDuplicate={handleDuplicateSettings}
-                    />
-                  )}
-                  <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
+              {/* ── Image Fit Tab ── */}
+              {editorTab === 'fit' && activeScreen?.url && !activeScreen.placeholder && (
+                <div className="editor-tab-content">
+                  <ImageFitControls
+                    fit={activeScreen.image_fit || activeScreen.metadata?.image_fit || globalFit || {}}
+                    hasScreenOverride={!!(activeScreen.image_fit || activeScreen.metadata?.image_fit)}
+                    onChange={handleUpdateFit}
+                    onSave={handleSaveFit}
+                    onClearOverride={handleClearScreenFit}
+                    globalFit={globalFit}
+                    onChangeGlobal={handleUpdateGlobalFit}
+                    onSaveGlobal={handleSaveGlobalFit}
+                  />
+                </div>
+              )}
+
+              {/* ── Tap Links Tab ── */}
+              {editorTab === 'links' && activeScreen?.url && !activeScreen.placeholder && (
+                <div className="editor-tab-content">
+                  <ScreenLinkEditor
+                    screenUrl={activeScreen.url}
+                    links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
+                    screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
+                    generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                    iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
+                    onSave={handleSaveLinks}
+                    onUploadIcon={handleUploadIcon}
+                  />
+                </div>
+              )}
+
+              {/* ── Content Zones Tab ── */}
+              {editorTab === 'content' && activeScreen?.url && !activeScreen.placeholder && (
+                <div className="editor-tab-content">
+                  <div className="editor-content-hint">
+                    Draw zones on the template to render live show data (feed posts, profiles, DMs, wardrobe, etc.)
+                  </div>
+                  <ContentZoneEditor
+                    screenUrl={activeScreen.url}
+                    zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                    showId={showId}
+                    onSave={handleSaveContentZones}
+                  />
                 </div>
               )}
             </div>
