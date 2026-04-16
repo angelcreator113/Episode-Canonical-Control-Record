@@ -308,7 +308,7 @@
   transition: border-color 0.15s, color 0.15s;
 }
 .editor-modal-icon-btn:hover { border-color: #d0c8b8; color: #666; }
-.editor-modal-icon-btn:disabled { color: #ddd; cursor: default; }
+.editor-modal-icon-btn:disabled { color: #ddd; cursor: not-allowed; opacity: 0.4; }
 .editor-modal-icon-btn.close:hover { color: #dc2626; border-color: #fecaca; }
 
 /* ── Tab Bar ── */
@@ -318,7 +318,7 @@
   padding: 0 20px;
   border-bottom: 1px solid #f0ece4;
   flex-shrink: 0;
-  background: #faf8f5;
+  background: #fff;
 }
 
 .editor-tab {
@@ -521,99 +521,18 @@
   flex-wrap: wrap;
 }
 
-/* ── Content Zones hint ── */
-.editor-content-hint {
+/* ── Tab hints ── */
+.editor-tab-hint {
   font-size: 11px;
-  color: #999;
-  margin-bottom: 12px;
+  color: '#999';
+  margin-bottom: 14px;
   line-height: 1.5;
   font-family: 'DM Mono', monospace;
-}
-
-/* ── Action Button ── */
-.overlays-action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  padding: 8px 12px;
+  background: #faf7f0;
+  border: 1px solid #e8e0d0;
   border-radius: 8px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.overlays-action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.overlays-action-btn--primary {
-  justify-content: center;
-  padding: 10px 16px;
-  border: none;
-  color: #fff;
-  font-size: 13px;
-  min-height: 42px;
-  flex: 1;
-}
-
-.overlays-action-btn--secondary {
-  justify-content: flex-start;
-  padding: 8px 14px;
-  font-size: 12px;
-  min-height: 36px;
-}
-
-/* ── Type Toggle ── */
-.overlays-type-toggle {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
-}
-
-.overlays-type-toggle__btn {
-  flex: 1;
-  padding: 8px 0;
-  font-size: 11px;
-  font-weight: 700;
-  border: 1px solid #e0d9ce;
-  border-radius: 6px;
-  cursor: pointer;
-  min-height: 36px;
-  transition: background 0.2s, color 0.2s;
-}
-
-/* ── Section Header ── */
-.overlays-section-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 10px 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-  border-top: 1px solid #f0ece4;
-  margin-top: 4px;
-  min-height: 36px;
-}
-
-.overlays-section-header__label {
-  font-size: 11px;
-  font-weight: 700;
-  color: #666;
-  font-family: 'DM Mono', monospace;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-}
-
-.overlays-section-header__badge {
-  font-size: 9px;
-  background: rgba(184, 150, 46, 0.12);
-  color: #B8962E;
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-weight: 700;
+  color: #888;
 }
 
 /* ── Duplicate Settings Dropdown ── */
@@ -660,40 +579,6 @@
 
 .overlays-dup-dropdown__item:hover {
   background: #faf8f5;
-}
-
-/* ── Image Fit Controls ── */
-.overlays-fit {
-  margin-top: 10px;
-  padding: 10px 0;
-  border-top: 1px solid #f0ece4;
-}
-
-.overlays-fit__mode-toggle {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.overlays-fit__modes {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-
-.overlays-fit__mode-btn {
-  flex: 1;
-  padding: 8px 0;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid #e0d9ce;
-  border-radius: 6px;
-  cursor: pointer;
-  min-height: 34px;
-  transition: background 0.2s, color 0.2s;
 }
 
 /* ── Create Screen Modal ── */

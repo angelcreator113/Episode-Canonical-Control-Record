@@ -892,9 +892,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         className="editor-modal-name-input"
                         value={editNameValue}
                         onChange={e => setEditNameValue(e.target.value)}
-                        onBlur={() => handleRename(editNameValue)}
+                        onBlur={() => { if (editNameValue.trim()) handleRename(editNameValue); else setEditingName(false); }}
                         onKeyDown={e => {
-                          if (e.key === 'Enter') handleRename(editNameValue);
+                          if (e.key === 'Enter') { if (editNameValue.trim()) handleRename(editNameValue); else setEditingName(false); }
                           if (e.key === 'Escape') setEditingName(false);
                         }}
                       />
@@ -1075,7 +1075,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               {/* ── Content Zones Tab ── */}
               {editorTab === 'content' && activeScreen?.url && !activeScreen.placeholder && (
                 <div className="editor-tab-content">
-                  <div className="editor-content-hint">
+                  <div className="editor-tab-hint">
                     Draw zones on the template to render live show data (feed posts, profiles, DMs, wardrobe, etc.)
                   </div>
                   <ContentZoneEditor
@@ -1149,7 +1149,10 @@ function ImageFitControls({ fit, hasScreenOverride, onChange, onSave, onClearOve
   const offsetY = activeFit.offsetY || 0;
 
   return (
-    <div style={{ marginTop: 10, padding: '10px 0', borderTop: '1px solid #f0ece4' }}>
+    <div style={{ padding: '4px 0' }}>
+      <div className="editor-tab-hint">
+        Adjust how the image fits within the phone screen. Use "All Screens" for global defaults or "This Screen" to override.
+      </div>
       {/* Mode toggle: global vs per-screen */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 6, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4 }}>
