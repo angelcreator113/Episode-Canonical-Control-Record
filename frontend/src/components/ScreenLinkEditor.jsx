@@ -22,6 +22,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
   const [selectedZone, setSelectedZone] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [dragging, setDragging] = useState(null); // { id, startX, startY, origX, origY }
+  const [showIconPicker, setShowIconPicker] = useState(false);
   const containerRef = useRef(null);
   const iconInputRef = useRef(null);
   const uploadingLinkId = useRef(null);
@@ -153,6 +154,18 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
     uploadingLinkId.current = null;
   };
 
+  // Add a default zone (alternative to drawing — better for mobile)
+  const addDefaultZone = () => {
+    const newZone = {
+      id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      x: 25, y: 30, w: 20, h: 15,
+      target: '', label: '', icon_url: null,
+    };
+    setZones(prev => [...prev, newZone]);
+    setSelectedZone(newZone.id);
+    setIsDirty(true);
+  };
+
   const drawRect = drawing && drawStart && drawCurrent ? {
     x: Math.min(drawStart.x, drawCurrent.x),
     y: Math.min(drawStart.y, drawCurrent.y),
@@ -178,7 +191,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: compact ? 240 : 320,
+          maxWidth: compact ? 'min(200px, 45vw)' : 320,
           margin: '0 auto',
           aspectRatio: '9/16',
           borderRadius: 12,
@@ -261,19 +274,28 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
       {/* Zone list + editor */}
       {!readOnly && (
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
               TAP ZONES ({zones.length})
             </span>
-            {isDirty && (
-              <button onClick={handleSave} style={{
-                padding: '8px 14px', fontSize: 12, fontWeight: 600, border: 'none',
-                borderRadius: 6, background: '#B8962E', color: '#fff', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 4, minHeight: 36,
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={addDefaultZone} style={{
+                padding: '6px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9ce',
+                borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#888',
+                display: 'flex', alignItems: 'center', gap: 4, minHeight: 32,
               }}>
-                <Save size={12} /> Save Links
+                <Plus size={12} /> Add
               </button>
-            )}
+              {isDirty && (
+                <button onClick={handleSave} style={{
+                  padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none',
+                  borderRadius: 6, background: '#B8962E', color: '#fff', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 4, minHeight: 32,
+                }}>
+                  <Save size={12} /> Save
+                </button>
+              )}
+            </div>
           </div>
 
           {zones.length === 0 && (
@@ -337,88 +359,85 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                         })}
                       </select>
                     </div>
-                    {/* Icon picker — choose from existing icon overlays or upload */}
-                    <div>
-                      {uniqueIcons.length > 0 && (
-                        <div style={{ marginBottom: 8 }}>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: '#888', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>
-                            USE ICON OVERLAY ({uniqueIcons.length})
+                    {/* Position & Size — all slider-based for mobile friendliness */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
+                      {[
+                        { label: 'X', key: 'x', max: () => 100 - zone.w },
+                        { label: 'Y', key: 'y', max: () => 100 - zone.h },
+                        { label: 'W', key: 'w', max: () => 100 - zone.x },
+                        { label: 'H', key: 'h', max: () => 100 - zone.y },
+                      ].map(s => (
+                        <div key={s.key}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 1 }}>
+                            <span style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>{s.label}</span>
+                            <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(zone[s.key])}%</span>
                           </div>
-                          <div style={{
-                            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))',
-                            gap: 6, maxHeight: 200, overflowY: 'auto', padding: 2,
-                            WebkitOverflowScrolling: 'touch',
-                          }}>
-                            {uniqueIcons.map(ico => (
-                              <button
-                                key={ico.id}
-                                onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url }); }}
-                                title={ico.name}
-                                style={{
-                                  width: '100%', aspectRatio: '1/1', borderRadius: 8,
-                                  border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
-                                  background: zone.icon_url === ico.url ? '#fdf8ee' : '#fff',
-                                  cursor: 'pointer', padding: 4,
-                                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
-                                  transition: 'border-color 0.15s',
-                                }}
-                              >
-                                <img src={ico.url} alt={ico.name} style={{ width: '100%', flex: 1, objectFit: 'contain', borderRadius: 4 }} draggable={false} />
-                                <span style={{ fontSize: 7, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center', lineHeight: 1 }}>
-                                  {(ico.name || '').replace(/\s*Icon$/i, '')}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
+                          <input type="range" min={s.key === 'w' || s.key === 'h' ? 5 : 0} max={s.max()}
+                            value={Math.round(zone[s.key])}
+                            onChange={e => updateZone(zone.id, { [s.key]: parseInt(e.target.value) })}
+                            style={{ width: '100%', height: 4, cursor: 'pointer', accentColor: '#B8962E' }} />
                         </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => handleIconUpload(zone.id)}
-                          style={{
-                            padding: '8px 12px', fontSize: 12, fontWeight: 600, border: '1px solid #e0d9ce',
-                            borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#7ab3d4',
-                            display: 'flex', alignItems: 'center', gap: 4, minHeight: 36,
-                          }}
-                        >
-                          <Upload size={12} /> {zone.icon_url ? 'Replace' : 'Upload Custom'}
-                        </button>
+                      ))}
+                    </div>
+                    {/* Icon — collapsible picker */}
+                    <div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         {zone.icon_url && (
                           <>
                             <img src={zone.icon_url} alt="icon" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />
                             <button
                               onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: null }); }}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 4, fontSize: 11 }}
-                            >
-                              <X size={12} />
-                            </button>
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 4 }}
+                            ><X size={12} /></button>
                           </>
                         )}
-                        <span style={{ fontSize: 11, color: '#bbb', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>
-                          {Math.round(zone.x)}%, {Math.round(zone.y)}%
-                        </span>
+                        <button
+                          onClick={() => handleIconUpload(zone.id)}
+                          style={{
+                            padding: '6px 10px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9ce',
+                            borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#7ab3d4',
+                            display: 'flex', alignItems: 'center', gap: 4, minHeight: 32,
+                          }}
+                        >
+                          <Upload size={12} /> {zone.icon_url ? 'Replace' : 'Upload'}
+                        </button>
+                        {uniqueIcons.length > 0 && (
+                          <button
+                            onClick={() => setShowIconPicker(!showIconPicker)}
+                            style={{
+                              padding: '6px 10px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9ce',
+                              borderRadius: 6, background: showIconPicker ? '#fdf8ee' : '#fff', cursor: 'pointer',
+                              color: showIconPicker ? '#B8962E' : '#888',
+                              display: 'flex', alignItems: 'center', gap: 4, minHeight: 32,
+                            }}
+                          >
+                            Icons ({uniqueIcons.length})
+                          </button>
+                        )}
                       </div>
-                    </div>
-                    {/* Size controls — resize zone width & height */}
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                          <span style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>Width</span>
-                          <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(zone.w)}%</span>
+                      {showIconPicker && uniqueIcons.length > 0 && (
+                        <div style={{
+                          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))',
+                          gap: 4, marginTop: 6, maxHeight: 140, overflowY: 'auto', padding: 2,
+                        }}>
+                          {uniqueIcons.map(ico => (
+                            <button
+                              key={ico.id}
+                              onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url }); setShowIconPicker(false); }}
+                              title={ico.name}
+                              style={{
+                                width: '100%', aspectRatio: '1/1', borderRadius: 6,
+                                border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
+                                background: zone.icon_url === ico.url ? '#fdf8ee' : '#fff',
+                                cursor: 'pointer', padding: 3,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}
+                            >
+                              <img src={ico.url} alt={ico.name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 3 }} draggable={false} />
+                            </button>
+                          ))}
                         </div>
-                        <input type="range" min={5} max={100} value={Math.round(zone.w)}
-                          onChange={e => updateZone(zone.id, { w: Math.min(parseInt(e.target.value), 100 - zone.x) })}
-                          style={{ width: '100%', height: 4, cursor: 'pointer', accentColor: '#B8962E' }} />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                          <span style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>Height</span>
-                          <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(zone.h)}%</span>
-                        </div>
-                        <input type="range" min={5} max={100} value={Math.round(zone.h)}
-                          onChange={e => updateZone(zone.id, { h: Math.min(parseInt(e.target.value), 100 - zone.y) })}
-                          style={{ width: '100%', height: 4, cursor: 'pointer', accentColor: '#B8962E' }} />
-                      </div>
+                      )}
                     </div>
                     {/* Persistent toggle — pin icon to show on all screens */}
                     <button
