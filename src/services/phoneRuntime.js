@@ -164,4 +164,58 @@ module.exports = {
   filterZones,
   filterContentItems,
   resolveKey,
+  evaluateMission,
+  evaluateMissions,
 };
+
+// ── Mission progress ────────────────────────────────────────────────────────
+//
+// Read-only observers: given a mission and a runtime context, compute
+// per-objective completion and an overall "complete" flag. No side effects,
+// no state writes — the editor preview and player runtime both call this to
+// render progress UI.
+
+/**
+ * Evaluate one mission. Returns:
+ *   {
+ *     active:     true unless start_condition is set and currently false,
+ *     objectives: [{ id, label, complete: bool }, ...],
+ *     completed:  count of completed objectives,
+ *     total:      total objectives,
+ *     is_complete:all objectives complete (and mission is active),
+ *   }
+ */
+function evaluateMission(mission, context) {
+  if (!mission || typeof mission !== 'object') {
+    return { active: false, objectives: [], completed: 0, total: 0, is_complete: false };
+  }
+
+  const active = mission.start_condition ? evaluate(mission.start_condition, context) : true;
+  const objs = Array.isArray(mission.objectives) ? mission.objectives : [];
+  const results = objs.map(o => ({
+    id: o.id,
+    label: o.label,
+    complete: evaluate(o.condition, context),
+  }));
+  const completed = results.filter(r => r.complete).length;
+
+  return {
+    active,
+    objectives: results,
+    completed,
+    total: results.length,
+    is_complete: active && results.length > 0 && completed === results.length,
+  };
+}
+
+/**
+ * Convenience: run evaluateMission across an array and keep the mission
+ * reference alongside its progress for easy rendering.
+ */
+function evaluateMissions(missions, context) {
+  if (!Array.isArray(missions)) return [];
+  return missions.map(m => ({
+    mission: m,
+    progress: evaluateMission(m, context),
+  }));
+}

@@ -3,9 +3,9 @@
  * ScreenFlowMap — Visual diagram of screen connections
  */
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw } from 'lucide-react';
+import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle } from 'lucide-react';
 import { getScreenImageStyle, PHONE_SKINS } from '../components/PhoneHub';
-import { filterZones, applyActions, actionsForZone } from '../lib/phoneRuntime';
+import { filterZones, applyActions, actionsForZone, evaluateMissions } from '../lib/phoneRuntime';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C' };
 const MONO = "'DM Mono', monospace";
@@ -27,7 +27,7 @@ function getLinks(screen) {
  *     taps hit the server-side evaluator, and the reset button clears the
  *     DB row in place. Same evaluator runs on both sides.
  */
-export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', playthrough = null }) {
+export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', playthrough = null, missions = [] }) {
   const skin = PHONE_SKINS.find(s => s.key === phoneSkin) || PHONE_SKINS[0];
   const [activeScreen, setActiveScreen] = useState(initialScreen || screens[0] || null);
   const [history, setHistory] = useState([]);
@@ -52,6 +52,12 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   }, [playthrough?.state]);
 
   const evalContext = useMemo(() => ({ state, visitedScreens }), [state, visitedScreens]);
+  // Progress for each mission relative to the current state. Read-only — we
+  // just display it. Completed missions bubble up in-order.
+  const missionProgress = useMemo(() => evaluateMissions(missions, evalContext), [missions, evalContext]);
+  const [showMissions, setShowMissions] = useState(false);
+  const visibleMissions = missionProgress.filter(m => m.progress.active && (m.mission.is_active !== false));
+  const completedCount = visibleMissions.filter(m => m.progress.is_complete).length;
 
   const resetState = useCallback(async () => {
     if (playthrough?.reset) {
@@ -214,6 +220,61 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
       }}>
         <RotateCcw size={14} /> Reset
       </button>
+
+      {/* Mission progress chip — shows live count vs total completed. Click to expand
+          into a panel listing each objective with its state. Only renders when the
+          host passed a non-empty missions array. */}
+      {visibleMissions.length > 0 && (
+        <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 10 }}>
+          <button
+            onClick={() => setShowMissions(s => !s)}
+            style={{
+              background: 'rgba(184,150,46,0.85)', border: 'none', borderRadius: 8,
+              padding: '8px 12px', cursor: 'pointer', color: '#fff',
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontFamily: MONO, fontSize: 12, fontWeight: 700,
+            }}
+          >
+            <Target size={14} /> {completedCount}/{visibleMissions.length}
+          </button>
+          {showMissions && (
+            <div style={{
+              marginTop: 6,
+              background: 'rgba(20,20,30,0.95)', backdropFilter: 'blur(8px)',
+              borderRadius: 10, padding: 10,
+              width: 280, maxHeight: 400, overflowY: 'auto',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              border: '1px solid rgba(184,150,46,0.3)',
+            }}>
+              {visibleMissions.map(({ mission, progress }) => (
+                <div key={mission.id} style={{ padding: '8px 4px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    {progress.is_complete
+                      ? <CheckCircle2 size={14} color={TOKENS.gold} />
+                      : <Circle size={14} color="rgba(255,255,255,0.4)" />}
+                    <span style={{ fontFamily: PROSE, fontSize: 13, fontWeight: 700, color: progress.is_complete ? TOKENS.gold : '#fff', flex: 1 }}>
+                      {mission.name}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontFamily: MONO }}>
+                      {progress.completed}/{progress.total}
+                    </span>
+                  </div>
+                  {progress.objectives.map(o => (
+                    <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 20, marginBottom: 2 }}>
+                      {o.complete
+                        ? <CheckCircle2 size={10} color={TOKENS.gold} />
+                        : <Circle size={10} color="rgba(255,255,255,0.3)" />}
+                      <span style={{ fontSize: 11, color: o.complete ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.55)', fontFamily: MONO, textDecoration: o.complete ? 'line-through' : 'none' }}>
+                        {o.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Toast stack — show_toast actions land here. Auto-dismisses every 2.5s. */}
       {toasts.length > 0 && (

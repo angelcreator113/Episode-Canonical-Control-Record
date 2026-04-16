@@ -41,6 +41,7 @@ const EpisodeDetail = () => {
   // (state persists server-side via usePhonePlaythrough).
   const [playingPhone, setPlayingPhone] = useState(false);
   const [phoneOverlays, setPhoneOverlays] = useState([]);
+  const [phoneMissions, setPhoneMissions] = useState([]);
   const [phoneSkin, setPhoneSkin] = useState('rosegold');
   const [globalFit, setGlobalFit] = useState({});
   const playthrough = usePhonePlaythrough(playingPhone ? episode?.id : null);
@@ -58,6 +59,11 @@ const EpisodeDetail = () => {
       const frameRes = await api.get(`/api/v1/ui-overlays/${showId}/frame`).catch(() => ({ data: {} }));
       if (frameRes.data?.global_fit) setGlobalFit(frameRes.data.global_fit);
       if (frameRes.data?.phone_skin) setPhoneSkin(frameRes.data.phone_skin);
+      // Missions scoped to this episode OR show-wide — observers track progress
+      // live as the user plays. Fail-open: if the missions endpoint errors (e.g.
+      // table not deployed yet), we just skip the mission UI.
+      const missionsRes = await api.get(`/api/v1/ui-overlays/${showId}/missions?episode_id=${encodeURIComponent(episode.id)}`).catch(() => ({ data: {} }));
+      setPhoneMissions(missionsRes.data?.missions || []);
       setPlayingPhone(true);
     } catch (err) {
       console.error('[EpisodeDetail] Failed to load phone overlays:', err);
@@ -1058,6 +1064,7 @@ const EpisodeDetail = () => {
           globalFit={globalFit}
           phoneSkin={phoneSkin}
           playthrough={playthrough}
+          missions={phoneMissions}
           onClose={() => setPlayingPhone(false)}
         />
       )}

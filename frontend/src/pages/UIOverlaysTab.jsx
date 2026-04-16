@@ -7,12 +7,13 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef, Component } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
 import AIProposalReview from '../components/phone-editor/AIProposalReview';
+import MissionEditor from '../components/phone-editor/MissionEditor';
 import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import './UIOverlaysTab.css';
@@ -578,6 +579,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   //    toolbar AI flow so both entry points can coexist without fighting. ──
   const [panelProposal, setPanelProposal] = useState(null);
   const [panelAiBusy, setPanelAiBusy] = useState(false);
+  // Missions modal (PR4). No per-episode context here — missions are show-scoped,
+  // optionally per-episode, and that's picked inside the editor form.
+  const [missionsOpen, setMissionsOpen] = useState(false);
 
   const handlePanelAddZones = async (hint) => {
     if (!activeScreen?.asset_id || !showId || panelAiBusy) return;
@@ -892,6 +896,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           </button>
           <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
+          <button onClick={() => setMissionsOpen(true)} disabled={!showId} className="overlays-header-btn">
+            <Target size={13} /> <span className="btn-label">Missions</span>
+          </button>
           <button onClick={handleGenerateAll} disabled={generating || !showId} className="overlays-header-btn" style={{
             background: generating ? '#eee' : '#2C2C2C',
             color: generating ? '#999' : '#fff', border: 'none',
@@ -1252,6 +1259,13 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
       )}
       </>
       )}
+
+      {/* Missions editor — show-scoped CRUD modal */}
+      <MissionEditor
+        open={missionsOpen}
+        showId={showId}
+        onClose={() => setMissionsOpen(false)}
+      />
 
       {/* AI proposal from the Assistant panel — separate modal from the one
           ScreenLinkEditor's toolbar button uses so both entry points work. */}

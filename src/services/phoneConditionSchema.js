@@ -116,6 +116,34 @@ function validateScreenLinks(links) {
   return { value: out };
 }
 
+// ── Mission objective + payload ─────────────────────────────────────────────
+// Missions are read-only observers (PR4). Each objective is just a labeled
+// conditions array — no actions, no rewards yet. Reusing conditionsArraySchema
+// keeps the grammar consistent with zones + content zones.
+
+const objectiveSchema = Joi.object({
+  id: Joi.string().trim().max(60).required(),
+  label: Joi.string().trim().min(1).max(160).required(),
+  condition: conditionsArraySchema.required(),
+}).unknown(false);
+
+const missionPayloadSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(200).required(),
+  description: Joi.string().trim().max(2000).allow('', null),
+  icon_url: Joi.string().trim().max(500).allow('', null),
+  start_condition: conditionsArraySchema.optional(),
+  objectives: Joi.array().items(objectiveSchema).max(12).default([]),
+  display_order: Joi.number().integer().min(0).default(0),
+  is_active: Joi.boolean().default(true),
+  episode_id: Joi.string().trim().max(64).allow(null),
+}).unknown(false);
+
+function validateMissionPayload(payload) {
+  const { error, value } = missionPayloadSchema.validate(payload || {}, { abortEarly: false });
+  if (error) return { error: error.message };
+  return { value };
+}
+
 module.exports = {
   CONDITION_OPS,
   ALLOWED_ACTION_TYPES,
@@ -125,4 +153,7 @@ module.exports = {
   actionsArraySchema,
   validateZoneRules,
   validateScreenLinks,
+  objectiveSchema,
+  missionPayloadSchema,
+  validateMissionPayload,
 };

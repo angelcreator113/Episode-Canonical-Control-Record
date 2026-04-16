@@ -1617,6 +1617,10 @@ try {
   const phonePlaythroughRoutes = require('./routes/phonePlaythroughRoutes');
   app.use('/api/v1/episodes/:episodeId/phone-state', phonePlaythroughRoutes);
   console.log('✓ Phone playthrough loaded at /api/v1/episodes/:episodeId/phone-state');
+  // Phone missions — show-scoped, optionally per-episode. Read-only observers in v1.
+  const phoneMissionRoutes = require('./routes/phoneMissionRoutes');
+  app.use('/api/v1/ui-overlays/:showId/missions', phoneMissionRoutes);
+  console.log('✓ Phone missions loaded at /api/v1/ui-overlays/:showId/missions');
 } catch (e) {
   console.error('✗ Failed to load UI Overlay routes:', e.message);
 }
