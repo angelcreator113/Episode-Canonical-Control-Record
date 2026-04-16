@@ -334,6 +334,19 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   // Deduplicate icon overlays by URL to avoid showing the same image multiple times
   const uniqueIcons = iconOverlays.filter((ico, idx, arr) => arr.findIndex(i => i.url === ico.url) === idx);
 
+  // Fallback display name for a zone — prefers the user's label, then derives from the first
+  // selected icon (so "Phone Icon" → "Phone"), then target, then generic "Untitled".
+  // Purely for display; the underlying zone.label stays empty until the user types one.
+  const displayLabel = (zone) => {
+    if (zone.label) return zone.label;
+    const firstIcon = getIconUrls(zone)[0];
+    if (firstIcon) {
+      const match = iconOverlays.find(i => i.url === firstIcon);
+      if (match?.name) return match.name.replace(/\s*Icon$/i, '').trim();
+    }
+    return zone.target || 'Untitled';
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Toolbar — grouped into view toggles / layout tools / history so intent is readable.
@@ -526,7 +539,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
             ) : (
               !preview && (
                 <span style={{ fontSize: 7, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.6)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2 }}>
-                  {zone.label || zone.target || '?'}
+                  {displayLabel(zone)}
                 </span>
               )
             )}
@@ -678,7 +691,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                       fontSize: 15, fontWeight: 600, lineHeight: 1.25,
                       color: '#2C2C2C',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{zone.label || zone.target || 'Untitled'}</span>
+                    }}>{displayLabel(zone)}</span>
                     <span style={{
                       fontSize: 10, color: zone.target ? '#a89870' : '#dc2626',
                       fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
