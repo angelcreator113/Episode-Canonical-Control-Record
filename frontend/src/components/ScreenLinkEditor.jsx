@@ -608,7 +608,11 @@ export default function ScreenLinkEditor({
                                   const updated = isSelected
                                     ? current.filter(u => u !== ico.url)
                                     : [...current, ico.url];
-                                  updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null });
+                                  // Auto-fill label from icon name if zone has no label yet —
+                                  // saves a step and matches what the icon visually represents.
+                                  const cleanName = (ico.name || '').replace(/\s*Icon$/i, '').trim();
+                                  const labelUpdate = !zone.label && !isSelected && cleanName ? { label: cleanName } : {};
+                                  updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null, ...labelUpdate });
                                 }}
                                 title={ico.name}
                                 style={{
