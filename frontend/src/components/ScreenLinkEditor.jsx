@@ -3,16 +3,23 @@
  *
  * Props:
  *   screenUrl       — URL of the screen image to draw zones on
- *   links           — array of { id, x, y, w, h, target, label, icon_url }  (% based positions)
+ *   links           — array of { id, x, y, w, h, target, label, icon_urls }  (% based positions)
  *   screenTypes     — SCREEN_TYPES array for target picker dropdown
  *   onSave(links)   — callback to persist updated links
  *   onUploadIcon(linkId, file) — callback to upload icon image for a zone
  *   readOnly        — if true, hide editing controls (used in preview mode)
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin } from 'lucide-react';
+import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Check } from 'lucide-react';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
+
+// Normalize legacy icon_url (string) to icon_urls (array) for backward compat
+const getIconUrls = (zone) => {
+  if (zone.icon_urls?.length) return zone.icon_urls;
+  if (zone.icon_url) return [zone.icon_url];
+  return [];
+};
 
 export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], generatedScreenKeys, iconOverlays = [], onSave, onUploadIcon, readOnly = false, compact = false }) {
   const [zones, setZones] = useState(links);
@@ -101,6 +108,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
         target: '',
         label: '',
         icon_url: null,
+        icon_urls: [],
       };
       setZones(prev => [...prev, newZone]);
       setSelectedZone(newZone.id);
@@ -159,7 +167,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
     const newZone = {
       id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
       x: 25, y: 30, w: 20, h: 15,
-      target: '', label: '', icon_url: null,
+      target: '', label: '', icon_url: null, icon_urls: [],
     };
     setZones(prev => [...prev, newZone]);
     setSelectedZone(newZone.id);
@@ -229,13 +237,25 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
               overflow: 'hidden',
             }}
           >
-            {zone.icon_url ? (
-              <img src={zone.icon_url} alt={zone.label || zone.target} style={{ width: '80%', height: '80%', maxWidth: 64, maxHeight: 64, objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
-            ) : (
-              <span style={{ fontSize: 9, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.7)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2, lineHeight: 1.2 }}>
-                {zone.label || zone.target || '?'}
-              </span>
-            )}
+            {(() => {
+              const icons = getIconUrls(zone);
+              if (icons.length > 0) {
+                const maxPx = 64;
+                const iconSize = Math.min(maxPx, Math.max(16, maxPx / Math.ceil(Math.sqrt(icons.length))));
+                return (
+                  <div style={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', width: '90%', height: '90%', pointerEvents: 'none' }}>
+                    {icons.map((url, idx) => (
+                      <img key={idx} src={url} alt="" style={{ width: iconSize, height: iconSize, objectFit: 'contain', borderRadius: 2 }} draggable={false} />
+                    ))}
+                  </div>
+                );
+              }
+              return (
+                <span style={{ fontSize: 9, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.7)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2, lineHeight: 1.2 }}>
+                  {zone.label || zone.target || '?'}
+                </span>
+              );
+            })()}
           </div>
         ))}
 
@@ -320,7 +340,10 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: selectedZone === zone.id ? 8 : 0 }}>
                   <div style={{ width: 10, height: 10, borderRadius: 3, background: ZONE_COLORS[i % ZONE_COLORS.length], flexShrink: 0 }} />
                   {zone.persistent && <Pin size={11} color="#B8962E" style={{ flexShrink: 0 }} />}
-                  {zone.icon_url && <img src={zone.icon_url} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain' }} />}
+                  {getIconUrls(zone).slice(0, 3).map((url, idx) => (
+                    <img key={idx} src={url} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain', marginLeft: idx > 0 ? -4 : 0 }} />
+                  ))}
+                  {getIconUrls(zone).length > 3 && <span style={{ fontSize: 9, color: '#aaa' }}>+{getIconUrls(zone).length - 3}</span>}
                   <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{zone.label || zone.target || 'Untitled'}</span>
                   <span style={{ fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
                     {zone.target ? `→ ${zone.target}` : 'no target'}
@@ -379,18 +402,22 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                         </div>
                       ))}
                     </div>
-                    {/* Icon — collapsible picker */}
+                    {/* Icons — multi-select picker */}
                     <div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        {zone.icon_url && (
-                          <>
-                            <img src={zone.icon_url} alt="icon" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {getIconUrls(zone).map((url, idx) => (
+                          <div key={idx} style={{ position: 'relative' }}>
+                            <img src={url} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />
                             <button
-                              onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: null }); }}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 4 }}
-                            ><X size={12} /></button>
-                          </>
-                        )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const updated = getIconUrls(zone).filter(u => u !== url);
+                                updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null });
+                              }}
+                              style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: 7, background: '#dc2626', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }}
+                            >×</button>
+                          </div>
+                        ))}
                         <button
                           onClick={() => handleIconUpload(zone.id)}
                           style={{
@@ -399,7 +426,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                             display: 'flex', alignItems: 'center', gap: 4, minHeight: 32,
                           }}
                         >
-                          <Upload size={12} /> {zone.icon_url ? 'Replace' : 'Upload'}
+                          <Upload size={12} /> Upload
                         </button>
                         {uniqueIcons.length > 0 && (
                           <button
@@ -414,28 +441,52 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                             Icons ({uniqueIcons.length})
                           </button>
                         )}
+                        {getIconUrls(zone).length > 0 && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_urls: [], icon_url: null }); }}
+                            style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, border: '1px solid #fecaca', borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#dc2626', minHeight: 32 }}
+                          >
+                            Clear All
+                          </button>
+                        )}
                       </div>
                       {showIconPicker && uniqueIcons.length > 0 && (
                         <div style={{
                           display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
                           gap: 6, marginTop: 6, maxHeight: 200, overflowY: 'auto', padding: 2,
                         }}>
-                          {uniqueIcons.map(ico => (
-                            <button
-                              key={ico.id}
-                              onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url }); setShowIconPicker(false); }}
-                              title={ico.name}
-                              style={{
-                                width: '100%', aspectRatio: '1/1', borderRadius: 8,
-                                border: zone.icon_url === ico.url ? '2px solid #B8962E' : '1px solid #e0d9ce',
-                                background: zone.icon_url === ico.url ? '#fdf8ee' : '#fff',
-                                cursor: 'pointer', padding: 6,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              }}
-                            >
-                              <img src={ico.url} alt={ico.name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 3 }} draggable={false} />
-                            </button>
-                          ))}
+                          {uniqueIcons.map(ico => {
+                            const isSelected = getIconUrls(zone).includes(ico.url);
+                            return (
+                              <button
+                                key={ico.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const current = getIconUrls(zone);
+                                  const updated = isSelected
+                                    ? current.filter(u => u !== ico.url)
+                                    : [...current, ico.url];
+                                  updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null });
+                                }}
+                                title={ico.name}
+                                style={{
+                                  position: 'relative',
+                                  width: '100%', aspectRatio: '1/1', borderRadius: 8,
+                                  border: isSelected ? '2px solid #B8962E' : '1px solid #e0d9ce',
+                                  background: isSelected ? '#fdf8ee' : '#fff',
+                                  cursor: 'pointer', padding: 6,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}
+                              >
+                                <img src={ico.url} alt={ico.name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 3 }} draggable={false} />
+                                {isSelected && (
+                                  <div style={{ position: 'absolute', top: 3, right: 3, width: 16, height: 16, borderRadius: 8, background: '#B8962E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Check size={10} color="#fff" strokeWidth={3} />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
