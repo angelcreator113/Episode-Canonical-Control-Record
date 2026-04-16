@@ -846,28 +846,57 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
       ) : (
         <>
         <div className="phone-hub-layout">
-          {/* Phone Hub (phone + grid) — takes full width now */}
-          <div className="phone-hub-main">
-            <OverlayErrorBoundary>
-              <PhoneHub
-                screens={overlays}
-                activeScreen={activeScreen}
-                onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
-                onDelete={handleDeleteScreen}
-                onHideScreen={handleHideScreen}
-                hiddenScreens={hiddenScreens}
-                showHidden={showHidden}
-                onToggleShowHidden={() => setShowHidden(h => !h)}
-                onNavigate={handleNavigate}
-                navigationHistory={navHistory}
-                onBack={handleBack}
-                skin={phoneSkin}
-                onChangeSkin={handleChangeSkin}
-                customFrameUrl={customFrameUrl}
+          {editingLinks && activeScreen?.url ? (
+            /* ── Inline Zone Editor — replaces PhoneHub so users draw directly on the main display ── */
+            <div className="zone-editor-inline">
+              <div className="zone-editor-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                  <span className="zone-editor-title">Editing Zones</span>
+                  <span className="zone-editor-screen-name">{activeScreen.name}</span>
+                </div>
+                <button onClick={() => setEditingLinks(false)} className="zone-editor-done-btn">
+                  ✓ Done
+                </button>
+              </div>
+              <ScreenLinkEditor
+                screen={activeScreen}
+                screenUrl={activeScreen.url}
+                links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
+                screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
+                generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
                 globalFit={globalFit}
+                customFrameUrl={customFrameUrl}
+                phoneSkin={phoneSkin}
+                onSave={handleSaveLinks}
+                onUploadIcon={handleUploadIcon}
               />
-            </OverlayErrorBoundary>
-          </div>
+            </div>
+          ) : (
+            /* ── Phone Hub (phone + grid) ── */
+            <div className="phone-hub-main">
+              <OverlayErrorBoundary>
+                <PhoneHub
+                  screens={overlays}
+                  activeScreen={activeScreen}
+                  onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
+                  onDelete={handleDeleteScreen}
+                  onHideScreen={handleHideScreen}
+                  hiddenScreens={hiddenScreens}
+                  showHidden={showHidden}
+                  onToggleShowHidden={() => setShowHidden(h => !h)}
+                  onNavigate={handleNavigate}
+                  navigationHistory={navHistory}
+                  onBack={handleBack}
+                  skin={phoneSkin}
+                  onChangeSkin={handleChangeSkin}
+                  customFrameUrl={customFrameUrl}
+                  globalFit={globalFit}
+                  onEditZones={() => setEditingLinks(true)}
+                />
+              </OverlayErrorBoundary>
+            </div>
+          )}
         </div>
 
       {/* ── Floating Editor Modal ── */}
@@ -1050,23 +1079,23 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 </div>
               )}
 
-              {/* ── Tap Links Tab ── */}
+              {/* ── Tap Links Tab — redirects to inline editor on the main phone display ── */}
               {editorTab === 'links' && activeScreen?.url && !activeScreen.placeholder && (
-                <div className="editor-tab-content">
-                  <ScreenLinkEditor
-                    screen={activeScreen}
-                    screenUrl={activeScreen.url}
-                    links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                    screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
-                    generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                    iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
-                    globalFit={globalFit}
-                    customFrameUrl={customFrameUrl}
-                    phoneSkin={phoneSkin}
-                    onSave={handleSaveLinks}
-                    onUploadIcon={handleUploadIcon}
-                    compact
-                  />
+                <div className="editor-tab-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '24px 16px' }}>
+                  <Link2 size={24} style={{ color: '#B8962E' }} />
+                  <p style={{ fontSize: 13, color: '#666', textAlign: 'center', lineHeight: 1.5, maxWidth: 280 }}>
+                    Tap zones are now edited directly on the phone display for precise placement.
+                  </p>
+                  <button
+                    onClick={() => { setPanelOpen(false); setEditingLinks(true); }}
+                    style={{
+                      padding: '10px 20px', fontSize: 13, fontWeight: 600, border: 'none',
+                      borderRadius: 8, background: '#B8962E', color: '#fff', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    ✎ Edit Zones on Phone
+                  </button>
                 </div>
               )}
 

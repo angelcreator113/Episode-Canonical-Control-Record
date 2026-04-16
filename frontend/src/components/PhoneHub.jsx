@@ -215,7 +215,7 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
   );
 });
 
-export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
+export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all', onEditZones }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [frameError, setFrameError] = useState(false);
@@ -390,6 +390,17 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 {phoneScreen.beat || phoneScreen.description?.slice(0, 40)}
               </div>
             </div>
+          )}
+
+          {/* Edit Zones button — opens inline zone editor on the main display */}
+          {onEditZones && phoneScreen?.url && (
+            <button onClick={(e) => { e.stopPropagation(); onEditZones(); }} style={{
+              position: 'absolute', top: 38, right: 8, zIndex: 10,
+              padding: '4px 10px', fontSize: 9, fontWeight: 700, border: 'none',
+              borderRadius: 10, background: 'rgba(184,150,46,0.85)', color: '#fff',
+              cursor: 'pointer', backdropFilter: 'blur(4px)',
+              fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+            }}>✎ Edit Zones</button>
           )}
 
           {/* Home indicator bar */}
