@@ -19,8 +19,12 @@
  *   readOnly        — if true, hide editing controls (used in preview mode)
  */
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader } from 'lucide-react';
+import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader, Sparkles } from 'lucide-react';
 import { getScreenImageStyle, PHONE_SKINS } from './PhoneHub';
+import ZoneBadges from './phone-editor/ZoneBadges';
+import ConditionRow from './phone-editor/ConditionRow';
+import ActionRow from './phone-editor/ActionRow';
+import AIProposalReview from './phone-editor/AIProposalReview';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
@@ -64,6 +68,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   onNavigate,
   navigationHistory = [],
   onBack,
+  onRequestAiZones,  // (hint?: string) => Promise<{ proposal, context_summary }> — parent hits /ai/add-zones
   readOnly = false,
   compact = false,
 }, ref) {
@@ -105,6 +110,9 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   const iconInputRef = useRef(null);
   const uploadingLinkId = useRef(null);
   const [uploadingForZone, setUploadingForZone] = useState(null); // zone id currently uploading — drives the spinner
+  // AI proposal — populated after a successful /ai/add-zones call; review modal opens when non-null.
+  const [aiProposal, setAiProposal] = useState(null);
+  const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => {
     setZones(links); setIsDirty(false);
@@ -442,7 +450,57 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
           >
             <Redo2 size={12} />
           </button>
+          {/* Group 4 — AI (show-aware add-zones). Only rendered when the parent wired the prop. */}
+          {onRequestAiZones && (
+            <>
+              <div style={toolbarDividerStyle} />
+              <button
+                type="button"
+                onClick={async () => {
+                  if (aiBusy) return;
+                  try {
+                    setAiBusy(true);
+                    const result = await onRequestAiZones();
+                    if (result?.proposal) setAiProposal(result);
+                  } catch (err) {
+                    console.error('[ScreenLinkEditor] AI request failed:', err);
+                  } finally {
+                    setAiBusy(false);
+                  }
+                }}
+                title="Let AI propose zones for this screen (review before apply)"
+                style={{ ...toolbarBtnStyle(aiBusy), opacity: aiBusy ? 0.6 : 1, cursor: aiBusy ? 'wait' : 'pointer' }}
+              >
+                {aiBusy ? <Loader size={12} className="spin" /> : <Sparkles size={12} />}
+                {aiBusy ? 'Thinking' : 'AI Zones'}
+              </button>
+            </>
+          )}
         </div>
+      )}
+
+      {/* AI proposal review — opens modal when the AI call returns. Approve → merge + save;
+          reject → discard. Validation already ran server-side so approve is just a merge. */}
+      {aiProposal && (
+        <AIProposalReview
+          proposal={aiProposal.proposal}
+          contextSummary={aiProposal.context_summary}
+          busy={aiBusy}
+          onReject={() => setAiProposal(null)}
+          onApprove={() => {
+            const newZones = aiProposal.proposal?.zones || [];
+            if (newZones.length) {
+              pushUndo();
+              const merged = [...zones, ...newZones];
+              setZones(merged);
+              setIsDirty(true);
+              // Persist immediately — AI work is safer on disk than in memory.
+              if (onSave) onSave(merged);
+              setIsDirty(false);
+            }
+            setAiProposal(null);
+          }}
+        />
       )}
 
       {/* Migration notice — one-time warning so users know to re-check pre-existing zones */}
@@ -711,20 +769,15 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                     <img key={idx} src={url} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: 'contain', marginLeft: idx > 0 ? -4 : 0, padding: 2, background: '#fafafa', border: '1px solid #f0ece4' }} />
                   ))}
                   {getIconUrls(zone).length > 3 && <span style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>+{getIconUrls(zone).length - 3}</span>}
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <span style={{
                       fontFamily: "'Lora', serif",
                       fontSize: 15, fontWeight: 600, lineHeight: 1.25,
                       color: '#2C2C2C',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>{displayLabel(zone)}</span>
-                    <span style={{
-                      fontSize: 10, color: zone.target ? '#a89870' : '#dc2626',
-                      fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {zone.target ? `→ ${zone.target}` : '⚠ no target'}
-                    </span>
+                    {/* Always-visible lock/unlock/action summary — one source of truth for the zone's behavior. */}
+                    <ZoneBadges zone={zone} />
                   </div>
                   <button onClick={(e) => { e.stopPropagation(); removeZone(zone.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 6, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, transition: 'color 0.15s, background 0.15s' }}
                     onMouseEnter={e => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.background = '#fef2f2'; }}
@@ -780,6 +833,69 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                             onChange={e => updateZone(zone.id, { [s.key]: parseInt(e.target.value) })}
                             style={{ width: '100%', height: 4, cursor: 'pointer', accentColor: '#B8962E' }} />
                         </div>
+                      ))}
+                    </div>
+                    {/* Conditions (when should this zone be visible/tappable?) and Actions
+                        (what happens on tap, beyond navigate). Both are collapsible / additive.
+                        Empty arrays behave as implicit defaults: always visible, navigate(target). */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 0', borderTop: '1px dashed #f0ece4', borderBottom: '1px dashed #f0ece4' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
+                          VISIBLE WHEN {Array.isArray(zone.conditions) && zone.conditions.length > 0 ? `(${zone.conditions.length})` : '— always'}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const next = [...(zone.conditions || []), { key: '', op: 'eq', value: true }];
+                            updateZone(zone.id, { conditions: next });
+                          }}
+                          style={{ padding: '4px 8px', fontSize: 10, fontWeight: 600, border: '1px solid #e0d9ce', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#666', fontFamily: "'DM Mono', monospace" }}
+                        >+ condition</button>
+                      </div>
+                      {(zone.conditions || []).map((cond, ci) => (
+                        <ConditionRow
+                          key={ci}
+                          condition={cond}
+                          onChange={(nextCond) => {
+                            const next = [...(zone.conditions || [])];
+                            next[ci] = nextCond;
+                            updateZone(zone.id, { conditions: next });
+                          }}
+                          onRemove={() => {
+                            const next = (zone.conditions || []).filter((_, i) => i !== ci);
+                            updateZone(zone.id, { conditions: next.length ? next : undefined });
+                          }}
+                        />
+                      ))}
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
+                          ON TAP {Array.isArray(zone.actions) && zone.actions.length > 0 ? `(${zone.actions.length})` : '— navigate only'}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const next = [...(zone.actions || []), { type: 'set_state', key: '', value: true }];
+                            updateZone(zone.id, { actions: next });
+                          }}
+                          style={{ padding: '4px 8px', fontSize: 10, fontWeight: 600, border: '1px solid #e0d9ce', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#666', fontFamily: "'DM Mono', monospace" }}
+                        >+ action</button>
+                      </div>
+                      {(zone.actions || []).map((act, ai) => (
+                        <ActionRow
+                          key={ai}
+                          action={act}
+                          screenOptions={screenTypes}
+                          onChange={(nextAct) => {
+                            const next = [...(zone.actions || [])];
+                            next[ai] = nextAct;
+                            updateZone(zone.id, { actions: next });
+                          }}
+                          onRemove={() => {
+                            const next = (zone.actions || []).filter((_, i) => i !== ai);
+                            updateZone(zone.id, { actions: next.length ? next : undefined });
+                          }}
+                        />
                       ))}
                     </div>
                     {/* Icons — selected row (if any) + always-visible picker with Upload as the first tile.

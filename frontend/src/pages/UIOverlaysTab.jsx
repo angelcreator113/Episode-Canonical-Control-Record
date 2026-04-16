@@ -555,6 +555,22 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // Request AI-proposed zones for the current screen. Returns the proposal so
+  // ScreenLinkEditor can open its review modal; we deliberately do NOT write here.
+  const handleRequestAiZones = async (hint) => {
+    if (!activeScreen?.asset_id || !showId) return null;
+    try {
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/ai/add-zones`, {
+        asset_id: activeScreen.asset_id,
+        prompt_hint: hint || undefined,
+      });
+      return res.data;
+    } catch (err) {
+      flash(err.response?.data?.error || err.message, 'error');
+      throw err;
+    }
+  };
+
   const handleUploadIcon = async (linkId, file) => {
     if (!activeScreen?.asset_id || !showId) return;
     try {
@@ -919,6 +935,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     onNavigate={handleNavigate}
                     navigationHistory={navHistory}
                     onBack={handleBack}
+                    onRequestAiZones={handleRequestAiZones}
                   />
                 </div>
               );

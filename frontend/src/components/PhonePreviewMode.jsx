@@ -3,8 +3,9 @@
  * ScreenFlowMap — Visual diagram of screen connections
  */
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { X, ChevronLeft, Wifi, Signal, BatteryFull } from 'lucide-react';
+import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw } from 'lucide-react';
 import { getScreenImageStyle, PHONE_SKINS } from '../components/PhoneHub';
+import { filterZones, applyActions, actionsForZone } from '../lib/phoneRuntime';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C' };
 const MONO = "'DM Mono', monospace";
@@ -21,6 +22,23 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   const [history, setHistory] = useState([]);
   const [slideDir, setSlideDir] = useState(null); // 'left' | 'right' | null
   const [animating, setAnimating] = useState(false);
+  // ── Phone runtime state (in-memory) ──
+  // Preview is a disposable session; when the user closes the overlay everything resets.
+  // Same shape as the server-side phone_playthrough_state row so the runtime route can
+  // be a drop-in in PR2.
+  const [state, setState] = useState({});                    // key → value from set_state actions
+  const [visitedScreens, setVisitedScreens] = useState(() => new Set());
+  const [toasts, setToasts] = useState([]);                   // transient notifications
+  const [episodeComplete, setEpisodeComplete] = useState(false);
+  const evalContext = useMemo(() => ({ state, visitedScreens }), [state, visitedScreens]);
+  const resetState = useCallback(() => {
+    setState({});
+    setVisitedScreens(new Set());
+    setToasts([]);
+    setEpisodeComplete(false);
+    setHistory([]);
+    setActiveScreen(initialScreen || screens[0] || null);
+  }, [initialScreen, screens]);
 
   const findScreen = useCallback((key) => {
     if (!key) return null;
@@ -38,10 +56,44 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     if (direction === 'left') setHistory(h => [...h, activeScreen]);
     setTimeout(() => {
       setActiveScreen(target);
+      // Track every screen the user lands on so `visited:<id>` conditions can fire.
+      setVisitedScreens(prev => {
+        const next = new Set(prev);
+        if (target.id) next.add(target.id);
+        return next;
+      });
       setSlideDir(null);
       setAnimating(false);
     }, TRANSITION_MS);
   }, [findScreen, activeScreen, animating]);
+
+  /**
+   * The single entry point for tapping a zone — runs the zone's actions through
+   * the shared phoneRuntime evaluator. Implicit defaults: no actions → navigate(target).
+   * Never calls navigateTo directly; the evaluator returns `effects.navigate` instead
+   * so preview and runtime share exactly one tap-handling path.
+   */
+  const handleZoneTap = useCallback((zone) => {
+    const actions = actionsForZone(zone);
+    const writer = {
+      setState: (k, v) => setState(prev => ({ ...prev, [k]: v })),
+      markEpisodeComplete: () => setEpisodeComplete(true),
+    };
+    const effects = applyActions(actions, evalContext, writer);
+    if (effects.toasts.length) {
+      setToasts(prev => [...prev, ...effects.toasts.map((t, i) => ({ ...t, id: Date.now() + i }))]);
+    }
+    if (effects.navigate) navigateTo(effects.navigate, 'left');
+  }, [evalContext, navigateTo]);
+
+  // Auto-dismiss toasts after 2.5s
+  useEffect(() => {
+    if (toasts.length === 0) return;
+    const timer = setTimeout(() => {
+      setToasts(prev => prev.slice(1));
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [toasts]);
 
   const goBack = useCallback(() => {
     if (!history.length || animating) return;
@@ -83,7 +135,11 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     return trail;
   }, [history, activeScreen]);
 
-  const links = getLinks(activeScreen);
+  // Filter zones through the evaluator — locked zones don't render at all in player view
+  // (they're invisible until their condition becomes true). Editor "author view" would
+  // show them dimmed; that's a PR2 concern.
+  const allLinks = getLinks(activeScreen);
+  const { visible: links } = filterZones(allLinks, evalContext);
 
   const slideTransform = slideDir === 'left'
     ? 'translateX(-100%)' : slideDir === 'right'
@@ -106,6 +162,43 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         <span style={{ opacity: 0.6 }}>ESC</span>
         <X size={16} />
       </button>
+
+      {/* Reset button — wipes in-memory state + visited + history so authors can replay from scratch */}
+      <button onClick={resetState} title="Reset playthrough" style={{
+        position: 'absolute', top: 16, right: 92, zIndex: 10,
+        background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8,
+        padding: '8px 12px', cursor: 'pointer', color: '#fff',
+        display: 'flex', alignItems: 'center', gap: 6,
+        fontFamily: MONO, fontSize: 12,
+      }}>
+        <RotateCcw size={14} /> Reset
+      </button>
+
+      {/* Toast stack — show_toast actions land here. Auto-dismisses every 2.5s. */}
+      {toasts.length > 0 && (
+        <div style={{ position: 'absolute', top: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 11, display: 'flex', flexDirection: 'column', gap: 6, pointerEvents: 'none' }}>
+          {toasts.slice(0, 3).map(t => (
+            <div key={t.id} style={{
+              padding: '10px 16px', borderRadius: 8,
+              background: t.tone === 'error' ? '#7a1a1a' : t.tone === 'warning' ? '#7a5a1a' : t.tone === 'success' ? '#1a5a3a' : '#2a2a4a',
+              color: '#fff', fontSize: 13, fontFamily: PROSE,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+              maxWidth: 320, textAlign: 'center',
+            }}>{t.text}</div>
+          ))}
+        </div>
+      )}
+
+      {/* Episode-complete banner — PR2 will wire this to the real next-episode CTA */}
+      {episodeComplete && (
+        <div style={{
+          position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 11,
+          padding: '14px 24px', borderRadius: 12,
+          background: 'linear-gradient(135deg, #B8962E, #8a6c1d)', color: '#fff',
+          fontSize: 14, fontFamily: PROSE, fontWeight: 700,
+          boxShadow: '0 8px 32px rgba(184,150,46,0.4)',
+        }}>Episode complete</div>
+      )}
 
       {/* Phone device */}
       <div style={{
@@ -188,10 +281,10 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
             )}
 
             {/* Tap zone hotspots */}
-            {links.map(link => (
+            {links.map(link => ( /* onClick below routes through phoneRuntime; preview + runtime share one tap path */
               <div
                 key={link.id}
-                onClick={(e) => { e.stopPropagation(); if (link.target) navigateTo(link.target, 'left'); }}
+                onClick={(e) => { e.stopPropagation(); handleZoneTap(link); }}
                 title={link.label || link.target}
                 style={{
                   position: 'absolute',

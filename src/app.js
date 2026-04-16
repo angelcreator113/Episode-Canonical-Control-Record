@@ -1609,6 +1609,10 @@ try {
   const uiOverlayRoutes = require('./routes/uiOverlayRoutes');
   app.use('/api/v1/ui-overlays', uiOverlayRoutes);
   console.log('✓ UI Overlays loaded at /api/v1/ui-overlays');
+  // Phone AI — scoped to a show, mounted so :showId is captured in mergeParams
+  const phoneAIRoutes = require('./routes/phoneAIRoutes');
+  app.use('/api/v1/ui-overlays/:showId/ai', phoneAIRoutes);
+  console.log('✓ Phone AI loaded at /api/v1/ui-overlays/:showId/ai');
 } catch (e) {
   console.error('✗ Failed to load UI Overlay routes:', e.message);
 }
