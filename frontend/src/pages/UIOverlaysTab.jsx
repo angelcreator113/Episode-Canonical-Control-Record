@@ -563,9 +563,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       const res = await api.post(`/api/v1/ui-overlays/${showId}/screen-links/${activeScreen.asset_id}/icon`, fd);
       const iconUrl = res.data?.icon_url;
       if (iconUrl) {
-        // Update the link's icon_url locally
+        // Append uploaded icon to the link's icon_urls array
         const currentLinks = activeScreen.screen_links || activeScreen.metadata?.screen_links || [];
-        const updated = currentLinks.map(l => l.id === linkId ? { ...l, icon_url: iconUrl } : l);
+        const updated = currentLinks.map(l => {
+          if (l.id !== linkId) return l;
+          const existing = l.icon_urls?.length ? l.icon_urls : (l.icon_url ? [l.icon_url] : []);
+          const icon_urls = [...existing, iconUrl];
+          return { ...l, icon_urls, icon_url: icon_urls[0] };
+        });
         setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, screen_links: updated, metadata: { ...(o.metadata || {}), screen_links: updated } } : o));
         setActiveScreen(prev => prev ? { ...prev, screen_links: updated, metadata: { ...(prev.metadata || {}), screen_links: updated } } : prev);
         flash('Icon uploaded!');
