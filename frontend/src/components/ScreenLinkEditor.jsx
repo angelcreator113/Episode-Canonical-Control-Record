@@ -19,10 +19,17 @@
  *   readOnly        — if true, hide editing controls (used in preview mode)
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info } from 'lucide-react';
+import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check } from 'lucide-react';
 import { getScreenImageStyle } from './PhoneHub';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
+
+// Normalize legacy icon_url (string) to icon_urls (array) for backward compat
+const getIconUrls = (zone) => {
+  if (zone.icon_urls?.length) return zone.icon_urls;
+  if (zone.icon_url) return [zone.icon_url];
+  return [];
+};
 
 export default function ScreenLinkEditor({
   screen,
@@ -37,6 +44,7 @@ export default function ScreenLinkEditor({
   onSave,
   onUploadIcon,
   readOnly = false,
+  compact = false,
 }) {
   // Resolve the image URL: prefer the full screen object, fall back to legacy screenUrl prop.
   const resolvedScreenUrl = screen?.url || screenUrl;
@@ -51,6 +59,7 @@ export default function ScreenLinkEditor({
   const [selectedZone, setSelectedZone] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [dragging, setDragging] = useState(null); // { id, startX, startY, origX, origY }
+  const [showIconPicker, setShowIconPicker] = useState(false);
   // UX: toggle into a preview that hides editor chrome so you see exactly what the user sees.
   const [preview, setPreview] = useState(false);
   // UX: toggle dashed guides showing the notch / home-indicator areas to avoid during placement.

@@ -980,47 +980,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     )}
                   </div>
 
-              {/* ── Screen Links ── */}
-              {activeScreen?.url && !activeScreen.placeholder && (
-                <>
-                  <SectionHeader label="Tap Zone Links" expanded={expandedSections.links} onToggle={() => toggleSection('links')} badge={(activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null} />
-                  {expandedSections.links && (
-                    <div style={{ marginBottom: 8 }}>
-                      <ScreenLinkEditor
-                        screen={activeScreen}
-                        screenUrl={activeScreen.url}
-                        links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                        screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
-                        generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                        iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
-                        globalFit={globalFit}
-                        customFrameUrl={customFrameUrl}
-                        phoneSkin={phoneSkin}
-                        onSave={handleSaveLinks}
-                        onUploadIcon={handleUploadIcon}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* ── Content Zones (Live Data Templates) ── */}
-              {activeScreen?.url && !activeScreen.placeholder && (
-                <>
-                  <SectionHeader
-                    label="Live Content Zones"
-                    expanded={expandedSections.content}
-                    onToggle={() => toggleSection('content')}
-                    badge={(activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length || null}
-                  />
-                  {expandedSections.content && (
-                    <div style={{ marginBottom: 8 }}>
-                      <div style={{ fontSize: 10, color: '#999', marginBottom: 8, lineHeight: 1.5, fontFamily: "'DM Mono', monospace" }}>
-                        Draw zones on the template to render live show data (feed posts, profiles, DMs, wardrobe, etc.)
-                      </div>
-                    </div>
-                  )}
-
                   {/* Home Screen Toggle */}
                   {activeScreen.custom_id && activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' && (
                     <div className="editor-section">
@@ -1095,11 +1054,15 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               {editorTab === 'links' && activeScreen?.url && !activeScreen.placeholder && (
                 <div className="editor-tab-content">
                   <ScreenLinkEditor
+                    screen={activeScreen}
                     screenUrl={activeScreen.url}
                     links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
                     screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
                     generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                     iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
+                    globalFit={globalFit}
+                    customFrameUrl={customFrameUrl}
+                    phoneSkin={phoneSkin}
                     onSave={handleSaveLinks}
                     onUploadIcon={handleUploadIcon}
                     compact
