@@ -142,7 +142,7 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
         onPointerLeave={() => { if (!drawing) return; }}
         style={{
           position: 'relative',
-          width: '100%', maxWidth: compact ? 200 : 320,
+          width: '100%', maxWidth: compact ? 240 : 320,
           margin: '0 auto',
           touchAction: 'none',
           aspectRatio: '9/16',
