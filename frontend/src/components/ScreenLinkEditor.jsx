@@ -1,27 +1,49 @@
 /**
  * ScreenLinkEditor — Draw tap zones on a phone screen overlay, assign targets, upload icon images.
  *
+ * The editor renders the screen image in a canvas that is a pixel-for-pixel replica
+ * of the phone's screen area (same aspect ratio, same object-fit/position/scale via
+ * getScreenImageStyle, same optional custom bezel). This guarantees that tap-zone
+ * coordinates — stored as percentages — map to the exact visual location on the phone.
+ *
  * Props:
- *   screenUrl       — URL of the screen image to draw zones on
- *   links           — array of { id, x, y, w, h, target, label, icon_urls }  (% based positions)
+ *   screen          — the full overlay object (url + image_fit metadata). Preferred over screenUrl.
+ *   screenUrl       — fallback image URL if `screen` is not provided (legacy)
+ *   links           — array of { id, x, y, w, h, target, label, icon_url }  (% based positions)
  *   screenTypes     — SCREEN_TYPES array for target picker dropdown
+ *   globalFit       — device-level fit defaults (applied when screen has no override)
+ *   customFrameUrl  — optional custom phone frame image URL (matches PhoneHub behavior)
+ *   phoneSkin       — optional skin key for the built-in frame (passed through for visual parity)
  *   onSave(links)   — callback to persist updated links
  *   onUploadIcon(linkId, file) — callback to upload icon image for a zone
  *   readOnly        — if true, hide editing controls (used in preview mode)
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Check } from 'lucide-react';
+import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info } from 'lucide-react';
+import { getScreenImageStyle } from './PhoneHub';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
-// Normalize legacy icon_url (string) to icon_urls (array) for backward compat
-const getIconUrls = (zone) => {
-  if (zone.icon_urls?.length) return zone.icon_urls;
-  if (zone.icon_url) return [zone.icon_url];
-  return [];
-};
-
-export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], generatedScreenKeys, iconOverlays = [], onSave, onUploadIcon, readOnly = false, compact = false }) {
+export default function ScreenLinkEditor({
+  screen,
+  screenUrl,
+  links = [],
+  screenTypes = [],
+  generatedScreenKeys,
+  iconOverlays = [],
+  globalFit,
+  customFrameUrl,
+  phoneSkin,
+  onSave,
+  onUploadIcon,
+  readOnly = false,
+}) {
+  // Resolve the image URL: prefer the full screen object, fall back to legacy screenUrl prop.
+  const resolvedScreenUrl = screen?.url || screenUrl;
+  // Build the exact same image style the phone uses, so the editor canvas is a visual twin.
+  const imageStyle = screen
+    ? getScreenImageStyle(screen, globalFit)
+    : { width: '100%', height: '100%', objectFit: 'cover' };
   const [zones, setZones] = useState(links);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -29,12 +51,31 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
   const [selectedZone, setSelectedZone] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [dragging, setDragging] = useState(null); // { id, startX, startY, origX, origY }
-  const [showIconPicker, setShowIconPicker] = useState(false);
+  // UX: toggle into a preview that hides editor chrome so you see exactly what the user sees.
+  const [preview, setPreview] = useState(false);
+  // UX: toggle dashed guides showing the notch / home-indicator areas to avoid during placement.
+  const [showSafeArea, setShowSafeArea] = useState(false);
+  // Migration notice state — dismissed per-screen and persisted in localStorage so it shows once.
+  const MIGRATION_KEY = 'screenLinkEditor.migrationDismissed.v1';
+  const [migrationDismissed, setMigrationDismissed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(MIGRATION_KEY) || '{}'); } catch { return {}; }
+  });
   const containerRef = useRef(null);
   const iconInputRef = useRef(null);
   const uploadingLinkId = useRef(null);
 
   useEffect(() => { setZones(links); setIsDirty(false); }, [links]);
+
+  // Editing is disabled when parent forced readOnly OR the user flipped into preview mode.
+  const editingDisabled = readOnly || preview;
+  // Key to persist migration-notice dismissal per screen.
+  const screenKey = screen?.id || resolvedScreenUrl || 'unknown';
+  const showMigrationNotice = !readOnly && links.length > 0 && !migrationDismissed[screenKey];
+  const dismissMigration = () => {
+    const next = { ...migrationDismissed, [screenKey]: true };
+    setMigrationDismissed(next);
+    try { localStorage.setItem(MIGRATION_KEY, JSON.stringify(next)); } catch {}
+  };
 
   // Unified position getter — works for mouse, touch, and pointer events
   const getRelativePos = useCallback((e) => {
@@ -50,7 +91,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
 
   // Drawing new zones — works for mouse and touch via pointer capture
   const handlePointerDown = (e) => {
-    if (readOnly || dragging) return;
+    if (editingDisabled || dragging) return;
     if (e.target.closest('[data-zone-id]')) return;
     e.preventDefault();
     // Capture pointer so we keep getting events even if finger moves fast
@@ -188,7 +229,67 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Screen with overlay zones */}
+      {/* Toolbar — preview + safe-area toggles live here so they're visible above the canvas */}
+      {!readOnly && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setPreview(p => !p)}
+            title={preview ? 'Exit preview — back to editing' : 'Preview how this screen will look on the phone'}
+            style={toolbarBtnStyle(preview)}
+          >
+            {preview ? <EyeOff size={12} /> : <Eye size={12} />}
+            {preview ? 'Exit Preview' : 'Preview'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowSafeArea(s => !s)}
+            title="Toggle guides for notch and home-indicator areas"
+            style={toolbarBtnStyle(showSafeArea)}
+          >
+            <Ruler size={12} />
+            {showSafeArea ? 'Hide Guides' : 'Show Guides'}
+          </button>
+        </div>
+      )}
+
+      {/* Migration notice — one-time warning so users know to re-check pre-existing zones */}
+      {showMigrationNotice && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 8,
+          padding: '10px 12px', borderRadius: 8,
+          background: '#fdf8ee', border: '1px solid #e6d9b8',
+          fontSize: 12, color: '#6b5a28', lineHeight: 1.5,
+        }}>
+          <Info size={14} style={{ flexShrink: 0, marginTop: 1, color: '#B8962E' }} />
+          <div style={{ flex: 1 }}>
+            The editor now matches the phone&rsquo;s exact dimensions. Existing zones may need to be repositioned — open each and drag into place, then Save Links.
+          </div>
+          <button
+            type="button"
+            onClick={dismissMigration}
+            aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B8962E', padding: 2, flexShrink: 0 }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Phone-frame wrapper — a compact neutral bezel so users see they're editing
+          inside a phone, not a floating rectangle. Zones still live inside the inner
+          screen-area div (which keeps the aspect ratio that matches PhoneHub). */}
+      <div style={{
+        width: '100%', maxWidth: 300, margin: '0 auto',
+        padding: '10px 8px 14px',
+        background: '#1a1a2e',
+        borderRadius: 32,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.08)',
+        border: '2px solid rgba(0,0,0,0.4)',
+        position: 'relative',
+      }}>
+        {/* Screen with overlay zones — aspect ratio + image style MUST match PhoneHub
+            exactly, or tap-zone percentages won't land at the same visual spot. */}
       <div
         ref={containerRef}
         onPointerDown={handlePointerDown}
@@ -199,63 +300,54 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: compact ? 'min(200px, 45vw)' : 320,
-          margin: '0 auto',
           aspectRatio: '9/19.5',
-          borderRadius: 12,
+          borderRadius: 20,
           touchAction: 'none',
           overflow: 'hidden',
-          cursor: readOnly ? 'default' : 'crosshair',
+          cursor: editingDisabled ? 'default' : 'crosshair',
           userSelect: 'none',
-          border: '1px solid #e8e0d0',
+          border: '2px solid #0a0a14',
+          background: '#000',
+          boxShadow: 'inset 0 0 6px rgba(0,0,0,0.4)',
         }}
       >
-        {screenUrl ? (
-          <img src={screenUrl} alt="Screen" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} draggable={false} />
+        {resolvedScreenUrl ? (
+          <img src={resolvedScreenUrl} alt="Screen" style={{ ...imageStyle, pointerEvents: 'none' }} draggable={false} />
         ) : (
           <div style={{ width: '100%', height: '100%', background: '#f5f3ee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 11 }}>
             No screen image
           </div>
         )}
 
-        {/* Existing zones */}
+        {/* Existing zones — in preview mode, render without chrome so the surface
+            looks exactly like the phone display. */}
         {zones.map((zone, i) => (
           <div
             key={zone.id}
             data-zone-id={zone.id}
-            onPointerDown={(e) => !readOnly && handleZoneDragStart(e, zone)}
-            onClick={(e) => { e.stopPropagation(); setSelectedZone(zone.id); }}
+            onPointerDown={(e) => !editingDisabled && handleZoneDragStart(e, zone)}
+            onClick={(e) => { e.stopPropagation(); if (!preview) setSelectedZone(zone.id); }}
             style={{
               position: 'absolute',
               left: `${zone.x}%`, top: `${zone.y}%`,
               width: `${zone.w}%`, height: `${zone.h}%`,
-              border: `2px solid ${selectedZone === zone.id ? '#B8962E' : ZONE_COLORS[i % ZONE_COLORS.length]}`,
+              border: preview ? 'none' : `2px solid ${selectedZone === zone.id ? '#B8962E' : ZONE_COLORS[i % ZONE_COLORS.length]}`,
               borderRadius: 6,
-              background: selectedZone === zone.id ? 'rgba(184,150,46,0.15)' : 'rgba(255,255,255,0.08)',
-              cursor: readOnly ? 'pointer' : 'move',
+              background: preview ? 'transparent' : (selectedZone === zone.id ? 'rgba(184,150,46,0.15)' : 'rgba(255,255,255,0.08)'),
+              cursor: editingDisabled ? 'default' : 'move',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               overflow: 'hidden',
             }}
           >
-            {(() => {
-              const icons = getIconUrls(zone);
-              if (icons.length > 0) {
-                const maxPx = 64;
-                const iconSize = Math.min(maxPx, Math.max(16, maxPx / Math.ceil(Math.sqrt(icons.length))));
-                return (
-                  <div style={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', width: '90%', height: '90%', pointerEvents: 'none' }}>
-                    {icons.map((url, idx) => (
-                      <img key={idx} src={url} alt="" style={{ width: iconSize, height: iconSize, objectFit: 'contain', borderRadius: 2 }} draggable={false} />
-                    ))}
-                  </div>
-                );
-              }
-              return (
-                <span style={{ fontSize: 9, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.7)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2, lineHeight: 1.2 }}>
+            {zone.icon_url ? (
+              <img src={zone.icon_url} alt={zone.label || zone.target} style={{ width: '80%', height: '80%', maxWidth: 64, maxHeight: 64, objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
+            ) : (
+              !preview && (
+                <span style={{ fontSize: 7, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.6)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2 }}>
                   {zone.label || zone.target || '?'}
                 </span>
-              );
-            })()}
+              )
+            )}
           </div>
         ))}
 
@@ -289,6 +381,47 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
             pointerEvents: 'none',
           }} />
         )}
+
+        {/* Dynamic Island — matches PhoneHub exactly so it overlaps the same pixels
+            on both surfaces. Drawn as an overlay inside the screen area. */}
+        <div style={{
+          position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)',
+          width: '28%', height: 18, borderRadius: 9,
+          background: '#000', zIndex: 6,
+          border: '1.5px solid #333',
+          pointerEvents: 'none',
+        }} />
+
+        {/* Home indicator bar — matches PhoneHub */}
+        <div style={{
+          position: 'absolute', bottom: 5, left: '50%', transform: 'translateX(-50%)',
+          width: '30%', height: 3, borderRadius: 2,
+          background: 'rgba(255,255,255,0.35)', zIndex: 6,
+          pointerEvents: 'none',
+        }} />
+
+        {/* Safe-area guides — dashed regions users should avoid placing zones in */}
+        {showSafeArea && !preview && (
+          <>
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, height: '7%',
+              border: '1px dashed rgba(220,180,60,0.9)',
+              background: 'rgba(220,180,60,0.08)',
+              pointerEvents: 'none', zIndex: 5,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 8, color: 'rgba(220,180,60,1)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5,
+            }}>notch area</div>
+            <div style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0, height: '3.5%',
+              border: '1px dashed rgba(220,180,60,0.9)',
+              background: 'rgba(220,180,60,0.08)',
+              pointerEvents: 'none', zIndex: 5,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 8, color: 'rgba(220,180,60,1)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5,
+            }}>home indicator</div>
+          </>
+        )}
+      </div>
       </div>
 
       {/* Zone list + editor */}
@@ -516,4 +649,20 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
       )}
     </div>
   );
+}
+
+// Shared style for the compact toolbar buttons above the canvas.
+function toolbarBtnStyle(active) {
+  return {
+    display: 'inline-flex', alignItems: 'center', gap: 5,
+    padding: '6px 10px', fontSize: 11, fontWeight: 600,
+    border: `1px solid ${active ? '#B8962E' : '#e0d9ce'}`,
+    borderRadius: 6,
+    background: active ? '#fdf8ee' : '#fff',
+    color: active ? '#B8962E' : '#666',
+    cursor: 'pointer',
+    fontFamily: "'DM Mono', monospace",
+    letterSpacing: 0.3,
+    minHeight: 30,
+  };
 }
