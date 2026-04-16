@@ -19,7 +19,7 @@
  *   readOnly        — if true, hide editing controls (used in preview mode)
  */
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader } from 'lucide-react';
 import { getScreenImageStyle, PHONE_SKINS } from './PhoneHub';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
@@ -105,6 +105,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   const containerRef = useRef(null);
   const iconInputRef = useRef(null);
   const uploadingLinkId = useRef(null);
+  const [uploadingForZone, setUploadingForZone] = useState(null); // zone id currently uploading — drives the spinner
 
   useEffect(() => {
     setZones(links); setIsDirty(false);
@@ -303,11 +304,34 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   const handleIconFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !uploadingLinkId.current) return;
-    if (onUploadIcon) {
-      await onUploadIcon(uploadingLinkId.current, file);
+    const linkId = uploadingLinkId.current;
+    try {
+      // Save any locally-drawn-but-unsaved zones first so the parent's upload handler
+      // can find this zone in activeScreen.screen_links. Without this, newly-drawn
+      // zones get silently wiped when the parent re-hydrates from the server.
+      if (isDirty && onSave) {
+        onSave(zones);
+        setIsDirty(false);
+      }
+      setUploadingForZone(linkId);
+      if (onUploadIcon) {
+        await onUploadIcon(linkId, file);
+      }
+      // Auto-fill zone label from the filename if empty, matching the library-pick behavior.
+      const current = zones.find(z => z.id === linkId);
+      if (current && !current.label) {
+        const cleanName = (file.name || '')
+          .replace(/\.[^.]+$/, '')       // strip extension
+          .replace(/[-_]+/g, ' ')         // dashes/underscores → spaces
+          .replace(/\s*icon\s*$/i, '')    // strip trailing " icon"
+          .trim();
+        if (cleanName) updateZone(linkId, { label: cleanName });
+      }
+    } finally {
+      setUploadingForZone(null);
+      if (iconInputRef.current) iconInputRef.current.value = '';
+      uploadingLinkId.current = null;
     }
-    if (iconInputRef.current) iconInputRef.current.value = '';
-    uploadingLinkId.current = null;
   };
 
   // Add a default zone (alternative to drawing — better for mobile)
@@ -756,95 +780,121 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                         </div>
                       ))}
                     </div>
-                    {/* Icons — multi-select picker */}
+                    {/* Icons — selected row (if any) + always-visible picker with Upload as the first tile.
+                        Clicking a library tile toggles it on/off. Clicking the Upload tile opens the
+                        file picker; uploads auto-save any drawn zones first so local work isn't wiped. */}
                     <div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        {getIconUrls(zone).map((url, idx) => (
-                          <div key={idx} style={{ position: 'relative' }}>
-                            <img src={url} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const updated = getIconUrls(zone).filter(u => u !== url);
-                                updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null });
-                              }}
-                              style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: 7, background: '#dc2626', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }}
-                            >×</button>
-                          </div>
-                        ))}
-                        <button
-                          onClick={() => handleIconUpload(zone.id)}
-                          style={{
-                            padding: '6px 10px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9ce',
-                            borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#7ab3d4',
-                            display: 'flex', alignItems: 'center', gap: 4, minHeight: 32,
-                          }}
-                        >
-                          <Upload size={12} /> Upload
-                        </button>
-                        {uniqueIcons.length > 0 && (
-                          <button
-                            onClick={() => setShowIconPicker(!showIconPicker)}
-                            style={{
-                              padding: '6px 10px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9ce',
-                              borderRadius: 6, background: showIconPicker ? '#fdf8ee' : '#fff', cursor: 'pointer',
-                              color: showIconPicker ? '#B8962E' : '#888',
-                              display: 'flex', alignItems: 'center', gap: 4, minHeight: 32,
-                            }}
-                          >
-                            Icons ({uniqueIcons.length})
-                          </button>
-                        )}
-                        {getIconUrls(zone).length > 0 && (
+                      {/* Header row — shows count + Clear All when any icons are attached */}
+                      {getIconUrls(zone).length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
+                            ICONS ({getIconUrls(zone).length})
+                          </span>
                           <button
                             onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_urls: [], icon_url: null }); }}
-                            style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, border: '1px solid #fecaca', borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#dc2626', minHeight: 32 }}
+                            style={{ padding: '4px 8px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: '#dc2626', fontFamily: "'DM Mono', monospace" }}
                           >
-                            Clear All
+                            Clear all
                           </button>
-                        )}
-                      </div>
-                      {showIconPicker && uniqueIcons.length > 0 && (
-                        <div style={{
-                          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
-                          gap: 6, marginTop: 6, maxHeight: 200, overflowY: 'auto', padding: 2,
-                        }}>
-                          {uniqueIcons.map(ico => {
-                            const isSelected = getIconUrls(zone).includes(ico.url);
-                            return (
+                        </div>
+                      )}
+
+                      {/* Selected icons row — small chips with remove button. Only shown when zone has icons. */}
+                      {getIconUrls(zone).length > 0 && (
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+                          {getIconUrls(zone).map((url, idx) => (
+                            <div key={idx} style={{ position: 'relative' }}>
+                              <img src={url} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'contain', padding: 3, background: '#fafafa', border: '1px solid #e0d9ce' }} />
                               <button
-                                key={ico.id}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const current = getIconUrls(zone);
-                                  const updated = isSelected
-                                    ? current.filter(u => u !== ico.url)
-                                    : [...current, ico.url];
-                                  // Auto-fill label from icon name if zone has no label yet —
-                                  // saves a step and matches what the icon visually represents.
-                                  const cleanName = (ico.name || '').replace(/\s*Icon$/i, '').trim();
-                                  const labelUpdate = !zone.label && !isSelected && cleanName ? { label: cleanName } : {};
-                                  updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null, ...labelUpdate });
+                                  const updated = getIconUrls(zone).filter(u => u !== url);
+                                  updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null });
                                 }}
-                                title={ico.name}
-                                style={{
-                                  position: 'relative',
-                                  width: '100%', aspectRatio: '1/1', borderRadius: 8,
-                                  border: isSelected ? '2px solid #B8962E' : '1px solid #e0d9ce',
-                                  background: isSelected ? '#fdf8ee' : '#fff',
-                                  cursor: 'pointer', padding: 6,
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                }}
-                              >
-                                <img src={ico.url} alt={ico.name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 3 }} draggable={false} />
-                                {isSelected && (
-                                  <div style={{ position: 'absolute', top: 3, right: 3, width: 16, height: 16, borderRadius: 8, background: '#B8962E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Check size={10} color="#fff" strokeWidth={3} />
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })}
+                                aria-label="Remove icon"
+                                style={{ position: 'absolute', top: -5, right: -5, width: 16, height: 16, borderRadius: 8, background: '#dc2626', color: '#fff', border: '1.5px solid #fff', cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}
+                              >×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Always-visible picker. First tile is Upload (creates new icon); rest are
+                          library icons. Clicking a library icon toggles on/off; a gold check mark
+                          indicates selection. */}
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3, marginBottom: 6 }}>
+                        {getIconUrls(zone).length === 0 ? 'ADD AN ICON' : 'ADD ANOTHER'}
+                      </div>
+                      <div style={{
+                        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))',
+                        gap: 6, maxHeight: 220, overflowY: 'auto', padding: 2,
+                      }}>
+                        {/* Upload tile — always first so it's easy to find */}
+                        <button
+                          onClick={() => handleIconUpload(zone.id)}
+                          disabled={uploadingForZone === zone.id}
+                          title="Upload a custom icon"
+                          style={{
+                            position: 'relative',
+                            width: '100%', aspectRatio: '1/1', borderRadius: 8,
+                            border: '1px dashed #B8962E',
+                            background: uploadingForZone === zone.id ? '#fdf8ee' : '#fafaf5',
+                            cursor: uploadingForZone === zone.id ? 'wait' : 'pointer',
+                            padding: 6,
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+                            color: '#B8962E',
+                            transition: 'background 0.15s',
+                          }}
+                        >
+                          {uploadingForZone === zone.id ? (
+                            <Loader size={18} className="spin" />
+                          ) : (
+                            <Upload size={16} />
+                          )}
+                          <span style={{ fontSize: 8, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
+                            {uploadingForZone === zone.id ? 'UPLOADING' : 'UPLOAD'}
+                          </span>
+                        </button>
+                        {uniqueIcons.map(ico => {
+                          const isSelected = getIconUrls(zone).includes(ico.url);
+                          return (
+                            <button
+                              key={ico.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const current = getIconUrls(zone);
+                                const updated = isSelected
+                                  ? current.filter(u => u !== ico.url)
+                                  : [...current, ico.url];
+                                // Auto-fill label from icon name if zone has no label yet —
+                                // saves a step and matches what the icon visually represents.
+                                const cleanName = (ico.name || '').replace(/\s*Icon$/i, '').trim();
+                                const labelUpdate = !zone.label && !isSelected && cleanName ? { label: cleanName } : {};
+                                updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null, ...labelUpdate });
+                              }}
+                              title={ico.name}
+                              style={{
+                                position: 'relative',
+                                width: '100%', aspectRatio: '1/1', borderRadius: 8,
+                                border: isSelected ? '2px solid #B8962E' : '1px solid #e0d9ce',
+                                background: isSelected ? '#fdf8ee' : '#fff',
+                                cursor: 'pointer', padding: 6,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}
+                            >
+                              <img src={ico.url} alt={ico.name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 3 }} draggable={false} />
+                              {isSelected && (
+                                <div style={{ position: 'absolute', top: 3, right: 3, width: 16, height: 16, borderRadius: 8, background: '#B8962E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <Check size={10} color="#fff" strokeWidth={3} />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {uniqueIcons.length === 0 && (
+                        <div style={{ fontSize: 10, color: '#999', textAlign: 'center', padding: '8px 0', fontFamily: "'DM Mono', monospace", lineHeight: 1.5 }}>
+                          No library icons yet — upload one or create via "+ New Icon" in the toolbar
                         </div>
                       )}
                     </div>
