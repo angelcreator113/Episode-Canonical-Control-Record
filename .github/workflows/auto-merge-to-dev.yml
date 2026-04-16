@@ -29,13 +29,6 @@ jobs:
           # GITHUB_TOKEN pushes do NOT trigger other workflows (GitHub security rule).
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
@@ -53,6 +46,10 @@ jobs:
 
           git checkout dev
           git pull origin dev
+
+          # Capture dev's tip BEFORE merging so the next step can diff the merge
+          # against it to decide whether frontend paths were touched.
+          echo "pre_merge_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
           # Try clean merge first
           if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev"; then
@@ -82,12 +79,37 @@ jobs:
             exit 1
           fi
 
+      # Skip the (slow) build verification when the merge only touches backend
+      # code. `git diff --quiet` exits 0 when there are no changes in the given
+      # paths, 1 when there are — we invert that to set a boolean output.
+      - name: Detect frontend changes
+        id: changes
+        run: |
+          if git diff --quiet "${{ steps.merge.outputs.pre_merge_sha }}" HEAD -- frontend/; then
+            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
+            echo "📦 No frontend changes in merge — skipping build verification."
+          else
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+            echo "🔨 Frontend changed — will verify build."
+          fi
+
+      # Setup Node only when we actually need to build — saves ~5s on
+      # backend-only merges and avoids wasting npm cache slots.
+      - name: Setup Node.js
+        if: steps.changes.outputs.frontend_changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
       # Verify the merged tree actually builds before pushing. Even a "clean"
       # three-way merge can produce broken code when two branches add
       # non-overlapping usages of an identifier that one branch forgot to
       # declare, or touch the same JSX tree in ways that balance per-branch
       # but not together. A post-merge build catches those silent breakages.
       - name: Verify frontend build
+        if: steps.changes.outputs.frontend_changed == 'true'
         run: |
           echo "🔨 Verifying merged tree builds..."
           cd frontend
