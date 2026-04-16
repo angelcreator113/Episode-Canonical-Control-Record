@@ -7,7 +7,7 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef, Component } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, GitBranch } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
@@ -874,7 +874,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         className="zone-editor-nav-btn"
                         title={prevScreen ? `Previous: ${prevScreen.name}` : 'No previous screen'}
                         aria-label="Previous screen"
-                      >◀</button>
+                      ><ChevronLeft size={16} /></button>
                       <select
                         className="zone-editor-screen-select"
                         value={activeScreen.id}
@@ -893,14 +893,14 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         className="zone-editor-nav-btn"
                         title={nextScreen ? `Next: ${nextScreen.name}` : 'No next screen'}
                         aria-label="Next screen"
-                      >▶</button>
+                      ><ChevronRight size={16} /></button>
                     </div>
                     <button onClick={() => {
                       if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
                       setEditingLinks(false);
                       setNavHistory([]);
                     }} className="zone-editor-done-btn">
-                      ✓ Done
+                      <Check size={14} /> Done
                     </button>
                   </div>
                   <ScreenLinkEditor

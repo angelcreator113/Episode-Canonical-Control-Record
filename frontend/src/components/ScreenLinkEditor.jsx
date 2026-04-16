@@ -20,7 +20,7 @@
  */
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle } from 'lucide-react';
-import { getScreenImageStyle } from './PhoneHub';
+import { getScreenImageStyle, PHONE_SKINS } from './PhoneHub';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
@@ -73,6 +73,10 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   const imageStyle = screen
     ? getScreenImageStyle(screen, globalFit)
     : { width: '100%', height: '100%', objectFit: 'cover' };
+  // Resolve the skin so the editor bezel matches the main phone's skin, not a generic dark rectangle.
+  const currentSkin = (PHONE_SKINS && PHONE_SKINS.find(s => s.key === phoneSkin)) || (PHONE_SKINS && PHONE_SKINS[0]) || {
+    body: '#1a1a2e', notch: '#333', btn: '#444', shadow: 'rgba(0,0,0,0.3)', accent: 'rgba(255,255,255,0.1)',
+  };
   const [zones, setZones] = useState(links);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -332,9 +336,19 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Toolbar — preview, safe-area, grid snap, and undo/redo live here so they're visible above the canvas */}
+      {/* Toolbar — grouped into view toggles / layout tools / history so intent is readable.
+          Wrapped in a parchment pill with subtle gold border so it reads as one cohesive control bar. */}
       {!readOnly && (
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+        <div style={{
+          display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap',
+          padding: '4px', margin: '0 auto',
+          background: '#FAF7F0',
+          border: '1px solid rgba(184,150,46,0.2)',
+          borderRadius: 10,
+          width: 'fit-content', maxWidth: '100%',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+        }}>
+          {/* Group 1 — view toggles */}
           <button
             type="button"
             onClick={() => {
@@ -357,6 +371,8 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
             <Ruler size={12} />
             {showSafeArea ? 'Hide Guides' : 'Show Guides'}
           </button>
+          <div style={toolbarDividerStyle} />
+          {/* Group 2 — layout */}
           <button
             type="button"
             onClick={() => {
@@ -370,6 +386,8 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
             <Grid3x3 size={12} />
             {gridSnap ? 'Snap On' : 'Snap Off'}
           </button>
+          <div style={toolbarDividerStyle} />
+          {/* Group 3 — history */}
           <button
             type="button"
             onClick={undo}
@@ -414,18 +432,29 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
         </div>
       )}
 
-      {/* Phone-frame wrapper — a compact neutral bezel so users see they're editing
-          inside a phone, not a floating rectangle. Zones still live inside the inner
-          screen-area div (which keeps the aspect ratio that matches PhoneHub). */}
-      <div style={{
-        width: '100%', maxWidth: 300, margin: '0 auto',
-        padding: '10px 8px 14px',
-        background: '#1a1a2e',
-        borderRadius: 32,
-        boxShadow: '0 4px 16px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.08)',
-        border: '2px solid rgba(0,0,0,0.4)',
-        position: 'relative',
+      {/* Phone-frame wrapper — matches the selected phone skin exactly so the editor
+          looks like the same device the user is editing for, not a generic stand-in.
+          Zones live inside the inner screen-area div (which keeps the aspect ratio
+          that matches PhoneHub). A soft fade keyed off screen.id makes screen switches
+          feel polished instead of snapping. */}
+      <div
+        key={screen?.id || 'no-screen'}
+        className="screen-link-editor-frame"
+        style={{
+          width: '100%', maxWidth: 300, margin: '0 auto',
+          padding: '12px 10px 16px',
+          background: currentSkin.body,
+          backgroundImage: typeof currentSkin.body === 'string' && currentSkin.body.startsWith('linear') ? currentSkin.body : undefined,
+          borderRadius: 40,
+          boxShadow: `0 6px 20px ${currentSkin.shadow}, inset 0 1px 0 ${currentSkin.accent}, 0 0 0 2px rgba(0,0,0,0.28)`,
+          border: '2px solid rgba(0,0,0,0.4)',
+          position: 'relative',
       }}>
+        {/* Side buttons — match PhoneHub for visual parity */}
+        <div style={{ position: 'absolute', left: -5, top: '18%', width: 4, height: 28, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
+        <div style={{ position: 'absolute', left: -5, top: '26%', width: 4, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
+        <div style={{ position: 'absolute', left: -5, top: '34%', width: 4, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
+        <div style={{ position: 'absolute', right: -5, top: '24%', width: 4, height: 64, background: currentSkin.btn, borderRadius: '0 3px 3px 0', border: '1px solid rgba(0,0,0,0.3)', borderLeft: 'none' }} />
         {/* Screen with overlay zones — aspect ratio + image style MUST match PhoneHub
             exactly, or tap-zone percentages won't land at the same visual spot. */}
       <div
@@ -627,25 +656,40 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                 key={zone.id}
                 onClick={() => setSelectedZone(zone.id)}
                 style={{
-                  padding: '10px 12px',
+                  padding: '12px 14px',
                   background: selectedZone === zone.id ? '#fdf8ee' : '#fff',
                   border: `1px solid ${selectedZone === zone.id ? '#B8962E' : '#eee'}`,
-                  borderRadius: 8,
+                  borderRadius: 10,
                   fontSize: 13,
+                  boxShadow: selectedZone === zone.id ? '0 2px 8px rgba(184,150,46,0.12)' : 'none',
+                  transition: 'box-shadow 0.15s, border-color 0.15s',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: selectedZone === zone.id ? 8 : 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: selectedZone === zone.id ? 10 : 0 }}>
                   <div style={{ width: 10, height: 10, borderRadius: 3, background: ZONE_COLORS[i % ZONE_COLORS.length], flexShrink: 0 }} />
-                  {zone.persistent && <Pin size={11} color="#B8962E" style={{ flexShrink: 0 }} />}
+                  {zone.persistent && <Pin size={12} color="#B8962E" style={{ flexShrink: 0 }} />}
                   {getIconUrls(zone).slice(0, 3).map((url, idx) => (
-                    <img key={idx} src={url} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain', marginLeft: idx > 0 ? -4 : 0 }} />
+                    <img key={idx} src={url} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: 'contain', marginLeft: idx > 0 ? -4 : 0, padding: 2, background: '#fafafa', border: '1px solid #f0ece4' }} />
                   ))}
-                  {getIconUrls(zone).length > 3 && <span style={{ fontSize: 9, color: '#aaa' }}>+{getIconUrls(zone).length - 3}</span>}
-                  <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{zone.label || zone.target || 'Untitled'}</span>
-                  <span style={{ fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
-                    {zone.target ? `→ ${zone.target}` : 'no target'}
-                  </span>
-                  <button onClick={(e) => { e.stopPropagation(); removeZone(zone.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 4, minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {getIconUrls(zone).length > 3 && <span style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>+{getIconUrls(zone).length - 3}</span>}
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <span style={{
+                      fontFamily: "'Lora', serif",
+                      fontSize: 15, fontWeight: 600, lineHeight: 1.25,
+                      color: '#2C2C2C',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{zone.label || zone.target || 'Untitled'}</span>
+                    <span style={{
+                      fontSize: 10, color: zone.target ? '#a89870' : '#dc2626',
+                      fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {zone.target ? `→ ${zone.target}` : '⚠ no target'}
+                    </span>
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); removeZone(zone.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 6, minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, transition: 'color 0.15s, background 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.background = '#fef2f2'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#ccc'; e.currentTarget.style.background = 'transparent'; }}>
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -826,9 +870,9 @@ function toolbarBtnStyle(active) {
   return {
     display: 'inline-flex', alignItems: 'center', gap: 5,
     padding: '6px 10px', fontSize: 11, fontWeight: 600,
-    border: `1px solid ${active ? '#B8962E' : '#e0d9ce'}`,
+    border: `1px solid ${active ? '#B8962E' : 'transparent'}`,
     borderRadius: 6,
-    background: active ? '#fdf8ee' : '#fff',
+    background: active ? '#fdf8ee' : 'transparent',
     color: active ? '#B8962E' : '#666',
     cursor: 'pointer',
     fontFamily: "'DM Mono', monospace",
@@ -836,3 +880,10 @@ function toolbarBtnStyle(active) {
     minHeight: 30,
   };
 }
+
+// Thin vertical divider that groups related toolbar buttons together.
+const toolbarDividerStyle = {
+  width: 1, height: 20,
+  background: 'rgba(184,150,46,0.25)',
+  margin: '0 2px',
+};
