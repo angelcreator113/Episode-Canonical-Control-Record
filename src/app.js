@@ -1613,6 +1613,10 @@ try {
   const phoneAIRoutes = require('./routes/phoneAIRoutes');
   app.use('/api/v1/ui-overlays/:showId/ai', phoneAIRoutes);
   console.log('✓ Phone AI loaded at /api/v1/ui-overlays/:showId/ai');
+  // Phone playthrough — reader-facing runtime. Episode-scoped, authenticated.
+  const phonePlaythroughRoutes = require('./routes/phonePlaythroughRoutes');
+  app.use('/api/v1/episodes/:episodeId/phone-state', phonePlaythroughRoutes);
+  console.log('✓ Phone playthrough loaded at /api/v1/episodes/:episodeId/phone-state');
 } catch (e) {
   console.error('✗ Failed to load UI Overlay routes:', e.message);
 }

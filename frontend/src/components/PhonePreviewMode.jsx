@@ -16,29 +16,55 @@ function getLinks(screen) {
   return screen?.screen_links || screen?.metadata?.screen_links || [];
 }
 
-export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight' }) {
+/**
+ * PhonePreviewMode — walk the phone end-to-end.
+ *
+ * Two modes:
+ *   - Author mode (default): in-memory state, resets when the overlay closes.
+ *     Used by the editor for quick preview.
+ *   - Player mode: pass `playthrough` — a server-backed state object from the
+ *     `usePhonePlaythrough(episodeId)` hook. State persists across sessions,
+ *     taps hit the server-side evaluator, and the reset button clears the
+ *     DB row in place. Same evaluator runs on both sides.
+ */
+export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', playthrough = null }) {
   const skin = PHONE_SKINS.find(s => s.key === phoneSkin) || PHONE_SKINS[0];
   const [activeScreen, setActiveScreen] = useState(initialScreen || screens[0] || null);
   const [history, setHistory] = useState([]);
   const [slideDir, setSlideDir] = useState(null); // 'left' | 'right' | null
   const [animating, setAnimating] = useState(false);
-  // ── Phone runtime state (in-memory) ──
-  // Preview is a disposable session; when the user closes the overlay everything resets.
-  // Same shape as the server-side phone_playthrough_state row so the runtime route can
-  // be a drop-in in PR2.
-  const [state, setState] = useState({});                    // key → value from set_state actions
-  const [visitedScreens, setVisitedScreens] = useState(() => new Set());
-  const [toasts, setToasts] = useState([]);                   // transient notifications
+  // ── Phone runtime state ──
+  // In author mode, these drive the evaluator directly (in-memory).
+  // In player mode, we mirror the server-returned `playthrough.state` object so
+  // the evaluator still has something to read between taps; the real writes go
+  // through `playthrough.tap()` which returns the updated state.
+  const [state, setStateRaw] = useState({});
+  const [visitedScreens, setVisitedScreensRaw] = useState(() => new Set());
+  const [toasts, setToasts] = useState([]);
   const [episodeComplete, setEpisodeComplete] = useState(false);
+
+  // Hydrate from playthrough whenever it changes (covers initial load + tap responses).
+  useEffect(() => {
+    if (!playthrough?.state) return;
+    setStateRaw(playthrough.state.state_flags || {});
+    setVisitedScreensRaw(new Set(playthrough.state.visited_screens || []));
+    setEpisodeComplete(Boolean(playthrough.state.completed_at));
+  }, [playthrough?.state]);
+
   const evalContext = useMemo(() => ({ state, visitedScreens }), [state, visitedScreens]);
-  const resetState = useCallback(() => {
-    setState({});
-    setVisitedScreens(new Set());
+
+  const resetState = useCallback(async () => {
+    if (playthrough?.reset) {
+      await playthrough.reset();  // server wipes + returns new state, useEffect re-hydrates
+    } else {
+      setStateRaw({});
+      setVisitedScreensRaw(new Set());
+    }
     setToasts([]);
     setEpisodeComplete(false);
     setHistory([]);
     setActiveScreen(initialScreen || screens[0] || null);
-  }, [initialScreen, screens]);
+  }, [initialScreen, screens, playthrough]);
 
   const findScreen = useCallback((key) => {
     if (!key) return null;
@@ -57,7 +83,9 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     setTimeout(() => {
       setActiveScreen(target);
       // Track every screen the user lands on so `visited:<id>` conditions can fire.
-      setVisitedScreens(prev => {
+      // In player mode the server also tracks this; we still update locally for
+      // immediate UI feedback between taps.
+      setVisitedScreensRaw(prev => {
         const next = new Set(prev);
         if (target.id) next.add(target.id);
         return next;
@@ -68,15 +96,28 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   }, [findScreen, activeScreen, animating]);
 
   /**
-   * The single entry point for tapping a zone — runs the zone's actions through
-   * the shared phoneRuntime evaluator. Implicit defaults: no actions → navigate(target).
-   * Never calls navigateTo directly; the evaluator returns `effects.navigate` instead
-   * so preview and runtime share exactly one tap-handling path.
+   * The single entry point for tapping a zone. In author mode we run actions
+   * locally through applyActions; in player mode we delegate to the server via
+   * playthrough.tap() which runs the SAME evaluator and persists the result.
+   * Either way, the returned effects (navigate/toasts/completeEpisode) drive
+   * the same UI updates.
    */
-  const handleZoneTap = useCallback((zone) => {
+  const handleZoneTap = useCallback(async (zone) => {
+    if (playthrough?.tap && zone.id) {
+      // Player mode — server executes. Returns effects; state syncs via useEffect.
+      const result = await playthrough.tap(zone.id);
+      const effects = result?.effects;
+      if (effects?.toasts?.length) {
+        setToasts(prev => [...prev, ...effects.toasts.map((t, i) => ({ ...t, id: Date.now() + i }))]);
+      }
+      if (effects?.navigate) navigateTo(effects.navigate, 'left');
+      return;
+    }
+
+    // Author mode — in-memory. Implicit defaults apply (no actions → navigate target).
     const actions = actionsForZone(zone);
     const writer = {
-      setState: (k, v) => setState(prev => ({ ...prev, [k]: v })),
+      setState: (k, v) => setStateRaw(prev => ({ ...prev, [k]: v })),
       markEpisodeComplete: () => setEpisodeComplete(true),
     };
     const effects = applyActions(actions, evalContext, writer);
@@ -84,7 +125,7 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
       setToasts(prev => [...prev, ...effects.toasts.map((t, i) => ({ ...t, id: Date.now() + i }))]);
     }
     if (effects.navigate) navigateTo(effects.navigate, 'left');
-  }, [evalContext, navigateTo]);
+  }, [evalContext, navigateTo, playthrough]);
 
   // Auto-dismiss toasts after 2.5s
   useEffect(() => {

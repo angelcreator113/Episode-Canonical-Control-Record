@@ -15,6 +15,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Plus, Trash2, Save, X, Layers, Eye, EyeOff } from 'lucide-react';
 import { CONTENT_TYPES, CONTENT_TYPE_MAP } from './ScreenContentRenderer';
+import ConditionRow from './phone-editor/ConditionRow';
 import api from '../services/api';
 
 const ZONE_COLORS = ['#e8a0b4', '#b8a9d4', '#7ab3d4', '#a8d5a2', '#c9a84c', '#6bba9a', '#e06060', '#b89060'];
@@ -466,6 +467,40 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate }) {
           </div>
         </div>
       )}
+
+      {/* Visibility conditions — empty array means always visible (implicit default).
+          Shares the exact schema used by tap zones, so the same evaluator gates both.
+          Content items inside the zone are filtered separately per-renderer. */}
+      <div style={{ borderTop: '1px dashed #f0ece4', paddingTop: 8, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <label style={labelStyle}>
+            VISIBLE WHEN {Array.isArray(zone.conditions) && zone.conditions.length > 0 ? `(${zone.conditions.length})` : '— always'}
+          </label>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const next = [...(zone.conditions || []), { key: '', op: 'eq', value: true }];
+              onUpdate({ conditions: next });
+            }}
+            style={{ padding: '3px 8px', fontSize: 10, fontWeight: 600, border: '1px solid #e0d9ce', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#666', fontFamily: "'DM Mono', monospace" }}
+          >+ condition</button>
+        </div>
+        {(zone.conditions || []).map((cond, ci) => (
+          <ConditionRow
+            key={ci}
+            condition={cond}
+            onChange={(nextCond) => {
+              const next = [...(zone.conditions || [])];
+              next[ci] = nextCond;
+              onUpdate({ conditions: next });
+            }}
+            onRemove={() => {
+              const next = (zone.conditions || []).filter((_, i) => i !== ci);
+              onUpdate({ conditions: next.length ? next : undefined });
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }
