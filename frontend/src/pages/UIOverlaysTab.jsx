@@ -1067,6 +1067,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
                     onSave={handleSaveLinks}
                     onUploadIcon={handleUploadIcon}
+                    compact
                   />
                 </div>
               )}
@@ -1082,6 +1083,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
                     showId={showId}
                     onSave={handleSaveContentZones}
+                    compact
                   />
                 </div>
               )}

@@ -14,7 +14,7 @@ import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin } from 'l
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
-export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], generatedScreenKeys, iconOverlays = [], onSave, onUploadIcon, readOnly = false }) {
+export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = [], generatedScreenKeys, iconOverlays = [], onSave, onUploadIcon, readOnly = false, compact = false }) {
   const [zones, setZones] = useState(links);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -175,7 +175,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: 320,
+          maxWidth: compact ? 200 : 320,
           margin: '0 auto',
           aspectRatio: '9/16',
           borderRadius: 12,
