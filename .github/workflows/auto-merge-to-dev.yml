@@ -29,23 +29,35 @@ jobs:
           # GITHUB_TOKEN pushes do NOT trigger other workflows (GitHub security rule).
           token: ${{ steps.app-token.outputs.token }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge into dev
+      # Merge locally only — do NOT push yet. The build-verification step below
+      # must succeed before we ship the merge commit to dev; otherwise a broken
+      # half-merge (e.g. usages without declarations after -X ours) would land
+      # on the shared branch and block every downstream claude/* session.
+      - name: Merge into dev (local)
+        id: merge
         run: |
           BRANCH="${{ github.ref_name }}"
-          echo "Merging $BRANCH into dev..."
+          echo "Merging $BRANCH into dev locally..."
 
           git checkout dev
           git pull origin dev
 
           # Try clean merge first
           if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev"; then
-            git push origin dev
-            echo "✅ Clean merge — pushed to dev."
+            echo "merge_type=clean" >> "$GITHUB_OUTPUT"
+            echo "✅ Clean merge."
             exit 0
           fi
 
@@ -62,10 +74,28 @@ jobs:
           # hunks — which is visible to its author, easy to fix with a rebase+push,
           # and doesn't corrupt the shared branch.
           if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev (resolved conflicts, dev wins)" -X ours; then
-            git push origin dev
-            echo "✅ Merged with conflict resolution (dev wins) — pushed to dev."
+            echo "merge_type=conflicts-resolved" >> "$GITHUB_OUTPUT"
+            echo "✅ Merged with conflict resolution (dev wins)."
           else
             echo "❌ Merge still failed even with -X ours. Manual resolution needed."
             git merge --abort
             exit 1
           fi
+
+      # Verify the merged tree actually builds before pushing. Even a "clean"
+      # three-way merge can produce broken code when two branches add
+      # non-overlapping usages of an identifier that one branch forgot to
+      # declare, or touch the same JSX tree in ways that balance per-branch
+      # but not together. A post-merge build catches those silent breakages.
+      - name: Verify frontend build
+        run: |
+          echo "🔨 Verifying merged tree builds..."
+          cd frontend
+          npm ci --prefer-offline --no-audit --no-fund
+          npx vite build
+          echo "✅ Frontend build passed."
+
+      - name: Push to dev
+        run: |
+          git push origin dev
+          echo "✅ Pushed verified merge to dev."
