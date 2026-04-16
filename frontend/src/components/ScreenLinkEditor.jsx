@@ -162,6 +162,9 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
 
   const sel = selectedZone ? zones.find(z => z.id === selectedZone) : null;
 
+  // Deduplicate icon overlays by URL to avoid showing the same image multiple times
+  const uniqueIcons = iconOverlays.filter((ico, idx, arr) => arr.findIndex(i => i.url === ico.url) === idx);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Screen with overlay zones */}
@@ -336,17 +339,17 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                     </div>
                     {/* Icon picker — choose from existing icon overlays or upload */}
                     <div>
-                      {iconOverlays.length > 0 && (
+                      {uniqueIcons.length > 0 && (
                         <div style={{ marginBottom: 8 }}>
                           <div style={{ fontSize: 11, fontWeight: 600, color: '#888', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>
-                            USE ICON OVERLAY ({iconOverlays.length})
+                            USE ICON OVERLAY ({uniqueIcons.length})
                           </div>
                           <div style={{
                             display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))',
                             gap: 6, maxHeight: 200, overflowY: 'auto', padding: 2,
                             WebkitOverflowScrolling: 'touch',
                           }}>
-                            {iconOverlays.map(ico => (
+                            {uniqueIcons.map(ico => (
                               <button
                                 key={ico.id}
                                 onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_url: ico.url, icon_overlay_id: ico.id }); }}
@@ -396,23 +399,25 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                         </span>
                       </div>
                     </div>
-                    {/* Zone size controls */}
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ flex: 1, minWidth: 100 }}>
+                    {/* Size controls — resize zone width & height */}
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                          <span style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>Width</span>
+                          <span style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>Width</span>
                           <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(zone.w)}%</span>
                         </div>
-                        <input type="range" min={3} max={50} value={Math.round(zone.w)} onChange={e => updateZone(zone.id, { w: parseInt(e.target.value) })}
-                          style={{ width: '100%', height: 4, cursor: 'pointer' }} />
+                        <input type="range" min={5} max={100} value={Math.round(zone.w)}
+                          onChange={e => updateZone(zone.id, { w: Math.min(parseInt(e.target.value), 100 - zone.x) })}
+                          style={{ width: '100%', height: 4, cursor: 'pointer', accentColor: '#B8962E' }} />
                       </div>
-                      <div style={{ flex: 1, minWidth: 100 }}>
+                      <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                          <span style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>Height</span>
+                          <span style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>Height</span>
                           <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(zone.h)}%</span>
                         </div>
-                        <input type="range" min={3} max={50} value={Math.round(zone.h)} onChange={e => updateZone(zone.id, { h: parseInt(e.target.value) })}
-                          style={{ width: '100%', height: 4, cursor: 'pointer' }} />
+                        <input type="range" min={5} max={100} value={Math.round(zone.h)}
+                          onChange={e => updateZone(zone.id, { h: Math.min(parseInt(e.target.value), 100 - zone.y) })}
+                          style={{ width: '100%', height: 4, cursor: 'pointer', accentColor: '#B8962E' }} />
                       </div>
                     </div>
                     {/* Persistent toggle — pin icon to show on all screens */}
