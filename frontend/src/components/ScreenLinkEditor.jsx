@@ -175,7 +175,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: compact ? 200 : 320,
+          maxWidth: compact ? 240 : 320,
           margin: '0 auto',
           aspectRatio: '9/16',
           borderRadius: 12,
@@ -216,12 +216,30 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
             {zone.icon_url ? (
               <img src={zone.icon_url} alt={zone.label || zone.target} style={{ width: '80%', height: '80%', maxWidth: 64, maxHeight: 64, objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
             ) : (
-              <span style={{ fontSize: 7, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.6)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2 }}>
+              <span style={{ fontSize: 9, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.7)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2, lineHeight: 1.2 }}>
                 {zone.label || zone.target || '?'}
               </span>
             )}
           </div>
         ))}
+
+        {/* Draw instruction overlay — shown when no zones exist and not drawing */}
+        {!readOnly && zones.length === 0 && !drawing && screenUrl && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.25)', pointerEvents: 'none',
+          }}>
+            <div style={{
+              padding: '8px 14px', borderRadius: 8,
+              background: 'rgba(0,0,0,0.55)', color: '#fff',
+              fontSize: 11, fontWeight: 600, fontFamily: "'DM Mono', monospace",
+              textAlign: 'center', lineHeight: 1.4,
+            }}>
+              Draw a rectangle to<br />create a tap zone
+            </div>
+          </div>
+        )}
 
         {/* Drawing preview */}
         {drawRect && drawRect.w > 1 && drawRect.h > 1 && (
@@ -261,7 +279,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 'min(400px, 35vh)', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...(!compact ? { maxHeight: 'min(400px, 35vh)', overflowY: 'auto', WebkitOverflowScrolling: 'touch' } : {}) }}>
             {zones.map((zone, i) => (
               <div
                 key={zone.id}
@@ -310,7 +328,7 @@ export default function ScreenLinkEditor({ screenUrl, links = [], screenTypes = 
                           const hasImage = generatedScreenKeys?.has(st.key);
                           return (
                             <option key={st.key} value={st.key}>
-                              {st.icon} {st.label}{hasImage ? ' \u2713' : ''}
+                              {st.label}{hasImage ? ' \u2713' : ''}
                             </option>
                           );
                         })}
