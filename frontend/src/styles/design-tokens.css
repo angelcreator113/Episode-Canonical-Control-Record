@@ -188,6 +188,37 @@
   --safe-right:  env(safe-area-inset-right,  0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left:   env(safe-area-inset-left,   0px);
+
+  /* ════════════════════════════════════════════════════════════
+     LALA PALETTE — "Before Lala" / LalaVerse editorial theme
+     ════════════════════════════════════════════════════════════
+     Use these on Lala-themed surfaces (Phone Hub, Story pages,
+     etc.). They sit on top of the generic tokens above without
+     overriding them, so other areas of the app are unaffected.
+  */
+  --lala-parchment:   #FAF7F0;  /* page background */
+  --lala-parchment-2: #F4EFE4;  /* subtle surface / active track */
+  --lala-parchment-3: #E8E0D0;  /* borders, dividers */
+  --lala-surface:     #FFFFFF;  /* cards on parchment */
+
+  --lala-ink:         #2C2C2C;  /* body text */
+  --lala-ink-muted:   #6B6557;  /* labels, meta, secondary text */
+  --lala-ink-faint:   #A09889;  /* placeholders, disabled */
+
+  --lala-gold:        #B8962E;  /* primary CTA + active state */
+  --lala-gold-hover:  #A68324;  /* darker gold on hover */
+  --lala-gold-soft:   #FDF8EE;  /* gold @ 6% tint — selected card bg */
+  --lala-gold-line:   #E8D9A8;  /* gold @ border tint */
+
+  --lala-danger:      #B84D2E;  /* retuned red — on-brand */
+  --lala-danger-soft: #F7E4DC;  /* danger tint bg */
+
+  /* Control heights — two sizes, pick one */
+  --lala-h-control: 40px;  /* primary buttons, inputs, selects */
+  --lala-h-inline:  32px;  /* row-inline actions (trash, add, clear) */
+
+  /* Shape — single radius for Lala surfaces */
+  --lala-radius: 8px;
 }
 
 /* === BUTTON STYLES === */
