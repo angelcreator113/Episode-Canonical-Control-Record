@@ -1258,7 +1258,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     </div>
                   )}
 
-                  {/* Secondary Actions */}
+                  {/* Secondary Actions — non-destructive only (Download, Remove BG, Copy To).
+                      Delete moved to its own "Danger Zone" section below so it doesn't
+                      sit next to benign buttons and get hit by accident. */}
                   {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
                     <div className="editor-secondary-actions">
                       {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
@@ -1269,7 +1271,15 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           onDuplicate={handleDuplicateSettings}
                         />
                       )}
-                      <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
+                    </div>
+                  )}
+
+                  {/* Danger Zone — destructive actions isolated at the bottom with a
+                      visible boundary so Delete isn't a one-tap mistake next to Download. */}
+                  {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
+                    <div className="editor-danger-zone">
+                      <div className="editor-section-label editor-danger-zone-label">Danger Zone</div>
+                      <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#B84D2E" />
                     </div>
                   )}
                 </div>

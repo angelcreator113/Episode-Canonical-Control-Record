@@ -15,7 +15,7 @@
  *   deviceFrame   — optional custom device frame image URL
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, Trash2, EyeOff, Edit3 } from 'lucide-react';
+import { MoreVertical, Trash2, EyeOff, Edit3, Settings } from 'lucide-react';
 import ScreenContentRenderer from './ScreenContentRenderer';
 
 // Screen types are now fully dynamic — defined per-show in the database.
@@ -219,6 +219,9 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [frameError, setFrameError] = useState(false);
+  // Skin picker collapsed by default — it's a rare customization, not a primary
+  // control. Opens via a small ⚙ trigger just below the phone.
+  const [skinPickerOpen, setSkinPickerOpen] = useState(false);
 
   // Only use custom frame if we have a URL AND it hasn't errored
   const useCustomFrame = customFrameUrl && !frameError;
@@ -423,25 +426,49 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         </button>
       )}
 
-      {/* Skin picker — only shown for built-in frame (skins don't apply to custom frames) */}
+      {/* Skin picker — hidden behind a ⚙ trigger since it's a rare customization.
+          Not shown at all for custom frames (skins don't apply there). */}
       {onChangeSkin && !useCustomFrame && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {PHONE_SKINS.map(s => (
-            <button
-              key={s.key}
-              title={s.label}
-              aria-label={`Phone skin: ${s.label}`}
-              onClick={() => onChangeSkin(s.key)}
-              className="phone-hub-skin-btn"
-              style={{
-                width: 36, height: 36, borderRadius: '50%', border: skin === s.key ? '2.5px solid #B8962E' : '1.5px solid #ddd',
-                background: typeof s.body === 'string' && s.body.startsWith('linear') ? undefined : s.body,
-                backgroundImage: typeof s.body === 'string' && s.body.startsWith('linear') ? s.body : undefined,
-                cursor: 'pointer', padding: 0, transition: 'transform 0.15s',
-                transform: skin === s.key ? 'scale(1.15)' : 'scale(1)',
-              }}
-            />
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={() => setSkinPickerOpen(o => !o)}
+            aria-expanded={skinPickerOpen}
+            aria-label="Phone skin settings"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', fontSize: 11, fontWeight: 600,
+              border: `1px solid ${skinPickerOpen ? 'var(--lala-gold)' : 'var(--lala-parchment-3)'}`,
+              borderRadius: 'var(--lala-radius)',
+              background: skinPickerOpen ? 'var(--lala-gold-soft)' : 'var(--lala-surface)',
+              color: skinPickerOpen ? 'var(--lala-gold)' : 'var(--lala-ink-muted)',
+              cursor: 'pointer', fontFamily: 'var(--font-ui)',
+              letterSpacing: '0.3px', minHeight: 32,
+              transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+            }}
+          >
+            <Settings size={12} /> {skinPickerOpen ? 'Hide skins' : 'Phone skin'}
+          </button>
+          {skinPickerOpen && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', padding: '6px 4px' }}>
+              {PHONE_SKINS.map(s => (
+                <button
+                  key={s.key}
+                  title={s.label}
+                  aria-label={`Phone skin: ${s.label}`}
+                  onClick={() => onChangeSkin(s.key)}
+                  className="phone-hub-skin-btn"
+                  style={{
+                    width: 36, height: 36, borderRadius: '50%', border: skin === s.key ? '2.5px solid var(--lala-gold)' : '1.5px solid var(--lala-parchment-3)',
+                    background: typeof s.body === 'string' && s.body.startsWith('linear') ? undefined : s.body,
+                    backgroundImage: typeof s.body === 'string' && s.body.startsWith('linear') ? s.body : undefined,
+                    cursor: 'pointer', padding: 0, transition: 'transform 0.15s',
+                    transform: skin === s.key ? 'scale(1.15)' : 'scale(1)',
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
       </div>

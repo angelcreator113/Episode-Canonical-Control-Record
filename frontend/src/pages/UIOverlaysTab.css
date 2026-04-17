@@ -673,12 +673,30 @@
 .editor-add-variant-btn:hover { background: var(--lala-gold-soft); }
 
 .editor-secondary-actions {
-  border-top: 1px solid #f0ece4;
+  border-top: 1px solid var(--lala-parchment-3);
   padding-top: 16px;
   margin-top: 16px;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+/* ── Danger Zone — isolates destructive actions from everything else
+      so Delete can't be hit on reflex while reaching for Download. */
+.editor-danger-zone {
+  margin-top: 20px;
+  padding: 12px 14px;
+  border: 1px dashed var(--lala-danger);
+  border-radius: var(--lala-radius);
+  background: var(--lala-danger-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editor-danger-zone-label {
+  color: var(--lala-danger) !important;
+  margin-bottom: 0;
 }
 
 /* ── Tab hints ── */

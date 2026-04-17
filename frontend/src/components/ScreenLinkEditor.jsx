@@ -564,15 +564,18 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
           feel polished instead of snapping. */}
       <div
         key={screen?.id || 'no-screen'}
-        className="screen-link-editor-frame"
+        className="screen-link-editor-frame phone-hub-frame"
         style={{
+          /* Bezel dimensions + shadows synced with PhoneHub's built-in frame so
+             flipping between preview and edit mode doesn't feel like a different
+             device. Any change here should also happen in PhoneHub.jsx. */
           width: '100%', maxWidth: 300, margin: '0 auto',
-          padding: '12px 10px 16px',
+          padding: '16px 12px 20px',
           background: currentSkin.body,
           backgroundImage: typeof currentSkin.body === 'string' && currentSkin.body.startsWith('linear') ? currentSkin.body : undefined,
-          borderRadius: 40,
-          boxShadow: `0 6px 20px ${currentSkin.shadow}, inset 0 1px 0 ${currentSkin.accent}, 0 0 0 2px rgba(0,0,0,0.28)`,
-          border: '2px solid rgba(0,0,0,0.4)',
+          borderRadius: 44,
+          boxShadow: `0 8px 32px ${currentSkin.shadow}, inset 0 1px 0 ${currentSkin.accent}, 0 0 0 2px rgba(0,0,0,0.3)`,
+          border: '2px solid rgba(0,0,0,0.5)',
           position: 'relative',
       }}>
         {/* Side buttons — match PhoneHub for visual parity */}
@@ -590,15 +593,16 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
         onPointerCancel={handlePointerUp}
         onPointerLeave={() => { if (!drawing && !dragging) return; /* captured pointers don't fire leave */ }}
         style={{
+          /* Inner screen radius + border synced with PhoneHub's built-in frame. */
           position: 'relative',
           width: '100%',
           aspectRatio: '9/19.5',
-          borderRadius: 20,
+          borderRadius: 24,
           touchAction: 'none',
           overflow: 'hidden',
           cursor: editingDisabled ? 'default' : 'crosshair',
           userSelect: 'none',
-          border: '2px solid #0a0a14',
+          border: '2.5px solid #111',
           background: '#000',
           boxShadow: 'inset 0 0 6px rgba(0,0,0,0.4)',
         }}
