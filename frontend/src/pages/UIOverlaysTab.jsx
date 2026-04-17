@@ -7,7 +7,7 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef, Component } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
@@ -924,8 +924,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             <Target size={13} /> <span className="btn-label">Missions</span>
           </button>
           <button onClick={handleGenerateAll} disabled={generating || !showId} className="overlays-header-btn" style={{
-            background: generating ? '#eee' : '#2C2C2C',
-            color: generating ? '#999' : '#fff', border: 'none',
+            background: generating ? 'var(--lala-parchment-2)' : 'var(--lala-gold)',
+            color: generating ? 'var(--lala-ink-faint)' : '#fff',
+            border: 'none',
           }}>
             {generating ? <><Loader size={13} className="spin" /> Generating...</> : <><Sparkles size={13} /> Generate All</>}
           </button>
@@ -1142,12 +1143,16 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 { key: 'actions', label: 'Actions' },
                 ...(activeScreen?.url && !activeScreen.placeholder ? [
                   { key: 'fit', label: 'Image Fit' },
-                  { key: 'links', label: 'Tap Links', badge: (activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null },
+                  // Tap Links tab removed — tap-zone editing lives on the main phone
+                  // display (the "Edit Tap Zones" button below the phone) since dev's
+                  // "Move tap zone editing to the main phone display" refactor. The
+                  // in-modal tab was a dead redirect, so it's gone.
+                  //
                   // Content tab hidden by default — only shown on screens that already
                   // have content zones drawn (keeps backward compat). The tab renders
                   // live show data (feed posts, DMs, wardrobe, etc.) into template
                   // rectangles. Hide it until someone starts using content zones so
-                  // the editor reads as three clean modes instead of four.
+                  // the editor reads as clean modes instead of a busy tab bar.
                   ...((activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length > 0
                     ? [{ key: 'content', label: 'Content', badge: (activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length }]
                     : []),
@@ -1177,16 +1182,40 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     </div>
                   )}
 
-                  {/* Primary Actions */}
+                  {/* Type toggle — Screen ↔ Icon. Only meaningful once an asset exists
+                      (placeholder cards don't have a type to change yet). */}
+                  {activeScreen.asset_id && (
+                    <div className="editor-section">
+                      <div className="editor-section-label">Type</div>
+                      <div className="editor-type-toggle">
+                        <button
+                          onClick={() => handleChangeScreenType('phone')}
+                          className={`editor-type-btn ${activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' ? 'active-screen' : ''}`}
+                        >
+                          Screen
+                        </button>
+                        <button
+                          onClick={() => handleChangeScreenType('phone_icon')}
+                          className={`editor-type-btn ${activeScreen.category === 'phone_icon' || activeScreen.category === 'icon' ? 'active-icon' : ''}`}
+                        >
+                          Icon
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Primary Actions — Generate is gold (primary); Upload is ink-muted
+                      so the two read as equal-weight options without competing for
+                      the eye. Previously Upload was sky-blue which fought the gold palette. */}
                   <div className="editor-primary-actions">
                     {!activeScreen.placeholder ? (
                       <>
                         <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
-                        <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#7ab3d4" primary />
+                        <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#6B6557" primary />
                       </>
                     ) : (
                       <>
-                        <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#7ab3d4" primary />
+                        <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#6B6557" primary />
                         <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
                       </>
                     )}
@@ -1233,7 +1262,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
                     <div className="editor-secondary-actions">
                       {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
-                      {activeScreen.asset_id && <ActionBtn icon={removingBg ? Loader : Eraser} label={removingBg ? 'Removing...' : 'Remove BG'} onClick={handleRemoveBg} disabled={removingBg} color="#a889c8" />}
+                      {activeScreen.asset_id && <ActionBtn icon={removingBg ? Loader : Eraser} label={removingBg ? 'Removing...' : 'Remove BG'} onClick={handleRemoveBg} disabled={removingBg} color="#6B6557" />}
                       {activeScreen.url && overlays.filter(o => o.id !== activeScreen.id && o.generated).length > 0 && (
                         <DuplicateSettingsBtn
                           screens={overlays.filter(o => o.id !== activeScreen.id && o.generated)}
@@ -1262,25 +1291,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 </div>
               )}
 
-              {/* ── Tap Links Tab — redirects to inline editor on the main phone display ── */}
-              {editorTab === 'links' && activeScreen?.url && !activeScreen.placeholder && (
-                <div className="editor-tab-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '24px 16px' }}>
-                  <Link2 size={24} style={{ color: '#B8962E' }} />
-                  <p style={{ fontSize: 13, color: '#666', textAlign: 'center', lineHeight: 1.5, maxWidth: 280 }}>
-                    Tap zones are now edited directly on the phone display for precise placement.
-                  </p>
-                  <button
-                    onClick={() => { setPanelOpen(false); setEditingLinks(true); }}
-                    style={{
-                      padding: '10px 20px', fontSize: 13, fontWeight: 600, border: 'none',
-                      borderRadius: 8, background: '#B8962E', color: '#fff', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 6,
-                    }}
-                  >
-                    ✎ Edit Zones on Phone
-                  </button>
-                </div>
-              )}
+              {/* Tap Links render block removed — the tab itself is gone (see tab definitions
+                  above). Tap-zone editing lives on the main phone display via the
+                  "Edit Tap Zones" button below the phone. */}
 
               {/* ── Content Zones Tab ── */}
               {editorTab === 'content' && activeScreen?.url && !activeScreen.placeholder && (
@@ -1368,7 +1381,10 @@ const FIT_MODES = [
 ];
 
 function ImageFitControls({ fit, hasScreenOverride, onChange, onSave, onClearOverride, globalFit, onChangeGlobal, onSaveGlobal }) {
-  const [editMode, setEditMode] = useState(hasScreenOverride ? 'screen' : 'global');
+  // Default to 'screen' (per-screen override) so accidental edits don't propagate
+  // to every screen via the global defaults. Users who explicitly want to change
+  // the global defaults have to click "All Screens" first.
+  const [editMode, setEditMode] = useState('screen');
   const activeFit = editMode === 'global' ? (globalFit || {}) : fit;
   const activeChange = editMode === 'global' ? onChangeGlobal : onChange;
   const activeSave = editMode === 'global' ? onSaveGlobal : onSave;
