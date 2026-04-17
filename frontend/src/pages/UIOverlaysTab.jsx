@@ -1143,7 +1143,14 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 ...(activeScreen?.url && !activeScreen.placeholder ? [
                   { key: 'fit', label: 'Image Fit' },
                   { key: 'links', label: 'Tap Links', badge: (activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null },
-                  { key: 'content', label: 'Content', badge: (activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length || null },
+                  // Content tab hidden by default — only shown on screens that already
+                  // have content zones drawn (keeps backward compat). The tab renders
+                  // live show data (feed posts, DMs, wardrobe, etc.) into template
+                  // rectangles. Hide it until someone starts using content zones so
+                  // the editor reads as three clean modes instead of four.
+                  ...((activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length > 0
+                    ? [{ key: 'content', label: 'Content', badge: (activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length }]
+                    : []),
                 ] : []),
               ].map(tab => (
                 <button
