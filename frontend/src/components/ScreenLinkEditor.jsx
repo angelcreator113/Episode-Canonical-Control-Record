@@ -365,17 +365,48 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   // Deduplicate icon overlays by URL to avoid showing the same image multiple times
   const uniqueIcons = iconOverlays.filter((ico, idx, arr) => arr.findIndex(i => i.url === ico.url) === idx);
 
-  // Fallback display name for a zone — prefers the user's label, then derives from the first
-  // selected icon (so "Phone Icon" → "Phone"), then target, then generic "Untitled".
+  // Fallback display name for a zone. Preference order:
+  //   1. User-typed label
+  //   2. Matching icon overlay's human name (strips trailing " Icon")
+  //   3. Derived from the icon URL's filename (for inline-uploaded icons
+  //      that aren't in the icon library)
+  //   4. Target screen name
+  //   5. Generic "Zone N" (1-indexed) — never show "Untitled"
   // Purely for display; the underlying zone.label stays empty until the user types one.
-  const displayLabel = (zone) => {
+  const displayLabel = (zone, index = 0) => {
     if (zone.label) return zone.label;
     const firstIcon = getIconUrls(zone)[0];
     if (firstIcon) {
       const match = iconOverlays.find(i => i.url === firstIcon);
       if (match?.name) return match.name.replace(/\s*Icon$/i, '').trim();
+      const fromFile = deriveLabelFromUrl(firstIcon);
+      if (fromFile) return fromFile;
     }
-    return zone.target || 'Untitled';
+    if (zone.target) return zone.target;
+    return `Zone ${index + 1}`;
+  };
+
+  // Derive a human-readable label from an uploaded icon URL.
+  // "https://.../icons/eye-closet-icon-1234567890.png" → "Eye Closet"
+  // Returns '' when nothing useful can be derived (all digits, empty, etc.).
+  const deriveLabelFromUrl = (url) => {
+    try {
+      const pathname = typeof url === 'string' ? url.split('?')[0] : '';
+      const file = pathname.split('/').pop() || '';
+      const base = file.replace(/\.[^.]+$/, '');
+      // Strip common trailing timestamps (10+ consecutive digits) and leading asset prefixes.
+      const cleaned = base.replace(/[-_]?\d{10,}$/, '').replace(/^(icon[-_])/i, '');
+      if (!cleaned || !/[a-z]/i.test(cleaned)) return '';
+      return cleaned
+        .split(/[-_.\s]+/)
+        .filter(Boolean)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ')
+        .replace(/\s*Icon$/i, '')
+        .trim();
+    } catch {
+      return '';
+    }
   };
 
   return (
@@ -620,7 +651,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
             ) : (
               !preview && (
                 <span style={{ fontSize: 7, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.6)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2 }}>
-                  {displayLabel(zone)}
+                  {displayLabel(zone, i)}
                 </span>
               )
             )}
@@ -775,7 +806,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                       fontSize: 15, fontWeight: 600, lineHeight: 1.25,
                       color: '#2C2C2C',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{displayLabel(zone)}</span>
+                    }}>{displayLabel(zone, i)}</span>
                     {/* Always-visible lock/unlock/action summary — one source of truth for the zone's behavior. */}
                     <ZoneBadges zone={zone} />
                   </div>
