@@ -940,8 +940,16 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                       {/* Always-visible picker. First tile is Upload (creates new icon); rest are
                           library icons. Clicking a library icon toggles on/off; a gold check mark
                           indicates selection. */}
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3, marginBottom: 6 }}>
-                        {getIconUrls(zone).length === 0 ? 'ADD AN ICON' : 'ADD ANOTHER'}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
+                          {getIconUrls(zone).length === 0 ? 'ADD AN ICON' : 'ADD ANOTHER'}
+                        </span>
+                        {/* Diagnostic: surface the library count so "where are my icons?" is obvious.
+                            If this says "3 in library" but you expected more, some icons are missing
+                            a URL or category — go to the screen grid and check their status dots. */}
+                        <span style={{ fontSize: 9, color: '#b0a890', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
+                          {uniqueIcons.length} in library
+                        </span>
                       </div>
                       <div style={{
                         display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))',
