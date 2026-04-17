@@ -282,16 +282,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 cursor: 'pointer', backdropFilter: 'blur(4px)',
               }}>← Back</button>
             )}
-            {/* Edit Zones button — also on custom-frame phones */}
-            {onEditZones && phoneScreen?.url && (
-              <button onClick={(e) => { e.stopPropagation(); onEditZones(); }} style={{
-                position: 'absolute', top: 6, right: 6, zIndex: 10,
-                padding: '4px 10px', fontSize: 9, fontWeight: 700, border: 'none',
-                borderRadius: 10, background: 'rgba(184,150,46,0.9)', color: '#fff',
-                cursor: 'pointer', backdropFilter: 'blur(4px)',
-                fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
-              }}>✎ Edit Zones</button>
-            )}
+            {/* Floating "Edit Zones" pill removed — the below-phone "Edit Tap Zones"
+                button is the single entry point now, so the phone preview stays clean. */}
           </div>
           {/* Frame image — on top so it visually wraps the screen content */}
           <img
@@ -402,16 +394,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             </div>
           )}
 
-          {/* Edit Zones button — opens inline zone editor on the main display */}
-          {onEditZones && phoneScreen?.url && (
-            <button onClick={(e) => { e.stopPropagation(); onEditZones(); }} style={{
-              position: 'absolute', top: 38, right: 8, zIndex: 10,
-              padding: '4px 10px', fontSize: 9, fontWeight: 700, border: 'none',
-              borderRadius: 10, background: 'rgba(184,150,46,0.85)', color: '#fff',
-              cursor: 'pointer', backdropFilter: 'blur(4px)',
-              fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
-            }}>✎ Edit Zones</button>
-          )}
+          {/* Floating "Edit Zones" pill removed — see the single below-phone
+              "Edit Tap Zones" button; the phone preview stays clean. */}
 
           {/* Home indicator bar */}
           <div style={{
