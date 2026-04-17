@@ -14,7 +14,7 @@ import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
 import AIProposalReview from '../components/phone-editor/AIProposalReview';
 import MissionEditor from '../components/phone-editor/MissionEditor';
-import PhoneHubSteps from '../components/phone-editor/PhoneHubSteps';
+// PhoneHubSteps removed — see below where the 4-step guide was deleted.
 import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import './UIOverlaysTab.css';
@@ -940,21 +940,10 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         </div>
       ) : (
         <>
-        {/* Guided 4-step progress header — makes it obvious what stage this
-            show's phone is at and what to do next. Hidden while the inline
-            zone editor is open so it doesn't compete with the editor header. */}
-        {!editingLinks && (
-          <PhoneHubSteps
-            screensGenerated={screensGenerated}
-            screensTotal={screensTotal}
-            screensWithZones={screensWithZones}
-            missionCount={missionCount}
-            onGenerateAll={handleGenerateAll}
-            onOpenMissions={() => setMissionsOpen(true)}
-            onOpenPreview={() => setPreviewMode(true)}
-            isGenerating={generating}
-          />
-        )}
+        {/* 4-step guide removed — creators don't need the hand-holding every
+            visit, and it was eating prime real estate above the phone. The
+            same state (screens generated, missions, preview) is still
+            reachable via the header buttons + grid tabs. */}
 
         <div className="phone-hub-layout">
           {editingLinks && activeScreen?.url ? (
@@ -1031,6 +1020,21 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     onBack={handleBack}
                     onRequestAiZones={handleRequestAiZones}
                   />
+
+                  {/* AI Assistant — lives next to the zone editor since its
+                      output *is* tap zones. Only visible while editing zones,
+                      not on the main Phone Hub view. */}
+                  {activeScreen?.url && !activeScreen.placeholder && (
+                    <div style={{ marginTop: 14 }}>
+                      <AIAssistantPanel
+                        scope="screen"
+                        scopeLabel={`Screen: ${activeScreen.name}`}
+                        activeScreen={activeScreen}
+                        onRunAddZones={handlePanelAddZones}
+                        busy={panelAiBusy}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })()
@@ -1058,20 +1062,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 />
               </OverlayErrorBoundary>
 
-              {/* AI Assistant — scoped to the currently active screen (if it has
-                  an image). Show-level commands land as separate PRs; for now
-                  the panel is most useful when you're focused on one screen. */}
-              {activeScreen?.url && !activeScreen.placeholder && (
-                <div style={{ marginTop: 14, maxWidth: 640 }}>
-                  <AIAssistantPanel
-                    scope="screen"
-                    scopeLabel={`Screen: ${activeScreen.name}`}
-                    activeScreen={activeScreen}
-                    onRunAddZones={handlePanelAddZones}
-                    busy={panelAiBusy}
-                  />
-                </div>
-              )}
+              {/* AI Assistant moved into the inline zone editor — it only
+                  appears when you're actively editing zones since that's
+                  what it acts on. */}
             </div>
           )}
         </div>
