@@ -260,7 +260,11 @@
   position: fixed;
   inset: 0;
   z-index: 950;
-  background: rgba(0, 0, 0, 0.45);
+  /* Soft parchment-tinted scrim (~18% alpha) instead of a hard 45% black so
+     the page behind stays readable — creators can still see the phone/grid
+     while a modal is open. */
+  background: rgba(44, 44, 44, 0.18);
+  backdrop-filter: blur(2px);
   animation: editorFadeIn 0.2s ease;
 }
 

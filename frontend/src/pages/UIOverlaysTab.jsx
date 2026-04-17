@@ -14,6 +14,7 @@ import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
 import AIProposalReview from '../components/phone-editor/AIProposalReview';
 import MissionEditor from '../components/phone-editor/MissionEditor';
+import PhoneHubSteps from '../components/phone-editor/PhoneHubSteps';
 import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import './UIOverlaysTab.css';
@@ -801,6 +802,29 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
 
   const generatedCount = overlays.filter(o => o.generated).length;
 
+  // Step-header derived counts. "Screens" excludes phone icons — icons are
+  // app tiles that live on a screen, not standalone workspaces.
+  const screenOverlays = overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon');
+  const screensGenerated = screenOverlays.filter(o => o.generated && o.url).length;
+  const screensTotal = screenOverlays.length;
+  const screensWithZones = screenOverlays.filter(o => {
+    const links = o.screen_links || o.metadata?.screen_links || [];
+    return Array.isArray(links) && links.length > 0;
+  }).length;
+
+  // Lightweight mission count fetch — refreshes on mount + whenever the
+  // missions modal closes (after a save/delete). Keeps the step header in
+  // sync without prop-drilling the modal's internal list.
+  const [missionCount, setMissionCount] = useState(0);
+  useEffect(() => {
+    if (!showId || missionsOpen) return;
+    let cancelled = false;
+    api.get(`/api/v1/ui-overlays/${showId}/missions`)
+      .then(r => { if (!cancelled) setMissionCount((r.data?.missions || []).length); })
+      .catch(() => { /* table may not exist yet; leave count at 0 */ });
+    return () => { cancelled = true; };
+  }, [showId, missionsOpen]);
+
 
   return (
     <div style={{ padding: '20px 0' }}>
@@ -915,6 +939,22 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         </div>
       ) : (
         <>
+        {/* Guided 4-step progress header — makes it obvious what stage this
+            show's phone is at and what to do next. Hidden while the inline
+            zone editor is open so it doesn't compete with the editor header. */}
+        {!editingLinks && (
+          <PhoneHubSteps
+            screensGenerated={screensGenerated}
+            screensTotal={screensTotal}
+            screensWithZones={screensWithZones}
+            missionCount={missionCount}
+            onGenerateAll={handleGenerateAll}
+            onOpenMissions={() => setMissionsOpen(true)}
+            onOpenPreview={() => setPreviewMode(true)}
+            isGenerating={generating}
+          />
+        )}
+
         <div className="phone-hub-layout">
           {editingLinks && activeScreen?.url ? (
             /* ── Inline Zone Editor — replaces PhoneHub so users draw directly on the main display ── */
