@@ -18,9 +18,13 @@ const { validateMissionPayload } = require('../services/phoneConditionSchema');
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const where = { show_id: req.params.showId, deleted_at: null };
+    // Fail soft if the table hasn't been migrated yet on this environment
+    // (e.g. old dev DB). Returning an empty list keeps the step header + AI
+    // context builder working; a missing table isn't an error from the UI's POV.
+    if (!models.PhoneMission) {
+      return res.json({ success: true, missions: [] });
+    }
     if (req.query.episode_id) {
-      // `episode_id IS NULL OR = :episodeId` — show-wide missions surface everywhere.
       const [rows] = await models.sequelize.query(
         `SELECT * FROM phone_missions
          WHERE show_id = :showId AND deleted_at IS NULL
@@ -31,11 +35,17 @@ router.get('/', optionalAuth, async (req, res) => {
       return res.json({ success: true, missions: rows || [] });
     }
     const missions = await models.PhoneMission.findAll({
-      where,
+      where: { show_id: req.params.showId, deleted_at: null },
       order: [['display_order', 'ASC'], ['created_at', 'ASC']],
     });
     return res.json({ success: true, missions });
   } catch (err) {
+    // Undefined-table fallback — Postgres throws code 42P01 when the relation
+    // doesn't exist. Treat that specifically as "no missions yet" rather than
+    // a server error.
+    if (err?.parent?.code === '42P01' || /phone_missions.*does not exist/i.test(err?.message || '')) {
+      return res.json({ success: true, missions: [] });
+    }
     console.error('[phoneMissionRoutes] GET error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }

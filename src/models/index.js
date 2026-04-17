@@ -67,6 +67,7 @@ let ShowConfig, ScriptTemplate, ScriptLearningProfile, ScriptEditHistory, Script
 let EditMap, CharacterProfile;
 let Character; // Characters model
 let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
+let PhonePlaythroughState, PhoneMission; // Lala's Phone gameplay runtime
 let TimelineData; // Scene Composer & Timeline Editor integration
 let StorytellerBook, StorytellerChapter, StorytellerLine; // StoryTeller Book Editor models
 let StorytellerMemory; // StoryTeller Memory Bank model
@@ -220,6 +221,11 @@ try {
   AIEditPlan = require('./AIEditPlan')(sequelize);
   EditingDecision = require('./EditingDecision')(sequelize);
   AIRevision = require('./AIRevision')(sequelize);
+  // Lala's Phone gameplay runtime (per-user playthrough state + authored missions).
+  // Register here so PhoneMission.findAll and PhonePlaythroughState.findOne
+  // resolve via models.* in the route handlers.
+  PhonePlaythroughState = require('./PhonePlaythroughState')(sequelize);
+  PhoneMission = require('./PhoneMission')(sequelize);
   VideoProcessingJob = require('./VideoProcessingJob')(sequelize);
   AITrainingData = require('./AITrainingData')(sequelize);
   ScriptMetadata = require('./ScriptMetadata')(sequelize);
@@ -455,6 +461,9 @@ const requiredModels = {
   EditingDecision,
   AIRevision,
   VideoProcessingJob,
+  // Phone gameplay (PR2, PR4)
+  PhonePlaythroughState,
+  PhoneMission,
   AITrainingData,
   ScriptMetadata,
   SceneLayerConfiguration,

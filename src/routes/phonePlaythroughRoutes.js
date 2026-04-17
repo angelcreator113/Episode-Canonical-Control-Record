@@ -33,6 +33,11 @@ async function loadOrCreateState(models, { userId, episodeId }) {
   const episode = eps?.[0];
   if (!episode) return { error: 'episode not found' };
 
+  // Fail soft when the playthrough table hasn't been migrated yet.
+  if (!models.PhonePlaythroughState) {
+    return { error: 'phone playthrough not yet available on this environment' };
+  }
+
   let state = await models.PhonePlaythroughState.findOne({
     where: { user_id: userId, episode_id: episodeId, deleted_at: null },
   });
