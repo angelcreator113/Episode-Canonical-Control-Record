@@ -222,6 +222,9 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   // Skin picker collapsed by default — it's a rare customization, not a primary
   // control. Opens via a small ⚙ trigger just below the phone.
   const [skinPickerOpen, setSkinPickerOpen] = useState(false);
+  // Grid section — show Screens or Icons at a time, not both stacked. Defaults
+  // to Screens since that's the primary content.
+  const [gridSection, setGridSection] = useState('screens');
 
   // Only use custom frame if we have a URL AND it hasn't errored
   const useCustomFrame = customFrameUrl && !frameError;
@@ -473,41 +476,50 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       )}
       </div>
 
-      {/* Screen Slots Grid */}
+      {/* Screen Slots Grid — Screens / Icons shown one at a time via tabs so the
+          page stays focused on one surface instead of two stacked grids. */}
       <div className="phone-hub-grid-section">
-        {/* Screens Section */}
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ background: '#B8962E', color: '#fff', padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700 }}>SCREENS</span>
-            Full phone views
+        {/* Section tabs */}
+        <div className="phone-hub-section-tabs">
+          <div className="phone-hub-section-tab-group">
+            <button
+              type="button"
+              onClick={() => setGridSection('screens')}
+              className={`phone-hub-section-tab ${gridSection === 'screens' ? 'active' : ''}`}
+            >
+              Screens <span className="phone-hub-section-tab-count">· {screenTypes.length}</span>
+            </button>
+            {(gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setGridSection('icons')}
+                className={`phone-hub-section-tab ${gridSection === 'icons' ? 'active' : ''}`}
+              >
+                Icons <span className="phone-hub-section-tab-count">· {iconTypes.length}</span>
+              </button>
+            )}
           </div>
           {hiddenScreens.length > 0 && onToggleShowHidden && (
-            <button onClick={onToggleShowHidden} style={{
-              fontSize: 11, color: '#666', background: showHidden ? '#fdf8ee' : '#fff', border: `1px solid ${showHidden ? '#B8962E' : '#ddd'}`,
-              borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontFamily: "'DM Mono', monospace",
-              minHeight: 36, fontWeight: 600,
-            }}>{showHidden ? 'Hide removed' : `Show removed (${hiddenScreens.length})`}</button>
+            <button onClick={onToggleShowHidden} className={`phone-hub-show-hidden-btn ${showHidden ? 'active' : ''}`}>
+              {showHidden ? 'Hide removed' : `Show removed (${hiddenScreens.length})`}
+            </button>
           )}
         </div>
-        <div className="phone-hub-screen-grid">
-          {screenTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-            <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} />
-          ))}
-        </div>
 
-        {/* Icons Section */}
-        {(gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
-          <>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#a889c8', fontFamily: "'DM Mono', monospace", marginBottom: 10, marginTop: 20, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ background: '#a889c8', color: '#fff', padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700 }}>ICONS</span>
-              App icons for home screen links
-            </div>
-            <div className="phone-hub-icon-grid">
-              {iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-                <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon />
-              ))}
-            </div>
-          </>
+        {gridSection === 'screens' && (
+          <div className="phone-hub-screen-grid">
+            {screenTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} />
+            ))}
+          </div>
+        )}
+
+        {gridSection === 'icons' && (gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
+          <div className="phone-hub-icon-grid">
+            {iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon />
+            ))}
+          </div>
         )}
       </div>
 
@@ -516,6 +528,66 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; position: sticky; top: 20px; align-self: flex-start; }
         .phone-hub-frame { width: 280px; position: relative; }
         .phone-hub-grid-section { flex: 1; min-width: 0; }
+
+        /* Section tabs — pill group with gold underline on active,
+           mirrors the editor modal's chapter-marker tab treatment. */
+        .phone-hub-section-tabs {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 12px;
+          border-bottom: 1px solid var(--lala-parchment-3);
+        }
+        .phone-hub-section-tab-group { display: flex; gap: 2px; }
+        .phone-hub-section-tab {
+          padding: 10px 16px;
+          font-size: var(--text-xs);
+          font-weight: 700;
+          font-family: var(--font-ui);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--lala-ink-muted);
+          background: none;
+          border: none;
+          border-bottom: 3px solid transparent;
+          cursor: pointer;
+          transition: color 0.15s, border-color 0.15s;
+          white-space: nowrap;
+        }
+        .phone-hub-section-tab:hover { color: var(--lala-ink); }
+        .phone-hub-section-tab.active {
+          color: var(--lala-ink);
+          border-bottom-color: var(--lala-gold);
+        }
+        .phone-hub-section-tab-count {
+          color: var(--lala-gold);
+          font-weight: 700;
+          margin-left: 2px;
+        }
+
+        .phone-hub-show-hidden-btn {
+          font-size: var(--text-xs);
+          color: var(--lala-ink-muted);
+          background: var(--lala-surface);
+          border: 1px solid var(--lala-parchment-3);
+          border-radius: var(--lala-radius);
+          padding: 6px 12px;
+          cursor: pointer;
+          font-family: var(--font-ui);
+          letter-spacing: 0.3px;
+          min-height: 32px;
+          font-weight: 600;
+          transition: border-color 0.15s, color 0.15s, background 0.15s;
+        }
+        .phone-hub-show-hidden-btn:hover { border-color: var(--lala-gold-line); color: var(--lala-ink); }
+        .phone-hub-show-hidden-btn.active {
+          background: var(--lala-gold-soft);
+          color: var(--lala-gold);
+          border-color: var(--lala-gold);
+        }
+
         .phone-hub-screen-grid {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 16px;
         }
