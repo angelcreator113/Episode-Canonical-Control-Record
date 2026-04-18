@@ -1597,6 +1597,11 @@ function DuplicateSettingsBtn({ screens, onDuplicate }) {
 
 function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existingScreens = [] }) {
   const [form, setForm] = useState({ name: '', beat: '', description: '', prompt: '', opens_screen: '' });
+  // Optional details (beat / description / generation prompt) collapsed by
+  // default — most creators just want to name the thing and pick what it opens.
+  // The Generation Prompt is only needed if you plan to AI-generate the image;
+  // uploading one later works fine without it.
+  const [showOptional, setShowOptional] = useState(false);
   const [saving, setSaving] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
 
@@ -1667,19 +1672,58 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existing
                 )}
               </div>
             )}
+            {/* Optional details — collapsed by default since most creators
+                just want a name + what-it-opens. Beat/Description are
+                nice-to-have; Generation Prompt is only needed if you plan
+                to AI-generate the image (you can upload one later instead). */}
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Beat / Trigger</label>
-              <input value={form.beat} onChange={e => setForm(f => ({ ...f, beat: e.target.value }))} placeholder="e.g., Beat 2, Login" className="overlays-modal__field" />
+              <button
+                type="button"
+                onClick={() => setShowOptional(o => !o)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '6px 0', fontSize: 12, fontWeight: 600,
+                  border: 'none', background: 'none', cursor: 'pointer',
+                  color: '#6B6557', fontFamily: "'DM Mono', monospace",
+                  letterSpacing: 0.3,
+                }}
+              >
+                <ChevronRight
+                  size={14}
+                  style={{
+                    transform: showOptional ? 'rotate(90deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.15s',
+                  }}
+                />
+                Optional details
+                <span style={{ color: '#A09889', fontWeight: 500 }}>
+                  · beat, description, AI prompt
+                </span>
+              </button>
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Description</label>
-              <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What the screen shows" className="overlays-modal__field" />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Generation Prompt</label>
-              <textarea value={form.prompt} onChange={e => setForm(f => ({ ...f, prompt: e.target.value }))} rows={3} placeholder="Describe the screen for AI generation..." className="overlays-modal__field" style={{ resize: 'vertical' }} />
-            </div>
-            <button type="submit" disabled={saving || !form.name.trim() || !form.prompt.trim()} className="overlays-modal__submit">
+            {showOptional && (
+              <>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>
+                    Beat / Trigger <span style={{ color: '#A09889', fontWeight: 500 }}>— optional</span>
+                  </label>
+                  <input value={form.beat} onChange={e => setForm(f => ({ ...f, beat: e.target.value }))} placeholder="e.g., Beat 2, Login" className="overlays-modal__field" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>
+                    Description <span style={{ color: '#A09889', fontWeight: 500 }}>— optional</span>
+                  </label>
+                  <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What the screen shows" className="overlays-modal__field" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>
+                    Generation Prompt <span style={{ color: '#A09889', fontWeight: 500 }}>— only if you plan to AI-generate</span>
+                  </label>
+                  <textarea value={form.prompt} onChange={e => setForm(f => ({ ...f, prompt: e.target.value }))} rows={3} placeholder="Describe the screen for AI generation..." className="overlays-modal__field" style={{ resize: 'vertical' }} />
+                </div>
+              </>
+            )}
+            <button type="submit" disabled={saving || !form.name.trim()} className="overlays-modal__submit">
               {saving ? 'Creating...' : isIcon ? 'Create Icon' : 'Create Screen'}
             </button>
           </div>
