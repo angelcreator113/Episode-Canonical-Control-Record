@@ -459,39 +459,51 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
   // Create custom screen or icon
   const handleCreateScreen = async (form, file) => {
+    // If the user attaches a file while creating, we still want the image to land
+    // on the matching type even when the create POST returns 409 (name already
+    // exists). Resolve the target type_key from either the create response or
+    // the existing list, then upload.
+    const deriveTypeKey = (name) => (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
     try {
-      const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
-      // Optimistic add, then reconcile with API response
-      const newType = res.data?.data;
-      if (newType) {
-        setOverlays(prev => [...prev, {
-          id: newType.type_key, name: newType.name, category: newType.category,
-          beat: newType.beat, description: newType.description, prompt: newType.prompt,
-          opens_screen: newType.opens_screen, is_home: !!newType.is_home,
-          custom: true, custom_id: newType.id, generated: false, url: null,
-        }]);
+      let newType = null;
+      try {
+        const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
+        newType = res.data?.data;
+        if (newType) {
+          setOverlays(prev => [...prev, {
+            id: newType.type_key, name: newType.name, category: newType.category,
+            beat: newType.beat, description: newType.description, prompt: newType.prompt,
+            opens_screen: newType.opens_screen, is_home: !!newType.is_home,
+            custom: true, custom_id: newType.id, generated: false, url: null,
+          }]);
+        }
+      } catch (err) {
+        // Duplicate name — fall through and upload to the existing type. Any
+        // other error bubbles up to the outer catch.
+        if (err.response?.status !== 409) throw err;
       }
-      // Second step: if the creator attached an image, upload it to the new type
-      // so the icon/screen is immediately usable (no need to click into the
-      // detail modal afterwards and upload there).
-      if (file && newType?.type_key) {
+      // Resolve the type_key to upload against. On 201 we use the returned
+      // type_key; on 409 we derive it from the submitted name (which matches
+      // the server's slugification).
+      const targetKey = newType?.type_key || deriveTypeKey(form.name);
+      if (file && targetKey) {
         try {
           const fd = new FormData();
           fd.append('image', file);
-          await api.post(`/api/v1/ui-overlays/${showId}/upload/${newType.type_key}`, fd);
+          await api.post(`/api/v1/ui-overlays/${showId}/upload/${targetKey}`, fd);
         } catch (upErr) {
           console.warn('[createScreen] image upload failed', upErr);
-          flash('Created but image upload failed — try uploading from the card', 'error');
+          flash('Image upload failed — try uploading from the card', 'error');
         }
-        // Re-fetch to pick up the uploaded URL (optimistic state was url: null)
         loadOverlays(false);
       } else if (!newType) {
         loadOverlays(false);
       }
       setShowCreateModal(false);
+      const wasDuplicate = !newType;
       flash(createMode === 'phone_icon'
-        ? (file ? 'Icon created + image uploaded' : 'Icon type created')
-        : (file ? 'Screen created + image uploaded' : 'Screen type created'));
+        ? (wasDuplicate ? 'Icon already existed — image uploaded to it' : (file ? 'Icon created + image uploaded' : 'Icon type created'))
+        : (wasDuplicate ? 'Screen already existed — image uploaded to it' : (file ? 'Screen created + image uploaded' : 'Screen type created')));
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
