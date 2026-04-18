@@ -11,15 +11,15 @@
  *  - Story arc / emotional / narrative metadata in info blocks
  */
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, Fragment } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import './ChapterJourney.css';
 
 // ── Lazy imports ───────────────────────────────────────────────────────────
-const StoryPlannerConversational = React.lazy(() =>
+const StoryPlannerConversational = lazy(() =>
   import('../components/StoryPlannerConversational')
 );
-const WriteMode = React.lazy(() =>
+const WriteMode = lazy(() =>
   import('./WriteMode')
 );
 
@@ -417,7 +417,7 @@ export default function ChapterJourney() {
               const isActive   = s.id === activeStage;
               const isDetected = s.id === detectedStage;
               return (
-                <React.Fragment key={s.id}>
+                <Fragment key={s.id}>
                   {i > 0 && <span className="cj-pill-sep">›</span>}
                   <button
                     className={`cj-pill ${isActive ? 'cj-active' : ''}`}
@@ -432,7 +432,7 @@ export default function ChapterJourney() {
                     {isDetected && !isOverride && <span className="cj-pill-dot" />}
                     <span className="cj-pill-label">{s.label}</span>
                   </button>
-                </React.Fragment>
+                </Fragment>
               );
             })}
           </div>
@@ -479,7 +479,7 @@ export default function ChapterJourney() {
       )}
 
       {/* ── Stage content ────────────────────────────────────────────────── */}
-      <React.Suspense fallback={
+      <Suspense fallback={
         <div className="cj-loading">
           <div className="cj-loading-dots"><span /><span /><span /></div>
         </div>
@@ -513,7 +513,7 @@ export default function ChapterJourney() {
           )}
 
         </div>
-      </React.Suspense>
+      </Suspense>
     </div>
   );
 }

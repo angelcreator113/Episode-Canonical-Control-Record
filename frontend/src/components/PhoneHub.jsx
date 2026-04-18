@@ -14,7 +14,7 @@
  *   onBack()                — callback for back button (pops navigation history)
  *   deviceFrame   — optional custom device frame image URL
  */
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { MoreVertical, Trash2, EyeOff, Edit3 } from 'lucide-react';
 import ScreenContentRenderer from './ScreenContentRenderer';
 
@@ -152,13 +152,13 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   const phoneScreen = isIconType ? null : activeScreen;
 
   // Find the home screen — prefer is_home flag, then first generated screen
-  const firstScreen = React.useMemo(() => {
+  const firstScreen = useMemo(() => {
     const generated = screens.filter(s => s.generated && s.url && s.category !== 'phone_icon' && s.category !== 'icon');
     return generated.find(s => s.is_home) || generated[0] || null;
   }, [screens]);
 
   // Find persistent icons from the first/home screen that should show on ALL screens
-  const persistentLinks = React.useMemo(() => {
+  const persistentLinks = useMemo(() => {
     if (!firstScreen) return [];
     const links = firstScreen.screen_links || firstScreen.metadata?.screen_links || [];
     return links.filter(l => l.persistent && l.icon_url);
@@ -436,7 +436,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   );
 }
 
-const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
+const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';

@@ -1,4 +1,4 @@
-import React from 'react';
+import { Fragment } from 'react';
 
 const STEPS = [
   { key: 'loading_dna',     label: 'Character DNA' },
@@ -38,7 +38,7 @@ export default function ArcGenerationStatus({ arcProgress, charColor, elapsed })
           }
 
           return (
-            <React.Fragment key={step.key}>
+            <Fragment key={step.key}>
               {i > 0 && (
                 <div className={`se-arc-status-connector ${state === 'done' || (i <= currentStepIdx && !isError) ? 'filled' : ''}`}
                   style={state === 'done' || (i <= currentStepIdx) ? { background: charColor || '#b0922e' } : undefined}
@@ -55,7 +55,7 @@ export default function ArcGenerationStatus({ arcProgress, charColor, elapsed })
                 </div>
                 <div className="se-arc-status-label">{step.label}</div>
               </div>
-            </React.Fragment>
+            </Fragment>
           );
         })}
       </div>

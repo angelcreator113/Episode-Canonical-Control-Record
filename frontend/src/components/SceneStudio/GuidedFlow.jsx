@@ -1,4 +1,4 @@
-import React from 'react';
+import { Fragment } from 'react';
 import { Image, Layers, Palette, Check } from 'lucide-react';
 
 /**
@@ -42,13 +42,13 @@ export default function GuidedFlow({ hasBackground, objectCount, hasEffects, dis
         const active = step.key === activeStep;
 
         return (
-          <React.Fragment key={step.key}>
+          <Fragment key={step.key}>
             {i > 0 && <span className="scene-studio-flow-arrow">›</span>}
             <span className={`scene-studio-flow-step ${active ? 'active' : ''} ${done ? 'done' : ''}`}>
               {done ? <Check size={10} /> : <Icon size={10} />}
               {step.label}
             </span>
-          </React.Fragment>
+          </Fragment>
         );
       })}
     </div>

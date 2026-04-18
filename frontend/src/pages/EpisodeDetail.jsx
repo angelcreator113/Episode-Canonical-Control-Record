@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
@@ -76,7 +76,7 @@ const EpisodeDetail = () => {
   };
 
   // Resolve initial tab on mount
-  React.useEffect(() => {
+  useEffect(() => {
     const initial = searchParams.get('tab') || 'overview';
     const [main, sub] = resolveEpTab(initial);
     if (main !== initial) {

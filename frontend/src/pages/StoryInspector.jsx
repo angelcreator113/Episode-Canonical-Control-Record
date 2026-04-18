@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { PHASE_COLORS, PHASE_LABELS, TYPE_ICONS, WORLD_LABELS, getReadingTime, API_BASE } from './storyEngineConstants';
 
 // ─── Scene Pulse — emotional feedback ────────────────────────────────────────
@@ -146,7 +146,7 @@ function StorySparksPanel({ characterKey }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setSparks([]);
     setOpen(false);
   }, [characterKey]);

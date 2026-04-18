@@ -2,7 +2,7 @@
  * WorldFoundation — Map + Locations + Loop
  * Merges: WorldInfrastructure + WorldLocations
  */
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 import PushToBrain from '../components/PushToBrain';
@@ -351,7 +351,7 @@ export default function WorldFoundation() {
           <p style={{ fontSize: 12, color: '#888', margin: '0 0 20px' }}>The infrastructure of LalaVerse operates as a single interconnected system.</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {(data.WORLD_LAYERS || WORLD_LAYERS).map((l, i, arr) => (
-              <React.Fragment key={l.layer}>
+              <Fragment key={l.layer}>
                 <div style={{ ...cardStyle, borderTop: `3px solid ${l.color}`, minWidth: 160, flex: '1 1 160px' }}>
                   <div style={{ fontSize: 20, marginBottom: 4 }}>{l.icon}</div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#2C2C2C' }}>{l.layer}</div>
@@ -359,7 +359,7 @@ export default function WorldFoundation() {
                   <div style={{ fontSize: 10, color: l.color, fontWeight: 600 }}>{l.feedsInto}</div>
                 </div>
                 {i < arr.length - 1 && <span style={{ fontSize: 20, color: '#ccc' }}>→</span>}
-              </React.Fragment>
+              </Fragment>
             ))}
           </div>
           <div style={{ ...cardStyle, marginTop: 20, background: '#FAF7F0', border: '1px solid #e8e0d0', textAlign: 'center' }}>

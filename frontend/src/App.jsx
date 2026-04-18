@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -60,9 +60,9 @@ const StorytellerPage = lazy(() => import('./pages/StorytellerPage'));
 // Redirect from /book/:id → WriteMode (first chapter)
 const BookToWriteRedirect = () => {
   const { id } = useParams();
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = useState(true);
   const nav = useNavigate();
-  React.useEffect(() => {
+  useEffect(() => {
     const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
     fetch(`/api/v1/storyteller/books/${id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
@@ -179,13 +179,13 @@ function ProtectedRoute({ children }) {
  */
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
-  const [currentEpisodeId, setCurrentEpisodeId] = React.useState(null);
+  const [currentEpisodeId, setCurrentEpisodeId] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const isNavigatingRef = React.useRef(false);
+  const isNavigatingRef = useRef(false);
 
   // Extract episode ID from URL if present (skip non-ID segments like 'create')
-  React.useEffect(() => {
+  useEffect(() => {
     const match = location.pathname.match(/\/episodes\/([^/]+)/);
     if (match && match[1] && match[1] !== 'create') {
       setCurrentEpisodeId(match[1]);
@@ -198,7 +198,7 @@ function AppContent() {
   const closeSidebar = () => setSidebarOpen(false);
 
   // Sync sidebar state when crossing the 1279px breakpoint
-  React.useEffect(() => {
+  useEffect(() => {
     let wasDesktop = window.innerWidth > 1279;
     const onResize = () => {
       const isDesktop = window.innerWidth > 1279;
@@ -212,12 +212,12 @@ function AppContent() {
   }, []);
 
   // Debug logging - disabled to reduce console noise
-  // React.useEffect(() => {
+  // useEffect(() => {
   //   console.log('[AppContent] Auth state changed:', { isAuthenticated, loading, pathname: location.pathname });
   // }, [isAuthenticated, loading, location.pathname]);
 
   // Redirect to home when logged in from login page (but allow direct navigation to other authenticated pages)
-  React.useEffect(() => {
+  useEffect(() => {
     if (!loading && isAuthenticated && location.pathname === '/login' && !isNavigatingRef.current) {
       console.log('[AppContent] User authenticated on login page, redirecting to home...');
       isNavigatingRef.current = true;
@@ -228,7 +228,7 @@ function AppContent() {
 
   // Only redirect to login if not authenticated AND not currently loading auth state
   // Also check localStorage directly to survive React state races on refresh
-  React.useEffect(() => {
+  useEffect(() => {
     const hasToken = !!localStorage.getItem('authToken');
     if (!loading && !isAuthenticated && !hasToken && location.pathname !== '/login' && location.pathname !== '/' && !isNavigatingRef.current) {
       console.log('[AppContent] User not authenticated, redirecting to landing...');

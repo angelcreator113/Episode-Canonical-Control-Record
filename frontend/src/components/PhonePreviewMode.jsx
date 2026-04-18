@@ -2,7 +2,7 @@
  * PhonePreviewMode — Full-screen interactive phone simulator overlay
  * ScreenFlowMap — Visual diagram of screen connections
  */
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, Fragment } from 'react';
 import { X, ChevronLeft, Wifi, Signal, BatteryFull } from 'lucide-react';
 import { getScreenImageStyle, PHONE_SKINS } from '../components/PhoneHub';
 
@@ -244,12 +244,12 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         flexWrap: 'wrap', justifyContent: 'center', maxWidth: 360, padding: '0 12px',
       }}>
         {breadcrumbs.map((name, i) => (
-          <React.Fragment key={i}>
+          <Fragment key={i}>
             {i > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}>{'>'}</span>}
             <span style={i === breadcrumbs.length - 1 ? { color: TOKENS.gold, fontWeight: 600 } : {}}>
               {name}
             </span>
-          </React.Fragment>
+          </Fragment>
         ))}
       </div>
     </div>
