@@ -750,9 +750,16 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
     const showId = req.params.showId;
     const { name, category, beat, description, prompt, type_key, opens_screen, is_home } = req.body;
 
-    if (!name || !prompt) {
-      return res.status(400).json({ success: false, error: 'name and prompt are required' });
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'name is required' });
     }
+
+    // Prompt is only needed for AI generation; creators who plan to upload an
+    // image inline can leave it blank. Fill in a sensible default so the column
+    // (NOT NULL in older schemas) stays happy.
+    const effectivePrompt = prompt && prompt.trim()
+      ? prompt
+      : `Phone ${category === 'phone_icon' || category === 'icon' ? 'icon' : 'screen'} for "${name}".`;
 
     // Generate type_key from name if not provided
     const key = type_key || name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
@@ -783,14 +790,14 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
         category: category || 'phone',
         beat: beat || 'Various',
         description: description || '',
-        prompt,
+        prompt: effectivePrompt,
         sortOrder: req.body.sort_order || 100,
         opensScreen: opens_screen || null,
         isHome: !!is_home,
       } }
     );
 
-    return res.json({ success: true, data: { id, type_key: key, name, category: category || 'phone', beat: beat || 'Various', description, prompt, opens_screen: opens_screen || null } });
+    return res.json({ success: true, data: { id, type_key: key, name, category: category || 'phone', beat: beat || 'Various', description, prompt: effectivePrompt, opens_screen: opens_screen || null } });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
