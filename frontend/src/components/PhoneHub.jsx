@@ -15,7 +15,7 @@
  *   deviceFrame   — optional custom device frame image URL
  */
 import { useState, useRef, useEffect, useMemo, memo } from 'react';
-import { MoreVertical, Trash2, EyeOff, Edit3 } from 'lucide-react';
+import { MoreVertical, Trash2, EyeOff, Edit3, Settings } from 'lucide-react';
 import ScreenContentRenderer from './ScreenContentRenderer';
 
 // Screen types are now fully dynamic — defined per-show in the database.
@@ -89,7 +89,7 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
             <img
               src={link.icon_url}
               alt={link.label || link.target}
-              style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }}
+              style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }}
               draggable={false}
             />
           )}
@@ -129,7 +129,7 @@ function PersistentOverlay({ links = [], onNavigate }) {
             <img
               src={link.icon_url}
               alt={link.label || link.target}
-              style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }}
+              style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }}
               draggable={false}
             />
           )}
@@ -139,10 +139,142 @@ function PersistentOverlay({ links = [], onNavigate }) {
   );
 }
 
-export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all' }) {
+const menuItemStyle = {
+  display: 'flex', alignItems: 'center', gap: 8,
+  width: '100%', padding: '11px 14px',
+  border: 'none', background: 'none', cursor: 'pointer',
+  fontSize: 13, fontWeight: 500, color: '#2C2C2C',
+  textAlign: 'left', minHeight: 44,
+  borderBottom: '1px solid #f5f3ee',
+};
+
+const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false }) {
+  const isActive = activeScreen?.id === screen?.id && screen;
+  const hasImage = screen?.generated && screen?.url;
+  const accentColor = isIcon ? '#a889c8' : '#B8962E';
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
+  }, [menuOpen]);
+
+  return (
+    <div
+      onClick={() => {
+        if (menuOpen) return;
+        if (isHidden && onHide) { onHide(type.key); return; }
+        screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
+      }}
+      className="screen-card"
+      style={{
+        background: isHidden ? '#f5f3f0' : isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
+        border: `1px solid ${isHidden ? '#e8e0d0' : isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
+        borderRadius: isIcon ? 8 : 10, padding: isIcon ? 6 : 8,
+        cursor: 'pointer', transition: 'all 0.15s', position: 'relative', overflow: 'visible',
+        minHeight: isIcon ? 40 : 'auto', opacity: isHidden ? 0.45 : 1,
+      }}
+    >
+      {!isHidden && (onDelete || onHide) && (
+        <div ref={menuRef} style={{ position: 'absolute', top: 4, right: 4, zIndex: 5 }}>
+          <button className="screen-card-menu" onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} aria-label="Screen options" style={{
+            width: 28, height: 28, borderRadius: 6,
+            background: hasImage ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)',
+            border: 'none', color: hasImage ? '#fff' : '#999',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: hasImage ? 'blur(4px)' : 'none',
+          }}><MoreVertical size={14} /></button>
+          {menuOpen && (
+            <div style={{ position: 'absolute', top: '100%', right: isIcon ? 'auto' : 0, left: isIcon ? 0 : 'auto', marginTop: 4, background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, minWidth: 140, overflow: 'hidden' }}>
+              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true }); }} style={menuItemStyle}><Edit3 size={14} /> Edit</button>
+              {onHide && !hasImage && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onHide(type.key); }} style={menuItemStyle}><EyeOff size={14} /> Hide</button>)}
+              {onDelete && (screen?.generated || screen?.asset_id || screen?.url) && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }} style={{ ...menuItemStyle, color: '#dc2626', borderBottom: 'none' }}><Trash2 size={14} /> Delete</button>)}
+            </div>
+          )}
+        </div>
+      )}
+      {isHidden && (<div style={{ position: 'absolute', top: 4, right: 4, zIndex: 3, fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace", background: '#fff', padding: '2px 8px', borderRadius: 4, border: '1px solid #ddd' }}>restore</div>)}
+      {hasImage && (
+        <div className="screen-card-thumb" style={{ width: '100%', borderRadius: 8, overflow: 'hidden', marginBottom: 6, background: '#f0f0f0' }}>
+          <img src={screen.url} alt={type.label} style={isIcon ? { width: '100%', height: '100%', objectFit: 'contain' } : getScreenImageStyle(screen, globalFit)} />
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+        <span style={{ fontSize: isIcon ? 12 : 14, flexShrink: 0 }}>{type.icon}</span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: isIcon ? 9 : 11, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{type.label}</div>
+          {!isIcon && (<div className="screen-card-desc" style={{ fontSize: 8, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{type.desc}</div>)}
+        </div>
+      </div>
+      {/* Link status badge — shows at a glance whether this card participates
+          in the phone flow. Skipped for placeholders (no real screen/icon). */}
+      {screen && !isHidden && (() => {
+        const linked = linkCount > 0;
+        const isIconCard = !!isIcon;
+        // For icons: "linked" means it's placed on ≥1 screen AND at least one of
+        // those placements has a target. Placed-but-no-target = unlinked.
+        const reallyLinked = isIconCard ? (linked && hasTargetedPlacement) : linked;
+        const label = isIconCard
+          ? (reallyLinked
+              ? `✓ ${linkCount} screen${linkCount === 1 ? '' : 's'}`
+              : linked
+                ? '⚠ No target'
+                : '○ Unplaced')
+          : (linked
+              ? `← ${linkCount} zone${linkCount === 1 ? '' : 's'}`
+              : '⚠ Unreached');
+        const color = reallyLinked
+          ? (isActive ? 'rgba(255,255,255,0.85)' : '#5a8f3b')
+          : !linked && !isIconCard
+            ? (isActive ? 'rgba(255,200,150,0.95)' : '#B84D2E')
+            : isIconCard && !linked
+              ? (isActive ? 'rgba(255,255,255,0.55)' : '#A09889')
+              : (isActive ? 'rgba(255,200,150,0.95)' : '#B84D2E');
+        return (
+          <div
+            title={reallyLinked
+              ? (isIconCard ? 'Placed on screens with targets set' : 'Zones link here')
+              : isIconCard
+                ? (linked ? 'Placed but has no navigation target' : 'Not placed on any screen yet')
+                : 'No zones link to this screen'}
+            style={{
+              marginTop: 4,
+              fontSize: 9,
+              fontFamily: "'DM Mono', monospace",
+              fontWeight: 700,
+              letterSpacing: 0.3,
+              color,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {label}
+          </div>
+        );
+      })()}
+      {!menuOpen && (<div style={{ position: 'absolute', top: isIcon ? 5 : 8, left: isIcon ? 5 : 8, width: 7, height: 7, borderRadius: '50%', background: hasImage ? '#16a34a' : screen ? '#eab308' : '#e0e0e0' }} />)}
+    </div>
+  );
+});
+
+export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all', onEditZones }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
+  // Placements memo lives below the screenTypes/iconTypes declarations so it
+  // doesn't TDZ-crash (useMemo body runs synchronously on first render).
+
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [frameError, setFrameError] = useState(false);
+  // Skin picker collapsed by default — it's a rare customization, not a primary
+  // control. Opens via a small ⚙ trigger just below the phone.
+  const [skinPickerOpen, setSkinPickerOpen] = useState(false);
+  // Grid section — show Screens or Icons at a time, not both stacked. Defaults
+  // to Screens since that's the primary content.
+  const [gridSection, setGridSection] = useState('screens');
 
   // Only use custom frame if we have a URL AND it hasn't errored
   const useCustomFrame = customFrameUrl && !frameError;
@@ -167,6 +299,73 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   // Split screens by category — all from the DB, no hardcoded keys
   const screenTypes = screens.filter(s => s.category !== 'phone_icon' && s.category !== 'icon');
   const iconTypes = screens.filter(s => s.category === 'phone_icon' || s.category === 'icon');
+
+  // Placements view — groups zones across all screens by the icon they display.
+  // Gives creators a read-only overview: "this icon appears on N screens" plus
+  // a list of those screens, so they can see the full picture without clicking
+  // through each screen one by one. Declared AFTER screenTypes/iconTypes so
+  // the useMemo body doesn't reference them before initialization.
+  const placements = useMemo(() => {
+    const byIcon = new Map();
+    // Seed with library icons so icons with zero placements still show (with a count of 0).
+    iconTypes.forEach(icon => {
+      if (!icon.url) return;
+      byIcon.set(icon.url, { icon, placements: [] });
+    });
+    // Walk every screen's zones and append them to the matching icon's bucket.
+    screenTypes.forEach(screen => {
+      const links = screen.screen_links || screen.metadata?.screen_links || [];
+      links.forEach(link => {
+        const icons = link.icon_urls?.length ? link.icon_urls : (link.icon_url ? [link.icon_url] : []);
+        icons.forEach(iconUrl => {
+          const entry = byIcon.get(iconUrl);
+          if (entry) {
+            entry.placements.push({ screen, zone: link });
+          } else {
+            // Zone uses an icon that isn't in the library (inline upload). Surface it
+            // as an orphan entry so the creator can still see where it's used.
+            byIcon.set(iconUrl, {
+              icon: { id: `orphan-${iconUrl}`, url: iconUrl, name: 'Inline icon', orphan: true },
+              placements: [{ screen, zone: link }],
+            });
+          }
+        });
+      });
+    });
+    // Icons-with-placements first, then unused icons, for a more useful default order.
+    return Array.from(byIcon.values()).sort((a, b) => b.placements.length - a.placements.length);
+  }, [screenTypes, iconTypes]);
+
+  // Link status for status badges on Screen / Icon cards.
+  //   iconLinkByUrl: icon_url -> { screenCount, hasTargetedPlacement }
+  //     screenCount = # of distinct screens this icon is placed on
+  //     hasTargetedPlacement = at least one of those placements has a target set
+  //   screenReachById: screen_id -> incomingZoneCount (# of zones with target = this screen)
+  const { iconLinkByUrl, screenReachById } = useMemo(() => {
+    const iconLinkByUrl = new Map();
+    const screenReachById = new Map();
+    screenTypes.forEach(src => {
+      const links = src.screen_links || src.metadata?.screen_links || [];
+      links.forEach(link => {
+        // Icon usage (by URL, dedup screens per icon)
+        const iconUrls = link.icon_urls?.length ? link.icon_urls : (link.icon_url ? [link.icon_url] : []);
+        iconUrls.forEach(url => {
+          if (!iconLinkByUrl.has(url)) iconLinkByUrl.set(url, { screens: new Set(), hasTargetedPlacement: false });
+          const entry = iconLinkByUrl.get(url);
+          entry.screens.add(src.id);
+          if (link.target) entry.hasTargetedPlacement = true;
+        });
+        // Screen reach (count of zones pointing to each target)
+        if (link.target) {
+          screenReachById.set(link.target, (screenReachById.get(link.target) || 0) + 1);
+        }
+      });
+    });
+    // Freeze to plain values to keep memo outputs stable
+    const iconOut = new Map();
+    iconLinkByUrl.forEach((v, k) => iconOut.set(k, { screenCount: v.screens.size, hasTargetedPlacement: v.hasTargetedPlacement }));
+    return { iconLinkByUrl: iconOut, screenReachById };
+  }, [screenTypes]);
 
   return (
     <div className="phone-hub-inner">
@@ -206,6 +405,8 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 cursor: 'pointer', backdropFilter: 'blur(4px)',
               }}>← Back</button>
             )}
+            {/* Floating "Edit Zones" pill removed — the below-phone "Edit Tap Zones"
+                button is the single entry point now, so the phone preview stays clean. */}
           </div>
           {/* Frame image — on top so it visually wraps the screen content */}
           <img
@@ -316,6 +517,9 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
             </div>
           )}
 
+          {/* Floating "Edit Zones" pill removed — see the single below-phone
+              "Edit Tap Zones" button; the phone preview stays clean. */}
+
           {/* Home indicator bar */}
           <div style={{
             position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)',
@@ -327,64 +531,172 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       </div>
       )}
 
-      {/* Skin picker — only shown for built-in frame (skins don't apply to custom frames) */}
+      {/* Edit Zones button — always visible below the phone, regardless of frame type */}
+      {onEditZones && phoneScreen?.url && (
+        <button onClick={onEditZones} style={{
+          marginTop: 10, padding: '10px 18px', fontSize: 12, fontWeight: 700,
+          border: 'none', borderRadius: 10,
+          background: '#B8962E', color: '#fff', cursor: 'pointer',
+          fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+          boxShadow: '0 2px 8px rgba(184,150,46,0.3)',
+          minHeight: 40, width: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        }}>
+          ✎ Edit Tap Zones
+        </button>
+      )}
+
+      {/* Skin picker — hidden behind a ⚙ trigger since it's a rare customization.
+          Not shown at all for custom frames (skins don't apply there). */}
       {onChangeSkin && !useCustomFrame && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {PHONE_SKINS.map(s => (
-            <button
-              key={s.key}
-              title={s.label}
-              aria-label={`Phone skin: ${s.label}`}
-              onClick={() => onChangeSkin(s.key)}
-              className="phone-hub-skin-btn"
-              style={{
-                width: 36, height: 36, borderRadius: '50%', border: skin === s.key ? '2.5px solid #B8962E' : '1.5px solid #ddd',
-                background: typeof s.body === 'string' && s.body.startsWith('linear') ? undefined : s.body,
-                backgroundImage: typeof s.body === 'string' && s.body.startsWith('linear') ? s.body : undefined,
-                cursor: 'pointer', padding: 0, transition: 'transform 0.15s',
-                transform: skin === s.key ? 'scale(1.15)' : 'scale(1)',
-              }}
-            />
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={() => setSkinPickerOpen(o => !o)}
+            aria-expanded={skinPickerOpen}
+            aria-label="Phone skin settings"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', fontSize: 11, fontWeight: 600,
+              border: `1px solid ${skinPickerOpen ? 'var(--lala-gold)' : 'var(--lala-parchment-3)'}`,
+              borderRadius: 'var(--lala-radius)',
+              background: skinPickerOpen ? 'var(--lala-gold-soft)' : 'var(--lala-surface)',
+              color: skinPickerOpen ? 'var(--lala-gold)' : 'var(--lala-ink-muted)',
+              cursor: 'pointer', fontFamily: 'var(--font-ui)',
+              letterSpacing: '0.3px', minHeight: 32,
+              transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+            }}
+          >
+            <Settings size={12} /> {skinPickerOpen ? 'Hide skins' : 'Phone skin'}
+          </button>
+          {skinPickerOpen && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', padding: '6px 4px' }}>
+              {PHONE_SKINS.map(s => (
+                <button
+                  key={s.key}
+                  title={s.label}
+                  aria-label={`Phone skin: ${s.label}`}
+                  onClick={() => onChangeSkin(s.key)}
+                  className="phone-hub-skin-btn"
+                  style={{
+                    width: 36, height: 36, borderRadius: '50%', border: skin === s.key ? '2.5px solid var(--lala-gold)' : '1.5px solid var(--lala-parchment-3)',
+                    background: typeof s.body === 'string' && s.body.startsWith('linear') ? undefined : s.body,
+                    backgroundImage: typeof s.body === 'string' && s.body.startsWith('linear') ? s.body : undefined,
+                    cursor: 'pointer', padding: 0, transition: 'transform 0.15s',
+                    transform: skin === s.key ? 'scale(1.15)' : 'scale(1)',
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
       </div>
 
-      {/* Screen Slots Grid */}
+      {/* Screen Slots Grid — Screens / Icons shown one at a time via tabs so the
+          page stays focused on one surface instead of two stacked grids. */}
       <div className="phone-hub-grid-section">
-        {/* Screens Section */}
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ background: '#B8962E', color: '#fff', padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700 }}>SCREENS</span>
-            Full phone views
+        {/* Section tabs */}
+        <div className="phone-hub-section-tabs">
+          <div className="phone-hub-section-tab-group">
+            <button
+              type="button"
+              onClick={() => setGridSection('screens')}
+              className={`phone-hub-section-tab ${gridSection === 'screens' ? 'active' : ''}`}
+            >
+              Screens <span className="phone-hub-section-tab-count">· {screenTypes.length}</span>
+            </button>
+            {(gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setGridSection('icons')}
+                className={`phone-hub-section-tab ${gridSection === 'icons' ? 'active' : ''}`}
+              >
+                Icons <span className="phone-hub-section-tab-count">· {iconTypes.length}</span>
+              </button>
+            )}
+            {/* Placements tab — icon-first view showing where each icon appears
+                across the show's screens. Hidden when there are no icons to
+                place (fresh shows) so the tab bar stays clean. */}
+            {iconTypes.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setGridSection('placements')}
+                className={`phone-hub-section-tab ${gridSection === 'placements' ? 'active' : ''}`}
+              >
+                Placements <span className="phone-hub-section-tab-count">· {placements.length}</span>
+              </button>
+            )}
           </div>
           {hiddenScreens.length > 0 && onToggleShowHidden && (
-            <button onClick={onToggleShowHidden} style={{
-              fontSize: 11, color: '#666', background: showHidden ? '#fdf8ee' : '#fff', border: `1px solid ${showHidden ? '#B8962E' : '#ddd'}`,
-              borderRadius: 6, padding: '8px 12px', cursor: 'pointer', fontFamily: "'DM Mono', monospace",
-              minHeight: 36, fontWeight: 600,
-            }}>{showHidden ? 'Hide removed' : `Show removed (${hiddenScreens.length})`}</button>
+            <button onClick={onToggleShowHidden} className={`phone-hub-show-hidden-btn ${showHidden ? 'active' : ''}`}>
+              {showHidden ? 'Hide removed' : `Show removed (${hiddenScreens.length})`}
+            </button>
           )}
         </div>
-        <div className="phone-hub-screen-grid">
-          {screenTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-            <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} />
-          ))}
-        </div>
 
-        {/* Icons Section */}
-        {(gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
-          <>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#a889c8', fontFamily: "'DM Mono', monospace", marginBottom: 10, marginTop: 20, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ background: '#a889c8', color: '#fff', padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700 }}>ICONS</span>
-              App icons for home screen links
-            </div>
-            <div className="phone-hub-icon-grid">
-              {iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-                <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon />
-              ))}
-            </div>
-          </>
+        {gridSection === 'screens' && (
+          <div className="phone-hub-screen-grid">
+            {screenTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} linkCount={screenReachById.get(s.id) || 0} />
+            ))}
+          </div>
+        )}
+
+        {gridSection === 'icons' && (gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
+          <div className="phone-hub-icon-grid">
+            {iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon linkCount={s.url && iconLinkByUrl.get(s.url)?.screenCount || 0} hasTargetedPlacement={!!(s.url && iconLinkByUrl.get(s.url)?.hasTargetedPlacement)} />
+            ))}
+          </div>
+        )}
+
+        {/* Placements: each icon gets a card; within the card, a list of the
+            screens it currently appears on. Clicking a screen chip navigates to
+            that screen's editor so you can adjust position / remove / etc. */}
+        {gridSection === 'placements' && (
+          <div className="phone-hub-placements">
+            {placements.length === 0 && (
+              <div className="phone-hub-placements-empty">
+                No icons in the library yet. Create one with <strong>+ New Icon</strong> above.
+              </div>
+            )}
+            {placements.map(({ icon, placements: uses }) => (
+              <div key={icon.id || icon.url} className="phone-hub-placement-card">
+                <div className="phone-hub-placement-head">
+                  <img src={icon.url} alt="" className="phone-hub-placement-thumb" />
+                  <div className="phone-hub-placement-meta">
+                    <div className="phone-hub-placement-name">
+                      {icon.name}
+                      {icon.orphan && <span className="phone-hub-placement-orphan"> · uploaded inline</span>}
+                    </div>
+                    <div className="phone-hub-placement-count">
+                      {uses.length === 0
+                        ? 'Not placed yet'
+                        : uses.length === 1
+                          ? 'Appears on 1 screen'
+                          : `Appears on ${uses.length} screens`}
+                    </div>
+                  </div>
+                </div>
+                {uses.length > 0 && (
+                  <div className="phone-hub-placement-chips">
+                    {uses.map(({ screen, zone }, idx) => (
+                      <button
+                        key={`${screen.id}-${zone.id}-${idx}`}
+                        type="button"
+                        onClick={() => onSelectScreen && onSelectScreen(screen)}
+                        className="phone-hub-placement-chip"
+                        title={`${screen.name} — x:${Math.round(zone.x)}%, y:${Math.round(zone.y)}%`}
+                      >
+                        {screen.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -393,12 +705,147 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; position: sticky; top: 20px; align-self: flex-start; }
         .phone-hub-frame { width: 280px; position: relative; }
         .phone-hub-grid-section { flex: 1; min-width: 0; }
+
+        /* Section tabs — pill group with gold underline on active,
+           mirrors the editor modal's chapter-marker tab treatment. */
+        .phone-hub-section-tabs {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 12px;
+          border-bottom: 1px solid var(--lala-parchment-3);
+        }
+        .phone-hub-section-tab-group { display: flex; gap: 2px; }
+        .phone-hub-section-tab {
+          padding: 10px 16px;
+          font-size: var(--text-xs);
+          font-weight: 700;
+          font-family: var(--font-ui);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--lala-ink-muted);
+          background: none;
+          border: none;
+          border-bottom: 3px solid transparent;
+          cursor: pointer;
+          transition: color 0.15s, border-color 0.15s;
+          white-space: nowrap;
+        }
+        .phone-hub-section-tab:hover { color: var(--lala-ink); }
+        .phone-hub-section-tab.active {
+          color: var(--lala-ink);
+          border-bottom-color: var(--lala-gold);
+        }
+        .phone-hub-section-tab-count {
+          color: var(--lala-gold);
+          font-weight: 700;
+          margin-left: 2px;
+        }
+
+        .phone-hub-show-hidden-btn {
+          font-size: var(--text-xs);
+          color: var(--lala-ink-muted);
+          background: var(--lala-surface);
+          border: 1px solid var(--lala-parchment-3);
+          border-radius: var(--lala-radius);
+          padding: 6px 12px;
+          cursor: pointer;
+          font-family: var(--font-ui);
+          letter-spacing: 0.3px;
+          min-height: 32px;
+          font-weight: 600;
+          transition: border-color 0.15s, color 0.15s, background 0.15s;
+        }
+        .phone-hub-show-hidden-btn:hover { border-color: var(--lala-gold-line); color: var(--lala-ink); }
+        .phone-hub-show-hidden-btn.active {
+          background: var(--lala-gold-soft);
+          color: var(--lala-gold);
+          border-color: var(--lala-gold);
+        }
+
         .phone-hub-screen-grid {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 16px;
         }
         .phone-hub-icon-grid {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px;
         }
+
+        /* Placements view — one card per icon, stacked vertically. Inside each
+           card, a row of screen chips showing where that icon appears. */
+        .phone-hub-placements { display: flex; flex-direction: column; gap: 10px; }
+        .phone-hub-placements-empty {
+          padding: 20px 16px;
+          text-align: center;
+          color: var(--lala-ink-muted);
+          font-family: var(--font-ui);
+          font-size: var(--text-xs);
+          background: var(--lala-parchment);
+          border: 1px dashed var(--lala-parchment-3);
+          border-radius: var(--lala-radius);
+        }
+        .phone-hub-placement-card {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 12px 14px;
+          background: var(--lala-surface);
+          border: 1px solid var(--lala-parchment-3);
+          border-radius: var(--lala-radius);
+          transition: border-color 0.15s;
+        }
+        .phone-hub-placement-card:hover { border-color: var(--lala-gold-line); }
+        .phone-hub-placement-head { display: flex; align-items: center; gap: 12px; }
+        .phone-hub-placement-thumb {
+          width: 40px; height: 40px;
+          object-fit: contain;
+          border-radius: var(--lala-radius);
+          background: var(--lala-parchment);
+          border: 1px solid var(--lala-parchment-3);
+          padding: 2px;
+          flex-shrink: 0;
+        }
+        .phone-hub-placement-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .phone-hub-placement-name {
+          font-family: var(--font-prose);
+          font-size: var(--text-md);
+          font-weight: 600;
+          color: var(--lala-ink);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .phone-hub-placement-orphan {
+          font-family: var(--font-ui);
+          font-size: var(--text-xs);
+          color: var(--lala-ink-faint);
+          font-weight: 500;
+        }
+        .phone-hub-placement-count {
+          font-family: var(--font-ui);
+          font-size: var(--text-xs);
+          color: var(--lala-ink-muted);
+          letter-spacing: 0.3px;
+        }
+        .phone-hub-placement-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+        .phone-hub-placement-chip {
+          padding: 5px 10px;
+          font-size: var(--text-xs);
+          font-family: var(--font-ui);
+          font-weight: 600;
+          letter-spacing: 0.3px;
+          border: 1px solid var(--lala-parchment-3);
+          border-radius: var(--lala-radius);
+          background: var(--lala-parchment);
+          color: var(--lala-ink-muted);
+          cursor: pointer;
+          transition: border-color 0.15s, color 0.15s, background 0.15s;
+        }
+        .phone-hub-placement-chip:hover {
+          border-color: var(--lala-gold);
+          background: var(--lala-gold-soft);
+          color: var(--lala-gold);
+        }
+
         .screen-card-thumb { aspect-ratio: 9/16; }
 
         @media (max-width: 1024px) {
@@ -436,155 +883,3 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   );
 }
 
-const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
-  const isActive = activeScreen?.id === screen?.id && screen;
-  const hasImage = screen?.generated && screen?.url;
-  const accentColor = isIcon ? '#a889c8' : '#B8962E';
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
-
-  // Close menu on outside click
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('touchstart', handler);
-    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
-  }, [menuOpen]);
-
-  return (
-    <div
-      onClick={() => {
-        if (menuOpen) return;
-        if (isHidden && onHide) { onHide(type.key); return; }
-        screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
-      }}
-      className="screen-card"
-      style={{
-        background: isHidden ? '#f5f3f0' : isActive ? '#2C2C2C' : hasImage ? '#fff' : '#faf8f5',
-        border: `1px solid ${isHidden ? '#e8e0d0' : isActive ? accentColor : hasImage ? '#e8e0d0' : '#f0ece4'}`,
-        borderRadius: isIcon ? 8 : 10, padding: isIcon ? 6 : 8,
-        cursor: 'pointer',
-        transition: 'all 0.15s',
-        position: 'relative',
-        overflow: 'visible',
-        minHeight: isIcon ? 40 : 'auto',
-        opacity: isHidden ? 0.45 : 1,
-      }}
-    >
-      {/* 3-dot menu — replaces old delete/hide buttons */}
-      {!isHidden && (onDelete || onHide) && (
-        <div ref={menuRef} style={{ position: 'absolute', top: 4, right: 4, zIndex: 5 }}>
-          <button
-            className="screen-card-menu"
-            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-            aria-label="Screen options"
-            style={{
-              width: 28, height: 28, borderRadius: 6,
-              background: hasImage ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)',
-              border: 'none', color: hasImage ? '#fff' : '#999',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              backdropFilter: hasImage ? 'blur(4px)' : 'none',
-            }}
-          >
-            <MoreVertical size={14} />
-          </button>
-
-          {menuOpen && (
-            <div style={{
-              position: 'absolute', top: '100%', right: isIcon ? 'auto' : 0, left: isIcon ? 0 : 'auto', marginTop: 4,
-              background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20,
-              minWidth: 140, overflow: 'hidden',
-            }}>
-              {/* Edit — opens the detail panel */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuOpen(false);
-                  screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
-                }}
-                style={menuItemStyle}
-              >
-                <Edit3 size={14} /> Edit
-              </button>
-
-              {/* Hide from grid */}
-              {onHide && !hasImage && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onHide(type.key); }}
-                  style={menuItemStyle}
-                >
-                  <EyeOff size={14} /> Hide
-                </button>
-              )}
-
-              {/* Delete — available for any screen with an image or asset */}
-              {onDelete && (screen?.generated || screen?.asset_id || screen?.url) && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }}
-                  style={{ ...menuItemStyle, color: '#dc2626', borderBottom: 'none' }}
-                >
-                  <Trash2 size={14} /> Delete
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Restore badge for hidden cards */}
-      {isHidden && (
-        <div style={{
-          position: 'absolute', top: 4, right: 4, zIndex: 3,
-          fontSize: 9, color: '#999', fontFamily: "'DM Mono', monospace",
-          background: '#fff', padding: '2px 8px', borderRadius: 4, border: '1px solid #ddd',
-        }}>restore</div>
-      )}
-
-      {/* Thumbnail preview */}
-      {hasImage && (
-        <div className="screen-card-thumb" style={{
-          width: '100%',
-          borderRadius: 8, overflow: 'hidden',
-          marginBottom: 6, background: '#f0f0f0',
-        }}>
-          <img src={screen.url} alt={type.label}
-            style={isIcon ? { width: '100%', height: '100%', objectFit: 'contain' } : getScreenImageStyle(screen, globalFit)} />
-        </div>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-        <span style={{ fontSize: isIcon ? 12 : 14, flexShrink: 0 }}>{type.icon}</span>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: isIcon ? 9 : 11, fontWeight: 600, color: isActive ? '#fff' : '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
-            {type.label}
-          </div>
-          {!isIcon && (
-            <div className="screen-card-desc" style={{ fontSize: 8, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
-              {type.desc}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Status dot */}
-      {!menuOpen && (
-        <div style={{
-          position: 'absolute', top: isIcon ? 5 : 8, left: isIcon ? 5 : 8,
-          width: 7, height: 7, borderRadius: '50%',
-          background: hasImage ? '#16a34a' : screen ? '#eab308' : '#e0e0e0',
-        }} />
-      )}
-    </div>
-  );
-});
-
-const menuItemStyle = {
-  display: 'flex', alignItems: 'center', gap: 8,
-  width: '100%', padding: '11px 14px',
-  border: 'none', background: 'none', cursor: 'pointer',
-  fontSize: 13, fontWeight: 500, color: '#2C2C2C',
-  textAlign: 'left', minHeight: 44,
-  borderBottom: '1px solid #f5f3ee',
-};

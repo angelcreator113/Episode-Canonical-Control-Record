@@ -7,10 +7,14 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef, Component } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Link2, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, GitBranch } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
+import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
+import AIProposalReview from '../components/phone-editor/AIProposalReview';
+import MissionEditor from '../components/phone-editor/MissionEditor';
+// PhoneHubSteps removed — see below where the 4-step guide was deleted.
 import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import './UIOverlaysTab.css';
@@ -77,6 +81,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const batchInputRef = useRef(null);
   const pollRef = useRef(null);
   const genTimeoutRef = useRef(null);  // tracks the 5-min generation timeout
+  const linkEditorRef = useRef(null);  // exposes save()/isDirty()/undo()/redo() from the inline zone editor
   const [removingBg, setRemovingBg] = useState(false);  // loading state for Remove BG
 
   // Keep activeScreenRef in sync with activeScreen state
@@ -453,7 +458,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   };
 
   // Create custom screen or icon
-  const handleCreateScreen = async (form) => {
+  const handleCreateScreen = async (form, file) => {
     try {
       const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
       // Optimistic add, then reconcile with API response
@@ -465,11 +470,28 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           opens_screen: newType.opens_screen, is_home: !!newType.is_home,
           custom: true, custom_id: newType.id, generated: false, url: null,
         }]);
-      } else {
+      }
+      // Second step: if the creator attached an image, upload it to the new type
+      // so the icon/screen is immediately usable (no need to click into the
+      // detail modal afterwards and upload there).
+      if (file && newType?.type_key) {
+        try {
+          const fd = new FormData();
+          fd.append('image', file);
+          await api.post(`/api/v1/ui-overlays/${showId}/upload/${newType.type_key}`, fd);
+        } catch (upErr) {
+          console.warn('[createScreen] image upload failed', upErr);
+          flash('Created but image upload failed — try uploading from the card', 'error');
+        }
+        // Re-fetch to pick up the uploaded URL (optimistic state was url: null)
+        loadOverlays(false);
+      } else if (!newType) {
         loadOverlays(false);
       }
       setShowCreateModal(false);
-      flash(createMode === 'phone_icon' ? 'Icon type created' : 'Screen type created');
+      flash(createMode === 'phone_icon'
+        ? (file ? 'Icon created + image uploaded' : 'Icon type created')
+        : (file ? 'Screen created + image uploaded' : 'Screen type created'));
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -552,6 +574,100 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       setActiveScreen(prev => prev ? { ...prev, screen_links: links, metadata: { ...(prev.metadata || {}), screen_links: links } } : prev);
       flash('Links saved!');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
+  // Bulk-place (Phase 3.3) — copies the given zone (icon, label, position) onto
+  // each target screen as an independent new zone. Each copy gets a fresh id so
+  // they can be repositioned / edited per screen without affecting the original.
+  const handleBulkPlaceZone = async (sourceZone, targetScreenIds) => {
+    if (!showId || !sourceZone || !Array.isArray(targetScreenIds) || targetScreenIds.length === 0) return;
+    let ok = 0, failed = 0;
+    // Update local state incrementally so each target flips immediately; each
+    // screen's zones get persisted via the same endpoint handleSaveLinks uses.
+    for (const targetId of targetScreenIds) {
+      const target = overlays.find(o => o.id === targetId);
+      if (!target?.asset_id) { failed++; continue; }
+      const existing = target.screen_links || target.metadata?.screen_links || [];
+      const copy = {
+        ...sourceZone,
+        id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      };
+      const nextLinks = [...existing, copy];
+      try {
+        await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${target.asset_id}`, { screen_links: nextLinks });
+        setOverlays(prev => prev.map(o => o.id === targetId ? { ...o, screen_links: nextLinks, metadata: { ...(o.metadata || {}), screen_links: nextLinks } } : o));
+        ok++;
+      } catch (err) {
+        console.error('[bulk-place] failed for screen', targetId, err);
+        failed++;
+      }
+    }
+    if (ok && !failed) flash(`Placed on ${ok} screen${ok === 1 ? '' : 's'}`);
+    else if (ok && failed) flash(`Placed on ${ok}, ${failed} failed`, 'error');
+    else flash('Bulk place failed', 'error');
+  };
+
+  // Request AI-proposed zones for the current screen. Returns the proposal so
+  // ScreenLinkEditor can open its review modal; we deliberately do NOT write here.
+  const handleRequestAiZones = async (hint) => {
+    if (!activeScreen?.asset_id || !showId) return null;
+    try {
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/ai/add-zones`, {
+        asset_id: activeScreen.asset_id,
+        prompt_hint: hint || undefined,
+      });
+      return res.data;
+    } catch (err) {
+      flash(err.response?.data?.error || err.message, 'error');
+      throw err;
+    }
+  };
+
+  // ── AI panel state — the panel lives outside ScreenLinkEditor so it needs its
+  //    own proposal holder + review modal. Separate from ScreenLinkEditor's
+  //    toolbar AI flow so both entry points can coexist without fighting. ──
+  const [panelProposal, setPanelProposal] = useState(null);
+  const [panelAiBusy, setPanelAiBusy] = useState(false);
+  // Missions modal (PR4). No per-episode context here — missions are show-scoped,
+  // optionally per-episode, and that's picked inside the editor form.
+  const [missionsOpen, setMissionsOpen] = useState(false);
+
+  const handlePanelAddZones = async (hint) => {
+    if (!activeScreen?.asset_id || !showId || panelAiBusy) return;
+    setPanelAiBusy(true);
+    try {
+      const data = await handleRequestAiZones(hint);
+      if (data?.proposal) setPanelProposal(data);
+    } finally {
+      setPanelAiBusy(false);
+    }
+  };
+
+  // When the user approves a panel-generated proposal, merge the new zones with
+  // whatever the screen already has and save through the existing PUT.
+  const handleApprovePanelProposal = async () => {
+    if (!panelProposal?.proposal?.zones?.length || !activeScreen) return;
+    const existing = activeScreen.screen_links || activeScreen.metadata?.screen_links || [];
+    const merged = [...existing, ...panelProposal.proposal.zones];
+    await handleSaveLinks(merged);
+    setPanelProposal(null);
+  };
+
+  // Zone-level AI — called from ContentZoneEditor via prop. Returns the proposal;
+  // the editor renders an inline Apply/Discard surface and applies on approve.
+  const handleFillContentZone = async (zoneId, hint) => {
+    if (!activeScreen?.asset_id || !showId) return null;
+    try {
+      const res = await api.post(`/api/v1/ui-overlays/${showId}/ai/fill-content-zone`, {
+        asset_id: activeScreen.asset_id,
+        zone_id: zoneId,
+        prompt_hint: hint || undefined,
+      });
+      return res.data;
+    } catch (err) {
+      flash(err.response?.data?.error || err.message, 'error');
+      return null;
+    }
   };
 
   const handleUploadIcon = async (linkId, file) => {
@@ -734,6 +850,29 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
 
   const generatedCount = overlays.filter(o => o.generated).length;
 
+  // Step-header derived counts. "Screens" excludes phone icons — icons are
+  // app tiles that live on a screen, not standalone workspaces.
+  const screenOverlays = overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon');
+  const screensGenerated = screenOverlays.filter(o => o.generated && o.url).length;
+  const screensTotal = screenOverlays.length;
+  const screensWithZones = screenOverlays.filter(o => {
+    const links = o.screen_links || o.metadata?.screen_links || [];
+    return Array.isArray(links) && links.length > 0;
+  }).length;
+
+  // Lightweight mission count fetch — refreshes on mount + whenever the
+  // missions modal closes (after a save/delete). Keeps the step header in
+  // sync without prop-drilling the modal's internal list.
+  const [missionCount, setMissionCount] = useState(0);
+  useEffect(() => {
+    if (!showId || missionsOpen) return;
+    let cancelled = false;
+    api.get(`/api/v1/ui-overlays/${showId}/missions`)
+      .then(r => { if (!cancelled) setMissionCount((r.data?.missions || []).length); })
+      .catch(() => { /* table may not exist yet; leave count at 0 */ });
+    return () => { cancelled = true; };
+  }, [showId, missionsOpen]);
+
 
   return (
     <div style={{ padding: '20px 0' }}>
@@ -829,9 +968,13 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           </button>
           <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
+          <button onClick={() => setMissionsOpen(true)} disabled={!showId} className="overlays-header-btn">
+            <Target size={13} /> <span className="btn-label">Missions</span>
+          </button>
           <button onClick={handleGenerateAll} disabled={generating || !showId} className="overlays-header-btn" style={{
-            background: generating ? '#eee' : '#2C2C2C',
-            color: generating ? '#999' : '#fff', border: 'none',
+            background: generating ? 'var(--lala-parchment-2)' : 'var(--lala-gold)',
+            color: generating ? 'var(--lala-ink-faint)' : '#fff',
+            border: 'none',
           }}>
             {generating ? <><Loader size={13} className="spin" /> Generating...</> : <><Sparkles size={13} /> Generate All</>}
           </button>
@@ -845,29 +988,135 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         </div>
       ) : (
         <>
+        {/* 4-step guide removed — creators don't need the hand-holding every
+            visit, and it was eating prime real estate above the phone. The
+            same state (screens generated, missions, preview) is still
+            reachable via the header buttons + grid tabs. */}
+
         <div className="phone-hub-layout">
-          {/* Phone Hub (phone + grid) — takes full width now */}
-          <div className="phone-hub-main">
-            <OverlayErrorBoundary>
-              <PhoneHub
-                screens={overlays}
-                activeScreen={activeScreen}
-                onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
-                onDelete={handleDeleteScreen}
-                onHideScreen={handleHideScreen}
-                hiddenScreens={hiddenScreens}
-                showHidden={showHidden}
-                onToggleShowHidden={() => setShowHidden(h => !h)}
-                onNavigate={handleNavigate}
-                navigationHistory={navHistory}
-                onBack={handleBack}
-                skin={phoneSkin}
-                onChangeSkin={handleChangeSkin}
-                customFrameUrl={customFrameUrl}
-                globalFit={globalFit}
-              />
-            </OverlayErrorBoundary>
-          </div>
+          {editingLinks && activeScreen?.url ? (
+            /* ── Inline Zone Editor — replaces PhoneHub so users draw directly on the main display ── */
+            (() => {
+              // Computed once per render: the list of screens you can edit zones on (has image, not icon).
+              const editableScreens = overlays.filter(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+              const curIdx = editableScreens.findIndex(s => s.id === activeScreen.id);
+              const switchToScreen = (target) => {
+                if (!target || target.id === activeScreen.id) return;
+                // If the editor has unsaved work, persist it before switching so drags/edits aren't lost.
+                if (linkEditorRef.current?.isDirty?.()) {
+                  linkEditorRef.current.save();
+                }
+                setActiveScreen(target);
+                setNavHistory([]);  // fresh navigation stack on screen switch
+              };
+              const prevScreen = curIdx > 0 ? editableScreens[curIdx - 1] : null;
+              const nextScreen = curIdx >= 0 && curIdx < editableScreens.length - 1 ? editableScreens[curIdx + 1] : null;
+              return (
+                <div className="zone-editor-inline">
+                  <div className="zone-editor-header">
+                    <div className="zone-editor-switcher">
+                      <button
+                        onClick={() => switchToScreen(prevScreen)}
+                        disabled={!prevScreen}
+                        className="zone-editor-nav-btn"
+                        title={prevScreen ? `Previous: ${prevScreen.name}` : 'No previous screen'}
+                        aria-label="Previous screen"
+                      ><ChevronLeft size={16} /></button>
+                      <select
+                        className="zone-editor-screen-select"
+                        value={activeScreen.id}
+                        onChange={(e) => {
+                          const target = editableScreens.find(s => s.id === e.target.value);
+                          switchToScreen(target);
+                        }}
+                      >
+                        {editableScreens.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => switchToScreen(nextScreen)}
+                        disabled={!nextScreen}
+                        className="zone-editor-nav-btn"
+                        title={nextScreen ? `Next: ${nextScreen.name}` : 'No next screen'}
+                        aria-label="Next screen"
+                      ><ChevronRight size={16} /></button>
+                    </div>
+                    <button onClick={() => {
+                      if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                      setEditingLinks(false);
+                      setNavHistory([]);
+                    }} className="zone-editor-done-btn">
+                      <Check size={14} /> Done
+                    </button>
+                  </div>
+                  <ScreenLinkEditor
+                    ref={linkEditorRef}
+                    screen={activeScreen}
+                    screenUrl={activeScreen.url}
+                    links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
+                    screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
+                    generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                    iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.category === 'icon' || o.type === 'icon') && o.url)}
+                    globalFit={globalFit}
+                    customFrameUrl={customFrameUrl}
+                    phoneSkin={phoneSkin}
+                    onSave={handleSaveLinks}
+                    onUploadIcon={handleUploadIcon}
+                    onNavigate={handleNavigate}
+                    navigationHistory={navHistory}
+                    onBack={handleBack}
+                    onRequestAiZones={handleRequestAiZones}
+                    allScreens={overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.url).map(o => ({ id: o.id, name: o.name }))}
+                    onBulkPlace={handleBulkPlaceZone}
+                  />
+
+                  {/* AI Assistant — lives next to the zone editor since its
+                      output *is* tap zones. Only visible while editing zones,
+                      not on the main Phone Hub view. */}
+                  {activeScreen?.url && !activeScreen.placeholder && (
+                    <div style={{ marginTop: 14 }}>
+                      <AIAssistantPanel
+                        scope="screen"
+                        scopeLabel={`Screen: ${activeScreen.name}`}
+                        activeScreen={activeScreen}
+                        onRunAddZones={handlePanelAddZones}
+                        busy={panelAiBusy}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          ) : (
+            /* ── Phone Hub (phone + grid) ── */
+            <div className="phone-hub-main">
+              <OverlayErrorBoundary>
+                <PhoneHub
+                  screens={overlays}
+                  activeScreen={activeScreen}
+                  onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
+                  onDelete={handleDeleteScreen}
+                  onHideScreen={handleHideScreen}
+                  hiddenScreens={hiddenScreens}
+                  showHidden={showHidden}
+                  onToggleShowHidden={() => setShowHidden(h => !h)}
+                  onNavigate={handleNavigate}
+                  navigationHistory={navHistory}
+                  onBack={handleBack}
+                  skin={phoneSkin}
+                  onChangeSkin={handleChangeSkin}
+                  customFrameUrl={customFrameUrl}
+                  globalFit={globalFit}
+                  onEditZones={() => setEditingLinks(true)}
+                />
+              </OverlayErrorBoundary>
+
+              {/* AI Assistant moved into the inline zone editor — it only
+                  appears when you're actively editing zones since that's
+                  what it acts on. */}
+            </div>
+          )}
         </div>
 
       {/* ── Floating Editor Modal ── */}
@@ -937,8 +1186,19 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 { key: 'actions', label: 'Actions' },
                 ...(activeScreen?.url && !activeScreen.placeholder ? [
                   { key: 'fit', label: 'Image Fit' },
-                  { key: 'links', label: 'Tap Links', badge: (activeScreen.screen_links || activeScreen.metadata?.screen_links || []).length || null },
-                  { key: 'content', label: 'Content', badge: (activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length || null },
+                  // Tap Links tab removed — tap-zone editing lives on the main phone
+                  // display (the "Edit Tap Zones" button below the phone) since dev's
+                  // "Move tap zone editing to the main phone display" refactor. The
+                  // in-modal tab was a dead redirect, so it's gone.
+                  //
+                  // Content tab hidden by default — only shown on screens that already
+                  // have content zones drawn (keeps backward compat). The tab renders
+                  // live show data (feed posts, DMs, wardrobe, etc.) into template
+                  // rectangles. Hide it until someone starts using content zones so
+                  // the editor reads as clean modes instead of a busy tab bar.
+                  ...((activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length > 0
+                    ? [{ key: 'content', label: 'Content', badge: (activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length }]
+                    : []),
                 ] : []),
               ].map(tab => (
                 <button
@@ -965,31 +1225,44 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     </div>
                   )}
 
-                  {/* Primary Actions */}
-                  <div className="editor-primary-actions">
-                    {!activeScreen.placeholder ? (
-                      <>
-                        <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
-                        <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#7ab3d4" primary />
-                      </>
-                    ) : (
-                      <>
-                        <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#7ab3d4" primary />
-                        <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
-                      </>
-                    )}
-                  </div>
-
-                  {/* Type Toggle */}
+                  {/* Type toggle — Screen ↔ Icon. Only meaningful once an asset exists
+                      (placeholder cards don't have a type to change yet). */}
                   {activeScreen.asset_id && (
                     <div className="editor-section">
                       <div className="editor-section-label">Type</div>
                       <div className="editor-type-toggle">
-                        <button onClick={() => handleChangeScreenType('phone')} className={`editor-type-btn ${activeScreen.category !== 'phone_icon' ? 'active-screen' : ''}`}>Screen</button>
-                        <button onClick={() => handleChangeScreenType('phone_icon')} className={`editor-type-btn ${activeScreen.category === 'phone_icon' ? 'active-icon' : ''}`}>Icon</button>
+                        <button
+                          onClick={() => handleChangeScreenType('phone')}
+                          className={`editor-type-btn ${activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' ? 'active-screen' : ''}`}
+                        >
+                          Screen
+                        </button>
+                        <button
+                          onClick={() => handleChangeScreenType('phone_icon')}
+                          className={`editor-type-btn ${activeScreen.category === 'phone_icon' || activeScreen.category === 'icon' ? 'active-icon' : ''}`}
+                        >
+                          Icon
+                        </button>
                       </div>
                     </div>
                   )}
+
+                  {/* Primary Actions — Generate is gold (primary); Upload is ink-muted
+                      so the two read as equal-weight options without competing for
+                      the eye. Previously Upload was sky-blue which fought the gold palette. */}
+                  <div className="editor-primary-actions">
+                    {!activeScreen.placeholder ? (
+                      <>
+                        <ActionBtn icon={Sparkles} label={generatingId === activeScreen.id ? '...' : 'Generate'} onClick={() => handleGenerateOne(activeScreen.id)} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
+                        <ActionBtn icon={Upload} label="Upload" onClick={() => fileInputRef.current?.click()} color="#6B6557" primary />
+                      </>
+                    ) : (
+                      <>
+                        <ActionBtn icon={Upload} label="Upload" onClick={() => handleAutoCreateAndUpload()} color="#6B6557" primary />
+                        <ActionBtn icon={Sparkles} label="Generate" onClick={() => handleAutoCreateAndGenerate()} disabled={generatingId === activeScreen.id} color="#B8962E" primary />
+                      </>
+                    )}
+                  </div>
 
                   {/* Home Screen Toggle */}
                   {activeScreen.custom_id && activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' && (
@@ -1028,18 +1301,28 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     </div>
                   )}
 
-                  {/* Secondary Actions */}
+                  {/* Secondary Actions — non-destructive only (Download, Remove BG, Copy To).
+                      Delete moved to its own "Danger Zone" section below so it doesn't
+                      sit next to benign buttons and get hit by accident. */}
                   {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
                     <div className="editor-secondary-actions">
                       {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
-                      {activeScreen.asset_id && <ActionBtn icon={removingBg ? Loader : Eraser} label={removingBg ? 'Removing...' : 'Remove BG'} onClick={handleRemoveBg} disabled={removingBg} color="#a889c8" />}
+                      {activeScreen.asset_id && <ActionBtn icon={removingBg ? Loader : Eraser} label={removingBg ? 'Removing...' : 'Remove BG'} onClick={handleRemoveBg} disabled={removingBg} color="#6B6557" />}
                       {activeScreen.url && overlays.filter(o => o.id !== activeScreen.id && o.generated).length > 0 && (
                         <DuplicateSettingsBtn
                           screens={overlays.filter(o => o.id !== activeScreen.id && o.generated)}
                           onDuplicate={handleDuplicateSettings}
                         />
                       )}
-                      <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#dc2626" />
+                    </div>
+                  )}
+
+                  {/* Danger Zone — destructive actions isolated at the bottom with a
+                      visible boundary so Delete isn't a one-tap mistake next to Download. */}
+                  {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
+                    <div className="editor-danger-zone">
+                      <div className="editor-section-label editor-danger-zone-label">Danger Zone</div>
+                      <ActionBtn icon={Trash2} label="Delete" onClick={handleDelete} color="#B84D2E" />
                     </div>
                   )}
                 </div>
@@ -1061,25 +1344,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 </div>
               )}
 
-              {/* ── Tap Links Tab ── */}
-              {editorTab === 'links' && activeScreen?.url && !activeScreen.placeholder && (
-                <div className="editor-tab-content">
-                  <ScreenLinkEditor
-                    screen={activeScreen}
-                    screenUrl={activeScreen.url}
-                    links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                    screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
-                    generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                    iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.type === 'icon') && o.generated && o.url)}
-                    globalFit={globalFit}
-                    customFrameUrl={customFrameUrl}
-                    phoneSkin={phoneSkin}
-                    onSave={handleSaveLinks}
-                    onUploadIcon={handleUploadIcon}
-                    compact
-                  />
-                </div>
-              )}
+              {/* Tap Links render block removed — the tab itself is gone (see tab definitions
+                  above). Tap-zone editing lives on the main phone display via the
+                  "Edit Tap Zones" button below the phone. */}
 
               {/* ── Content Zones Tab ── */}
               {editorTab === 'content' && activeScreen?.url && !activeScreen.placeholder && (
@@ -1092,6 +1359,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
                     showId={showId}
                     onSave={handleSaveContentZones}
+                    onAiFillZone={handleFillContentZone}
                     compact
                   />
                 </div>
@@ -1103,6 +1371,25 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         </>
       )}
       </>
+      )}
+
+      {/* Missions editor — show-scoped CRUD modal */}
+      <MissionEditor
+        open={missionsOpen}
+        showId={showId}
+        onClose={() => setMissionsOpen(false)}
+      />
+
+      {/* AI proposal from the Assistant panel — separate modal from the one
+          ScreenLinkEditor's toolbar button uses so both entry points work. */}
+      {panelProposal && (
+        <AIProposalReview
+          proposal={panelProposal.proposal}
+          contextSummary={panelProposal.context_summary}
+          busy={panelAiBusy}
+          onReject={() => setPanelProposal(null)}
+          onApprove={handleApprovePanelProposal}
+        />
       )}
 
       {/* Preview Mode */}
@@ -1147,7 +1434,10 @@ const FIT_MODES = [
 ];
 
 function ImageFitControls({ fit, hasScreenOverride, onChange, onSave, onClearOverride, globalFit, onChangeGlobal, onSaveGlobal }) {
-  const [editMode, setEditMode] = useState(hasScreenOverride ? 'screen' : 'global');
+  // Default to 'screen' (per-screen override) so accidental edits don't propagate
+  // to every screen via the global defaults. Users who explicitly want to change
+  // the global defaults have to click "All Screens" first.
+  const [editMode, setEditMode] = useState('screen');
   const activeFit = editMode === 'global' ? (globalFit || {}) : fit;
   const activeChange = editMode === 'global' ? onChangeGlobal : onChange;
   const activeSave = editMode === 'global' ? onSaveGlobal : onSave;
@@ -1324,6 +1614,16 @@ function DuplicateSettingsBtn({ screens, onDuplicate }) {
 
 function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existingScreens = [] }) {
   const [form, setForm] = useState({ name: '', beat: '', description: '', prompt: '', opens_screen: '' });
+  // Optional details (beat / description / generation prompt) collapsed by
+  // default — most creators just want to name the thing and pick what it opens.
+  // The Generation Prompt is only needed if you plan to AI-generate the image;
+  // uploading one later works fine without it.
+  const [showOptional, setShowOptional] = useState(false);
+  // Direct-upload support: attach an image while creating so the asset is
+  // immediately populated. Preview shown inline before Create is clicked.
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadPreview, setUploadPreview] = useState(null);
+  const fileInputRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
 
@@ -1347,11 +1647,35 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existing
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.prompt.trim()) return;
+    if (!form.name.trim()) return;
     setSaving(true);
-    await onCreate(form);
+    await onCreate(form, uploadFile);
     setSaving(false);
   };
+
+  // File picker: store the File for submit-time upload AND generate a local
+  // object URL for an inline preview so creators can confirm before hitting Create.
+  const handleFilePick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadFile(file);
+    setUploadPreview((prev) => {
+      if (prev) { try { URL.revokeObjectURL(prev); } catch {} }
+      return URL.createObjectURL(file);
+    });
+  };
+  const clearFile = () => {
+    setUploadFile(null);
+    setUploadPreview((prev) => {
+      if (prev) { try { URL.revokeObjectURL(prev); } catch {} }
+      return null;
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+  useEffect(() => () => {
+    // Revoke the preview URL on unmount to avoid leaks.
+    if (uploadPreview) { try { URL.revokeObjectURL(uploadPreview); } catch {} }
+  }, [uploadPreview]);
 
   return (
     <div className="overlays-modal-backdrop" onClick={onClose}>
@@ -1365,6 +1689,90 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existing
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>{isIcon ? 'Icon Name' : 'Screen Name'}</label>
               <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isIcon ? 'e.g., Social Feed Icon, Camera Icon' : 'e.g., Feed View, DM Conversation'} className="overlays-modal__field" />
+            </div>
+
+            {/* Inline image upload — lets creators attach their own image right
+                here instead of creating a placeholder first then uploading on
+                the card. Optional; skipping keeps today's "generate or upload
+                later" flow intact. */}
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>
+                {isIcon ? 'Icon Image' : 'Screen Image'} <span style={{ color: '#A09889', fontWeight: 500 }}>— optional, upload your own</span>
+              </label>
+              {uploadPreview ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: 10,
+                  border: '1px solid #E8E0D0',
+                  borderRadius: 8,
+                  background: '#FAF7F0',
+                }}>
+                  <img
+                    src={uploadPreview}
+                    alt="Preview"
+                    style={{
+                      width: isIcon ? 48 : 42,
+                      height: isIcon ? 48 : 72,
+                      objectFit: isIcon ? 'contain' : 'cover',
+                      borderRadius: 6,
+                      background: '#fff',
+                      border: '1px solid #E8E0D0',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {uploadFile?.name || 'Selected image'}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#6B6557', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>
+                      Will upload when you click Create
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearFile}
+                    style={{
+                      padding: '6px 10px', fontSize: 11, fontWeight: 600,
+                      border: '1px solid #E8E0D0', borderRadius: 6,
+                      background: '#fff', color: '#6B6557',
+                      cursor: 'pointer', fontFamily: "'DM Mono', monospace",
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '2px dashed #E8E0D0',
+                    borderRadius: 8,
+                    background: '#FAF7F0',
+                    color: '#6B6557',
+                    cursor: 'pointer',
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: 0.3,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    transition: 'border-color 0.15s, color 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#B8962E'; e.currentTarget.style.color = '#B8962E'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E8E0D0'; e.currentTarget.style.color = '#6B6557'; }}
+                >
+                  <Upload size={14} /> Upload image (PNG or JPG)
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFilePick}
+                style={{ display: 'none' }}
+              />
             </div>
             {isIcon && (
               <div>
@@ -1394,19 +1802,58 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existing
                 )}
               </div>
             )}
+            {/* Optional details — collapsed by default since most creators
+                just want a name + what-it-opens. Beat/Description are
+                nice-to-have; Generation Prompt is only needed if you plan
+                to AI-generate the image (you can upload one later instead). */}
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Beat / Trigger</label>
-              <input value={form.beat} onChange={e => setForm(f => ({ ...f, beat: e.target.value }))} placeholder="e.g., Beat 2, Login" className="overlays-modal__field" />
+              <button
+                type="button"
+                onClick={() => setShowOptional(o => !o)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '6px 0', fontSize: 12, fontWeight: 600,
+                  border: 'none', background: 'none', cursor: 'pointer',
+                  color: '#6B6557', fontFamily: "'DM Mono', monospace",
+                  letterSpacing: 0.3,
+                }}
+              >
+                <ChevronRight
+                  size={14}
+                  style={{
+                    transform: showOptional ? 'rotate(90deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.15s',
+                  }}
+                />
+                Optional details
+                <span style={{ color: '#A09889', fontWeight: 500 }}>
+                  · beat, description, AI prompt
+                </span>
+              </button>
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Description</label>
-              <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What the screen shows" className="overlays-modal__field" />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>Generation Prompt</label>
-              <textarea value={form.prompt} onChange={e => setForm(f => ({ ...f, prompt: e.target.value }))} rows={3} placeholder="Describe the screen for AI generation..." className="overlays-modal__field" style={{ resize: 'vertical' }} />
-            </div>
-            <button type="submit" disabled={saving || !form.name.trim() || !form.prompt.trim()} className="overlays-modal__submit">
+            {showOptional && (
+              <>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>
+                    Beat / Trigger <span style={{ color: '#A09889', fontWeight: 500 }}>— optional</span>
+                  </label>
+                  <input value={form.beat} onChange={e => setForm(f => ({ ...f, beat: e.target.value }))} placeholder="e.g., Beat 2, Login" className="overlays-modal__field" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>
+                    Description <span style={{ color: '#A09889', fontWeight: 500 }}>— optional</span>
+                  </label>
+                  <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What the screen shows" className="overlays-modal__field" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>
+                    Generation Prompt <span style={{ color: '#A09889', fontWeight: 500 }}>— only if you plan to AI-generate</span>
+                  </label>
+                  <textarea value={form.prompt} onChange={e => setForm(f => ({ ...f, prompt: e.target.value }))} rows={3} placeholder="Describe the screen for AI generation..." className="overlays-modal__field" style={{ resize: 'vertical' }} />
+                </div>
+              </>
+            )}
+            <button type="submit" disabled={saving || !form.name.trim()} className="overlays-modal__submit">
               {saving ? 'Creating...' : isIcon ? 'Create Icon' : 'Create Screen'}
             </button>
           </div>
