@@ -19,7 +19,7 @@
  *   readOnly        — if true, hide editing controls (used in preview mode)
  */
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader, Sparkles, ChevronLeft } from 'lucide-react';
 import { getScreenImageStyle, PHONE_SKINS } from './PhoneHub';
 import ZoneBadges from './phone-editor/ZoneBadges';
 import ConditionRow from './phone-editor/ConditionRow';
@@ -767,17 +767,41 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
       {!readOnly && (
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
-              TAP ZONES ({zones.length})
-            </span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={addDefaultZone} style={{
-                padding: '6px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9ce',
-                borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#888',
-                display: 'flex', alignItems: 'center', gap: 4, minHeight: 32,
-              }}>
-                <Plus size={12} /> Add
+            {sel ? (
+              <button
+                type="button"
+                onClick={() => setSelectedZone(null)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '6px 12px', fontSize: 12, fontWeight: 700,
+                  border: '1px solid var(--lala-parchment-3, #E8E0D0)',
+                  borderRadius: 'var(--lala-radius, 8px)',
+                  background: 'var(--lala-surface, #fff)',
+                  color: 'var(--lala-ink, #2C2C2C)',
+                  cursor: 'pointer',
+                  fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+                  minHeight: 32,
+                }}
+              >
+                <ChevronLeft size={14} /> Back to zones
               </button>
+            ) : (
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+                TAP ZONES ({zones.length})
+              </span>
+            )}
+            <div style={{ display: 'flex', gap: 6 }}>
+              {/* Add button only in list view — adding a new zone from inside
+                  the editor would be confusing. */}
+              {!sel && (
+                <button onClick={addDefaultZone} style={{
+                  padding: '6px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9ce',
+                  borderRadius: 6, background: '#fff', cursor: 'pointer', color: '#888',
+                  display: 'flex', alignItems: 'center', gap: 4, minHeight: 32,
+                }}>
+                  <Plus size={12} /> Add
+                </button>
+              )}
               {isDirty && (
                 <button onClick={handleSave} style={{
                   padding: '6px 12px', fontSize: 11, fontWeight: 600, border: 'none',
@@ -796,11 +820,16 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
             </div>
           )}
 
-          {/* Zone list — no inner scroll cap so the expanded editor (with icon grid) can lay out
-              fully. Page scroll handles long lists. The nested-scroll version hid icons
-              and made the picker feel broken. */}
+          {/* Zone list — drill-in pattern: when a zone is selected, we hide all
+              other zones so the panel reads as a dedicated editor for that one
+              zone (matches the screens/icons detail flow). The "Back to zones"
+              button up top brings the list back. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {zones.map((zone, i) => (
+            {zones.filter(z => !sel || z.id === sel.id).map((zone, _filteredIdx) => {
+              // Keep the original color-swatch index so drill-in doesn't recolor
+              // the zone to something different from how it looks in the list.
+              const i = zones.findIndex(z => z.id === zone.id);
+              return (
               <div
                 key={zone.id}
                 onClick={() => setSelectedZone(zone.id)}
@@ -1094,7 +1123,8 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <input ref={iconInputRef} type="file" accept="image/*" onChange={handleIconFileChange} style={{ display: 'none' }} />
