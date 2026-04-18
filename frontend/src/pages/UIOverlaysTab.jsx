@@ -462,10 +462,18 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     // If the user attaches a file while creating, we still want the image to land
     // on the matching type even when the create POST returns 409 (name already
     // exists). Resolve the target type_key from either the create response or
-    // the existing list, then upload.
+    // the existing list, then upload — but only if the existing type's category
+    // matches what the creator just asked for, otherwise we'd silently upload
+    // a new Icon's image to an existing Screen (or vice versa).
     const deriveTypeKey = (name) => (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+    const categoryMatches = (existing, target) => {
+      const existingIsIcon = existing?.category === 'phone_icon' || existing?.category === 'icon';
+      const targetIsIcon = target === 'phone_icon' || target === 'icon';
+      return existingIsIcon === targetIsIcon;
+    };
     try {
       let newType = null;
+      let conflict = false;
       try {
         const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
         newType = res.data?.data;
@@ -478,14 +486,23 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           }]);
         }
       } catch (err) {
-        // Duplicate name — fall through and upload to the existing type. Any
-        // other error bubbles up to the outer catch.
         if (err.response?.status !== 409) throw err;
+        conflict = true;
       }
-      // Resolve the type_key to upload against. On 201 we use the returned
-      // type_key; on 409 we derive it from the submitted name (which matches
-      // the server's slugification).
       const targetKey = newType?.type_key || deriveTypeKey(form.name);
+      if (conflict) {
+        // Guard against uploading the creator's image into a differently-
+        // categorized existing type. Find the existing overlay locally; if it's
+        // the wrong kind (Icon vs Screen), surface a clear error and bail
+        // instead of silently corrupting it.
+        const existing = overlays.find(o => o.id === targetKey || deriveTypeKey(o.name) === targetKey);
+        if (existing && !categoryMatches(existing, createMode)) {
+          const existingKind = (existing.category === 'phone_icon' || existing.category === 'icon') ? 'icon' : 'screen';
+          const wantedKind = createMode === 'phone_icon' ? 'icon' : 'screen';
+          flash(`A ${existingKind} named "${form.name}" already exists — pick a different name, or convert that ${existingKind} to a ${wantedKind} via its Type toggle.`, 'error');
+          return;
+        }
+      }
       if (file && targetKey) {
         try {
           const fd = new FormData();
