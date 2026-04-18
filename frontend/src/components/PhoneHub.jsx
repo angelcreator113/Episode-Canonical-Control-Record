@@ -89,7 +89,7 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
             <img
               src={link.icon_url}
               alt={link.label || link.target}
-              style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }}
+              style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }}
               draggable={false}
             />
           )}
@@ -129,7 +129,7 @@ function PersistentOverlay({ links = [], onNavigate }) {
             <img
               src={link.icon_url}
               alt={link.label || link.target}
-              style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }}
+              style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }}
               draggable={false}
             />
           )}

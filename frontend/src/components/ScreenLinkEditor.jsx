@@ -668,7 +668,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
             }}
           >
             {zone.icon_url ? (
-              <img src={zone.icon_url} alt={zone.label || zone.target} style={{ width: '80%', height: '80%', maxWidth: 64, maxHeight: 64, objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
+              <img src={zone.icon_url} alt={zone.label || zone.target} style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
             ) : (
               !preview && (
                 <span style={{ fontSize: 7, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.6)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2 }}>
