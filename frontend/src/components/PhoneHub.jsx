@@ -191,7 +191,7 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
           {menuOpen && (
             <div style={{ position: 'absolute', top: '100%', right: isIcon ? 'auto' : 0, left: isIcon ? 0 : 'auto', marginTop: 4, background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, minWidth: 140, overflow: 'hidden' }}>
               <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true }); }} style={menuItemStyle}><Edit3 size={14} /> Edit</button>
-              {onHide && !hasImage && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onHide(type.key); }} style={menuItemStyle}><EyeOff size={14} /> Hide</button>)}
+              {onHide && !hasImage && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); if (window.confirm(`Remove "${type.label}" from the grid? You can restore it later from "Show removed" at the top.`)) onHide(type.key); }} style={menuItemStyle}><EyeOff size={14} /> Hide</button>)}
               {onDelete && (screen?.generated || screen?.asset_id || screen?.url) && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }} style={{ ...menuItemStyle, color: '#dc2626', borderBottom: 'none' }}><Trash2 size={14} /> Delete</button>)}
             </div>
           )}
