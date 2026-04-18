@@ -130,7 +130,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     setEditingLinks(false);
     undoStackRef.current = [];
     const home = overlays.find(o => o.is_home && o.generated && o.url)
-      || overlays.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+      || overlays.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
     if (home) setActiveScreen(home);
   }, [overlays]);
 
@@ -278,7 +278,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         // Auto-select home screen (or first screen) on initial load if nothing is selected
         if (!activeScreenRef.current) {
           const home = data.find(o => o.is_home && o.generated && o.url)
-            || data.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+            || data.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
           if (home) setActiveScreen(home);
         }
       })
@@ -781,7 +781,19 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (activeScreen.asset_id) {
         await api.put(`/api/v1/ui-overlays/${showId}/category/${activeScreen.asset_id}`, { category });
       }
-      const typeField = category === 'phone_icon' ? 'icon' : 'screen';
+      const typeField = category === 'phone_icon' ? 'icon'
+        : category === 'production' ? 'overlay'
+        : 'screen';
+      // Flipping to 'production' moves the item out of the Phone Hub entirely
+      // (it'll show up in the UI Overlays / ProductionOverlaysTab instead), so
+      // close the detail panel and drop it from local state rather than leaving
+      // a dangling selection.
+      if (category === 'production') {
+        setOverlays(prev => prev.filter(o => o.id !== activeScreen.id));
+        closePanel();
+        flash('Moved to UI Overlays tab');
+        return;
+      }
       setActiveScreen(prev => prev ? { ...prev, category, type: typeField } : prev);
       setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, category, type: typeField } : o));
       flash(category === 'phone_icon' ? 'Set as Icon' : 'Set as Screen');
@@ -852,7 +864,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
 
   // Step-header derived counts. "Screens" excludes phone icons — icons are
   // app tiles that live on a screen, not standalone workspaces.
-  const screenOverlays = overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon');
+  const screenOverlays = overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
   const screensGenerated = screenOverlays.filter(o => o.generated && o.url).length;
   const screensTotal = screenOverlays.length;
   const screensWithZones = screenOverlays.filter(o => {
@@ -998,7 +1010,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             /* ── Inline Zone Editor — replaces PhoneHub so users draw directly on the main display ── */
             (() => {
               // Computed once per render: the list of screens you can edit zones on (has image, not icon).
-              const editableScreens = overlays.filter(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+              const editableScreens = overlays.filter(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
               const curIdx = editableScreens.findIndex(s => s.id === activeScreen.id);
               const switchToScreen = (target) => {
                 if (!target || target.id === activeScreen.id) return;
@@ -1055,7 +1067,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     screen={activeScreen}
                     screenUrl={activeScreen.url}
                     links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                    screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
+                    screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
                     generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                     iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.category === 'icon' || o.type === 'icon') && o.url)}
                     globalFit={globalFit}
@@ -1067,7 +1079,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     navigationHistory={navHistory}
                     onBack={handleBack}
                     onRequestAiZones={handleRequestAiZones}
-                    allScreens={overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.url).map(o => ({ id: o.id, name: o.name }))}
+                    allScreens={overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production' && o.url).map(o => ({ id: o.id, name: o.name }))}
                     onBulkPlace={handleBulkPlaceZone}
                   />
 
@@ -1225,15 +1237,18 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     </div>
                   )}
 
-                  {/* Type toggle — Screen ↔ Icon. Only meaningful once an asset exists
-                      (placeholder cards don't have a type to change yet). */}
+                  {/* Type toggle — Screen ↔ Icon ↔ UI Overlay. Only meaningful once
+                      an asset exists (placeholder cards don't have a type to change
+                      yet). Flipping to "UI Overlay" re-tags the item as
+                      category='production' so it moves out of the Phone Hub and
+                      into the UI Overlays (ProductionOverlaysTab) view. */}
                   {activeScreen.asset_id && (
                     <div className="editor-section">
                       <div className="editor-section-label">Type</div>
                       <div className="editor-type-toggle">
                         <button
                           onClick={() => handleChangeScreenType('phone')}
-                          className={`editor-type-btn ${activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' ? 'active-screen' : ''}`}
+                          className={`editor-type-btn ${activeScreen.category === 'phone' ? 'active-screen' : ''}`}
                         >
                           Screen
                         </button>
@@ -1242,6 +1257,17 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           className={`editor-type-btn ${activeScreen.category === 'phone_icon' || activeScreen.category === 'icon' ? 'active-icon' : ''}`}
                         >
                           Icon
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Move this item to the UI Overlays tab? It will disappear from the Phone Hub.')) {
+                              handleChangeScreenType('production');
+                            }
+                          }}
+                          className={`editor-type-btn ${activeScreen.category === 'production' ? 'active-overlay' : ''}`}
+                          title="Move to UI Overlays tab"
+                        >
+                          UI Overlay
                         </button>
                       </div>
                     </div>
@@ -1396,7 +1422,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
       {previewMode && (
         <PhonePreviewMode
           screens={overlays}
-          initialScreen={overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && o.category !== 'phone_icon' && o.category !== 'icon') || overlays.find(o => o.generated)}
+          initialScreen={overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production') || overlays.find(o => o.generated)}
           onClose={() => setPreviewMode(false)}
           globalFit={globalFit}
           phoneSkin={phoneSkin}
@@ -1419,7 +1445,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           onCreate={handleCreateScreen}
           isIcon={createMode === 'phone_icon'}
           showId={showId}
-          existingScreens={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon'))}
+          existingScreens={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production'))}
         />
       )}
 
