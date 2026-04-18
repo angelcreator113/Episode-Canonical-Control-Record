@@ -217,6 +217,41 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
 
 export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all', onEditZones }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
+  // Placements view — groups zones across all screens by the icon they display.
+  // Gives creators a read-only overview: "this icon appears on N screens" plus
+  // a list of those screens, so they can see the full picture without clicking
+  // through each screen one by one.
+  const placements = React.useMemo(() => {
+    const byIcon = new Map();
+    // Seed with library icons so icons with zero placements still show (with a count of 0).
+    iconTypes.forEach(icon => {
+      if (!icon.url) return;
+      byIcon.set(icon.url, { icon, placements: [] });
+    });
+    // Walk every screen's zones and append them to the matching icon's bucket.
+    screenTypes.forEach(screen => {
+      const links = screen.screen_links || screen.metadata?.screen_links || [];
+      links.forEach(link => {
+        const icons = link.icon_urls?.length ? link.icon_urls : (link.icon_url ? [link.icon_url] : []);
+        icons.forEach(iconUrl => {
+          const entry = byIcon.get(iconUrl);
+          if (entry) {
+            entry.placements.push({ screen, zone: link });
+          } else {
+            // Zone uses an icon that isn't in the library (inline upload). Surface it
+            // as an orphan entry so the creator can still see where it's used.
+            byIcon.set(iconUrl, {
+              icon: { id: `orphan-${iconUrl}`, url: iconUrl, name: 'Inline icon', orphan: true },
+              placements: [{ screen, zone: link }],
+            });
+          }
+        });
+      });
+    });
+    // Icons-with-placements first, then unused icons, for a more useful default order.
+    return Array.from(byIcon.values()).sort((a, b) => b.placements.length - a.placements.length);
+  }, [screenTypes, iconTypes]);
+
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [frameError, setFrameError] = useState(false);
   // Skin picker collapsed by default — it's a rare customization, not a primary
@@ -498,6 +533,18 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 Icons <span className="phone-hub-section-tab-count">· {iconTypes.length}</span>
               </button>
             )}
+            {/* Placements tab — icon-first view showing where each icon appears
+                across the show's screens. Hidden when there are no icons to
+                place (fresh shows) so the tab bar stays clean. */}
+            {iconTypes.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setGridSection('placements')}
+                className={`phone-hub-section-tab ${gridSection === 'placements' ? 'active' : ''}`}
+              >
+                Placements <span className="phone-hub-section-tab-count">· {placements.length}</span>
+              </button>
+            )}
           </div>
           {hiddenScreens.length > 0 && onToggleShowHidden && (
             <button onClick={onToggleShowHidden} className={`phone-hub-show-hidden-btn ${showHidden ? 'active' : ''}`}>
@@ -518,6 +565,54 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
           <div className="phone-hub-icon-grid">
             {iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
               <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon />
+            ))}
+          </div>
+        )}
+
+        {/* Placements: each icon gets a card; within the card, a list of the
+            screens it currently appears on. Clicking a screen chip navigates to
+            that screen's editor so you can adjust position / remove / etc. */}
+        {gridSection === 'placements' && (
+          <div className="phone-hub-placements">
+            {placements.length === 0 && (
+              <div className="phone-hub-placements-empty">
+                No icons in the library yet. Create one with <strong>+ New Icon</strong> above.
+              </div>
+            )}
+            {placements.map(({ icon, placements: uses }) => (
+              <div key={icon.id || icon.url} className="phone-hub-placement-card">
+                <div className="phone-hub-placement-head">
+                  <img src={icon.url} alt="" className="phone-hub-placement-thumb" />
+                  <div className="phone-hub-placement-meta">
+                    <div className="phone-hub-placement-name">
+                      {icon.name}
+                      {icon.orphan && <span className="phone-hub-placement-orphan"> · uploaded inline</span>}
+                    </div>
+                    <div className="phone-hub-placement-count">
+                      {uses.length === 0
+                        ? 'Not placed yet'
+                        : uses.length === 1
+                          ? 'Appears on 1 screen'
+                          : `Appears on ${uses.length} screens`}
+                    </div>
+                  </div>
+                </div>
+                {uses.length > 0 && (
+                  <div className="phone-hub-placement-chips">
+                    {uses.map(({ screen, zone }, idx) => (
+                      <button
+                        key={`${screen.id}-${zone.id}-${idx}`}
+                        type="button"
+                        onClick={() => onSelectScreen && onSelectScreen(screen)}
+                        className="phone-hub-placement-chip"
+                        title={`${screen.name} — x:${Math.round(zone.x)}%, y:${Math.round(zone.y)}%`}
+                      >
+                        {screen.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -594,6 +689,81 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         .phone-hub-icon-grid {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px;
         }
+
+        /* Placements view — one card per icon, stacked vertically. Inside each
+           card, a row of screen chips showing where that icon appears. */
+        .phone-hub-placements { display: flex; flex-direction: column; gap: 10px; }
+        .phone-hub-placements-empty {
+          padding: 20px 16px;
+          text-align: center;
+          color: var(--lala-ink-muted);
+          font-family: var(--font-ui);
+          font-size: var(--text-xs);
+          background: var(--lala-parchment);
+          border: 1px dashed var(--lala-parchment-3);
+          border-radius: var(--lala-radius);
+        }
+        .phone-hub-placement-card {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 12px 14px;
+          background: var(--lala-surface);
+          border: 1px solid var(--lala-parchment-3);
+          border-radius: var(--lala-radius);
+          transition: border-color 0.15s;
+        }
+        .phone-hub-placement-card:hover { border-color: var(--lala-gold-line); }
+        .phone-hub-placement-head { display: flex; align-items: center; gap: 12px; }
+        .phone-hub-placement-thumb {
+          width: 40px; height: 40px;
+          object-fit: contain;
+          border-radius: var(--lala-radius);
+          background: var(--lala-parchment);
+          border: 1px solid var(--lala-parchment-3);
+          padding: 2px;
+          flex-shrink: 0;
+        }
+        .phone-hub-placement-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .phone-hub-placement-name {
+          font-family: var(--font-prose);
+          font-size: var(--text-md);
+          font-weight: 600;
+          color: var(--lala-ink);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .phone-hub-placement-orphan {
+          font-family: var(--font-ui);
+          font-size: var(--text-xs);
+          color: var(--lala-ink-faint);
+          font-weight: 500;
+        }
+        .phone-hub-placement-count {
+          font-family: var(--font-ui);
+          font-size: var(--text-xs);
+          color: var(--lala-ink-muted);
+          letter-spacing: 0.3px;
+        }
+        .phone-hub-placement-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+        .phone-hub-placement-chip {
+          padding: 5px 10px;
+          font-size: var(--text-xs);
+          font-family: var(--font-ui);
+          font-weight: 600;
+          letter-spacing: 0.3px;
+          border: 1px solid var(--lala-parchment-3);
+          border-radius: var(--lala-radius);
+          background: var(--lala-parchment);
+          color: var(--lala-ink-muted);
+          cursor: pointer;
+          transition: border-color 0.15s, color 0.15s, background 0.15s;
+        }
+        .phone-hub-placement-chip:hover {
+          border-color: var(--lala-gold);
+          background: var(--lala-gold-soft);
+          color: var(--lala-gold);
+        }
+
         .screen-card-thumb { aspect-ratio: 9/16; }
 
         @media (max-width: 1024px) {
