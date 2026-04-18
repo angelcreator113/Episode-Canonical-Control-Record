@@ -388,6 +388,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
 
   // Derive a human-readable label from an uploaded icon URL.
   // "https://.../icons/eye-closet-icon-1234567890.png" → "Eye Closet"
+  // "calls-nobg.png" → "Calls" (technical suffix stripped)
   // Returns '' when nothing useful can be derived (all digits, empty, etc.).
   const deriveLabelFromUrl = (url) => {
     try {
@@ -397,9 +398,19 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
       // Strip common trailing timestamps (10+ consecutive digits) and leading asset prefixes.
       const cleaned = base.replace(/[-_]?\d{10,}$/, '').replace(/^(icon[-_])/i, '');
       if (!cleaned || !/[a-z]/i.test(cleaned)) return '';
-      return cleaned
+      // Technical suffixes creators add to distinguish asset variants —
+      // strip them from the display label so "calls-nobg" reads as "Calls".
+      const TECHNICAL_WORDS = new Set([
+        'nobg', 'transparent', 'removed', 'removedbg', 'bg', 'alpha',
+        'hd', 'sd', 'final', 'v1', 'v2', 'v3', 'new', 'old',
+        'copy', 'draft', 'wip', 'png', 'jpg', 'jpeg',
+      ]);
+      const words = cleaned
         .split(/[-_.\s]+/)
         .filter(Boolean)
+        .filter(w => !TECHNICAL_WORDS.has(w.toLowerCase()));
+      if (!words.length) return '';
+      return words
         .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ')
         .replace(/\s*Icon$/i, '')
@@ -556,6 +567,12 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
           </button>
         </div>
       )}
+
+      {/* Main editor row — phone and zone list sit side-by-side on desktop
+          (>=900px) and stack vertically on mobile. Phone stays fixed-width on
+          the left so tap-zone drawing is always at a consistent size; the
+          zone list flexes to fill the remaining width. */}
+      <div className="sle-main-row">
 
       {/* Phone-frame wrapper — matches the selected phone skin exactly so the editor
           looks like the same device the user is editing for, not a generic stand-in.
@@ -1083,6 +1100,22 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
           <input ref={iconInputRef} type="file" accept="image/*" onChange={handleIconFileChange} style={{ display: 'none' }} />
         </div>
       )}
+      </div>{/* /.sle-main-row */}
+
+      <style>{`
+        /* Inline zone editor: side-by-side on desktop, stacked on mobile. */
+        .sle-main-row {
+          display: flex;
+          gap: 20px;
+          align-items: flex-start;
+        }
+        .sle-main-row > .screen-link-editor-frame { flex-shrink: 0; }
+        .sle-main-row > :last-child { flex: 1; min-width: 0; }
+        @media (max-width: 900px) {
+          .sle-main-row { flex-direction: column; align-items: stretch; }
+          .sle-main-row > .screen-link-editor-frame { margin: 0 auto; }
+        }
+      `}</style>
     </div>
   );
 });
