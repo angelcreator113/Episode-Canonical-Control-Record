@@ -559,6 +559,37 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // Bulk-place (Phase 3.3) — copies the given zone (icon, label, position) onto
+  // each target screen as an independent new zone. Each copy gets a fresh id so
+  // they can be repositioned / edited per screen without affecting the original.
+  const handleBulkPlaceZone = async (sourceZone, targetScreenIds) => {
+    if (!showId || !sourceZone || !Array.isArray(targetScreenIds) || targetScreenIds.length === 0) return;
+    let ok = 0, failed = 0;
+    // Update local state incrementally so each target flips immediately; each
+    // screen's zones get persisted via the same endpoint handleSaveLinks uses.
+    for (const targetId of targetScreenIds) {
+      const target = overlays.find(o => o.id === targetId);
+      if (!target?.asset_id) { failed++; continue; }
+      const existing = target.screen_links || target.metadata?.screen_links || [];
+      const copy = {
+        ...sourceZone,
+        id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      };
+      const nextLinks = [...existing, copy];
+      try {
+        await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${target.asset_id}`, { screen_links: nextLinks });
+        setOverlays(prev => prev.map(o => o.id === targetId ? { ...o, screen_links: nextLinks, metadata: { ...(o.metadata || {}), screen_links: nextLinks } } : o));
+        ok++;
+      } catch (err) {
+        console.error('[bulk-place] failed for screen', targetId, err);
+        failed++;
+      }
+    }
+    if (ok && !failed) flash(`Placed on ${ok} screen${ok === 1 ? '' : 's'}`);
+    else if (ok && failed) flash(`Placed on ${ok}, ${failed} failed`, 'error');
+    else flash('Bulk place failed', 'error');
+  };
+
   // Request AI-proposed zones for the current screen. Returns the proposal so
   // ScreenLinkEditor can open its review modal; we deliberately do NOT write here.
   const handleRequestAiZones = async (hint) => {
@@ -1019,6 +1050,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     navigationHistory={navHistory}
                     onBack={handleBack}
                     onRequestAiZones={handleRequestAiZones}
+                    allScreens={overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.url).map(o => ({ id: o.id, name: o.name }))}
+                    onBulkPlace={handleBulkPlaceZone}
                   />
 
                   {/* AI Assistant — lives next to the zone editor since its

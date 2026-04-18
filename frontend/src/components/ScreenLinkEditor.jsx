@@ -69,6 +69,11 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   navigationHistory = [],
   onBack,
   onRequestAiZones,  // (hint?: string) => Promise<{ proposal, context_summary }> — parent hits /ai/add-zones
+  // Bulk-place support (Phase 3.3). allScreens = list of screens creators can copy
+  // the current zone onto. onBulkPlace(zone, targetScreenIds) persists a copy of the
+  // zone (icon, label, position) onto each target screen.
+  allScreens = [],
+  onBulkPlace,
   readOnly = false,
   compact = false,
 }, ref) {
@@ -97,6 +102,11 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   // Hovering a zone row in the list lights up just that zone on the phone, so you can see
   // which card corresponds to which tap area without committing to a click-to-select.
   const [hoveredZoneId, setHoveredZoneId] = useState(null);
+  // Bulk-place: zone id currently being "copied to other screens" (null = panel closed)
+  // and the set of target screen ids selected via checkboxes.
+  const [bulkPlacingZoneId, setBulkPlacingZoneId] = useState(null);
+  const [bulkTargetIds, setBulkTargetIds] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   // UX: toggle grid-snap — rounds zone positions/sizes to a 4x6 grid for clean home-screen layouts.
   const [gridSnap, setGridSnap] = useState(() => {
     try { return localStorage.getItem('screenLinkEditor.gridSnap') === '1'; } catch { return false; }
@@ -1150,6 +1160,132 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                     >
                       <Pin size={12} /> {zone.persistent ? 'Pinned — shows on all screens' : 'Pin to all screens'}
                     </button>
+
+                    {/* Bulk-place (Phase 3.3): copy this zone (icon + label +
+                        position) onto other screens in one click. Different from
+                        "Pin to all screens" — pinning ties every screen to the
+                        same live position, bulk-place creates independent copies
+                        you can reposition per screen later. */}
+                    {onBulkPlace && allScreens.filter(s => s.id !== screen?.id).length > 0 && (
+                      <div style={{
+                        marginTop: 2,
+                        padding: '10px 12px',
+                        border: '1px solid #e0d9ce',
+                        borderRadius: 8,
+                        background: '#fff',
+                        display: 'flex', flexDirection: 'column', gap: 8,
+                      }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBulkPlacingZoneId(bulkPlacingZoneId === zone.id ? null : zone.id);
+                            setBulkTargetIds(new Set());
+                          }}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+                            padding: 0, fontSize: 12, fontWeight: 600,
+                            border: 'none', background: 'none',
+                            color: '#2C2C2C', cursor: 'pointer',
+                            fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+                          }}
+                        >
+                          <span>📋 Also place on other screens</span>
+                          <span style={{ color: '#888', fontSize: 11 }}>
+                            {bulkPlacingZoneId === zone.id ? 'Close' : 'Open'}
+                          </span>
+                        </button>
+
+                        {bulkPlacingZoneId === zone.id && (
+                          <>
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                              gap: 4,
+                            }}>
+                              {allScreens.filter(s => s.id !== screen?.id).map(s => {
+                                const checked = bulkTargetIds.has(s.id);
+                                return (
+                                  <label
+                                    key={s.id}
+                                    style={{
+                                      display: 'flex', alignItems: 'center', gap: 6,
+                                      padding: '6px 8px',
+                                      fontSize: 12,
+                                      fontFamily: "'Lora', serif",
+                                      color: '#2C2C2C',
+                                      background: checked ? '#fdf8ee' : 'transparent',
+                                      border: `1px solid ${checked ? '#B8962E' : 'transparent'}`,
+                                      borderRadius: 6,
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        setBulkTargetIds(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                                          return next;
+                                        });
+                                      }}
+                                      style={{ margin: 0, accentColor: '#B8962E' }}
+                                    />
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {s.name}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                onClick={() => { setBulkPlacingZoneId(null); setBulkTargetIds(new Set()); }}
+                                disabled={bulkBusy}
+                                style={{
+                                  padding: '6px 12px', fontSize: 11, fontWeight: 600,
+                                  border: '1px solid #e0d9ce', borderRadius: 6,
+                                  background: '#fff', color: '#888',
+                                  cursor: bulkBusy ? 'not-allowed' : 'pointer',
+                                  fontFamily: "'DM Mono', monospace",
+                                }}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!onBulkPlace || bulkTargetIds.size === 0) return;
+                                  setBulkBusy(true);
+                                  try {
+                                    await onBulkPlace(zone, Array.from(bulkTargetIds));
+                                    setBulkPlacingZoneId(null);
+                                    setBulkTargetIds(new Set());
+                                  } finally {
+                                    setBulkBusy(false);
+                                  }
+                                }}
+                                disabled={bulkBusy || bulkTargetIds.size === 0}
+                                style={{
+                                  padding: '6px 12px', fontSize: 11, fontWeight: 700,
+                                  border: 'none', borderRadius: 6,
+                                  background: (bulkBusy || bulkTargetIds.size === 0) ? '#eee' : '#B8962E',
+                                  color: (bulkBusy || bulkTargetIds.size === 0) ? '#999' : '#fff',
+                                  cursor: (bulkBusy || bulkTargetIds.size === 0) ? 'not-allowed' : 'pointer',
+                                  fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+                                }}
+                              >
+                                {bulkBusy ? 'Placing...' : `Place on ${bulkTargetIds.size} screen${bulkTargetIds.size === 1 ? '' : 's'}`}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
