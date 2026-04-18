@@ -1,5 +1,5 @@
 // frontend/src/pages/Home.jsx — Creator Command Center
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { episodeService } from '../services/episodeService';
@@ -22,7 +22,7 @@ function Home() {
   const [episodes, setEpisodes] = useState([]);
   const [characters, setCharacters] = useState([]);
 
-  const loadingRef = React.useRef(false);
+  const loadingRef = useRef(false);
   useEffect(() => {
     if (loadingRef.current) return;
     loadingRef.current = true;

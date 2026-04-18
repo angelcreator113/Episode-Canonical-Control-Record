@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef, useState, useMemo } from 'react';
+import { useEffect, useCallback, useRef, useState, useMemo, Fragment } from 'react';
 import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp, Layers, Settings, Merge } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import MaskLayer from './Canvas/MaskLayer';
@@ -2084,7 +2084,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   {QUICK_ADD_OPTIONS.map((opt) => {
                     const Icon = opt.icon;
                     return (
-                      <React.Fragment key={opt.key}>
+                      <Fragment key={opt.key}>
                         {opt.direct && <div className="scene-studio-action-bar-popup-divider" />}
                         <button
                           type="button"
@@ -2094,7 +2094,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                           <Icon size={14} />
                           <span>{opt.label}</span>
                         </button>
-                      </React.Fragment>
+                      </Fragment>
                     );
                   })}
                 </div>

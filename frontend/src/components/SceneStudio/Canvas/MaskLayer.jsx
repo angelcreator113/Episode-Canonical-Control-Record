@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import { Line, Group, Rect } from 'react-konva';
 
 /**
@@ -206,7 +206,7 @@ export default function MaskLayer({
   const hasMask = lines.length > 0;
 
   // Expose exportMask and clearMask to parent via static methods
-  React.useEffect(() => {
+  useEffect(() => {
     MaskLayer._exportMask = exportMask;
     MaskLayer._clearMask = clearMask;
     MaskLayer._hasMask = hasMask;

@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, ChevronRight } from 'lucide-react';
 import api from '../services/api';
+import { evaluate as evaluatePhoneConditions } from '../lib/phoneRuntime';
 
 // ── Content type registry — maps type keys to renderer components and metadata ──
 export const CONTENT_TYPES = [
@@ -32,12 +33,22 @@ export const CONTENT_TYPES = [
 export const CONTENT_TYPE_MAP = Object.fromEntries(CONTENT_TYPES.map(t => [t.key, t]));
 
 // ── Main renderer — renders all content zones over a screen ──
-export default function ScreenContentRenderer({ zones = [], showId, episodeId, interactive = false }) {
+// `runtimeContext` is the optional phone-runtime context used to filter zones by
+// their `conditions` array. When absent, all zones render (editor "author view").
+export default function ScreenContentRenderer({ zones = [], showId, episodeId, interactive = false, runtimeContext = null }) {
   if (!zones.length) return null;
+
+  // Filter zones by `conditions` when a runtime context is provided. Editor/author
+  // view passes no context, so zones without conditions always render — and zones
+  // WITH conditions also render (so creators can see them while editing). The
+  // player runtime passes a context, which gates visibility.
+  const visibleZones = runtimeContext
+    ? zones.filter(z => evaluateZoneConditions(z, runtimeContext))
+    : zones;
 
   return (
     <>
-      {zones.map(zone => (
+      {visibleZones.map(zone => (
         <div
           key={zone.id}
           style={{
@@ -60,6 +71,12 @@ export default function ScreenContentRenderer({ zones = [], showId, episodeId, i
       ))}
     </>
   );
+}
+
+// Delegates to the single phoneRuntime evaluator so content-zone gating, tap-zone
+// gating, and mission-progress checks all behave identically.
+function evaluateZoneConditions(zone, ctx) {
+  return evaluatePhoneConditions(zone.conditions, ctx);
 }
 
 // ── Dispatch to the right sub-renderer based on content_type ──

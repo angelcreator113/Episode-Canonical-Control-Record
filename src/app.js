@@ -1609,6 +1609,18 @@ try {
   const uiOverlayRoutes = require('./routes/uiOverlayRoutes');
   app.use('/api/v1/ui-overlays', uiOverlayRoutes);
   console.log('✓ UI Overlays loaded at /api/v1/ui-overlays');
+  // Phone AI — scoped to a show, mounted so :showId is captured in mergeParams
+  const phoneAIRoutes = require('./routes/phoneAIRoutes');
+  app.use('/api/v1/ui-overlays/:showId/ai', phoneAIRoutes);
+  console.log('✓ Phone AI loaded at /api/v1/ui-overlays/:showId/ai');
+  // Phone playthrough — reader-facing runtime. Episode-scoped, authenticated.
+  const phonePlaythroughRoutes = require('./routes/phonePlaythroughRoutes');
+  app.use('/api/v1/episodes/:episodeId/phone-state', phonePlaythroughRoutes);
+  console.log('✓ Phone playthrough loaded at /api/v1/episodes/:episodeId/phone-state');
+  // Phone missions — show-scoped, optionally per-episode. Read-only observers in v1.
+  const phoneMissionRoutes = require('./routes/phoneMissionRoutes');
+  app.use('/api/v1/ui-overlays/:showId/missions', phoneMissionRoutes);
+  console.log('✓ Phone missions loaded at /api/v1/ui-overlays/:showId/missions');
 } catch (e) {
   console.error('✗ Failed to load UI Overlay routes:', e.message);
 }

@@ -12,7 +12,7 @@
  * Styling: WorldStudio.css — light theme, pink/blue/lavender palette
  */
 
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './WorldStudio.css';
 
@@ -1569,7 +1569,7 @@ export default function WorldStudio() {
                 <>
                   <div className="ws4-tabs ws4-tabs-grouped">
                     {DETAIL_TAB_GROUPS.map((g, gi) => (
-                      <React.Fragment key={gi}>
+                      <Fragment key={gi}>
                         {g.group && <span className="ws4-tab-group-label">{g.group}</span>}
                         {g.tabs.map(t => (
                           <button
@@ -1582,7 +1582,7 @@ export default function WorldStudio() {
                           </button>
                         ))}
                         {gi < DETAIL_TAB_GROUPS.length - 1 && <span className="ws4-tab-divider" />}
-                      </React.Fragment>
+                      </Fragment>
                     ))}
                   </div>
 

@@ -25,6 +25,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # GitHub App token is required so the push to dev triggers deploy-dev.yml.
+          # GITHUB_TOKEN pushes do NOT trigger other workflows (GitHub security rule).
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure git
@@ -32,6 +34,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      # Merge locally only — do NOT push yet. The build-verification step below
+      # must succeed before we ship the merge commit to dev; otherwise a broken
+      # half-merge (e.g. usages without declarations after -X ours) would land
+      # on the shared branch and block every downstream claude/* session.
       - name: Merge into dev (local)
         id: merge
         run: |
@@ -41,8 +47,11 @@ jobs:
           git checkout dev
           git pull origin dev
 
+          # Capture dev's tip BEFORE merging so the next step can diff the merge
+          # against it to decide whether frontend paths were touched.
           echo "pre_merge_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+          # Try clean merge first
           if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev"; then
             echo "merge_type=clean" >> "$GITHUB_OUTPUT"
             echo "✅ Clean merge."
@@ -52,6 +61,15 @@ jobs:
           echo "⚠️  Merge conflict detected. Resolving by preferring dev..."
           git merge --abort
 
+          # Retry with dev taking priority on conflicts.
+          # Rationale: dev is the shared truth — if two claude/* sessions touch the
+          # same file, the one that reaches dev first is already being validated by
+          # CI and possibly running in the environment. Silently overwriting it with
+          # an older feature-branch view of the world produces broken half-merges
+          # (missing declarations for usages that landed earlier in dev).
+          # With -X ours, the later branch loses *its own* changes in conflicting
+          # hunks — which is visible to its author, easy to fix with a rebase+push,
+          # and doesn't corrupt the shared branch.
           if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev (resolved conflicts, dev wins)" -X ours; then
             echo "merge_type=conflicts-resolved" >> "$GITHUB_OUTPUT"
             echo "✅ Merged with conflict resolution (dev wins)."
@@ -61,6 +79,9 @@ jobs:
             exit 1
           fi
 
+      # Skip the (slow) build verification when the merge only touches backend
+      # code. `git diff --quiet` exits 0 when there are no changes in the given
+      # paths, 1 when there are — we invert that to set a boolean output.
       - name: Detect frontend changes
         id: changes
         run: |
@@ -72,6 +93,8 @@ jobs:
             echo "🔨 Frontend changed — will verify build."
           fi
 
+      # Setup Node only when we actually need to build — saves ~5s on
+      # backend-only merges and avoids wasting npm cache slots.
       - name: Setup Node.js
         if: steps.changes.outputs.frontend_changed == 'true'
         uses: actions/setup-node@v4
@@ -80,6 +103,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
+      # Verify the merged tree actually builds before pushing. Even a "clean"
+      # three-way merge can produce broken code when two branches add
+      # non-overlapping usages of an identifier that one branch forgot to
+      # declare, or touch the same JSX tree in ways that balance per-branch
+      # but not together. A post-merge build catches those silent breakages.
       - name: Verify frontend build
         if: steps.changes.outputs.frontend_changed == 'true'
         run: |

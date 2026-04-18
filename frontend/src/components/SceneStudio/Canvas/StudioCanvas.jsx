@@ -1,9 +1,10 @@
-import React, {
+import {
   useRef,
   useEffect,
   useCallback,
   useState,
   useImperativeHandle,
+  forwardRef,
 } from 'react';
 import {
   Stage,
@@ -179,7 +180,7 @@ function SnapGuides({ guides, canvasWidth, canvasHeight, stroke = '#FFD700' }) {
   });
 }
 
-const StudioCanvas = React.forwardRef(function StudioCanvas(props, forwardedRef) {
+const StudioCanvas = forwardRef(function StudioCanvas(props, forwardedRef) {
   const {
     canvasWidth,
     canvasHeight,

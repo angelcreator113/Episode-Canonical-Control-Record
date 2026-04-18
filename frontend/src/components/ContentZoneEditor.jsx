@@ -15,11 +15,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Plus, Trash2, Save, X, Layers, Eye, EyeOff } from 'lucide-react';
 import { CONTENT_TYPES, CONTENT_TYPE_MAP } from './ScreenContentRenderer';
+import ConditionRow from './phone-editor/ConditionRow';
 import api from '../services/api';
 
 const ZONE_COLORS = ['#e8a0b4', '#b8a9d4', '#7ab3d4', '#a8d5a2', '#c9a84c', '#6bba9a', '#e06060', '#b89060'];
 
-export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSave, readOnly = false, compact = false }) {
+export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSave, onAiFillZone, readOnly = false, compact = false }) {
   const [localZones, setLocalZones] = useState(zones);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -264,6 +265,7 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
                       profiles={profiles}
                       profilesLoading={profilesLoading}
                       onUpdate={(changes) => updateZone(zone.id, changes)}
+                      onAiFillZone={onAiFillZone}
                     />
                   )}
                 </div>
@@ -277,8 +279,22 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
 }
 
 // ── Zone configuration panel — type picker + type-specific config fields ──
-function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate }) {
+function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate, onAiFillZone }) {
   const config = zone.content_config || {};
+  // Inline AI proposal — keyed per-zone so each zone has its own review surface.
+  const [aiProposal, setAiProposal] = useState(null);
+  const [aiBusy, setAiBusy] = useState(false);
+
+  const runAiFill = async () => {
+    if (!onAiFillZone || !zone.id || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const data = await onAiFillZone(zone.id);
+      if (data?.proposal?.content_config) setAiProposal(data.proposal);
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const handleTypeChange = (content_type) => {
     onUpdate({ content_type, content_config: {} });
@@ -297,6 +313,60 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6, borderTop: '1px solid #f0ece4' }}>
+      {/* AI fill — proposes a content_config based on show context. Inline review:
+          preview the proposal, Apply → merge into content_config, Discard → clear. */}
+      {onAiFillZone && zone.content_type && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', background: '#fdf8ee', border: '1px solid #e6d9b8', borderRadius: 8 }}>
+          {!aiProposal && (
+            <button
+              onClick={(e) => { e.stopPropagation(); runAiFill(); }}
+              disabled={aiBusy}
+              title="Let AI propose a content config based on the show's characters + recent beats"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '6px 10px', fontSize: 11, fontWeight: 700,
+                border: 'none', borderRadius: 6,
+                background: aiBusy ? '#e0d9ce' : '#B8962E', color: '#fff',
+                cursor: aiBusy ? 'wait' : 'pointer',
+                fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+                alignSelf: 'flex-start',
+              }}
+            >
+              {aiBusy ? '✨ Thinking…' : '✨ AI fill'}
+            </button>
+          )}
+          {aiProposal && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
+                AI PROPOSAL
+              </div>
+              {aiProposal.content_preview && (
+                <div style={{ fontSize: 12, color: '#6b5a28', lineHeight: 1.45, fontFamily: "'Lora', serif" }}>
+                  {aiProposal.content_preview}
+                </div>
+              )}
+              <pre style={{ fontSize: 10, color: '#6b5a28', fontFamily: "'DM Mono', monospace", margin: 0, whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'auto', background: '#fff', padding: 6, borderRadius: 4, border: '1px solid #e6d9b8' }}>
+                {JSON.stringify(aiProposal.content_config, null, 2)}
+              </pre>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setAiProposal(null); }}
+                  style={{ padding: '5px 10px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9ce', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#666', fontFamily: "'DM Mono', monospace" }}
+                >Discard</button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdate({ content_config: { ...(zone.content_config || {}), ...aiProposal.content_config } });
+                    setAiProposal(null);
+                  }}
+                  style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, border: 'none', borderRadius: 5, background: '#B8962E', color: '#fff', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}
+                >Apply</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Content type picker */}
       <div>
         <label style={labelStyle}>
@@ -466,6 +536,40 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate }) {
           </div>
         </div>
       )}
+
+      {/* Visibility conditions — empty array means always visible (implicit default).
+          Shares the exact schema used by tap zones, so the same evaluator gates both.
+          Content items inside the zone are filtered separately per-renderer. */}
+      <div style={{ borderTop: '1px dashed #f0ece4', paddingTop: 8, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <label style={labelStyle}>
+            VISIBLE WHEN {Array.isArray(zone.conditions) && zone.conditions.length > 0 ? `(${zone.conditions.length})` : '— always'}
+          </label>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const next = [...(zone.conditions || []), { key: '', op: 'eq', value: true }];
+              onUpdate({ conditions: next });
+            }}
+            style={{ padding: '3px 8px', fontSize: 10, fontWeight: 600, border: '1px solid #e0d9ce', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#666', fontFamily: "'DM Mono', monospace" }}
+          >+ condition</button>
+        </div>
+        {(zone.conditions || []).map((cond, ci) => (
+          <ConditionRow
+            key={ci}
+            condition={cond}
+            onChange={(nextCond) => {
+              const next = [...(zone.conditions || [])];
+              next[ci] = nextCond;
+              onUpdate({ conditions: next });
+            }}
+            onRemove={() => {
+              const next = (zone.conditions || []).filter((_, i) => i !== ci);
+              onUpdate({ conditions: next.length ? next : undefined });
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }

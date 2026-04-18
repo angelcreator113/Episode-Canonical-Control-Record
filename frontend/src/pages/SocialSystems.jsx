@@ -2,7 +2,7 @@
  * SocialSystems — Archetypes + Legends/Society + Rules + Trends
  * Merges: InfluencerSystems + Legends from Infrastructure + Society from Calendar
  */
-import React, { useState } from 'react';
+import { useState, Fragment } from 'react';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 import PushToBrain from '../components/PushToBrain';
@@ -277,7 +277,7 @@ export default function SocialSystems() {
           <div style={lbl}>FASHION TREND ENGINE — 5 STAGES</div>
           <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:20, flexWrap:'wrap' }}>
             {(isData.FASHION_TREND_STAGES || FASHION_TREND_STAGES).map((s, i, a) => (
-              <React.Fragment key={s.stage}>
+              <Fragment key={s.stage}>
                 <div style={{ ...card, borderTop:`3px solid ${s.color}`, flex:'1 1 140px', minWidth:140 }}>
                   <div style={{ width:24, height:24, borderRadius:'50%', background:s.color, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700 }}>{s.stage}</div>
                   <div style={{ fontSize:12, fontWeight:700, marginTop:4 }}>{s.name}</div>
@@ -285,14 +285,14 @@ export default function SocialSystems() {
                   <p style={{ fontSize:10, color:'#555', fontStyle:'italic', margin:'4px 0 0' }}>{s.story}</p>
                 </div>
                 {i < a.length - 1 && <span style={{ fontSize:18, color:'#ccc' }}>→</span>}
-              </React.Fragment>
+              </Fragment>
             ))}
           </div>
 
           <div style={lbl}>BEAUTY TREND ENGINE — 4 STAGES</div>
           <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:20, flexWrap:'wrap' }}>
             {(isData.BEAUTY_TREND_STAGES || BEAUTY_TREND_STAGES).map((s, i, a) => (
-              <React.Fragment key={s.stage}>
+              <Fragment key={s.stage}>
                 <div style={{ ...card, borderTop:`3px solid ${s.color}`, flex:'1 1 160px', minWidth:160 }}>
                   <div style={{ width:24, height:24, borderRadius:'50%', background:s.color, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700 }}>{s.stage}</div>
                   <div style={{ fontSize:12, fontWeight:700, marginTop:4 }}>{s.name}</div>
@@ -300,7 +300,7 @@ export default function SocialSystems() {
                   <p style={{ fontSize:10, color:'#555', fontStyle:'italic', margin:'4px 0 0' }}>{s.story}</p>
                 </div>
                 {i < a.length - 1 && <span style={{ fontSize:18, color:'#ccc' }}>→</span>}
-              </React.Fragment>
+              </Fragment>
             ))}
           </div>
 

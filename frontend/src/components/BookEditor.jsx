@@ -6,7 +6,7 @@
  *
  * Extracted from StorytellerPage.jsx for maintainability.
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
 import MemoryBankView from './MemoryBankView';
 import ChapterBrief from './ChapterBrief';
@@ -1115,7 +1115,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                       <>
                     {/* Approved lines with Narrative Intelligence every 5 */}
                     {approvedLines.map((ln, i) => (
-                      <React.Fragment key={ln.id}>
+                      <Fragment key={ln.id}>
                         {renderLine(ln, false)}
                         {(i + 1) % 5 === 0 && i < approvedLines.length - 1 && (
                           <div className="narrative-intelligence-wrapper">
@@ -1133,7 +1133,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                             />
                           </div>
                         )}
-                      </React.Fragment>
+                      </Fragment>
                     ))}
 
                     {/* Continuity Guard */}
@@ -1157,9 +1157,9 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                         {pendingOpen && (
                           <div className="st-pending-body">
                             {pendingLines.map(ln => (
-                              <React.Fragment key={ln.id}>
+                              <Fragment key={ln.id}>
                                 {renderLine(ln, true)}
-                              </React.Fragment>
+                              </Fragment>
                             ))}
                           </div>
                         )}
@@ -1350,11 +1350,11 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
             </div>
           ) : activeView === 'history' ? (() => {
             const VersionHistory = () => {
-              const [versions, setVersions] = React.useState([]);
-              const [loading, setLoading] = React.useState(false);
-              const [viewContent, setViewContent] = React.useState(null);
+              const [versions, setVersions] = useState([]);
+              const [loading, setLoading] = useState(false);
+              const [viewContent, setViewContent] = useState(null);
 
-              React.useEffect(() => {
+              useEffect(() => {
                 if (!activeChapterId) return;
                 setLoading(true);
                 fetch(`/api/v1/story-health/versions/chapter/${activeChapterId}`, { headers: authHeader() })

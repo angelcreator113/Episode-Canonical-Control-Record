@@ -3,11 +3,11 @@
  * Manages multiple toast notifications
  */
 
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback, createContext, useContext } from 'react';
 import Toast from './Toast';
 import './ToastContainer.css';
 
-export const ToastContext = React.createContext();
+export const ToastContext = createContext();
 
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
@@ -57,7 +57,7 @@ export const ToastProvider = ({ children }) => {
 };
 
 export const useToast = () => {
-  const context = React.useContext(ToastContext);
+  const context = useContext(ToastContext);
   if (!context) {
     throw new Error('useToast must be used within ToastProvider');
   }

@@ -569,10 +569,18 @@ router.put('/:showId/image-fit/:assetId', optionalAuth, async (req, res) => {
 router.put('/:showId/screen-links/:assetId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
+    const { validateScreenLinks } = require('../services/phoneConditionSchema');
     const { screen_links } = req.body;
 
     if (!Array.isArray(screen_links)) {
       return res.status(400).json({ success: false, error: 'screen_links must be an array' });
+    }
+
+    // Validate any conditions/actions before persisting — rejects unknown action types
+    // and malformed rules. Zones without conditions/actions pass through untouched.
+    const { error, value: validatedLinks } = validateScreenLinks(screen_links);
+    if (error) {
+      return res.status(400).json({ success: false, error });
     }
 
     // Merge screen_links into existing metadata
@@ -584,11 +592,11 @@ router.put('/:showId/screen-links/:assetId', optionalAuth, async (req, res) => {
       { replacements: {
         assetId: req.params.assetId,
         showId: req.params.showId,
-        patch: JSON.stringify({ screen_links }),
+        patch: JSON.stringify({ screen_links: validatedLinks }),
       } }
     );
 
-    return res.json({ success: true, screen_links });
+    return res.json({ success: true, screen_links: validatedLinks });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

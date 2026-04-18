@@ -2,7 +2,7 @@
  * HistoryTab — How the world remembers (merged Memory + Legacy)
  * Memory types, strength, archives, feuds, nostalgia, capsules, rankings
  */
-import React, { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { MEMORY_TYPES, STRENGTH_LEVELS, ARCHIVES, LEGEND_PATHS, FEUD_STAGES, NOSTALGIA_WAVES, CAPSULE_TYPES, RANKING_METRICS } from '../../data/memoryData';
 
 const card = { background:'#fff', border:'1px solid #eee', borderRadius:8, padding:12, marginBottom:6 };
@@ -134,14 +134,14 @@ export default function HistoryTab({ data }) {
           <div style={lbl}>HISTORICAL FEUDS — How Rivalries Evolve</div>
           <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
             {(data.FEUD_STAGES || FEUD_STAGES).map((f, i, a) => (
-              <React.Fragment key={f.stage}>
+              <Fragment key={f.stage}>
                 <div style={{ ...card, borderTop:`3px solid ${f.color}`, flex:'1 1 180px', minWidth:180, marginBottom:0 }}>
                   <div style={{ fontSize:12, fontWeight:700, color:f.color }}>{f.stage}</div>
                   <p style={{ fontSize:10, color:'#666', margin:'4px 0', lineHeight:1.4 }}>{f.looks}</p>
                   <div style={{ fontSize:9, color:'#888' }}>{f.attention}</div>
                 </div>
                 {i < a.length - 1 && <span style={{ fontSize:18, color:'#ccc' }}>→</span>}
-              </React.Fragment>
+              </Fragment>
             ))}
           </div>
         </div>

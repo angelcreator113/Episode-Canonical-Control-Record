@@ -5,7 +5,7 @@
  * Refactored for Prime Studios light theme:
  *   #d4789a (pink) · #7ab3d4 (blue) · #a889c8 (lavender)
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import FeedBulkImport from '../components/FeedBulkImport';
 import ProfileCard from './feed/ProfileCard';
@@ -1166,10 +1166,10 @@ const sBtnSm = { padding:'5px 12px', borderRadius:8, fontSize:12, fontWeight:600
 
 // ── ProfileEventSection — shows existing events + create button ──
 function ProfileEventSection({ profileId, profileName, showId, showToast, onNavigateToEvent }) {
-  const [events, setEvents] = React.useState(null);
-  const [creating, setCreating] = React.useState(false);
+  const [events, setEvents] = useState(null);
+  const [creating, setCreating] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!profileId || !showId) return;
     fetch(`/api/v1/world/${showId}/events`)
       .then(r => r.json())
