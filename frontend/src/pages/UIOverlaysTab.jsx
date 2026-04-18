@@ -458,7 +458,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   };
 
   // Create custom screen or icon
-  const handleCreateScreen = async (form) => {
+  const handleCreateScreen = async (form, file) => {
     try {
       const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
       // Optimistic add, then reconcile with API response
@@ -470,11 +470,28 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           opens_screen: newType.opens_screen, is_home: !!newType.is_home,
           custom: true, custom_id: newType.id, generated: false, url: null,
         }]);
-      } else {
+      }
+      // Second step: if the creator attached an image, upload it to the new type
+      // so the icon/screen is immediately usable (no need to click into the
+      // detail modal afterwards and upload there).
+      if (file && newType?.type_key) {
+        try {
+          const fd = new FormData();
+          fd.append('image', file);
+          await api.post(`/api/v1/ui-overlays/${showId}/upload/${newType.type_key}`, fd);
+        } catch (upErr) {
+          console.warn('[createScreen] image upload failed', upErr);
+          flash('Created but image upload failed — try uploading from the card', 'error');
+        }
+        // Re-fetch to pick up the uploaded URL (optimistic state was url: null)
+        loadOverlays(false);
+      } else if (!newType) {
         loadOverlays(false);
       }
       setShowCreateModal(false);
-      flash(createMode === 'phone_icon' ? 'Icon type created' : 'Screen type created');
+      flash(createMode === 'phone_icon'
+        ? (file ? 'Icon created + image uploaded' : 'Icon type created')
+        : (file ? 'Screen created + image uploaded' : 'Screen type created'));
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -1602,6 +1619,11 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existing
   // The Generation Prompt is only needed if you plan to AI-generate the image;
   // uploading one later works fine without it.
   const [showOptional, setShowOptional] = useState(false);
+  // Direct-upload support: attach an image while creating so the asset is
+  // immediately populated. Preview shown inline before Create is clicked.
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadPreview, setUploadPreview] = useState(null);
+  const fileInputRef = React.useRef(null);
   const [saving, setSaving] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
 
@@ -1625,11 +1647,35 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existing
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.prompt.trim()) return;
+    if (!form.name.trim()) return;
     setSaving(true);
-    await onCreate(form);
+    await onCreate(form, uploadFile);
     setSaving(false);
   };
+
+  // File picker: store the File for submit-time upload AND generate a local
+  // object URL for an inline preview so creators can confirm before hitting Create.
+  const handleFilePick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadFile(file);
+    setUploadPreview((prev) => {
+      if (prev) { try { URL.revokeObjectURL(prev); } catch {} }
+      return URL.createObjectURL(file);
+    });
+  };
+  const clearFile = () => {
+    setUploadFile(null);
+    setUploadPreview((prev) => {
+      if (prev) { try { URL.revokeObjectURL(prev); } catch {} }
+      return null;
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+  React.useEffect(() => () => {
+    // Revoke the preview URL on unmount to avoid leaks.
+    if (uploadPreview) { try { URL.revokeObjectURL(uploadPreview); } catch {} }
+  }, [uploadPreview]);
 
   return (
     <div className="overlays-modal-backdrop" onClick={onClose}>
@@ -1643,6 +1689,90 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existing
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>{isIcon ? 'Icon Name' : 'Screen Name'}</label>
               <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isIcon ? 'e.g., Social Feed Icon, Camera Icon' : 'e.g., Feed View, DM Conversation'} className="overlays-modal__field" />
+            </div>
+
+            {/* Inline image upload — lets creators attach their own image right
+                here instead of creating a placeholder first then uploading on
+                the card. Optional; skipping keeps today's "generate or upload
+                later" flow intact. */}
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>
+                {isIcon ? 'Icon Image' : 'Screen Image'} <span style={{ color: '#A09889', fontWeight: 500 }}>— optional, upload your own</span>
+              </label>
+              {uploadPreview ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: 10,
+                  border: '1px solid #E8E0D0',
+                  borderRadius: 8,
+                  background: '#FAF7F0',
+                }}>
+                  <img
+                    src={uploadPreview}
+                    alt="Preview"
+                    style={{
+                      width: isIcon ? 48 : 42,
+                      height: isIcon ? 48 : 72,
+                      objectFit: isIcon ? 'contain' : 'cover',
+                      borderRadius: 6,
+                      background: '#fff',
+                      border: '1px solid #E8E0D0',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {uploadFile?.name || 'Selected image'}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#6B6557', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>
+                      Will upload when you click Create
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearFile}
+                    style={{
+                      padding: '6px 10px', fontSize: 11, fontWeight: 600,
+                      border: '1px solid #E8E0D0', borderRadius: 6,
+                      background: '#fff', color: '#6B6557',
+                      cursor: 'pointer', fontFamily: "'DM Mono', monospace",
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '2px dashed #E8E0D0',
+                    borderRadius: 8,
+                    background: '#FAF7F0',
+                    color: '#6B6557',
+                    cursor: 'pointer',
+                    fontFamily: "'DM Mono', monospace",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: 0.3,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    transition: 'border-color 0.15s, color 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#B8962E'; e.currentTarget.style.color = '#B8962E'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E8E0D0'; e.currentTarget.style.color = '#6B6557'; }}
+                >
+                  <Upload size={14} /> Upload image (PNG or JPG)
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFilePick}
+                style={{ display: 'none' }}
+              />
             </div>
             {isIcon && (
               <div>
