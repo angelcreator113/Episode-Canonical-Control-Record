@@ -255,17 +255,16 @@
   font-size: 13px;
 }
 
-/* ── Floating Editor Modal ── */
+/* ── Docked Editor Panel ──
+   Desktop: docks to the right edge of the viewport, no scrim — the
+   phone hub behind it stays visible and interactive (side-by-side feel).
+   Mobile: slides up as a bottom sheet.
+   The "modal" class name is kept for continuity with the existing
+   JSX, but it's no longer a true modal. */
 .editor-modal-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 950;
-  /* Soft parchment-tinted scrim (~18% alpha) instead of a hard 45% black so
-     the page behind stays readable — creators can still see the phone/grid
-     while a modal is open. */
-  background: rgba(44, 44, 44, 0.18);
-  backdrop-filter: blur(2px);
-  animation: editorFadeIn 0.2s ease;
+  /* Scrim removed — no more darkened overlay while editing.
+     The phone hub stays visible behind/next to the panel. */
+  display: none;
 }
 
 @keyframes editorFadeIn {
@@ -273,27 +272,31 @@
   to   { opacity: 1; }
 }
 
+@keyframes editorSlideIn {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 @keyframes editorSlideUp {
-  from { opacity: 0; transform: translate(-50%, -46%); }
-  to   { opacity: 1; transform: translate(-50%, -50%); }
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .editor-modal {
   position: fixed;
   z-index: 960;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 580px;
-  max-width: calc(100vw - 32px);
-  max-height: 80vh;
-  background: #fff;
+  top: 80px;
+  right: 20px;
+  bottom: 20px;
+  width: 480px;
+  max-width: calc(100vw - 40px);
+  background: var(--lala-surface);
   border-radius: 16px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--lala-parchment-3);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: editorSlideUp 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+  animation: editorSlideIn 0.25s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* ── Modal Header ── */
@@ -825,14 +828,25 @@
   cursor: not-allowed;
 }
 
-/* ── Mobile: full-width modal ── */
-@media (max-width: 768px) {
+/* ── Below 900px: bottom sheet ──
+   Dock to the bottom of the viewport, full-width, rounded top corners
+   only — slides up from below instead of in from the right. */
+@media (max-width: 900px) {
   .editor-modal {
-    width: calc(100vw - 16px);
-    max-height: 85vh;
-    border-radius: 14px;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 82vh;
+    border-radius: 16px 16px 0 0;
+    animation: editorSlideUp 0.25s cubic-bezier(0.32, 0.72, 0, 1);
   }
+}
 
+/* ── Mobile content sizing (tabs, thumb, header) ── */
+@media (max-width: 768px) {
   .editor-modal-header {
     padding: 14px 16px;
   }
