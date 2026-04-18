@@ -148,7 +148,7 @@ const menuItemStyle = {
   borderBottom: '1px solid #f5f3ee',
 };
 
-const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon }) {
+const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';
@@ -210,6 +210,53 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
           {!isIcon && (<div className="screen-card-desc" style={{ fontSize: 8, color: isActive ? 'rgba(255,255,255,0.6)' : '#999', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{type.desc}</div>)}
         </div>
       </div>
+      {/* Link status badge — shows at a glance whether this card participates
+          in the phone flow. Skipped for placeholders (no real screen/icon). */}
+      {screen && !isHidden && (() => {
+        const linked = linkCount > 0;
+        const isIconCard = !!isIcon;
+        // For icons: "linked" means it's placed on ≥1 screen AND at least one of
+        // those placements has a target. Placed-but-no-target = unlinked.
+        const reallyLinked = isIconCard ? (linked && hasTargetedPlacement) : linked;
+        const label = isIconCard
+          ? (reallyLinked
+              ? `✓ ${linkCount} screen${linkCount === 1 ? '' : 's'}`
+              : linked
+                ? '⚠ No target'
+                : '○ Unplaced')
+          : (linked
+              ? `← ${linkCount} zone${linkCount === 1 ? '' : 's'}`
+              : '⚠ Unreached');
+        const color = reallyLinked
+          ? (isActive ? 'rgba(255,255,255,0.85)' : '#5a8f3b')
+          : !linked && !isIconCard
+            ? (isActive ? 'rgba(255,200,150,0.95)' : '#B84D2E')
+            : isIconCard && !linked
+              ? (isActive ? 'rgba(255,255,255,0.55)' : '#A09889')
+              : (isActive ? 'rgba(255,200,150,0.95)' : '#B84D2E');
+        return (
+          <div
+            title={reallyLinked
+              ? (isIconCard ? 'Placed on screens with targets set' : 'Zones link here')
+              : isIconCard
+                ? (linked ? 'Placed but has no navigation target' : 'Not placed on any screen yet')
+                : 'No zones link to this screen'}
+            style={{
+              marginTop: 4,
+              fontSize: 9,
+              fontFamily: "'DM Mono', monospace",
+              fontWeight: 700,
+              letterSpacing: 0.3,
+              color,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {label}
+          </div>
+        );
+      })()}
       {!menuOpen && (<div style={{ position: 'absolute', top: isIcon ? 5 : 8, left: isIcon ? 5 : 8, width: 7, height: 7, borderRadius: '50%', background: hasImage ? '#16a34a' : screen ? '#eab308' : '#e0e0e0' }} />)}
     </div>
   );
@@ -288,6 +335,37 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
     // Icons-with-placements first, then unused icons, for a more useful default order.
     return Array.from(byIcon.values()).sort((a, b) => b.placements.length - a.placements.length);
   }, [screenTypes, iconTypes]);
+
+  // Link status for status badges on Screen / Icon cards.
+  //   iconLinkByUrl: icon_url -> { screenCount, hasTargetedPlacement }
+  //     screenCount = # of distinct screens this icon is placed on
+  //     hasTargetedPlacement = at least one of those placements has a target set
+  //   screenReachById: screen_id -> incomingZoneCount (# of zones with target = this screen)
+  const { iconLinkByUrl, screenReachById } = React.useMemo(() => {
+    const iconLinkByUrl = new Map();
+    const screenReachById = new Map();
+    screenTypes.forEach(src => {
+      const links = src.screen_links || src.metadata?.screen_links || [];
+      links.forEach(link => {
+        // Icon usage (by URL, dedup screens per icon)
+        const iconUrls = link.icon_urls?.length ? link.icon_urls : (link.icon_url ? [link.icon_url] : []);
+        iconUrls.forEach(url => {
+          if (!iconLinkByUrl.has(url)) iconLinkByUrl.set(url, { screens: new Set(), hasTargetedPlacement: false });
+          const entry = iconLinkByUrl.get(url);
+          entry.screens.add(src.id);
+          if (link.target) entry.hasTargetedPlacement = true;
+        });
+        // Screen reach (count of zones pointing to each target)
+        if (link.target) {
+          screenReachById.set(link.target, (screenReachById.get(link.target) || 0) + 1);
+        }
+      });
+    });
+    // Freeze to plain values to keep memo outputs stable
+    const iconOut = new Map();
+    iconLinkByUrl.forEach((v, k) => iconOut.set(k, { screenCount: v.screens.size, hasTargetedPlacement: v.hasTargetedPlacement }));
+    return { iconLinkByUrl: iconOut, screenReachById };
+  }, [screenTypes]);
 
   return (
     <div className="phone-hub-inner">
@@ -560,7 +638,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         {gridSection === 'screens' && (
           <div className="phone-hub-screen-grid">
             {screenTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} />
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} linkCount={screenReachById.get(s.id) || 0} />
             ))}
           </div>
         )}
@@ -568,7 +646,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         {gridSection === 'icons' && (gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
           <div className="phone-hub-icon-grid">
             {iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon />
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon linkCount={s.url && iconLinkByUrl.get(s.url)?.screenCount || 0} hasTargetedPlacement={!!(s.url && iconLinkByUrl.get(s.url)?.hasTargetedPlacement)} />
             ))}
           </div>
         )}
