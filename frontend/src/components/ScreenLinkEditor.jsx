@@ -92,7 +92,11 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   // UX: toggle into a preview that hides editor chrome so you see exactly what the user sees.
   const [preview, setPreview] = useState(false);
   // UX: toggle dashed guides showing the notch / home-indicator areas to avoid during placement.
+  // Also drives "show all zone outlines" when on — flip one switch to see everything for overview.
   const [showSafeArea, setShowSafeArea] = useState(false);
+  // Hovering a zone row in the list lights up just that zone on the phone, so you can see
+  // which card corresponds to which tap area without committing to a click-to-select.
+  const [hoveredZoneId, setHoveredZoneId] = useState(null);
   // UX: toggle grid-snap — rounds zone positions/sizes to a 4x6 grid for clean home-screen layouts.
   const [gridSnap, setGridSnap] = useState(() => {
     try { return localStorage.getItem('screenLinkEditor.gridSnap') === '1'; } catch { return false; }
@@ -451,11 +455,11 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
           <button
             type="button"
             onClick={() => setShowSafeArea(s => !s)}
-            title="Toggle guides for notch and home-indicator areas"
+            title="Show all zone outlines + notch/home-indicator safe-area guides"
             style={toolbarBtnStyle(showSafeArea)}
           >
             <Ruler size={12} />
-            {showSafeArea ? 'Hide Guides' : 'Show Guides'}
+            {showSafeArea ? 'Hide All Zones' : 'Show All Zones'}
           </button>
           <div style={toolbarDividerStyle} />
           {/* Group 2 — layout */}
@@ -648,24 +652,47 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                 setSelectedZone(zone.id);
               }
             }}
-            style={{
-              position: 'absolute',
-              left: `${zone.x}%`, top: `${zone.y}%`,
-              width: `${zone.w}%`, height: `${zone.h}%`,
-              // Zones without a target get a dashed red outline so broken links are obvious at a glance.
-              border: preview
-                ? 'none'
-                : selectedZone === zone.id
-                  ? '2px solid #B8962E'
-                  : !zone.target
-                    ? '2px dashed #dc2626'
-                    : `2px solid ${ZONE_COLORS[i % ZONE_COLORS.length]}`,
-              borderRadius: 6,
-              background: preview ? 'transparent' : (selectedZone === zone.id ? 'rgba(184,150,46,0.15)' : 'rgba(255,255,255,0.08)'),
-              cursor: editingDisabled ? (preview && zone.target ? 'pointer' : 'default') : 'move',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              overflow: 'hidden',
-            }}
+            style={(() => {
+              // Clean default: zones are invisible unless the user is actively
+              // engaging with them. This keeps the phone preview looking like a
+              // phone instead of an editor. Outlines appear when:
+              //   1. preview mode: never (preview = walk-as-user flow)
+              //   2. Show Guides toggle is on (overview / debug)
+              //   3. zone is selected
+              //   4. zone is hovered from the list row
+              const isSel = selectedZone === zone.id;
+              const isHovered = hoveredZoneId === zone.id;
+              const showOutline = !preview && (showSafeArea || isSel || isHovered);
+              let border = 'none';
+              let background = 'transparent';
+              if (showOutline) {
+                if (isSel) {
+                  border = '2px solid #B8962E';
+                  background = 'rgba(184,150,46,0.15)';
+                } else if (isHovered) {
+                  border = '2px solid rgba(184,150,46,0.7)';
+                  background = 'rgba(184,150,46,0.06)';
+                } else if (!zone.target) {
+                  border = '2px dashed #dc2626';
+                  background = 'rgba(255,255,255,0.06)';
+                } else {
+                  border = `2px solid ${ZONE_COLORS[i % ZONE_COLORS.length]}`;
+                  background = 'rgba(255,255,255,0.06)';
+                }
+              }
+              return {
+                position: 'absolute',
+                left: `${zone.x}%`, top: `${zone.y}%`,
+                width: `${zone.w}%`, height: `${zone.h}%`,
+                border,
+                borderRadius: 6,
+                background,
+                cursor: editingDisabled ? (preview && zone.target ? 'pointer' : 'default') : 'move',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden',
+                transition: 'border-color 0.15s, background 0.15s',
+              };
+            })()}
           >
             {zone.icon_url ? (
               <img src={zone.icon_url} alt={zone.label || zone.target} style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
@@ -833,14 +860,17 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
               <div
                 key={zone.id}
                 onClick={() => setSelectedZone(zone.id)}
+                onMouseEnter={() => setHoveredZoneId(zone.id)}
+                onMouseLeave={() => setHoveredZoneId(null)}
                 style={{
                   padding: '12px 14px',
                   background: selectedZone === zone.id ? '#fdf8ee' : '#fff',
-                  border: `1px solid ${selectedZone === zone.id ? '#B8962E' : '#eee'}`,
+                  border: `1px solid ${selectedZone === zone.id ? '#B8962E' : (hoveredZoneId === zone.id ? '#E8D9A8' : '#eee')}`,
                   borderRadius: 10,
                   fontSize: 13,
                   boxShadow: selectedZone === zone.id ? '0 2px 8px rgba(184,150,46,0.12)' : 'none',
                   transition: 'box-shadow 0.15s, border-color 0.15s',
+                  cursor: 'pointer',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: selectedZone === zone.id ? 10 : 0 }}>
