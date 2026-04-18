@@ -217,40 +217,8 @@ const ScreenCard = React.memo(function ScreenCard({ type, screen, activeScreen, 
 
 export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all', onEditZones }) {
   const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
-  // Placements view — groups zones across all screens by the icon they display.
-  // Gives creators a read-only overview: "this icon appears on N screens" plus
-  // a list of those screens, so they can see the full picture without clicking
-  // through each screen one by one.
-  const placements = React.useMemo(() => {
-    const byIcon = new Map();
-    // Seed with library icons so icons with zero placements still show (with a count of 0).
-    iconTypes.forEach(icon => {
-      if (!icon.url) return;
-      byIcon.set(icon.url, { icon, placements: [] });
-    });
-    // Walk every screen's zones and append them to the matching icon's bucket.
-    screenTypes.forEach(screen => {
-      const links = screen.screen_links || screen.metadata?.screen_links || [];
-      links.forEach(link => {
-        const icons = link.icon_urls?.length ? link.icon_urls : (link.icon_url ? [link.icon_url] : []);
-        icons.forEach(iconUrl => {
-          const entry = byIcon.get(iconUrl);
-          if (entry) {
-            entry.placements.push({ screen, zone: link });
-          } else {
-            // Zone uses an icon that isn't in the library (inline upload). Surface it
-            // as an orphan entry so the creator can still see where it's used.
-            byIcon.set(iconUrl, {
-              icon: { id: `orphan-${iconUrl}`, url: iconUrl, name: 'Inline icon', orphan: true },
-              placements: [{ screen, zone: link }],
-            });
-          }
-        });
-      });
-    });
-    // Icons-with-placements first, then unused icons, for a more useful default order.
-    return Array.from(byIcon.values()).sort((a, b) => b.placements.length - a.placements.length);
-  }, [screenTypes, iconTypes]);
+  // Placements memo lives below the screenTypes/iconTypes declarations so it
+  // doesn't TDZ-crash (useMemo body runs synchronously on first render).
 
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [frameError, setFrameError] = useState(false);
@@ -284,6 +252,42 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   // Split screens by category — all from the DB, no hardcoded keys
   const screenTypes = screens.filter(s => s.category !== 'phone_icon' && s.category !== 'icon');
   const iconTypes = screens.filter(s => s.category === 'phone_icon' || s.category === 'icon');
+
+  // Placements view — groups zones across all screens by the icon they display.
+  // Gives creators a read-only overview: "this icon appears on N screens" plus
+  // a list of those screens, so they can see the full picture without clicking
+  // through each screen one by one. Declared AFTER screenTypes/iconTypes so
+  // the useMemo body doesn't reference them before initialization.
+  const placements = React.useMemo(() => {
+    const byIcon = new Map();
+    // Seed with library icons so icons with zero placements still show (with a count of 0).
+    iconTypes.forEach(icon => {
+      if (!icon.url) return;
+      byIcon.set(icon.url, { icon, placements: [] });
+    });
+    // Walk every screen's zones and append them to the matching icon's bucket.
+    screenTypes.forEach(screen => {
+      const links = screen.screen_links || screen.metadata?.screen_links || [];
+      links.forEach(link => {
+        const icons = link.icon_urls?.length ? link.icon_urls : (link.icon_url ? [link.icon_url] : []);
+        icons.forEach(iconUrl => {
+          const entry = byIcon.get(iconUrl);
+          if (entry) {
+            entry.placements.push({ screen, zone: link });
+          } else {
+            // Zone uses an icon that isn't in the library (inline upload). Surface it
+            // as an orphan entry so the creator can still see where it's used.
+            byIcon.set(iconUrl, {
+              icon: { id: `orphan-${iconUrl}`, url: iconUrl, name: 'Inline icon', orphan: true },
+              placements: [{ screen, zone: link }],
+            });
+          }
+        });
+      });
+    });
+    // Icons-with-placements first, then unused icons, for a more useful default order.
+    return Array.from(byIcon.values()).sort((a, b) => b.placements.length - a.placements.length);
+  }, [screenTypes, iconTypes]);
 
   return (
     <div className="phone-hub-inner">
