@@ -1117,7 +1117,14 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                                 // saves a step and matches what the icon visually represents.
                                 const cleanName = (ico.name || '').replace(/\s*Icon$/i, '').trim();
                                 const labelUpdate = !zone.label && !isSelected && cleanName ? { label: cleanName } : {};
-                                updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null, ...labelUpdate });
+                                // Auto-fill target from the icon's `opens_screen` field so the
+                                // "this icon opens X" info creators set at icon-creation time
+                                // is inherited by any tap zone that uses the icon. Only applied
+                                // when the zone doesn't already have a target (don't overwrite
+                                // intentional per-zone targets) and only when this is the
+                                // selection, not a deselection.
+                                const targetUpdate = !zone.target && !isSelected && ico.opens_screen ? { target: ico.opens_screen } : {};
+                                updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null, ...labelUpdate, ...targetUpdate });
                               }}
                               title={ico.name}
                               style={{
