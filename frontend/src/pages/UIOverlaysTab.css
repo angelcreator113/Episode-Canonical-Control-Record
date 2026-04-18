@@ -134,10 +134,15 @@
   width: 100%;
 }
 
-/* ── Inline Zone Editor (replaces PhoneHub when editing) ── */
+/* ── Inline Zone Editor (replaces PhoneHub when editing) ──
+   Widened to accommodate the phone + zone list side-by-side layout.
+   Previously capped at 520px (single-column) which squeezed the row. */
 .zone-editor-inline {
-  max-width: 520px;
+  max-width: 980px;
   margin: 0 auto;
+}
+@media (max-width: 900px) {
+  .zone-editor-inline { max-width: 520px; }
 }
 
 /* Fade the editor frame when the screen changes so transitions feel intentional, not snappy. */
