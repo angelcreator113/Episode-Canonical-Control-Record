@@ -467,69 +467,61 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   };
 
   // Create custom screen or icon
+  // The Create modal is strictly for *new* entries. If the slug collides with
+  // an existing type (409), bail with a clear error and point the creator at
+  // the right remedy (rename, pick from grid, or use the Type toggle). The
+  // previous "silently upload to the existing entry" recovery was confusing
+  // because the modal's button says "Create" — replacing an existing screen
+  // is supposed to happen from that screen's detail panel, not this modal.
   const handleCreateScreen = async (form, file) => {
-    // If the user attaches a file while creating, we still want the image to land
-    // on the matching type even when the create POST returns 409 (name already
-    // exists). Resolve the target type_key from either the create response or
-    // the existing list, then upload — but only if the existing type's category
-    // matches what the creator just asked for, otherwise we'd silently upload
-    // a new Icon's image to an existing Screen (or vice versa).
     const deriveTypeKey = (name) => (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
-    const categoryMatches = (existing, target) => {
-      const existingIsIcon = existing?.category === 'phone_icon' || existing?.category === 'icon';
-      const targetIsIcon = target === 'phone_icon' || target === 'icon';
-      return existingIsIcon === targetIsIcon;
-    };
     try {
       let newType = null;
-      let conflict = false;
       try {
         const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
         newType = res.data?.data;
-        if (newType) {
-          setOverlays(prev => [...prev, {
-            id: newType.type_key, name: newType.name, category: newType.category,
-            beat: newType.beat, description: newType.description, prompt: newType.prompt,
-            opens_screen: newType.opens_screen, is_home: !!newType.is_home,
-            custom: true, custom_id: newType.id, generated: false, url: null,
-          }]);
-        }
       } catch (err) {
-        if (err.response?.status !== 409) throw err;
-        conflict = true;
-      }
-      const targetKey = newType?.type_key || deriveTypeKey(form.name);
-      if (conflict) {
-        // Guard against uploading the creator's image into a differently-
-        // categorized existing type. Find the existing overlay locally; if it's
-        // the wrong kind (Icon vs Screen), surface a clear error and bail
-        // instead of silently corrupting it.
-        const existing = overlays.find(o => o.id === targetKey || deriveTypeKey(o.name) === targetKey);
-        if (existing && !categoryMatches(existing, createMode)) {
-          const existingKind = (existing.category === 'phone_icon' || existing.category === 'icon') ? 'icon' : 'screen';
-          const wantedKind = createMode === 'phone_icon' ? 'icon' : 'screen';
-          flash(`A ${existingKind} named "${form.name}" already exists — pick a different name, or convert that ${existingKind} to a ${wantedKind} via its Type toggle.`, 'error');
+        if (err.response?.status === 409) {
+          // Find the colliding overlay locally to give the creator a precise
+          // description of what to do. Fall back to a generic message if we
+          // can't locate it (stale local state).
+          const targetKey = deriveTypeKey(form.name);
+          const existing = overlays.find(o => o.id === targetKey || deriveTypeKey(o.name) === targetKey);
+          const existingKind = existing
+            ? (existing.category === 'phone_icon' || existing.category === 'icon' ? 'icon' : 'screen')
+            : 'item';
+          flash(`Name "${form.name}" is already in use by an existing ${existingKind}. Pick a different name, or edit that ${existingKind} from the grid if you meant to replace its image.`, 'error');
           return;
         }
+        throw err;
       }
-      if (file && targetKey) {
+      if (!newType) {
+        flash('Create returned no data — reload and try again', 'error');
+        return;
+      }
+      // Optimistic add so the card appears immediately; loadOverlays below
+      // reconciles with server truth.
+      setOverlays(prev => [...prev, {
+        id: newType.type_key, name: newType.name, category: newType.category,
+        beat: newType.beat, description: newType.description, prompt: newType.prompt,
+        opens_screen: newType.opens_screen, is_home: !!newType.is_home,
+        custom: true, custom_id: newType.id, generated: false, url: null,
+      }]);
+      if (file && newType.type_key) {
         try {
           const fd = new FormData();
           fd.append('image', file);
-          await api.post(`/api/v1/ui-overlays/${showId}/upload/${targetKey}`, fd);
+          await api.post(`/api/v1/ui-overlays/${showId}/upload/${newType.type_key}`, fd);
         } catch (upErr) {
           console.warn('[createScreen] image upload failed', upErr);
-          flash('Image upload failed — try uploading from the card', 'error');
+          flash('Created, but the image upload failed — upload from the card', 'error');
         }
-        loadOverlays(false);
-      } else if (!newType) {
         loadOverlays(false);
       }
       setShowCreateModal(false);
-      const wasDuplicate = !newType;
       flash(createMode === 'phone_icon'
-        ? (wasDuplicate ? 'Icon already existed — image uploaded to it' : (file ? 'Icon created + image uploaded' : 'Icon type created'))
-        : (wasDuplicate ? 'Screen already existed — image uploaded to it' : (file ? 'Screen created + image uploaded' : 'Screen type created')));
+        ? (file ? 'Icon created + image uploaded' : 'Icon type created')
+        : (file ? 'Screen created + image uploaded' : 'Screen type created'));
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
