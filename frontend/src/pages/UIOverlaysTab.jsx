@@ -890,6 +890,19 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // Update the icon's navigation target (opens_screen). Empty string clears.
+  // The backend validates the key exists; a flash surfaces the server-side
+  // 400 if the picked target is no longer valid.
+  const handleChangeOpensScreen = async (targetKey) => {
+    if (!activeScreen?.custom_id || !showId) return;
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`, { opens_screen: targetKey || null });
+      setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, opens_screen: targetKey || null } : o));
+      setActiveScreen(prev => prev ? { ...prev, opens_screen: targetKey || null } : prev);
+      flash(targetKey ? 'Opens screen updated' : 'Opens screen cleared');
+    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
+  };
+
   // Duplicate screen settings to another screen
   const handleDuplicateSettings = async (targetScreenId) => {
     if (!activeScreen || !showId) return;
@@ -1347,6 +1360,34 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           UI Overlay
                         </button>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Opens Screen — icons only. Edit the icon's default navigation
+                      target after creation. The Create modal surfaces this too, but
+                      creators often realise they need to change it (or didn't pick
+                      one at all) once the icon is placed. */}
+                  {activeScreen.custom_id && (activeScreen.category === 'phone_icon' || activeScreen.category === 'icon') && (
+                    <div className="editor-section">
+                      <div className="editor-section-label">Opens Screen</div>
+                      <select
+                        value={activeScreen.opens_screen || ''}
+                        onChange={e => handleChangeOpensScreen(e.target.value)}
+                        className="overlays-modal__field"
+                        style={{ cursor: 'pointer', width: '100%' }}
+                      >
+                        <option value="">None (no navigation)</option>
+                        {overlays
+                          .filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production'))
+                          .map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                      </select>
+                      {!activeScreen.opens_screen && (
+                        <div style={{ fontSize: 10, color: '#A09889', marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
+                          Pick a target so tap zones placing this icon inherit it.
+                        </div>
+                      )}
                     </div>
                   )}
 
