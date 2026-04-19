@@ -118,13 +118,15 @@ function validateScreenLinks(links) {
     out.push({ ...zone, ...value });
   });
   if (zoneErrors.length) {
-    // Keep the top-level `error` string for back-compat with callers that only
-    // read that field; surface the per-zone detail under `zone_errors` so the
-    // UI can highlight exactly which zone failed instead of re-running 16 saves.
-    return {
-      error: `Validation failed on ${zoneErrors.length} zone${zoneErrors.length === 1 ? '' : 's'}: ${zoneErrors.map(z => z.zone_id || `#${z.index}`).join(', ')}`,
-      zone_errors: zoneErrors,
-    };
+    // Keep the top-level `error` string back-compatible: embed the first zone's
+    // detail (which contains the original Joi message — "allowlist"/"invalid"
+    // etc.) so existing callers matching on the raw text still work. The
+    // per-zone array under `zone_errors` gives the UI everything it needs to
+    // highlight specific zones.
+    const summary = zoneErrors.length === 1
+      ? zoneErrors[0].error
+      : `Validation failed on ${zoneErrors.length} zones (${zoneErrors.map(z => z.zone_id || `#${z.index}`).join(', ')}); first: ${zoneErrors[0].error}`;
+    return { error: summary, zone_errors: zoneErrors };
   }
   return { value: out };
 }
