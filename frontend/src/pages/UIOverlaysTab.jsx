@@ -331,6 +331,27 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); setGenerating(false); }
   };
 
+  // Shared: auto-run background removal on freshly-uploaded icon assets.
+  // Icons are almost always meant to be transparent PNGs sitting on top of a
+  // phone screen — leaving the original background in makes them look like
+  // clunky rectangles. Screens skip this (full-bleed images keep their
+  // backgrounds). Non-blocking: if bg removal fails, the upload still stands
+  // and creators can retry via the Remove BG button on the detail card.
+  const autoRemoveBgIfIcon = async (freshOverlays, typeKey) => {
+    if (!showId || !typeKey) return false;
+    const item = freshOverlays.find(o => o.id === typeKey);
+    if (!item) return false;
+    const isIcon = item.category === 'phone_icon' || item.category === 'icon';
+    if (!isIcon || !item.asset_id || item.bg_removed) return false;
+    try {
+      await api.post(`/api/v1/ui-overlays/${showId}/remove-bg/${item.asset_id}`);
+      return true;
+    } catch (err) {
+      console.warn('[autoRemoveBgIfIcon] failed', err);
+      return false;
+    }
+  };
+
   // Shared: auto-place an icon on the home screen when it has both a linked
   // navigation target (opens_screen) and an image (url). Idempotent — skips
   // if a zone on the home screen already references this icon's URL. Returns
@@ -412,15 +433,23 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       fd.append('image', file);
       await api.post(`/api/v1/ui-overlays/${showId}/upload/${activeScreen.id}`, fd);
       flash('Uploaded!');
-      const res = await api.get(`/api/v1/ui-overlays/${showId}`);
-      const all = res.data?.data || [];
+      let all = (await api.get(`/api/v1/ui-overlays/${showId}`)).data?.data || [];
       setOverlays(all);
       const updated = all.find(o => o.id === activeScreen.id);
       if (updated) setActiveScreen(updated);
+      // Auto-run bg removal for icons — they're meant to be transparent.
+      if (await autoRemoveBgIfIcon(all, activeScreen.id)) {
+        all = (await api.get(`/api/v1/ui-overlays/${showId}`)).data?.data || [];
+        setOverlays(all);
+        const reupdated = all.find(o => o.id === activeScreen.id);
+        if (reupdated) setActiveScreen(reupdated);
+      }
       // Freshly-uploaded icon with a pre-set opens_screen? Place it on home.
       if (await autoPlaceIconOnHome(all, activeScreen.id)) {
         loadOverlays(false);
-        flash('Uploaded + placed on home screen');
+        flash('Uploaded + bg removed + placed on home screen');
+      } else if ((updated?.category === 'phone_icon' || updated?.category === 'icon')) {
+        flash('Uploaded + bg removed');
       }
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -491,7 +520,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         const orphans = links.filter(l => l.target === deletedKey);
         if (orphans.length > 0 && overlay.asset_id) {
           const cleaned = links.filter(l => l.target !== deletedKey);
-          api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: cleaned }).catch(() => {});
+          api.put(`/api/v1/ui-overlays/${showId}/screen-links/${overlay.asset_id}`, { screen_links: cleaned })
+            .catch(err => console.warn(`[handleDeleteScreen] orphan cleanup failed on ${overlay.name}`, err));
         }
       }
       // Optimistic removal from local state
@@ -575,17 +605,23 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           flash('Created, but the image upload failed — upload from the card', 'error');
         }
         // Refetch to surface the newly-uploaded asset URL on the icon, then
-        // auto-place on home if this is a linked icon.
-        const fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => []);
+        // auto-bg-remove + auto-place if this is a linked icon.
+        let fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => []);
         setOverlays(fresh);
         if (createMode === 'phone_icon') {
+          if (await autoRemoveBgIfIcon(fresh, newType.type_key)) {
+            fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => fresh);
+            setOverlays(fresh);
+          }
           autoPlaced = await autoPlaceIconOnHome(fresh, newType.type_key);
           if (autoPlaced) loadOverlays(false);
         }
       }
       setShowCreateModal(false);
       if (autoPlaced) {
-        flash(`${newType.name} created and placed on the home screen — drag to reposition`);
+        flash(createMode === 'phone_icon'
+          ? `${newType.name} created, bg removed, placed on home screen — drag to reposition`
+          : `${newType.name} created and placed on the home screen — drag to reposition`);
       } else {
         flash(createMode === 'phone_icon'
           ? (file ? 'Icon created + image uploaded' : 'Icon type created')
@@ -833,7 +869,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     try {
       await api.put(`/api/v1/ui-overlays/${showId}/image-fit/${activeScreen.asset_id}`, { image_fit: null });
       flash('Using global fit');
-    } catch { /* silent */ }
+    } catch (err) {
+      console.warn('[clearScreenFit] failed to persist null fit — optimistic state kept', err);
+      flash('Fit cleared locally but save failed — refresh to verify', 'error');
+    }
   };
 
   // Global fit (applies to all screens that don't have a per-screen override)
