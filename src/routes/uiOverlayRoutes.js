@@ -327,44 +327,47 @@ router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image')
     if (!overlayType) return res.status(404).json({ success: false, error: `Unknown overlay type: ${req.params.overlayType}` });
     if (!req.file) return res.status(400).json({ success: false, error: 'No image file uploaded' });
 
-    // Soft-delete existing asset for this variant (or all if no variant specified)
-    if (variantLabel) {
-      await models.sequelize.query(
-        `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-         AND metadata->>'overlay_type' = :overlayId AND metadata->>'variant_label' = :variantLabel AND deleted_at IS NULL`,
-        { replacements: { showId, overlayId: overlayType.id, variantLabel } }
-      );
-    } else {
-      await models.sequelize.query(
-        `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-         AND metadata->>'overlay_type' = :overlayId AND (metadata->>'variant_label' IS NULL OR metadata->>'variant_label' = '') AND deleted_at IS NULL`,
-        { replacements: { showId, overlayId: overlayType.id } }
-      );
-    }
-
-    // Upload to S3
+    // Upload to S3 first — if this fails we haven't touched the DB yet.
     const url = await uploadOverlayToS3(req.file.buffer, overlayType.id, showId, req.file.mimetype);
 
-    // Create Asset
+    // Soft-delete the previous asset AND insert the new one in a single
+    // transaction: if the INSERT fails, the tombstone on the previous row is
+    // rolled back so the UI still has a visible asset. Previously a failure
+    // left the old asset soft-deleted with no replacement.
     let assetId = null;
     try {
       const assetUuid = uuidv4();
-      await models.sequelize.query(
-        `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
-         VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
-        { replacements: {
-          id: assetUuid,
-          name: `UI Overlay: ${overlayType.name}${variantLabel ? ` (${variantLabel})` : ''}`,
-          url,
-          showId,
-          metadata: JSON.stringify({
-            source: 'custom-upload', overlay_type: overlayType.id,
-            overlay_beat: overlayType.beat, overlay_category: overlayType.category,
-            uploaded_at: new Date().toISOString(), original_filename: req.file.originalname,
-            ...(variantLabel ? { variant_label: variantLabel } : {}),
-          }),
-        } }
-      );
+      await models.sequelize.transaction(async (t) => {
+        if (variantLabel) {
+          await models.sequelize.query(
+            `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+             AND metadata->>'overlay_type' = :overlayId AND metadata->>'variant_label' = :variantLabel AND deleted_at IS NULL`,
+            { replacements: { showId, overlayId: overlayType.id, variantLabel }, transaction: t }
+          );
+        } else {
+          await models.sequelize.query(
+            `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+             AND metadata->>'overlay_type' = :overlayId AND (metadata->>'variant_label' IS NULL OR metadata->>'variant_label' = '') AND deleted_at IS NULL`,
+            { replacements: { showId, overlayId: overlayType.id }, transaction: t }
+          );
+        }
+        await models.sequelize.query(
+          `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
+           VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
+          { replacements: {
+            id: assetUuid,
+            name: `UI Overlay: ${overlayType.name}${variantLabel ? ` (${variantLabel})` : ''}`,
+            url,
+            showId,
+            metadata: JSON.stringify({
+              source: 'custom-upload', overlay_type: overlayType.id,
+              overlay_beat: overlayType.beat, overlay_category: overlayType.category,
+              uploaded_at: new Date().toISOString(), original_filename: req.file.originalname,
+              ...(variantLabel ? { variant_label: variantLabel } : {}),
+            }),
+          }, transaction: t }
+        );
+      });
       assetId = assetUuid;
     } catch (assetErr) {
       console.warn('[UIOverlay] Asset save failed:', assetErr.message);

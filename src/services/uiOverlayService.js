@@ -278,36 +278,41 @@ async function generateAllOverlays(showId, models, options = {}) {
 
         const lifecycle = overlayType.lifecycle || 'permanent';
         let assetId = null;
+        // Wrap the soft-delete + insert in a transaction so a failed INSERT
+        // doesn't leave the previous asset tombstoned with no replacement —
+        // that was stranding the S3 URL and hiding the image from the UI.
         try {
           const assetUuid = uuidv4();
-          if (lifecycle === 'per_episode' && episodeId) {
+          await models.sequelize.transaction(async (t) => {
+            if (lifecycle === 'per_episode' && episodeId) {
+              await models.sequelize.query(
+                `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+                 AND episode_id = :episodeId AND metadata::text LIKE :typePattern AND deleted_at IS NULL`,
+                { replacements: { showId, episodeId, typePattern: `%"overlay_type": "${overlayType.id}"%` }, transaction: t }
+              );
+            }
             await models.sequelize.query(
-              `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-               AND episode_id = :episodeId AND metadata::text LIKE :typePattern AND deleted_at IS NULL`,
-              { replacements: { showId, episodeId, typePattern: `%"overlay_type": "${overlayType.id}"%` } }
+              `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, episode_id, metadata, created_at, updated_at)
+               VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :episodeId, :metadata, NOW(), NOW())`,
+              { replacements: {
+                id: assetUuid,
+                name: `UI Overlay: ${overlayType.name}`,
+                url,
+                showId,
+                episodeId: (lifecycle === 'per_episode' ? episodeId : null),
+                metadata: JSON.stringify({
+                  source: 'ui-overlay-generator',
+                  overlay_type: overlayType.id,
+                  overlay_beat: overlayType.beat,
+                  overlay_category: overlayType.category,
+                  overlay_lifecycle: lifecycle,
+                  episode_id: (lifecycle === 'per_episode' ? episodeId : null),
+                  bg_removed,
+                  generated_at: new Date().toISOString(),
+                }),
+              }, transaction: t }
             );
-          }
-          await models.sequelize.query(
-            `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, episode_id, metadata, created_at, updated_at)
-             VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :episodeId, :metadata, NOW(), NOW())`,
-            { replacements: {
-              id: assetUuid,
-              name: `UI Overlay: ${overlayType.name}`,
-              url,
-              showId,
-              episodeId: (lifecycle === 'per_episode' ? episodeId : null),
-              metadata: JSON.stringify({
-                source: 'ui-overlay-generator',
-                overlay_type: overlayType.id,
-                overlay_beat: overlayType.beat,
-                overlay_category: overlayType.category,
-                overlay_lifecycle: lifecycle,
-                episode_id: (lifecycle === 'per_episode' ? episodeId : null),
-                bg_removed,
-                generated_at: new Date().toISOString(),
-              }),
-            } }
-          );
+          });
           assetId = assetUuid;
           console.log(`[UIOverlay] Asset saved: ${overlayType.name} → ${assetUuid}`);
         } catch (assetErr) {
