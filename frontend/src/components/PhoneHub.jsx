@@ -293,7 +293,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
 
   // Find the home screen — prefer is_home flag, then first generated screen
   const firstScreen = useMemo(() => {
-    const generated = screens.filter(s => s.generated && s.url && s.category !== 'phone_icon' && s.category !== 'icon');
+    const generated = screens.filter(s => s.generated && s.url && s.category !== 'phone_icon' && s.category !== 'icon' && s.category !== 'production');
     return generated.find(s => s.is_home) || generated[0] || null;
   }, [screens]);
 
@@ -305,7 +305,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   }, [firstScreen]);
 
   // Split screens by category — all from the DB, no hardcoded keys
-  const screenTypes = screens.filter(s => s.category !== 'phone_icon' && s.category !== 'icon');
+  const screenTypes = screens.filter(s => s.category !== 'phone_icon' && s.category !== 'icon' && s.category !== 'production');
   const iconTypes = screens.filter(s => s.category === 'phone_icon' || s.category === 'icon');
 
   // Placements view — groups zones across all screens by the icon they display.
