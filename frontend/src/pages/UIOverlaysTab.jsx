@@ -574,6 +574,18 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // because the modal's button says "Create" — replacing an existing screen
   // is supposed to happen from that screen's detail panel, not this modal.
   const handleCreateScreen = async (form, file) => {
+    // If the user attaches a file while creating, we still want the image to land
+    // on the matching type even when the create POST returns 409 (name already
+    // exists). Resolve the target type_key from either the create response or
+    // the existing list, then upload — but only if the existing type's category
+    // matches what the creator just asked for, otherwise we'd silently upload
+    // a new Icon's image to an existing Screen (or vice versa).
+    const deriveTypeKey = (name) => (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+    const categoryMatches = (existing, target) => {
+      const existingIsIcon = existing?.category === 'phone_icon' || existing?.category === 'icon';
+      const targetIsIcon = target === 'phone_icon' || target === 'icon';
+      return existingIsIcon === targetIsIcon;
+    };
     try {
       let newType = null;
       try {
@@ -611,7 +623,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         try {
           const fd = new FormData();
           fd.append('image', file);
-          await api.post(`/api/v1/ui-overlays/${showId}/upload/${newType.type_key}`, fd);
+          await api.post(`/api/v1/ui-overlays/${showId}/upload/${targetKey}`, fd);
         } catch (upErr) {
           console.warn('[createScreen] image upload failed', upErr);
           flash('Created, but the image upload failed — upload from the card', 'error');
