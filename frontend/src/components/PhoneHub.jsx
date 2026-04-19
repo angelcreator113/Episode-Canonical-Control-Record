@@ -17,6 +17,7 @@
 import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { MoreVertical, Trash2, EyeOff, Edit3, Settings } from 'lucide-react';
 import ScreenContentRenderer from './ScreenContentRenderer';
+import { isIcon, isScreen, getScreenLinks, getIconUrls } from '../lib/overlayUtils';
 
 // Screen types are now fully dynamic — defined per-show in the database.
 // The `screens` prop already contains all type data from the API.
@@ -293,20 +294,20 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
 
   // Find the home screen — prefer is_home flag, then first generated screen
   const firstScreen = useMemo(() => {
-    const generated = screens.filter(s => s.generated && s.url && s.category !== 'phone_icon' && s.category !== 'icon' && s.category !== 'production');
+    const generated = screens.filter(s => s.generated && s.url && isScreen(s));
     return generated.find(s => s.is_home) || generated[0] || null;
   }, [screens]);
 
   // Find persistent icons from the first/home screen that should show on ALL screens
   const persistentLinks = useMemo(() => {
     if (!firstScreen) return [];
-    const links = firstScreen.screen_links || firstScreen.metadata?.screen_links || [];
+    const links = getScreenLinks(firstScreen);
     return links.filter(l => l.persistent && l.icon_url);
   }, [firstScreen]);
 
   // Split screens by category — all from the DB, no hardcoded keys
-  const screenTypes = screens.filter(s => s.category !== 'phone_icon' && s.category !== 'icon' && s.category !== 'production');
-  const iconTypes = screens.filter(s => s.category === 'phone_icon' || s.category === 'icon');
+  const screenTypes = screens.filter(s => isScreen(s));
+  const iconTypes = screens.filter(isIcon);
 
   // Placements view — groups zones across all screens by the icon they display.
   // Gives creators a read-only overview: "this icon appears on N screens" plus
@@ -322,9 +323,9 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
     });
     // Walk every screen's zones and append them to the matching icon's bucket.
     screenTypes.forEach(screen => {
-      const links = screen.screen_links || screen.metadata?.screen_links || [];
+      const links = getScreenLinks(screen);
       links.forEach(link => {
-        const icons = link.icon_urls?.length ? link.icon_urls : (link.icon_url ? [link.icon_url] : []);
+        const icons = getIconUrls(link);
         icons.forEach(iconUrl => {
           const entry = byIcon.get(iconUrl);
           if (entry) {
@@ -356,7 +357,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
       const links = src.screen_links || src.metadata?.screen_links || [];
       links.forEach(link => {
         // Icon usage (by URL, dedup screens per icon)
-        const iconUrls = link.icon_urls?.length ? link.icon_urls : (link.icon_url ? [link.icon_url] : []);
+        const iconUrls = getIconUrls(link);
         iconUrls.forEach(url => {
           if (!iconLinkByUrl.has(url)) iconLinkByUrl.set(url, { screens: new Set(), hasTargetedPlacement: false });
           const entry = iconLinkByUrl.get(url);

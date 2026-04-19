@@ -12,6 +12,7 @@ import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import IconPlacementMode from '../components/IconPlacementMode';
+import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks } from '../lib/overlayUtils';
 import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
 import AIProposalReview from '../components/phone-editor/AIProposalReview';
 import MissionEditor from '../components/phone-editor/MissionEditor';
@@ -77,7 +78,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const activeScreenRef = useRef(null);  // ref mirror of activeScreen for stable closures
   const [batchUploading, setBatchUploading] = useState(false);
   const [hiddenScreens, setHiddenScreens] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('phone_hub_hidden') || '[]'); } catch { return []; }
+    // Guard against malformed storage (non-array JSON) — earlier bugs wrote
+    // strings or objects; if `.includes()` is called on a non-array it throws
+    // and breaks the whole grid render. Fail closed (empty list) so creators
+    // just see everything instead of a blank screen.
+    try {
+      const raw = JSON.parse(localStorage.getItem('phone_hub_hidden') || '[]');
+      return Array.isArray(raw) ? raw : [];
+    } catch { return []; }
   });
   const [showHidden, setShowHidden] = useState(false);
   const fileInputRef = useRef(null);
@@ -114,12 +122,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const flash = useCallback((msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 4000); }, []);
 
   // ── Undo system ──
+  // Read from activeScreenRef (kept in sync below) rather than closing over
+  // the `activeScreen` state so rapid sequences (switch screen → pushUndo →
+  // switch back → pushUndo) capture the latest value without waiting for the
+  // callback to be re-created on the next render.
   const pushUndo = useCallback(() => {
-    if (activeScreen) {
-      undoStackRef.current.push(JSON.parse(JSON.stringify(activeScreen)));
+    const current = activeScreenRef.current;
+    if (current) {
+      undoStackRef.current.push(JSON.parse(JSON.stringify(current)));
       if (undoStackRef.current.length > 20) undoStackRef.current.shift();
     }
-  }, [activeScreen]);
+  }, []);
 
   const handleUndo = useCallback(() => {
     if (undoStackRef.current.length === 0) return;
@@ -135,7 +148,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     setEditingLinks(false);
     undoStackRef.current = [];
     const home = overlays.find(o => o.is_home && o.generated && o.url)
-      || overlays.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
+      || overlays.find(o => o.generated && o.url && isScreen(o));
     if (home) setActiveScreen(home);
   }, [overlays]);
 
@@ -292,7 +305,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         // Auto-select home screen (or first screen) on initial load if nothing is selected
         if (!activeScreenRef.current) {
           const home = data.find(o => o.is_home && o.generated && o.url)
-            || data.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
+            || data.find(o => o.generated && o.url && isScreen(o));
           if (home) setActiveScreen(home);
         }
       })
@@ -366,7 +379,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     const home = freshOverlays.find(o => o.is_home && o.generated && o.url && o.category === 'phone')
       || freshOverlays.find(o => o.generated && o.url && o.category === 'phone');
     if (!home?.asset_id) return false;
-    const existingLinks = home.screen_links || home.metadata?.screen_links || [];
+    const existingLinks = getScreenLinks(home);
     if (existingLinks.some(l => l.icon_url === icon.url)) return false;
     const iconLinks = existingLinks.filter(l => l.icon_url);
     const col = iconLinks.length % 4;
@@ -516,7 +529,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       }
       // Clean orphaned links: remove any screen_links targeting the deleted screen
       for (const overlay of overlays) {
-        const links = overlay.screen_links || overlay.metadata?.screen_links || [];
+        const links = getScreenLinks(overlay);
         const orphans = links.filter(l => l.target === deletedKey);
         if (orphans.length > 0 && overlay.asset_id) {
           const cleaned = links.filter(l => l.target !== deletedKey);
@@ -561,7 +574,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // because the modal's button says "Create" — replacing an existing screen
   // is supposed to happen from that screen's detail panel, not this modal.
   const handleCreateScreen = async (form, file) => {
-    const deriveTypeKey = (name) => (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
     try {
       let newType = null;
       try {
@@ -782,7 +794,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // whatever the screen already has and save through the existing PUT.
   const handleApprovePanelProposal = async () => {
     if (!panelProposal?.proposal?.zones?.length || !activeScreen) return;
-    const existing = activeScreen.screen_links || activeScreen.metadata?.screen_links || [];
+    const existing = getScreenLinks(activeScreen);
     const merged = [...existing, ...panelProposal.proposal.zones];
     await handleSaveLinks(merged);
     setPanelProposal(null);
@@ -815,7 +827,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       const iconUrl = res.data?.icon_url;
       if (iconUrl) {
         // Append uploaded icon to the link's icon_urls array
-        const currentLinks = activeScreen.screen_links || activeScreen.metadata?.screen_links || [];
+        const currentLinks = getScreenLinks(activeScreen);
         const updated = currentLinks.map(l => {
           if (l.id !== linkId) return l;
           const existing = l.icon_urls?.length ? l.icon_urls : (l.icon_url ? [l.icon_url] : []);
@@ -964,7 +976,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       // behaviour of the Create modal so setting the link post-hoc still
       // produces a tap zone on the home screen.
       let autoPlaced = false;
-      if (targetKey && (activeScreen.category === 'phone_icon' || activeScreen.category === 'icon') && activeScreen.url) {
+      if (targetKey && isIcon(activeScreen) && activeScreen.url) {
         const fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => []);
         if (fresh.length) setOverlays(fresh);
         autoPlaced = await autoPlaceIconOnHome(fresh.length ? fresh : overlays, activeScreen.id);
@@ -1029,7 +1041,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
 
   // Step-header derived counts. "Screens" excludes phone icons — icons are
   // app tiles that live on a screen, not standalone workspaces.
-  const screenOverlays = overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
+  const screenOverlays = overlays.filter(o => isScreen(o));
   const screensGenerated = screenOverlays.filter(o => o.generated && o.url).length;
   const screensTotal = screenOverlays.length;
   const screensWithZones = screenOverlays.filter(o => {
@@ -1175,7 +1187,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             /* ── Inline Zone Editor — replaces PhoneHub so users draw directly on the main display ── */
             (() => {
               // Computed once per render: the list of screens you can edit zones on (has image, not icon).
-              const editableScreens = overlays.filter(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
+              const editableScreens = overlays.filter(o => o.generated && o.url && isScreen(o));
               const curIdx = editableScreens.findIndex(s => s.id === activeScreen.id);
               const switchToScreen = (target) => {
                 if (!target || target.id === activeScreen.id) return;
@@ -1268,10 +1280,10 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       ref={linkEditorRef}
                       screen={activeScreen}
                       screenUrl={activeScreen.url}
-                      links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                      screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
+                      links={getScreenLinks(activeScreen)}
+                      screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
                       generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                      iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.category === 'icon' || o.type === 'icon') && o.url)}
+                      iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
                       globalFit={globalFit}
                       customFrameUrl={customFrameUrl}
                       phoneSkin={phoneSkin}
@@ -1281,7 +1293,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       navigationHistory={navHistory}
                       onBack={handleBack}
                       onRequestAiZones={handleRequestAiZones}
-                      allScreens={overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production' && o.url).map(o => ({ id: o.id, name: o.name }))}
+                      allScreens={overlays.filter(o => isScreen(o) && o.url).map(o => ({ id: o.id, name: o.name }))}
                       onBulkPlace={handleBulkPlaceZone}
                     />
                   ) : (
@@ -1302,9 +1314,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       />
                       <div style={{ position: 'relative', zIndex: 1 }}>
                         <IconPlacementMode
-                          links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                          iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.category === 'icon' || o.type === 'icon') && o.url)}
-                          screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production')).map(o => ({ key: o.id, label: o.name, icon: '📱', desc: o.description || '' }))}
+                          links={getScreenLinks(activeScreen)}
+                          iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
+                          screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, icon: '📱', desc: o.description || '' }))}
                           generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                           onSave={handleSaveLinks}
                         />
@@ -1370,9 +1382,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               <div className="editor-modal-header-left">
                 {(() => {
                   const displayUrl = activeScreen.variants?.[activeVariantIdx]?.url || activeScreen.url;
-                  const isIcon = activeScreen.category === 'phone_icon' || activeScreen.type === 'icon';
+                  const iconThumb = isIcon(activeScreen) || activeScreen.type === 'icon';
                   return displayUrl ? (
-                    <div className={`editor-modal-thumb ${isIcon ? 'icon' : 'screen'}`}>
+                    <div className={`editor-modal-thumb ${iconThumb ? 'icon' : 'screen'}`}>
                       <img src={displayUrl} alt="" />
                     </div>
                   ) : (
@@ -1506,7 +1518,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       target after creation. The Create modal surfaces this too, but
                       creators often realise they need to change it (or didn't pick
                       one at all) once the icon is placed. */}
-                  {activeScreen.custom_id && (activeScreen.category === 'phone_icon' || activeScreen.category === 'icon') && (
+                  {activeScreen.custom_id && isIcon(activeScreen) && (
                     <div className="editor-section">
                       <div className="editor-section-label">Opens Screen</div>
                       <select
@@ -1517,7 +1529,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       >
                         <option value="">None (no navigation)</option>
                         {overlays
-                          .filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production'))
+                          .filter(o => isScreen(o))
                           .map(s => (
                             <option key={s.id} value={s.id}>{s.name}</option>
                           ))}
@@ -1679,7 +1691,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
       {previewMode && (
         <PhonePreviewMode
           screens={overlays}
-          initialScreen={overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production') || overlays.find(o => o.generated)}
+          initialScreen={overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && isScreen(o)) || overlays.find(o => o.generated)}
           onClose={() => setPreviewMode(false)}
           globalFit={globalFit}
           phoneSkin={phoneSkin}
@@ -1702,7 +1714,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           onCreate={handleCreateScreen}
           isIcon={createMode === 'phone_icon'}
           showId={showId}
-          existingScreens={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production'))}
+          existingScreens={overlays.filter(o => isScreen(o))}
         />
       )}
 
