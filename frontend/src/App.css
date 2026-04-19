@@ -366,7 +366,7 @@ body.page-story-engine .app-content {
   html, body {
     overflow-x: hidden;
     overflow-y: auto;
-    overscroll-behavior-y: auto;
+    overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     max-width: 100vw;
   }
