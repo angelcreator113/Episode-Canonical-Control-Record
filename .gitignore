@@ -111,3 +111,6 @@ nul
 
 Episode-Canonical-Control-Record/
 exports/
+
+# Backfill/migration script state logs
+scripts/state/

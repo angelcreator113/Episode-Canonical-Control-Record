@@ -48,7 +48,8 @@
     "deploy:staging": "bash deploy-staging.sh deploy",
     "deploy:production": "bash deploy-production.sh deploy",
     "health:staging": "bash deploy-staging.sh health",
-    "health:production": "bash deploy-production.sh health"
+    "health:production": "bash deploy-production.sh health",
+    "backfill:wardrobe-bg": "node scripts/backfill-wardrobe-bg.js"
   },
   "keywords": [
     "api",
