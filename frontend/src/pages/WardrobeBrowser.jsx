@@ -1409,34 +1409,42 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
                         method: 'POST', body: fd,
                         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
                       });
-                      const data = await res.json();
-                      if (data.success && data.data) {
-                        const ai = data.data;
-                        const categoryMap = {
-                          dress: 'Dresses', top: 'Tops', bottom: 'Bottoms', bottoms: 'Bottoms',
-                          shoes: 'Shoes', accessory: 'Accessories', jewelry: 'Jewelry',
-                          bag: 'Accessories', outerwear: 'Outerwear', swimwear: 'Dresses',
-                          activewear: 'Tops', jacket: 'Outerwear', coat: 'Outerwear',
-                          skirt: 'Bottoms', pants: 'Bottoms', shirt: 'Tops', blouse: 'Tops',
-                        };
-                        // Parse AI price — enforce $150 minimum (luxury world)
-                        let aiPrice = '';
-                        if (ai.price_estimate) {
-                          const num = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, ''));
-                          aiPrice = num && num >= 150 ? num.toFixed(2) : '150.00';
-                        }
-                        setFormData(prev => ({
-                          ...prev,
-                          name: ai.name || prev.name,
-                          clothingCategory: categoryMap[ai.item_type?.toLowerCase()] || prev.clothingCategory,
-                          color: ai.color || prev.color,
-                          brand: ai.brand_guess || prev.brand,
-                          price: aiPrice || prev.price,
-                          character: prev.character || 'Lala',
-                        }));
+                      const data = await res.json().catch(() => ({}));
+                      if (!res.ok || !data.success || !data.data) {
+                        const msg = data.error || `${res.status} ${res.statusText || 'request failed'}`;
+                        console.error('[Auto-fill] backend rejected:', msg, data);
+                        alert(`Auto-fill failed: ${msg}`);
+                        return;
                       }
-                    } catch (err) { console.error('Analyze failed:', err); }
-                    setAnalyzing(false);
+                      const ai = data.data;
+                      const categoryMap = {
+                        dress: 'Dresses', top: 'Tops', bottom: 'Bottoms', bottoms: 'Bottoms',
+                        shoes: 'Shoes', accessory: 'Accessories', jewelry: 'Jewelry',
+                        bag: 'Accessories', outerwear: 'Outerwear', swimwear: 'Dresses',
+                        activewear: 'Tops', jacket: 'Outerwear', coat: 'Outerwear',
+                        skirt: 'Bottoms', pants: 'Bottoms', shirt: 'Tops', blouse: 'Tops',
+                      };
+                      // Parse AI price — enforce $150 minimum (luxury world)
+                      let aiPrice = '';
+                      if (ai.price_estimate) {
+                        const num = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, ''));
+                        aiPrice = num && num >= 150 ? num.toFixed(2) : '150.00';
+                      }
+                      setFormData(prev => ({
+                        ...prev,
+                        name: ai.name || prev.name,
+                        clothingCategory: categoryMap[ai.item_type?.toLowerCase()] || prev.clothingCategory,
+                        color: ai.color || prev.color,
+                        brand: ai.brand_guess || prev.brand,
+                        price: aiPrice || prev.price,
+                        character: prev.character || 'Lala',
+                      }));
+                    } catch (err) {
+                      console.error('[Auto-fill] threw:', err);
+                      alert(`Auto-fill failed: ${err.message || err}`);
+                    } finally {
+                      setAnalyzing(false);
+                    }
                   }} style={{
                     width: '100%', padding: '8px 0', border: 'none', borderRadius: 6,
                     background: '#B8962E', color: 'white', cursor: analyzing ? 'not-allowed' : 'pointer',
