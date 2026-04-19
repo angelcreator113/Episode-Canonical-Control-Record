@@ -147,6 +147,16 @@ function WorldAdmin() {
 
   // Map old tab keys to new structure for URL backwards compat
   const resolveTab = (tab) => {
+    // Auto-resolve any sub-tab key to its parent main tab, so deep-links like
+    // ?tab=wardrobe-items (or any other sub-tab) land on the right view
+    // without having to register each one manually.
+    for (const t of TABS) {
+      if (t.subs && t.subs.some((s) => s.key === tab)) {
+        return [t.key, tab];
+      }
+    }
+    // Legacy aliases for renamed tabs or top-level keys that should default
+    // to a specific sub-tab when deep-linked.
     const oldToNew = {
       'season': ['episodes', 'season'],
       'episodes': ['episodes', 'episodes-ledger'],
