@@ -71,10 +71,10 @@ const actionSchema = Joi.object({ type: Joi.string().required() })
   .custom((value, helpers) => {
     const schema = ACTION_SCHEMAS[value.type];
     if (!schema) {
-      return helpers.error('any.invalid', { message: `action type "${value.type}" not in allowlist` });
+      return helpers.message(`action type "${value.type}" not in allowlist`);
     }
     const { error, value: clean } = schema.validate(value, { abortEarly: false, stripUnknown: false });
-    if (error) return helpers.error('any.invalid', { message: error.message });
+    if (error) return helpers.message(error.message);
     return clean;
   });
 
