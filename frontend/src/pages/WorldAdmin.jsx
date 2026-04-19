@@ -4294,29 +4294,37 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         const fd = new FormData(); fd.append('image', wardrobeUploadFile);
                         const token = localStorage.getItem('authToken') || localStorage.getItem('token');
                         const res = await fetch(`/api/v1/wardrobe-library/analyze-image`, { method: 'POST', body: fd, headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
-                        const data = await res.json();
-                        if (data.success && data.data) {
-                          const ai = data.data;
-                          const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
-                          let aiPrice = '';
-                          if (ai.price_estimate) { const n = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, '')); aiPrice = n && n >= 150 ? n.toFixed(2) : '150.00'; }
-                          setWardrobeUploadForm(prev => ({
-                            ...prev,
-                            name: ai.name || prev.name,
-                            clothingCategory: catMap[ai.item_type?.toLowerCase()] || prev.clothingCategory,
-                            color: ai.color || prev.color,
-                            brand: ai.brand_guess || prev.brand,
-                            price: aiPrice || prev.price,
-                            description: ai.description || prev.description || '',
-                            season: ai.season || prev.season || '',
-                            occasion: ai.occasion || prev.occasion || '',
-                            tags: (ai.aesthetic_tags || []).join(', ') || prev.tags || '',
-                            tier: ai.tier || prev.tier || '',
-                            character: 'Lala',
-                          }));
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok || !data.success || !data.data) {
+                          const msg = data.error || `${res.status} ${res.statusText || 'request failed'}`;
+                          console.error('[Auto-fill] backend rejected:', msg, data);
+                          alert(`Auto-fill failed: ${msg}`);
+                          return;
                         }
-                      } catch (err) { console.error('Analyze failed:', err); }
-                      setWardrobeAnalyzing(false);
+                        const ai = data.data;
+                        const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
+                        let aiPrice = '';
+                        if (ai.price_estimate) { const n = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, '')); aiPrice = n && n >= 150 ? n.toFixed(2) : '150.00'; }
+                        setWardrobeUploadForm(prev => ({
+                          ...prev,
+                          name: ai.name || prev.name,
+                          clothingCategory: catMap[ai.item_type?.toLowerCase()] || prev.clothingCategory,
+                          color: ai.color || prev.color,
+                          brand: ai.brand_guess || prev.brand,
+                          price: aiPrice || prev.price,
+                          description: ai.description || prev.description || '',
+                          season: ai.season || prev.season || '',
+                          occasion: ai.occasion || prev.occasion || '',
+                          tags: (ai.aesthetic_tags || []).join(', ') || prev.tags || '',
+                          tier: ai.tier || prev.tier || '',
+                          character: 'Lala',
+                        }));
+                      } catch (err) {
+                        console.error('[Auto-fill] threw:', err);
+                        alert(`Auto-fill failed: ${err.message || err}`);
+                      } finally {
+                        setWardrobeAnalyzing(false);
+                      }
                     }} style={{ width: '100%', padding: '8px 0', border: 'none', borderRadius: 6, background: '#B8962E', color: '#fff', cursor: wardrobeAnalyzing ? 'not-allowed' : 'pointer', fontFamily: "'DM Mono', monospace", fontSize: 11, opacity: wardrobeAnalyzing ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
                       {wardrobeAnalyzing ? '⏳ Analyzing...' : '✨ Auto-fill from image'}
                     </button>
