@@ -227,14 +227,23 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       // Try to match filename to an existing screen key
       const match = screenKeys.find(k => name.includes(k) || name.includes(k.replace(/_/g, '')));
       if (!match) {
-        // No existing type matches — create a new type from the filename
+        // No existing type matches — create a new type from the filename.
+        // If that 409s (a type with the same slug already exists but our local
+        // screenKeys list was stale, or the slug matches an icon vs a screen),
+        // fall through to the upload step instead of marking the file failed.
         const cleanName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
         const typeKey = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
         try {
-          await api.post(`/api/v1/ui-overlays/${showId}/types`, {
-            name: cleanName, beat: 'Various', description: `Uploaded from ${file.name}`,
-            prompt: `Phone screen for ${cleanName}`, category: 'phone',
-          });
+          try {
+            await api.post(`/api/v1/ui-overlays/${showId}/types`, {
+              name: cleanName, beat: 'Various', description: `Uploaded from ${file.name}`,
+              prompt: `Phone screen for ${cleanName}`, category: 'phone',
+            });
+          } catch (createErr) {
+            // 409 = type already exists under this slug; upload to it anyway.
+            // Anything else is a real create failure — surface as file failure.
+            if (createErr?.response?.status !== 409) throw createErr;
+          }
           const fd = new FormData();
           fd.append('image', file);
           await api.post(`/api/v1/ui-overlays/${showId}/upload/${typeKey}`, fd);
