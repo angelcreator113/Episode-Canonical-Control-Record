@@ -59,15 +59,27 @@ router.get('/:showId', optionalAuth, async (req, res) => {
       const otName = ot.name.toLowerCase();
       const lifecycle = ot.lifecycle || 'permanent';
 
-      // Find ALL matching assets (variants)
-      const allMatches = existing.filter(e => {
+      // Find ALL matching assets (variants).
+      //
+      // Strict matches first (unambiguous): explicit metadata.overlay_type,
+      // canonical "UI Overlay: <name>" asset name, or the wardrobe_list
+      // legacy alias. The loose substring match (eName.includes(otId)) is a
+      // fallback for legacy assets that lack metadata, but when applied as a
+      // primary rule it cross-contaminates types that share a name prefix:
+      // the "shopping" type picks up "UI Overlay: Shopping Icon" because
+      // that name contains "shopping", and both cards end up rendering the
+      // same asset's URL. Apply the fallback only when strict matching
+      // yields nothing.
+      const strictMatches = existing.filter(e => {
         const eType = (e.overlay_type || '').toLowerCase();
         const eName = (e.name || '').toLowerCase();
         return eType === otId
           || eName === `ui overlay: ${otName}`
-          || eName.includes(otId.replace(/_/g, ' '))
           || (otId === 'wardrobe_list' && eType === 'todo_checklist');
       });
+      const allMatches = strictMatches.length > 0
+        ? strictMatches
+        : existing.filter(e => (e.name || '').toLowerCase().includes(otId.replace(/_/g, ' ')));
 
       // Primary = the one without a variant_label, or first match
       const primary = allMatches.find(e => !e.metadata?.variant_label) || allMatches[0] || null;
