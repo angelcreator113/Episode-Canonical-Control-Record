@@ -146,21 +146,42 @@ module.exports = {
       });
 
       // Auto background removal — runs async, updates the record when done
-      if (s3Url && process.env.REMOVEBG_API_KEY) {
+      if (s3Url && s3Key && process.env.REMOVEBG_API_KEY) {
         // Don't await — let it run in background so upload returns fast
         (async () => {
           try {
             const axios = require('axios');
+            const FormData = require('form-data');
+            const { GetObjectCommand } = require('@aws-sdk/client-s3');
             const { v4: bgUuid } = require('uuid');
-            console.log(`[Wardrobe] Auto-removing background for ${wardrobeItem.id}...`);
+            console.log(`[Wardrobe] Auto-removing background for ${wardrobeItem.id} (key=${s3Key})...`);
+
+            // Download the original from S3 ourselves rather than handing remove.bg
+            // an `image_url` — the latter requires the bucket/object to be
+            // publicly readable, which isn't guaranteed and produced silent
+            // failures. form-data upload works regardless of bucket ACL.
+            const obj = await s3Client.send(new GetObjectCommand({
+              Bucket: BUCKET_NAME,
+              Key: s3Key,
+            }));
+            const chunks = [];
+            for await (const chunk of obj.Body) chunks.push(chunk);
+            const imageBuffer = Buffer.concat(chunks);
+
+            const fd = new FormData();
+            fd.append('image_file', imageBuffer, {
+              filename: `${wardrobeItem.id}.jpg`,
+              contentType: 'image/jpeg',
+            });
+            fd.append('size', 'auto');
 
             const bgRes = await axios.post(
               'https://api.remove.bg/v1.0/removebg',
-              { image_url: s3Url, size: 'auto', format: 'png' },
+              fd,
               {
-                headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY },
+                headers: { ...fd.getHeaders(), 'X-Api-Key': process.env.REMOVEBG_API_KEY },
                 responseType: 'arraybuffer',
-                timeout: 45000,
+                timeout: 60000,
               }
             );
 
@@ -180,7 +201,25 @@ module.exports = {
             });
             console.log(`[Wardrobe] Background removed: ${wardrobeItem.id}`);
           } catch (bgErr) {
-            console.warn(`[Wardrobe] Background removal failed (non-blocking): ${bgErr.message}`);
+            // Surface HTTP status + response body when the error came from
+            // remove.bg, so pm2 logs tell us exactly why (credits, bad key,
+            // image rejected, rate limit, etc.) instead of just a message.
+            const status = bgErr.response?.status;
+            let body = '';
+            if (bgErr.response?.data) {
+              try {
+                body = Buffer.isBuffer(bgErr.response.data)
+                  ? bgErr.response.data.toString('utf8')
+                  : JSON.stringify(bgErr.response.data);
+              } catch (_) {
+                body = String(bgErr.response.data).slice(0, 500);
+              }
+            }
+            console.warn(
+              `[Wardrobe] Background removal failed (non-blocking) for ${wardrobeItem.id}: ${bgErr.message}` +
+                (status ? ` [status=${status}]` : '') +
+                (body ? ` body=${body.slice(0, 500)}` : '')
+            );
           }
         })();
       }
