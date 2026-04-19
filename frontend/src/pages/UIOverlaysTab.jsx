@@ -11,6 +11,7 @@ import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maxim
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
+import IconPlacementMode from '../components/IconPlacementMode';
 import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
 import AIProposalReview from '../components/phone-editor/AIProposalReview';
 import MissionEditor from '../components/phone-editor/MissionEditor';
@@ -56,6 +57,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [phoneSkin, setPhoneSkin] = useState('rosegold');
   const [customFrameUrl, setCustomFrameUrl] = useState(null);
   const [editingLinks, setEditingLinks] = useState(false);
+  // 'zones' — draw-rectangle ScreenLinkEditor (the precise/advanced mode with conditions, variants, AI).
+  // 'icons' — IconPlacementMode (tap the phone, pick an icon from the picker — simpler for placing
+  // app-icon-style tap zones on a home screen). Both persist to the same screen_links array.
+  const [zoneEditorMode, setZoneEditorMode] = useState('zones');
   const [navHistory, setNavHistory] = useState([]);  // stack of screen keys for back navigation
   const [globalFit, setGlobalFit] = useState({});    // device-level fit applied to all screens
   const [activeVariantIdx, setActiveVariantIdx] = useState(0);
@@ -1183,26 +1188,90 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       <Check size={14} /> Done
                     </button>
                   </div>
-                  <ScreenLinkEditor
-                    ref={linkEditorRef}
-                    screen={activeScreen}
-                    screenUrl={activeScreen.url}
-                    links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                    screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
-                    generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                    iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.category === 'icon' || o.type === 'icon') && o.url)}
-                    globalFit={globalFit}
-                    customFrameUrl={customFrameUrl}
-                    phoneSkin={phoneSkin}
-                    onSave={handleSaveLinks}
-                    onUploadIcon={handleUploadIcon}
-                    onNavigate={handleNavigate}
-                    navigationHistory={navHistory}
-                    onBack={handleBack}
-                    onRequestAiZones={handleRequestAiZones}
-                    allScreens={overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production' && o.url).map(o => ({ id: o.id, name: o.name }))}
-                    onBulkPlace={handleBulkPlaceZone}
-                  />
+                  {/* Mode toggle — pick between the two ways to add a tap zone.
+                      Zones: draw a rectangle, assign icon/target, edit conditions.
+                      Icons: tap the phone where the icon should go, pick from the
+                      library, done. Both write to the same screen_links array. */}
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 10, background: '#faf8f5', borderRadius: 8, padding: 4 }}>
+                    <button
+                      onClick={() => {
+                        if (zoneEditorMode === 'zones') return;
+                        if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                        setZoneEditorMode('zones');
+                      }}
+                      style={{
+                        flex: 1, padding: '8px 12px', fontSize: 12, fontWeight: 700,
+                        border: 'none', borderRadius: 6, cursor: 'pointer', minHeight: 36,
+                        background: zoneEditorMode === 'zones' ? '#fff' : 'transparent',
+                        color: zoneEditorMode === 'zones' ? '#B8962E' : '#888',
+                        boxShadow: zoneEditorMode === 'zones' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+                      }}
+                    >
+                      ZONES · draw
+                    </button>
+                    <button
+                      onClick={() => setZoneEditorMode('icons')}
+                      style={{
+                        flex: 1, padding: '8px 12px', fontSize: 12, fontWeight: 700,
+                        border: 'none', borderRadius: 6, cursor: 'pointer', minHeight: 36,
+                        background: zoneEditorMode === 'icons' ? '#fff' : 'transparent',
+                        color: zoneEditorMode === 'icons' ? '#B8962E' : '#888',
+                        boxShadow: zoneEditorMode === 'icons' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
+                      }}
+                    >
+                      ICONS · tap to place
+                    </button>
+                  </div>
+                  {zoneEditorMode === 'zones' ? (
+                    <ScreenLinkEditor
+                      ref={linkEditorRef}
+                      screen={activeScreen}
+                      screenUrl={activeScreen.url}
+                      links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
+                      screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
+                      generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                      iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.category === 'icon' || o.type === 'icon') && o.url)}
+                      globalFit={globalFit}
+                      customFrameUrl={customFrameUrl}
+                      phoneSkin={phoneSkin}
+                      onSave={handleSaveLinks}
+                      onUploadIcon={handleUploadIcon}
+                      onNavigate={handleNavigate}
+                      navigationHistory={navHistory}
+                      onBack={handleBack}
+                      onRequestAiZones={handleRequestAiZones}
+                      allScreens={overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production' && o.url).map(o => ({ id: o.id, name: o.name }))}
+                      onBulkPlace={handleBulkPlaceZone}
+                    />
+                  ) : (
+                    <div style={{ position: 'relative' }}>
+                      {/* Render the screen image behind the placement canvas so creators
+                          can see what they're placing icons on. IconPlacementMode uses a
+                          transparent container; we layer the screen image beneath. */}
+                      <img
+                        src={activeScreen.url}
+                        alt={activeScreen.name}
+                        style={{
+                          position: 'absolute', inset: 0, margin: '0 auto',
+                          width: '100%', maxWidth: 340, aspectRatio: '9/19.5',
+                          objectFit: 'cover', borderRadius: 16, pointerEvents: 'none',
+                          zIndex: 0,
+                        }}
+                        draggable={false}
+                      />
+                      <div style={{ position: 'relative', zIndex: 1 }}>
+                        <IconPlacementMode
+                          links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
+                          iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.category === 'icon' || o.type === 'icon') && o.url)}
+                          screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production')).map(o => ({ key: o.id, label: o.name, icon: '📱', desc: o.description || '' }))}
+                          generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                          onSave={handleSaveLinks}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* AI Assistant — lives next to the zone editor since its
                       output *is* tap zones. Only visible while editing zones,
