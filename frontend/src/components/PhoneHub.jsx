@@ -33,8 +33,16 @@ const PHONE_SKINS = [
 
 export { PHONE_SKINS, getScreenImageStyle };
 
-// Build image style from screen's fit settings (metadata.image_fit)
-// globalFit is the device-level default applied when screen has no per-screen override
+// Build image style from screen's fit settings.
+//
+// Cascade (highest precedence first, same rule applied in editor + player):
+//   1. screen.image_fit or screen.metadata.image_fit — per-screen override set
+//      by the creator in the Image Fit tab of the detail panel.
+//   2. globalFit — device-level default stored on the show via
+//      /api/v1/ui-overlays/:showId/frame and reapplied by PhonePreviewMode and
+//      PhoneHub via the `globalFit` prop.
+//   3. Built-in defaults: mode='cover', scale=100, offsetX/Y=0.
+// Any field missing at a given tier falls through to the next tier.
 function getScreenImageStyle(screen, globalFit) {
   const screenFit = screen?.image_fit || screen?.metadata?.image_fit;
   const fit = screenFit || globalFit || {};
@@ -191,7 +199,7 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
           {menuOpen && (
             <div style={{ position: 'absolute', top: '100%', right: isIcon ? 'auto' : 0, left: isIcon ? 0 : 'auto', marginTop: 4, background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, minWidth: 140, overflow: 'hidden' }}>
               <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true }); }} style={menuItemStyle}><Edit3 size={14} /> Edit</button>
-              {onHide && !hasImage && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onHide(type.key); }} style={menuItemStyle}><EyeOff size={14} /> Hide</button>)}
+              {onHide && !hasImage && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); if (window.confirm(`Remove "${type.label}" from the grid? You can restore it later from "Show removed" at the top.`)) onHide(type.key); }} style={menuItemStyle}><EyeOff size={14} /> Hide</button>)}
               {onDelete && (screen?.generated || screen?.asset_id || screen?.url) && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }} style={{ ...menuItemStyle, color: '#dc2626', borderBottom: 'none' }}><Trash2 size={14} /> Delete</button>)}
             </div>
           )}

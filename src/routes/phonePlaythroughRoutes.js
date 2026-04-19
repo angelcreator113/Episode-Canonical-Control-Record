@@ -54,13 +54,16 @@ async function loadOrCreateState(models, { userId, episodeId }) {
 }
 
 async function loadScreenZone(models, { showId, zoneId }) {
-  // Zones live inside asset metadata.screen_links[]. Pull any asset on this show
-  // that contains the zone — in practice, the client sent `screen_id` so we
-  // could index faster, but scanning is fine for PR2.
+  // Zones live inside asset metadata.screen_links[]. Pull any UI_OVERLAY asset
+  // on this show; narrowing by overlay_category is unreliable because it's in
+  // JSONB metadata and historically has three phone-family values (phone,
+  // phone_icon, icon) that not every author migrates between consistently.
+  // Scanning all UI_OVERLAY rows for the show is fine for PR2 — zone counts
+  // are low double digits in practice.
   const [rows] = await models.sequelize.query(
     `SELECT id, metadata::text AS metadata_text
      FROM assets
-     WHERE show_id = :showId AND deleted_at IS NULL AND category IN ('phone', 'phone_icon')`,
+     WHERE show_id = :showId AND deleted_at IS NULL AND asset_type = 'UI_OVERLAY'`,
     { replacements: { showId } }
   );
   for (const row of rows || []) {

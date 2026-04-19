@@ -327,44 +327,47 @@ router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image')
     if (!overlayType) return res.status(404).json({ success: false, error: `Unknown overlay type: ${req.params.overlayType}` });
     if (!req.file) return res.status(400).json({ success: false, error: 'No image file uploaded' });
 
-    // Soft-delete existing asset for this variant (or all if no variant specified)
-    if (variantLabel) {
-      await models.sequelize.query(
-        `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-         AND metadata->>'overlay_type' = :overlayId AND metadata->>'variant_label' = :variantLabel AND deleted_at IS NULL`,
-        { replacements: { showId, overlayId: overlayType.id, variantLabel } }
-      );
-    } else {
-      await models.sequelize.query(
-        `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-         AND metadata->>'overlay_type' = :overlayId AND (metadata->>'variant_label' IS NULL OR metadata->>'variant_label' = '') AND deleted_at IS NULL`,
-        { replacements: { showId, overlayId: overlayType.id } }
-      );
-    }
-
-    // Upload to S3
+    // Upload to S3 first — if this fails we haven't touched the DB yet.
     const url = await uploadOverlayToS3(req.file.buffer, overlayType.id, showId, req.file.mimetype);
 
-    // Create Asset
+    // Soft-delete the previous asset AND insert the new one in a single
+    // transaction: if the INSERT fails, the tombstone on the previous row is
+    // rolled back so the UI still has a visible asset. Previously a failure
+    // left the old asset soft-deleted with no replacement.
     let assetId = null;
     try {
       const assetUuid = uuidv4();
-      await models.sequelize.query(
-        `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
-         VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
-        { replacements: {
-          id: assetUuid,
-          name: `UI Overlay: ${overlayType.name}${variantLabel ? ` (${variantLabel})` : ''}`,
-          url,
-          showId,
-          metadata: JSON.stringify({
-            source: 'custom-upload', overlay_type: overlayType.id,
-            overlay_beat: overlayType.beat, overlay_category: overlayType.category,
-            uploaded_at: new Date().toISOString(), original_filename: req.file.originalname,
-            ...(variantLabel ? { variant_label: variantLabel } : {}),
-          }),
-        } }
-      );
+      await models.sequelize.transaction(async (t) => {
+        if (variantLabel) {
+          await models.sequelize.query(
+            `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+             AND metadata->>'overlay_type' = :overlayId AND metadata->>'variant_label' = :variantLabel AND deleted_at IS NULL`,
+            { replacements: { showId, overlayId: overlayType.id, variantLabel }, transaction: t }
+          );
+        } else {
+          await models.sequelize.query(
+            `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+             AND metadata->>'overlay_type' = :overlayId AND (metadata->>'variant_label' IS NULL OR metadata->>'variant_label' = '') AND deleted_at IS NULL`,
+            { replacements: { showId, overlayId: overlayType.id }, transaction: t }
+          );
+        }
+        await models.sequelize.query(
+          `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, metadata, created_at, updated_at)
+           VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, CAST(:metadata AS jsonb), NOW(), NOW())`,
+          { replacements: {
+            id: assetUuid,
+            name: `UI Overlay: ${overlayType.name}${variantLabel ? ` (${variantLabel})` : ''}`,
+            url,
+            showId,
+            metadata: JSON.stringify({
+              source: 'custom-upload', overlay_type: overlayType.id,
+              overlay_beat: overlayType.beat, overlay_category: overlayType.category,
+              uploaded_at: new Date().toISOString(), original_filename: req.file.originalname,
+              ...(variantLabel ? { variant_label: variantLabel } : {}),
+            }),
+          }, transaction: t }
+        );
+      });
       assetId = assetUuid;
     } catch (assetErr) {
       console.warn('[UIOverlay] Asset save failed:', assetErr.message);
@@ -578,9 +581,11 @@ router.put('/:showId/screen-links/:assetId', optionalAuth, async (req, res) => {
 
     // Validate any conditions/actions before persisting — rejects unknown action types
     // and malformed rules. Zones without conditions/actions pass through untouched.
-    const { error, value: validatedLinks } = validateScreenLinks(screen_links);
+    // zone_errors (when present) carries per-zone detail so the UI can point at the
+    // specific zone that failed instead of surfacing one flat message.
+    const { error, value: validatedLinks, zone_errors } = validateScreenLinks(screen_links);
     if (error) {
-      return res.status(400).json({ success: false, error });
+      return res.status(400).json({ success: false, error, zone_errors: zone_errors || null });
     }
 
     // Merge screen_links into existing metadata
@@ -750,8 +755,28 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
     const showId = req.params.showId;
     const { name, category, beat, description, prompt, type_key, opens_screen, is_home } = req.body;
 
-    if (!name || !prompt) {
-      return res.status(400).json({ success: false, error: 'name and prompt are required' });
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'name is required' });
+    }
+
+    // Prompt is only needed for AI generation; creators who plan to upload an
+    // image inline can leave it blank. Fill in a sensible default so the column
+    // (NOT NULL in older schemas) stays happy.
+    const effectivePrompt = prompt && prompt.trim()
+      ? prompt
+      : `Phone ${category === 'phone_icon' || category === 'icon' ? 'icon' : 'screen'} for "${name}".`;
+
+    // Guard against dangling `opens_screen` references — only accept keys that
+    // correspond to a live overlay type on the same show. Null/empty is fine
+    // (icon with no navigation target).
+    if (opens_screen) {
+      const [[row]] = await models.sequelize.query(
+        `SELECT 1 FROM ui_overlay_types WHERE show_id = :showId AND type_key = :key AND deleted_at IS NULL LIMIT 1`,
+        { replacements: { showId, key: opens_screen } }
+      );
+      if (!row) {
+        return res.status(400).json({ success: false, error: `opens_screen "${opens_screen}" does not match any screen on this show` });
+      }
     }
 
     // Generate type_key from name if not provided
@@ -783,14 +808,14 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
         category: category || 'phone',
         beat: beat || 'Various',
         description: description || '',
-        prompt,
+        prompt: effectivePrompt,
         sortOrder: req.body.sort_order || 100,
         opensScreen: opens_screen || null,
         isHome: !!is_home,
       } }
     );
 
-    return res.json({ success: true, data: { id, type_key: key, name, category: category || 'phone', beat: beat || 'Various', description, prompt, opens_screen: opens_screen || null } });
+    return res.json({ success: true, data: { id, type_key: key, name, category: category || 'phone', beat: beat || 'Various', description, prompt: effectivePrompt, opens_screen: opens_screen || null } });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -811,7 +836,20 @@ router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
     if (description !== undefined) { sets.push('description = :description'); replacements.description = description; }
     if (prompt !== undefined) { sets.push('prompt = :prompt'); replacements.prompt = prompt; }
     if (sort_order !== undefined) { sets.push('sort_order = :sortOrder'); replacements.sortOrder = sort_order; }
-    if (opens_screen !== undefined) { sets.push('opens_screen = :opensScreen'); replacements.opensScreen = opens_screen; }
+    if (opens_screen !== undefined) {
+      // FK-like validation: only accept keys that live on this show. Null/empty
+      // clears the link. See the POST handler for the same guard.
+      if (opens_screen) {
+        const [[row]] = await models.sequelize.query(
+          `SELECT 1 FROM ui_overlay_types WHERE show_id = :showId AND type_key = :key AND deleted_at IS NULL LIMIT 1`,
+          { replacements: { showId: req.params.showId, key: opens_screen } }
+        );
+        if (!row) {
+          return res.status(400).json({ success: false, error: `opens_screen "${opens_screen}" does not match any screen on this show` });
+        }
+      }
+      sets.push('opens_screen = :opensScreen'); replacements.opensScreen = opens_screen || null;
+    }
     if (is_home !== undefined) {
       sets.push('is_home = :isHome'); replacements.isHome = !!is_home;
       // If marking as home, unset any existing home screen first

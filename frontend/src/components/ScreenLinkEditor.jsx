@@ -129,12 +129,29 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => {
-    setZones(links); setIsDirty(false);
+    // Retroactively inherit target from the icon library when a zone has an
+    // icon_url but no target yet — covers zones created before the auto-fill
+    // was wired up on icon selection. Non-destructive: never overwrites an
+    // existing target, so per-zone overrides are preserved.
+    const enriched = (links || []).map(z => {
+      if (z.target) return z;
+      const iconUrls = z.icon_urls?.length ? z.icon_urls : (z.icon_url ? [z.icon_url] : []);
+      if (!iconUrls.length) return z;
+      const matchedIcon = iconOverlays.find(i => iconUrls.includes(i.url) && i.opens_screen);
+      if (!matchedIcon) return z;
+      return { ...z, target: matchedIcon.opens_screen };
+    });
+    setZones(enriched);
+    // Any additions mean the on-disk zones differ from what we just rendered
+    // — mark dirty so the Save button lights up and creators can commit the
+    // inferred targets (or tweak them first).
+    const wasEnriched = enriched.some((z, i) => z.target && !links[i]?.target);
+    setIsDirty(wasEnriched);
     // Reset undo stacks when the screen changes (links prop identity changes per screen).
     undoStack.current = [];
     redoStack.current = [];
     setUndoTick(t => t + 1);
-  }, [links]);
+  }, [links, iconOverlays]);
 
   // Save a snapshot of current zones before mutating, clearing redo since the timeline branched.
   const pushUndo = useCallback(() => {
@@ -1117,7 +1134,14 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                                 // saves a step and matches what the icon visually represents.
                                 const cleanName = (ico.name || '').replace(/\s*Icon$/i, '').trim();
                                 const labelUpdate = !zone.label && !isSelected && cleanName ? { label: cleanName } : {};
-                                updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null, ...labelUpdate });
+                                // Auto-fill target from the icon's `opens_screen` field so the
+                                // "this icon opens X" info creators set at icon-creation time
+                                // is inherited by any tap zone that uses the icon. Only applied
+                                // when the zone doesn't already have a target (don't overwrite
+                                // intentional per-zone targets) and only when this is the
+                                // selection, not a deselection.
+                                const targetUpdate = !zone.target && !isSelected && ico.opens_screen ? { target: ico.opens_screen } : {};
+                                updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null, ...labelUpdate, ...targetUpdate });
                               }}
                               title={ico.name}
                               style={{

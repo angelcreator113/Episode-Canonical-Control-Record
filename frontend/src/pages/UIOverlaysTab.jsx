@@ -130,7 +130,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     setEditingLinks(false);
     undoStackRef.current = [];
     const home = overlays.find(o => o.is_home && o.generated && o.url)
-      || overlays.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+      || overlays.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
     if (home) setActiveScreen(home);
   }, [overlays]);
 
@@ -278,7 +278,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         // Auto-select home screen (or first screen) on initial load if nothing is selected
         if (!activeScreenRef.current) {
           const home = data.find(o => o.is_home && o.generated && o.url)
-            || data.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+            || data.find(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
           if (home) setActiveScreen(home);
         }
       })
@@ -459,39 +459,68 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
   // Create custom screen or icon
   const handleCreateScreen = async (form, file) => {
+    // If the user attaches a file while creating, we still want the image to land
+    // on the matching type even when the create POST returns 409 (name already
+    // exists). Resolve the target type_key from either the create response or
+    // the existing list, then upload — but only if the existing type's category
+    // matches what the creator just asked for, otherwise we'd silently upload
+    // a new Icon's image to an existing Screen (or vice versa).
+    const deriveTypeKey = (name) => (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+    const categoryMatches = (existing, target) => {
+      const existingIsIcon = existing?.category === 'phone_icon' || existing?.category === 'icon';
+      const targetIsIcon = target === 'phone_icon' || target === 'icon';
+      return existingIsIcon === targetIsIcon;
+    };
     try {
-      const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
-      // Optimistic add, then reconcile with API response
-      const newType = res.data?.data;
-      if (newType) {
-        setOverlays(prev => [...prev, {
-          id: newType.type_key, name: newType.name, category: newType.category,
-          beat: newType.beat, description: newType.description, prompt: newType.prompt,
-          opens_screen: newType.opens_screen, is_home: !!newType.is_home,
-          custom: true, custom_id: newType.id, generated: false, url: null,
-        }]);
+      let newType = null;
+      let conflict = false;
+      try {
+        const res = await api.post(`/api/v1/ui-overlays/${showId}/types`, { ...form, category: createMode });
+        newType = res.data?.data;
+        if (newType) {
+          setOverlays(prev => [...prev, {
+            id: newType.type_key, name: newType.name, category: newType.category,
+            beat: newType.beat, description: newType.description, prompt: newType.prompt,
+            opens_screen: newType.opens_screen, is_home: !!newType.is_home,
+            custom: true, custom_id: newType.id, generated: false, url: null,
+          }]);
+        }
+      } catch (err) {
+        if (err.response?.status !== 409) throw err;
+        conflict = true;
       }
-      // Second step: if the creator attached an image, upload it to the new type
-      // so the icon/screen is immediately usable (no need to click into the
-      // detail modal afterwards and upload there).
-      if (file && newType?.type_key) {
+      const targetKey = newType?.type_key || deriveTypeKey(form.name);
+      if (conflict) {
+        // Guard against uploading the creator's image into a differently-
+        // categorized existing type. Find the existing overlay locally; if it's
+        // the wrong kind (Icon vs Screen), surface a clear error and bail
+        // instead of silently corrupting it.
+        const existing = overlays.find(o => o.id === targetKey || deriveTypeKey(o.name) === targetKey);
+        if (existing && !categoryMatches(existing, createMode)) {
+          const existingKind = (existing.category === 'phone_icon' || existing.category === 'icon') ? 'icon' : 'screen';
+          const wantedKind = createMode === 'phone_icon' ? 'icon' : 'screen';
+          flash(`A ${existingKind} named "${form.name}" already exists — pick a different name, or convert that ${existingKind} to a ${wantedKind} via its Type toggle.`, 'error');
+          return;
+        }
+      }
+      if (file && targetKey) {
         try {
           const fd = new FormData();
           fd.append('image', file);
-          await api.post(`/api/v1/ui-overlays/${showId}/upload/${newType.type_key}`, fd);
+          await api.post(`/api/v1/ui-overlays/${showId}/upload/${targetKey}`, fd);
         } catch (upErr) {
           console.warn('[createScreen] image upload failed', upErr);
-          flash('Created but image upload failed — try uploading from the card', 'error');
+          flash('Image upload failed — try uploading from the card', 'error');
         }
-        // Re-fetch to pick up the uploaded URL (optimistic state was url: null)
         loadOverlays(false);
       } else if (!newType) {
         loadOverlays(false);
       }
       setShowCreateModal(false);
+      const wasDuplicate = !newType;
       flash(createMode === 'phone_icon'
-        ? (file ? 'Icon created + image uploaded' : 'Icon type created')
-        : (file ? 'Screen created + image uploaded' : 'Screen type created'));
+        ? (wasDuplicate ? 'Icon already existed — image uploaded to it' : (file ? 'Icon created + image uploaded' : 'Icon type created'))
+        : (wasDuplicate ? 'Screen already existed — image uploaded to it' : (file ? 'Screen created + image uploaded' : 'Screen type created')));
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -781,7 +810,19 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (activeScreen.asset_id) {
         await api.put(`/api/v1/ui-overlays/${showId}/category/${activeScreen.asset_id}`, { category });
       }
-      const typeField = category === 'phone_icon' ? 'icon' : 'screen';
+      const typeField = category === 'phone_icon' ? 'icon'
+        : category === 'production' ? 'overlay'
+        : 'screen';
+      // Flipping to 'production' moves the item out of the Phone Hub entirely
+      // (it'll show up in the UI Overlays / ProductionOverlaysTab instead), so
+      // close the detail panel and drop it from local state rather than leaving
+      // a dangling selection.
+      if (category === 'production') {
+        setOverlays(prev => prev.filter(o => o.id !== activeScreen.id));
+        closePanel();
+        flash('Moved to UI Overlays tab');
+        return;
+      }
       setActiveScreen(prev => prev ? { ...prev, category, type: typeField } : prev);
       setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, category, type: typeField } : o));
       flash(category === 'phone_icon' ? 'Set as Icon' : 'Set as Screen');
@@ -852,7 +893,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
 
   // Step-header derived counts. "Screens" excludes phone icons — icons are
   // app tiles that live on a screen, not standalone workspaces.
-  const screenOverlays = overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon');
+  const screenOverlays = overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
   const screensGenerated = screenOverlays.filter(o => o.generated && o.url).length;
   const screensTotal = screenOverlays.length;
   const screensWithZones = screenOverlays.filter(o => {
@@ -998,7 +1039,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             /* ── Inline Zone Editor — replaces PhoneHub so users draw directly on the main display ── */
             (() => {
               // Computed once per render: the list of screens you can edit zones on (has image, not icon).
-              const editableScreens = overlays.filter(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon');
+              const editableScreens = overlays.filter(o => o.generated && o.url && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production');
               const curIdx = editableScreens.findIndex(s => s.id === activeScreen.id);
               const switchToScreen = (target) => {
                 if (!target || target.id === activeScreen.id) return;
@@ -1055,7 +1096,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     screen={activeScreen}
                     screenUrl={activeScreen.url}
                     links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []}
-                    screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
+                    screenTypes={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production')).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
                     generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                     iconOverlays={overlays.filter(o => (o.category === 'phone_icon' || o.category === 'icon' || o.type === 'icon') && o.url)}
                     globalFit={globalFit}
@@ -1067,7 +1108,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     navigationHistory={navHistory}
                     onBack={handleBack}
                     onRequestAiZones={handleRequestAiZones}
-                    allScreens={overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.url).map(o => ({ id: o.id, name: o.name }))}
+                    allScreens={overlays.filter(o => o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production' && o.url).map(o => ({ id: o.id, name: o.name }))}
                     onBulkPlace={handleBulkPlaceZone}
                   />
 
@@ -1225,15 +1266,18 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     </div>
                   )}
 
-                  {/* Type toggle — Screen ↔ Icon. Only meaningful once an asset exists
-                      (placeholder cards don't have a type to change yet). */}
+                  {/* Type toggle — Screen ↔ Icon ↔ UI Overlay. Only meaningful once
+                      an asset exists (placeholder cards don't have a type to change
+                      yet). Flipping to "UI Overlay" re-tags the item as
+                      category='production' so it moves out of the Phone Hub and
+                      into the UI Overlays (ProductionOverlaysTab) view. */}
                   {activeScreen.asset_id && (
                     <div className="editor-section">
                       <div className="editor-section-label">Type</div>
                       <div className="editor-type-toggle">
                         <button
                           onClick={() => handleChangeScreenType('phone')}
-                          className={`editor-type-btn ${activeScreen.category !== 'phone_icon' && activeScreen.category !== 'icon' ? 'active-screen' : ''}`}
+                          className={`editor-type-btn ${activeScreen.category === 'phone' ? 'active-screen' : ''}`}
                         >
                           Screen
                         </button>
@@ -1242,6 +1286,17 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           className={`editor-type-btn ${activeScreen.category === 'phone_icon' || activeScreen.category === 'icon' ? 'active-icon' : ''}`}
                         >
                           Icon
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Move this item to the UI Overlays tab? It will disappear from the Phone Hub.')) {
+                              handleChangeScreenType('production');
+                            }
+                          }}
+                          className={`editor-type-btn ${activeScreen.category === 'production' ? 'active-overlay' : ''}`}
+                          title="Move to UI Overlays tab"
+                        >
+                          UI Overlay
                         </button>
                       </div>
                     </div>
@@ -1396,7 +1451,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
       {previewMode && (
         <PhonePreviewMode
           screens={overlays}
-          initialScreen={overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && o.category !== 'phone_icon' && o.category !== 'icon') || overlays.find(o => o.generated)}
+          initialScreen={overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production') || overlays.find(o => o.generated)}
           onClose={() => setPreviewMode(false)}
           globalFit={globalFit}
           phoneSkin={phoneSkin}
@@ -1419,7 +1474,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           onCreate={handleCreateScreen}
           isIcon={createMode === 'phone_icon'}
           showId={showId}
-          existingScreens={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon'))}
+          existingScreens={overlays.filter(o => o.category === 'phone' || (o.category !== 'phone_icon' && o.category !== 'icon' && o.category !== 'production'))}
         />
       )}
 

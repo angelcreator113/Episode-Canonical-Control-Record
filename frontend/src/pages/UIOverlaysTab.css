@@ -565,7 +565,7 @@
   text-transform: uppercase;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.editor-type-btn:hover:not(.active-screen):not(.active-icon) {
+.editor-type-btn:hover:not(.active-screen):not(.active-icon):not(.active-overlay) {
   border-color: var(--lala-gold-line);
   color: var(--lala-ink);
 }
@@ -578,6 +578,11 @@
   background: var(--lala-gold-soft);
   color: var(--lala-gold);
   border-color: var(--lala-gold);
+}
+.editor-type-btn.active-overlay {
+  background: var(--lala-ink);
+  color: #fff;
+  border-color: var(--lala-ink);
 }
 
 .editor-home-btn {

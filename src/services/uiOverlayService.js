@@ -83,6 +83,24 @@ async function suggestLinkedScreens(showId, iconName, models) {
   const allTypes = await getAllOverlayTypes(showId, models);
   const screens = allTypes.filter(t => t.category === 'phone');
 
+  // Popularity signal: count how many tap zones already target each screen.
+  // Popular targets surface above rarely-linked peers at the same name score.
+  const targetCounts = new Map();
+  try {
+    const [rows] = await models.sequelize.query(
+      `SELECT metadata::text AS metadata_text FROM assets
+       WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND deleted_at IS NULL`,
+      { replacements: { showId } }
+    );
+    for (const row of rows || []) {
+      let meta = {};
+      try { meta = JSON.parse(row.metadata_text || '{}'); } catch { /* noop */ }
+      for (const link of meta.screen_links || []) {
+        if (link.target) targetCounts.set(link.target, (targetCounts.get(link.target) || 0) + 1);
+      }
+    }
+  } catch { /* popularity is a bonus, not a requirement */ }
+
   // Score each screen by relevance to the stripped icon name
   const scored = screens.map(s => {
     const sName = (s.name || '').toLowerCase();
@@ -98,7 +116,9 @@ async function suggestLinkedScreens(showId, iconName, models) {
       const overlap = iconWords.filter(w => nameWords.includes(w)).length;
       if (overlap > 0) score = 30 + (overlap * 20);
     }
-    return { ...s, score };
+    // Small popularity tiebreaker (caps at +10 so a name match still dominates)
+    const popularityBonus = Math.min(targetCounts.get(s.id) || 0, 10);
+    return { ...s, score: score + popularityBonus };
   });
 
   return scored
@@ -278,36 +298,41 @@ async function generateAllOverlays(showId, models, options = {}) {
 
         const lifecycle = overlayType.lifecycle || 'permanent';
         let assetId = null;
+        // Wrap the soft-delete + insert in a transaction so a failed INSERT
+        // doesn't leave the previous asset tombstoned with no replacement —
+        // that was stranding the S3 URL and hiding the image from the UI.
         try {
           const assetUuid = uuidv4();
-          if (lifecycle === 'per_episode' && episodeId) {
+          await models.sequelize.transaction(async (t) => {
+            if (lifecycle === 'per_episode' && episodeId) {
+              await models.sequelize.query(
+                `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
+                 AND episode_id = :episodeId AND metadata::text LIKE :typePattern AND deleted_at IS NULL`,
+                { replacements: { showId, episodeId, typePattern: `%"overlay_type": "${overlayType.id}"%` }, transaction: t }
+              );
+            }
             await models.sequelize.query(
-              `UPDATE assets SET deleted_at = NOW() WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId
-               AND episode_id = :episodeId AND metadata::text LIKE :typePattern AND deleted_at IS NULL`,
-              { replacements: { showId, episodeId, typePattern: `%"overlay_type": "${overlayType.id}"%` } }
+              `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, episode_id, metadata, created_at, updated_at)
+               VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :episodeId, :metadata, NOW(), NOW())`,
+              { replacements: {
+                id: assetUuid,
+                name: `UI Overlay: ${overlayType.name}`,
+                url,
+                showId,
+                episodeId: (lifecycle === 'per_episode' ? episodeId : null),
+                metadata: JSON.stringify({
+                  source: 'ui-overlay-generator',
+                  overlay_type: overlayType.id,
+                  overlay_beat: overlayType.beat,
+                  overlay_category: overlayType.category,
+                  overlay_lifecycle: lifecycle,
+                  episode_id: (lifecycle === 'per_episode' ? episodeId : null),
+                  bg_removed,
+                  generated_at: new Date().toISOString(),
+                }),
+              }, transaction: t }
             );
-          }
-          await models.sequelize.query(
-            `INSERT INTO assets (id, name, asset_type, s3_url_raw, s3_url_processed, show_id, episode_id, metadata, created_at, updated_at)
-             VALUES (:id, :name, 'UI_OVERLAY', :url, :url, :showId, :episodeId, :metadata, NOW(), NOW())`,
-            { replacements: {
-              id: assetUuid,
-              name: `UI Overlay: ${overlayType.name}`,
-              url,
-              showId,
-              episodeId: (lifecycle === 'per_episode' ? episodeId : null),
-              metadata: JSON.stringify({
-                source: 'ui-overlay-generator',
-                overlay_type: overlayType.id,
-                overlay_beat: overlayType.beat,
-                overlay_category: overlayType.category,
-                overlay_lifecycle: lifecycle,
-                episode_id: (lifecycle === 'per_episode' ? episodeId : null),
-                bg_removed,
-                generated_at: new Date().toISOString(),
-              }),
-            } }
-          );
+          });
           assetId = assetUuid;
           console.log(`[UIOverlay] Asset saved: ${overlayType.name} → ${assetUuid}`);
         } catch (assetErr) {

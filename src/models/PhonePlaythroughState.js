@@ -22,6 +22,10 @@ module.exports = (sequelize) => {
     // Every screen the user lands on is pushed here so `visited:<id>`
     // conditions can resolve. Bounded at a reasonable max in the route handler.
     visited_screens: { type: DataTypes.ARRAY(DataTypes.TEXT), allowNull: false, defaultValue: [] },
+    // Mission ids whose reward actions have already fired for this playthrough.
+    // The runtime uses this to avoid re-firing rewards on every tap after a
+    // mission first completes. Mirrors visited_screens in shape.
+    completed_mission_ids: { type: DataTypes.ARRAY(DataTypes.TEXT), allowNull: false, defaultValue: [] },
     last_screen_id: { type: DataTypes.STRING(255), allowNull: true },
     started_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
