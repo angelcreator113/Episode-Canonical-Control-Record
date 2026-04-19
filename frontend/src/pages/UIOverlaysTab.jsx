@@ -326,6 +326,46 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); setGenerating(false); }
   };
 
+  // Shared: auto-place an icon on the home screen when it has both a linked
+  // navigation target (opens_screen) and an image (url). Idempotent — skips
+  // if a zone on the home screen already references this icon's URL. Returns
+  // true when a new zone was placed, false otherwise. Callers refresh state
+  // themselves; this only performs the PUT.
+  const autoPlaceIconOnHome = async (freshOverlays, iconTypeKey) => {
+    if (!showId || !iconTypeKey) return false;
+    const icon = freshOverlays.find(o => o.id === iconTypeKey);
+    if (!icon) return false;
+    const isIcon = icon.category === 'phone_icon' || icon.category === 'icon';
+    if (!isIcon || !icon.url || !icon.opens_screen) return false;
+    const home = freshOverlays.find(o => o.is_home && o.generated && o.url && o.category === 'phone')
+      || freshOverlays.find(o => o.generated && o.url && o.category === 'phone');
+    if (!home?.asset_id) return false;
+    const existingLinks = home.screen_links || home.metadata?.screen_links || [];
+    if (existingLinks.some(l => l.icon_url === icon.url)) return false;
+    const iconLinks = existingLinks.filter(l => l.icon_url);
+    const col = iconLinks.length % 4;
+    const row = Math.floor(iconLinks.length / 4);
+    const newZone = {
+      id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      x: 8 + col * 22,
+      y: Math.max(8, 75 - row * 14),
+      w: 18, h: 10,
+      target: icon.opens_screen,
+      label: icon.name,
+      icon_url: icon.url,
+      icon_urls: [icon.url],
+    };
+    try {
+      await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${home.asset_id}`, {
+        screen_links: [...existingLinks, newZone],
+      });
+      return true;
+    } catch (err) {
+      console.warn('[autoPlaceIconOnHome] failed', err);
+      return false;
+    }
+  };
+
   // Generate one
   const handleGenerateOne = async (overlayId, prompt) => {
     if (!showId) return;
@@ -340,6 +380,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       setOverlays(all);
       const updated = all.find(o => o.id === overlayId);
       if (updated) setActiveScreen(updated);
+      // Newly-generated icons with an opens_screen target haven't been placed
+      // yet; auto-place them on home so creators don't have to remember a
+      // second step after generation.
+      if (await autoPlaceIconOnHome(all, overlayId)) {
+        loadOverlays(false);
+        flash('Generated + placed on home screen');
+      }
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
     setGeneratingId(null);
   };
@@ -365,6 +412,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       setOverlays(all);
       const updated = all.find(o => o.id === activeScreen.id);
       if (updated) setActiveScreen(updated);
+      // Freshly-uploaded icon with a pre-set opens_screen? Place it on home.
+      if (await autoPlaceIconOnHome(all, activeScreen.id)) {
+        loadOverlays(false);
+        flash('Uploaded + placed on home screen');
+      }
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -517,48 +569,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           console.warn('[createScreen] image upload failed', upErr);
           flash('Created, but the image upload failed — upload from the card', 'error');
         }
-        // Refetch to surface the newly-uploaded asset URL on the icon.
+        // Refetch to surface the newly-uploaded asset URL on the icon, then
+        // auto-place on home if this is a linked icon.
         const fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => []);
         setOverlays(fresh);
-        // Auto-place the icon on the home screen when creating with a linked
-        // target. Addresses the confusion around "I picked Opens Screen but
-        // nothing happened" — we treat Opens Screen as the creator's intent
-        // to actually wire up the nav button, not just store metadata. The
-        // creator can reposition or remove the zone in Edit Tap Zones.
-        if (createMode === 'phone_icon' && form.opens_screen) {
-          const newIcon = fresh.find(o => o.id === newType.type_key);
-          const home = fresh.find(o => o.is_home && o.generated && o.url && o.category === 'phone')
-            || fresh.find(o => o.generated && o.url && o.category === 'phone');
-          if (newIcon?.url && home?.asset_id) {
-            const existingLinks = home.screen_links || home.metadata?.screen_links || [];
-            // Idempotent guard — don't duplicate if the icon is already there.
-            if (!existingLinks.some(l => l.icon_url === newIcon.url)) {
-              // Grid placement: 4 columns, rows stack upward from the dock.
-              // Creator can drag to reposition later.
-              const iconLinks = existingLinks.filter(l => l.icon_url);
-              const col = iconLinks.length % 4;
-              const row = Math.floor(iconLinks.length / 4);
-              const newZone = {
-                id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-                x: 8 + col * 22,
-                y: Math.max(8, 75 - row * 14),
-                w: 18, h: 10,
-                target: newIcon.opens_screen,
-                label: newIcon.name,
-                icon_url: newIcon.url,
-                icon_urls: [newIcon.url],
-              };
-              try {
-                await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${home.asset_id}`, {
-                  screen_links: [...existingLinks, newZone],
-                });
-                loadOverlays(false);
-                autoPlaced = true;
-              } catch (placeErr) {
-                console.warn('[createScreen] auto-place failed', placeErr);
-              }
-            }
-          }
+        if (createMode === 'phone_icon') {
+          autoPlaced = await autoPlaceIconOnHome(fresh, newType.type_key);
+          if (autoPlaced) loadOverlays(false);
         }
       }
       setShowCreateModal(false);
@@ -899,7 +916,21 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       await api.put(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`, { opens_screen: targetKey || null });
       setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, opens_screen: targetKey || null } : o));
       setActiveScreen(prev => prev ? { ...prev, opens_screen: targetKey || null } : prev);
-      flash(targetKey ? 'Opens screen updated' : 'Opens screen cleared');
+      // Auto-place if this is an icon that just got a target — mirrors the
+      // behaviour of the Create modal so setting the link post-hoc still
+      // produces a tap zone on the home screen.
+      let autoPlaced = false;
+      if (targetKey && (activeScreen.category === 'phone_icon' || activeScreen.category === 'icon') && activeScreen.url) {
+        const fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => []);
+        if (fresh.length) setOverlays(fresh);
+        autoPlaced = await autoPlaceIconOnHome(fresh.length ? fresh : overlays, activeScreen.id);
+        if (autoPlaced) loadOverlays(false);
+      }
+      flash(
+        autoPlaced ? `Opens screen updated + placed on home screen`
+        : targetKey ? 'Opens screen updated'
+        : 'Opens screen cleared'
+      );
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
