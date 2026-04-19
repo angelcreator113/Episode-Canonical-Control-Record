@@ -51,6 +51,14 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
+// Postgres 42703 = column does not exist; surfaces a clearer 503 so the UI
+// can tell creators "this environment needs a DB migration" rather than a
+// generic 500. Covers pre-migration state where reward_actions isn't in the
+// table yet but the client already POSTs it via validateMissionPayload.
+function missingColumnError(err) {
+  return err?.parent?.code === '42703' || /column.*does not exist/i.test(err?.message || '');
+}
+
 // POST /api/v1/ui-overlays/:showId/missions
 router.post('/', optionalAuth, async (req, res) => {
   try {
@@ -64,6 +72,9 @@ router.post('/', optionalAuth, async (req, res) => {
     return res.status(201).json({ success: true, mission });
   } catch (err) {
     console.error('[phoneMissionRoutes] POST error:', err);
+    if (missingColumnError(err)) {
+      return res.status(503).json({ success: false, error: 'Mission schema is out of date on this environment — run pending migrations (reward_actions column).' });
+    }
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -84,6 +95,9 @@ router.put('/:id', optionalAuth, async (req, res) => {
     return res.json({ success: true, mission });
   } catch (err) {
     console.error('[phoneMissionRoutes] PUT error:', err);
+    if (missingColumnError(err)) {
+      return res.status(503).json({ success: false, error: 'Mission schema is out of date on this environment — run pending migrations (reward_actions column).' });
+    }
     return res.status(500).json({ success: false, error: err.message });
   }
 });

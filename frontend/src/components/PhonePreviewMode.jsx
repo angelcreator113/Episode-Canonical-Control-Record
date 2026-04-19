@@ -250,7 +250,18 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
   // Filter zones through the evaluator — locked zones don't render at all in player view
   // (they're invisible until their condition becomes true). Editor "author view" would
   // show them dimmed; that's a PR2 concern.
-  const allLinks = getLinks(activeScreen);
+  // Also merge in the home screen's `persistent` links so pinned icons show on every
+  // screen — PhoneHub does this for authors; without it here the player would lose
+  // the nav bar / persistent controls once they leave the home screen.
+  const homeScreen = useMemo(() => {
+    const generated = screens.filter(s => s.generated && s.url);
+    return generated.find(s => s.is_home) || generated[0] || null;
+  }, [screens]);
+  const persistentLinks = useMemo(() => {
+    if (!homeScreen || homeScreen.id === activeScreen?.id) return [];
+    return getLinks(homeScreen).filter(l => l.persistent && l.icon_url);
+  }, [homeScreen, activeScreen]);
+  const allLinks = [...getLinks(activeScreen), ...persistentLinks];
   const { visible: links } = filterZones(allLinks, evalContext);
 
   const slideTransform = slideDir === 'left'

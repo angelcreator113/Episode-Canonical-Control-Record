@@ -33,8 +33,16 @@ const PHONE_SKINS = [
 
 export { PHONE_SKINS, getScreenImageStyle };
 
-// Build image style from screen's fit settings (metadata.image_fit)
-// globalFit is the device-level default applied when screen has no per-screen override
+// Build image style from screen's fit settings.
+//
+// Cascade (highest precedence first, same rule applied in editor + player):
+//   1. screen.image_fit or screen.metadata.image_fit — per-screen override set
+//      by the creator in the Image Fit tab of the detail panel.
+//   2. globalFit — device-level default stored on the show via
+//      /api/v1/ui-overlays/:showId/frame and reapplied by PhonePreviewMode and
+//      PhoneHub via the `globalFit` prop.
+//   3. Built-in defaults: mode='cover', scale=100, offsetX/Y=0.
+// Any field missing at a given tier falls through to the next tier.
 function getScreenImageStyle(screen, globalFit) {
   const screenFit = screen?.image_fit || screen?.metadata?.image_fit;
   const fit = screenFit || globalFit || {};

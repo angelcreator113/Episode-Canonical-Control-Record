@@ -83,6 +83,24 @@ async function suggestLinkedScreens(showId, iconName, models) {
   const allTypes = await getAllOverlayTypes(showId, models);
   const screens = allTypes.filter(t => t.category === 'phone');
 
+  // Popularity signal: count how many tap zones already target each screen.
+  // Popular targets surface above rarely-linked peers at the same name score.
+  const targetCounts = new Map();
+  try {
+    const [rows] = await models.sequelize.query(
+      `SELECT metadata::text AS metadata_text FROM assets
+       WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND deleted_at IS NULL`,
+      { replacements: { showId } }
+    );
+    for (const row of rows || []) {
+      let meta = {};
+      try { meta = JSON.parse(row.metadata_text || '{}'); } catch { /* noop */ }
+      for (const link of meta.screen_links || []) {
+        if (link.target) targetCounts.set(link.target, (targetCounts.get(link.target) || 0) + 1);
+      }
+    }
+  } catch { /* popularity is a bonus, not a requirement */ }
+
   // Score each screen by relevance to the stripped icon name
   const scored = screens.map(s => {
     const sName = (s.name || '').toLowerCase();
@@ -98,7 +116,9 @@ async function suggestLinkedScreens(showId, iconName, models) {
       const overlap = iconWords.filter(w => nameWords.includes(w)).length;
       if (overlap > 0) score = 30 + (overlap * 20);
     }
-    return { ...s, score };
+    // Small popularity tiebreaker (caps at +10 so a name match still dominates)
+    const popularityBonus = Math.min(targetCounts.get(s.id) || 0, 10);
+    return { ...s, score: score + popularityBonus };
   });
 
   return scored

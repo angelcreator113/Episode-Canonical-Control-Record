@@ -53,16 +53,27 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
   }
 
   // ── Peer screens (legal navigate targets) ─────────────────────────────────
+  // UI_OVERLAY assets don't set the top-level `category` column — their
+  // phone-family category (phone, phone_icon, icon, production) lives in
+  // metadata.overlay_category. Filter on asset_type + parse metadata so the
+  // AI receives every peer with its true category, letting it propose
+  // navigate targets with the correct type awareness (e.g. don't route from
+  // a phone screen into a production overlay).
   const [peerRows] = await sequelize.query(
-    `SELECT id, name, category FROM assets
+    `SELECT id, name, metadata::text AS metadata_text FROM assets
      WHERE show_id = :showId
        AND deleted_at IS NULL
-       AND category IN ('phone', 'phone_icon')
+       AND asset_type = 'UI_OVERLAY'
        ${assetId ? 'AND id <> :assetId' : ''}
      ORDER BY name ASC
      LIMIT 40`,
     { replacements: assetId ? { showId, assetId } : { showId } }
   );
+  const peers = (peerRows || []).map(r => {
+    let meta = {};
+    try { meta = JSON.parse(r.metadata_text || '{}'); } catch { /* noop */ }
+    return { id: r.id, name: r.name, category: meta.overlay_category || 'phone' };
+  });
 
   // ── Characters — name + role + metadata-driven voice ────────────────────
   const [charRows] = await sequelize.query(
@@ -167,7 +178,7 @@ async function buildPhoneContext({ showId, episodeId, assetId }) {
       style_prefix: show.style_prefix,
     } : null,
     screen,
-    peer_screens: (peerRows || []).map(s => ({ id: s.id, name: s.name, category: s.category })),
+    peer_screens: peers,
     characters,
     episode,
     recent_beats: beats,

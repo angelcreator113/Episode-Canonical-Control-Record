@@ -581,9 +581,11 @@ router.put('/:showId/screen-links/:assetId', optionalAuth, async (req, res) => {
 
     // Validate any conditions/actions before persisting — rejects unknown action types
     // and malformed rules. Zones without conditions/actions pass through untouched.
-    const { error, value: validatedLinks } = validateScreenLinks(screen_links);
+    // zone_errors (when present) carries per-zone detail so the UI can point at the
+    // specific zone that failed instead of surfacing one flat message.
+    const { error, value: validatedLinks, zone_errors } = validateScreenLinks(screen_links);
     if (error) {
-      return res.status(400).json({ success: false, error });
+      return res.status(400).json({ success: false, error, zone_errors: zone_errors || null });
     }
 
     // Merge screen_links into existing metadata
@@ -764,6 +766,19 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
       ? prompt
       : `Phone ${category === 'phone_icon' || category === 'icon' ? 'icon' : 'screen'} for "${name}".`;
 
+    // Guard against dangling `opens_screen` references — only accept keys that
+    // correspond to a live overlay type on the same show. Null/empty is fine
+    // (icon with no navigation target).
+    if (opens_screen) {
+      const [[row]] = await models.sequelize.query(
+        `SELECT 1 FROM ui_overlay_types WHERE show_id = :showId AND type_key = :key AND deleted_at IS NULL LIMIT 1`,
+        { replacements: { showId, key: opens_screen } }
+      );
+      if (!row) {
+        return res.status(400).json({ success: false, error: `opens_screen "${opens_screen}" does not match any screen on this show` });
+      }
+    }
+
     // Generate type_key from name if not provided
     const key = type_key || name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
 
@@ -821,7 +836,20 @@ router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
     if (description !== undefined) { sets.push('description = :description'); replacements.description = description; }
     if (prompt !== undefined) { sets.push('prompt = :prompt'); replacements.prompt = prompt; }
     if (sort_order !== undefined) { sets.push('sort_order = :sortOrder'); replacements.sortOrder = sort_order; }
-    if (opens_screen !== undefined) { sets.push('opens_screen = :opensScreen'); replacements.opensScreen = opens_screen; }
+    if (opens_screen !== undefined) {
+      // FK-like validation: only accept keys that live on this show. Null/empty
+      // clears the link. See the POST handler for the same guard.
+      if (opens_screen) {
+        const [[row]] = await models.sequelize.query(
+          `SELECT 1 FROM ui_overlay_types WHERE show_id = :showId AND type_key = :key AND deleted_at IS NULL LIMIT 1`,
+          { replacements: { showId: req.params.showId, key: opens_screen } }
+        );
+        if (!row) {
+          return res.status(400).json({ success: false, error: `opens_screen "${opens_screen}" does not match any screen on this show` });
+        }
+      }
+      sets.push('opens_screen = :opensScreen'); replacements.opensScreen = opens_screen || null;
+    }
     if (is_home !== undefined) {
       sets.push('is_home = :isHome'); replacements.isHome = !!is_home;
       // If marking as home, unset any existing home screen first

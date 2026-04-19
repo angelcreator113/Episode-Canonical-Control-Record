@@ -108,10 +108,23 @@ function validateZoneRules(zone) {
 function validateScreenLinks(links) {
   if (!Array.isArray(links)) return { error: 'screen_links must be an array' };
   const out = [];
-  for (const zone of links) {
+  const zoneErrors = [];
+  links.forEach((zone, index) => {
     const { error, value } = validateZoneRules(zone);
-    if (error) return { error };
+    if (error) {
+      zoneErrors.push({ zone_id: zone?.id || null, index, error });
+      return;
+    }
     out.push({ ...zone, ...value });
+  });
+  if (zoneErrors.length) {
+    // Keep the top-level `error` string for back-compat with callers that only
+    // read that field; surface the per-zone detail under `zone_errors` so the
+    // UI can highlight exactly which zone failed instead of re-running 16 saves.
+    return {
+      error: `Validation failed on ${zoneErrors.length} zone${zoneErrors.length === 1 ? '' : 's'}: ${zoneErrors.map(z => z.zone_id || `#${z.index}`).join(', ')}`,
+      zone_errors: zoneErrors,
+    };
   }
   return { value: out };
 }
