@@ -71,10 +71,10 @@ const actionSchema = Joi.object({ type: Joi.string().required() })
   .custom((value, helpers) => {
     const schema = ACTION_SCHEMAS[value.type];
     if (!schema) {
-      return helpers.error('any.invalid', { message: `action type "${value.type}" not in allowlist` });
+      return helpers.message(`action type "${value.type}" not in allowlist`);
     }
     const { error, value: clean } = schema.validate(value, { abortEarly: false, stripUnknown: false });
-    if (error) return helpers.error('any.invalid', { message: error.message });
+    if (error) return helpers.message(error.message);
     return clean;
   });
 
@@ -121,8 +121,13 @@ function validateScreenLinks(links) {
     // Keep the top-level `error` string for back-compat with callers that only
     // read that field; surface the per-zone detail under `zone_errors` so the
     // UI can highlight exactly which zone failed instead of re-running 16 saves.
+    // When only a single zone errored, include its underlying message so callers
+    // that only read `error` still get actionable info instead of a bare ID.
+    const zoneIds = zoneErrors.map(z => z.zone_id || `#${z.index}`).join(', ');
+    const noun = zoneErrors.length === 1 ? 'zone' : 'zones';
+    const detail = zoneErrors.length === 1 ? ` — ${zoneErrors[0].error}` : '';
     return {
-      error: `Validation failed on ${zoneErrors.length} zone${zoneErrors.length === 1 ? '' : 's'}: ${zoneErrors.map(z => z.zone_id || `#${z.index}`).join(', ')}`,
+      error: `Validation failed on ${zoneErrors.length} ${noun}: ${zoneIds}${detail}`,
       zone_errors: zoneErrors,
     };
   }
