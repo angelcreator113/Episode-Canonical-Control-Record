@@ -122,9 +122,18 @@ router.post('/analyze-image', optionalAuth, upload.single('image'), async (req, 
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    // Convert buffer to base64
-    const base64 = req.file.buffer.toString('base64');
-    const mediaType = req.file.mimetype || 'image/jpeg';
+    // Resize + recompress before base64 encoding. Anthropic's vision API rejects
+    // base64 images >5 MB, and phone photos from users commonly exceed that raw.
+    // 1568px on the long side matches Anthropic's recommended max for vision and
+    // keeps JPEG quality 85 under ~500 KB for typical garment shots.
+    const sharp = require('sharp');
+    const processed = await sharp(req.file.buffer)
+      .rotate()
+      .resize(1568, 1568, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    const base64 = processed.toString('base64');
+    const mediaType = 'image/jpeg';
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
