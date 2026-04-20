@@ -30,10 +30,12 @@ const ShowManagement = lazy(() => import('./pages/ShowManagement'));
 const ShowDetail = lazy(() => import('./pages/ShowDetail'));
 const CreateShow = lazy(() => import('./pages/CreateShow'));
 const EditShow = lazy(() => import('./pages/EditShow'));
-// Wardrobe authoring lives in WorldAdmin's wardrobe tab — the standalone
-// Wardrobe / WardrobeBrowser / UniverseWardrobePage / analytics pages were
-// orphaned (redirected to `/` via the fallback routes below) and have been
-// removed. OutfitCalendar is still reachable via /wardrobe/calendar.
+// Wardrobe authoring lives in WorldAdmin's wardrobe tab — most of the old
+// Wardrobe / UniverseWardrobePage / analytics pages were orphaned and have
+// been removed. WardrobeBrowser is restored temporarily so we can compare
+// it side-by-side against the WorldAdmin tab and decide what (if anything)
+// is still missing before deleting for real.
+const WardrobeBrowser = lazy(() => import('./pages/WardrobeBrowser'));
 const OutfitCalendar = lazy(() => import('./pages/OutfitCalendar'));
 const WardrobeLibraryUpload = lazy(() => import('./pages/WardrobeLibraryUpload'));
 const WardrobeLibraryDetail = lazy(() => import('./pages/WardrobeLibraryDetail'));
@@ -369,7 +371,9 @@ function AppContent() {
           {/* ===== PRODUCTION ROUTES ===== */}
           
           {/* Wardrobe */}
-          <Route path="/wardrobe" element={<Navigate to="/" replace />} />
+          {/* Temporary — restored so we can compare against WorldAdmin's wardrobe
+              tab and figure out what (if anything) needs porting before deleting. */}
+          <Route path="/wardrobe" element={<WardrobeBrowser mode="gallery" />} />
           <Route path="/wardrobe/analytics" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe/outfits" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe/calendar" element={<OutfitCalendar />} />
