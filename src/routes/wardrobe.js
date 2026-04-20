@@ -161,6 +161,9 @@ router.put('/:id', upload.single('image'), asyncHandler(wardrobeController.updat
 // Process background removal for wardrobe item
 router.post('/:id/process-background', asyncHandler(wardrobeController.processBackgroundRemoval));
 
+// AI-regenerate as a studio product shot (Flux Kontext img2img)
+router.post('/:id/regenerate-product-shot', asyncHandler(wardrobeController.regenerateProductShot));
+
 // AI upscale wardrobe image (4x via Real-ESRGAN)
 router.post('/:id/upscale', asyncHandler(wardrobeController.aiUpscaleItem));
 
