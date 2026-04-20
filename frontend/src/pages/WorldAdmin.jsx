@@ -4288,11 +4288,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
                     {/* Image - click for lightbox */}
                     <div 
-                      style={{ width: '100%', aspectRatio: '1', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}
+                      style={{ width: '100%', aspectRatio: '3/4', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}
                       onClick={(e) => { if (imgUrl) { e.stopPropagation(); setLightboxItem(item); } }}
                     >
                       {imgUrl ? (
-                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#f8fafc' }}
                           onError={e => { e.target.style.display = 'none'; e.target.nextSibling && (e.target.nextSibling.style.display = 'flex'); }} />
                       ) : null}
                       <div style={{ display: imgUrl ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: 48, color: '#cbd5e1' }}>
