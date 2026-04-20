@@ -1,5 +1,7 @@
 'use strict';
 
+const { SLOT_KEYS, SLOT_DEFS, groupItemsBySlot } = require('../utils/wardrobeSlots');
+
 /**
  * Wardrobe Intelligence Service
  *
@@ -16,6 +18,92 @@
 // ── 1. OUTFIT MATCH SCORING ─────────────────────────────────────────────────
 // Scores how well an outfit matches an event — NOT a filter, a narrative signal
 
+const TIER_VALUES = { basic: 1, mid: 2, luxury: 3, elite: 4 };
+const TIER_LABELS = { 1: 'basic', 2: 'mid', 3: 'luxury', 4: 'elite' };
+
+/**
+ * Score a single slot against an event. Returns { match, status, reason } where
+ * match is 0–100 and status is one of: 'empty' (nothing in the slot), 'low'
+ * (<45), 'ok' (45–74), 'good' (75+). The reason is a short string the UI can
+ * render directly — keeps the rendering code dumb.
+ *
+ * Slot scoring works on the same prestige-expected-tier model as the overall
+ * score, but applied to THIS slot's items only, so creators can see exactly
+ * which slot is dragging the total down. Multi-item slots (jewelry, access-
+ * ories) average their pieces and add a small coordination bonus when 2+
+ * pieces share at least one aesthetic tag.
+ */
+function scoreSingleSlot(slotKey, items, event, expectedTier) {
+  const def = SLOT_DEFS[slotKey];
+  if (!items || items.length === 0) {
+    return {
+      slot: slotKey,
+      label: def.label,
+      icon: def.icon,
+      required: def.required,
+      items: [],
+      match: 0,
+      status: 'empty',
+      reason: def.required ? `No ${def.label.toLowerCase()} selected — required for this event.` : null,
+    };
+  }
+
+  // Average tier across the items in this slot.
+  const tiers = items.map(i => TIER_VALUES[i.tier] || 2);
+  const avgTier = tiers.reduce((a, b) => a + b, 0) / tiers.length;
+  const gap = avgTier - expectedTier;
+
+  let match;
+  let reason;
+  if (gap >= 1.5) {
+    match = 75;
+    reason = `Tier is above the event — ${def.label} reads as overdressed.`;
+  } else if (Math.abs(gap) <= 0.5) {
+    match = 92;
+    reason = `Tier nails the event's prestige.`;
+  } else if (gap >= -1) {
+    match = 65;
+    reason = `Slightly under the event's tier — works but not hero-level.`;
+  } else {
+    match = 30;
+    reason = `Tier is well under what the event expects (need ${TIER_LABELS[Math.round(expectedTier)] || 'higher'}).`;
+  }
+
+  // Host-brand bonus — wearing the host brand on the key piece is a statement.
+  if (event && event.host_brand && items.some(i => i.brand === event.host_brand)) {
+    match = Math.min(100, match + 8);
+    reason = `${reason} Wearing ${event.host_brand} to their own event.`.trim();
+  }
+
+  // Multi-item coordination — reward jewelry/accessories that share tags.
+  if (def.multi && items.length >= 2) {
+    const tagSets = items.map(i => new Set((i.aesthetic_tags || []).map(t => String(t).toLowerCase())));
+    const shared = [...tagSets[0]].filter(t => tagSets.every(s => s.has(t)));
+    if (shared.length > 0) {
+      match = Math.min(100, match + 4);
+      reason = `${reason} Pieces coordinate on ${shared.slice(0, 2).join('/')}.`.trim();
+    }
+  }
+
+  // Borrowed/rented piece flag — doesn't tank the score, but surfaces.
+  const borrowed = items.find(i => i.acquisition_type === 'borrowed' || i.acquisition_type === 'rented');
+  if (borrowed) {
+    reason = `${reason} (${borrowed.name} is ${borrowed.acquisition_type}.)`.trim();
+  }
+
+  const status = match >= 75 ? 'good' : match >= 45 ? 'ok' : 'low';
+  return {
+    slot: slotKey,
+    label: def.label,
+    icon: def.icon,
+    required: def.required,
+    items: items.map(i => ({ id: i.id, name: i.name, tier: i.tier, brand: i.brand })),
+    match: Math.round(match),
+    status,
+    reason,
+  };
+}
+
 function scoreOutfitForEvent(wardrobeItems, event) {
   if (!wardrobeItems?.length || !event) return null;
 
@@ -23,7 +111,6 @@ function scoreOutfitForEvent(wardrobeItems, event) {
   const _eventType = event.event_type || 'invite';
 
   // Calculate outfit tier (average of all pieces)
-  const TIER_VALUES = { basic: 1, mid: 2, luxury: 3, elite: 4 };
   const tierSum = wardrobeItems.reduce((s, i) => s + (TIER_VALUES[i.tier] || 2), 0);
   const avgTier = tierSum / wardrobeItems.length;
 
@@ -73,6 +160,18 @@ function scoreOutfitForEvent(wardrobeItems, event) {
     signals.push({ type: 'borrowed', text: 'Some pieces are borrowed — she\'s faking it', narrative: 'vulnerability' });
   }
 
+  // ── Per-slot breakdown ─────────────────────────────────────────────
+  // Bucket the items into our 5 UI slots and score each one against the
+  // event independently. The aggregate `match_score` above stays the source
+  // of truth for narrative mood / signals; the `slots` array is purely a
+  // "where's the weak link?" readout that the outfit-picker modal renders
+  // as a row per slot.
+  const bySlot = groupItemsBySlot(wardrobeItems);
+  const slots = SLOT_KEYS.map(key => scoreSingleSlot(key, bySlot[key] || [], event, expectedTier));
+  const unassigned = bySlot.__unassigned && bySlot.__unassigned.length
+    ? bySlot.__unassigned.map(i => ({ id: i.id, name: i.name, clothing_category: i.clothing_category }))
+    : [];
+
   return {
     match_score: Math.max(0, Math.min(100, matchScore)),
     outfit_tier: avgTier,
@@ -83,6 +182,11 @@ function scoreOutfitForEvent(wardrobeItems, event) {
     brands,
     piece_count: wardrobeItems.length,
     narrative_mood: tierGap < -1 ? 'anxiety' : tierGap > 1 ? 'overcompensation' : Math.abs(tierGap) <= 0.5 ? 'confidence' : 'tension',
+    // New in the 5-slot redesign. Clients can render the breakdown without
+    // duplicating the tier-gap logic; legacy clients that only read
+    // match_score keep working.
+    slots,
+    unassigned,
   };
 }
 
