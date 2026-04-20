@@ -139,6 +139,7 @@ function WorldAdmin() {
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
   const [lightboxItem, setLightboxItem] = useState(null);  // For fullscreen image view
+  const [regeneratingItemId, setRegeneratingItemId] = useState(null);  // AI product-shot regeneration in flight
   const [selectedWardrobeIds, setSelectedWardrobeIds] = useState(new Set());  // For bulk selection
   const [overlayData, setOverlayData] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
@@ -3961,6 +3962,52 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           });
         };
 
+        // Kick off an AI regeneration of the item as a clean studio product
+        // shot (Flux Kontext img2img). Preserves the original image; the
+        // regenerated variant lands on s3_url_regenerated and the grid/
+        // lightbox prefer it automatically once present.
+        const handleRegenerateProductShot = async (item, e) => {
+          if (e) e.stopPropagation();
+          if (regeneratingItemId) return;
+          if (!confirm(
+            `Regenerate "${item.name}" as a studio product shot?\n\n` +
+            `Uses AI image-to-image (~$0.04). The original photo is preserved; ` +
+            `the polished version replaces the visible card image when ready.`
+          )) return;
+
+          setRegeneratingItemId(item.id);
+          try {
+            const res = await fetch(`/api/v1/wardrobe/${item.id}/regenerate-product-shot`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.error || err.message || `HTTP ${res.status}`);
+            }
+            const result = await res.json();
+            const newUrl = result.data?.s3_url_regenerated;
+            if (!newUrl) throw new Error('No regenerated URL returned');
+
+            // Reflect in the grid immediately.
+            setWardrobeItems(prev => prev.map(i =>
+              i.id === item.id
+                ? { ...i, s3_url_regenerated: newUrl, regeneration_status: 'success' }
+                : i
+            ));
+            // And in the open lightbox if it's still this item.
+            setLightboxItem(prev => (prev && prev.id === item.id)
+              ? { ...prev, s3_url_regenerated: newUrl, regeneration_status: 'success' }
+              : prev);
+
+            alert('Product shot regenerated!');
+          } catch (err) {
+            alert(`Regeneration failed: ${err.message}`);
+          } finally {
+            setRegeneratingItemId(null);
+          }
+        };
+
         const saveWardrobeItem = async () => {
           if (!editingWardrobeItem) return;
           setSavingWardrobe(true); setError(null);
@@ -4239,7 +4286,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* Item Grid — visual cards with thumbnails */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
               {filteredItems.map(item => {
-                const imgUrl = item.s3_url_processed || item.s3_url || item.thumbnail_url || item.image_url;
+                const imgUrl = item.s3_url_regenerated || item.s3_url_processed || item.s3_url || item.thumbnail_url || item.image_url;
                 const itemType = item.clothing_category || item.itemType || item.item_type || '';
                 const tags = Array.isArray(item.tags) ? item.tags : [];
                 const isEditing = editingWardrobeItem?.id === item.id;
@@ -4506,7 +4553,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
             {/* ── Lightbox Modal ── */}
             {lightboxItem && (() => {
-              const imgUrl = lightboxItem.s3_url_processed || lightboxItem.s3_url || lightboxItem.image_url;
+              // AI-regenerated product shot wins over background-removed wins
+              // over raw upload — matches the resolution order used elsewhere
+              // in the wardrobe UI.
+              const imgUrl = lightboxItem.s3_url_regenerated || lightboxItem.s3_url_processed || lightboxItem.s3_url || lightboxItem.image_url;
               const itemType = lightboxItem.clothing_category || lightboxItem.itemType || lightboxItem.item_type || '';
               const colorHex = getColorHex(lightboxItem.color);
               return (
@@ -4542,9 +4592,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           {lightboxItem.price && <span style={{ color: '#16a34a', fontWeight: 600 }}> · ${parseFloat(lightboxItem.price).toFixed(0)}</span>}
                         </div>
                       </div>
-                      <button 
-                        onClick={() => { setLightboxItem(null); openEditItem(lightboxItem); }} 
-                        style={{ marginLeft: 'auto', padding: '6px 14px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                      <button
+                        onClick={() => handleRegenerateProductShot(lightboxItem)}
+                        disabled={regeneratingItemId === lightboxItem.id}
+                        title="AI image-to-image — swaps backdrop, removes hangers/dress-form residue, simulates invisible mannequin (~$0.04)"
+                        style={{ marginLeft: 'auto', padding: '6px 14px', background: regeneratingItemId === lightboxItem.id ? '#94a3b8' : '#db2777', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: regeneratingItemId === lightboxItem.id ? 'wait' : 'pointer' }}
+                      >{regeneratingItemId === lightboxItem.id ? 'Regenerating…' : '🎨 Regenerate Product Shot'}</button>
+                      <button
+                        onClick={() => { setLightboxItem(null); openEditItem(lightboxItem); }}
+                        style={{ padding: '6px 14px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                       >Edit Item</button>
                     </div>
                   </div>
