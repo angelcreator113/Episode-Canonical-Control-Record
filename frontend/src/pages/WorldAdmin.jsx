@@ -163,9 +163,17 @@ function WorldAdmin() {
   const [outfitScore, setOutfitScore] = useState(null);
   const [wardrobeUploading, setWardrobeUploading] = useState(false);
   const [wardrobeAnalyzing, setWardrobeAnalyzing] = useState(false);
+  // Inline error banner for the auto-fill button. Replaces the old alert()
+  // which users were dismissing without reading, making failures look silent.
+  const [wardrobeAutoFillError, setWardrobeAutoFillError] = useState(null);
   const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
   const [wardrobeUploadPreview, setWardrobeUploadPreview] = useState(null);
   const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false });
+  // Reset the auto-fill error whenever the modal is closed or the file is
+  // swapped out — stale error text against a different image would be confusing.
+  useEffect(() => {
+    if (!showWardrobeUpload || !wardrobeUploadFile) setWardrobeAutoFillError(null);
+  }, [showWardrobeUpload, wardrobeUploadFile]);
   // Sort order for the wardrobe grid. Mirrors the options previously in
   // WardrobeBrowser so consolidating the upload path doesn't drop UX.
   const [wardrobeSort, setWardrobeSort] = useState('recent'); // recent | name | price_asc | price_desc | most_used | last_used
@@ -4871,10 +4879,25 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <input id="wardrobe-upload-input" type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { setWardrobeUploadFile(f); setWardrobeUploadPreview(URL.createObjectURL(f)); } }} />
                   </div>
 
-                  {/* AI auto-fill */}
+                  {/* AI auto-fill — inline error banner sits right above the button
+                      so failures are visible without a modal. Common cause on dev:
+                      ANTHROPIC_API_KEY unset → server returns 503; we annotate that
+                      case so users don't have to dig through network tab. */}
+                  {wardrobeAutoFillError && (
+                    <div style={{ marginBottom: 10, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#991b1b', lineHeight: 1.5 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 2 }}>Auto-fill failed</div>
+                      <div>{wardrobeAutoFillError}</div>
+                      {/ANTHROPIC_API_KEY/i.test(wardrobeAutoFillError) && (
+                        <div style={{ marginTop: 4, fontSize: 11, color: '#7f1d1d' }}>
+                          The dev server is missing an Anthropic API key. Ask an admin to set <code>ANTHROPIC_API_KEY</code> in EC2 .env and restart PM2.
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {wardrobeUploadFile && (
                     <button type="button" disabled={wardrobeAnalyzing} onClick={async () => {
                       setWardrobeAnalyzing(true);
+                      setWardrobeAutoFillError(null);
                       try {
                         const fd = new FormData(); fd.append('image', wardrobeUploadFile);
                         const token = localStorage.getItem('authToken') || localStorage.getItem('token');
@@ -4883,7 +4906,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         if (!res.ok || !data.success || !data.data) {
                           const msg = data.error || `${res.status} ${res.statusText || 'request failed'}`;
                           console.error('[Auto-fill] backend rejected:', msg, data);
-                          alert(`Auto-fill failed: ${msg}`);
+                          setWardrobeAutoFillError(msg);
                           return;
                         }
                         const ai = data.data;
@@ -4906,7 +4929,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         }));
                       } catch (err) {
                         console.error('[Auto-fill] threw:', err);
-                        alert(`Auto-fill failed: ${err.message || err}`);
+                        setWardrobeAutoFillError(err.message || String(err));
                       } finally {
                         setWardrobeAnalyzing(false);
                       }
