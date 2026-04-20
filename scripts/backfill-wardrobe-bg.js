@@ -41,6 +41,7 @@ const {
 
 const { models, sequelize } = require('../src/models');
 const { Wardrobe } = models;
+const { applyRemoveBgParams } = require('../src/services/removeBgParams');
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const REMOVEBG_KEY =
@@ -111,7 +112,7 @@ async function removeBackground(item) {
       filename: `${item.id}.jpg`,
       contentType: 'image/jpeg',
     });
-    fd.append('size', 'auto');
+    applyRemoveBgParams(fd, item.clothing_category);
     return fd;
   };
 

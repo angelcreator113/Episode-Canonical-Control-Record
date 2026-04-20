@@ -66,6 +66,29 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: 'Thumbnail image URL',
       },
+      s3_key_regenerated: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        comment: 'S3 key for AI-regenerated product-shot variant',
+      },
+      s3_url_regenerated: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Full S3 URL for AI-regenerated product-shot variant',
+      },
+      regeneration_status: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        comment: 'pending | success | failed',
+      },
+      regeneration_error: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      regenerated_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
 
       // Shopping / sourcing
       brand: {
