@@ -19,6 +19,7 @@ import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
 import { InvitationButton, InvitationStyleFields } from '../components/InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
@@ -37,6 +38,9 @@ const EVENT_TYPES = ['invite', 'upgrade', 'guest', 'fail_test', 'deliverable', '
 const BIAS_OPTIONS = ['balanced', 'glam', 'cozy', 'couture', 'trendy', 'romantic'];
 const WARDROBE_TIER_COLORS = { basic: '#94a3b8', mid: '#6366f1', luxury: '#eab308', elite: '#ec4899' };
 const WARDROBE_TIER_ICONS = { basic: '👟', mid: '👠', luxury: '💎', elite: '👑' };
+// Legacy atomic list — kept only for any pre-existing lookup that still expects
+// the old 9-category shape. New UIs should import SLOT_KEYS / SLOT_DEFS from
+// lib/wardrobeSlots and group by slot.
 const WARDROBE_CATEGORIES = ['all', 'dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'];
 
 // Color name to hex mapping for swatches
@@ -3968,13 +3972,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
       {/* ════════════════════════ WARDROBE ════════════════════════ */}
       {activeTab === 'wardrobe' && subTab === 'wardrobe-items' && (() => {
-        // Group items by type for summary
-        const typeGroups = {};
-        wardrobeItems.forEach(item => {
-          const t = item.clothing_category || item.itemType || item.item_type || 'other';
-          if (!typeGroups[t]) typeGroups[t] = [];
-          typeGroups[t].push(item);
-        });
+        // Group items by SLOT for the summary cards. Uses the shared slot helper
+        // so dress/top/bottom/outerwear all roll up under "Outfit", bag+accessory
+        // under "Accessories", etc. Items with an unknown category land in
+        // __unassigned so we can surface them (rare — usually legacy data).
+        const typeGroups = groupItemsBySlot(wardrobeItems);
 
         // Quick helper — kept outside the filter so both the tab-count badge
         // and the per-item filter share the exact same definition of "used".
@@ -3986,7 +3988,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           // so the count in the tab matches what the grid shows.
           if (wardrobeTopTab === 'staging' && isItemUsed(item)) return false;
           const itemType = item.clothing_category || item.itemType || item.item_type || 'other';
-          if (wardrobeCatFilter !== 'all' && itemType !== wardrobeCatFilter) return false;
+          // Category pill filters by SLOT now — e.g. clicking "Outfit" matches
+          // dress, top, bottom, outerwear. Falls back to raw category match if
+          // the filter value isn't a known slot key (for legacy call sites).
+          if (wardrobeCatFilter !== 'all') {
+            const itemSlot = getSlotForCategory(itemType);
+            const filterIsSlot = SLOT_KEYS.includes(wardrobeCatFilter);
+            if (filterIsSlot ? itemSlot !== wardrobeCatFilter : itemType !== wardrobeCatFilter) return false;
+          }
           if (wardrobeFilter !== 'all') {
             const searchTerm = wardrobeFilter.toLowerCase();
             const nameMatch = (item.name || '').toLowerCase().includes(searchTerm);
@@ -4391,27 +4400,40 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               })}
             </div>
 
-            {/* Type Summary Cards */}
-            {Object.keys(typeGroups).length > 0 && (
-              <div className="wa-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10, marginBottom: 16 }}>
-                {Object.entries(typeGroups).sort((a, b) => b[1].length - a[1].length).map(([type, items]) => {
-                  const isActive = wardrobeCatFilter === type;
-                  return (
-                    <div key={type} onClick={() => setWardrobeCatFilter(isActive ? 'all' : type)}
-                      style={{
-                        padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'pointer',
-                        background: isActive ? '#6366f118' : '#fff',
-                        border: isActive ? '2px solid #6366f1' : '1px solid #e2e8f0',
-                        transition: 'all 0.2s',
-                      }}>
-                      <div style={{ fontSize: 20 }}>{CAT_ICONS[type] || '🏷️'}</div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: isActive ? '#6366f1' : '#1a1a2e' }}>{items.length}</div>
-                      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>{type}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {/* Slot summary cards — one per slot, in fixed order so the row
+                doesn't reshuffle as counts change. Each card is a shortcut to
+                filter the grid by that slot (clicking the active card clears
+                the filter). Unassigned items get a warning card only when
+                non-empty so creators can spot mis-categorised rows. */}
+            <div className="wa-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10, marginBottom: 16 }}>
+              {SLOT_KEYS.map(slotKey => {
+                const items = typeGroups[slotKey] || [];
+                const def = SLOT_DEFS[slotKey];
+                const isActive = wardrobeCatFilter === slotKey;
+                return (
+                  <div key={slotKey} onClick={() => setWardrobeCatFilter(isActive ? 'all' : slotKey)}
+                    title={def.desc}
+                    style={{
+                      padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'pointer',
+                      background: isActive ? '#6366f118' : '#fff',
+                      border: isActive ? '2px solid #6366f1' : '1px solid #e2e8f0',
+                      transition: 'all 0.2s',
+                    }}>
+                    <div style={{ fontSize: 20 }}>{def.icon}</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: isActive ? '#6366f1' : '#1a1a2e' }}>{items.length}</div>
+                    <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>{def.label}</div>
+                  </div>
+                );
+              })}
+              {(typeGroups.__unassigned?.length > 0) && (
+                <div title="These items have a clothing_category that doesn't map to any slot — edit to fix"
+                  style={{ padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'default', background: '#fff7ed', border: '1px solid #fdba74' }}>
+                  <div style={{ fontSize: 20 }}>⚠️</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#c2410c' }}>{typeGroups.__unassigned.length}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#c2410c' }}>Unassigned</div>
+                </div>
+              )}
+            </div>
 
             {/* Search + Category Filter */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
@@ -4437,15 +4459,18 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 <option value="favorites">Favorites first</option>
               </select>
               <div style={{ width: 1, height: 24, background: '#e2e8f0', alignSelf: 'center' }} />
-              {WARDROBE_CATEGORIES.map(cat => (
-                <button key={cat} onClick={() => setWardrobeCatFilter(cat)}
+              {/* Category pills now filter by SLOT, not raw clothing_category.
+                  "all" clears the filter; each slot button routes dress/top/bottom
+                  under "Outfit", bag/accessory under "Accessories", etc. */}
+              {[{ key: 'all', label: 'all', icon: '🏷️' }, ...SLOT_KEYS.map(k => ({ key: k, label: SLOT_DEFS[k].label.toLowerCase(), icon: SLOT_DEFS[k].icon }))].map(opt => (
+                <button key={opt.key} onClick={() => setWardrobeCatFilter(opt.key)}
                   style={{
                     padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    background: wardrobeCatFilter === cat ? '#6366f1' : '#fff',
-                    color: wardrobeCatFilter === cat ? '#fff' : '#64748b',
-                    border: wardrobeCatFilter === cat ? '1px solid #6366f1' : '1px solid #e2e8f0',
+                    background: wardrobeCatFilter === opt.key ? '#6366f1' : '#fff',
+                    color: wardrobeCatFilter === opt.key ? '#fff' : '#64748b',
+                    border: wardrobeCatFilter === opt.key ? '1px solid #6366f1' : '1px solid #e2e8f0',
                   }}>
-                  {CAT_ICONS[cat] || '🏷️'} {cat}
+                  {opt.icon} {opt.label}
                 </button>
               ))}
               {/* Filters toggle — keeps the advanced panel out of the way by default
@@ -4554,10 +4579,16 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   </div>
                   <div>
                     <label style={S.fLabel}>Type</label>
+                    {/* Same slot-grouped structure as the upload modal so authors see
+                        a consistent category picker whether they're creating or editing. */}
                     <select value={wf.itemType} onChange={e => setWf('itemType', e.target.value)} style={S.sel}>
                       <option value="">Select...</option>
-                      {['dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'].map(c => (
-                        <option key={c} value={c}>{CAT_ICONS[c] || '🏷️'} {c}</option>
+                      {SLOT_KEYS.map(slot => (
+                        <optgroup key={slot} label={`${SLOT_DEFS[slot].icon} ${SLOT_DEFS[slot].label}`}>
+                          {SLOT_SUBCATEGORIES[slot].map(sub => (
+                            <option key={sub.value} value={sub.value}>{sub.label}</option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </div>
@@ -5142,7 +5173,22 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>brand</label><input value={wardrobeUploadForm.brand} onChange={e => setWardrobeUploadForm(p => ({ ...p, brand: e.target.value }))} placeholder="e.g., Zara" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>category *</label><select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Select...</option>{['dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'].map(c => <option key={c} value={c}>{CAT_ICONS[c] || '🏷️'} {c}</option>)}</select></div>
+                      <div>
+                        <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>category *</label>
+                        {/* Grouped by the five UI slots (Outfit / Shoes / Jewelry /
+                            Accessories / Fragrance) — DB still stores the granular
+                            clothing_category so scoring + filters keep working. */}
+                        <select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}>
+                          <option value="">Select...</option>
+                          {SLOT_KEYS.map(slot => (
+                            <optgroup key={slot} label={`${SLOT_DEFS[slot].icon} ${SLOT_DEFS[slot].label}`}>
+                              {SLOT_SUBCATEGORIES[slot].map(sub => (
+                                <option key={sub.value} value={sub.value}>{sub.label}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>color</label><input value={wardrobeUploadForm.color} onChange={e => setWardrobeUploadForm(p => ({ ...p, color: e.target.value }))} placeholder="e.g., blush pink" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
                       <div>
                         <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tier</label>
