@@ -177,6 +177,12 @@ function WorldAdmin() {
   const [wardrobeColorFilter, setWardrobeColorFilter] = useState('all');
   const [wardrobeStatusFilter, setWardrobeStatusFilter] = useState('all'); // all | used | unused | favorites
   const [wardrobeFiltersOpen, setWardrobeFiltersOpen] = useState(false);
+  // Top-level view mode: 'all' is the full library, 'staging' shows only items
+  // never used in an episode (ported from WardrobeBrowser's two-tab split). It
+  // layers on top of the existing filters — a creator can still narrow staging
+  // by category, season, etc. Implementing client-side so we don't need to
+  // fetch from a second endpoint; the semantic matches usage_count === 0.
+  const [wardrobeTopTab, setWardrobeTopTab] = useState('all'); // all | staging
   // Grid vs. list rendering. List view shows more metadata per row and is better
   // for scanning long libraries; grid is the default thumbnail wall.
   const [wardrobeViewMode, setWardrobeViewMode] = useState('grid'); // grid | list
@@ -3962,7 +3968,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           typeGroups[t].push(item);
         });
 
+        // Quick helper — kept outside the filter so both the tab-count badge
+        // and the per-item filter share the exact same definition of "used".
+        const isItemUsed = (item) => Number(item.times_worn || item.totalUsageCount || item.total_usage_count || 0) > 0;
+        const stagingCount = wardrobeItems.filter(i => !isItemUsed(i)).length;
+
         const filteredItems = wardrobeItems.filter(item => {
+          // Top-tab: staging means never used. Applied before everything else
+          // so the count in the tab matches what the grid shows.
+          if (wardrobeTopTab === 'staging' && isItemUsed(item)) return false;
           const itemType = item.clothing_category || item.itemType || item.item_type || 'other';
           if (wardrobeCatFilter !== 'all' && itemType !== wardrobeCatFilter) return false;
           if (wardrobeFilter !== 'all') {
@@ -4313,6 +4327,30 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 </div>
                 <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
               </div>
+            </div>
+
+            {/* Top tabs: All vs. Staging (never-used). The staging count lives
+                in the tab itself so creators can see at a glance how much of the
+                library is unassigned — catches the "forgot to assign" case fast. */}
+            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e2e8f0', marginBottom: 14 }}>
+              {[
+                { key: 'all', label: 'All items', count: wardrobeItems.length },
+                { key: 'staging', label: 'Staging (never used)', count: stagingCount },
+              ].map(tab => {
+                const active = wardrobeTopTab === tab.key;
+                return (
+                  <button key={tab.key} onClick={() => { setWardrobeTopTab(tab.key); setWardrobePage(1); }}
+                    style={{
+                      padding: '10px 18px', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer',
+                      background: 'transparent', border: 'none',
+                      borderBottom: active ? '2px solid #6366f1' : '2px solid transparent',
+                      color: active ? '#1e293b' : '#64748b',
+                      marginBottom: -1,
+                    }}>
+                    {tab.label} <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4 }}>({tab.count})</span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Type Summary Cards */}
