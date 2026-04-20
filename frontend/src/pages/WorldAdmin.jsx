@@ -184,6 +184,16 @@ function WorldAdmin() {
   // real libraries. 48 per page lines up with the 4-wide grid.
   const [wardrobePage, setWardrobePage] = useState(1);
   const WARDROBE_PAGE_SIZE = 48;
+  // Per-item usage modal — lists the episodes that reference a wardrobe item.
+  // Populated on demand via GET /api/v1/wardrobe/:id/usage; also auto-opened
+  // when a delete is blocked because the item is still in use.
+  const [usageModalItem, setUsageModalItem] = useState(null);
+  const [itemUsage, setItemUsage] = useState(null);
+  // Outfit-set creation from the current bulk selection. `setName` lives here
+  // instead of inside the modal so it survives re-renders while the user types.
+  const [showCreateOutfitSet, setShowCreateOutfitSet] = useState(false);
+  const [outfitSetName, setOutfitSetName] = useState('');
+  const [creatingOutfitSet, setCreatingOutfitSet] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [subTab, setSubTab] = useState(null);
@@ -4237,6 +4247,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: '#fef3c7', borderRadius: 6, border: '1px solid #fcd34d' }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e' }}>{selectedWardrobeIds.size} selected</span>
                     <button onClick={() => setSelectedWardrobeIds(new Set())} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, color: '#92400e' }}>✕</button>
+                    <button onClick={() => { setOutfitSetName(''); setShowCreateOutfitSet(true); }} style={{ padding: '2px 8px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>👗 Create set</button>
                     <button onClick={bulkDeleteSelected} style={{ padding: '2px 8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>🗑️ Delete</button>
                   </div>
                 )}
@@ -4254,6 +4265,52 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   ))}
                 </div>
                 <button onClick={() => window.open('/wardrobe/calendar', '_blank')} style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px' }}>📅 Calendar</button>
+                {/* Bulk ops — kept behind a ⚡ menu-on-button so the toolbar doesn't get
+                    cluttered. Each action confirms before calling an expensive endpoint
+                    (AI analyze costs tokens). `window.confirm` is used for parity with
+                    the alert-based UX users already know from WardrobeBrowser. */}
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <details style={{ position: 'relative' }}>
+                    <summary style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', listStyle: 'none', cursor: 'pointer', userSelect: 'none' }}>
+                      ⚡ Bulk ops
+                    </summary>
+                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: 220, zIndex: 50, padding: 6 }}>
+                      {[
+                        { label: '✨ AI-enhance first 20', endpoint: '/api/v1/wardrobe/bulk/enhance', bodyFactory: () => ({ itemIds: filteredItems.slice(0, 20).map(i => i.id) }), confirmText: (n) => `Enhance ${n} items? This may take a while.`, emptyText: 'No items to enhance' },
+                        { label: '🔍 AI-analyze first 20', endpoint: '/api/v1/wardrobe/bulk/analyze', bodyFactory: () => ({ itemIds: filteredItems.slice(0, 20).map(i => i.id), autoApply: true }), confirmText: (n) => `Analyze ${n} items with AI? This uses API credits.`, emptyText: 'No items to analyze' },
+                        { label: '🖼 Regenerate missing thumbnails', endpoint: '/api/v1/wardrobe/bulk/regenerate-thumbnails', bodyFactory: () => ({ limit: 50 }), confirmText: () => 'Regenerate thumbnails for up to 50 items that are missing them?', emptyText: null },
+                      ].map(op => (
+                        <button key={op.endpoint} onClick={async () => {
+                          const body = op.bodyFactory();
+                          const count = body.itemIds?.length;
+                          if (op.emptyText && count === 0) { setToast(op.emptyText); return; }
+                          if (!window.confirm(op.confirmText(count))) return;
+                          try {
+                            const res = await fetch(op.endpoint, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(body),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error || 'Operation failed');
+                            // Endpoints report either { succeeded, failed } or { processed, failed } — show both shapes.
+                            const succ = data.data?.succeeded?.length ?? data.data?.processed ?? 0;
+                            const fail = data.data?.failed?.length ?? data.data?.failed ?? 0;
+                            setToast(`Done: ${succ} ok, ${fail} failed`);
+                            // Reload via the existing effect that fetches wardrobeItems when showId changes.
+                            // Trigger that path by re-fetching manually:
+                            try { const r = await fetch(`/api/v1/shows/${showId}/wardrobe`); const j = await r.json(); if (j?.data) setWardrobeItems(j.data); } catch {}
+                          } catch (err) {
+                            setToast(`Bulk op failed: ${err.message}`);
+                          }
+                        }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 12, borderRadius: 6, color: '#334155' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                        >{op.label}</button>
+                      ))}
+                    </div>
+                  </details>
+                </div>
                 <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
@@ -4524,6 +4581,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   }} style={{ ...S.secBtn, background: '#FAF7F0', borderColor: '#D4AF37', color: '#B8962E' }}>
                     ✨ AI Enhance
                   </button>
+                  <button onClick={async () => {
+                    // Open the usage modal and lazy-fetch the episode list. The modal
+                    // opens immediately with a loading placeholder so users aren't
+                    // staring at a frozen button while the request is in flight.
+                    setUsageModalItem(editingWardrobeItem);
+                    setItemUsage(null);
+                    try {
+                      const res = await fetch(`/api/v1/wardrobe/${editingWardrobeItem.id}/usage`);
+                      const data = await res.json();
+                      if (res.ok) setItemUsage(data.data || data);
+                      else setToast(data.error || 'Could not load usage');
+                    } catch (err) { setToast('Could not load usage'); }
+                  }} style={{ ...S.secBtn }}>🔍 View usage</button>
                   <div style={{ flex: 1 }} />
                   <button onClick={() => setEditingWardrobeItem(null)} style={S.secBtn}>Cancel</button>
                   <button onClick={saveWardrobeItem} disabled={savingWardrobe} style={S.primaryBtn}>
@@ -4868,6 +4938,112 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     }} style={{ padding: '7px 22px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (wardrobeUploading || !wardrobeUploadFile || !wardrobeUploadForm.name || !wardrobeUploadForm.clothingCategory) ? 0.35 : 1 }}>
                       {wardrobeUploading ? 'Uploading...' : 'Upload Item'}
                     </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Create Outfit Set Modal ── */}
+            {showCreateOutfitSet && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !creatingOutfitSet && setShowCreateOutfitSet(false)}>
+                <div style={{ background: '#fff', borderRadius: 14, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Create Outfit Set</h3>
+                    <button onClick={() => setShowCreateOutfitSet(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, fontFamily: "'DM Mono', monospace" }}>
+                    {selectedWardrobeIds.size} pieces selected
+                  </div>
+                  {/* Piece chips — visual confirmation of what goes into the set. */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                    {Array.from(selectedWardrobeIds).map(id => {
+                      const item = wardrobeItems.find(w => w.id === id);
+                      if (!item) return null;
+                      const img = item.s3_url_processed || item.s3_url || item.thumbnail_url;
+                      return (
+                        <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 8px' }}>
+                          {img && <img src={img} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4 }} />}
+                          <span style={{ fontSize: 11, color: '#334155' }}>{item.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <label style={{ fontSize: 11, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>set name</label>
+                  <input
+                    type="text"
+                    value={outfitSetName}
+                    onChange={e => setOutfitSetName(e.target.value)}
+                    placeholder="e.g., Floral Corset Set"
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 14, fontFamily: "'Lora', serif", marginTop: 4, marginBottom: 16, boxSizing: 'border-box' }}
+                    autoFocus
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <button onClick={() => setShowCreateOutfitSet(false)} style={{ padding: '7px 16px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
+                    <button
+                      disabled={!outfitSetName.trim() || creatingOutfitSet}
+                      onClick={async () => {
+                        setCreatingOutfitSet(true);
+                        try {
+                          const selectedArr = Array.from(selectedWardrobeIds);
+                          const payloadItems = selectedArr.map(id => {
+                            const item = wardrobeItems.find(w => w.id === id);
+                            return item ? { id: item.id, name: item.name, category: item.clothing_category || item.itemType, image: item.s3_url_processed || item.s3_url } : null;
+                          }).filter(Boolean);
+                          const res = await fetch('/api/v1/outfit-sets', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: outfitSetName.trim(), character: 'Lala', items: payloadItems, show_id: showId }),
+                          });
+                          if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Create failed'); }
+                          setToast(`Outfit set "${outfitSetName.trim()}" created`);
+                          setShowCreateOutfitSet(false);
+                          setSelectedWardrobeIds(new Set());
+                        } catch (err) { setToast('Failed to create set: ' + err.message); }
+                        setCreatingOutfitSet(false);
+                      }}
+                      style={{ padding: '7px 22px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (!outfitSetName.trim() || creatingOutfitSet) ? 0.4 : 1 }}
+                    >{creatingOutfitSet ? 'Creating...' : 'Create set'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Usage Modal — which episodes reference this item ── */}
+            {usageModalItem && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setUsageModalItem(null); setItemUsage(null); }}>
+                <div style={{ background: '#fff', borderRadius: 14, maxWidth: 520, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Item Usage: {usageModalItem.name}</h3>
+                    <button onClick={() => { setUsageModalItem(null); setItemUsage(null); }} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                  </div>
+                  {/* Three states: loading, empty, populated — matches the existing WardrobeBrowser modal. */}
+                  {itemUsage == null ? (
+                    <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Loading usage data...</div>
+                  ) : !itemUsage.totalEpisodes ? (
+                    <div style={{ padding: 20, textAlign: 'center' }}>
+                      <p style={{ margin: '4px 0', fontSize: 13, color: '#334155' }}>This item isn't used in any episodes yet.</p>
+                      <p style={{ margin: '4px 0', fontSize: 12, color: '#94a3b8' }}>It can be safely deleted.</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
+                        <div><strong>Total episodes:</strong> {itemUsage.totalEpisodes}</div>
+                        <div><strong>Total shows:</strong> {itemUsage.totalShows}</div>
+                      </div>
+                      {(itemUsage.shows || []).map(show => (
+                        <div key={show.showId} style={{ marginBottom: 14 }}>
+                          <h4 style={{ margin: '4px 0 6px', fontSize: 13, color: '#1e293b' }}>{show.showName || 'Unknown Show'}</h4>
+                          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
+                            {(show.episodes || []).map(ep => (
+                              <li key={ep.episodeId}>Episode {ep.episodeNumber}: {ep.title}{ep.isFavorite && <span style={{ marginLeft: 4, color: '#eab308' }}>★</span>}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                    <button onClick={() => { setUsageModalItem(null); setItemUsage(null); }} style={{ padding: '7px 20px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Close</button>
                   </div>
                 </div>
               </div>
