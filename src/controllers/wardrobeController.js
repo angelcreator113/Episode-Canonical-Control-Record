@@ -1204,4 +1204,511 @@ module.exports = {
       });
     }
   },
+
+  /**
+   * POST /api/v1/wardrobe/:id/premium-enhance - Apply full premium enhancement pipeline
+   */
+  async premiumEnhance(req, res) {
+    try {
+      const { id } = req.params;
+      const { skipColorNorm, skipTexture, skipCenter, skipShadow, skipThumbnail } = req.body;
+
+      const wardrobeItem = await Wardrobe.findOne({
+        where: { id, deleted_at: null },
+      });
+
+      if (!wardrobeItem) {
+        return res.status(404).json({ error: 'Wardrobe item not found' });
+      }
+
+      if (!wardrobeItem.s3_url) {
+        return res.status(400).json({ error: 'No image to enhance' });
+      }
+
+      console.log(`✨ Starting premium enhancement for wardrobe item ${id}...`);
+
+      // Download the source image
+      const axios = require('axios');
+      const response = await axios.get(wardrobeItem.s3_url, { responseType: 'arraybuffer', timeout: 60000 });
+      const imageBuffer = Buffer.from(response.data);
+
+      // Run premium pipeline
+      const result = await wardrobeImageService.premiumEnhance(
+        imageBuffer,
+        wardrobeItem.character || 'unknown',
+        { skipColorNorm, skipTexture, skipCenter, skipShadow, skipThumbnail }
+      );
+
+      // Update the wardrobe item
+      await wardrobeItem.update({
+        s3_url: result.mainImage.s3Url,
+        s3_key: result.mainImage.s3Key,
+        thumbnail_url: result.thumbnail?.s3Url || wardrobeItem.thumbnail_url,
+      });
+
+      console.log(`✅ Premium enhancement complete for wardrobe item ${id}`);
+
+      res.json({
+        success: true,
+        data: {
+          id: wardrobeItem.id,
+          s3_url: result.mainImage.s3Url,
+          thumbnail_url: result.thumbnail?.s3Url,
+          processing: result.processing,
+        },
+        message: `Premium enhancement complete (${result.processing.steps.length} steps applied)`,
+      });
+    } catch (error) {
+      console.error('❌ Error in premium enhancement:', error);
+      res.status(500).json({
+        error: 'Failed to enhance image',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /api/v1/wardrobe/:id/add-shadow - Add drop shadow to transparent PNG
+   */
+  async addDropShadow(req, res) {
+    try {
+      const { id } = req.params;
+      const { shadowOffsetX, shadowOffsetY, shadowBlur, shadowOpacity } = req.body;
+
+      const wardrobeItem = await Wardrobe.findOne({
+        where: { id, deleted_at: null },
+      });
+
+      if (!wardrobeItem) {
+        return res.status(404).json({ error: 'Wardrobe item not found' });
+      }
+
+      const imageUrl = wardrobeItem.s3_url_processed || wardrobeItem.s3_url;
+      if (!imageUrl) {
+        return res.status(400).json({ error: 'No image to process' });
+      }
+
+      console.log(`🌑 Adding drop shadow to wardrobe item ${id}...`);
+
+      const axios = require('axios');
+      const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60000 });
+      const imageBuffer = Buffer.from(response.data);
+
+      const result = await wardrobeImageService.addDropShadow(imageBuffer, {
+        shadowOffsetX, shadowOffsetY, shadowBlur, shadowOpacity,
+      });
+
+      if (result.skipped) {
+        return res.status(400).json({
+          error: 'Image has no transparency',
+          message: 'Drop shadows can only be added to PNG images with alpha channel',
+        });
+      }
+
+      const uploaded = await wardrobeImageService.uploadWardrobeImage(
+        result.buffer,
+        wardrobeItem.character || 'unknown',
+        '-shadow',
+        result.contentType
+      );
+
+      // Store as the processed version
+      await wardrobeItem.update({
+        s3_url_processed: uploaded.s3Url,
+        s3_key_processed: uploaded.s3Key,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          id: wardrobeItem.id,
+          s3_url_processed: uploaded.s3Url,
+        },
+        message: 'Drop shadow added successfully',
+      });
+    } catch (error) {
+      console.error('❌ Error adding drop shadow:', error);
+      res.status(500).json({
+        error: 'Failed to add drop shadow',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /api/v1/wardrobe/:id/analyze - AI analysis (colors + tags) using Claude Vision
+   */
+  async analyzeItem(req, res) {
+    try {
+      const { id } = req.params;
+      const { autoApply = false } = req.body;
+
+      const wardrobeItem = await Wardrobe.findOne({
+        where: { id, deleted_at: null },
+      });
+
+      if (!wardrobeItem) {
+        return res.status(404).json({ error: 'Wardrobe item not found' });
+      }
+
+      if (!wardrobeItem.s3_url) {
+        return res.status(400).json({ error: 'No image to analyze' });
+      }
+
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return res.status(500).json({
+          error: 'AI analysis not configured',
+          message: 'ANTHROPIC_API_KEY is required',
+        });
+      }
+
+      console.log(`🔍 Running AI analysis for wardrobe item ${id}...`);
+
+      const analysis = await wardrobeImageService.analyzeImage(wardrobeItem.s3_url);
+
+      // Optionally auto-apply the results
+      if (autoApply) {
+        const updates = {};
+        if (analysis.primaryColor) updates.color = analysis.primaryColor;
+        if (analysis.category) updates.clothing_category = analysis.category;
+        if (analysis.allTags?.length) {
+          updates.tags = [...new Set([...(wardrobeItem.tags || []), ...analysis.allTags])];
+        }
+        if (analysis.suggestedName && !wardrobeItem.name) {
+          updates.name = analysis.suggestedName;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await wardrobeItem.update(updates);
+          console.log(`✅ Auto-applied ${Object.keys(updates).length} fields from AI analysis`);
+        }
+      }
+
+      res.json({
+        success: true,
+        data: {
+          id: wardrobeItem.id,
+          analysis,
+          autoApplied: autoApply,
+        },
+        message: 'AI analysis complete',
+      });
+    } catch (error) {
+      console.error('❌ Error in AI analysis:', error);
+      res.status(500).json({
+        error: 'Failed to analyze image',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /api/v1/wardrobe/bulk/enhance - Bulk enhance multiple wardrobe items
+   */
+  async bulkEnhance(req, res) {
+    try {
+      const { itemIds, options = {} } = req.body;
+
+      if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+        return res.status(400).json({ error: 'itemIds array is required' });
+      }
+
+      if (itemIds.length > 20) {
+        return res.status(400).json({ error: 'Maximum 20 items per bulk operation' });
+      }
+
+      console.log(`📦 Starting bulk enhance for ${itemIds.length} items...`);
+
+      const results = { succeeded: [], failed: [] };
+      const axios = require('axios');
+
+      for (const id of itemIds) {
+        try {
+          const wardrobeItem = await Wardrobe.findOne({
+            where: { id, deleted_at: null },
+          });
+
+          if (!wardrobeItem || !wardrobeItem.s3_url) {
+            results.failed.push({ id, error: 'Item not found or has no image' });
+            continue;
+          }
+
+          const response = await axios.get(wardrobeItem.s3_url, { responseType: 'arraybuffer', timeout: 60000 });
+          const imageBuffer = Buffer.from(response.data);
+
+          const enhanced = await wardrobeImageService.sharpEnhanceWardrobe(imageBuffer);
+          const uploaded = await wardrobeImageService.uploadWardrobeImage(
+            enhanced.buffer,
+            wardrobeItem.character || 'unknown',
+            '-enhanced',
+            enhanced.contentType
+          );
+
+          // Generate new thumbnail
+          const thumbnail = await wardrobeImageService.generateThumbnail(enhanced.buffer);
+          const thumbUploaded = await wardrobeImageService.uploadWardrobeImage(
+            thumbnail.buffer,
+            wardrobeItem.character || 'unknown',
+            '-thumb',
+            thumbnail.contentType
+          );
+
+          await wardrobeItem.update({
+            s3_url: uploaded.s3Url,
+            s3_key: uploaded.s3Key,
+            thumbnail_url: thumbUploaded.s3Url,
+          });
+
+          results.succeeded.push({ id, s3_url: uploaded.s3Url });
+        } catch (itemError) {
+          results.failed.push({ id, error: itemError.message });
+        }
+      }
+
+      console.log(`✅ Bulk enhance complete: ${results.succeeded.length} succeeded, ${results.failed.length} failed`);
+
+      res.json({
+        success: true,
+        data: results,
+        message: `Enhanced ${results.succeeded.length} of ${itemIds.length} items`,
+      });
+    } catch (error) {
+      console.error('❌ Error in bulk enhance:', error);
+      res.status(500).json({
+        error: 'Failed to bulk enhance',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /api/v1/wardrobe/bulk/upscale - Bulk AI upscale multiple wardrobe items
+   */
+  async bulkUpscale(req, res) {
+    try {
+      const { itemIds, scale = 4 } = req.body;
+
+      if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+        return res.status(400).json({ error: 'itemIds array is required' });
+      }
+
+      if (itemIds.length > 10) {
+        return res.status(400).json({ error: 'Maximum 10 items per bulk upscale (API cost control)' });
+      }
+
+      if (!process.env.REPLICATE_API_TOKEN) {
+        return res.status(500).json({
+          error: 'AI upscaling not configured',
+          message: 'REPLICATE_API_TOKEN is required',
+        });
+      }
+
+      console.log(`🔍 Starting bulk ${scale}x upscale for ${itemIds.length} items...`);
+
+      const results = { succeeded: [], failed: [] };
+
+      for (const id of itemIds) {
+        try {
+          const wardrobeItem = await Wardrobe.findOne({
+            where: { id, deleted_at: null },
+          });
+
+          if (!wardrobeItem || !wardrobeItem.s3_url) {
+            results.failed.push({ id, error: 'Item not found or has no image' });
+            continue;
+          }
+
+          const upscaleResult = await wardrobeImageService.aiUpscaleImage(wardrobeItem.s3_url, { scale });
+
+          const uploaded = await wardrobeImageService.uploadWardrobeImage(
+            upscaleResult.buffer,
+            wardrobeItem.character || 'unknown',
+            '-upscaled',
+            upscaleResult.contentType
+          );
+
+          // Generate new thumbnail from upscaled
+          const thumbnail = await wardrobeImageService.generateThumbnail(upscaleResult.buffer);
+          const thumbUploaded = await wardrobeImageService.uploadWardrobeImage(
+            thumbnail.buffer,
+            wardrobeItem.character || 'unknown',
+            '-thumb',
+            thumbnail.contentType
+          );
+
+          await wardrobeItem.update({
+            s3_url: uploaded.s3Url,
+            s3_key: uploaded.s3Key,
+            thumbnail_url: thumbUploaded.s3Url,
+          });
+
+          results.succeeded.push({ id, s3_url: uploaded.s3Url });
+        } catch (itemError) {
+          results.failed.push({ id, error: itemError.message });
+        }
+      }
+
+      console.log(`✅ Bulk upscale complete: ${results.succeeded.length} succeeded, ${results.failed.length} failed`);
+
+      res.json({
+        success: true,
+        data: results,
+        message: `Upscaled ${results.succeeded.length} of ${itemIds.length} items`,
+      });
+    } catch (error) {
+      console.error('❌ Error in bulk upscale:', error);
+      res.status(500).json({
+        error: 'Failed to bulk upscale',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /api/v1/wardrobe/bulk/analyze - Bulk AI analysis for multiple items
+   */
+  async bulkAnalyze(req, res) {
+    try {
+      const { itemIds, autoApply = false } = req.body;
+
+      if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+        return res.status(400).json({ error: 'itemIds array is required' });
+      }
+
+      if (itemIds.length > 20) {
+        return res.status(400).json({ error: 'Maximum 20 items per bulk analysis' });
+      }
+
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return res.status(500).json({
+          error: 'AI analysis not configured',
+          message: 'ANTHROPIC_API_KEY is required',
+        });
+      }
+
+      console.log(`🔍 Starting bulk AI analysis for ${itemIds.length} items...`);
+
+      const results = { succeeded: [], failed: [] };
+
+      for (const id of itemIds) {
+        try {
+          const wardrobeItem = await Wardrobe.findOne({
+            where: { id, deleted_at: null },
+          });
+
+          if (!wardrobeItem || !wardrobeItem.s3_url) {
+            results.failed.push({ id, error: 'Item not found or has no image' });
+            continue;
+          }
+
+          const analysis = await wardrobeImageService.analyzeImage(wardrobeItem.s3_url);
+
+          if (autoApply) {
+            const updates = {};
+            if (analysis.primaryColor) updates.color = analysis.primaryColor;
+            if (analysis.category) updates.clothing_category = analysis.category;
+            if (analysis.allTags?.length) {
+              updates.tags = [...new Set([...(wardrobeItem.tags || []), ...analysis.allTags])];
+            }
+
+            if (Object.keys(updates).length > 0) {
+              await wardrobeItem.update(updates);
+            }
+          }
+
+          results.succeeded.push({ id, analysis, autoApplied: autoApply });
+        } catch (itemError) {
+          results.failed.push({ id, error: itemError.message });
+        }
+      }
+
+      console.log(`✅ Bulk analysis complete: ${results.succeeded.length} succeeded, ${results.failed.length} failed`);
+
+      res.json({
+        success: true,
+        data: results,
+        message: `Analyzed ${results.succeeded.length} of ${itemIds.length} items`,
+      });
+    } catch (error) {
+      console.error('❌ Error in bulk analysis:', error);
+      res.status(500).json({
+        error: 'Failed to bulk analyze',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /api/v1/wardrobe/bulk/regenerate-thumbnails - Regenerate thumbnails for all items missing them
+   */
+  async bulkRegenerateThumbnails(req, res) {
+    try {
+      const { limit = 50 } = req.body;
+
+      // Find items without thumbnails
+      const items = await Wardrobe.findAll({
+        where: {
+          deleted_at: null,
+          s3_url: { [Op.ne]: null },
+          [Op.or]: [
+            { thumbnail_url: null },
+            { thumbnail_url: '' },
+          ],
+        },
+        limit: Math.min(limit, 100),
+        order: [['created_at', 'DESC']],
+      });
+
+      if (items.length === 0) {
+        return res.json({
+          success: true,
+          data: { processed: 0 },
+          message: 'No items need thumbnail regeneration',
+        });
+      }
+
+      console.log(`🖼️ Regenerating thumbnails for ${items.length} items...`);
+
+      const axios = require('axios');
+      const results = { succeeded: [], failed: [] };
+
+      for (const item of items) {
+        try {
+          const response = await axios.get(item.s3_url, { responseType: 'arraybuffer', timeout: 60000 });
+          const imageBuffer = Buffer.from(response.data);
+
+          const thumbnail = await wardrobeImageService.generateThumbnail(imageBuffer);
+          const uploaded = await wardrobeImageService.uploadWardrobeImage(
+            thumbnail.buffer,
+            item.character || 'unknown',
+            '-thumb',
+            thumbnail.contentType
+          );
+
+          await item.update({ thumbnail_url: uploaded.s3Url });
+          results.succeeded.push(item.id);
+        } catch (itemError) {
+          results.failed.push({ id: item.id, error: itemError.message });
+        }
+      }
+
+      console.log(`✅ Bulk thumbnail regeneration complete: ${results.succeeded.length} succeeded`);
+
+      res.json({
+        success: true,
+        data: {
+          processed: results.succeeded.length,
+          failed: results.failed.length,
+          failedItems: results.failed,
+        },
+        message: `Regenerated ${results.succeeded.length} thumbnails`,
+      });
+    } catch (error) {
+      console.error('❌ Error in bulk thumbnail regeneration:', error);
+      res.status(500).json({
+        error: 'Failed to regenerate thumbnails',
+        message: error.message,
+      });
+    }
+  },
 };

@@ -167,6 +167,31 @@ router.post('/:id/upscale', asyncHandler(wardrobeController.aiUpscaleItem));
 // Regenerate thumbnail for existing item
 router.post('/:id/regenerate-thumbnail', asyncHandler(wardrobeController.regenerateThumbnail));
 
+// Premium enhancement pipeline (all enhancements combined)
+router.post('/:id/premium-enhance', asyncHandler(wardrobeController.premiumEnhance));
+
+// Add drop shadow to transparent PNG
+router.post('/:id/add-shadow', asyncHandler(wardrobeController.addDropShadow));
+
+// AI analysis (colors + tags) using Claude Vision
+router.post('/:id/analyze', asyncHandler(wardrobeController.analyzeItem));
+
+// ═══════════════════════════════════════════
+// BULK OPERATIONS
+// ═══════════════════════════════════════════
+
+// Bulk enhance multiple wardrobe items
+router.post('/bulk/enhance', asyncHandler(wardrobeController.bulkEnhance));
+
+// Bulk AI upscale multiple items (limit 10)
+router.post('/bulk/upscale', asyncHandler(wardrobeController.bulkUpscale));
+
+// Bulk AI analysis (colors + tags)
+router.post('/bulk/analyze', asyncHandler(wardrobeController.bulkAnalyze));
+
+// Bulk regenerate missing thumbnails
+router.post('/bulk/regenerate-thumbnails', asyncHandler(wardrobeController.bulkRegenerateThumbnails));
+
 // Delete wardrobe item (with safeguards)
 router.delete('/:id', asyncHandler(wardrobeController.deleteWardrobeItem));
 
