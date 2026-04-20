@@ -56,6 +56,29 @@ module.exports = {
         isFavorite,
         tags,
         showId, // NEW: Primary show ownership
+        // ── Game-layer fields ───────────────────────────────────────
+        // These used to only be settable via PUT after creation. Accepting
+        // them on POST too so creators can author a fully gameplay-ready
+        // item in one step from the upload modal (matches the old
+        // WardrobeBrowser edit form's coin_cost / acquisition_type inputs).
+        coinCost,
+        acquisitionType,
+        lockType,
+        eraAlignment,
+        reputationRequired,
+        // Advanced game-layer (Part 2): Lala reactions, extra tag buckets,
+        // scoring weight, harder unlock gates, and visibility flags. Kept
+        // optional — anything unset falls back to the model's defaults.
+        aestheticTags,
+        eventTypes,
+        outfitMatchWeight,
+        influenceRequired,
+        seasonUnlockEpisode,
+        isOwned,
+        isVisible,
+        lalaReactionOwn,
+        lalaReactionLocked,
+        lalaReactionReject,
       } = req.body;
 
       // Validation - character is REQUIRED, name and category auto-fill
@@ -167,6 +190,33 @@ module.exports = {
         outfit_notes: outfitNotes || null,
         is_favorite: isFavorite === 'true' || isFavorite === true,
         tags: parsedTags,
+        // Game-layer — all optional; model defaults handle the rest.
+        coin_cost: coinCost != null && coinCost !== '' ? parseInt(coinCost, 10) : undefined,
+        acquisition_type: acquisitionType || undefined,
+        lock_type: lockType || undefined,
+        era_alignment: eraAlignment || undefined,
+        reputation_required: reputationRequired != null && reputationRequired !== '' ? parseInt(reputationRequired, 10) : undefined,
+        // Advanced game-layer. Tag arrays accept either a JSON array or a
+        // comma-separated string (UI sends CSV to match the basic `tags` field
+        // convention); ints are parsed when present.
+        aesthetic_tags: (() => {
+          if (!aestheticTags) return undefined;
+          if (Array.isArray(aestheticTags)) return aestheticTags;
+          try { return JSON.parse(aestheticTags); } catch { return String(aestheticTags).split(',').map(s => s.trim()).filter(Boolean); }
+        })(),
+        event_types: (() => {
+          if (!eventTypes) return undefined;
+          if (Array.isArray(eventTypes)) return eventTypes;
+          try { return JSON.parse(eventTypes); } catch { return String(eventTypes).split(',').map(s => s.trim()).filter(Boolean); }
+        })(),
+        outfit_match_weight: outfitMatchWeight != null && outfitMatchWeight !== '' ? parseInt(outfitMatchWeight, 10) : undefined,
+        influence_required: influenceRequired != null && influenceRequired !== '' ? parseInt(influenceRequired, 10) : undefined,
+        season_unlock_episode: seasonUnlockEpisode != null && seasonUnlockEpisode !== '' ? parseInt(seasonUnlockEpisode, 10) : undefined,
+        is_owned: isOwned != null ? (isOwned === 'true' || isOwned === true) : undefined,
+        is_visible: isVisible != null ? (isVisible === 'true' || isVisible === true) : undefined,
+        lala_reaction_own: lalaReactionOwn || undefined,
+        lala_reaction_locked: lalaReactionLocked || undefined,
+        lala_reaction_reject: lalaReactionReject || undefined,
       });
 
       // Auto background removal — runs async, updates the record when done
@@ -554,6 +604,9 @@ module.exports = {
         lala_reaction_own: updates.lala_reaction_own,
         lala_reaction_locked: updates.lala_reaction_locked,
         lala_reaction_reject: updates.lala_reaction_reject,
+        // acquisition_type was missing from the PUT handler — added so the
+        // edit panel's "How Lala Got It" dropdown actually persists.
+        acquisition_type: updates.acquisition_type,
         updated_at: new Date(),
       };
 

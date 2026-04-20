@@ -30,13 +30,12 @@ const ShowManagement = lazy(() => import('./pages/ShowManagement'));
 const ShowDetail = lazy(() => import('./pages/ShowDetail'));
 const CreateShow = lazy(() => import('./pages/CreateShow'));
 const EditShow = lazy(() => import('./pages/EditShow'));
-const Wardrobe = lazy(() => import('./pages/Wardrobe'));
-const WardrobeBrowser = lazy(() => import('./pages/WardrobeBrowser'));
-const WardrobeAnalytics = lazy(() => import('./pages/WardrobeAnalytics'));
-const OutfitSets = lazy(() => import('./pages/OutfitSets'));
+// Wardrobe authoring consolidated to WorldAdmin's wardrobe tab (at /shows/:id).
+// All standalone wardrobe pages (Wardrobe, WardrobeBrowser, WardrobeLibrary*,
+// WardrobeAnalytics, OutfitSets, UniverseWardrobePage) and the
+// wardrobeLibraryService + WardrobeAssignmentModal helpers have been removed.
+// OutfitCalendar is still reachable at /wardrobe/calendar.
 const OutfitCalendar = lazy(() => import('./pages/OutfitCalendar'));
-const WardrobeLibraryUpload = lazy(() => import('./pages/WardrobeLibraryUpload'));
-const WardrobeLibraryDetail = lazy(() => import('./pages/WardrobeLibraryDetail'));
 const TemplateStudio = lazy(() => import('./pages/TemplateStudio'));
 const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
 const DiagnosticPage = lazy(() => import('./pages/DiagnosticPage'));
@@ -88,7 +87,6 @@ const UniversePage = lazy(() => import('./pages/UniversePage'));
 const SeriesPage = lazy(() => import('./pages/SeriesPage'));
 const UniverseProductionPage = lazy(() => import('./pages/UniverseProductionPage'));
 const UniverseSocialImportPage = lazy(() => import('./pages/UniverseSocialImportPage'));
-const UniverseWardrobePage = lazy(() => import('./pages/UniverseWardrobePage'));
 const UniverseAssetsPage = lazy(() => import('./pages/UniverseAssetsPage'));
 const UniverseWorldStatePage = lazy(() => import('./pages/UniverseWorldStatePage'));
 const UniverseTensionsPage = lazy(() => import('./pages/UniverseTensionsPage'));
@@ -310,7 +308,7 @@ function AppContent() {
           <Route path="/universe/social-import" element={<UniverseSocialImportPage />} />
           <Route path="/universe/series" element={<SeriesPage />} />
           <Route path="/universe/production" element={<UniverseProductionPage />} />
-          <Route path="/universe/wardrobe" element={<Navigate to="/wardrobe-library" replace />} />
+          <Route path="/universe/wardrobe" element={<Navigate to="/" replace />} />
           <Route path="/universe/assets" element={<UniverseAssetsPage />} />
           <Route path="/universe/world-state" element={<UniverseWorldStatePage />} />
           <Route path="/universe/tensions" element={<UniverseTensionsPage />} />
@@ -376,7 +374,7 @@ function AppContent() {
           <Route path="/wardrobe/calendar" element={<OutfitCalendar />} />
           <Route path="/wardrobe-library" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe-library/upload" element={<Navigate to="/" replace />} />
-          <Route path="/wardrobe-library/:id" element={<WardrobeLibraryDetail />} />
+          <Route path="/wardrobe-library/:id" element={<Navigate to="/" replace />} />
           
           {/* Thumbnail Composer / Template Studio */}
           <Route path="/episodes/:episodeId/composer" element={<TemplateStudio />} />

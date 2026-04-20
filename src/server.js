@@ -199,6 +199,13 @@ async function startServer() {
       console.log(`✓ Socket.io:   enabled`);
       console.log(`✓ Redis:       ${redisAvailable ? 'connected' : '⚠️  unavailable'}`);
       console.log(`✓ Export Queue: ${redisAvailable ? 'ready' : '⚠️  degraded'}`);
+      // Surface missing AI credentials at boot so operators see the
+      // root cause in PM2 logs instead of hunting after a 503 in the UI.
+      // Listed features fail soft when the key is absent: wardrobe auto-fill,
+      // AI enhance, phone AI proposals, and the wardrobe image regenerator.
+      if (!process.env.ANTHROPIC_API_KEY) {
+        console.warn('⚠️  ANTHROPIC_API_KEY not set — AI features (wardrobe auto-fill, phone AI, image regen) will return 503.');
+      }
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('🔗 Ready to accept requests\n');
 
