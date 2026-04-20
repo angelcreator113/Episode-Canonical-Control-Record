@@ -66,6 +66,19 @@ module.exports = {
         lockType,
         eraAlignment,
         reputationRequired,
+        // Advanced game-layer (Part 2): Lala reactions, extra tag buckets,
+        // scoring weight, harder unlock gates, and visibility flags. Kept
+        // optional — anything unset falls back to the model's defaults.
+        aestheticTags,
+        eventTypes,
+        outfitMatchWeight,
+        influenceRequired,
+        seasonUnlockEpisode,
+        isOwned,
+        isVisible,
+        lalaReactionOwn,
+        lalaReactionLocked,
+        lalaReactionReject,
       } = req.body;
 
       // Validation - character is REQUIRED, name and category auto-fill
@@ -183,6 +196,27 @@ module.exports = {
         lock_type: lockType || undefined,
         era_alignment: eraAlignment || undefined,
         reputation_required: reputationRequired != null && reputationRequired !== '' ? parseInt(reputationRequired, 10) : undefined,
+        // Advanced game-layer. Tag arrays accept either a JSON array or a
+        // comma-separated string (UI sends CSV to match the basic `tags` field
+        // convention); ints are parsed when present.
+        aesthetic_tags: (() => {
+          if (!aestheticTags) return undefined;
+          if (Array.isArray(aestheticTags)) return aestheticTags;
+          try { return JSON.parse(aestheticTags); } catch { return String(aestheticTags).split(',').map(s => s.trim()).filter(Boolean); }
+        })(),
+        event_types: (() => {
+          if (!eventTypes) return undefined;
+          if (Array.isArray(eventTypes)) return eventTypes;
+          try { return JSON.parse(eventTypes); } catch { return String(eventTypes).split(',').map(s => s.trim()).filter(Boolean); }
+        })(),
+        outfit_match_weight: outfitMatchWeight != null && outfitMatchWeight !== '' ? parseInt(outfitMatchWeight, 10) : undefined,
+        influence_required: influenceRequired != null && influenceRequired !== '' ? parseInt(influenceRequired, 10) : undefined,
+        season_unlock_episode: seasonUnlockEpisode != null && seasonUnlockEpisode !== '' ? parseInt(seasonUnlockEpisode, 10) : undefined,
+        is_owned: isOwned != null ? (isOwned === 'true' || isOwned === true) : undefined,
+        is_visible: isVisible != null ? (isVisible === 'true' || isVisible === true) : undefined,
+        lala_reaction_own: lalaReactionOwn || undefined,
+        lala_reaction_locked: lalaReactionLocked || undefined,
+        lala_reaction_reject: lalaReactionReject || undefined,
       });
 
       // Auto background removal — runs async, updates the record when done
