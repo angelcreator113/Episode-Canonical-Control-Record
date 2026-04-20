@@ -38,6 +38,25 @@ const BIAS_OPTIONS = ['balanced', 'glam', 'cozy', 'couture', 'trendy', 'romantic
 const WARDROBE_TIER_COLORS = { basic: '#94a3b8', mid: '#6366f1', luxury: '#eab308', elite: '#ec4899' };
 const WARDROBE_TIER_ICONS = { basic: '👟', mid: '👠', luxury: '💎', elite: '👑' };
 const WARDROBE_CATEGORIES = ['all', 'dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'];
+
+// Color name to hex mapping for swatches
+const COLOR_TO_HEX = {
+  black: '#1a1a1a', white: '#f8f8f8', red: '#dc2626', blue: '#2563eb', green: '#16a34a', yellow: '#eab308',
+  pink: '#ec4899', purple: '#a855f7', orange: '#f97316', brown: '#92400e', beige: '#d4a574', cream: '#fffdd0',
+  navy: '#1e3a5f', gold: '#d4af37', silver: '#c0c0c0', grey: '#6b7280', gray: '#6b7280', 'blush': '#de5d83',
+  nude: '#e3bc9a', burgundy: '#800020', emerald: '#50c878', coral: '#ff7f50', teal: '#008080', ivory: '#fffff0',
+  tan: '#d2b48c', olive: '#808000', maroon: '#800000', rose: '#ff007f', lavender: '#e6e6fa', mint: '#98ff98',
+};
+const getColorHex = (colorName) => {
+  if (!colorName) return null;
+  const lower = colorName.toLowerCase().trim();
+  if (COLOR_TO_HEX[lower]) return COLOR_TO_HEX[lower];
+  // Check for partial matches
+  for (const [name, hex] of Object.entries(COLOR_TO_HEX)) {
+    if (lower.includes(name) || name.includes(lower)) return hex;
+  }
+  return null;
+};
 const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', shoes: '👟', accessory: '🎀', jewelry: '💍', bag: '👜', outerwear: '🧥', perfume: '🌸' };
 
 const EMPTY_EVENT = {
@@ -119,6 +138,8 @@ function WorldAdmin() {
   const [sceneSets, setSceneSets] = useState([]);
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
+  const [lightboxItem, setLightboxItem] = useState(null);  // For fullscreen image view
+  const [selectedWardrobeIds, setSelectedWardrobeIds] = useState(new Set());  // For bulk selection
   const [overlayData, setOverlayData] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
   const [oppQuickForm, setOppQuickForm] = useState(null);
@@ -3975,13 +3996,57 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
         const wf = wardrobeForm;
         const setWf = (key, val) => setWardrobeForm(prev => ({ ...prev, [key]: val }));
 
+        // Helper: check if item was used in last 3 episodes (continuity warning)
+        const recentlyUsedItems = new Set(
+          wardrobeItems
+            .filter(item => (item.lastUsedAt || item.last_used_at) && 
+              (Date.now() - new Date(item.lastUsedAt || item.last_used_at).getTime()) < 14 * 24 * 60 * 60 * 1000)
+            .map(i => i.id)
+        );
+
+        // Bulk delete handler
+        const bulkDeleteSelected = async () => {
+          if (selectedWardrobeIds.size === 0) return;
+          if (!window.confirm(`Delete ${selectedWardrobeIds.size} selected items?`)) return;
+          const toDelete = [...selectedWardrobeIds];
+          for (const id of toDelete) {
+            try {
+              await api.delete(`/api/v1/wardrobe/${id}`);
+              setWardrobeItems(prev => prev.filter(i => i.id !== id));
+            } catch (err) { console.error('Failed to delete', id, err); }
+          }
+          setSelectedWardrobeIds(new Set());
+          setToast(`Deleted ${toDelete.length} items`);
+          setTimeout(() => setToast(null), 2500);
+        };
+
+        // Toggle selection
+        const toggleSelectItem = (e, itemId) => {
+          e.stopPropagation();
+          setSelectedWardrobeIds(prev => {
+            const next = new Set(prev);
+            if (next.has(itemId)) next.delete(itemId);
+            else next.add(itemId);
+            return next;
+          });
+        };
+
         return (
           <div style={S.content}>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
               <h2 style={{ ...S.cardTitle, margin: 0 }}>👗 Wardrobe Library</h2>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* Bulk selection indicator */}
+                {selectedWardrobeIds.size > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: '#fef3c7', borderRadius: 6, border: '1px solid #fcd34d' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e' }}>{selectedWardrobeIds.size} selected</span>
+                    <button onClick={() => setSelectedWardrobeIds(new Set())} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, color: '#92400e' }}>✕</button>
+                    <button onClick={bulkDeleteSelected} style={{ padding: '2px 8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>🗑️ Delete</button>
+                  </div>
+                )}
                 <span style={{ fontSize: 12, color: '#94a3b8' }}>{wardrobeItems.length} items</span>
+                <button onClick={() => window.open('/wardrobe/calendar', '_blank')} style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px' }}>📅 Calendar</button>
                 <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
@@ -4177,33 +4242,84 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 const imgUrl = item.s3_url_processed || item.s3_url || item.thumbnail_url || item.image_url;
                 const itemType = item.clothing_category || item.itemType || item.item_type || '';
                 const tags = Array.isArray(item.tags) ? item.tags : [];
-                const isSelected = editingWardrobeItem?.id === item.id;
+                const isEditing = editingWardrobeItem?.id === item.id;
+                const isBulkSelected = selectedWardrobeIds.has(item.id);
+                const colorHex = getColorHex(item.color);
+                const hasRecentUsage = recentlyUsedItems.has(item.id);
 
                 return (
                   <div key={item.id} onClick={() => openEditItem(item)}
                     style={{
-                      background: '#fff', border: isSelected ? '2px solid #6366f1' : '1px solid #e2e8f0', borderRadius: 12,
+                      background: '#fff', 
+                      border: isBulkSelected ? '2px solid #eab308' : isEditing ? '2px solid #6366f1' : '1px solid #e2e8f0', 
+                      borderRadius: 12,
                       overflow: 'hidden', cursor: 'pointer', transition: 'all 0.2s',
-                      boxShadow: isSelected ? '0 4px 16px rgba(99,102,241,0.2)' : 'none',
+                      boxShadow: isBulkSelected ? '0 4px 16px rgba(234,179,8,0.25)' : isEditing ? '0 4px 16px rgba(99,102,241,0.2)' : 'none',
+                      position: 'relative',
                     }}
-                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
+                    onMouseEnter={e => { if (!isEditing && !isBulkSelected) e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                    onMouseLeave={e => { if (!isEditing && !isBulkSelected) e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
                   >
-                    {/* Image */}
-                    <div style={{ width: '100%', aspectRatio: '1', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    {/* Selection checkbox */}
+                    <div 
+                      onClick={(e) => toggleSelectItem(e, item.id)}
+                      style={{ 
+                        position: 'absolute', top: 8, left: 8, zIndex: 10, 
+                        width: 20, height: 20, borderRadius: 4,
+                        background: isBulkSelected ? '#eab308' : 'rgba(255,255,255,0.9)',
+                        border: isBulkSelected ? '2px solid #eab308' : '2px solid #d1d5db',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                    >
+                      {isBulkSelected && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</span>}
+                    </div>
+
+                    {/* Continuity warning badge */}
+                    {hasRecentUsage && (
+                      <div style={{ 
+                        position: 'absolute', top: 8, right: 8, zIndex: 10,
+                        padding: '2px 6px', background: '#fef3c7', border: '1px solid #fcd34d',
+                        borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#92400e',
+                      }} title="Used recently - check continuity">
+                        ⚠️ Recent
+                      </div>
+                    )}
+
+                    {/* Image - click for lightbox */}
+                    <div 
+                      style={{ width: '100%', aspectRatio: '3/4', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}
+                      onClick={(e) => { if (imgUrl) { e.stopPropagation(); setLightboxItem(item); } }}
+                    >
                       {imgUrl ? (
-                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#f8fafc' }}
                           onError={e => { e.target.style.display = 'none'; e.target.nextSibling && (e.target.nextSibling.style.display = 'flex'); }} />
                       ) : null}
                       <div style={{ display: imgUrl ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: 48, color: '#cbd5e1' }}>
                         {CAT_ICONS[itemType] || '👗'}
                       </div>
+                      {/* Expand icon on hover */}
+                      {imgUrl && (
+                        <div style={{ position: 'absolute', bottom: 6, right: 6, padding: '3px 6px', background: 'rgba(0,0,0,0.6)', borderRadius: 4, fontSize: 10, color: '#fff', opacity: 0.7 }}>
+                          🔍
+                        </div>
+                      )}
                     </div>
 
                     {/* Info */}
                     <div style={{ padding: '10px 12px' }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {item.name}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        {/* Color swatch */}
+                        {colorHex && (
+                          <div style={{ 
+                            width: 12, height: 12, borderRadius: '50%', flexShrink: 0,
+                            background: colorHex, border: '1px solid rgba(0,0,0,0.15)',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                          }} title={item.color} />
+                        )}
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {item.name}
+                        </div>
                       </div>
                       <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
                         {CAT_ICONS[itemType] || '🏷️'} {itemType || 'item'}
@@ -4387,6 +4503,54 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 </div>
               </div>
             )}
+
+            {/* ── Lightbox Modal ── */}
+            {lightboxItem && (() => {
+              const imgUrl = lightboxItem.s3_url_processed || lightboxItem.s3_url || lightboxItem.image_url;
+              const itemType = lightboxItem.clothing_category || lightboxItem.itemType || lightboxItem.item_type || '';
+              const colorHex = getColorHex(lightboxItem.color);
+              return (
+                <div 
+                  style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} 
+                  onClick={() => setLightboxItem(null)}
+                >
+                  <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                    {/* Close button */}
+                    <button 
+                      onClick={() => setLightboxItem(null)} 
+                      style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', padding: 8 }}
+                    >✕</button>
+                    
+                    {/* Main image */}
+                    <img 
+                      src={imgUrl} 
+                      alt={lightboxItem.name} 
+                      style={{ maxWidth: '100%', maxHeight: 'calc(90vh - 120px)', objectFit: 'contain', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }} 
+                    />
+                    
+                    {/* Item info bar */}
+                    <div style={{ marginTop: 16, padding: '12px 20px', background: 'rgba(255,255,255,0.95)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 16, maxWidth: '100%' }}>
+                      {colorHex && (
+                        <div style={{ width: 20, height: 20, borderRadius: '50%', background: colorHex, border: '2px solid rgba(0,0,0,0.15)', flexShrink: 0 }} title={lightboxItem.color} />
+                      )}
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>{lightboxItem.name}</div>
+                        <div style={{ fontSize: 12, color: '#64748b' }}>
+                          {CAT_ICONS[itemType] || '🏷️'} {itemType || 'item'}
+                          {lightboxItem.color && <span> · {lightboxItem.color}</span>}
+                          {lightboxItem.vendor && <span> · {lightboxItem.vendor}</span>}
+                          {lightboxItem.price && <span style={{ color: '#16a34a', fontWeight: 600 }}> · ${parseFloat(lightboxItem.price).toFixed(0)}</span>}
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => { setLightboxItem(null); openEditItem(lightboxItem); }} 
+                        style={{ marginLeft: 'auto', padding: '6px 14px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                      >Edit Item</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
