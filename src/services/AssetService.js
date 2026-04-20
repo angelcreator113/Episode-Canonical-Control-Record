@@ -777,12 +777,15 @@ class AssetService {
         }
 
         try {
+          const { applyRemoveBgParams } = require('./removeBgParams');
           const formData = new FormData();
           formData.append('image_file', imageBuffer, {
             filename: asset.file_name,
             contentType: asset.content_type,
           });
-          formData.append('size', 'auto');
+          // Assets don't have a clothing_category; pass asset.asset_type so
+          // wardrobe-ish asset types still get the product-tuned removal.
+          applyRemoveBgParams(formData, asset.asset_type);
 
           console.log(`📤 Using remove.bg API as fallback...`);
           const removebgResponse = await axios.post(

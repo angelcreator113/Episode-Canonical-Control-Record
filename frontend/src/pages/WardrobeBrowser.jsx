@@ -72,7 +72,8 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
   const [analyzingItemId, setAnalyzingItemId] = useState(null);
   const [analyzeResult, setAnalyzeResult] = useState(null);
   const [showAnalyzeModal, setShowAnalyzeModal] = useState(false);
-  
+  const [regeneratingItemId, setRegeneratingItemId] = useState(null);
+
   // Continuity warnings
   const [continuityWarnings, setContinuityWarnings] = useState({});
   
@@ -836,16 +837,17 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
   
   // Get full-res image URL (for lightbox/detail view)
   const getImageUrl = (item) => {
-    const url = item.s3_url_processed || item.s3_url || item.image_url;
+    // AI-regenerated product shot wins over background-removed wins over raw upload.
+    const url = item.s3_url_regenerated || item.s3_url_processed || item.s3_url || item.image_url;
     if (url) {
       return url.startsWith('http') ? url : `${API_URL}${url}`;
     }
     return null;
   };
-  
+
   // Get thumbnail URL (for grid cards - faster loading)
   const getThumbnailUrl = (item) => {
-    const url = item.thumbnail_url || item.s3_url_processed || item.s3_url || item.image_url;
+    const url = item.thumbnail_url || item.s3_url_regenerated || item.s3_url_processed || item.s3_url || item.image_url;
     if (url) {
       return url.startsWith('http') ? url : `${API_URL}${url}`;
     }
@@ -891,6 +893,49 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
     }
   };
   
+  // AI-regenerate a single item as a studio product shot (Flux Kontext img2img)
+  const handleRegenerateProductShot = async (item, e) => {
+    if (e) e.stopPropagation();
+    if (regeneratingItemId) return;
+
+    if (!confirm(
+      `Regenerate "${item.name}" as a studio product shot?\n\n` +
+      `Uses AI image-to-image (~$0.04). The original photo is preserved; ` +
+      `the polished version will be shown when available.`
+    )) return;
+
+    setRegeneratingItemId(item.id);
+    try {
+      const response = await fetch(`${API_URL}/wardrobe/${item.id}/regenerate-product-shot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || err.message || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      const newUrl = result.data?.s3_url_regenerated;
+      if (!newUrl) throw new Error('No regenerated URL returned');
+
+      // Swap the visible image to the regenerated variant in both grids.
+      setItems(prev => prev.map(i => i.id === item.id
+        ? { ...i, s3_url_regenerated: newUrl, regeneration_status: 'success' }
+        : i));
+      setGalleryItems(prev => prev.map(i => i.id === item.id
+        ? { ...i, s3_url_regenerated: newUrl, regeneration_status: 'success' }
+        : i));
+
+      alert('Product shot regenerated!');
+    } catch (err) {
+      alert(`Regeneration failed: ${err.message}`);
+    } finally {
+      setRegeneratingItemId(null);
+    }
+  };
+
   // AI analyze a single item
   const handleAnalyzeItem = async (item, e) => {
     if (e) e.stopPropagation();
@@ -1056,7 +1101,6 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
       alert(`Thumbnail regeneration failed: ${err.message}`);
     }
   };
-  
   const switchMode = (newMode) => {
     if (newMode === 'library') {
       navigate('/wardrobe-library');
@@ -2161,7 +2205,8 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
     const warning = checkContinuityWarning(item);
     const isEnhancing = enhancingItemId === item.id;
     const isAnalyzing = analyzingItemId === item.id;
-    
+    const isRegenerating = regeneratingItemId === item.id;
+
     return (
       <div 
         key={item.id} 
@@ -2228,9 +2273,24 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
                 </svg>
               )}
             </button>
-            <button 
-              className={`overlay-action analyze-btn ${isAnalyzing ? 'loading' : ''}`} 
-              title="AI Analyze (Colors & Tags)" 
+            <button
+              className={`overlay-action regenerate-btn ${isRegenerating ? 'loading' : ''}`}
+              title="Regenerate as Studio Product Shot (AI, ~$0.04)"
+              onClick={(e) => handleRegenerateProductShot(item, e)}
+              disabled={isRegenerating}
+            >
+              {isRegenerating ? (
+                <span className="spinner-small">⟳</span>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="10" r="3"/>
+                </svg>
+              )}
+            </button>
+            <button
+              className={`overlay-action analyze-btn ${isAnalyzing ? 'loading' : ''}`}
+              title="AI Analyze (Colors & Tags)"
               onClick={(e) => handleAnalyzeItem(item, e)}
               disabled={isAnalyzing}
             >
