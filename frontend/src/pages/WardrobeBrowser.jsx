@@ -73,7 +73,7 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
   const [analyzeResult, setAnalyzeResult] = useState(null);
   const [showAnalyzeModal, setShowAnalyzeModal] = useState(false);
   const [regeneratingItemId, setRegeneratingItemId] = useState(null);
-  
+
   // Continuity warnings
   const [continuityWarnings, setContinuityWarnings] = useState({});
   
@@ -1101,7 +1101,6 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
       alert(`Thumbnail regeneration failed: ${err.message}`);
     }
   };
-  
   const switchMode = (newMode) => {
     if (newMode === 'library') {
       navigate('/wardrobe-library');
@@ -2207,7 +2206,7 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
     const isEnhancing = enhancingItemId === item.id;
     const isAnalyzing = analyzingItemId === item.id;
     const isRegenerating = regeneratingItemId === item.id;
-    
+
     return (
       <div 
         key={item.id} 
