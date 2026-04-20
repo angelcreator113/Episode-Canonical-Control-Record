@@ -165,7 +165,10 @@ function WorldAdmin() {
   const [wardrobeAnalyzing, setWardrobeAnalyzing] = useState(false);
   const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
   const [wardrobeUploadPreview, setWardrobeUploadPreview] = useState(null);
-  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' });
+  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false });
+  // Sort order for the wardrobe grid. Mirrors the options previously in
+  // WardrobeBrowser so consolidating the upload path doesn't drop UX.
+  const [wardrobeSort, setWardrobeSort] = useState('recent'); // recent | name | price_asc | price_desc | most_used | last_used
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [subTab, setSubTab] = useState(null);
@@ -3943,9 +3946,29 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             const descMatch = (item.description || '').toLowerCase().includes(searchTerm);
             const colorMatch = (item.color || '').toLowerCase().includes(searchTerm);
             const vendorMatch = (item.vendor || '').toLowerCase().includes(searchTerm);
-            if (!nameMatch && !descMatch && !colorMatch && !vendorMatch) return false;
+            const brandMatch = (item.brand || '').toLowerCase().includes(searchTerm);
+            const tagMatch = Array.isArray(item.tags) && item.tags.some(t => (t || '').toLowerCase().includes(searchTerm));
+            if (!nameMatch && !descMatch && !colorMatch && !vendorMatch && !brandMatch && !tagMatch) return false;
           }
           return true;
+        });
+
+        // Sort — matches the options WardrobeBrowser exposed. Comparator pulled
+        // inline to keep all the wardrobe-tab logic co-located inside this IIFE.
+        const usageCount = (i) => Number(i.times_worn || i.totalUsageCount || i.total_usage_count || 0);
+        const priceOf = (i) => Number(i.price || 0);
+        const timeOf = (i, key) => (i[key] ? new Date(i[key]).getTime() : 0);
+        filteredItems.sort((a, b) => {
+          switch (wardrobeSort) {
+            case 'name':       return (a.name || '').localeCompare(b.name || '');
+            case 'price_asc':  return priceOf(a) - priceOf(b);
+            case 'price_desc': return priceOf(b) - priceOf(a);
+            case 'most_used':  return usageCount(b) - usageCount(a);
+            case 'last_used':  return timeOf(b, 'last_worn_date') - timeOf(a, 'last_worn_date');
+            case 'favorites':  return (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0);
+            case 'recent':
+            default:           return timeOf(b, 'created_at') - timeOf(a, 'created_at');
+          }
         });
 
         const openEditItem = (item) => {
@@ -4186,7 +4209,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 )}
                 <span style={{ fontSize: 12, color: '#94a3b8' }}>{wardrobeItems.length} items</span>
                 <button onClick={() => window.open('/wardrobe/calendar', '_blank')} style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px' }}>📅 Calendar</button>
-                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
+                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
 
@@ -4216,11 +4239,25 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
               <input
                 type="text"
-                placeholder="Search by name, color, vendor..."
+                placeholder="Search name, brand, color, tags..."
                 value={wardrobeFilter === 'all' ? '' : wardrobeFilter}
                 onChange={e => setWardrobeFilter(e.target.value || 'all')}
                 style={{ ...S.inp, flex: '1 1 200px', minWidth: 150, margin: 0 }}
               />
+              <select
+                value={wardrobeSort}
+                onChange={e => setWardrobeSort(e.target.value)}
+                title="Sort wardrobe items"
+                style={{ ...S.sel, width: 'auto', minWidth: 140, margin: 0 }}
+              >
+                <option value="recent">Recently added</option>
+                <option value="name">Name (A–Z)</option>
+                <option value="price_asc">Price (low → high)</option>
+                <option value="price_desc">Price (high → low)</option>
+                <option value="most_used">Most used</option>
+                <option value="last_used">Last used</option>
+                <option value="favorites">Favorites first</option>
+              </select>
               <div style={{ width: 1, height: 24, background: '#e2e8f0', alignSelf: 'center' }} />
               {WARDROBE_CATEGORIES.map(cat => (
                 <button key={cat} onClick={() => setWardrobeCatFilter(cat)}
@@ -4414,9 +4451,43 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       {isBulkSelected && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</span>}
                     </div>
 
+                    {/* Favorite heart — click to toggle. Stops propagation so card's
+                        edit-open handler doesn't fire. PATCHes the single `is_favorite`
+                        field so the DB row updates even in environments where full
+                        row-update validation is stricter. */}
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const next = !item.is_favorite;
+                        // Optimistic update
+                        setWardrobeItems(prev => prev.map(w => w.id === item.id ? { ...w, is_favorite: next } : w));
+                        try {
+                          await fetch(`/api/v1/wardrobe/${item.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ is_favorite: next }),
+                          });
+                        } catch (err) {
+                          // Roll back + surface a toast so the UI doesn't drift from the DB.
+                          setWardrobeItems(prev => prev.map(w => w.id === item.id ? { ...w, is_favorite: !next } : w));
+                          setToast('Could not save favorite');
+                        }
+                      }}
+                      title={item.is_favorite ? 'Remove from favorites' : 'Mark as favorite'}
+                      style={{
+                        position: 'absolute', top: 6, right: hasRecentUsage ? 68 : 6, zIndex: 10,
+                        width: 26, height: 26, borderRadius: '50%',
+                        background: item.is_favorite ? 'rgba(220,38,38,0.92)' : 'rgba(255,255,255,0.9)',
+                        border: item.is_favorite ? '1px solid #dc2626' : '1px solid #d1d5db',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1,
+                        color: item.is_favorite ? '#fff' : '#9ca3af',
+                      }}
+                    >♥</button>
+
                     {/* Continuity warning badge */}
                     {hasRecentUsage && (
-                      <div style={{ 
+                      <div style={{
                         position: 'absolute', top: 8, right: 8, zIndex: 10,
                         padding: '2px 6px', background: '#fef3c7', border: '1px solid #fcd34d',
                         borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#92400e',
@@ -4504,7 +4575,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     : 'Try a different search term or category filter.'}
                 </div>
                 {wardrobeItems.length === 0 && (
-                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
+                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
                     + Upload First Item
                   </button>
                 )}
@@ -4603,6 +4674,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     </div>
                     <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>description</label><textarea value={wardrobeUploadForm.description || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, description: e.target.value }))} placeholder="Material, style, fit, notable details..." rows={2} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa', resize: 'vertical', boxSizing: 'border-box' }} /></div>
                     <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tags (comma-separated)</label><input value={wardrobeUploadForm.tags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tags: e.target.value }))} placeholder="elegant, evening, silk" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                    {/* Purchase link so creators can source the real-world item later. Backend maps website → purchase_link. */}
+                    <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>website / purchase link</label><input type="url" value={wardrobeUploadForm.website || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, website: e.target.value }))} placeholder="https://..." style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                      <input type="checkbox" checked={!!wardrobeUploadForm.isFavorite} onChange={e => setWardrobeUploadForm(p => ({ ...p, isFavorite: e.target.checked }))} />
+                      ♥ Mark as favorite
+                    </label>
                   </div>
 
                   {/* Actions */}
@@ -4625,6 +4702,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         if (wardrobeUploadForm.occasion) fd.append('occasion', wardrobeUploadForm.occasion);
                         if (wardrobeUploadForm.tags) fd.append('tags', wardrobeUploadForm.tags);
                         if (wardrobeUploadForm.tier) fd.append('tier', wardrobeUploadForm.tier);
+                        if (wardrobeUploadForm.website) fd.append('purchaseLink', wardrobeUploadForm.website);
+                        if (wardrobeUploadForm.isFavorite) fd.append('isFavorite', 'true');
                         fd.append('showId', showId);
                         const res = await fetch('/api/v1/wardrobe', { method: 'POST', body: fd });
                         if (res.ok) {
