@@ -54,6 +54,12 @@ const sharedEnv = {
   // Replicate (inpainting / depth / SAM)
   REPLICATE_API_TOKEN: process.env.REPLICATE_API_TOKEN || '',
   REPLICATE_SAM_MODEL: process.env.REPLICATE_SAM_MODEL || '',
+
+  // fal.ai (Flux text-to-image + Kontext image-to-image for wardrobe regenerate)
+  FAL_KEY: process.env.FAL_KEY || '',
+
+  // remove.bg (wardrobe background removal)
+  REMOVEBG_API_KEY: process.env.REMOVEBG_API_KEY || '',
 };
 
 module.exports = {
