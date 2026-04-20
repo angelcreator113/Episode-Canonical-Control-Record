@@ -113,11 +113,75 @@ router.get('/for-chapter/:chapterId', optionalAuth, async (req, res) => {
 });
 
 // ── POST /analyze-image — AI analyzes uploaded wardrobe image ─────────
-// Returns: name, item_type, color, description, season, occasion, tags, brand estimate
+// Returns: name, item_type, color, description, season, occasion, tags, brand estimate,
+// plus optional gameplay suggestions when show_id (and optionally episode_id) is
+// passed in the form data. Gameplay mode pulls recent tier mix + the episode's
+// event so Claude can propose context-appropriate coin_cost, lock_type, era,
+// event_types, and Lala reaction blurbs.
 router.post('/analyze-image', optionalAuth, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No image provided' });
     if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+    const { showId, episodeId } = req.body || {};
+    const wantsGameplay = !!showId;
+
+    // ── Build context summary (only when gameplay is requested) ─────────
+    // Best-effort: any query that fails just falls out of the prompt block
+    // so a misconfigured env never breaks the basic auto-fill flow.
+    let contextBlock = '';
+    if (wantsGameplay) {
+      try {
+        const models = require('../models');
+        const contextLines = [];
+
+        // Show name + era — prompt Claude with what universe we're in.
+        if (models.Show) {
+          const show = await models.Show.findByPk(showId);
+          if (show) {
+            contextLines.push(`Show: "${show.name || 'Untitled'}"`);
+            if (show.current_era || show.era) contextLines.push(`Current era: ${show.current_era || show.era}`);
+          }
+        }
+
+        // Recent wardrobe: last 10 items for tier distribution. Helps Claude
+        // propose a tier that harmonizes (or intentionally contrasts).
+        if (models.Wardrobe) {
+          const recent = await models.Wardrobe.findAll({
+            where: { show_id: showId, deleted_at: null },
+            order: [['created_at', 'DESC']],
+            limit: 10,
+            attributes: ['name', 'tier', 'era_alignment', 'clothing_category'],
+          });
+          if (recent.length) {
+            const tierCounts = recent.reduce((acc, w) => { acc[w.tier || 'unset'] = (acc[w.tier || 'unset'] || 0) + 1; return acc; }, {});
+            const tierSummary = Object.entries(tierCounts).map(([t, n]) => `${t}×${n}`).join(', ');
+            contextLines.push(`Recent wardrobe tier mix (last 10): ${tierSummary}`);
+          }
+        }
+
+        // Episode event — if the item is being uploaded for a specific episode,
+        // Claude can tailor event_types and lala_reaction blurbs to it.
+        if (episodeId && models.Episode) {
+          const episode = await models.Episode.findByPk(episodeId, {
+            attributes: ['id', 'title', 'episode_number', 'event_type', 'event_name', 'dress_code'],
+          });
+          if (episode) {
+            const ep = [`Episode ${episode.episode_number || '?'}: "${episode.title || 'Untitled'}"`];
+            if (episode.event_type) ep.push(`event: ${episode.event_type}`);
+            if (episode.event_name) ep.push(`"${episode.event_name}"`);
+            if (episode.dress_code) ep.push(`dress code: ${episode.dress_code}`);
+            contextLines.push(ep.join(' — '));
+          }
+        }
+
+        if (contextLines.length) {
+          contextBlock = `\n\nSHOW CONTEXT (use this to propose gameplay fields that fit the story):\n${contextLines.map(l => `- ${l}`).join('\n')}`;
+        }
+      } catch (ctxErr) {
+        console.warn('[WardrobeAnalyze] Context build failed, continuing without:', ctxErr.message);
+      }
+    }
 
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -135,14 +199,10 @@ router.post('/analyze-image', optionalAuth, upload.single('image'), async (req, 
     const base64 = processed.toString('base64');
     const mediaType = 'image/jpeg';
 
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 800,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-          { type: 'text', text: `You are a fashion stylist analyzing a clothing/accessory item for a wardrobe database.
+    // Two prompts: basic (current behavior) and gameplay (extended). Gameplay
+    // mode gets more tokens since it's asking for 9 extra fields + 3 short
+    // narrative blurbs.
+    const basePrompt = `You are a fashion stylist analyzing a clothing/accessory item for a wardrobe database.
 
 Analyze this image and return JSON:
 {
@@ -160,7 +220,45 @@ Analyze this image and return JSON:
   "style_notes": "one sentence about what kind of person wears this and when"
 }
 
-Return ONLY the JSON.` },
+Return ONLY the JSON.`;
+
+    const gameplayPrompt = `You are a fashion stylist AND a narrative designer for a luxury-world story game (the LalaVerse). Analyze this image and return JSON that covers BOTH the fashion metadata AND the in-story gameplay fields. Use the show context below to keep your gameplay suggestions consistent with the existing world.${contextBlock}
+
+{
+  "name": "descriptive name (e.g. 'Floral Smocked Sundress')",
+  "item_type": "dress|top|bottom|shoes|accessory|jewelry|bag|outerwear|swimwear|activewear",
+  "color": "primary color name",
+  "colors": ["all colors present"],
+  "description": "2-3 sentences: material, style, fit, notable details",
+  "season": "spring|summer|fall|winter|all-season",
+  "occasion": "casual|formal|business|party|athletic|brunch|date_night|resort",
+  "brand_guess": "brand name if identifiable, or null",
+  "price_estimate": "estimated retail price as a single number, minimum $150. Luxury-boutique pricing.",
+  "aesthetic_tags": ["tag1", "tag2", "tag3"],
+  "tier": "basic|mid|luxury|elite",
+  "style_notes": "one sentence about what kind of person wears this and when",
+
+  "coin_cost": "in-story price in LalaVerse coins — default to the same value as price_estimate unless the tier justifies a premium. integer only.",
+  "acquisition_type": "purchased|gifted|borrowed|rented|custom|vintage — how Lala most likely got it given the tier and vibe",
+  "lock_type": "none|coin|reputation|brand_exclusive|season_drop — pick 'none' for basic/mid staples, 'coin' or 'reputation' for luxury, 'brand_exclusive' for elite designer",
+  "era_alignment": "foundation|glow_up|luxury|prime|legacy — which era of Lala's arc this item fits",
+  "event_types": ["event1", "event2"],
+  "outfit_match_weight": "integer 1-10, 10 = hero piece for curated outfits, 5 = neutral, 1 = filler",
+  "lala_reaction_own": "one short sentence in Lala's voice about owning this — first person, confident, modern",
+  "lala_reaction_locked": "one short sentence in Lala's voice when she can't have it yet — aspirational, not whiny",
+  "lala_reaction_reject": "one short sentence when it's wrong for the occasion — self-aware, funny"
+}
+
+Return ONLY the JSON.`;
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: wantsGameplay ? 1400 : 800,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+          { type: 'text', text: wantsGameplay ? gameplayPrompt : basePrompt },
         ],
       }],
     });
@@ -170,7 +268,7 @@ Return ONLY the JSON.` },
     if (!match) return res.status(500).json({ error: 'AI analysis failed — no JSON returned' });
 
     const analysis = JSON.parse(match[0]);
-    return res.json({ success: true, data: analysis });
+    return res.json({ success: true, data: analysis, gameplay: wantsGameplay });
   } catch (err) {
     console.error('[WardrobeAnalyze] Error:', err.message);
     return res.status(500).json({ error: err.message });

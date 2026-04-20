@@ -5056,6 +5056,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       setWardrobeAutoFillError(null);
                       try {
                         const fd = new FormData(); fd.append('image', wardrobeUploadFile);
+                        // Pass show context so the server can enrich the prompt with
+                        // recent tier mix + episode event and get gameplay suggestions.
+                        // Without showId it falls back to the basic image-only flow.
+                        if (showId) fd.append('showId', showId);
                         const token = localStorage.getItem('authToken') || localStorage.getItem('token');
                         // Abort after 120s — Claude vision on a large image can take
                         // 30-60s under load, but anything beyond 2 min means the
@@ -5079,6 +5083,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
                         let aiPrice = '';
                         if (ai.price_estimate) { const n = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, '')); aiPrice = n && n >= 150 ? n.toFixed(2) : '150.00'; }
+                        // Coin cost — per user: "how much the outfit is", so default
+                        // to the AI's coin_cost if provided, else 1:1 with the dollar
+                        // price. Integer only since the Wardrobe model stores it as INT.
+                        const aiCoinCost = ai.coin_cost != null
+                          ? parseInt(String(ai.coin_cost).replace(/[^0-9]/g, ''), 10) || ''
+                          : (aiPrice ? parseInt(aiPrice, 10) : '');
                         setWardrobeUploadForm(prev => ({
                           ...prev,
                           name: ai.name || prev.name,
@@ -5092,6 +5102,21 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           tags: (ai.aesthetic_tags || []).join(', ') || prev.tags || '',
                           tier: ai.tier || prev.tier || '',
                           character: 'Lala',
+                          // Gameplay — only filled when the server ran gameplay mode
+                          // (i.e. we sent a showId). prev.X preserved so a second
+                          // pass doesn't clobber values the user has tweaked.
+                          ...(data.gameplay ? {
+                            coinCost: prev.coinCost || aiCoinCost,
+                            acquisitionType: prev.acquisitionType === 'purchased' && ai.acquisition_type ? ai.acquisition_type : (prev.acquisitionType || 'purchased'),
+                            lockType: prev.lockType === 'none' && ai.lock_type ? ai.lock_type : (prev.lockType || 'none'),
+                            eraAlignment: prev.eraAlignment || ai.era_alignment || '',
+                            aestheticTags: prev.aestheticTags || (ai.aesthetic_tags || []).join(', '),
+                            eventTypes: prev.eventTypes || (ai.event_types || []).join(', '),
+                            outfitMatchWeight: prev.outfitMatchWeight || (ai.outfit_match_weight != null ? String(ai.outfit_match_weight) : ''),
+                            lalaReactionOwn: prev.lalaReactionOwn || ai.lala_reaction_own || '',
+                            lalaReactionLocked: prev.lalaReactionLocked || ai.lala_reaction_locked || '',
+                            lalaReactionReject: prev.lalaReactionReject || ai.lala_reaction_reject || '',
+                          } : {}),
                         }));
                       } catch (err) {
                         console.error('[Auto-fill] threw:', err);
