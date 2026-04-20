@@ -34,6 +34,7 @@ const Wardrobe = lazy(() => import('./pages/Wardrobe'));
 const WardrobeBrowser = lazy(() => import('./pages/WardrobeBrowser'));
 const WardrobeAnalytics = lazy(() => import('./pages/WardrobeAnalytics'));
 const OutfitSets = lazy(() => import('./pages/OutfitSets'));
+const OutfitCalendar = lazy(() => import('./pages/OutfitCalendar'));
 const WardrobeLibraryUpload = lazy(() => import('./pages/WardrobeLibraryUpload'));
 const WardrobeLibraryDetail = lazy(() => import('./pages/WardrobeLibraryDetail'));
 const TemplateStudio = lazy(() => import('./pages/TemplateStudio'));
@@ -372,6 +373,7 @@ function AppContent() {
           <Route path="/wardrobe" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe/analytics" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe/outfits" element={<Navigate to="/" replace />} />
+          <Route path="/wardrobe/calendar" element={<OutfitCalendar />} />
           <Route path="/wardrobe-library" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe-library/upload" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe-library/:id" element={<WardrobeLibraryDetail />} />

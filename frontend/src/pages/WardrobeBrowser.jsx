@@ -1272,6 +1272,19 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
                 </div>
               </div>
             )}
+            
+            {/* Calendar & Analytics Links */}
+            {!isLibraryMode && (
+              <>
+                <button 
+                  className="toolbar-btn"
+                  onClick={() => navigate('/wardrobe/calendar')}
+                  title="Outfit Calendar"
+                >
+                  📅 Calendar
+                </button>
+              </>
+            )}
           </div>
         </div>
 
