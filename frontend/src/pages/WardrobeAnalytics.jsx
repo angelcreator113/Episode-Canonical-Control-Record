@@ -29,7 +29,13 @@ const WardrobeAnalytics = () => {
     itemsByCategory: {},
     mostWornItems: [],
     recentPurchases: [],
-    favoriteItems: []
+    favoriteItems: [],
+    // ROI fields
+    bestROI: [],
+    worstROI: [],
+    neverWorn: [],
+    neverWornTotal: 0,
+    avgCostPerWear: 0
   });
 
   useEffect(() => {
@@ -119,6 +125,38 @@ const WardrobeAnalytics = () => {
     
     // Favorite items
     const favorites = wardrobeItems.filter(item => item.is_favorite);
+    
+    // Cost-per-wear / ROI analysis
+    const itemsWithCostPerWear = wardrobeItems
+      .filter(item => parseFloat(item.price) > 0 && item.times_worn > 0)
+      .map(item => ({
+        ...item,
+        costPerWear: parseFloat(item.price) / item.times_worn
+      }));
+    
+    // Best ROI (lowest cost per wear)
+    const bestROI = [...itemsWithCostPerWear]
+      .sort((a, b) => a.costPerWear - b.costPerWear)
+      .slice(0, 5);
+    
+    // Worst ROI (highest cost per wear among worn items)
+    const worstROI = [...itemsWithCostPerWear]
+      .sort((a, b) => b.costPerWear - a.costPerWear)
+      .slice(0, 5);
+    
+    // Never worn items with price (wasted potential)
+    const neverWorn = wardrobeItems
+      .filter(item => parseFloat(item.price) > 0 && (!item.times_worn || item.times_worn === 0))
+      .sort((a, b) => parseFloat(b.price) - parseFloat(a.price))
+      .slice(0, 5);
+    
+    const neverWornTotal = wardrobeItems
+      .filter(item => parseFloat(item.price) > 0 && (!item.times_worn || item.times_worn === 0))
+      .reduce((sum, item) => sum + parseFloat(item.price), 0);
+    
+    const avgCostPerWear = itemsWithCostPerWear.length > 0
+      ? itemsWithCostPerWear.reduce((sum, item) => sum + item.costPerWear, 0) / itemsWithCostPerWear.length
+      : 0;
 
     // Color analytics
     const colors = wardrobeEnhancements.analyzeColors(wardrobeItems);
@@ -158,7 +196,13 @@ const WardrobeAnalytics = () => {
       itemsByCategory,
       mostWornItems: mostWorn,
       recentPurchases: recent,
-      favoriteItems: favorites
+      favoriteItems: favorites,
+      // ROI metrics
+      bestROI,
+      worstROI,
+      neverWorn,
+      neverWornTotal,
+      avgCostPerWear
     });
   };
 
@@ -330,6 +374,108 @@ const WardrobeAnalytics = () => {
           </div>
         </div>
       )}
+
+      {/* ROI Analysis Section */}
+      <div className="section-card roi-section">
+        <h2>💎 ROI Analysis (Cost-Per-Wear)</h2>
+        <div className="roi-metrics">
+          <div className="roi-metric-card">
+            <div className="roi-metric-icon">📉</div>
+            <div className="roi-metric-value">${analytics.avgCostPerWear.toFixed(2)}</div>
+            <div className="roi-metric-label">Avg Cost Per Wear</div>
+          </div>
+          <div className="roi-metric-card warning">
+            <div className="roi-metric-icon">⚠️</div>
+            <div className="roi-metric-value">${analytics.neverWornTotal.toFixed(0)}</div>
+            <div className="roi-metric-label">Spent on Never Worn</div>
+          </div>
+          <div className="roi-metric-card">
+            <div className="roi-metric-icon">📊</div>
+            <div className="roi-metric-value">{analytics.neverWorn.length > 0 ? analytics.neverWorn.length : 0}</div>
+            <div className="roi-metric-label">Items Never Worn</div>
+          </div>
+        </div>
+        
+        <div className="roi-lists">
+          {/* Best ROI */}
+          {analytics.bestROI.length > 0 && (
+            <div className="roi-list best-roi">
+              <h3>🏆 Best Value (Lowest $/Wear)</h3>
+              <div className="roi-items">
+                {analytics.bestROI.map((item, index) => (
+                  <div key={item.id} className="roi-item">
+                    <div className="roi-rank">{index + 1}</div>
+                    <div className="roi-image">
+                      {item.s3_url ? (
+                        <img src={item.s3_url} alt={item.name} />
+                      ) : (
+                        <div className="placeholder">👗</div>
+                      )}
+                    </div>
+                    <div className="roi-info">
+                      <div className="roi-name">{item.name}</div>
+                      <div className="roi-meta">{item.character} • {item.times_worn}x worn</div>
+                    </div>
+                    <div className="roi-cost-per-wear best">${item.costPerWear.toFixed(2)}/wear</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Worst ROI */}
+          {analytics.worstROI.length > 0 && (
+            <div className="roi-list worst-roi">
+              <h3>📈 Needs More Wear (Highest $/Wear)</h3>
+              <div className="roi-items">
+                {analytics.worstROI.map((item, index) => (
+                  <div key={item.id} className="roi-item">
+                    <div className="roi-rank">{index + 1}</div>
+                    <div className="roi-image">
+                      {item.s3_url ? (
+                        <img src={item.s3_url} alt={item.name} />
+                      ) : (
+                        <div className="placeholder">👗</div>
+                      )}
+                    </div>
+                    <div className="roi-info">
+                      <div className="roi-name">{item.name}</div>
+                      <div className="roi-meta">{item.character} • {item.times_worn}x worn</div>
+                    </div>
+                    <div className="roi-cost-per-wear worst">${item.costPerWear.toFixed(2)}/wear</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Never Worn */}
+          {analytics.neverWorn.length > 0 && (
+            <div className="roi-list never-worn">
+              <h3>🚨 Never Worn (Highest Cost)</h3>
+              <div className="roi-items">
+                {analytics.neverWorn.map((item, index) => (
+                  <div key={item.id} className="roi-item">
+                    <div className="roi-rank">{index + 1}</div>
+                    <div className="roi-image">
+                      {item.s3_url ? (
+                        <img src={item.s3_url} alt={item.name} />
+                      ) : (
+                        <div className="placeholder">👗</div>
+                      )}
+                    </div>
+                    <div className="roi-info">
+                      <div className="roi-name">{item.name}</div>
+                      <div className="roi-meta">{item.character} • ${item.price}</div>
+                    </div>
+                    <div className="roi-cost-per-wear never">Not Used</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Price Extremes */}
       <div className="extremes-row">

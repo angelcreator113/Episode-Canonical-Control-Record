@@ -64,6 +64,18 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
   const [editSelectedFile, setEditSelectedFile] = useState(null);
   const [openMenuItemId, setOpenMenuItemId] = useState(null);
   
+  // Lightbox / Preview states
+  const [lightboxItem, setLightboxItem] = useState(null);
+  
+  // Enhance / Analyze states
+  const [enhancingItemId, setEnhancingItemId] = useState(null);
+  const [analyzingItemId, setAnalyzingItemId] = useState(null);
+  const [analyzeResult, setAnalyzeResult] = useState(null);
+  const [showAnalyzeModal, setShowAnalyzeModal] = useState(false);
+  
+  // Continuity warnings
+  const [continuityWarnings, setContinuityWarnings] = useState({});
+  
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState({
@@ -319,6 +331,25 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
         throw new Error(error.error || 'Upload failed');
       }
       
+      const uploadResult = await response.json();
+      const newItemId = uploadResult.data?.id;
+      
+      // Auto-analyze the uploaded item if we have the ID
+      if (newItemId) {
+        try {
+          const analyzeResponse = await fetch(`${API_URL}/wardrobe/${newItemId}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ autoApply: true }),
+          });
+          if (analyzeResponse.ok) {
+            console.log('Auto-analyzed uploaded item');
+          }
+        } catch (analyzeErr) {
+          console.warn('Auto-analyze failed:', analyzeErr);
+        }
+      }
+      
       // Reset form
       setFormData({
         name: '',
@@ -347,7 +378,7 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
         loadItems();
       }
       
-      alert('Item uploaded successfully!');
+      alert('Item uploaded and auto-analyzed!');
     } catch (err) {
       console.error('Upload error:', err);
       alert(`Upload failed: ${err.message}`);
@@ -803,12 +834,227 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
     }
   };
   
+  // Get full-res image URL (for lightbox/detail view)
   const getImageUrl = (item) => {
-    const url = item.s3_url_processed || item.s3_url || item.image_url || item.thumbnail_url;
+    const url = item.s3_url_processed || item.s3_url || item.image_url;
     if (url) {
       return url.startsWith('http') ? url : `${API_URL}${url}`;
     }
     return null;
+  };
+  
+  // Get thumbnail URL (for grid cards - faster loading)
+  const getThumbnailUrl = (item) => {
+    const url = item.thumbnail_url || item.s3_url_processed || item.s3_url || item.image_url;
+    if (url) {
+      return url.startsWith('http') ? url : `${API_URL}${url}`;
+    }
+    return null;
+  };
+  
+  // Premium enhance a single item
+  const handleEnhanceItem = async (item, e) => {
+    if (e) e.stopPropagation();
+    if (enhancingItemId) return; // Already processing
+    
+    setEnhancingItemId(item.id);
+    try {
+      const response = await fetch(`${API_URL}/wardrobe/${item.id}/premium-enhance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Enhancement failed');
+      }
+      
+      const result = await response.json();
+      
+      // Update the item in local state
+      setItems(prev => prev.map(i => 
+        i.id === item.id 
+          ? { ...i, s3_url: result.data.s3_url, thumbnail_url: result.data.thumbnail_url }
+          : i
+      ));
+      setGalleryItems(prev => prev.map(i => 
+        i.id === item.id 
+          ? { ...i, s3_url: result.data.s3_url, thumbnail_url: result.data.thumbnail_url }
+          : i
+      ));
+      
+      alert(`Enhanced! ${result.data.processing?.steps?.length || 0} processing steps applied.`);
+    } catch (err) {
+      alert(`Enhancement failed: ${err.message}`);
+    } finally {
+      setEnhancingItemId(null);
+    }
+  };
+  
+  // AI analyze a single item
+  const handleAnalyzeItem = async (item, e) => {
+    if (e) e.stopPropagation();
+    if (analyzingItemId) return;
+    
+    setAnalyzingItemId(item.id);
+    try {
+      const response = await fetch(`${API_URL}/wardrobe/${item.id}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ autoApply: false }),
+      });
+      
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Analysis failed');
+      }
+      
+      const result = await response.json();
+      setAnalyzeResult({ item, analysis: result.data.analysis });
+      setShowAnalyzeModal(true);
+    } catch (err) {
+      alert(`Analysis failed: ${err.message}`);
+    } finally {
+      setAnalyzingItemId(null);
+    }
+  };
+  
+  // Apply analyzed tags/colors to item
+  const applyAnalysisResults = async () => {
+    if (!analyzeResult) return;
+    
+    const { item, analysis } = analyzeResult;
+    const updates = {};
+    
+    if (analysis.primaryColor && !item.color) updates.color = analysis.primaryColor;
+    if (analysis.category && !item.clothing_category) updates.clothingCategory = analysis.category;
+    if (analysis.allTags?.length) {
+      updates.tags = JSON.stringify([...new Set([...(item.tags || []), ...analysis.allTags])]);
+    }
+    
+    if (Object.keys(updates).length === 0) {
+      alert('No new data to apply');
+      return;
+    }
+    
+    try {
+      const formData = new FormData();
+      Object.entries(updates).forEach(([k, v]) => formData.append(k, v));
+      
+      const response = await fetch(`${API_URL}/wardrobe/${item.id}`, {
+        method: 'PUT',
+        body: formData,
+      });
+      
+      if (!response.ok) throw new Error('Update failed');
+      
+      // Refresh
+      loadItems();
+      setShowAnalyzeModal(false);
+      setAnalyzeResult(null);
+      alert('Analysis results applied!');
+    } catch (err) {
+      alert(`Failed to apply: ${err.message}`);
+    }
+  };
+  
+  // Check continuity warnings for an item
+  const checkContinuityWarning = (item) => {
+    if (!item.last_worn_date || !item.times_worn) return null;
+    
+    const lastWorn = new Date(item.last_worn_date);
+    const daysSinceWorn = Math.floor((Date.now() - lastWorn) / (1000 * 60 * 60 * 24));
+    
+    // Warn if worn more than 3 times and used recently (within 7 days)
+    if (item.times_worn >= 3 && daysSinceWorn < 7) {
+      return { type: 'frequent', message: `Worn ${item.times_worn}× recently` };
+    }
+    
+    return null;
+  };
+  
+  // Bulk enhance all visible items
+  const handleBulkEnhanceAll = async () => {
+    const itemIds = items.slice(0, 20).map(i => i.id); // Limit to 20
+    if (itemIds.length === 0) {
+      alert('No items to enhance');
+      return;
+    }
+    
+    if (!confirm(`Enhance ${itemIds.length} items? This may take a while.`)) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/wardrobe/bulk/enhance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIds }),
+      });
+      
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Bulk enhance failed');
+      }
+      
+      const result = await response.json();
+      alert(`Enhanced ${result.data.succeeded.length} items. ${result.data.failed.length} failed.`);
+      loadItems();
+    } catch (err) {
+      alert(`Bulk enhance failed: ${err.message}`);
+    }
+  };
+  
+  // Bulk analyze all visible items
+  const handleBulkAnalyzeAll = async () => {
+    const itemIds = items.slice(0, 20).map(i => i.id);
+    if (itemIds.length === 0) {
+      alert('No items to analyze');
+      return;
+    }
+    
+    if (!confirm(`Analyze ${itemIds.length} items with AI? This uses API credits.`)) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/wardrobe/bulk/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIds, autoApply: true }),
+      });
+      
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Bulk analyze failed');
+      }
+      
+      const result = await response.json();
+      alert(`Analyzed ${result.data.succeeded.length} items. ${result.data.failed.length} failed.`);
+      loadItems();
+    } catch (err) {
+      alert(`Bulk analyze failed: ${err.message}`);
+    }
+  };
+  
+  // Regenerate thumbnails for items missing them
+  const handleBulkRegenerateThumbnails = async () => {
+    if (!confirm('Regenerate thumbnails for all items missing them?')) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/wardrobe/bulk/regenerate-thumbnails`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 50 }),
+      });
+      
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Thumbnail regeneration failed');
+      }
+      
+      const result = await response.json();
+      alert(`Regenerated ${result.data.processed} thumbnails. ${result.data.failed} failed.`);
+      loadItems();
+    } catch (err) {
+      alert(`Thumbnail regeneration failed: ${err.message}`);
+    }
   };
   
   const switchMode = (newMode) => {
@@ -1003,6 +1249,42 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
                 {bulkMode ? 'Exit Bulk' : 'Bulk Select'}
               </button>
             )}
+            
+            {/* Bulk Operations Dropdown */}
+            {!isLibraryMode && (
+              <div className="bulk-ops-dropdown">
+                <button className="toolbar-btn bulk-ops-btn">
+                  ⚡ Bulk Ops
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                <div className="bulk-ops-menu">
+                  <button onClick={handleBulkEnhanceAll}>
+                    ✨ Enhance All ({items.length})
+                  </button>
+                  <button onClick={handleBulkAnalyzeAll}>
+                    🔍 Analyze All ({items.length})
+                  </button>
+                  <button onClick={handleBulkRegenerateThumbnails}>
+                    🖼️ Regenerate Thumbnails
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Calendar & Analytics Links */}
+            {!isLibraryMode && (
+              <>
+                <button 
+                  className="toolbar-btn"
+                  onClick={() => navigate('/wardrobe/calendar')}
+                  title="Outfit Calendar"
+                >
+                  📅 Calendar
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -1023,12 +1305,41 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
               ))}
             </select>
 
-            <select value={filters.color} onChange={(e) => handleFilterChange('color', e.target.value)}>
-              <option value="">All Colors</option>
-              {(allColors.length > 0 ? allColors : colors).map(c => (
-                <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
-              ))}
-            </select>
+            {/* Visual Color Swatch Picker */}
+            <div className="color-swatch-picker">
+              <button 
+                className={`color-picker-toggle ${filters.color ? 'has-selection' : ''}`}
+                title="Filter by color"
+              >
+                {filters.color ? (
+                  <>
+                    <span className="color-dot" style={{ background: colorSwatchMap[filters.color.toLowerCase()] || '#888' }} />
+                    {filters.color}
+                  </>
+                ) : (
+                  'All Colors'
+                )}
+              </button>
+              <div className="color-swatches-dropdown">
+                <button 
+                  className={`color-swatch-option ${!filters.color ? 'active' : ''}`}
+                  onClick={() => handleFilterChange('color', '')}
+                >
+                  <span className="color-dot rainbow" />
+                  All Colors
+                </button>
+                {Object.entries(colorSwatchMap).map(([name, hex]) => (
+                  <button 
+                    key={name}
+                    className={`color-swatch-option ${filters.color === name ? 'active' : ''}`}
+                    onClick={() => handleFilterChange('color', name)}
+                  >
+                    <span className="color-dot" style={{ background: hex }} />
+                    {name.charAt(0).toUpperCase() + name.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <select value={filters.season} onChange={(e) => handleFilterChange('season', e.target.value)}>
               <option value="">All Seasons</option>
@@ -1730,19 +2041,131 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
           </div>
         </div>
       )}
+      
+      {/* Lightbox / Full Image Preview */}
+      {lightboxItem && (
+        <div className="lightbox-overlay" onClick={() => setLightboxItem(null)}>
+          <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <button className="lightbox-close" onClick={() => setLightboxItem(null)}>×</button>
+            <img 
+              src={getImageUrl(lightboxItem)} 
+              alt={lightboxItem.name}
+              className="lightbox-image"
+            />
+            <div className="lightbox-info">
+              <h3>{lightboxItem.name}</h3>
+              <div className="lightbox-meta">
+                {lightboxItem.character && <span className="character-badge">{lightboxItem.character}</span>}
+                {lightboxItem.clothing_category && <span className="category-badge">{lightboxItem.clothing_category}</span>}
+                {lightboxItem.brand && <span className="detail-chip">{lightboxItem.brand}</span>}
+                {lightboxItem.price && <span className="detail-chip price-chip">${lightboxItem.price}</span>}
+              </div>
+              <div className="lightbox-actions">
+                <button 
+                  className="btn-enhance" 
+                  onClick={() => handleEnhanceItem(lightboxItem)}
+                  disabled={enhancingItemId === lightboxItem.id}
+                >
+                  {enhancingItemId === lightboxItem.id ? 'Enhancing...' : '✨ Premium Enhance'}
+                </button>
+                <button 
+                  className="btn-analyze" 
+                  onClick={() => handleAnalyzeItem(lightboxItem)}
+                  disabled={analyzingItemId === lightboxItem.id}
+                >
+                  {analyzingItemId === lightboxItem.id ? 'Analyzing...' : '🔍 AI Analyze'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* AI Analysis Results Modal */}
+      {showAnalyzeModal && analyzeResult && (
+        <div className="modal-overlay" onClick={() => { setShowAnalyzeModal(false); setAnalyzeResult(null); }}>
+          <div className="modal-content analyze-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>🔍 AI Analysis: {analyzeResult.item.name}</h2>
+              <button className="modal-close" onClick={() => { setShowAnalyzeModal(false); setAnalyzeResult(null); }}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="analyze-preview">
+                <img src={getThumbnailUrl(analyzeResult.item)} alt={analyzeResult.item.name} />
+              </div>
+              <div className="analyze-results">
+                {analyzeResult.analysis.primaryColor && (
+                  <div className="analyze-section">
+                    <h4>Primary Color</h4>
+                    <div className="color-result">
+                      <span 
+                        className="color-swatch-large" 
+                        style={{ background: colorSwatchMap[analyzeResult.analysis.primaryColor.toLowerCase()] || '#888' }}
+                      />
+                      <span>{analyzeResult.analysis.primaryColor}</span>
+                    </div>
+                  </div>
+                )}
+                {analyzeResult.analysis.allColors?.length > 0 && (
+                  <div className="analyze-section">
+                    <h4>All Colors</h4>
+                    <div className="color-chips">
+                      {analyzeResult.analysis.allColors.map((c, i) => (
+                        <span key={i} className="color-chip" style={{ background: colorSwatchMap[c.toLowerCase()] || '#888' }}>
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {analyzeResult.analysis.category && (
+                  <div className="analyze-section">
+                    <h4>Category</h4>
+                    <span className="category-badge">{analyzeResult.analysis.category}</span>
+                  </div>
+                )}
+                {analyzeResult.analysis.allTags?.length > 0 && (
+                  <div className="analyze-section">
+                    <h4>Suggested Tags</h4>
+                    <div className="tag-chips">
+                      {analyzeResult.analysis.allTags.map((tag, i) => (
+                        <span key={i} className="tag-chip">{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {analyzeResult.analysis.suggestedName && (
+                  <div className="analyze-section">
+                    <h4>Suggested Name</h4>
+                    <span>{analyzeResult.analysis.suggestedName}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => { setShowAnalyzeModal(false); setAnalyzeResult(null); }} className="btn-secondary">Close</button>
+              <button onClick={applyAnalysisResults} className="btn-primary">Apply to Item</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
   // Render a single item card
   function renderItemCard(item, isStaging) {
-    const imgUrl = getImageUrl(item);
+    const thumbUrl = getThumbnailUrl(item);
+    const fullUrl = getImageUrl(item);
     const usage = itemsWithUsage[item.id];
     const colorHex = colorSwatchMap[(item.color || '').toLowerCase()];
+    const warning = checkContinuityWarning(item);
+    const isEnhancing = enhancingItemId === item.id;
+    const isAnalyzing = analyzingItemId === item.id;
     
     return (
       <div 
         key={item.id} 
-        className={`item-card ${bulkMode ? 'bulk-mode' : ''} ${selectedItems.has(item.id) ? 'selected' : ''} ${!imgUrl ? 'placeholder-card' : ''}`}
+        className={`item-card ${bulkMode ? 'bulk-mode' : ''} ${selectedItems.has(item.id) ? 'selected' : ''} ${!thumbUrl ? 'placeholder-card' : ''}`}
       >
         {bulkMode && (
           <div className="selection-checkbox">
@@ -1750,10 +2173,17 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
           </div>
         )}
         
-        <div className="item-image">
-          {imgUrl ? (
+        {/* Continuity warning badge */}
+        {warning && (
+          <div className="continuity-warning" title={warning.message}>
+            ⚠️
+          </div>
+        )}
+        
+        <div className="item-image" onClick={() => fullUrl && setLightboxItem(item)}>
+          {thumbUrl ? (
             <img
-              src={imgUrl}
+              src={thumbUrl}
               alt={item.name}
               loading="lazy"
               onError={(e) => {
@@ -1778,15 +2208,45 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
 
           {/* Hover overlay with quick actions */}
           <div className="card-hover-overlay">
+            <button className="overlay-action" title="View Full Size" onClick={(e) => { e.stopPropagation(); setLightboxItem(item); }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+              </svg>
+            </button>
+            <button 
+              className={`overlay-action enhance-btn ${isEnhancing ? 'loading' : ''}`} 
+              title="Premium Enhance" 
+              onClick={(e) => handleEnhanceItem(item, e)}
+              disabled={isEnhancing}
+            >
+              {isEnhancing ? (
+                <span className="spinner-small">⟳</span>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707"/>
+                  <circle cx="12" cy="12" r="4"/>
+                </svg>
+              )}
+            </button>
+            <button 
+              className={`overlay-action analyze-btn ${isAnalyzing ? 'loading' : ''}`} 
+              title="AI Analyze (Colors & Tags)" 
+              onClick={(e) => handleAnalyzeItem(item, e)}
+              disabled={isAnalyzing}
+            >
+              {isAnalyzing ? (
+                <span className="spinner-small">⟳</span>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                  <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                </svg>
+              )}
+            </button>
             <button className="overlay-action" title="Edit" onClick={(e) => { e.stopPropagation(); openEditModal(item); }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
-            <button className="overlay-action" title="View Usage" onClick={(e) => { e.stopPropagation(); setUsageModalItem(item); loadItemUsage(item.id); }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
               </svg>
             </button>
             <button className="overlay-action danger" title="Delete" onClick={(e) => { e.stopPropagation(); setDeleteConfirmItem(item); }}>
