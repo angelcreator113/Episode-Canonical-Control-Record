@@ -394,6 +394,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 <ScreenContentRenderer
                   zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
                   showId={activeScreen.show_id}
+                  screenMeta={activeScreen.metadata}
                   interactive={false}
                 />
                 <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
@@ -480,6 +481,7 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
               <ScreenContentRenderer
                 zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
                 showId={activeScreen.show_id}
+                screenMeta={activeScreen.metadata}
                 interactive={false}
               />
               <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
