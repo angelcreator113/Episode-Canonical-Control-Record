@@ -4892,6 +4892,21 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           The dev server is missing an Anthropic API key. Ask an admin to set <code>ANTHROPIC_API_KEY</code> in EC2 .env and restart PM2.
                         </div>
                       )}
+                      {/Failed to fetch|NetworkError|ERR_/i.test(wardrobeAutoFillError) && (
+                        <div style={{ marginTop: 4, fontSize: 11, color: '#7f1d1d' }}>
+                          The request didn't reach the server. Usually one of:
+                          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                            <li>Backend not yet running the latest build (ask an admin to check <code>pm2 status</code>)</li>
+                            <li>A stale Service Worker is intercepting — try a hard refresh (<code>Cmd/Ctrl+Shift+R</code>) or DevTools → Application → Service Workers → Unregister</li>
+                            <li>Browser extension blocking the request (disable ad/privacy blockers on this tab)</li>
+                          </ul>
+                        </div>
+                      )}
+                      {/^(413|payload too large)/i.test(wardrobeAutoFillError) && (
+                        <div style={{ marginTop: 4, fontSize: 11, color: '#7f1d1d' }}>
+                          Image exceeds the server's upload limit. Try a smaller photo (&lt; 5 MB) or crop it down.
+                        </div>
+                      )}
                     </div>
                   )}
                   {wardrobeUploadFile && (
@@ -4901,7 +4916,17 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       try {
                         const fd = new FormData(); fd.append('image', wardrobeUploadFile);
                         const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-                        const res = await fetch(`/api/v1/wardrobe-library/analyze-image`, { method: 'POST', body: fd, headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+                        // Abort after 120s — Claude vision on a large image can take
+                        // 30-60s under load, but anything beyond 2 min means the
+                        // upstream is hung and we should surface that to the user.
+                        const ac = new AbortController();
+                        const timeout = setTimeout(() => ac.abort(), 120000);
+                        let res;
+                        try {
+                          res = await fetch(`/api/v1/wardrobe-library/analyze-image`, { method: 'POST', body: fd, headers: token ? { 'Authorization': `Bearer ${token}` } : {}, signal: ac.signal });
+                        } finally {
+                          clearTimeout(timeout);
+                        }
                         const data = await res.json().catch(() => ({}));
                         if (!res.ok || !data.success || !data.data) {
                           const msg = data.error || `${res.status} ${res.statusText || 'request failed'}`;
@@ -4929,7 +4954,13 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         }));
                       } catch (err) {
                         console.error('[Auto-fill] threw:', err);
-                        setWardrobeAutoFillError(err.message || String(err));
+                        // AbortError means our 2-min timeout fired; give that a clear label
+                        // so users don't think "Failed to fetch" means permanent breakage.
+                        if (err.name === 'AbortError') {
+                          setWardrobeAutoFillError('Timed out after 2 minutes — the AI server is slow or overloaded. Try again.');
+                        } else {
+                          setWardrobeAutoFillError(err.message || String(err));
+                        }
                       } finally {
                         setWardrobeAnalyzing(false);
                       }
