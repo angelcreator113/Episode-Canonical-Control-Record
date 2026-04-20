@@ -168,6 +168,10 @@ router.post('/:id/regenerate-product-shot', asyncHandler(wardrobeController.rege
 // the grid card should show for this item
 router.patch('/:id/primary-variant', asyncHandler(wardrobeController.setPrimaryImageVariant));
 
+// Promote a colored-backdrop variant of this item to a phone screen
+// (creates an Asset row with overlay_type='wardrobe_detail')
+router.post('/:id/send-to-phone', asyncHandler(wardrobeController.sendToPhone));
+
 // AI upscale wardrobe image (4x via Real-ESRGAN)
 router.post('/:id/upscale', asyncHandler(wardrobeController.aiUpscaleItem));
 
