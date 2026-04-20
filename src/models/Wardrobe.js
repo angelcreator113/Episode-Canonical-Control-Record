@@ -94,6 +94,41 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: 'User-selected preferred variant: original | processed | regenerated (NULL = auto)',
       },
+      s3_key_bg_pink: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      s3_url_bg_pink: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      s3_key_bg_blue: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      s3_url_bg_blue: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      s3_key_bg_teal: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      s3_url_bg_teal: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      tap_zones: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: [],
+        comment: 'Array of tap-zone rects (normalized 0-1 coords) shared across colored variants',
+      },
+      display_price_on_phone: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
 
       // Shopping / sourcing
       brand: {

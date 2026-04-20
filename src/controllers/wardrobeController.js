@@ -224,6 +224,43 @@ module.exports = {
               s3_url_processed: processedUrl,
             });
             console.log(`[Wardrobe] Background removed: ${wardrobeItem.id}`);
+
+            // Chain the colored-backdrop variants off the transparent cutout
+            // we just produced. Runs inline (user is still waiting on the
+            // async IIFE anyway, and Sharp is fast — each variant is ~100-200ms
+            // of CPU — so no need for a separate worker). Partial success is
+            // fine: we write whichever of pink/blue/teal produced a buffer.
+            try {
+              console.log(`[Wardrobe] Generating backdrop variants for ${wardrobeItem.id}...`);
+              const processedBuffer = Buffer.from(bgRes.data);
+              const { generateBackdropVariants } = wardrobeImageService;
+              const backdrops = await generateBackdropVariants(processedBuffer, character || 'uncategorized');
+
+              const updates = {};
+              if (backdrops.pink) {
+                updates.s3_key_bg_pink = backdrops.pink.s3Key;
+                updates.s3_url_bg_pink = backdrops.pink.s3Url;
+              }
+              if (backdrops.blue) {
+                updates.s3_key_bg_blue = backdrops.blue.s3Key;
+                updates.s3_url_bg_blue = backdrops.blue.s3Url;
+              }
+              if (backdrops.teal) {
+                updates.s3_key_bg_teal = backdrops.teal.s3Key;
+                updates.s3_url_bg_teal = backdrops.teal.s3Url;
+              }
+              if (Object.keys(updates).length > 0) {
+                await wardrobeItem.update(updates);
+              }
+              const ok = ['pink', 'blue', 'teal'].filter(k => backdrops[k]).join(',');
+              const failed = backdrops.errors ? ` (failed: ${Object.keys(backdrops.errors).join(',')})` : '';
+              console.log(`[Wardrobe] Backdrops generated for ${wardrobeItem.id}: ${ok || '(none)'}${failed}`);
+            } catch (bdErr) {
+              // Backdrop generation is a nice-to-have — never block the item
+              // from being usable. Log and move on; the user can regenerate
+              // later via an explicit endpoint.
+              console.warn(`[Wardrobe] Backdrop generation failed (non-blocking) for ${wardrobeItem.id}: ${bdErr.message}`);
+            }
           } catch (bgErr) {
             // Surface HTTP status + response body when the error came from
             // remove.bg, so pm2 logs tell us exactly why (credits, bad key,
