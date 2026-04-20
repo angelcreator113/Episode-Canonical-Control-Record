@@ -2105,15 +2105,23 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
                 {lightboxItem.price && <span className="detail-chip price-chip">${lightboxItem.price}</span>}
               </div>
               <div className="lightbox-actions">
-                <button 
-                  className="btn-enhance" 
+                <button
+                  className="btn-enhance"
                   onClick={() => handleEnhanceItem(lightboxItem)}
                   disabled={enhancingItemId === lightboxItem.id}
                 >
                   {enhancingItemId === lightboxItem.id ? 'Enhancing...' : '✨ Premium Enhance'}
                 </button>
-                <button 
-                  className="btn-analyze" 
+                <button
+                  className="btn-regenerate"
+                  onClick={() => handleRegenerateProductShot(lightboxItem)}
+                  disabled={regeneratingItemId === lightboxItem.id}
+                  title="AI image-to-image — swaps backdrop, removes hangers/dress-form residue, simulates invisible mannequin (~$0.04)"
+                >
+                  {regeneratingItemId === lightboxItem.id ? 'Regenerating...' : '🎨 Regenerate Product Shot'}
+                </button>
+                <button
+                  className="btn-analyze"
                   onClick={() => handleAnalyzeItem(lightboxItem)}
                   disabled={analyzingItemId === lightboxItem.id}
                 >
