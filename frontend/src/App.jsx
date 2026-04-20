@@ -30,10 +30,10 @@ const ShowManagement = lazy(() => import('./pages/ShowManagement'));
 const ShowDetail = lazy(() => import('./pages/ShowDetail'));
 const CreateShow = lazy(() => import('./pages/CreateShow'));
 const EditShow = lazy(() => import('./pages/EditShow'));
-const Wardrobe = lazy(() => import('./pages/Wardrobe'));
-const WardrobeBrowser = lazy(() => import('./pages/WardrobeBrowser'));
-const WardrobeAnalytics = lazy(() => import('./pages/WardrobeAnalytics'));
-const OutfitSets = lazy(() => import('./pages/OutfitSets'));
+// Wardrobe authoring lives in WorldAdmin's wardrobe tab — the standalone
+// Wardrobe / WardrobeBrowser / UniverseWardrobePage / analytics pages were
+// orphaned (redirected to `/` via the fallback routes below) and have been
+// removed. OutfitCalendar is still reachable via /wardrobe/calendar.
 const OutfitCalendar = lazy(() => import('./pages/OutfitCalendar'));
 const WardrobeLibraryUpload = lazy(() => import('./pages/WardrobeLibraryUpload'));
 const WardrobeLibraryDetail = lazy(() => import('./pages/WardrobeLibraryDetail'));
@@ -88,7 +88,6 @@ const UniversePage = lazy(() => import('./pages/UniversePage'));
 const SeriesPage = lazy(() => import('./pages/SeriesPage'));
 const UniverseProductionPage = lazy(() => import('./pages/UniverseProductionPage'));
 const UniverseSocialImportPage = lazy(() => import('./pages/UniverseSocialImportPage'));
-const UniverseWardrobePage = lazy(() => import('./pages/UniverseWardrobePage'));
 const UniverseAssetsPage = lazy(() => import('./pages/UniverseAssetsPage'));
 const UniverseWorldStatePage = lazy(() => import('./pages/UniverseWorldStatePage'));
 const UniverseTensionsPage = lazy(() => import('./pages/UniverseTensionsPage'));
