@@ -1023,6 +1023,61 @@ module.exports = {
   },
 
   /**
+   * PATCH /api/v1/wardrobe/:id/primary-variant
+   *
+   * Persist the user's preference for which image variant the grid card
+   * should show (original | processed | regenerated | null=auto). The
+   * lightbox can preview any variant locally without hitting this, but
+   * writing changes which one non-hovering viewers see in the grid.
+   */
+  async setPrimaryImageVariant(req, res) {
+    try {
+      const { id } = req.params;
+      const { variant } = req.body || {};
+
+      const ALLOWED = new Set(['original', 'processed', 'regenerated', null]);
+      if (!ALLOWED.has(variant) && variant !== undefined) {
+        return res.status(400).json({
+          error: 'Invalid variant',
+          message: `variant must be one of: original, processed, regenerated, or null. Got: ${JSON.stringify(variant)}`,
+        });
+      }
+
+      const item = await Wardrobe.findOne({ where: { id, deleted_at: null } });
+      if (!item) return res.status(404).json({ error: 'Wardrobe item not found' });
+
+      // Refuse to set a variant the row doesn't actually have — otherwise
+      // the grid card would fall back to the default chain silently and the
+      // user would wonder why their click did nothing.
+      if (variant === 'regenerated' && !item.s3_url_regenerated) {
+        return res.status(400).json({ error: 'No regenerated image exists for this item yet' });
+      }
+      if (variant === 'processed' && !item.s3_url_processed) {
+        return res.status(400).json({ error: 'No background-removed image exists for this item yet' });
+      }
+      if (variant === 'original' && !item.s3_url) {
+        return res.status(400).json({ error: 'No original image exists for this item' });
+      }
+
+      await item.update({ primary_image_variant: variant === undefined ? null : variant });
+
+      return res.json({
+        success: true,
+        data: {
+          id: item.id,
+          primary_image_variant: item.primary_image_variant,
+        },
+      });
+    } catch (err) {
+      console.error('[Wardrobe] setPrimaryImageVariant failed:', err.message);
+      return res.status(500).json({
+        error: 'Failed to set primary image variant',
+        message: err.message,
+      });
+    }
+  },
+
+  /**
    * GET /api/v1/wardrobe/staging - Get unassigned wardrobe items (staging area)
    */
   async getStagingItems(req, res) {
