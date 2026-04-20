@@ -3694,6 +3694,62 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 {outfitScore.repeats?.length > 0 && outfitScore.repeats.map((r, i) => (
                   <div key={`r${i}`} style={{ fontSize: 11, color: '#8b5cf6', marginTop: 3 }}>{r.narrative?.text}</div>
                 ))}
+
+                {/* ── Per-slot breakdown ────────────────────────────────
+                    One row per UI slot (outfit/shoes/jewelry/accessories/
+                    fragrance). Each row shows a progress bar + reason so the
+                    player can see exactly which slot is hurting the overall
+                    score. Status color: empty=gray, low=red, ok=amber,
+                    good=green. Required slots with empty status get the red
+                    "missing" treatment. */}
+                {Array.isArray(outfitScore.slots) && outfitScore.slots.length > 0 && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {outfitScore.slots.map(slot => {
+                      const emptyRequired = slot.status === 'empty' && slot.required;
+                      const color = emptyRequired ? '#dc2626'
+                        : slot.status === 'good' ? '#16a34a'
+                        : slot.status === 'ok' ? '#B8962E'
+                        : slot.status === 'low' ? '#dc2626'
+                        : '#94a3b8';
+                      const barWidth = slot.status === 'empty' ? 0 : slot.match;
+                      return (
+                        <div key={slot.slot} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 110, display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#444', fontWeight: 600, flexShrink: 0 }}>
+                            <span>{slot.icon}</span>
+                            <span>{slot.label}</span>
+                          </div>
+                          <div style={{ flex: 1, height: 6, background: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ width: `${barWidth}%`, height: '100%', background: color, transition: 'width 0.25s' }} />
+                          </div>
+                          <div style={{ width: 36, fontSize: 11, fontWeight: 700, color, textAlign: 'right', flexShrink: 0, fontFamily: "'DM Mono', monospace" }}>
+                            {slot.status === 'empty' ? (slot.required ? '!' : '—') : slot.match}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {/* Reason line per-row would crowd the grid; show only
+                        the first non-empty reason whose slot is dragging the
+                        score so players get one concrete thing to fix. */}
+                    {(() => {
+                      const weakest = outfitScore.slots
+                        .filter(s => s.reason && (s.status === 'low' || (s.status === 'empty' && s.required)))
+                        .sort((a, b) => a.match - b.match)[0];
+                      if (!weakest) return null;
+                      return (
+                        <div style={{ fontSize: 11, color: '#8b5cf6', marginTop: 4, fontStyle: 'italic' }}>
+                          💡 {weakest.reason}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+                {/* Surface items whose category isn't one of the 5 slots so
+                    the author can fix the category on the row. */}
+                {Array.isArray(outfitScore.unassigned) && outfitScore.unassigned.length > 0 && (
+                  <div style={{ marginTop: 8, padding: '6px 8px', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 6, fontSize: 11, color: '#c2410c' }}>
+                    ⚠️ Couldn't slot {outfitScore.unassigned.length} piece{outfitScore.unassigned.length > 1 ? 's' : ''} — check {outfitScore.unassigned.map(u => u.name).slice(0, 3).join(', ')}{outfitScore.unassigned.length > 3 ? '…' : ''}
+                  </div>
+                )}
               </div>
             )}
 
