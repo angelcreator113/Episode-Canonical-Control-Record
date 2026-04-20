@@ -934,14 +934,68 @@ module.exports = {
       const mime = isPng ? 'image/png' : 'image/jpeg';
       const dataUri = `data:${mime};base64,${imageBuffer.toString('base64')}`;
 
-      // Default studio prompt — Kontext will use the reference image for
-      // identity (silhouette, color, pattern) and this prompt for the vibe.
-      const prompt = req.body?.prompt ||
-        'Professional studio product photograph of this clothing item. ' +
-        'Clean neutral off-white backdrop, soft even studio lighting, ' +
-        'invisible-mannequin pose showing the garment shape, no hanger, ' +
-        'no wrinkles, fashion e-commerce style, centered composition, ' +
-        'sharp focus on fabric details and trim.';
+      // Category-aware prompt. The previous one-size-fits-all prompt used
+      // "clothing item … invisible-mannequin pose showing the garment shape"
+      // which biased Kontext to produce clothing shapes even when the
+      // reference was a purse, jewelry, or perfume — turning a handbag into
+      // a sweater in at least one reported case. Each category now gets a
+      // prompt tuned to its own product-photography conventions.
+      const category = String(wardrobeItem.clothing_category || '').toLowerCase();
+      const isClothing = ['dress','top','bottom','outerwear','shoes','skirt','pants','jacket','coat','shirt','blouse','dresses','tops','bottoms'].includes(category);
+      const isBag = ['bag','purse','handbag','clutch','tote','backpack'].includes(category);
+      const isJewelry = ['jewelry','earring','earrings','necklace','bracelet','ring','brooch','pin'].includes(category);
+      const isPerfume = ['perfume','fragrance','cologne'].includes(category);
+      const isShoes = ['shoes','heels','boots','sneakers','sandals'].includes(category);
+
+      let defaultPrompt;
+      if (isBag) {
+        defaultPrompt =
+          'Professional studio product photograph of this handbag. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'bag standing upright or positioned naturally on a flat surface, ' +
+          'no model, no hands, no mannequin, no hanger, fashion e-commerce style, ' +
+          'centered composition, sharp focus on leather texture, hardware, and stitching details.';
+      } else if (isJewelry) {
+        defaultPrompt =
+          'Professional studio product photograph of this jewelry piece. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'jewelry laid flat or arranged to show its shape, no model, no hands, ' +
+          'no mannequin, luxury jewelry e-commerce style, centered composition, ' +
+          'sharp focus on metal finish, stones, and chain detail.';
+      } else if (isPerfume) {
+        defaultPrompt =
+          'Professional studio product photograph of this perfume bottle. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'bottle standing upright centered, no hands, no model, ' +
+          'luxury fragrance e-commerce style, centered composition, ' +
+          'sharp focus on bottle glass, cap, and label.';
+      } else if (isShoes) {
+        defaultPrompt =
+          'Professional studio product photograph of this pair of shoes. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'shoes positioned at a slight three-quarter angle, no model, no feet, ' +
+          'no mannequin, fashion e-commerce style, centered composition, ' +
+          'sharp focus on material, sole, and construction details.';
+      } else if (isClothing) {
+        defaultPrompt =
+          'Professional studio product photograph of this clothing item. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'invisible-mannequin pose showing the garment shape, no hanger, ' +
+          'no wrinkles, fashion e-commerce style, centered composition, ' +
+          'sharp focus on fabric details and trim.';
+      } else {
+        // Unknown / accessory: keep it generic — don't assume it's clothing.
+        defaultPrompt =
+          'Professional studio product photograph of this item. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'item arranged naturally, no model, no hands, no mannequin, ' +
+          'e-commerce product photography style, centered composition, ' +
+          'sharp focus on material and texture details.';
+      }
+
+      // Explicit prompt in the request body always wins, so the frontend (or
+      // a power user) can override per-call if needed.
+      const prompt = req.body?.prompt || defaultPrompt;
 
       const { generateImageFromImage } = require('../services/imageGenerationService');
       const result = await generateImageFromImage(dataUri, prompt, {
