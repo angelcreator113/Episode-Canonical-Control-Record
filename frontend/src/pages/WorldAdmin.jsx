@@ -168,7 +168,7 @@ function WorldAdmin() {
   const [wardrobeAutoFillError, setWardrobeAutoFillError] = useState(null);
   const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
   const [wardrobeUploadPreview, setWardrobeUploadPreview] = useState(null);
-  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '' });
+  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' });
   // Reset the auto-fill error whenever the modal is closed or the file is
   // swapped out — stale error text against a different image would be confusing.
   useEffect(() => {
@@ -4059,6 +4059,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             lock_type: item.lock_type || 'none',
             era_alignment: item.era_alignment || '',
             reputation_required: item.reputation_required ?? '',
+            // Advanced gameplay — JSONB arrays show as CSV in the UI; numbers
+            // and booleans hydrate from the row. is_visible defaults true so
+            // items predating the flag still render as visible.
+            aesthetic_tags: Array.isArray(item.aesthetic_tags) ? item.aesthetic_tags.join(', ') : (item.aesthetic_tags || ''),
+            event_types: Array.isArray(item.event_types) ? item.event_types.join(', ') : (item.event_types || ''),
+            outfit_match_weight: item.outfit_match_weight ?? '',
+            influence_required: item.influence_required ?? '',
+            season_unlock_episode: item.season_unlock_episode ?? '',
+            is_owned: !!item.is_owned,
+            is_visible: item.is_visible !== false,
+            lala_reaction_own: item.lala_reaction_own || '',
+            lala_reaction_locked: item.lala_reaction_locked || '',
+            lala_reaction_reject: item.lala_reaction_reject || '',
           });
         };
 
@@ -4201,9 +4214,17 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           if (!editingWardrobeItem) return;
           setSavingWardrobe(true); setError(null);
           try {
+            // CSV → array for tag buckets. The PUT handler JSON.parses these,
+            // so we send actual arrays instead of CSV strings. Empty string
+            // becomes undefined so we don't wipe existing values on save.
+            const csvToArray = (v) => typeof v === 'string' && v.trim()
+              ? v.split(',').map(s => s.trim()).filter(Boolean)
+              : undefined;
             const payload = {
               ...wardrobeForm,
               tags: wardrobeForm.tags ? wardrobeForm.tags.split(',').map(s => s.trim()).filter(Boolean) : [],
+              aesthetic_tags: csvToArray(wardrobeForm.aesthetic_tags),
+              event_types: csvToArray(wardrobeForm.event_types),
               price: wardrobeForm.price ? parseFloat(wardrobeForm.price) : null,
             };
             const res = await api.put(`/api/v1/wardrobe/${editingWardrobeItem.id}`, payload);
@@ -4342,7 +4363,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     </div>
                   </details>
                 </div>
-                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
+                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
 
@@ -4647,6 +4668,61 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       </div>
                     )}
                   </div>
+
+                  {/* Advanced gameplay — same collapsible shape as the upload modal. */}
+                  <details style={{ marginTop: 14, paddingTop: 10, borderTop: '1px dashed #e6d9b8' }}>
+                    <summary style={{ fontSize: 12, fontWeight: 600, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
+                      ⋯ advanced gameplay
+                    </summary>
+                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div>
+                        <label style={S.fLabel}>Lala reaction (when owned)</label>
+                        <textarea rows={2} value={wf.lala_reaction_own || ''} onChange={e => setWf('lala_reaction_own', e.target.value)} style={{ ...S.tArea, minHeight: 44 }} placeholder="e.g., 'My ride-or-die for red carpets'" />
+                      </div>
+                      <div>
+                        <label style={S.fLabel}>Lala reaction (when locked)</label>
+                        <textarea rows={2} value={wf.lala_reaction_locked || ''} onChange={e => setWf('lala_reaction_locked', e.target.value)} style={{ ...S.tArea, minHeight: 44 }} placeholder="e.g., 'One day...'" />
+                      </div>
+                      <div>
+                        <label style={S.fLabel}>Lala reaction (when rejected)</label>
+                        <textarea rows={2} value={wf.lala_reaction_reject || ''} onChange={e => setWf('lala_reaction_reject', e.target.value)} style={{ ...S.tArea, minHeight: 44 }} placeholder="e.g., 'Not the vibe for tonight'" />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <label style={S.fLabel}>Aesthetic Tags <span style={{ fontWeight: 400, color: '#94a3b8' }}>(CSV)</span></label>
+                          <input value={wf.aesthetic_tags || ''} onChange={e => setWf('aesthetic_tags', e.target.value)} style={S.inp} placeholder="romantic, bold, editorial" />
+                        </div>
+                        <div>
+                          <label style={S.fLabel}>Event Types <span style={{ fontWeight: 400, color: '#94a3b8' }}>(CSV)</span></label>
+                          <input value={wf.event_types || ''} onChange={e => setWf('event_types', e.target.value)} style={S.inp} placeholder="gala, brunch, meetup" />
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                        <div>
+                          <label style={S.fLabel}>Match Weight (1-10)</label>
+                          <input type="number" min="1" max="10" step="1" value={wf.outfit_match_weight ?? ''} onChange={e => setWf('outfit_match_weight', e.target.value)} style={S.inp} placeholder="5" />
+                        </div>
+                        <div>
+                          <label style={S.fLabel}>Influence Required</label>
+                          <input type="number" min="0" step="1" value={wf.influence_required ?? ''} onChange={e => setWf('influence_required', e.target.value)} style={S.inp} placeholder="0" />
+                        </div>
+                        <div>
+                          <label style={S.fLabel}>Unlock Episode #</label>
+                          <input type="number" min="1" step="1" value={wf.season_unlock_episode ?? ''} onChange={e => setWf('season_unlock_episode', e.target.value)} style={S.inp} placeholder="1" />
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                          <input type="checkbox" checked={!!wf.is_owned} onChange={e => setWf('is_owned', e.target.checked)} />
+                          Lala already owns it
+                        </label>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                          <input type="checkbox" checked={wf.is_visible !== false} onChange={e => setWf('is_visible', e.target.checked)} />
+                          Visible in closet
+                        </label>
+                      </div>
+                    </div>
+                  </details>
                 </div>
 
                 {/* Actions */}
@@ -4907,7 +4983,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     : 'Try a different search term or category filter.'}
                 </div>
                 {wardrobeItems.length === 0 && (
-                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
+                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
                     + Upload First Item
                   </button>
                 )}
@@ -5117,6 +5193,68 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           <input type="number" min="0" step="1" value={wardrobeUploadForm.reputationRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, reputationRequired: e.target.value }))} placeholder="e.g., 5" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
                         </div>
                       )}
+
+                      {/* ── Advanced gameplay (expandable) ─────────────────────
+                          Collapsed by default so creators logging a piece don't see
+                          12 extra inputs. Expand only when the item needs Lala
+                          reaction blurbs, aesthetic/event tag buckets, or the rarer
+                          scoring/gate knobs. */}
+                      <details style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e6d9b8' }}>
+                        <summary style={{ fontSize: 11, fontWeight: 600, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
+                          ⋯ advanced gameplay
+                        </summary>
+                        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {/* Lala reaction blurbs — what she says about this item in three states. */}
+                          <div>
+                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when she owns it)</label>
+                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionOwn || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionOwn: e.target.value }))} placeholder="e.g., 'My ride-or-die for red carpets'" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', resize: 'vertical', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when locked)</label>
+                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionLocked || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionLocked: e.target.value }))} placeholder="e.g., 'One day...'" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', resize: 'vertical', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when rejected)</label>
+                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionReject || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionReject: e.target.value }))} placeholder="e.g., 'Not the vibe for tonight'" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', resize: 'vertical', boxSizing: 'border-box' }} />
+                          </div>
+                          {/* Tag buckets — distinct from the basic `tags` field above. */}
+                          <div>
+                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>aesthetic tags (CSV)</label>
+                            <input value={wardrobeUploadForm.aestheticTags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, aestheticTags: e.target.value }))} placeholder="romantic, bold, editorial" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>event types (CSV)</label>
+                            <input value={wardrobeUploadForm.eventTypes || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, eventTypes: e.target.value }))} placeholder="gala, brunch, meetup" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', boxSizing: 'border-box' }} />
+                          </div>
+                          {/* Numeric knobs — match-weight is 1-10, the rest are natural units. */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                            <div>
+                              <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>match weight (1-10)</label>
+                              <input type="number" min="1" max="10" step="1" value={wardrobeUploadForm.outfitMatchWeight || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, outfitMatchWeight: e.target.value }))} placeholder="5" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>influence required</label>
+                              <input type="number" min="0" step="1" value={wardrobeUploadForm.influenceRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, influenceRequired: e.target.value }))} placeholder="0" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>unlock ep #</label>
+                              <input type="number" min="1" step="1" value={wardrobeUploadForm.seasonUnlockEpisode || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, seasonUnlockEpisode: e.target.value }))} placeholder="1" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                            </div>
+                          </div>
+                          {/* Visibility flags — is_visible defaults true so this only
+                              surfaces for authors who want to hide an item or mark it owned up front. */}
+                          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                              <input type="checkbox" checked={!!wardrobeUploadForm.isOwned} onChange={e => setWardrobeUploadForm(p => ({ ...p, isOwned: e.target.checked }))} />
+                              Lala already owns it
+                            </label>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                              <input type="checkbox" checked={wardrobeUploadForm.isVisible !== false} onChange={e => setWardrobeUploadForm(p => ({ ...p, isVisible: e.target.checked }))} />
+                              Visible in closet
+                            </label>
+                          </div>
+                        </div>
+                      </details>
                     </div>
 
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
@@ -5155,6 +5293,20 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         if (wardrobeUploadForm.lockType && wardrobeUploadForm.lockType !== 'none') fd.append('lockType', wardrobeUploadForm.lockType);
                         if (wardrobeUploadForm.eraAlignment) fd.append('eraAlignment', wardrobeUploadForm.eraAlignment);
                         if (wardrobeUploadForm.reputationRequired) fd.append('reputationRequired', wardrobeUploadForm.reputationRequired);
+                        // Advanced gameplay — CSV tag buckets are sent raw; the
+                        // backend splits them. Numeric knobs only sent when set so
+                        // the model defaults stay intact. `is_visible` defaults
+                        // true server-side, so we only ship it when false.
+                        if (wardrobeUploadForm.aestheticTags) fd.append('aestheticTags', wardrobeUploadForm.aestheticTags);
+                        if (wardrobeUploadForm.eventTypes) fd.append('eventTypes', wardrobeUploadForm.eventTypes);
+                        if (wardrobeUploadForm.outfitMatchWeight) fd.append('outfitMatchWeight', wardrobeUploadForm.outfitMatchWeight);
+                        if (wardrobeUploadForm.influenceRequired) fd.append('influenceRequired', wardrobeUploadForm.influenceRequired);
+                        if (wardrobeUploadForm.seasonUnlockEpisode) fd.append('seasonUnlockEpisode', wardrobeUploadForm.seasonUnlockEpisode);
+                        if (wardrobeUploadForm.isOwned) fd.append('isOwned', 'true');
+                        if (wardrobeUploadForm.isVisible === false) fd.append('isVisible', 'false');
+                        if (wardrobeUploadForm.lalaReactionOwn) fd.append('lalaReactionOwn', wardrobeUploadForm.lalaReactionOwn);
+                        if (wardrobeUploadForm.lalaReactionLocked) fd.append('lalaReactionLocked', wardrobeUploadForm.lalaReactionLocked);
+                        if (wardrobeUploadForm.lalaReactionReject) fd.append('lalaReactionReject', wardrobeUploadForm.lalaReactionReject);
                         fd.append('showId', showId);
                         const res = await fetch('/api/v1/wardrobe', { method: 'POST', body: fd });
                         if (res.ok) {
