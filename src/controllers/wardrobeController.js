@@ -1169,6 +1169,108 @@ module.exports = {
   },
 
   /**
+   * POST /api/v1/wardrobe/:id/send-to-phone
+   *
+   * Promote a wardrobe item's colored backdrop variant into a phone screen
+   * (an Asset row with overlay_type='wardrobe_detail'). The user then drops
+   * into the existing UIOverlaysTab authoring UI to draw tap zones, set
+   * content zones, and configure price display on the phone — we don't
+   * duplicate any of that wardrobe-side.
+   *
+   * Body: { variant: 'pink'|'blue'|'teal', episodeId?: uuid, showId?: uuid }
+   * Variant picks which backdrop color gets used as the screen background.
+   * episodeId is optional — when provided the Asset is episode-scoped so
+   * different episodes can have different tap behavior on the same item.
+   */
+  async sendToPhone(req, res) {
+    try {
+      const { id } = req.params;
+      const { variant, episodeId, showId: bodyShowId } = req.body || {};
+
+      const VARIANT_TO_URL = {
+        pink: { key: 's3_key_bg_pink', url: 's3_url_bg_pink' },
+        blue: { key: 's3_key_bg_blue', url: 's3_url_bg_blue' },
+        teal: { key: 's3_key_bg_teal', url: 's3_url_bg_teal' },
+      };
+      if (!VARIANT_TO_URL[variant]) {
+        return res.status(400).json({
+          error: 'Invalid variant',
+          message: `variant must be one of: ${Object.keys(VARIANT_TO_URL).join(', ')}. Got: ${JSON.stringify(variant)}`,
+        });
+      }
+
+      const item = await Wardrobe.findOne({ where: { id, deleted_at: null } });
+      if (!item) return res.status(404).json({ error: 'Wardrobe item not found' });
+
+      const backdropKey = item[VARIANT_TO_URL[variant].key];
+      const backdropUrl = item[VARIANT_TO_URL[variant].url];
+      if (!backdropUrl) {
+        return res.status(400).json({
+          error: `No ${variant} backdrop exists for this item yet`,
+          message: 'Upload triggers backdrop generation; wait a few seconds after upload and try again. Existing pre-backdrop items can be reprocessed via the backfill script.',
+        });
+      }
+
+      // Resolve showId: explicit in body wins, else fall back to the wardrobe
+      // row's own show_id, else null (global scope).
+      const showId = bodyShowId || item.show_id || null;
+
+      const { Asset } = models;
+      if (!Asset) {
+        return res.status(500).json({ error: 'Asset model not available' });
+      }
+
+      // Create the phone screen. UIOverlaysTab picks it up through the
+      // existing GET /api/v1/ui-overlays/:showId listing (filters by
+      // asset_type='UI_OVERLAY' + show_id + episode_id).
+      const assetName = `${item.name || 'Wardrobe Item'} — ${variant} detail`;
+      const asset = await Asset.create({
+        asset_type: 'UI_OVERLAY',
+        asset_group: 'WARDROBE',
+        asset_scope: episodeId ? 'EPISODE' : (showId ? 'SHOW' : 'GLOBAL'),
+        show_id: showId,
+        episode_id: episodeId || null,
+        name: assetName,
+        s3_url_processed: backdropUrl,
+        s3_key_raw: backdropKey,
+        content_type: 'image/jpeg',
+        metadata: {
+          overlay_type: 'wardrobe_detail',
+          wardrobe_id: item.id,
+          wardrobe_variant: variant,
+          // Empty zones/links to start — user fills them in via UIOverlaysTab.
+          screen_links: [],
+          content_zones: [],
+          // Carry the price forward so the phone renderer can surface it
+          // when the screen's content_zones include a price zone.
+          wardrobe_price: item.price ? Number(item.price) : null,
+          wardrobe_brand: item.brand || null,
+        },
+      });
+
+      console.log(`[Wardrobe] Sent to phone — item=${id} variant=${variant} asset=${asset.id}`);
+
+      return res.json({
+        success: true,
+        data: {
+          asset_id: asset.id,
+          wardrobe_id: item.id,
+          variant,
+          show_id: showId,
+          episode_id: episodeId || null,
+          name: assetName,
+        },
+      });
+    } catch (err) {
+      console.error('[Wardrobe] sendToPhone failed:', err.message);
+      return res.status(500).json({
+        error: 'Failed to send wardrobe item to phone',
+        message: err.message,
+      });
+    }
+  },
+
+  /**
    * GET /api/v1/wardrobe/staging - Get unassigned wardrobe items (staging area)
    */
   async getStagingItems(req, res) {

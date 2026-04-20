@@ -142,6 +142,7 @@ function WorldAdmin() {
   const [regeneratingItemId, setRegeneratingItemId] = useState(null);  // AI product-shot regeneration in flight
   const [lightboxVariant, setLightboxVariant] = useState(null);  // 'original' | 'processed' | 'regenerated' (overrides resolver in lightbox only)
   const [promotingVariant, setPromotingVariant] = useState(false);  // PATCH in flight
+  const [sendingToPhone, setSendingToPhone] = useState(false);  // Send-to-phone POST in flight
   const [selectedWardrobeIds, setSelectedWardrobeIds] = useState(new Set());  // For bulk selection
   const [overlayData, setOverlayData] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
@@ -4009,6 +4010,50 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           }
         };
 
+        // Promote a colored-backdrop variant to a phone screen (Asset with
+        // overlay_type='wardrobe_detail'). After creation, switch the user
+        // into the UI Overlays tab so they can draw tap zones and content
+        // zones on the freshly-created screen — we delegate that authoring
+        // entirely to the existing overlay editor rather than reinvent it
+        // on the wardrobe side.
+        const handleSendToPhone = async (item, variant) => {
+          if (sendingToPhone) return;
+          if (!['pink', 'blue', 'teal'].includes(variant)) {
+            alert('Pick one of the colored backdrop variants (pink, blue, or teal) before sending to phone.');
+            return;
+          }
+          if (!confirm(
+            `Send "${item.name}" (${variant} backdrop) to Lala's phone?\n\n` +
+            `Creates a new phone screen using this variant. You'll be taken to the overlay editor to draw tap zones and content areas on it.`
+          )) return;
+
+          setSendingToPhone(true);
+          try {
+            const res = await fetch(`/api/v1/wardrobe/${item.id}/send-to-phone`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ variant, showId }),
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.message || err.error || `HTTP ${res.status}`);
+            }
+            const result = await res.json();
+            // Close lightbox + navigate to the overlay editor tab. The new
+            // Asset will appear in UIOverlaysTab's list automatically via
+            // its existing GET /api/v1/ui-overlays/:showId fetch.
+            setLightboxVariant(null);
+            setLightboxItem(null);
+            setSubTab('overlays-tab');
+            setSearchParams({ tab: 'overlays-tab' });
+            alert(`Sent to phone as "${result.data.name}". Opening overlay editor…`);
+          } catch (err) {
+            alert(`Send to phone failed: ${err.message}`);
+          } finally {
+            setSendingToPhone(false);
+          }
+        };
+
         // Kick off an AI regeneration of the item as a clean studio product
         // shot (Flux Kontext img2img). Preserves the original image; the
         // regenerated variant lands on s3_url_regenerated and the grid/
@@ -4697,11 +4742,21 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           style={{ marginLeft: 'auto', padding: '6px 14px', background: promotingVariant ? '#94a3b8' : '#0f766e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: promotingVariant ? 'wait' : 'pointer' }}
                         >{promotingVariant ? 'Saving…' : '★ Set as default'}</button>
                       )}
+                      {/* "Send to phone" only makes sense for a colored-backdrop
+                          variant — the phone uses it as a screen background. */}
+                      {active && ['pink', 'blue', 'teal'].includes(active.key) && (
+                        <button
+                          onClick={() => handleSendToPhone(lightboxItem, active.key)}
+                          disabled={sendingToPhone}
+                          title={`Create a Lala's-phone screen from the ${active.label} variant — opens the overlay editor so you can draw tap zones`}
+                          style={{ marginLeft: (active && active.key !== currentPrimary) ? 0 : 'auto', padding: '6px 14px', background: sendingToPhone ? '#94a3b8' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: sendingToPhone ? 'wait' : 'pointer' }}
+                        >{sendingToPhone ? 'Sending…' : '📱 Send to phone'}</button>
+                      )}
                       <button
                         onClick={() => handleRegenerateProductShot(lightboxItem)}
                         disabled={regeneratingItemId === lightboxItem.id}
                         title="AI image-to-image — swaps backdrop, removes hangers/dress-form residue, simulates invisible mannequin (~$0.04)"
-                        style={{ marginLeft: (active && active.key !== currentPrimary) ? 0 : 'auto', padding: '6px 14px', background: regeneratingItemId === lightboxItem.id ? '#94a3b8' : '#db2777', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: regeneratingItemId === lightboxItem.id ? 'wait' : 'pointer' }}
+                        style={{ padding: '6px 14px', background: regeneratingItemId === lightboxItem.id ? '#94a3b8' : '#db2777', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: regeneratingItemId === lightboxItem.id ? 'wait' : 'pointer' }}
                       >{regeneratingItemId === lightboxItem.id ? 'Regenerating…' : '🎨 Regenerate'}</button>
                       <button
                         onClick={() => { setLightboxVariant(null); setLightboxItem(null); openEditItem(lightboxItem); }}
