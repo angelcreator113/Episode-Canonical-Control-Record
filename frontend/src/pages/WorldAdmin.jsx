@@ -168,7 +168,7 @@ function WorldAdmin() {
   const [wardrobeAutoFillError, setWardrobeAutoFillError] = useState(null);
   const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
   const [wardrobeUploadPreview, setWardrobeUploadPreview] = useState(null);
-  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false });
+  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '' });
   // Reset the auto-fill error whenever the modal is closed or the file is
   // swapped out — stale error text against a different image would be confusing.
   useEffect(() => {
@@ -4050,6 +4050,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             price: item.price || '',
             website: item.website || item.purchase_link || '',
             tags: Array.isArray(item.tags) ? item.tags.join(', ') : (typeof item.tags === 'string' ? item.tags : ''),
+            // Game-layer fields — hydrate from the row so the edit form shows what
+            // the backend has today. Empty string (not null) so controlled inputs
+            // stay controlled.
+            tier: item.tier || '',
+            coin_cost: item.coin_cost ?? '',
+            acquisition_type: item.acquisition_type || 'purchased',
+            lock_type: item.lock_type || 'none',
+            era_alignment: item.era_alignment || '',
+            reputation_required: item.reputation_required ?? '',
           });
         };
 
@@ -4333,7 +4342,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     </div>
                   </details>
                 </div>
-                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
+                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
 
@@ -4581,6 +4590,62 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   <div>
                     <label style={S.fLabel}>Website URL</label>
                     <input value={wf.website} onChange={e => setWf('website', e.target.value)} style={S.inp} placeholder="https://..." />
+                  </div>
+                </div>
+
+                {/* ── Gameplay section ─────────────────────────────────
+                    Same grid the upload modal uses so creators see consistent
+                    fields whether they're authoring or editing. Backend PUT
+                    already accepts all of these via updates.*. */}
+                <div style={{ marginBottom: 16, padding: '12px 14px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 10 }}>🎮 GAMEPLAY</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
+                    <div>
+                      <label style={S.fLabel}>Tier</label>
+                      <select value={wf.tier || ''} onChange={e => setWf('tier', e.target.value)} style={S.sel}>
+                        <option value="">Auto</option>
+                        <option value="basic">👟 Basic — Fast Fashion</option>
+                        <option value="mid">👠 Mid — Contemporary</option>
+                        <option value="luxury">💎 Luxury — Designer</option>
+                        <option value="elite">👑 Elite — Haute Couture</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={S.fLabel}>Story Price (coins)</label>
+                      <input type="number" min="0" step="1" value={wf.coin_cost ?? ''} onChange={e => setWf('coin_cost', e.target.value)} style={S.inp} placeholder="e.g., 2400" />
+                    </div>
+                    <div>
+                      <label style={S.fLabel}>How Lala Got It</label>
+                      <select value={wf.acquisition_type || 'purchased'} onChange={e => setWf('acquisition_type', e.target.value)} style={S.sel}>
+                        {['purchased', 'gifted', 'borrowed', 'rented', 'custom', 'vintage'].map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                    <div>
+                      <label style={S.fLabel}>Lock Type</label>
+                      <select value={wf.lock_type || 'none'} onChange={e => setWf('lock_type', e.target.value)} style={S.sel}>
+                        <option value="none">None (always available)</option>
+                        <option value="coin">🪙 Coin</option>
+                        <option value="reputation">⭐ Reputation</option>
+                        <option value="brand_exclusive">🔒 Brand exclusive</option>
+                        <option value="season_drop">📅 Season drop</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={S.fLabel}>Era Alignment</label>
+                      <select value={wf.era_alignment || ''} onChange={e => setWf('era_alignment', e.target.value)} style={S.sel}>
+                        <option value="">Any era</option>
+                        {['foundation', 'glow_up', 'luxury', 'prime', 'legacy'].map(e2 => <option key={e2} value={e2}>{e2}</option>)}
+                      </select>
+                    </div>
+                    {/* Rep-required only visible when the lock type asks for it. */}
+                    {wf.lock_type === 'reputation' && (
+                      <div>
+                        <label style={S.fLabel}>Reputation Required</label>
+                        <input type="number" min="0" step="1" value={wf.reputation_required ?? ''} onChange={e => setWf('reputation_required', e.target.value)} style={S.inp} placeholder="e.g., 5" />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -4842,7 +4907,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     : 'Try a different search term or category filter.'}
                 </div>
                 {wardrobeItems.length === 0 && (
-                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
+                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
                     + Upload First Item
                   </button>
                 )}
@@ -4978,7 +5043,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>category *</label><select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Select...</option>{['dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'].map(c => <option key={c} value={c}>{CAT_ICONS[c] || '🏷️'} {c}</option>)}</select></div>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>color</label><input value={wardrobeUploadForm.color} onChange={e => setWardrobeUploadForm(p => ({ ...p, color: e.target.value }))} placeholder="e.g., blush pink" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tier</label><select value={wardrobeUploadForm.tier || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tier: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Auto</option>{['basic', 'mid', 'luxury', 'elite'].map(t => <option key={t} value={t}>{WARDROBE_TIER_ICONS[t]} {t}</option>)}</select></div>
+                      <div>
+                        <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tier</label>
+                        {/* Tier descriptors mirror the old WardrobeBrowser edit form so the
+                            gameplay context is obvious — e.g. "Luxury" isn't just a label,
+                            it signals Designer-tier in-story. */}
+                        <select value={wardrobeUploadForm.tier || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tier: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}>
+                          <option value="">Auto</option>
+                          <option value="basic">👟 Basic — Fast Fashion</option>
+                          <option value="mid">👠 Mid — Contemporary</option>
+                          <option value="luxury">💎 Luxury — Designer</option>
+                          <option value="elite">👑 Elite — Haute Couture</option>
+                        </select>
+                      </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>price</label><input type="number" value={wardrobeUploadForm.price} onChange={e => setWardrobeUploadForm(p => ({ ...p, price: e.target.value }))} placeholder="650.00" step="0.01" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
@@ -4989,6 +5066,59 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tags (comma-separated)</label><input value={wardrobeUploadForm.tags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tags: e.target.value }))} placeholder="elegant, evening, silk" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
                     {/* Purchase link so creators can source the real-world item later. Backend maps website → purchase_link. */}
                     <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>website / purchase link</label><input type="url" value={wardrobeUploadForm.website || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, website: e.target.value }))} placeholder="https://..." style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+
+                    {/* ── Gameplay section ─────────────────────────────────
+                        Fields that drive the in-story unlock/purchase flow. Kept
+                        visually separate from the "what is this thing?" fields
+                        above so creators can scan past if they're just logging
+                        a piece without gameplay intent. */}
+                    <div style={{ marginTop: 4, padding: '10px 12px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>🎮 GAMEPLAY (OPTIONAL)</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+                        <div>
+                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>story price (LalaVerse coins)</label>
+                          <input type="number" min="0" step="1" value={wardrobeUploadForm.coinCost || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, coinCost: e.target.value }))} placeholder="e.g., 2400" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>how Lala got it</label>
+                          <select value={wardrobeUploadForm.acquisitionType || 'purchased'} onChange={e => setWardrobeUploadForm(p => ({ ...p, acquisitionType: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff' }}>
+                            {['purchased', 'gifted', 'borrowed', 'rented', 'custom', 'vintage'].map(a => <option key={a} value={a}>{a}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+                        <div>
+                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>lock type</label>
+                          <select value={wardrobeUploadForm.lockType || 'none'} onChange={e => setWardrobeUploadForm(p => ({ ...p, lockType: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff' }}>
+                            <option value="none">None (always available)</option>
+                            <option value="coin">🪙 Coin (pay to unlock)</option>
+                            <option value="reputation">⭐ Reputation gate</option>
+                            <option value="brand_exclusive">🔒 Brand exclusive</option>
+                            <option value="season_drop">📅 Season drop</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>era alignment</label>
+                          <select value={wardrobeUploadForm.eraAlignment || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, eraAlignment: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff' }}>
+                            <option value="">Any era</option>
+                            <option value="foundation">Foundation</option>
+                            <option value="glow_up">Glow Up</option>
+                            <option value="luxury">Luxury</option>
+                            <option value="prime">Prime</option>
+                            <option value="legacy">Legacy</option>
+                          </select>
+                        </div>
+                      </div>
+                      {/* Rep requirement only shows when the lock gate asks for it. Keeps the
+                          form compact when it's irrelevant. */}
+                      {wardrobeUploadForm.lockType === 'reputation' && (
+                        <div>
+                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>reputation required</label>
+                          <input type="number" min="0" step="1" value={wardrobeUploadForm.reputationRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, reputationRequired: e.target.value }))} placeholder="e.g., 5" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                        </div>
+                      )}
+                    </div>
+
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
                       <input type="checkbox" checked={!!wardrobeUploadForm.isFavorite} onChange={e => setWardrobeUploadForm(p => ({ ...p, isFavorite: e.target.checked }))} />
                       ♥ Mark as favorite
@@ -5017,6 +5147,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         if (wardrobeUploadForm.tier) fd.append('tier', wardrobeUploadForm.tier);
                         if (wardrobeUploadForm.website) fd.append('purchaseLink', wardrobeUploadForm.website);
                         if (wardrobeUploadForm.isFavorite) fd.append('isFavorite', 'true');
+                        // Gameplay fields — only send when set so the backend keeps model
+                        // defaults (acquisition_type='purchased', lock_type='none', etc.)
+                        // for anything the creator didn't touch.
+                        if (wardrobeUploadForm.coinCost) fd.append('coinCost', wardrobeUploadForm.coinCost);
+                        if (wardrobeUploadForm.acquisitionType && wardrobeUploadForm.acquisitionType !== 'purchased') fd.append('acquisitionType', wardrobeUploadForm.acquisitionType);
+                        if (wardrobeUploadForm.lockType && wardrobeUploadForm.lockType !== 'none') fd.append('lockType', wardrobeUploadForm.lockType);
+                        if (wardrobeUploadForm.eraAlignment) fd.append('eraAlignment', wardrobeUploadForm.eraAlignment);
+                        if (wardrobeUploadForm.reputationRequired) fd.append('reputationRequired', wardrobeUploadForm.reputationRequired);
                         fd.append('showId', showId);
                         const res = await fetch('/api/v1/wardrobe', { method: 'POST', body: fd });
                         if (res.ok) {

@@ -56,6 +56,16 @@ module.exports = {
         isFavorite,
         tags,
         showId, // NEW: Primary show ownership
+        // ── Game-layer fields ───────────────────────────────────────
+        // These used to only be settable via PUT after creation. Accepting
+        // them on POST too so creators can author a fully gameplay-ready
+        // item in one step from the upload modal (matches the old
+        // WardrobeBrowser edit form's coin_cost / acquisition_type inputs).
+        coinCost,
+        acquisitionType,
+        lockType,
+        eraAlignment,
+        reputationRequired,
       } = req.body;
 
       // Validation - character is REQUIRED, name and category auto-fill
@@ -167,6 +177,12 @@ module.exports = {
         outfit_notes: outfitNotes || null,
         is_favorite: isFavorite === 'true' || isFavorite === true,
         tags: parsedTags,
+        // Game-layer — all optional; model defaults handle the rest.
+        coin_cost: coinCost != null && coinCost !== '' ? parseInt(coinCost, 10) : undefined,
+        acquisition_type: acquisitionType || undefined,
+        lock_type: lockType || undefined,
+        era_alignment: eraAlignment || undefined,
+        reputation_required: reputationRequired != null && reputationRequired !== '' ? parseInt(reputationRequired, 10) : undefined,
       });
 
       // Auto background removal — runs async, updates the record when done
@@ -554,6 +570,9 @@ module.exports = {
         lala_reaction_own: updates.lala_reaction_own,
         lala_reaction_locked: updates.lala_reaction_locked,
         lala_reaction_reject: updates.lala_reaction_reject,
+        // acquisition_type was missing from the PUT handler — added so the
+        // edit panel's "How Lala Got It" dropdown actually persists.
+        acquisition_type: updates.acquisition_type,
         updated_at: new Date(),
       };
 
