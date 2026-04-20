@@ -461,6 +461,86 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate, onAiFillZo
             </div>
           )}
 
+          {/* Wardrobe price — currency + font styling. Values come from the
+              screen's asset metadata, so there's no data source to pick. */}
+          {zone.content_type === 'wardrobe_price' && (
+            <>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>CURRENCY</label>
+                  <select
+                    value={config.currency || 'USD'}
+                    onChange={(e) => handleConfigChange('currency', e.target.value)}
+                    style={fieldStyle}
+                  >
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>SIZE</label>
+                  <input
+                    type="number"
+                    min={6}
+                    max={32}
+                    value={config.font_size || ''}
+                    onChange={(e) => handleConfigChange('font_size', parseInt(e.target.value) || undefined)}
+                    placeholder="14"
+                    style={fieldStyle}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>COLOR</label>
+                  <input
+                    type="color"
+                    value={config.color || '#ffffff'}
+                    onChange={(e) => handleConfigChange('color', e.target.value)}
+                    style={{ ...fieldStyle, padding: 2, height: 28 }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Wardrobe brand — font styling only. Brand text comes from asset metadata. */}
+          {zone.content_type === 'wardrobe_brand' && (
+            <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>SIZE</label>
+                <input
+                  type="number"
+                  min={6}
+                  max={24}
+                  value={config.font_size || ''}
+                  onChange={(e) => handleConfigChange('font_size', parseInt(e.target.value) || undefined)}
+                  placeholder="11"
+                  style={fieldStyle}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>COLOR</label>
+                <input
+                  type="color"
+                  value={config.color || '#ffffff'}
+                  onChange={(e) => handleConfigChange('color', e.target.value)}
+                  style={{ ...fieldStyle, padding: 2, height: 28 }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>CASE</label>
+                <select
+                  value={config.uppercase === false ? 'mixed' : 'upper'}
+                  onChange={(e) => handleConfigChange('uppercase', e.target.value === 'upper')}
+                  style={fieldStyle}
+                >
+                  <option value="upper">UPPER</option>
+                  <option value="mixed">Mixed</option>
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Custom text config */}
           {zone.content_type === 'custom_text' && (
             <>

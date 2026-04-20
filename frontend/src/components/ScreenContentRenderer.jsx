@@ -25,6 +25,8 @@ export const CONTENT_TYPES = [
   { key: 'story_ring', label: 'Story Avatars', icon: '⭕', desc: 'Row of story circles', group: 'social' },
   { key: 'wardrobe_grid', label: 'Wardrobe Grid', icon: '👗', desc: 'Outfit item thumbnails', group: 'wardrobe' },
   { key: 'outfit_card', label: 'Outfit Card', icon: '👠', desc: 'Single outfit set', group: 'wardrobe' },
+  { key: 'wardrobe_price', label: 'Wardrobe Price', icon: '💰', desc: 'Price from the screen\u2019s wardrobe item', group: 'wardrobe' },
+  { key: 'wardrobe_brand', label: 'Wardrobe Brand', icon: '🏷️', desc: 'Brand name from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'comments_list', label: 'Comments', icon: '💭', desc: 'Post comment thread', group: 'social' },
   { key: 'engagement_stats', label: 'Engagement Stats', icon: '📈', desc: 'Likes, reach, trending', group: 'stats' },
   { key: 'custom_text', label: 'Custom Text', icon: '✏️', desc: 'Static text overlay', group: 'other' },
@@ -35,7 +37,7 @@ export const CONTENT_TYPE_MAP = Object.fromEntries(CONTENT_TYPES.map(t => [t.key
 // ── Main renderer — renders all content zones over a screen ──
 // `runtimeContext` is the optional phone-runtime context used to filter zones by
 // their `conditions` array. When absent, all zones render (editor "author view").
-export default function ScreenContentRenderer({ zones = [], showId, episodeId, interactive = false, runtimeContext = null }) {
+export default function ScreenContentRenderer({ zones = [], showId, episodeId, interactive = false, runtimeContext = null, screenMeta = null }) {
   if (!zones.length) return null;
 
   // Filter zones by `conditions` when a runtime context is provided. Editor/author
@@ -66,6 +68,7 @@ export default function ScreenContentRenderer({ zones = [], showId, episodeId, i
             zone={zone}
             showId={showId}
             episodeId={episodeId}
+            screenMeta={screenMeta}
           />
         </div>
       ))}
@@ -80,7 +83,7 @@ function evaluateZoneConditions(zone, ctx) {
 }
 
 // ── Dispatch to the right sub-renderer based on content_type ──
-function ContentZoneRenderer({ zone, showId, episodeId }) {
+function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
   const config = zone.content_config || {};
 
   switch (zone.content_type) {
@@ -100,6 +103,10 @@ function ContentZoneRenderer({ zone, showId, episodeId }) {
       return <WardrobeGridRenderer showId={showId} config={config} />;
     case 'outfit_card':
       return <OutfitCardRenderer showId={showId} config={config} />;
+    case 'wardrobe_price':
+      return <WardrobePriceRenderer config={config} screenMeta={screenMeta} />;
+    case 'wardrobe_brand':
+      return <WardrobeBrandRenderer config={config} screenMeta={screenMeta} />;
     case 'comments_list':
       return <CommentsRenderer showId={showId} config={config} />;
     case 'engagement_stats':
@@ -411,6 +418,53 @@ function OutfitCardRenderer({ showId, config }) {
           {outfit.synergy_score}% match
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Wardrobe Price ──
+// Pulls wardrobe_price from the screen's own asset metadata (populated by
+// wardrobeController.sendToPhone). Currency defaults to USD but creators can
+// override via content_config.currency / prefix. Falls back to em-dash in the
+// editor when no asset is attached yet so the zone is still visible.
+function WardrobePriceRenderer({ config, screenMeta }) {
+  const price = screenMeta?.wardrobe_price;
+  const prefix = config.prefix ?? (config.currency === 'EUR' ? '€' : config.currency === 'GBP' ? '£' : '$');
+  const display = price != null ? `${prefix}${Number(price).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—';
+  return (
+    <div style={{
+      width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: config.align || 'center',
+      padding: '2px 6px', background: config.bg || 'rgba(0,0,0,0.4)',
+    }}>
+      <span style={{
+        fontSize: config.font_size || 14,
+        fontWeight: 700,
+        color: config.color || '#fff',
+        fontFamily: config.font === 'serif' ? "'Playfair Display', serif" : config.font === 'mono' ? "'DM Mono', monospace" : "'DM Sans', sans-serif",
+        letterSpacing: 0.3,
+      }}>{display}</span>
+    </div>
+  );
+}
+
+// ── Wardrobe Brand ──
+function WardrobeBrandRenderer({ config, screenMeta }) {
+  const brand = screenMeta?.wardrobe_brand;
+  const display = brand || '—';
+  return (
+    <div style={{
+      width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: config.align || 'center',
+      padding: '2px 6px', background: config.bg || 'rgba(0,0,0,0.3)',
+    }}>
+      <span style={{
+        fontSize: config.font_size || 11,
+        fontWeight: 600,
+        color: config.color || '#fff',
+        fontFamily: config.font === 'serif' ? "'Playfair Display', serif" : config.font === 'mono' ? "'DM Mono', monospace" : "'DM Sans', sans-serif",
+        textTransform: config.uppercase === false ? 'none' : 'uppercase',
+        letterSpacing: 0.8,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{display}</span>
     </div>
   );
 }

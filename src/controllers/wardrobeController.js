@@ -1220,6 +1220,52 @@ module.exports = {
         return res.status(500).json({ error: 'Asset model not available' });
       }
 
+      // Pre-wire a default "Equip" tap zone that fills the outfit slot matching
+      // the item's clothing_category. The slot key convention (outfit_slot_<cat>)
+      // lets mission objectives watch for a specific equip via `state.outfit_slot_dress == <id>`.
+      // Unknown categories fall back to a generic wardrobe_equipped_id flag so the
+      // zone still does *something* useful and the user can refine later.
+      const CATEGORY_TO_SLOT = {
+        dress: 'outfit_slot_dress',
+        top: 'outfit_slot_top',
+        bottom: 'outfit_slot_bottom',
+        shoes: 'outfit_slot_shoes',
+        accessories: 'outfit_slot_accessory',
+        jewelry: 'outfit_slot_jewelry',
+        perfume: 'outfit_slot_perfume',
+      };
+      const slotKey = CATEGORY_TO_SLOT[(item.clothing_category || '').toLowerCase()] || 'wardrobe_equipped_id';
+      const defaultScreenLinks = [{
+        id: `zone-equip-${item.id}`,
+        x: 10, y: 65, w: 80, h: 25,
+        label: 'Equip',
+        actions: [
+          { type: 'set_state', key: slotKey, value: item.id },
+          { type: 'show_toast', text: `Equipped ${item.name || 'item'}`, tone: 'success' },
+        ],
+      }];
+
+      // Pre-seed content zones so the card already shows brand + price without
+      // the user having to wire it. Brand is placed above price; both read
+      // directly from this asset's metadata (wardrobe_brand / wardrobe_price).
+      const defaultContentZones = [];
+      if (item.brand) {
+        defaultContentZones.push({
+          id: `cz-brand-${item.id}`,
+          x: 8, y: 8, w: 84, h: 8,
+          content_type: 'wardrobe_brand',
+          content_config: { font_size: 11, color: '#ffffff', bg: 'rgba(0,0,0,0.35)' },
+        });
+      }
+      if (item.price) {
+        defaultContentZones.push({
+          id: `cz-price-${item.id}`,
+          x: 8, y: 18, w: 84, h: 10,
+          content_type: 'wardrobe_price',
+          content_config: { font_size: 14, color: '#ffffff', bg: 'rgba(0,0,0,0.45)' },
+        });
+      }
+
       // Create the phone screen. UIOverlaysTab picks it up through the
       // existing GET /api/v1/ui-overlays/:showId listing (filters by
       // asset_type='UI_OVERLAY' + show_id + episode_id).
@@ -1238,9 +1284,11 @@ module.exports = {
           overlay_type: 'wardrobe_detail',
           wardrobe_id: item.id,
           wardrobe_variant: variant,
-          // Empty zones/links to start — user fills them in via UIOverlaysTab.
-          screen_links: [],
-          content_zones: [],
+          // Pre-wired: the Equip zone fills the correct outfit slot on tap, and
+          // brand/price content zones are seeded from the item's own fields.
+          // The user can still draw more zones / tweak configs in UIOverlaysTab.
+          screen_links: defaultScreenLinks,
+          content_zones: defaultContentZones,
           // Carry the price forward so the phone renderer can surface it
           // when the screen's content_zones include a price zone.
           wardrobe_price: item.price ? Number(item.price) : null,
