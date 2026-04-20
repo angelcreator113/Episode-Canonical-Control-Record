@@ -198,6 +198,76 @@ async function generateFlux(prompt, options = {}) {
   };
 }
 
+// ── FLUX KONTEXT (image-to-image via fal.ai) ─────────────────────────────────
+
+/**
+ * Image-to-image regeneration via Flux Pro Kontext.
+ *
+ * Takes a reference image (e.g. an amateur wardrobe photo on a hanger) plus a
+ * prompt (e.g. "studio product photograph, neutral backdrop, invisible
+ * mannequin") and returns a polished variant. Kontext preserves the subject's
+ * identity — silhouette, color, pattern — much better than text-to-image
+ * regenerated from a Claude Vision description.
+ *
+ * Cost: $0.04/image at the time of writing (same tier as DALL-E standard).
+ * The reference image can be passed as a publicly-reachable URL OR a base64
+ * data URI — the caller chooses based on whether the S3 object is public.
+ */
+async function generateImageFromImage(referenceImageUrl, prompt, options = {}) {
+  const FAL_KEY = process.env.FAL_KEY;
+  if (!FAL_KEY) throw new Error('FAL_KEY not configured');
+  if (!referenceImageUrl) throw new Error('referenceImageUrl required');
+
+  const KONTEXT_COST = 0.04;
+  if (!checkImageBudget(KONTEXT_COST)) {
+    throw new Error(
+      `Daily image budget exceeded ($${dailyImageSpend.toFixed(2)} / $${DAILY_IMAGE_BUDGET}). ` +
+      `Try again tomorrow or increase AI_DAILY_IMAGE_BUDGET_USD.`
+    );
+  }
+
+  const size = normalizeSize(options.size);
+  const imageSize = FLUX_SIZES[size] || FLUX_SIZES.portrait || 'portrait_16_9';
+
+  console.log(`[ImageGen] Flux Kontext | ${imageSize} | prompt: ${prompt.slice(0, 80)}...`);
+
+  const response = await axios.post(
+    'https://fal.run/fal-ai/flux-pro/kontext',
+    {
+      prompt: prompt.slice(0, 4000),
+      image_url: referenceImageUrl,
+      num_images: 1,
+      output_format: 'jpeg',
+      ...(options.seed ? { seed: options.seed } : {}),
+      ...(options.guidanceScale ? { guidance_scale: options.guidanceScale } : {}),
+    },
+    {
+      headers: {
+        'Authorization': `Key ${FAL_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 180000, // Kontext is slower than flux-pro text-to-image
+    }
+  );
+
+  const imageUrl = response.data?.images?.[0]?.url;
+  if (!imageUrl) {
+    console.error('[ImageGen] Flux Kontext full response:', JSON.stringify(response.data).slice(0, 500));
+    throw new Error(`Flux Kontext returned no image. Status: ${response.status}. Keys: ${Object.keys(response.data || {}).join(',')}`);
+  }
+
+  recordImageSpend(KONTEXT_COST);
+  console.log(`[ImageGen] Flux Kontext success: ${imageUrl.slice(0, 80)}...`);
+
+  return {
+    url: imageUrl,
+    provider: 'flux-kontext',
+    model: 'fal-ai/flux-pro/kontext',
+    seed: response.data?.images?.[0]?.seed || null,
+    cost_estimate: KONTEXT_COST,
+  };
+}
+
 // ── DALL-E 3 (OpenAI) ────────────────────────────────────────────────────────
 
 async function generateDallE(prompt, options = {}) {
@@ -315,6 +385,7 @@ async function generateImageUrl(prompt, options = {}) {
 module.exports = {
   generateImage,
   generateImageUrl,
+  generateImageFromImage,
   generateFlux,
   generateDallE,
   getProvider,

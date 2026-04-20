@@ -5,6 +5,7 @@ const { Op } = require('sequelize');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 const wardrobeImageService = require('../services/wardrobeImageService');
+const { applyRemoveBgParams } = require('../services/removeBgParams');
 
 // S3 client setup (reuse from assets)
 const s3Client = new S3Client({
@@ -196,7 +197,7 @@ module.exports = {
               filename: `${wardrobeItem.id}.jpg`,
               contentType: 'image/jpeg',
             });
-            fd.append('size', 'auto');
+            applyRemoveBgParams(fd, resolvedCategory);
 
             const bgRes = await axios.post(
               'https://api.remove.bg/v1.0/removebg',
@@ -801,7 +802,7 @@ module.exports = {
         filename: wardrobeItem.file_name || 'image.jpg',
         contentType: wardrobeItem.content_type || 'image/jpeg',
       });
-      formData.append('size', 'auto'); // Auto-detect best output size
+      applyRemoveBgParams(formData, wardrobeItem.clothing_category);
 
       let runwayResponse;
 
@@ -877,6 +878,146 @@ module.exports = {
       res.status(500).json({
         error: 'Failed to remove background',
         message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /api/v1/wardrobe/:id/regenerate-product-shot
+   *
+   * Produces a polished studio-style variant of the item using Flux Kontext
+   * (image-to-image). Preserves the garment's silhouette / color / pattern
+   * while swapping the backdrop, removing hangers, and simulating an
+   * invisible-mannequin pose — so amateur uploads start to look like the
+   * vendor product shots that already exist in the library.
+   *
+   * Cost: ~$0.04/call, charged against AI_DAILY_IMAGE_BUDGET_USD.
+   * Stored on a dedicated column pair (s3_key_regenerated / s3_url_regenerated)
+   * so the original and background-removed variants are preserved untouched.
+   */
+  async regenerateProductShot(req, res) {
+    const { id } = req.params;
+
+    try {
+      const wardrobeItem = await Wardrobe.findOne({
+        where: { id, deleted_at: null },
+      });
+
+      if (!wardrobeItem) {
+        return res.status(404).json({ error: 'Wardrobe item not found' });
+      }
+
+      // Prefer the background-removed version as reference — it has a cleaner
+      // subject isolation. Fall back to the original upload if not processed.
+      const referenceKey = wardrobeItem.s3_key_processed || wardrobeItem.s3_key;
+      if (!referenceKey) {
+        return res.status(400).json({ error: 'No image to regenerate from' });
+      }
+
+      // Mark pending so the UI can show progress; any existing regenerated
+      // variant stays accessible until success replaces it.
+      await wardrobeItem.update({
+        regeneration_status: 'pending',
+        regeneration_error: null,
+      });
+
+      const { GetObjectCommand } = require('@aws-sdk/client-s3');
+      const getCmd = new GetObjectCommand({ Bucket: BUCKET_NAME, Key: referenceKey });
+      const obj = await s3Client.send(getCmd);
+      const chunks = [];
+      for await (const chunk of obj.Body) chunks.push(chunk);
+      const imageBuffer = Buffer.concat(chunks);
+
+      // Pass as data URI so we don't depend on the S3 object being
+      // publicly readable (same reasoning as the remove.bg form-data path).
+      const isPng = referenceKey.toLowerCase().endsWith('.png');
+      const mime = isPng ? 'image/png' : 'image/jpeg';
+      const dataUri = `data:${mime};base64,${imageBuffer.toString('base64')}`;
+
+      // Default studio prompt — Kontext will use the reference image for
+      // identity (silhouette, color, pattern) and this prompt for the vibe.
+      const prompt = req.body?.prompt ||
+        'Professional studio product photograph of this clothing item. ' +
+        'Clean neutral off-white backdrop, soft even studio lighting, ' +
+        'invisible-mannequin pose showing the garment shape, no hanger, ' +
+        'no wrinkles, fashion e-commerce style, centered composition, ' +
+        'sharp focus on fabric details and trim.';
+
+      const { generateImageFromImage } = require('../services/imageGenerationService');
+      const result = await generateImageFromImage(dataUri, prompt, {
+        size: 'portrait',
+      });
+
+      // Persist the generated image to S3 so it survives the provider's
+      // expiring URL.
+      const axios = require('axios');
+      const genRes = await axios.get(result.url, {
+        responseType: 'arraybuffer',
+        timeout: 120000,
+      });
+
+      const newKey = `wardrobe/${wardrobeItem.character || 'uncategorized'}/${uuidv4()}-product.jpg`;
+      await s3Client.send(new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: newKey,
+        Body: Buffer.from(genRes.data),
+        ContentType: 'image/jpeg',
+        CacheControl: 'max-age=31536000',
+      }));
+
+      const newUrl = `https://${BUCKET_NAME}.s3.amazonaws.com/${newKey}`;
+
+      await wardrobeItem.update({
+        s3_key_regenerated: newKey,
+        s3_url_regenerated: newUrl,
+        regeneration_status: 'success',
+        regeneration_error: null,
+        regenerated_at: new Date(),
+      });
+
+      console.log(`[Wardrobe] Product-shot regenerated for ${id} → ${newUrl}`);
+
+      return res.json({
+        success: true,
+        data: {
+          id: wardrobeItem.id,
+          s3_url_regenerated: newUrl,
+          regenerated_at: wardrobeItem.regenerated_at,
+          cost_estimate: result.cost_estimate,
+          provider: result.provider,
+        },
+      });
+    } catch (error) {
+      console.error(`[Wardrobe] Product-shot regeneration failed for ${id}:`, error.message);
+      // Capture HTTP status + body when the failure came from fal.ai so pm2
+      // logs tell us exactly what went wrong (quota, bad reference, etc.).
+      const status = error.response?.status;
+      let body = '';
+      if (error.response?.data) {
+        try {
+          body = Buffer.isBuffer(error.response.data)
+            ? error.response.data.toString('utf8').slice(0, 500)
+            : JSON.stringify(error.response.data).slice(0, 500);
+        } catch (_) {
+          body = String(error.response.data).slice(0, 500);
+        }
+      }
+      const detail = status ? `${error.message} [status=${status}] ${body}` : error.message;
+
+      try {
+        const item = await Wardrobe.findOne({ where: { id } });
+        if (item) {
+          await item.update({
+            regeneration_status: 'failed',
+            regeneration_error: detail.slice(0, 1000),
+          });
+        }
+      } catch (_) { /* best-effort status write */ }
+
+      return res.status(500).json({
+        error: 'Failed to regenerate product shot',
+        message: error.message,
+        detail: status ? { status, body } : undefined,
       });
     }
   },
