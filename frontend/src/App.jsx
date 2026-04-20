@@ -30,15 +30,12 @@ const ShowManagement = lazy(() => import('./pages/ShowManagement'));
 const ShowDetail = lazy(() => import('./pages/ShowDetail'));
 const CreateShow = lazy(() => import('./pages/CreateShow'));
 const EditShow = lazy(() => import('./pages/EditShow'));
-// Wardrobe authoring lives in WorldAdmin's wardrobe tab — most of the old
-// Wardrobe / UniverseWardrobePage / analytics pages were orphaned and have
-// been removed. WardrobeBrowser is restored temporarily so we can compare
-// it side-by-side against the WorldAdmin tab and decide what (if anything)
-// is still missing before deleting for real.
-const WardrobeBrowser = lazy(() => import('./pages/WardrobeBrowser'));
+// Wardrobe authoring consolidated to WorldAdmin's wardrobe tab (at /shows/:id).
+// All standalone wardrobe pages (Wardrobe, WardrobeBrowser, WardrobeLibrary*,
+// WardrobeAnalytics, OutfitSets, UniverseWardrobePage) and the
+// wardrobeLibraryService + WardrobeAssignmentModal helpers have been removed.
+// OutfitCalendar is still reachable at /wardrobe/calendar.
 const OutfitCalendar = lazy(() => import('./pages/OutfitCalendar'));
-const WardrobeLibraryUpload = lazy(() => import('./pages/WardrobeLibraryUpload'));
-const WardrobeLibraryDetail = lazy(() => import('./pages/WardrobeLibraryDetail'));
 const TemplateStudio = lazy(() => import('./pages/TemplateStudio'));
 const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
 const DiagnosticPage = lazy(() => import('./pages/DiagnosticPage'));
@@ -311,7 +308,7 @@ function AppContent() {
           <Route path="/universe/social-import" element={<UniverseSocialImportPage />} />
           <Route path="/universe/series" element={<SeriesPage />} />
           <Route path="/universe/production" element={<UniverseProductionPage />} />
-          <Route path="/universe/wardrobe" element={<Navigate to="/wardrobe-library" replace />} />
+          <Route path="/universe/wardrobe" element={<Navigate to="/" replace />} />
           <Route path="/universe/assets" element={<UniverseAssetsPage />} />
           <Route path="/universe/world-state" element={<UniverseWorldStatePage />} />
           <Route path="/universe/tensions" element={<UniverseTensionsPage />} />
@@ -371,15 +368,13 @@ function AppContent() {
           {/* ===== PRODUCTION ROUTES ===== */}
           
           {/* Wardrobe */}
-          {/* Temporary — restored so we can compare against WorldAdmin's wardrobe
-              tab and figure out what (if anything) needs porting before deleting. */}
-          <Route path="/wardrobe" element={<WardrobeBrowser mode="gallery" />} />
+          <Route path="/wardrobe" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe/analytics" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe/outfits" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe/calendar" element={<OutfitCalendar />} />
           <Route path="/wardrobe-library" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe-library/upload" element={<Navigate to="/" replace />} />
-          <Route path="/wardrobe-library/:id" element={<WardrobeLibraryDetail />} />
+          <Route path="/wardrobe-library/:id" element={<Navigate to="/" replace />} />
           
           {/* Thumbnail Composer / Template Studio */}
           <Route path="/episodes/:episodeId/composer" element={<TemplateStudio />} />
