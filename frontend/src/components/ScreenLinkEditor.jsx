@@ -20,6 +20,7 @@
  */
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader, Sparkles, ChevronLeft } from 'lucide-react';
+import { getIconUrls } from '../lib/overlayUtils';
 import { getScreenImageStyle, PHONE_SKINS } from './PhoneHub';
 import ZoneBadges from './phone-editor/ZoneBadges';
 import ConditionRow from './phone-editor/ConditionRow';
@@ -28,12 +29,7 @@ import AIProposalReview from './phone-editor/AIProposalReview';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
-// Normalize legacy icon_url (string) to icon_urls (array) for backward compat
-const getIconUrls = (zone) => {
-  if (zone.icon_urls?.length) return zone.icon_urls;
-  if (zone.icon_url) return [zone.icon_url];
-  return [];
-};
+// getIconUrls moved to lib/overlayUtils — imported above.
 
 // Grid defaults — 4 columns x 6 rows matches a typical phone home-screen app grid.
 const GRID_COLS = 4;
@@ -135,7 +131,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     // existing target, so per-zone overrides are preserved.
     const enriched = (links || []).map(z => {
       if (z.target) return z;
-      const iconUrls = z.icon_urls?.length ? z.icon_urls : (z.icon_url ? [z.icon_url] : []);
+      const iconUrls = getIconUrls(z);
       if (!iconUrls.length) return z;
       const matchedIcon = iconOverlays.find(i => iconUrls.includes(i.url) && i.opens_screen);
       if (!matchedIcon) return z;

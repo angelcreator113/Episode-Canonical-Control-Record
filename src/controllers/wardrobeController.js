@@ -4,6 +4,7 @@ const { Wardrobe, EpisodeWardrobe, Episode } = models;
 const { Op } = require('sequelize');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
+const wardrobeImageService = require('../services/wardrobeImageService');
 
 // S3 client setup (reuse from assets)
 const s3Client = new S3Client({
@@ -69,31 +70,52 @@ module.exports = {
       const resolvedName = name || (req.file ? req.file.originalname.replace(/\.[^.]+$/, '') : `Outfit ${Date.now()}`);
       const resolvedCategory = clothingCategory || 'general';
 
-      // Handle file upload if present
+      // Handle file upload if present — now with auto-sharpening and thumbnail generation
       let s3Key = null;
       let s3Url = null;
+      let thumbnailUrl = null;
 
       if (req.file) {
         try {
-          const fileExtension = req.file.originalname.split('.').pop();
-          s3Key = `wardrobe/${character}/${uuidv4()}.${fileExtension}`;
+          console.log('📸 Processing wardrobe upload with auto-enhancement...');
+          
+          // Use new image processing pipeline: sharpen + generate thumbnail
+          const processedImages = await wardrobeImageService.processWardrobeUpload(
+            req.file.buffer,
+            character,
+            { skipThumbnail: false, thumbnailSize: 300 }
+          );
 
-          const uploadParams = {
-            Bucket: BUCKET_NAME,
-            Key: s3Key,
-            Body: req.file.buffer,
-            ContentType: req.file.mimetype,
-          };
+          s3Key = processedImages.mainImage.s3Key;
+          s3Url = processedImages.mainImage.s3Url;
+          thumbnailUrl = processedImages.thumbnail?.s3Url || null;
 
-          await s3Client.send(new PutObjectCommand(uploadParams));
-          s3Url = `https://${BUCKET_NAME}.s3.amazonaws.com/${s3Key}`;
-          console.log('✅ File uploaded to S3:', s3Url);
-        } catch (s3Error) {
-          console.error('⚠️ S3 upload failed:', s3Error.message);
-          // Continue without image - don't fail the entire request
-          console.warn('Creating wardrobe item without image due to S3 error');
-          s3Key = null;
-          s3Url = null;
+          console.log('✅ Image enhanced and uploaded:', s3Url);
+          if (thumbnailUrl) console.log('✅ Thumbnail generated:', thumbnailUrl);
+        } catch (imgError) {
+          console.error('⚠️ Image processing failed, using raw upload:', imgError.message);
+          
+          // Fallback to raw upload without enhancement
+          try {
+            const fileExtension = req.file.originalname.split('.').pop();
+            s3Key = `wardrobe/${character}/${uuidv4()}.${fileExtension}`;
+
+            const uploadParams = {
+              Bucket: BUCKET_NAME,
+              Key: s3Key,
+              Body: req.file.buffer,
+              ContentType: req.file.mimetype,
+            };
+
+            await s3Client.send(new PutObjectCommand(uploadParams));
+            s3Url = `https://${BUCKET_NAME}.s3.amazonaws.com/${s3Key}`;
+            console.log('✅ Raw file uploaded to S3:', s3Url);
+          } catch (s3Error) {
+            console.error('⚠️ S3 upload failed:', s3Error.message);
+            console.warn('Creating wardrobe item without image due to S3 error');
+            s3Key = null;
+            s3Url = null;
+          }
         }
       }
 
@@ -128,6 +150,7 @@ module.exports = {
         show_id: showId || null, // Primary show ownership
         s3_key: s3Key,
         s3_url: s3Url,
+        thumbnail_url: thumbnailUrl,
         brand: brand || null,
         price: price ? parseFloat(price) : null,
         purchase_link: purchaseLink || null,
@@ -1020,6 +1043,163 @@ module.exports = {
       console.error('❌ Error fetching item usage:', error);
       res.status(500).json({
         error: 'Failed to fetch item usage',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /api/v1/wardrobe/:id/upscale - AI upscale wardrobe image using Real-ESRGAN
+   */
+  async aiUpscaleItem(req, res) {
+    try {
+      const { id } = req.params;
+      const { scale = 4, faceEnhance = false } = req.body;
+
+      const wardrobeItem = await Wardrobe.findOne({
+        where: { id, deleted_at: null },
+      });
+
+      if (!wardrobeItem) {
+        return res.status(404).json({
+          error: 'Wardrobe item not found',
+        });
+      }
+
+      if (!wardrobeItem.s3_url) {
+        return res.status(400).json({
+          error: 'No image to upscale',
+        });
+      }
+
+      if (!process.env.REPLICATE_API_TOKEN) {
+        return res.status(500).json({
+          error: 'AI upscaling not configured',
+          message: 'REPLICATE_API_TOKEN is required',
+        });
+      }
+
+      console.log(`🔍 Starting ${scale}x AI upscale for wardrobe item ${id}...`);
+
+      // Run AI upscaling
+      const upscaleResult = await wardrobeImageService.aiUpscaleImage(
+        wardrobeItem.s3_url,
+        { scale, faceEnhance }
+      );
+
+      // Upload upscaled image to S3
+      const uploaded = await wardrobeImageService.uploadWardrobeImage(
+        upscaleResult.buffer,
+        wardrobeItem.character || 'unknown',
+        '-upscaled',
+        upscaleResult.contentType
+      );
+
+      // Update the wardrobe item with the upscaled URL
+      // Store in a new field or update the main image based on preference
+      await wardrobeItem.update({
+        s3_url: uploaded.s3Url, // Replace main image with upscaled version
+        s3_key: uploaded.s3Key,
+      });
+
+      // Regenerate thumbnail from upscaled image
+      const thumbnail = await wardrobeImageService.generateThumbnail(upscaleResult.buffer);
+      const thumbUploaded = await wardrobeImageService.uploadWardrobeImage(
+        thumbnail.buffer,
+        wardrobeItem.character || 'unknown',
+        '-thumb',
+        thumbnail.contentType
+      );
+
+      await wardrobeItem.update({
+        thumbnail_url: thumbUploaded.s3Url,
+      });
+
+      console.log(`✅ AI upscale complete for wardrobe item ${id}`);
+
+      res.json({
+        success: true,
+        data: {
+          id: wardrobeItem.id,
+          s3_url: uploaded.s3Url,
+          thumbnail_url: thumbUploaded.s3Url,
+          upscaleMetadata: {
+            scale,
+            originalWidth: upscaleResult.metadata.width / scale,
+            originalHeight: upscaleResult.metadata.height / scale,
+            newWidth: upscaleResult.metadata.width,
+            newHeight: upscaleResult.metadata.height,
+          },
+        },
+        message: `Image upscaled ${scale}x successfully`,
+      });
+    } catch (error) {
+      console.error('❌ Error upscaling wardrobe item:', error);
+      res.status(500).json({
+        error: 'Failed to upscale image',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /api/v1/wardrobe/:id/regenerate-thumbnail - Regenerate thumbnail for existing item
+   */
+  async regenerateThumbnail(req, res) {
+    try {
+      const { id } = req.params;
+      const { size = 300 } = req.body;
+
+      const wardrobeItem = await Wardrobe.findOne({
+        where: { id, deleted_at: null },
+      });
+
+      if (!wardrobeItem) {
+        return res.status(404).json({
+          error: 'Wardrobe item not found',
+        });
+      }
+
+      if (!wardrobeItem.s3_url) {
+        return res.status(400).json({
+          error: 'No image to generate thumbnail from',
+        });
+      }
+
+      console.log(`🖼️ Regenerating thumbnail for wardrobe item ${id}...`);
+
+      // Download the source image
+      const axios = require('axios');
+      const response = await axios.get(wardrobeItem.s3_url, { responseType: 'arraybuffer', timeout: 60000 });
+      const imageBuffer = Buffer.from(response.data);
+
+      // Generate thumbnail
+      const thumbnail = await wardrobeImageService.generateThumbnail(imageBuffer, { size });
+      const uploaded = await wardrobeImageService.uploadWardrobeImage(
+        thumbnail.buffer,
+        wardrobeItem.character || 'unknown',
+        '-thumb',
+        thumbnail.contentType
+      );
+
+      await wardrobeItem.update({
+        thumbnail_url: uploaded.s3Url,
+      });
+
+      console.log(`✅ Thumbnail regenerated for wardrobe item ${id}`);
+
+      res.json({
+        success: true,
+        data: {
+          id: wardrobeItem.id,
+          thumbnail_url: uploaded.s3Url,
+        },
+        message: 'Thumbnail regenerated successfully',
+      });
+    } catch (error) {
+      console.error('❌ Error regenerating thumbnail:', error);
+      res.status(500).json({
+        error: 'Failed to regenerate thumbnail',
         message: error.message,
       });
     }

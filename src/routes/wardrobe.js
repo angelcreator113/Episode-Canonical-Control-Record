@@ -161,6 +161,12 @@ router.put('/:id', upload.single('image'), asyncHandler(wardrobeController.updat
 // Process background removal for wardrobe item
 router.post('/:id/process-background', asyncHandler(wardrobeController.processBackgroundRemoval));
 
+// AI upscale wardrobe image (4x via Real-ESRGAN)
+router.post('/:id/upscale', asyncHandler(wardrobeController.aiUpscaleItem));
+
+// Regenerate thumbnail for existing item
+router.post('/:id/regenerate-thumbnail', asyncHandler(wardrobeController.regenerateThumbnail));
+
 // Delete wardrobe item (with safeguards)
 router.delete('/:id', asyncHandler(wardrobeController.deleteWardrobeItem));
 
