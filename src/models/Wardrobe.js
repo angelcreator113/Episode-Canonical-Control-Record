@@ -118,17 +118,6 @@ module.exports = (sequelize) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      tap_zones: {
-        type: DataTypes.JSONB,
-        allowNull: true,
-        defaultValue: [],
-        comment: 'Array of tap-zone rects (normalized 0-1 coords) shared across colored variants',
-      },
-      display_price_on_phone: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: false,
-      },
 
       // Shopping / sourcing
       brand: {
