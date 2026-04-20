@@ -89,6 +89,11 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      primary_image_variant: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        comment: 'User-selected preferred variant: original | processed | regenerated (NULL = auto)',
+      },
 
       // Shopping / sourcing
       brand: {

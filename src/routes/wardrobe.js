@@ -164,6 +164,10 @@ router.post('/:id/process-background', asyncHandler(wardrobeController.processBa
 // AI-regenerate as a studio product shot (Flux Kontext img2img)
 router.post('/:id/regenerate-product-shot', asyncHandler(wardrobeController.regenerateProductShot));
 
+// Set which image variant (original | processed | regenerated | null=auto)
+// the grid card should show for this item
+router.patch('/:id/primary-variant', asyncHandler(wardrobeController.setPrimaryImageVariant));
+
 // AI upscale wardrobe image (4x via Real-ESRGAN)
 router.post('/:id/upscale', asyncHandler(wardrobeController.aiUpscaleItem));
 

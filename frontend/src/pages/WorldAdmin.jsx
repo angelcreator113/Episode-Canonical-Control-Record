@@ -140,6 +140,8 @@ function WorldAdmin() {
   const [wardrobeItems, setWardrobeItems] = useState([]);
   const [lightboxItem, setLightboxItem] = useState(null);  // For fullscreen image view
   const [regeneratingItemId, setRegeneratingItemId] = useState(null);  // AI product-shot regeneration in flight
+  const [lightboxVariant, setLightboxVariant] = useState(null);  // 'original' | 'processed' | 'regenerated' (overrides resolver in lightbox only)
+  const [promotingVariant, setPromotingVariant] = useState(false);  // PATCH in flight
   const [selectedWardrobeIds, setSelectedWardrobeIds] = useState(new Set());  // For bulk selection
   const [overlayData, setOverlayData] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
@@ -3962,6 +3964,51 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           });
         };
 
+        // Return { variant, url } picking the right S3 variant for grid/card
+        // display. Honors user's primary_image_variant choice first; otherwise
+        // falls back to the default preference chain (regenerated wins).
+        const resolveItemImageUrl = (item) => {
+          if (!item) return { variant: null, url: null };
+          const byVariant = {
+            regenerated: item.s3_url_regenerated,
+            processed: item.s3_url_processed,
+            original: item.s3_url || item.image_url,
+          };
+          const pick = item.primary_image_variant;
+          if (pick && byVariant[pick]) return { variant: pick, url: byVariant[pick] };
+          if (byVariant.regenerated) return { variant: 'regenerated', url: byVariant.regenerated };
+          if (byVariant.processed) return { variant: 'processed', url: byVariant.processed };
+          if (byVariant.original) return { variant: 'original', url: byVariant.original };
+          return { variant: null, url: null };
+        };
+
+        // PATCH primary_image_variant — the value shown in the grid card.
+        // null = "auto", same as no preference.
+        const promoteToPrimary = async (item, variant) => {
+          if (promotingVariant) return;
+          setPromotingVariant(true);
+          try {
+            const res = await fetch(`/api/v1/wardrobe/${item.id}/primary-variant`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ variant }),
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.error || err.message || `HTTP ${res.status}`);
+            }
+            setWardrobeItems(prev => prev.map(i =>
+              i.id === item.id ? { ...i, primary_image_variant: variant } : i
+            ));
+            setLightboxItem(prev => (prev && prev.id === item.id)
+              ? { ...prev, primary_image_variant: variant } : prev);
+          } catch (err) {
+            alert(`Couldn't set default: ${err.message}`);
+          } finally {
+            setPromotingVariant(false);
+          }
+        };
+
         // Kick off an AI regeneration of the item as a clean studio product
         // shot (Flux Kontext img2img). Preserves the original image; the
         // regenerated variant lands on s3_url_regenerated and the grid/
@@ -4286,7 +4333,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             {/* Item Grid — visual cards with thumbnails */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
               {filteredItems.map(item => {
-                const imgUrl = item.s3_url_regenerated || item.s3_url_processed || item.s3_url || item.thumbnail_url || item.image_url;
+                const imgUrl = resolveItemImageUrl(item).url || item.thumbnail_url;
                 const itemType = item.clothing_category || item.itemType || item.item_type || '';
                 const tags = Array.isArray(item.tags) ? item.tags : [];
                 const isEditing = editingWardrobeItem?.id === item.id;
@@ -4336,7 +4383,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {/* Image - click for lightbox */}
                     <div 
                       style={{ width: '100%', aspectRatio: '3/4', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}
-                      onClick={(e) => { if (imgUrl) { e.stopPropagation(); setLightboxItem(item); } }}
+                      onClick={(e) => { if (imgUrl) { e.stopPropagation(); setLightboxVariant(null); setLightboxItem(item); } }}
                     >
                       {imgUrl ? (
                         <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#f8fafc' }}
@@ -4553,29 +4600,76 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
             {/* ── Lightbox Modal ── */}
             {lightboxItem && (() => {
-              // AI-regenerated product shot wins over background-removed wins
-              // over raw upload — matches the resolution order used elsewhere
-              // in the wardrobe UI.
-              const imgUrl = lightboxItem.s3_url_regenerated || lightboxItem.s3_url_processed || lightboxItem.s3_url || lightboxItem.image_url;
+              // Build the list of variants that actually have a URL on this
+              // row. The lightbox lets the user preview any of them via a
+              // toggle without mutating DB state; only the "Set as default"
+              // button writes back via primary_image_variant.
+              const variants = [
+                { key: 'regenerated', label: '🎨 Product Shot', url: lightboxItem.s3_url_regenerated },
+                { key: 'processed',   label: '✂️ No BG',        url: lightboxItem.s3_url_processed },
+                { key: 'original',    label: '📷 Original',     url: lightboxItem.s3_url || lightboxItem.image_url },
+              ].filter(v => v.url);
+
+              // Selection: local toggle wins (if it points at a variant that
+              // exists on this item); else the row's primary pick; else the
+              // default preference chain.
+              const resolved = resolveItemImageUrl(lightboxItem);
+              const active = variants.find(v => v.key === lightboxVariant)
+                          || variants.find(v => v.key === resolved.variant)
+                          || variants[0];
+              const imgUrl = active?.url;
+              const currentPrimary = lightboxItem.primary_image_variant || resolved.variant;
+
               const itemType = lightboxItem.clothing_category || lightboxItem.itemType || lightboxItem.item_type || '';
               const colorHex = getColorHex(lightboxItem.color);
               return (
                 <div 
                   style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} 
-                  onClick={() => setLightboxItem(null)}
+                  onClick={() => { setLightboxVariant(null); setLightboxItem(null); }}
                 >
                   <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                     {/* Close button */}
-                    <button 
-                      onClick={() => setLightboxItem(null)} 
+                    <button
+                      onClick={() => { setLightboxVariant(null); setLightboxItem(null); }}
                       style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', padding: 8 }}
                     >✕</button>
-                    
+
+                    {/* Variant toggle — only renders when the row has more than one
+                        variant worth switching between. A star next to the label
+                        marks which one the grid card will use. */}
+                    {variants.length > 1 && (
+                      <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {variants.map(v => {
+                          const isActive = v.key === active.key;
+                          const isPrimary = v.key === currentPrimary;
+                          return (
+                            <button
+                              key={v.key}
+                              onClick={() => setLightboxVariant(v.key)}
+                              style={{
+                                padding: '6px 12px',
+                                background: isActive ? '#fff' : 'rgba(255,255,255,0.15)',
+                                color: isActive ? '#1a1a2e' : '#fff',
+                                border: isActive ? '2px solid #fff' : '2px solid rgba(255,255,255,0.25)',
+                                borderRadius: 20,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              {isPrimary ? '★ ' : ''}{v.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {/* Main image */}
-                    <img 
-                      src={imgUrl} 
-                      alt={lightboxItem.name} 
-                      style={{ maxWidth: '100%', maxHeight: 'calc(90vh - 120px)', objectFit: 'contain', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }} 
+                    <img
+                      src={imgUrl}
+                      alt={lightboxItem.name}
+                      style={{ maxWidth: '100%', maxHeight: 'calc(90vh - 160px)', objectFit: 'contain', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
                     />
                     
                     {/* Item info bar */}
@@ -4592,14 +4686,25 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           {lightboxItem.price && <span style={{ color: '#16a34a', fontWeight: 600 }}> · ${parseFloat(lightboxItem.price).toFixed(0)}</span>}
                         </div>
                       </div>
+                      {/* Only offer "Set as default for grid" when the user is
+                          actively previewing a NON-primary variant — otherwise
+                          the action would be a no-op. */}
+                      {active && active.key !== currentPrimary && (
+                        <button
+                          onClick={() => promoteToPrimary(lightboxItem, active.key)}
+                          disabled={promotingVariant}
+                          title={`Make the ${active.label} the image shown in the grid for this item`}
+                          style={{ marginLeft: 'auto', padding: '6px 14px', background: promotingVariant ? '#94a3b8' : '#0f766e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: promotingVariant ? 'wait' : 'pointer' }}
+                        >{promotingVariant ? 'Saving…' : '★ Set as default'}</button>
+                      )}
                       <button
                         onClick={() => handleRegenerateProductShot(lightboxItem)}
                         disabled={regeneratingItemId === lightboxItem.id}
                         title="AI image-to-image — swaps backdrop, removes hangers/dress-form residue, simulates invisible mannequin (~$0.04)"
-                        style={{ marginLeft: 'auto', padding: '6px 14px', background: regeneratingItemId === lightboxItem.id ? '#94a3b8' : '#db2777', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: regeneratingItemId === lightboxItem.id ? 'wait' : 'pointer' }}
-                      >{regeneratingItemId === lightboxItem.id ? 'Regenerating…' : '🎨 Regenerate Product Shot'}</button>
+                        style={{ marginLeft: (active && active.key !== currentPrimary) ? 0 : 'auto', padding: '6px 14px', background: regeneratingItemId === lightboxItem.id ? '#94a3b8' : '#db2777', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: regeneratingItemId === lightboxItem.id ? 'wait' : 'pointer' }}
+                      >{regeneratingItemId === lightboxItem.id ? 'Regenerating…' : '🎨 Regenerate'}</button>
                       <button
-                        onClick={() => { setLightboxItem(null); openEditItem(lightboxItem); }}
+                        onClick={() => { setLightboxVariant(null); setLightboxItem(null); openEditItem(lightboxItem); }}
                         style={{ padding: '6px 14px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                       >Edit Item</button>
                     </div>
