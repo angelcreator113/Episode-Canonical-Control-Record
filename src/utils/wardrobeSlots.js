@@ -33,15 +33,65 @@ const CATEGORY_TO_SLOT = SLOT_KEYS.reduce((acc, slot) => {
   return acc;
 }, {});
 
+// Synonyms + plurals + common misspellings that should still resolve to a slot.
+// Keeps the canonical `accepts` lists in SLOT_DEFS tight (what the upload form
+// offers) while letting legacy data, AI-classified items, or pasted imports
+// still bucket correctly. Kept in sync with the frontend twin.
+const CATEGORY_ALIASES = {
+  // outfit slot
+  dresses: 'dress', gown: 'dress', gowns: 'dress', sundress: 'dress',
+  tops: 'top', shirt: 'top', shirts: 'top', blouse: 'top', blouses: 'top', tee: 'top', tshirt: 'top', 't-shirt': 'top', tank: 'top',
+  bottoms: 'bottom', skirt: 'bottom', skirts: 'bottom', pants: 'bottom', pant: 'bottom', trousers: 'bottom', jeans: 'bottom', shorts: 'bottom',
+  jacket: 'outerwear', coat: 'outerwear', blazer: 'outerwear', cardigan: 'outerwear',
+  // shoes slot
+  heels: 'shoes', heel: 'shoes', boots: 'shoes', boot: 'shoes', sandals: 'shoes', sandal: 'shoes',
+  sneakers: 'shoes', sneaker: 'shoes', flats: 'shoes', flat: 'shoes', loafers: 'shoes', pumps: 'shoes',
+  // jewelry slot
+  necklace: 'jewelry', necklaces: 'jewelry', earring: 'jewelry', earrings: 'jewelry',
+  ring: 'jewelry', rings: 'jewelry', bracelet: 'jewelry', bracelets: 'jewelry', watch: 'jewelry',
+  jewellery: 'jewelry',
+  // accessories slot
+  accessories: 'accessory', bags: 'bag', handbag: 'bag', handbags: 'bag', purse: 'bag', purses: 'bag', clutch: 'bag', clutches: 'bag', minaudiere: 'bag', minaudière: 'bag', tote: 'bag', totes: 'bag',
+  scarf: 'accessory', scarves: 'accessory', hat: 'accessory', hats: 'accessory',
+  belt: 'accessory', belts: 'accessory', sunglasses: 'accessory', glasses: 'accessory', gloves: 'accessory',
+  hair: 'accessory', 'hair bow': 'accessory', 'hair clip': 'accessory', headband: 'accessory',
+  // fragrance slot
+  fragrance: 'perfume', fragrances: 'perfume', perfumes: 'perfume', cologne: 'perfume', scent: 'perfume',
+  // Legacy categories still ambient in older seed data — collapse under outfit
+  // since they'd show on top or bottom of the body.
+  swimwear: 'top', swimsuit: 'top', bikini: 'top', activewear: 'top',
+};
+
 /**
  * Given a wardrobe item's clothing_category, return the UI slot key it belongs
  * to, or null if the category doesn't map to any of the 5 slots. Falls back to
  * a loose lowercase comparison so "Jewelry" and "JEWELRY" route the same as
  * "jewelry" — older rows have inconsistent casing.
+ *
+ * Resolution order:
+ *   1. Exact canonical match (dress, top, shoes, etc.)
+ *   2. Alias match (dresses → dress → outfit, handbag → bag → accessories)
+ *   3. Substring match against the canonical keys (last-ditch for free-text
+ *      categories like "Evening Dress" — picks up "dress")
+ *   4. null
  */
 function getSlotForCategory(clothing_category) {
   if (!clothing_category || typeof clothing_category !== 'string') return null;
-  return CATEGORY_TO_SLOT[clothing_category.toLowerCase().trim()] || null;
+  const normalized = clothing_category.toLowerCase().trim();
+  // 1. Canonical
+  if (CATEGORY_TO_SLOT[normalized]) return CATEGORY_TO_SLOT[normalized];
+  // 2. Alias
+  const aliased = CATEGORY_ALIASES[normalized];
+  if (aliased && CATEGORY_TO_SLOT[aliased]) return CATEGORY_TO_SLOT[aliased];
+  // 3. Substring against canonical + alias keys — helps "evening dress",
+  // "ankle boots", "leather jacket" resolve without needing exact match.
+  for (const key of Object.keys(CATEGORY_TO_SLOT)) {
+    if (normalized.includes(key)) return CATEGORY_TO_SLOT[key];
+  }
+  for (const key of Object.keys(CATEGORY_ALIASES)) {
+    if (normalized.includes(key)) return CATEGORY_TO_SLOT[CATEGORY_ALIASES[key]];
+  }
+  return null;
 }
 
 /**
@@ -64,6 +114,7 @@ module.exports = {
   SLOT_KEYS,
   SLOT_DEFS,
   CATEGORY_TO_SLOT,
+  CATEGORY_ALIASES,
   getSlotForCategory,
   groupItemsBySlot,
 };

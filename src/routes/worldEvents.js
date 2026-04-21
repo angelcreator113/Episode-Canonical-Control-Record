@@ -2174,9 +2174,25 @@ router.put('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, re
       image_url: i.s3_url_processed || i.s3_url,
     }));
 
-    // Score the outfit
+    // Score the outfit. Pull show-level `required_slots` off the Show's
+    // metadata JSON so events on shows that demand a full 5-slot outfit
+    // (fragrance + jewelry + accessories) light up the missing-required
+    // treatment in the per-slot breakdown. Falls back to the scorer's
+    // default (outfit + shoes required) when the show doesn't set it.
     const { scoreOutfitForEvent, detectRepeats, getBrandRelationships, generateOutfitReactionTriggers } = require('../services/wardrobeIntelligenceService');
-    const outfitScore = scoreOutfitForEvent(items, event);
+    let scoringEvent = event;
+    try {
+      if (models.Show) {
+        const show = await models.Show.findByPk(showId, { attributes: ['metadata'] });
+        const required = show?.metadata?.required_slots;
+        if (Array.isArray(required) && required.length > 0) {
+          scoringEvent = { ...event, required_slots: required };
+        }
+      }
+    } catch (e) {
+      console.warn('[Outfit] Could not read show required_slots:', e.message);
+    }
+    const outfitScore = scoreOutfitForEvent(items, scoringEvent);
     const repeats = await detectRepeats(items, showId, models);
     const brandRels = await getBrandRelationships(showId, models);
     const feedTriggers = generateOutfitReactionTriggers(outfitScore, repeats, brandRels);
