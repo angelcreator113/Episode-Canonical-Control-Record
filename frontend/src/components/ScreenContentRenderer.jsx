@@ -29,6 +29,7 @@ export const CONTENT_TYPES = [
   { key: 'wardrobe_brand', label: 'Wardrobe Brand', icon: '🏷️', desc: 'Brand name from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'comments_list', label: 'Comments', icon: '💭', desc: 'Post comment thread', group: 'social' },
   { key: 'engagement_stats', label: 'Engagement Stats', icon: '📈', desc: 'Likes, reach, trending', group: 'stats' },
+  { key: 'money_balance', label: 'Money Balance', icon: '💰', desc: 'Lala’s live coin balance + next goal', group: 'stats' },
   { key: 'custom_text', label: 'Custom Text', icon: '✏️', desc: 'Static text overlay', group: 'other' },
 ];
 
@@ -111,6 +112,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
       return <CommentsRenderer showId={showId} config={config} />;
     case 'engagement_stats':
       return <EngagementStatsRenderer showId={showId} config={config} />;
+    case 'money_balance':
+      return <MoneyBalanceRenderer showId={showId} config={config} />;
     case 'custom_text':
       return <CustomTextRenderer config={config} />;
     default:
@@ -465,6 +468,59 @@ function WardrobeBrandRenderer({ config, screenMeta }) {
         letterSpacing: 0.8,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{display}</span>
+    </div>
+  );
+}
+
+// ── Money Balance ──
+// Reads Lala's live coin balance + next-goal progress from the show's
+// financial-config endpoint. Small-screen friendly: headline balance + a
+// 3px progress bar under it. When the show hasn't configured any goals
+// yet, the bar disappears and we just show the balance.
+function MoneyBalanceRenderer({ showId, config }) {
+  const url = showId ? `/api/v1/shows/${showId}/financial-config` : null;
+  const { data, loading } = useContentData(url);
+  if (loading) return <ZoneLoader />;
+  const cfg = data?.data || data;
+  if (!cfg) return <ZoneEmpty label="No balance" />;
+  const balance = Number(cfg.current_balance) || 0;
+  const nextGoal = cfg.next_goal;
+  const progress = nextGoal ? Math.max(0, Math.min(1, balance / Number(nextGoal.threshold))) : 1;
+  const coinLabel = config.currency_label || 'coins';
+  return (
+    <div style={{
+      width: '100%', height: '100%', padding: '4px 6px',
+      background: config.bg || 'rgba(0,0,0,0.45)',
+      display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{
+          fontSize: config.font_size || 13,
+          fontWeight: 800,
+          color: config.color || '#fff',
+          fontFamily: "'DM Mono', monospace",
+          letterSpacing: 0.3,
+        }}>💰 {balance.toLocaleString()}</span>
+        {config.show_label !== false && (
+          <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.5)' }}>{coinLabel}</span>
+        )}
+      </div>
+      {nextGoal && config.show_progress !== false && (
+        <>
+          <div style={{ height: 3, background: 'rgba(255,255,255,0.15)', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{
+              width: `${progress * 100}%`, height: '100%',
+              background: config.progress_color || '#d4a017',
+              transition: 'width 0.3s',
+            }} />
+          </div>
+          {config.show_goal_label !== false && (
+            <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              → {nextGoal.label} ({Number(nextGoal.threshold).toLocaleString()})
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

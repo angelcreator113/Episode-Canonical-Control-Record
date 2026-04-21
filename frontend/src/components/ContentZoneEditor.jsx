@@ -541,6 +541,46 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate, onAiFillZo
             </div>
           )}
 
+          {/* Money balance — small set of display toggles. The balance + next
+              goal are fetched from the backend; these controls just style the
+              render. Mirrors the wardrobe_price/brand config pattern. */}
+          {zone.content_type === 'money_balance' && (
+            <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>SIZE</label>
+                <input
+                  type="number"
+                  min={8}
+                  max={28}
+                  value={config.font_size || ''}
+                  onChange={(e) => handleConfigChange('font_size', parseInt(e.target.value) || undefined)}
+                  placeholder="13"
+                  style={fieldStyle}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>COLOR</label>
+                <input
+                  type="color"
+                  value={config.color || '#ffffff'}
+                  onChange={(e) => handleConfigChange('color', e.target.value)}
+                  style={{ ...fieldStyle, padding: 2, height: 28 }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>SHOW</label>
+                <select
+                  value={config.show_progress === false ? 'balance' : 'full'}
+                  onChange={(e) => handleConfigChange('show_progress', e.target.value !== 'balance')}
+                  style={fieldStyle}
+                >
+                  <option value="full">Balance + goal bar</option>
+                  <option value="balance">Balance only</option>
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Custom text config */}
           {zone.content_type === 'custom_text' && (
             <>
