@@ -288,6 +288,50 @@ async function completeEpisode(episodeId, showId, sequelize) {
   const financialNet = (financialResult.summary?.total_income || 0) - (financialResult.summary?.total_expenses || 0);
   mergedDeltas.coins = financialNet + tierReward + paidBonus;
 
+  // ── 11b. Financial mood deltas ──
+  // Translate the episode's financial outcome into stress deltas so Lala's
+  // character state reflects "won a brand deal → relaxed" vs "blew 80% of
+  // her savings on a gala → anxiety spikes". Additive into mergedDeltas so
+  // outfit/event/social bonuses keep stacking alongside the money signal.
+  try {
+    const { getFinancialGoals } = require('./financialTransactionService');
+    const balanceBefore = financialResult.balance_before || 0;
+    const balanceAfter = financialResult.balance_after || 0;
+    const milestonesHit = Array.isArray(financialResult.milestones_triggered) ? financialResult.milestones_triggered.length : 0;
+    const goals = await getFinancialGoals(sequelize, showId);
+    const nextGoal = [...goals].sort((a, b) => a.threshold - b.threshold).find(g => !g.triggered_at);
+    const nextThreshold = nextGoal?.threshold || null;
+    // Stress scale is already roughly 0–10 in this codebase (see the 5/8
+    // thresholds in the episode-complete memory write below). Keep our
+    // deltas modest (±5 clamp) so a single episode can't spike or crater
+    // Lala by itself — the trend matters more than one event.
+    let stress = 0;
+    if (nextThreshold && balanceAfter < nextThreshold * 0.25) stress += 2;
+    else if (nextThreshold && balanceAfter < nextThreshold * 0.5) stress += 1;
+    if (balanceAfter <= 0) stress += 2;                   // going broke hurts
+    if (financialNet < -1000) stress += 2;                // big loss in one episode
+    else if (financialNet < 0) stress += 1;
+    if (financialNet > 500) stress -= 1;                  // winning
+    if (financialNet > 2000) stress -= 2;                 // winning big
+    stress -= 2 * milestonesHit;                          // each milestone = deep relief
+    // Bank surplus (way above next goal) — she's on offense, not defense.
+    if (nextThreshold && balanceAfter > nextThreshold * 1.5) stress -= 1;
+    const clamped = Math.max(-5, Math.min(5, stress));
+    if (clamped !== 0) {
+      mergedDeltas.stress = (mergedDeltas.stress || 0) + clamped;
+      mergedDeltas.financial_mood_delta = clamped;       // surfaced for debugging + UI
+    }
+    mergedDeltas._financial_context = {
+      balance_before: balanceBefore,
+      balance_after: balanceAfter,
+      episode_net: financialNet,
+      milestones_hit: milestonesHit,
+      next_goal_threshold: nextThreshold,
+    };
+  } catch (moodErr) {
+    console.warn('[episodeComplete] financial mood delta failed:', moodErr.message);
+  }
+
   // ── 12. Apply all deltas to character state ──
   const newState = applyDeltas(currentStats, mergedDeltas);
 
