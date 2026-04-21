@@ -395,6 +395,94 @@ router.post('/', async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id/financial-config
+ * Returns the show's starting balance + financial goals ladder (with
+ * triggered_at timestamps) alongside the current live balance. Frontend
+ * uses this to render the milestones widget + progress bar.
+ */
+router.get('/:id/financial-config', async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const {
+      getCurrentBalance, getStartingBalance, getFinancialGoals,
+    } = require('../services/financialTransactionService');
+    const sequelize = Show.sequelize;
+    const [startingBalance, goals, currentBalance] = await Promise.all([
+      getStartingBalance(sequelize, show.id),
+      getFinancialGoals(sequelize, show.id),
+      getCurrentBalance(sequelize, show.id),
+    ]);
+    // Next goal = lowest not-yet-triggered goal (sorted by threshold). Null
+    // if every goal is already triggered (Lala has reached Legacy status).
+    const sortedGoals = [...goals].sort((a, b) => (a.threshold || 0) - (b.threshold || 0));
+    const nextGoal = sortedGoals.find(g => !g.triggered_at) || null;
+    return res.json({
+      success: true,
+      starting_balance: startingBalance,
+      current_balance: currentBalance,
+      goals: sortedGoals,
+      next_goal: nextGoal,
+      progress_to_next: nextGoal ? Math.max(0, Math.min(1, currentBalance / nextGoal.threshold)) : 1,
+    });
+  } catch (err) {
+    console.error('GET /shows/:id/financial-config error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/v1/shows/:id/financial-config
+ * Body: { starting_balance?: number, financial_goals?: [{ id, threshold, reward_coins, label, description }] }
+ * Persists onto Show.metadata. Non-destructive: preserves other metadata keys.
+ * After updating starting_balance, call the seed endpoint to write the tx.
+ */
+router.put('/:id/financial-config', async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { starting_balance, financial_goals } = req.body || {};
+    if (starting_balance !== undefined && (!Number.isFinite(Number(starting_balance)) || Number(starting_balance) < 0)) {
+      return res.status(400).json({ error: 'starting_balance must be a non-negative number' });
+    }
+    if (financial_goals !== undefined && !Array.isArray(financial_goals)) {
+      return res.status(400).json({ error: 'financial_goals must be an array' });
+    }
+    const nextMeta = { ...(show.metadata || {}) };
+    if (starting_balance !== undefined) nextMeta.starting_balance = Number(starting_balance);
+    if (financial_goals !== undefined) nextMeta.financial_goals = financial_goals;
+    await show.update({ metadata: nextMeta });
+    return res.json({ success: true, metadata: nextMeta });
+  } catch (err) {
+    console.error('PUT /shows/:id/financial-config error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/shows/:id/seed-balance
+ * Idempotent: writes a single 'seed' transaction granting the starting
+ * balance if one doesn't already exist. Safe to call multiple times — it
+ * won't duplicate the seed. Called automatically from the frontend when
+ * the finance widget first loads on an empty ledger.
+ */
+router.post('/:id/seed-balance', async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { seedStartingBalance } = require('../services/financialTransactionService');
+    const result = await seedStartingBalance(Show.sequelize, show.id);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('POST /shows/:id/seed-balance error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * PUT /api/v1/shows/:id/wardrobe-config
  * Persist show-level wardrobe settings onto Show.metadata.
  * Body: { required_slots: ['outfit','shoes','jewelry','accessories','fragrance'] }
