@@ -299,6 +299,13 @@ function WorldAdmin() {
   const [financeEditorOpen, setFinanceEditorOpen] = useState(false);
   const [financeEditorDraft, setFinanceEditorDraft] = useState(null);
   const [financeEditorSaving, setFinanceEditorSaving] = useState(false);
+  // Finance page tabs — Overview, Per-Episode, Goals (later: Breakdowns).
+  const [financeTab, setFinanceTab] = useState('overview');
+  // Aggregated dashboard data (totals, by_episode, trend, burn_rate, runway).
+  // Fetched when the editor opens so the tabs render real numbers instead of
+  // refetching on every click.
+  const [financeSummary, setFinanceSummary] = useState(null);
+  const [financeSummaryLoading, setFinanceSummaryLoading] = useState(false);
   const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   const [selectedEvents, setSelectedEvents] = useState(new Set());
@@ -4498,14 +4505,23 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     starting balance and goal ladder. Stays compact: when
                     there's no next goal (Legacy reached), just the balance. */}
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setFinanceEditorDraft({
                       starting_balance: financeConfig?.starting_balance ?? 1900,
                       goals: (financeConfig?.goals || []).map(g => ({ ...g })),
                     });
+                    setFinanceTab('overview');
                     setFinanceEditorOpen(true);
+                    // Kick off the summary fetch so Overview renders real data.
+                    // Non-blocking: modal pops immediately with a loading state.
+                    setFinanceSummaryLoading(true);
+                    try {
+                      const res = await api.get(`/api/v1/shows/${showId}/financial-summary`);
+                      setFinanceSummary(res.data);
+                    } catch { setFinanceSummary(null); }
+                    finally { setFinanceSummaryLoading(false); }
                   }}
-                  title="Adjust Lala's starting balance and milestone goals"
+                  title="Lala's finances — balance, trend, per-episode P&L, and goal ladder"
                   style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 5 }}
                 >
                   💰 {(financeConfig?.current_balance ?? 0).toLocaleString()}
@@ -5652,12 +5668,179 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               };
               return (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !financeEditorSaving && setFinanceEditorOpen(false)}>
-                  <div style={{ background: '#fff', borderRadius: 14, maxWidth: 640, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>💰 Finance — Starting balance & goals</h3>
+                  <div style={{ background: '#fff', borderRadius: 14, maxWidth: 760, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>💰 Finance</h3>
                       <button onClick={() => setFinanceEditorOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
                     </div>
 
+                    {/* Tab bar — switches between Overview (dashboard), Per-Episode
+                        (the P&L table), and Goals (starting balance + ladder editor). */}
+                    <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e2e8f0', marginBottom: 16 }}>
+                      {[
+                        { key: 'overview',    label: 'Overview' },
+                        { key: 'per_episode', label: 'Per Episode' },
+                        { key: 'goals',       label: 'Goals' },
+                      ].map(t => {
+                        const active = financeTab === t.key;
+                        return (
+                          <button key={t.key} onClick={() => setFinanceTab(t.key)}
+                            style={{
+                              padding: '8px 16px', fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer',
+                              background: 'transparent', border: 'none',
+                              borderBottom: active ? '2px solid #B8962E' : '2px solid transparent',
+                              color: active ? '#1a1a2e' : '#64748b',
+                              marginBottom: -1,
+                            }}>{t.label}</button>
+                        );
+                      })}
+                    </div>
+
+                    {/* ── OVERVIEW TAB ────────────────────────────────────
+                        Balance, next-goal bar, lifetime totals, burn rate, runway,
+                        and a simple 12-episode trend sparkline. All derived from
+                        /financial-summary so the numbers match the ledger. */}
+                    {financeTab === 'overview' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {financeSummaryLoading && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>Loading summary…</div>}
+                        {financeSummary && (() => {
+                          const t = financeSummary.totals || {};
+                          const balance = t.current_balance ?? 0;
+                          const trend = financeSummary.trend || [];
+                          const recentTrend = trend.slice(-12);
+                          const maxBal = Math.max(1, ...recentTrend.map(p => p.balance_after));
+                          const minBal = Math.min(0, ...recentTrend.map(p => p.balance_after));
+                          const range = maxBal - minBal || 1;
+                          const nextGoal = financeConfig?.next_goal;
+                          const progress = nextGoal ? Math.max(0, Math.min(1, balance / Number(nextGoal.threshold))) : 1;
+                          return (
+                            <>
+                              {/* Hero: balance + next goal */}
+                              <div style={{ padding: '14px 16px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10 }}>
+                                <div style={{ fontSize: 11, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 4 }}>CURRENT BALANCE</div>
+                                <div style={{ fontSize: 32, fontWeight: 900, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>
+                                  💰 {balance.toLocaleString()}<span style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8', marginLeft: 8 }}>coins</span>
+                                </div>
+                                {nextGoal && (
+                                  <div style={{ marginTop: 10 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                                      <span style={{ color: '#854d0e', fontWeight: 600 }}>Next: {nextGoal.label}{nextGoal.episode_id && <span style={{ fontSize: 9, fontWeight: 500, color: '#a16207', marginLeft: 4 }}>· ep-scoped</span>}</span>
+                                      <span style={{ color: '#854d0e', fontFamily: "'DM Mono', monospace" }}>{balance.toLocaleString()} / {Number(nextGoal.threshold).toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+                                      <div style={{ width: `${progress * 100}%`, height: '100%', background: balance >= Number(nextGoal.threshold) ? '#16a34a' : '#d4a017', transition: 'width 0.3s' }} />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* KPI strip */}
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+                                {[
+                                  { label: 'Lifetime income', value: `+${(t.lifetime_income || 0).toLocaleString()}`, color: '#16a34a' },
+                                  { label: 'Lifetime expenses', value: `-${(t.lifetime_expenses || 0).toLocaleString()}`, color: '#dc2626' },
+                                  { label: 'Lifetime net', value: `${(t.net || 0) >= 0 ? '+' : ''}${(t.net || 0).toLocaleString()}`, color: (t.net || 0) >= 0 ? '#16a34a' : '#dc2626' },
+                                  { label: 'Burn rate', value: `${financeSummary.burn_rate_per_episode.toLocaleString()}/ep`, color: '#1a1a2e' },
+                                  { label: 'Avg income', value: `${(financeSummary.avg_income_per_episode || 0).toLocaleString()}/ep`, color: '#1a1a2e' },
+                                  { label: 'Runway', value: financeSummary.runway_episodes != null ? `${financeSummary.runway_episodes} eps` : '∞', color: '#1a1a2e' },
+                                ].map(kpi => (
+                                  <div key={kpi.label} style={{ padding: '10px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                                    <div style={{ fontSize: 9, color: '#64748b', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>{kpi.label}</div>
+                                    <div style={{ fontSize: 15, fontWeight: 700, color: kpi.color, fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{kpi.value}</div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Sparkline — last 12 episodes' ending balance. Rendered with
+                                  inline SVG (no chart library) so it survives any CSP + is
+                                  fast to paint. Each point is scaled into the 0-100 range */}
+                              {recentTrend.length > 1 && (
+                                <div style={{ padding: '12px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 10, color: '#64748b', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 6 }}>Balance — last {recentTrend.length} episodes</div>
+                                  <svg viewBox={`0 0 100 40`} preserveAspectRatio="none" style={{ width: '100%', height: 60 }}>
+                                    {/* Zero line */}
+                                    {minBal < 0 && (
+                                      <line x1="0" y1={40 - ((0 - minBal) / range) * 40} x2="100" y2={40 - ((0 - minBal) / range) * 40} stroke="#cbd5e1" strokeWidth="0.3" strokeDasharray="1,1" />
+                                    )}
+                                    <polyline
+                                      points={recentTrend.map((p, i) => {
+                                        const x = (i / Math.max(1, recentTrend.length - 1)) * 100;
+                                        const y = 40 - ((p.balance_after - minBal) / range) * 40;
+                                        return `${x},${y}`;
+                                      }).join(' ')}
+                                      fill="none"
+                                      stroke="#B8962E"
+                                      strokeWidth="0.8"
+                                      vectorEffect="non-scaling-stroke"
+                                    />
+                                    {recentTrend.map((p, i) => {
+                                      const x = (i / Math.max(1, recentTrend.length - 1)) * 100;
+                                      const y = 40 - ((p.balance_after - minBal) / range) * 40;
+                                      return <circle key={i} cx={x} cy={y} r="0.8" fill={p.net >= 0 ? '#16a34a' : '#dc2626'} vectorEffect="non-scaling-stroke" />;
+                                    })}
+                                  </svg>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#94a3b8', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>
+                                    <span>Ep {recentTrend[0]?.episode_number || '?'}</span>
+                                    <span>Ep {recentTrend[recentTrend.length - 1]?.episode_number || '?'}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                        {!financeSummaryLoading && !financeSummary && (
+                          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>
+                            No summary yet. Finalize an episode to populate.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── PER-EPISODE TAB ────────────────────────────────────
+                        Full-history P&L table, newest first. Colour-codes the net
+                        column red/green. Click a row to jump to that episode (TODO). */}
+                    {financeTab === 'per_episode' && (
+                      <div>
+                        {financeSummary && financeSummary.by_episode.length > 0 ? (
+                          <div style={{ overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ background: '#f8fafc', color: '#64748b', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', fontSize: 9, letterSpacing: 0.4 }}>
+                                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Ep</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Title</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Outfit</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Event</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Tasks</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Net</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Balance</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {financeSummary.by_episode.filter(e => e.tx_count > 0).map(e => (
+                                  <tr key={e.episode_id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                    <td style={{ padding: '7px 10px', fontFamily: "'DM Mono', monospace", color: '#64748b' }}>{e.episode_number ?? '—'}</td>
+                                    <td style={{ padding: '7px 10px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title || '(untitled)'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{e.outfit_cost ? `-${e.outfit_cost.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{e.event_cost ? `-${e.event_cost.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#16a34a' }}>{e.task_rewards ? `+${e.task_rewards.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontWeight: 700, color: e.net >= 0 ? '#16a34a' : '#dc2626' }}>{e.net >= 0 ? '+' : ''}{e.net.toLocaleString()}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#1a1a2e' }}>{e.balance_after.toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 30 }}>
+                            No episode-level transactions yet. Finalize episodes to populate.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── GOALS TAB ──────────────────────────────────────── */}
+                    {financeTab === 'goals' && (
+                    <>
                     {/* Starting balance */}
                     <div style={{ padding: '12px 14px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10, marginBottom: 14 }}>
                       <label style={{ fontSize: 10, fontWeight: 700, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>Starting balance (coins)</label>
@@ -5764,6 +5947,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         {financeEditorSaving ? 'Saving…' : 'Save & re-seed'}
                       </button>
                     </div>
+                    </>
+                    )}
                   </div>
                 </div>
               );
