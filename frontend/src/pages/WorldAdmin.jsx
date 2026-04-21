@@ -286,6 +286,13 @@ function WorldAdmin() {
   const [eventSearch, setEventSearch] = useState('');
   const [eventStatusFilter, setEventStatusFilter] = useState('all');
   const [eventDetailModal, setEventDetailModal] = useState(null);
+  // Live financial forecast for the open event + the show-level finance
+  // config (balance, goals, next goal, progress). The forecast fetches
+  // whenever the modal's event changes so a newly-picked outfit shows
+  // updated numbers; finance config fetches once per show open.
+  const [eventFinancials, setEventFinancials] = useState(null);
+  const [eventFinancialsLoading, setEventFinancialsLoading] = useState(false);
+  const [financeConfig, setFinanceConfig] = useState(null);
   const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   const [selectedEvents, setSelectedEvents] = useState(new Set());
@@ -314,6 +321,39 @@ function WorldAdmin() {
   const [successMsg, setSuccessMsg] = useState(null);
 
   useEffect(() => { loadData(); }, [showId]);
+
+  // Load the show's finance config (balance + goal ladder) whenever the show
+  // changes. Kick off a seed-balance POST first — it's idempotent, so if the
+  // ledger already has a seed row it returns the existing one. This ensures
+  // the finance widget never shows 0 coins for a brand-new show.
+  useEffect(() => {
+    if (!showId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await api.post(`/api/v1/shows/${showId}/seed-balance`);
+        const res = await api.get(`/api/v1/shows/${showId}/financial-config`);
+        if (!cancelled) setFinanceConfig(res.data);
+      } catch { /* non-blocking */ }
+    })();
+    return () => { cancelled = true; };
+  }, [showId]);
+
+  // Forecast fetch — refire whenever the open event changes OR its
+  // outfit_pieces change (user saved a new outfit in the picker).
+  useEffect(() => {
+    if (!eventDetailModal?.id || !showId) { setEventFinancials(null); return; }
+    let cancelled = false;
+    setEventFinancialsLoading(true);
+    (async () => {
+      try {
+        const res = await api.get(`/api/v1/world/${showId}/events/${eventDetailModal.id}/financial-forecast`);
+        if (!cancelled) setEventFinancials(res.data);
+      } catch { if (!cancelled) setEventFinancials(null); }
+      if (!cancelled) setEventFinancialsLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [eventDetailModal?.id, eventDetailModal?.outfit_pieces, showId]);
 
   // Escape key closes modals
   useEffect(() => {
@@ -3066,41 +3106,88 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <div><label style={S.fLabel}>Success Unlock</label><input value={md.success_unlock || ''} onChange={e => setEventDetailModal({ ...md, success_unlock: e.target.value })} onBlur={e => updateField('success_unlock', e.target.value)} placeholder="Unlocks VIP access..." style={S.sel} /></div>
                   </div>
 
-                  {/* Financial Preview */}
+                  {/* Financial Preview — fetched from /financial-forecast.
+                      Shows real outfit cost from the picked pieces, event
+                      extras (drinks/valet/photo booth) scaled by prestige,
+                      social-task rewards, and a "next goal" progress bar.
+                      Falls back to a loading row while the fetch is in
+                      flight, and a graceful "—" when the endpoint errored
+                      (older env, missing columns). */}
                   {(() => {
-                    const p = md.prestige || 5;
-                    const eventIncome = md.is_paid ? (parseFloat(md.payment_amount) || 0) : 0;
-                    const eventExpense = parseFloat(md.cost_coins) || 0;
-                    // Estimate content revenue from social tasks
-                    const contentRevenue = md.event_type === 'brand_deal' ? eventIncome * 0.1 : 0;
-                    // Estimate outfit cost from prestige tier
-                    const estOutfitCost = p >= 8 ? 400 : p >= 6 ? 250 : p >= 4 ? 120 : 50;
-                    const totalIn = eventIncome + contentRevenue;
-                    const totalOut = eventExpense + estOutfitCost;
-                    const net = totalIn - totalOut;
+                    const fc = eventFinancials;
+                    const loading = eventFinancialsLoading && !fc;
+                    const income = fc?.income?.total ?? 0;
+                    const expenses = fc?.expenses?.total ?? 0;
+                    const net = fc?.net ?? 0;
+                    const aff = fc?.affordability || {};
+                    const nextGoal = fc?.next_goal || financeConfig?.next_goal;
+                    const currentBalance = financeConfig?.current_balance ?? 0;
+                    const balanceAfter = aff.balance_after ?? currentBalance;
                     return (
                       <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>Financial Preview</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>Financial Preview</div>
+                          {loading && <div style={{ fontSize: 10, color: '#94a3b8' }}>calculating…</div>}
+                        </div>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
-                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#16a34a' }}>Income</div>
-                            <div style={{ fontSize: 15, fontWeight: 800, color: '#16a34a' }}>{totalIn.toLocaleString()}</div>
-                            {eventIncome > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Payment: {eventIncome}</div>}
-                            {contentRevenue > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Content: +{contentRevenue}</div>}
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#16a34a' }}>Income (coins)</div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: '#16a34a' }}>{income.toLocaleString()}</div>
+                            {fc?.income?.event_payment > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Payment: {fc.income.event_payment}</div>}
+                            {fc?.income?.social_task_rewards > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Tasks: +{fc.income.social_task_rewards}</div>}
+                            {fc?.income?.content_revenue_est > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Content est: +{fc.income.content_revenue_est}</div>}
                           </div>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
-                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#dc2626' }}>Expenses</div>
-                            <div style={{ fontSize: 15, fontWeight: 800, color: '#dc2626' }}>{totalOut.toLocaleString()}</div>
-                            {eventExpense > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Event: {eventExpense}</div>}
-                            <div style={{ fontSize: 9, color: '#dc262680' }}>Outfit (est): ~{estOutfitCost}</div>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#dc2626' }}>Expenses (coins)</div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: '#dc2626' }}>{expenses.toLocaleString()}</div>
+                            {fc?.expenses?.event_cost > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Event: {fc.expenses.event_cost}</div>}
+                            {fc?.expenses?.outfit_retail > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Outfit ({fc.outfit_source === 'actual' ? `${fc.outfit_piece_count} pieces` : 'est'}): {fc.expenses.outfit_retail}</div>}
+                            {fc?.expenses?.outfit_rentals > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Rentals: +{fc.expenses.outfit_rentals}</div>}
+                            {(fc?.expenses?.drinks_est || fc?.expenses?.valet_est || fc?.expenses?.photo_booth_est) ? (
+                              <div style={{ fontSize: 9, color: '#dc262680' }}>
+                                Extras: {[
+                                  fc.expenses.drinks_est && `drinks ${fc.expenses.drinks_est}`,
+                                  fc.expenses.valet_est && `valet ${fc.expenses.valet_est}`,
+                                  fc.expenses.photo_booth_est && `photo ${fc.expenses.photo_booth_est}`,
+                                ].filter(Boolean).join(', ')}
+                              </div>
+                            ) : null}
                           </div>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}` }}>
                             <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626' }}>Net P&L</div>
                             <div style={{ fontSize: 15, fontWeight: 800, color: net >= 0 ? '#16a34a' : '#dc2626' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
-                            <div style={{ fontSize: 9, color: '#94a3b8' }}>{net >= 0 ? 'Profitable' : 'Costs more than earns'}</div>
+                            <div style={{ fontSize: 9, color: '#94a3b8' }}>
+                              {aff.balance_before != null
+                                ? `${aff.balance_before.toLocaleString()} → ${balanceAfter.toLocaleString()}`
+                                : (net >= 0 ? 'Profitable' : 'Costs more than earns')}
+                            </div>
                           </div>
                         </div>
-                        <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 4 }}>Estimates based on prestige {p} tier. Actual costs depend on wardrobe selection.</div>
+                        {/* Milestones progress — "next goal" bar + reward preview. */}
+                        {nextGoal && (
+                          <div style={{ marginTop: 10, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#854d0e' }}>Next: {nextGoal.label}</span>
+                              <span style={{ fontSize: 10, color: '#854d0e', fontFamily: "'DM Mono', monospace" }}>
+                                {balanceAfter.toLocaleString()} / {Number(nextGoal.threshold).toLocaleString()} coins
+                              </span>
+                            </div>
+                            <div style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{
+                                width: `${Math.max(0, Math.min(100, (balanceAfter / Number(nextGoal.threshold)) * 100))}%`,
+                                height: '100%',
+                                background: balanceAfter >= Number(nextGoal.threshold) ? '#16a34a' : '#d4a017',
+                                transition: 'width 0.3s',
+                              }} />
+                            </div>
+                            {nextGoal.reward_coins > 0 && (
+                              <div style={{ fontSize: 10, color: '#854d0e', marginTop: 3 }}>🎁 Reward on reach: +{Number(nextGoal.reward_coins).toLocaleString()} coins — {nextGoal.description}</div>
+                            )}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 6 }}>
+                          {fc ? `From ${fc.outfit_source === 'actual' ? 'picked outfit' : 'prestige estimate'} + event extras. Refreshes when outfit changes.` : 'Loading forecast…'}
+                        </div>
                         {/* Finalize Financials button — executes real transactions */}
                         {md.used_in_episode_id && (
                           <button
