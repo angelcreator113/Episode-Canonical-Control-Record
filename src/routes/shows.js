@@ -462,6 +462,141 @@ router.put('/:id/financial-config', async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id/financial-summary
+ * Aggregated financial dashboard for the Finance page. Returns:
+ *   - totals: lifetime income/expense/net + current balance
+ *   - by_episode: per-episode net and category breakdown, newest first
+ *   - trend: balance_after per finalized episode in chronological order
+ *           (directly feeds the sparkline on the Overview tab)
+ *   - burn_rate_per_episode: average coins spent per finalized episode
+ *   - runway_episodes: at the current burn rate, how many episodes until 0
+ *
+ * Everything derives from financial_transactions + episodes. Zero new
+ * schema. Runs in one or two roundtrips; fine for a ~250-episode show.
+ */
+router.get('/:id/financial-summary', async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const sequelize = Show.sequelize;
+    const showId = show.id;
+    const { getCurrentBalance } = require('../services/financialTransactionService');
+
+    // ── Lifetime totals ──
+    const [totalsRow] = await sequelize.query(
+      `SELECT
+        COALESCE(SUM(CASE WHEN type IN ('income', 'reward') THEN amount ELSE 0 END), 0)::bigint AS lifetime_income,
+        COALESCE(SUM(CASE WHEN type IN ('expense', 'deduction') THEN amount ELSE 0 END), 0)::bigint AS lifetime_expenses,
+        COUNT(*)::int AS tx_count
+       FROM financial_transactions
+       WHERE show_id = :showId AND status = 'executed' AND deleted_at IS NULL`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    const lifetimeIncome = Number(totalsRow?.lifetime_income) || 0;
+    const lifetimeExpenses = Number(totalsRow?.lifetime_expenses) || 0;
+
+    // ── Per-episode aggregates ──
+    // Group transactions by episode_id, join against episodes for title/number.
+    // Orphan transactions (episode_id null) are bucketed under "Unlinked" so
+    // they still count in lifetime totals but don't clutter the table.
+    const [byEpRows] = await sequelize.query(
+      `SELECT
+        e.id AS episode_id,
+        e.episode_number,
+        e.title,
+        e.status AS episode_status,
+        COALESCE(SUM(CASE WHEN ft.type IN ('income', 'reward') THEN ft.amount ELSE 0 END), 0)::bigint AS income,
+        COALESCE(SUM(CASE WHEN ft.type IN ('expense', 'deduction') THEN ft.amount ELSE 0 END), 0)::bigint AS expenses,
+        COALESCE(SUM(CASE WHEN ft.category IN ('wardrobe_purchase','wardrobe_rental') THEN ft.amount ELSE 0 END), 0)::bigint AS outfit_cost,
+        COALESCE(SUM(CASE WHEN ft.category = 'event_cost' THEN ft.amount ELSE 0 END), 0)::bigint AS event_cost,
+        COALESCE(SUM(CASE WHEN ft.category = 'social_task_reward' THEN ft.amount ELSE 0 END), 0)::bigint AS task_rewards,
+        COUNT(ft.id)::int AS tx_count
+       FROM episodes e
+       LEFT JOIN financial_transactions ft
+         ON ft.episode_id = e.id AND ft.show_id = :showId AND ft.status = 'executed' AND ft.deleted_at IS NULL
+       WHERE e.show_id = :showId AND e.deleted_at IS NULL
+       GROUP BY e.id, e.episode_number, e.title, e.status
+       ORDER BY COALESCE(e.episode_number, 0) DESC
+       LIMIT 250`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+
+    // ── Rolling balance per episode (for the trend line) ──
+    // Walk episodes oldest → newest and carry forward. Starts from 0 and
+    // lets the seed transaction (which lives on no specific episode) show
+    // up as the first income spike on the "Unlinked" row — that's fine for
+    // the trend because the running balance still matches getCurrentBalance
+    // by the end.
+    const chrono = [...(byEpRows || [])].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
+    let running = 0;
+    const trend = [];
+    const byEpisode = [];
+    for (const r of chrono) {
+      const income = Number(r.income) || 0;
+      const expenses = Number(r.expenses) || 0;
+      const net = income - expenses;
+      running += net;
+      trend.push({
+        episode_id: r.episode_id,
+        episode_number: r.episode_number,
+        net,
+        balance_after: running,
+      });
+      byEpisode.push({
+        episode_id: r.episode_id,
+        episode_number: r.episode_number,
+        title: r.title,
+        status: r.episode_status,
+        income,
+        expenses,
+        outfit_cost: Number(r.outfit_cost) || 0,
+        event_cost: Number(r.event_cost) || 0,
+        task_rewards: Number(r.task_rewards) || 0,
+        net,
+        balance_after: running,
+        tx_count: r.tx_count,
+      });
+    }
+
+    // ── Burn rate + runway ──
+    // Only count episodes that actually had transactions — a 200-row show
+    // where only 4 episodes have been played shouldn't dilute burn rate to
+    // near-zero. A "spend episode" = any episode with non-zero expense.
+    const spendingEpisodes = byEpisode.filter(e => e.expenses > 0);
+    const avgExpense = spendingEpisodes.length
+      ? spendingEpisodes.reduce((s, e) => s + e.expenses, 0) / spendingEpisodes.length
+      : 0;
+    const avgIncome = spendingEpisodes.length
+      ? spendingEpisodes.reduce((s, e) => s + e.income, 0) / spendingEpisodes.length
+      : 0;
+    const burnRate = Math.max(0, avgExpense - avgIncome);  // net burn only; income offsets
+    const currentBalance = await getCurrentBalance(sequelize, showId);
+    const runway = burnRate > 0 ? Math.floor(currentBalance / burnRate) : null;
+
+    return res.json({
+      success: true,
+      totals: {
+        lifetime_income: lifetimeIncome,
+        lifetime_expenses: lifetimeExpenses,
+        net: lifetimeIncome - lifetimeExpenses,
+        current_balance: currentBalance,
+        tx_count: Number(totalsRow?.tx_count) || 0,
+      },
+      by_episode: byEpisode.reverse(), // newest first for the table
+      trend,                           // oldest → newest for the sparkline
+      burn_rate_per_episode: Math.round(burnRate),
+      avg_income_per_episode: Math.round(avgIncome),
+      runway_episodes: runway,
+      spending_episode_count: spendingEpisodes.length,
+    });
+  } catch (err) {
+    console.error('GET /shows/:id/financial-summary error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/v1/shows/:id/seed-balance
  * Idempotent: writes a single 'seed' transaction granting the starting
  * balance if one doesn't already exist. Safe to call multiple times — it
