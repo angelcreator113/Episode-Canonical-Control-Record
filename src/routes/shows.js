@@ -716,49 +716,57 @@ router.post('/:id/seed-finance-apps', async (req, res) => {
         console.warn(`[seed-finance-apps] ${appKey} image gen failed:`, genErr.message);
       }
 
-      if (!screenExists) {
-        await Asset.create({
-          asset_type: 'UI_OVERLAY',
-          asset_group: 'SHOW',
-          asset_scope: 'SHOW',
-          show_id: showId,
-          name: `💰 ${prompts.label}`,
-          s3_url_processed: assets.frame_url,
-          content_type: 'image/png',
-          metadata: {
-            overlay_type: screenType,
-            overlay_category: 'phone',
-            is_home: false,
-            screen_links: [
-              // Back arrow to home screen — tap zone top-left
-              { id: `back-${appKey}`, x: 2, y: 2, w: 10, h: 6, label: '←', actions: [{ type: 'navigate', target: 'home' }] },
-            ],
-            content_zones: APP_CONTENT_ZONES[appKey] || [],
-            theme: { pink: '#FBCFE8', teal: '#14B8A6', gold: '#B8962E' },
-          },
-        });
-      }
+      // Wrap per-app creates so one bad row doesn't 500 the whole endpoint.
+      // The error surfaces in the response payload under results[n].error so
+      // the UI can show which app(s) failed and why.
+      try {
+        if (!screenExists) {
+          await Asset.create({
+            asset_type: 'UI_OVERLAY',
+            asset_group: 'SHOW',
+            asset_scope: 'SHOW',
+            show_id: showId,
+            name: `💰 ${prompts.label}`,
+            s3_url_processed: assets.frame_url,
+            content_type: 'image/png',
+            metadata: {
+              overlay_type: screenType,
+              overlay_category: 'phone',
+              is_home: false,
+              screen_links: [
+                // Back arrow to home screen — tap zone top-left
+                { id: `back-${appKey}`, x: 2, y: 2, w: 10, h: 6, label: '←', actions: [{ type: 'navigate', target: 'home' }] },
+              ],
+              content_zones: APP_CONTENT_ZONES[appKey] || [],
+              theme: { pink: '#FBCFE8', teal: '#14B8A6', gold: '#B8962E' },
+            },
+          });
+        }
 
-      if (!iconExists) {
-        await Asset.create({
-          asset_type: 'UI_OVERLAY',
-          asset_group: 'SHOW',
-          asset_scope: 'SHOW',
-          show_id: showId,
-          name: `${prompts.icon} ${prompts.label} icon`,
-          s3_url_processed: assets.icon_url,
-          content_type: 'image/png',
-          metadata: {
-            overlay_type: iconType,
-            overlay_category: 'icon',
-            opens_screen: screenType,
-            label: prompts.label,
-            theme: { pink: '#FBCFE8', teal: '#14B8A6' },
-          },
-        });
-      }
+        if (!iconExists) {
+          await Asset.create({
+            asset_type: 'UI_OVERLAY',
+            asset_group: 'SHOW',
+            asset_scope: 'SHOW',
+            show_id: showId,
+            name: `${prompts.icon} ${prompts.label} icon`,
+            s3_url_processed: assets.icon_url,
+            content_type: 'image/png',
+            metadata: {
+              overlay_type: iconType,
+              overlay_category: 'icon',
+              opens_screen: screenType,
+              label: prompts.label,
+              theme: { pink: '#FBCFE8', teal: '#14B8A6' },
+            },
+          });
+        }
 
-      results.push({ app: appKey, created: true, frame_generated: !!assets.frame_url, icon_generated: !!assets.icon_url });
+        results.push({ app: appKey, created: true, frame_generated: !!assets.frame_url, icon_generated: !!assets.icon_url });
+      } catch (createErr) {
+        console.error(`[seed-finance-apps] Asset.create failed for ${appKey}:`, createErr.message, createErr.stack);
+        results.push({ app: appKey, created: false, error: createErr.message, error_code: createErr.original?.code || null });
+      }
     }
 
     // ── Auto-place icons on the home screen ────────────────────────────
@@ -822,8 +830,15 @@ router.post('/:id/seed-finance-apps', async (req, res) => {
 
     return res.json({ success: true, results, placement });
   } catch (err) {
-    console.error('POST /shows/:id/seed-finance-apps error:', err);
-    return res.status(500).json({ error: err.message });
+    // Bubble full diagnostic info so the UI can toast something actionable
+    // (and the server log has enough context to spot misconfigured env /
+    // missing columns / enum violations without trial-and-error).
+    console.error('POST /shows/:id/seed-finance-apps error:', err, err?.stack);
+    return res.status(500).json({
+      error: err.message,
+      error_code: err.original?.code || err.code || null,
+      detail: err.original?.detail || null,
+    });
   }
 });
 
