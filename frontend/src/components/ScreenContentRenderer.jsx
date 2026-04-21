@@ -30,6 +30,13 @@ export const CONTENT_TYPES = [
   { key: 'comments_list', label: 'Comments', icon: '💭', desc: 'Post comment thread', group: 'social' },
   { key: 'engagement_stats', label: 'Engagement Stats', icon: '📈', desc: 'Likes, reach, trending', group: 'stats' },
   { key: 'money_balance', label: 'Money Balance', icon: '💰', desc: 'Lala’s live coin balance + next goal', group: 'stats' },
+  { key: 'balance_trend_sparkline', label: 'Balance Trend', icon: '📈', desc: 'Last 12 episodes balance line chart', group: 'stats' },
+  { key: 'income_expense_bars', label: 'Income/Expense Bars', icon: '📉', desc: 'Category rollup bars (side: income|expenses)', group: 'stats' },
+  { key: 'goal_progress_bar', label: 'Goal Progress', icon: '🎯', desc: 'Progress bar toward next financial goal', group: 'stats' },
+  { key: 'goal_ladder', label: 'Goal Ladder', icon: '🏆', desc: 'Full milestone ladder with triggered status', group: 'stats' },
+  { key: 'finance_kpis', label: 'Finance KPIs', icon: '🧮', desc: 'Burn rate / runway / avg income strip', group: 'stats' },
+  { key: 'closet_net_worth', label: 'Closet Net Worth', icon: '💎', desc: 'Owned vs wishlist wardrobe value', group: 'stats' },
+  { key: 'closet_wishlist_grid', label: 'Dream Pieces', icon: '👗', desc: 'Top N unowned wardrobe items', group: 'wardrobe' },
   { key: 'custom_text', label: 'Custom Text', icon: '✏️', desc: 'Static text overlay', group: 'other' },
 ];
 
@@ -114,6 +121,20 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
       return <EngagementStatsRenderer showId={showId} config={config} />;
     case 'money_balance':
       return <MoneyBalanceRenderer showId={showId} config={config} />;
+    case 'balance_trend_sparkline':
+      return <BalanceTrendSparklineRenderer showId={showId} config={config} />;
+    case 'income_expense_bars':
+      return <IncomeExpenseBarsRenderer showId={showId} config={config} />;
+    case 'goal_progress_bar':
+      return <GoalProgressBarRenderer showId={showId} config={config} />;
+    case 'goal_ladder':
+      return <GoalLadderRenderer showId={showId} config={config} />;
+    case 'finance_kpis':
+      return <FinanceKPIsRenderer showId={showId} config={config} />;
+    case 'closet_net_worth':
+      return <ClosetNetWorthRenderer showId={showId} config={config} />;
+    case 'closet_wishlist_grid':
+      return <ClosetWishlistGridRenderer showId={showId} config={config} />;
     case 'custom_text':
       return <CustomTextRenderer config={config} />;
     default:
@@ -521,6 +542,206 @@ function MoneyBalanceRenderer({ showId, config }) {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// ── Finance: Balance Trend Sparkline ──
+// Reuses the same SVG sparkline shape from the Finance Overview modal.
+// Fetches /financial-summary, plots the last N trend points (default 12),
+// colors the line teal and the zero-axis pink. Works at any zone size.
+function BalanceTrendSparklineRenderer({ showId, config }) {
+  const url = showId ? `/api/v1/shows/${showId}/financial-summary` : null;
+  const { data, loading } = useContentData(url);
+  if (loading) return <ZoneLoader />;
+  const trend = (data?.data?.trend || data?.trend || []).slice(-(config.points || 12));
+  if (trend.length < 2) return <ZoneEmpty label="No trend" />;
+  const maxBal = Math.max(1, ...trend.map(p => p.balance_after));
+  const minBal = Math.min(0, ...trend.map(p => p.balance_after));
+  const range = maxBal - minBal || 1;
+  return (
+    <div style={{ width: '100%', height: '100%', padding: 4, background: config.bg || 'rgba(0,0,0,0.25)' }}>
+      <svg viewBox="0 0 100 40" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+        {minBal < 0 && (
+          <line x1="0" y1={40 - ((0 - minBal) / range) * 40} x2="100" y2={40 - ((0 - minBal) / range) * 40}
+            stroke="#FBCFE8" strokeWidth="0.3" strokeDasharray="1,1" />
+        )}
+        <polyline
+          points={trend.map((p, i) => `${(i / Math.max(1, trend.length - 1)) * 100},${40 - ((p.balance_after - minBal) / range) * 40}`).join(' ')}
+          fill="none" stroke={config.line_color || '#14B8A6'} strokeWidth="0.8" vectorEffect="non-scaling-stroke"
+        />
+        {trend.map((p, i) => (
+          <circle key={i}
+            cx={(i / Math.max(1, trend.length - 1)) * 100}
+            cy={40 - ((p.balance_after - minBal) / range) * 40}
+            r="0.8" fill={p.net >= 0 ? '#14B8A6' : '#FBCFE8'} vectorEffect="non-scaling-stroke" />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// ── Finance: Income / Expense Category Bars ──
+// config.side = 'income' | 'expenses' (default income). Fetches the
+// pre-aggregated breakdown endpoint, renders horizontal bars scaled to
+// the largest category on that side.
+function IncomeExpenseBarsRenderer({ showId, config }) {
+  const url = showId ? `/api/v1/shows/${showId}/financial-breakdowns` : null;
+  const { data, loading } = useContentData(url);
+  if (loading) return <ZoneLoader />;
+  const side = config.side === 'expenses' ? 'expenses' : 'income';
+  const payload = data?.data || data || {};
+  const bucket = payload[side] || {};
+  const items = (bucket.breakdown || []).slice(0, config.limit || 6);
+  if (items.length === 0) return <ZoneEmpty label={`No ${side}`} />;
+  const max = Math.max(1, ...items.map(r => r.total));
+  const color = side === 'income' ? '#14B8A6' : '#FBCFE8';
+  return (
+    <div style={{ width: '100%', height: '100%', padding: 6, background: config.bg || 'rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+      {items.map((r, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+          <span style={{ fontSize: 7, color: 'rgba(255,255,255,0.7)', width: '38%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'DM Mono', monospace" }}>{r.category}</span>
+          <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.12)', borderRadius: 1, overflow: 'hidden' }}>
+            <div style={{ width: `${(r.total / max) * 100}%`, height: '100%', background: color }} />
+          </div>
+          <span style={{ fontSize: 7, color: '#fff', fontFamily: "'DM Mono', monospace", fontWeight: 700, width: '20%', textAlign: 'right' }}>{r.total.toLocaleString()}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Finance: Goal Progress Bar ──
+// Just the "next goal" bar, standalone (MoneyBalanceRenderer includes its
+// own smaller version). Useful as a hero element on the Wallet screen.
+function GoalProgressBarRenderer({ showId, config }) {
+  const url = showId ? `/api/v1/shows/${showId}/financial-config` : null;
+  const { data, loading } = useContentData(url);
+  if (loading) return <ZoneLoader />;
+  const cfg = data?.data || data;
+  const next = cfg?.next_goal;
+  const balance = Number(cfg?.current_balance) || 0;
+  if (!next) {
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: config.bg || 'rgba(0,0,0,0.25)' }}>
+        <span style={{ fontSize: 9, color: '#fff' }}>🏆 Legacy reached</span>
+      </div>
+    );
+  }
+  const progress = Math.max(0, Math.min(1, balance / Number(next.threshold)));
+  return (
+    <div style={{ width: '100%', height: '100%', padding: 4, background: config.bg || 'rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8 }}>
+        <span style={{ color: '#FBCFE8', fontWeight: 700 }}>{next.label}</span>
+        <span style={{ color: '#fff', fontFamily: "'DM Mono', monospace" }}>{balance.toLocaleString()}/{Number(next.threshold).toLocaleString()}</span>
+      </div>
+      <div style={{ height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ width: `${progress * 100}%`, height: '100%', background: '#14B8A6' }} />
+      </div>
+    </div>
+  );
+}
+
+// ── Finance: Full Goal Ladder ──
+// List every milestone with status dot (green=triggered, gold=next,
+// gray=locked). Used on the Goals phone screen.
+function GoalLadderRenderer({ showId, config }) {
+  const url = showId ? `/api/v1/shows/${showId}/financial-config` : null;
+  const { data, loading } = useContentData(url);
+  if (loading) return <ZoneLoader />;
+  const cfg = data?.data || data;
+  const goals = cfg?.goals || [];
+  const nextId = cfg?.next_goal?.id;
+  if (goals.length === 0) return <ZoneEmpty label="No goals" />;
+  return (
+    <div style={{ width: '100%', height: '100%', padding: 6, background: config.bg || 'rgba(0,0,0,0.25)', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {goals.map(g => {
+        const isTriggered = !!g.triggered_at;
+        const isNext = g.id === nextId;
+        const dotColor = isTriggered ? '#14B8A6' : isNext ? '#B8962E' : 'rgba(255,255,255,0.25)';
+        return (
+          <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 0', opacity: isTriggered ? 1 : isNext ? 1 : 0.7 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+            <span style={{ fontSize: 8, color: '#fff', fontWeight: isNext ? 700 : 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.label}</span>
+            <span style={{ fontSize: 7, color: 'rgba(255,255,255,0.6)', fontFamily: "'DM Mono', monospace" }}>{Number(g.threshold).toLocaleString()}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Finance: KPI Strip ──
+// Burn rate / runway / avg income in a compact three-column strip. Scales
+// its font to fit the zone; big zones get bigger numbers, cramped zones
+// get a mini display.
+function FinanceKPIsRenderer({ showId, config }) {
+  const url = showId ? `/api/v1/shows/${showId}/financial-summary` : null;
+  const { data, loading } = useContentData(url);
+  if (loading) return <ZoneLoader />;
+  const s = data?.data || data;
+  if (!s) return <ZoneEmpty label="No data" />;
+  const kpis = [
+    { label: 'Burn', value: `${(s.burn_rate_per_episode || 0).toLocaleString()}/ep` },
+    { label: 'Runway', value: s.runway_episodes != null ? `${s.runway_episodes} eps` : '∞' },
+    { label: 'Avg Inc', value: `${(s.avg_income_per_episode || 0).toLocaleString()}/ep` },
+  ];
+  return (
+    <div style={{ width: '100%', height: '100%', padding: 4, background: config.bg || 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'stretch' }}>
+      {kpis.map((k, i) => (
+        <div key={i} style={{ flex: 1, textAlign: 'center', padding: '2px 3px', borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.15)' : undefined }}>
+          <div style={{ fontSize: 6, color: '#FBCFE8', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.4 }}>{k.label}</div>
+          <div style={{ fontSize: 10, color: '#fff', fontWeight: 700, fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{k.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Finance: Closet Net Worth ──
+function ClosetNetWorthRenderer({ showId, config }) {
+  const url = showId ? `/api/v1/shows/${showId}/financial-breakdowns` : null;
+  const { data, loading } = useContentData(url);
+  if (loading) return <ZoneLoader />;
+  const closet = data?.data?.closet || data?.closet;
+  if (!closet) return <ZoneEmpty label="No closet" />;
+  return (
+    <div style={{ width: '100%', height: '100%', padding: 4, background: config.bg || 'rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', gap: 4 }}>
+      {[
+        { label: 'Owned', value: closet.owned_value, count: closet.owned_count, color: '#14B8A6' },
+        { label: 'Wishlist', value: closet.unowned_value, count: closet.unowned_count, color: '#FBCFE8' },
+      ].map((col, i) => (
+        <div key={i} style={{ flex: 1, textAlign: 'center', padding: '2px 3px', borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.15)' : undefined }}>
+          <div style={{ fontSize: 6, color: col.color, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.4 }}>{col.label}</div>
+          <div style={{ fontSize: 11, color: '#fff', fontWeight: 700, fontFamily: "'DM Mono', monospace", marginTop: 1 }}>{Number(col.value || 0).toLocaleString()}</div>
+          <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)' }}>{col.count} pieces</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Finance: Closet Wishlist Grid ──
+// Top N most expensive unowned pieces as small tiles.
+function ClosetWishlistGridRenderer({ showId, config }) {
+  const url = showId ? `/api/v1/shows/${showId}/financial-breakdowns` : null;
+  const { data, loading } = useContentData(url);
+  if (loading) return <ZoneLoader />;
+  const closet = data?.data?.closet || data?.closet;
+  const items = (closet?.wishlist || []).slice(0, config.limit || 5);
+  if (items.length === 0) return <ZoneEmpty label="No wishlist" />;
+  return (
+    <div style={{ width: '100%', height: '100%', padding: 4, background: config.bg || 'rgba(0,0,0,0.25)', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {items.map(w => (
+        <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 3 }}>
+          {w.image_url && <img src={w.image_url} alt="" style={{ width: 22, height: 22, objectFit: 'cover', borderRadius: 2, flexShrink: 0 }} />}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 8, color: '#fff', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
+            <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)' }}>{w.brand || '—'} · {w.tier || 'basic'}</div>
+          </div>
+          <span style={{ fontSize: 8, color: '#FBCFE8', fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>💰 {Number(w.coin_cost || 0).toLocaleString()}</span>
+        </div>
+      ))}
     </div>
   );
 }

@@ -5682,7 +5682,29 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   <div style={{ background: '#fff', borderRadius: 14, maxWidth: 760, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                       <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>💰 Finance</h3>
-                      <button onClick={() => setFinanceEditorOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {/* Seed finance apps — idempotent. Creates the 5 finance
+                            app screens + icons using AI-generated pink/teal
+                            frames, and appends the icons to the home screen in
+                            a 5-across grid at the bottom. Rerun any time to
+                            fill in missing apps. */}
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm('Create the 5 finance apps on Lala\'s phone?\n\n• 5 AI-generated icon images (pink + teal palette)\n• 5 stylized screens with pre-wired live-data zones\n• Icons auto-placed on the home screen\n\nSafe to re-run — only fills in missing apps.')) return;
+                            try {
+                              const res = await api.post(`/api/v1/shows/${showId}/seed-finance-apps`, { auto_place: true });
+                              const created = (res.data.results || []).filter(r => r.created).length;
+                              const placed = res.data.placement?.placed;
+                              setToast(`Finance apps: ${created} created${placed ? ', icons placed on home screen' : ' (place manually in UI Overlays)'}`);
+                            } catch (err) {
+                              setToast('Seed failed: ' + (err.response?.data?.error || err.message));
+                            }
+                          }}
+                          title="Create the 5 finance apps (Wallet, Insights, Breakdowns, Closet, Goals) on Lala's phone with AI-generated pink+teal frames"
+                          style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #fbcfe8', borderRadius: 6, background: 'linear-gradient(135deg, #FBCFE8 0%, #14B8A6 100%)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >📱 Seed Finance Apps</button>
+                        <button onClick={() => setFinanceEditorOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                      </div>
                     </div>
 
                     {/* Tab bar — switches between Overview (dashboard), Per-Episode

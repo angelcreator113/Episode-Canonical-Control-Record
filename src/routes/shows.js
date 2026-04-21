@@ -597,6 +597,283 @@ router.get('/:id/financial-summary', async (req, res) => {
 });
 
 /**
+ * POST /api/v1/shows/:id/seed-finance-apps
+ * Idempotent: creates the 5 finance-app phone screens + icons if they don't
+ * already exist for this show. Rerunning the endpoint only fills in missing
+ * pieces — does not regenerate existing frames (use the Redecorate flow on
+ * an individual screen for that). Returns which apps were created vs
+ * already-present.
+ *
+ * Body: { auto_place?: boolean, force?: boolean }
+ *  - auto_place (default true): once icons exist, append them as tap zones
+ *    to the show's home screen (is_home=true overlay) in a 5-across grid at
+ *    the bottom. If no home screen is found, skip placement but still
+ *    create the apps.
+ *  - force (default false): delete existing finance-app assets and rebuild.
+ *
+ * Each app yields two Asset rows:
+ *  - screen: asset_type=UI_OVERLAY, asset_group=FINANCE,
+ *      metadata.overlay_type='finance_<app>', metadata.content_zones=[...]
+ *  - icon:   asset_type=UI_OVERLAY, asset_group=FINANCE,
+ *      metadata.overlay_type='finance_<app>_icon'
+ */
+router.post('/:id/seed-finance-apps', async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+
+    const autoPlace = req.body?.auto_place !== false;
+    const force = req.body?.force === true;
+    const sequelize = Show.sequelize;
+    const showId = show.id;
+    const models = require('../models');
+    const { Asset } = models;
+    if (!Asset) return res.status(500).json({ error: 'Asset model not available' });
+
+    const {
+      APP_PROMPTS, generateAppAssets,
+    } = require('../services/financialFrameGeneratorService');
+
+    // Per-app pre-wired content zones. These are the finance-specific
+    // content_type keys Commit 3 adds; until those land they render as the
+    // fallback "No type" placeholder, which is fine — the seed still
+    // creates the slots so authors don't have to draw zones manually.
+    const APP_CONTENT_ZONES = {
+      wallet: [
+        { id: 'cz-balance', x: 10, y: 20, w: 80, h: 12, content_type: 'money_balance', content_config: { font_size: 22, show_progress: true, bg: 'transparent' } },
+        { id: 'cz-goal-progress', x: 10, y: 35, w: 80, h: 8, content_type: 'goal_progress_bar', content_config: {} },
+      ],
+      insights: [
+        { id: 'cz-trend', x: 8, y: 22, w: 84, h: 30, content_type: 'balance_trend_sparkline', content_config: {} },
+        { id: 'cz-kpis', x: 8, y: 55, w: 84, h: 20, content_type: 'finance_kpis', content_config: {} },
+      ],
+      breakdowns: [
+        { id: 'cz-income', x: 8, y: 14, w: 84, h: 28, content_type: 'income_expense_bars', content_config: { side: 'income' } },
+        { id: 'cz-expense', x: 8, y: 48, w: 84, h: 38, content_type: 'income_expense_bars', content_config: { side: 'expenses' } },
+      ],
+      closet: [
+        { id: 'cz-networth', x: 8, y: 14, w: 84, h: 14, content_type: 'closet_net_worth', content_config: {} },
+        { id: 'cz-wishlist', x: 8, y: 32, w: 84, h: 58, content_type: 'closet_wishlist_grid', content_config: { limit: 5 } },
+      ],
+      goals: [
+        { id: 'cz-goals', x: 8, y: 14, w: 84, h: 76, content_type: 'goal_ladder', content_config: {} },
+      ],
+    };
+
+    const appKeys = Object.keys(APP_PROMPTS);
+
+    // Force-rebuild: soft-delete existing finance assets for this show. The
+    // sequelize paranoid flag takes care of the deleted_at stamp.
+    if (force) {
+      await sequelize.query(
+        `UPDATE assets SET deleted_at = NOW()
+         WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND asset_group = 'FINANCE' AND deleted_at IS NULL`,
+        { replacements: { showId } }
+      );
+    }
+
+    // ── Locate existing finance assets so we can skip them on rerun ────
+    const [existing] = await sequelize.query(
+      `SELECT id, name, metadata::text AS meta
+       FROM assets
+       WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND asset_group = 'FINANCE' AND deleted_at IS NULL`,
+      { replacements: { showId } }
+    );
+    const existingByOverlayType = {};
+    for (const row of existing || []) {
+      try {
+        const m = JSON.parse(row.meta || '{}');
+        if (m.overlay_type) existingByOverlayType[m.overlay_type] = row;
+      } catch { /* skip malformed */ }
+    }
+
+    const results = [];
+
+    for (const appKey of appKeys) {
+      const prompts = APP_PROMPTS[appKey];
+      const screenType = `finance_${appKey}`;
+      const iconType = `${screenType}_icon`;
+
+      const screenExists = !!existingByOverlayType[screenType];
+      const iconExists = !!existingByOverlayType[iconType];
+      if (screenExists && iconExists) {
+        results.push({ app: appKey, created: false, reason: 'already exists' });
+        continue;
+      }
+
+      // Generate both images (screen frame + icon). Failures return
+      // partial data; we still create the asset rows so the creator can
+      // Redecorate later.
+      let assets = { frame_url: null, icon_url: null };
+      try {
+        assets = await generateAppAssets(appKey, showId);
+      } catch (genErr) {
+        console.warn(`[seed-finance-apps] ${appKey} image gen failed:`, genErr.message);
+      }
+
+      if (!screenExists) {
+        await Asset.create({
+          asset_type: 'UI_OVERLAY',
+          asset_group: 'FINANCE',
+          asset_scope: 'SHOW',
+          show_id: showId,
+          name: `💰 ${prompts.label}`,
+          s3_url_processed: assets.frame_url,
+          content_type: 'image/png',
+          metadata: {
+            overlay_type: screenType,
+            overlay_category: 'phone',
+            is_home: false,
+            screen_links: [
+              // Back arrow to home screen — tap zone top-left
+              { id: `back-${appKey}`, x: 2, y: 2, w: 10, h: 6, label: '←', actions: [{ type: 'navigate', target: 'home' }] },
+            ],
+            content_zones: APP_CONTENT_ZONES[appKey] || [],
+            theme: { pink: '#FBCFE8', teal: '#14B8A6', gold: '#B8962E' },
+          },
+        });
+      }
+
+      if (!iconExists) {
+        await Asset.create({
+          asset_type: 'UI_OVERLAY',
+          asset_group: 'FINANCE',
+          asset_scope: 'SHOW',
+          show_id: showId,
+          name: `${prompts.icon} ${prompts.label} icon`,
+          s3_url_processed: assets.icon_url,
+          content_type: 'image/png',
+          metadata: {
+            overlay_type: iconType,
+            overlay_category: 'icon',
+            opens_screen: screenType,
+            label: prompts.label,
+            theme: { pink: '#FBCFE8', teal: '#14B8A6' },
+          },
+        });
+      }
+
+      results.push({ app: appKey, created: true, frame_generated: !!assets.frame_url, icon_generated: !!assets.icon_url });
+    }
+
+    // ── Auto-place icons on the home screen ────────────────────────────
+    // Find the show's home screen (asset with metadata.is_home=true). If
+    // one exists, append 5 tap zones in a row at the bottom — one per
+    // finance app — each pointing at its matching screen via navigate action.
+    // Duplicate zones (same id) are skipped so re-running the seed doesn't
+    // multiply the icons. If no home screen exists, we don't invent one;
+    // the creator can place the icons later via the UI Overlays tab.
+    let placement = { placed: false, reason: 'auto_place disabled' };
+    if (autoPlace) {
+      try {
+        const [homeRows] = await sequelize.query(
+          `SELECT id, metadata::text AS meta
+           FROM assets
+           WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND deleted_at IS NULL
+             AND metadata::text LIKE '%"is_home": true%' LIMIT 1`,
+          { replacements: { showId } }
+        );
+        const home = homeRows?.[0];
+        if (home) {
+          const meta = JSON.parse(home.meta || '{}');
+          const links = Array.isArray(meta.screen_links) ? meta.screen_links : [];
+          // 5-across grid at the bottom 12% of the screen. Fixed coords so
+          // re-seeds land in the same spots.
+          const gridY = 82, gridH = 12, cellW = 16, gap = 2;
+          const startX = 50 - ((cellW * 5 + gap * 4) / 2);
+          let changed = false;
+          appKeys.forEach((appKey, i) => {
+            const zoneId = `fin-icon-${appKey}`;
+            if (links.some(l => l.id === zoneId)) return; // already placed
+            links.push({
+              id: zoneId,
+              x: startX + i * (cellW + gap),
+              y: gridY,
+              w: cellW,
+              h: gridH,
+              label: APP_PROMPTS[appKey].label,
+              actions: [{ type: 'navigate', target: `finance_${appKey}` }],
+            });
+            changed = true;
+          });
+          if (changed) {
+            meta.screen_links = links;
+            await sequelize.query(
+              `UPDATE assets SET metadata = :meta::jsonb, updated_at = NOW() WHERE id = :id`,
+              { replacements: { id: home.id, meta: JSON.stringify(meta) } }
+            );
+            placement = { placed: true, home_asset_id: home.id, zones_added: changed };
+          } else {
+            placement = { placed: true, home_asset_id: home.id, zones_added: false, reason: 'already on home screen' };
+          }
+        } else {
+          placement = { placed: false, reason: 'no home screen found — place icons manually via UI Overlays tab' };
+        }
+      } catch (placeErr) {
+        console.warn('[seed-finance-apps] placement failed:', placeErr.message);
+        placement = { placed: false, reason: placeErr.message };
+      }
+    }
+
+    return res.json({ success: true, results, placement });
+  } catch (err) {
+    console.error('POST /shows/:id/seed-finance-apps error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/shows/:id/redecorate-finance-app
+ * Body: { app_key: 'wallet'|'insights'|'breakdowns'|'closet'|'goals',
+ *         regenerate_icon?: boolean }
+ * Regenerates the decorative frame (and optionally the icon) for a single
+ * finance app. Preserves all content_zones + screen_links — only the image
+ * asset changes. Same "Regenerate" pattern as event invitations.
+ */
+router.post('/:id/redecorate-finance-app', async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { app_key, regenerate_icon } = req.body || {};
+    const {
+      APP_PROMPTS, generateAppAssets,
+    } = require('../services/financialFrameGeneratorService');
+    if (!APP_PROMPTS[app_key]) return res.status(400).json({ error: `Unknown app_key: ${app_key}` });
+
+    const sequelize = Show.sequelize;
+    const showId = show.id;
+    const assets = await generateAppAssets(app_key, showId);
+
+    const { Asset } = require('../models');
+    // Update screen
+    if (assets.frame_url) {
+      await sequelize.query(
+        `UPDATE assets SET s3_url_processed = :url, updated_at = NOW()
+         WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND asset_group = 'FINANCE'
+           AND metadata::text LIKE :pattern AND deleted_at IS NULL`,
+        { replacements: { url: assets.frame_url, showId, pattern: `%"overlay_type": "finance_${app_key}"%` } }
+      );
+    }
+    // Update icon only if asked
+    if (regenerate_icon && assets.icon_url) {
+      await sequelize.query(
+        `UPDATE assets SET s3_url_processed = :url, updated_at = NOW()
+         WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND asset_group = 'FINANCE'
+           AND metadata::text LIKE :pattern AND deleted_at IS NULL`,
+        { replacements: { url: assets.icon_url, showId, pattern: `%"overlay_type": "finance_${app_key}_icon"%` } }
+      );
+    }
+
+    return res.json({ success: true, app_key, frame_url: assets.frame_url, icon_url: regenerate_icon ? assets.icon_url : null });
+  } catch (err) {
+    console.error('POST /shows/:id/redecorate-finance-app error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/shows/:id/financial-breakdowns
  * Category rollups for the Breakdowns tab: income by source, expense by
  * category, plus a closet-value snapshot (total cost of owned pieces,
