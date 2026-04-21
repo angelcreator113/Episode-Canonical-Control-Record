@@ -395,6 +395,34 @@ router.post('/', async (req, res) => {
 });
 
 /**
+ * PUT /api/v1/shows/:id/wardrobe-config
+ * Persist show-level wardrobe settings onto Show.metadata.
+ * Body: { required_slots: ['outfit','shoes','jewelry','accessories','fragrance'] }
+ * The outfit scorer (wardrobeIntelligenceService.scoreOutfitForEvent) reads
+ * this via worldEvents.js to mark missing slots as required. Non-destructive:
+ * preserves any other metadata keys the show already has.
+ */
+router.put('/:id/wardrobe-config', async (req, res) => {
+  try {
+    const Show = getShow();
+    const { id } = req.params;
+    const show = await Show.findByPk(id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const { required_slots } = req.body || {};
+    if (required_slots !== undefined && !Array.isArray(required_slots)) {
+      return res.status(400).json({ error: 'required_slots must be an array' });
+    }
+    const nextMeta = { ...(show.metadata || {}) };
+    if (required_slots !== undefined) nextMeta.required_slots = required_slots;
+    await show.update({ metadata: nextMeta });
+    return res.json({ success: true, metadata: nextMeta });
+  } catch (err) {
+    console.error('PUT /shows/:id/wardrobe-config error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * PUT /api/v1/shows/:id
  * Update a show
  */

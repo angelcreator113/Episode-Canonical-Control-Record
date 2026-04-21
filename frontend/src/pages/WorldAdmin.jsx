@@ -4382,6 +4382,31 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   ))}
                 </div>
                 <button onClick={() => window.open('/wardrobe/calendar', '_blank')} style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px' }}>📅 Calendar</button>
+                {/* "Require all slots" toggle — when on, the outfit scorer marks
+                    every slot (jewelry, accessories, fragrance included) as
+                    required for this show. Persists to Show.metadata.required_slots. */}
+                {(() => {
+                  const allFive = ['outfit', 'shoes', 'jewelry', 'accessories', 'fragrance'];
+                  const current = Array.isArray(show?.metadata?.required_slots) ? show.metadata.required_slots : null;
+                  const requireAll = current && allFive.every(s => current.includes(s));
+                  const label = requireAll ? '✓ All slots required' : 'Require all slots';
+                  return (
+                    <button
+                      onClick={async () => {
+                        const next = requireAll ? ['outfit', 'shoes'] : allFive;
+                        try {
+                          await api.put(`/api/v1/shows/${showId}/wardrobe-config`, { required_slots: next });
+                          setShow(prev => prev ? { ...prev, metadata: { ...(prev.metadata || {}), required_slots: next } } : prev);
+                          setToast(requireAll ? 'Outfit + shoes required' : 'All 5 slots required');
+                        } catch (err) {
+                          setToast('Could not save: ' + (err.response?.data?.error || err.message));
+                        }
+                      }}
+                      title="Toggle whether every slot (including jewelry, accessories, fragrance) is required when scoring outfits against events"
+                      style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', background: requireAll ? '#fef3c7' : undefined, borderColor: requireAll ? '#d4a017' : undefined, color: requireAll ? '#854d0e' : undefined }}
+                    >{label}</button>
+                  );
+                })()}
                 {/* Bulk ops — kept behind a ⚡ menu-on-button so the toolbar doesn't get
                     cluttered. Each action confirms before calling an expensive endpoint
                     (AI analyze costs tokens). `window.confirm` is used for parity with

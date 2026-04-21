@@ -21,6 +21,114 @@ const { SLOT_KEYS, SLOT_DEFS, groupItemsBySlot } = require('../utils/wardrobeSlo
 const TIER_VALUES = { basic: 1, mid: 2, luxury: 3, elite: 4 };
 const TIER_LABELS = { 1: 'basic', 2: 'mid', 3: 'luxury', 4: 'elite' };
 
+// ── Secondary evaluation signals ────────────────────────────────────────────
+// These fire on the aggregate outfit (not per-slot) and add narrative texture
+// that tier-gap alone can't express. Each helper returns either `null` (no
+// opinion) or a `{ type, text, narrative, delta }` signal that can be merged
+// into the main signals array + match score.
+
+// Rough color families for harmony detection. Items with unknown color names
+// fall through as "neutral" — no bonus, no penalty. Kept deliberately small:
+// expanding it past ~20 groups makes the signal noisy.
+const COLOR_FAMILIES = {
+  warm: ['red', 'orange', 'coral', 'rust', 'burgundy', 'maroon', 'terracotta', 'rose', 'pink'],
+  cool: ['blue', 'navy', 'teal', 'mint', 'green', 'emerald', 'aqua', 'sky'],
+  neutral: ['black', 'white', 'grey', 'gray', 'beige', 'cream', 'ivory', 'nude', 'tan', 'taupe'],
+  metallic: ['gold', 'silver', 'bronze', 'champagne', 'copper', 'rose gold'],
+  jewel: ['purple', 'violet', 'lavender', 'plum', 'amethyst', 'sapphire', 'ruby'],
+  pastel: ['blush', 'peach', 'lavender', 'mint', 'buttercream', 'powder'],
+};
+function classifyColor(name) {
+  if (!name || typeof name !== 'string') return 'unknown';
+  const lower = name.toLowerCase();
+  for (const [family, members] of Object.entries(COLOR_FAMILIES)) {
+    if (members.some(c => lower.includes(c))) return family;
+  }
+  return 'unknown';
+}
+
+/**
+ * Color harmony — rewards outfits whose pieces sit in the same family (or all
+ * neutrals + one accent), flags chaotic palettes. Neutrals + metallics are
+ * treated as universal anchors so "black dress + gold jewelry" reads as
+ * cohesive, not conflicted.
+ */
+function evaluateColorHarmony(items) {
+  const families = items.map(i => classifyColor(i.color)).filter(f => f !== 'unknown');
+  if (families.length < 2) return null;
+  const anchors = new Set(['neutral', 'metallic']);
+  const colorful = families.filter(f => !anchors.has(f));
+  const uniqueColorful = new Set(colorful);
+  if (uniqueColorful.size === 0) {
+    return { type: 'color_cohesive', text: 'All neutrals/metallics — classic palette', narrative: 'confidence_boost', delta: 6 };
+  }
+  if (uniqueColorful.size === 1) {
+    return { type: 'color_cohesive', text: `Anchored on ${[...uniqueColorful][0]} — palette holds together`, narrative: 'confidence_boost', delta: 6 };
+  }
+  if (uniqueColorful.size >= 3) {
+    return { type: 'color_busy', text: 'Three+ color families fighting — palette reads busy', narrative: 'mild_anxiety', delta: -8 };
+  }
+  return null;
+}
+
+/**
+ * Occasion precision — matches items' `occasion` tag against the event's
+ * dress_code / event_type keywords. Precise match (≥60% of items tagged for
+ * this occasion) bumps the score; 0% hits gets flagged.
+ */
+function evaluateOccasionPrecision(items, event) {
+  const target = (event?.event_type || '').toLowerCase();
+  const dressCode = (event?.dress_code || '').toLowerCase();
+  if (!target && !dressCode) return null;
+  const hits = items.filter(i => {
+    const occ = (i.occasion || '').toLowerCase();
+    if (!occ) return false;
+    if (target && occ.includes(target)) return true;
+    if (dressCode && (occ.includes(dressCode) || dressCode.includes(occ))) return true;
+    return false;
+  }).length;
+  const ratio = items.length ? hits / items.length : 0;
+  if (ratio >= 0.6) return { type: 'occasion_precise', text: 'Pieces are tagged for this occasion', narrative: 'strategic', delta: 6 };
+  if (ratio === 0 && items.length >= 3) return { type: 'occasion_miss', text: 'None of the pieces are tagged for this kind of event', narrative: 'mild_anxiety', delta: -6 };
+  return null;
+}
+
+/**
+ * Season match — if the event has a known month/season and items have season
+ * tags, reward alignment. An all-winter outfit at a summer brunch reads wrong.
+ */
+function evaluateSeasonMatch(items, event) {
+  const eventSeason = (event?.season || '').toLowerCase();
+  if (!eventSeason) return null;
+  const wrong = items.filter(i => {
+    const s = (i.season || '').toLowerCase();
+    return s && s !== 'all-season' && s !== eventSeason;
+  }).length;
+  if (wrong === 0) return null;
+  if (wrong >= Math.ceil(items.length / 2)) {
+    return { type: 'season_off', text: `Half the pieces are wrong-season for a ${eventSeason} event`, narrative: 'mild_anxiety', delta: -5 };
+  }
+  return { type: 'season_minor', text: `${wrong} piece${wrong > 1 ? 's are' : ' is'} wrong-season for a ${eventSeason} event`, narrative: 'mild_anxiety', delta: -2 };
+}
+
+/**
+ * Era consistency — items carry era_alignment (foundation/glow_up/luxury/
+ * prime/legacy). Mixing eras reads as "throwback"; a single-era outfit reads
+ * as intentional. Only fires when ≥50% of items have an era tag.
+ */
+function evaluateEraConsistency(items) {
+  const withEra = items.filter(i => i.era_alignment);
+  if (withEra.length < Math.ceil(items.length / 2)) return null;
+  const eras = new Set(withEra.map(i => i.era_alignment));
+  if (eras.size === 1) {
+    return { type: 'era_consistent', text: `Grounded in the ${[...eras][0]} era — reads intentional`, narrative: 'confidence_boost', delta: 4 };
+  }
+  if (eras.size >= 3) {
+    return { type: 'era_mixed', text: `Three eras mixed (${[...eras].join(', ')}) — reads like a throwback`, narrative: 'tension', delta: -3 };
+  }
+  return null;
+}
+
 /**
  * Score a single slot against an event. Returns { match, status, reason } where
  * match is 0–100 and status is one of: 'empty' (nothing in the slot), 'low'
@@ -35,16 +143,24 @@ const TIER_LABELS = { 1: 'basic', 2: 'mid', 3: 'luxury', 4: 'elite' };
  */
 function scoreSingleSlot(slotKey, items, event, expectedTier) {
   const def = SLOT_DEFS[slotKey];
+  // Per-event override for which slots are required. Events on shows that
+  // demand a full 5-slot outfit (fragrance + jewelry + accessories included)
+  // pass `required_slots: ['outfit','shoes','jewelry','accessories','fragrance']`.
+  // Falls back to the slot def's own `required` when the event doesn't
+  // specify, so outfit + shoes stay required by default for everyone else.
+  const isRequired = Array.isArray(event?.required_slots)
+    ? event.required_slots.includes(slotKey)
+    : def.required;
   if (!items || items.length === 0) {
     return {
       slot: slotKey,
       label: def.label,
       icon: def.icon,
-      required: def.required,
+      required: isRequired,
       items: [],
       match: 0,
       status: 'empty',
-      reason: def.required ? `No ${def.label.toLowerCase()} selected — required for this event.` : null,
+      reason: isRequired ? `No ${def.label.toLowerCase()} selected — required for this event.` : null,
     };
   }
 
@@ -96,7 +212,7 @@ function scoreSingleSlot(slotKey, items, event, expectedTier) {
     slot: slotKey,
     label: def.label,
     icon: def.icon,
-    required: def.required,
+    required: isRequired,
     items: items.map(i => ({ id: i.id, name: i.name, tier: i.tier, brand: i.brand })),
     match: Math.round(match),
     status,
@@ -158,6 +274,22 @@ function scoreOutfitForEvent(wardrobeItems, event) {
   const hasBorrowed = wardrobeItems.some(i => i.acquisition_type === 'borrowed' || i.acquisition_type === 'rented');
   if (hasBorrowed) {
     signals.push({ type: 'borrowed', text: 'Some pieces are borrowed — she\'s faking it', narrative: 'vulnerability' });
+  }
+
+  // ── Secondary evaluation signals ─────────────────────────────────
+  // Layer color/occasion/season/era checks on top of the tier-gap score.
+  // Each helper returns either null or { type, text, narrative, delta }; we
+  // push the signal onto the stack and apply its delta to matchScore.
+  for (const sig of [
+    evaluateColorHarmony(wardrobeItems),
+    evaluateOccasionPrecision(wardrobeItems, event),
+    evaluateSeasonMatch(wardrobeItems, event),
+    evaluateEraConsistency(wardrobeItems),
+  ]) {
+    if (sig) {
+      matchScore += sig.delta || 0;
+      signals.push({ type: sig.type, text: sig.text, narrative: sig.narrative });
+    }
   }
 
   // ── Per-slot breakdown ─────────────────────────────────────────────

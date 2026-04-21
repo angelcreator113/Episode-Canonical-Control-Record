@@ -21,6 +21,27 @@ export const CATEGORY_TO_SLOT = SLOT_KEYS.reduce((acc, slot) => {
   return acc;
 }, {});
 
+// Synonyms + plurals + common misspellings — mirror of src/utils/wardrobeSlots.js
+// Keep both files in sync. Letting legacy / AI-classified / free-text categories
+// still route to a slot without forcing a DB rewrite.
+export const CATEGORY_ALIASES = {
+  dresses: 'dress', gown: 'dress', gowns: 'dress', sundress: 'dress',
+  tops: 'top', shirt: 'top', shirts: 'top', blouse: 'top', blouses: 'top', tee: 'top', tshirt: 'top', 't-shirt': 'top', tank: 'top',
+  bottoms: 'bottom', skirt: 'bottom', skirts: 'bottom', pants: 'bottom', pant: 'bottom', trousers: 'bottom', jeans: 'bottom', shorts: 'bottom',
+  jacket: 'outerwear', coat: 'outerwear', blazer: 'outerwear', cardigan: 'outerwear',
+  heels: 'shoes', heel: 'shoes', boots: 'shoes', boot: 'shoes', sandals: 'shoes', sandal: 'shoes',
+  sneakers: 'shoes', sneaker: 'shoes', flats: 'shoes', flat: 'shoes', loafers: 'shoes', pumps: 'shoes',
+  necklace: 'jewelry', necklaces: 'jewelry', earring: 'jewelry', earrings: 'jewelry',
+  ring: 'jewelry', rings: 'jewelry', bracelet: 'jewelry', bracelets: 'jewelry', watch: 'jewelry',
+  jewellery: 'jewelry',
+  accessories: 'accessory', bags: 'bag', handbag: 'bag', handbags: 'bag', purse: 'bag', purses: 'bag', clutch: 'bag', clutches: 'bag', minaudiere: 'bag', 'minaudière': 'bag', tote: 'bag', totes: 'bag',
+  scarf: 'accessory', scarves: 'accessory', hat: 'accessory', hats: 'accessory',
+  belt: 'accessory', belts: 'accessory', sunglasses: 'accessory', glasses: 'accessory', gloves: 'accessory',
+  hair: 'accessory', 'hair bow': 'accessory', 'hair clip': 'accessory', headband: 'accessory',
+  fragrance: 'perfume', fragrances: 'perfume', perfumes: 'perfume', cologne: 'perfume', scent: 'perfume',
+  swimwear: 'top', swimsuit: 'top', bikini: 'top', activewear: 'top',
+};
+
 // Sub-category options per slot, for UIs that want a two-level "which slot, then
 // which specific category" picker on upload. Fragrance + shoes + jewelry each
 // only map to one underlying category, so their "sub" is a single-item list.
@@ -34,11 +55,22 @@ export const SLOT_SUBCATEGORIES = {
 
 /**
  * Given a wardrobe item's clothing_category, return the UI slot key it belongs
- * to, or null if unknown. Lowercased + trimmed so casing doesn't matter.
+ * to, or null if unknown. Three-stage resolution: canonical → alias → substring
+ * match against canonical + alias keys (catches "evening dress", "ankle boots").
  */
 export function getSlotForCategory(clothing_category) {
   if (!clothing_category || typeof clothing_category !== 'string') return null;
-  return CATEGORY_TO_SLOT[clothing_category.toLowerCase().trim()] || null;
+  const normalized = clothing_category.toLowerCase().trim();
+  if (CATEGORY_TO_SLOT[normalized]) return CATEGORY_TO_SLOT[normalized];
+  const aliased = CATEGORY_ALIASES[normalized];
+  if (aliased && CATEGORY_TO_SLOT[aliased]) return CATEGORY_TO_SLOT[aliased];
+  for (const key of Object.keys(CATEGORY_TO_SLOT)) {
+    if (normalized.includes(key)) return CATEGORY_TO_SLOT[key];
+  }
+  for (const key of Object.keys(CATEGORY_ALIASES)) {
+    if (normalized.includes(key)) return CATEGORY_TO_SLOT[CATEGORY_ALIASES[key]];
+  }
+  return null;
 }
 
 /**
