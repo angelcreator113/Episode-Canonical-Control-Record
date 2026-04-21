@@ -188,16 +188,30 @@ async function markGoalTriggered(sequelize, showId, goalId, triggeredAt) {
  * whose threshold Lala just crossed upward. One-shot: triggered_at guards
  * against re-firing when balance dips and returns above the threshold.
  *
+ * Goals can optionally scope to a specific episode via `goal.episode_id`.
+ * When set, the goal only fires if the current transaction is tied to
+ * that episode; unscoped goals (episode_id null) fire globally. Lets
+ * creators build per-episode money targets ("reach 10k by end of ep 3")
+ * alongside show-wide ladder milestones.
+ *
  * Returns `{ triggered: [{ goal, payout_tx }] }` so callers (logTransaction,
  * episodeCompletion) can surface the milestone to UI / Feed.
  */
-async function checkMilestones(sequelize, showId, oldBalance, newBalance) {
+async function checkMilestones(sequelize, showId, oldBalance, newBalance, opts = {}) {
   // Only check on upward crossings — dropping below a threshold is its own
   // narrative (financial pressure) but doesn't un-trigger a milestone.
   if (newBalance <= oldBalance) return { triggered: [] };
 
+  const { episodeId = null } = opts;
   const goals = await getFinancialGoals(sequelize, showId);
-  const crossed = goals.filter(g => !g.triggered_at && g.threshold > oldBalance && g.threshold <= newBalance);
+  const crossed = goals.filter(g => {
+    if (g.triggered_at) return false;
+    if (g.threshold <= oldBalance || g.threshold > newBalance) return false;
+    // Episode-scoped goals only fire when we're finalizing that exact
+    // episode. Unscoped goals (episode_id null/undefined) fire anywhere.
+    if (g.episode_id && g.episode_id !== episodeId) return false;
+    return true;
+  });
   if (!crossed.length) return { triggered: [] };
 
   const triggered = [];
@@ -505,7 +519,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
     // Lala jumps from "rising-star" straight past "it-girl". Each entry has
     // { goal, payout_tx } and the payout is already in the ledger.
     milestones_triggered: await (async () => {
-      const result = await checkMilestones(sequelize, showId, balanceBefore, balance);
+      const result = await checkMilestones(sequelize, showId, balanceBefore, balance, { episodeId });
       // Feed integration — one post per milestone reached, plus an
       // aggregate big-spend post when the episode moved a lot of coins.
       // Wrapped in try/catch so a feed-table issue can't 500 the

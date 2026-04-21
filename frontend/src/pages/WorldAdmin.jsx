@@ -3173,7 +3173,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         {nextGoal && (
                           <div style={{ marginTop: 10, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: '#854d0e' }}>Next: {nextGoal.label}</span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#854d0e' }}>
+                                Next: {nextGoal.label}
+                                {nextGoal.episode_id && (
+                                  <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 500, color: '#a16207' }}>
+                                    · ep-scoped
+                                  </span>
+                                )}
+                              </span>
                               <span style={{ fontSize: 10, color: '#854d0e', fontFamily: "'DM Mono', monospace" }}>
                                 {balanceAfter.toLocaleString()} / {Number(nextGoal.threshold).toLocaleString()} coins
                               </span>
@@ -5722,6 +5729,26 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             placeholder="Short description shown on the progress bar"
                             style={{ ...S.inp, width: '100%', margin: 0, fontSize: 12 }}
                           />
+                          {/* Episode scope — leave as "any episode" for ladder-style
+                              show-wide goals, or pin to a specific episode for per-
+                              episode targets ("hit 10k by end of Ep 3"). Episode-
+                              scoped goals only fire when that specific episode
+                              finalizes and the threshold gets crossed. */}
+                          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <label style={{ fontSize: 10, color: '#8a7e65', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>EPISODE:</label>
+                            <select
+                              value={g.episode_id || ''}
+                              onChange={e => updateGoal(i, { episode_id: e.target.value || null })}
+                              style={{ ...S.sel, width: '100%', margin: 0, fontSize: 12 }}
+                            >
+                              <option value="">Any episode (show-wide ladder)</option>
+                              {episodes.map(ep => (
+                                <option key={ep.id} value={ep.id}>
+                                  Ep {ep.episode_number || '?'}: {ep.title || 'Untitled'}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                           {g.triggered_at && (
                             <div style={{ fontSize: 10, color: '#16a34a', marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
                               ✓ Triggered {new Date(g.triggered_at).toLocaleDateString()}
