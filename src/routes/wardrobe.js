@@ -249,6 +249,43 @@ router.post('/bulk/analyze', asyncHandler(wardrobeController.bulkAnalyze));
 // Bulk regenerate missing thumbnails
 router.post('/bulk/regenerate-thumbnails', asyncHandler(wardrobeController.bulkRegenerateThumbnails));
 
+// POST /api/v1/wardrobe/bulk/sync-coin-costs?show_id=<id>
+// One-shot backfill: sets coin_cost = price × USD_TO_COINS for rows where
+// price is non-null but coin_cost is null or 0 and the item isn't already
+// manually customised. Returns { updated, skipped } so the UI can toast a
+// result. Use after enabling the POST/PUT auto-sync to heal historical data.
+router.post('/bulk/sync-coin-costs', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not available' });
+    const { USD_TO_COINS } = require('../utils/financialRates');
+    const { show_id } = req.query;
+    const where = show_id ? 'AND (show_id = :show_id OR show_id IS NULL)' : '';
+    const [rows] = await models.sequelize.query(
+      `SELECT id, price FROM wardrobe
+       WHERE deleted_at IS NULL
+         AND (coin_cost IS NULL OR coin_cost = 0)
+         AND price IS NOT NULL AND price > 0
+         ${where}`,
+      { replacements: show_id ? { show_id } : {} }
+    );
+    let updated = 0;
+    for (const r of rows || []) {
+      const coins = Math.round(parseFloat(r.price) * USD_TO_COINS);
+      if (!Number.isFinite(coins) || coins <= 0) continue;
+      await models.sequelize.query(
+        `UPDATE wardrobe SET coin_cost = :coins, updated_at = NOW() WHERE id = :id`,
+        { replacements: { coins, id: r.id } }
+      );
+      updated++;
+    }
+    return res.json({ success: true, data: { updated, scanned: (rows || []).length, skipped: (rows || []).length - updated } });
+  } catch (err) {
+    console.error('[bulk/sync-coin-costs] failed:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Delete wardrobe item (with safeguards)
 router.delete('/:id', asyncHandler(wardrobeController.deleteWardrobeItem));
 

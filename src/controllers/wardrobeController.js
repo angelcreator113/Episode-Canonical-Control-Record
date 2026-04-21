@@ -191,7 +191,15 @@ module.exports = {
         is_favorite: isFavorite === 'true' || isFavorite === true,
         tags: parsedTags,
         // Game-layer — all optional; model defaults handle the rest.
-        coin_cost: coinCost != null && coinCost !== '' ? parseInt(coinCost, 10) : undefined,
+        // coin_cost defaults to price × USD_TO_COINS (1:1) when not explicitly
+        // provided, so uploading a $1,850 item automatically gets 1,850 coins
+        // without the creator having to duplicate the number into two fields.
+        coin_cost: (() => {
+          if (coinCost != null && coinCost !== '') return parseInt(coinCost, 10);
+          const { USD_TO_COINS } = require('../utils/financialRates');
+          const p = parseFloat(price);
+          return Number.isFinite(p) && p > 0 ? Math.round(p * USD_TO_COINS) : undefined;
+        })(),
         acquisition_type: acquisitionType || undefined,
         lock_type: lockType || undefined,
         era_alignment: eraAlignment || undefined,
@@ -597,7 +605,19 @@ module.exports = {
             : updates.event_types
           : undefined,
         outfit_match_weight: updates.outfit_match_weight != null ? parseInt(updates.outfit_match_weight) : undefined,
-        coin_cost: updates.coin_cost != null ? parseInt(updates.coin_cost) : undefined,
+        // Same coin_cost ↔ price auto-sync as POST. If the edit doesn't touch
+        // coin_cost but DOES change price, recompute coin_cost so the two
+        // fields don't silently drift. When coin_cost is explicitly set, it
+        // wins (lets creators decouple story price from real-world price).
+        coin_cost: (() => {
+          if (updates.coin_cost != null) return parseInt(updates.coin_cost);
+          if (updates.price != null) {
+            const { USD_TO_COINS } = require('../utils/financialRates');
+            const p = parseFloat(updates.price);
+            if (Number.isFinite(p) && p > 0) return Math.round(p * USD_TO_COINS);
+          }
+          return undefined;
+        })(),
         reputation_required: updates.reputation_required != null ? parseInt(updates.reputation_required) : undefined,
         influence_required: updates.influence_required != null ? parseInt(updates.influence_required) : undefined,
         season_unlock_episode: updates.season_unlock_episode != null ? parseInt(updates.season_unlock_episode) : undefined,
