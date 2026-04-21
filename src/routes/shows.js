@@ -664,11 +664,14 @@ router.post('/:id/seed-finance-apps', async (req, res) => {
     const appKeys = Object.keys(APP_PROMPTS);
 
     // Force-rebuild: soft-delete existing finance assets for this show. The
-    // sequelize paranoid flag takes care of the deleted_at stamp.
+    // sequelize paranoid flag takes care of the deleted_at stamp. We identify
+    // finance assets by metadata.overlay_type prefix rather than asset_group
+    // because the Asset model's asset_group ENUM doesn't include 'FINANCE'.
     if (force) {
       await sequelize.query(
         `UPDATE assets SET deleted_at = NOW()
-         WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND asset_group = 'FINANCE' AND deleted_at IS NULL`,
+         WHERE show_id = :showId AND asset_type = 'UI_OVERLAY'
+           AND metadata::text LIKE '%"overlay_type": "finance_%' AND deleted_at IS NULL`,
         { replacements: { showId } }
       );
     }
@@ -677,7 +680,8 @@ router.post('/:id/seed-finance-apps', async (req, res) => {
     const [existing] = await sequelize.query(
       `SELECT id, name, metadata::text AS meta
        FROM assets
-       WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND asset_group = 'FINANCE' AND deleted_at IS NULL`,
+       WHERE show_id = :showId AND asset_type = 'UI_OVERLAY'
+         AND metadata::text LIKE '%"overlay_type": "finance_%' AND deleted_at IS NULL`,
       { replacements: { showId } }
     );
     const existingByOverlayType = {};
@@ -715,7 +719,7 @@ router.post('/:id/seed-finance-apps', async (req, res) => {
       if (!screenExists) {
         await Asset.create({
           asset_type: 'UI_OVERLAY',
-          asset_group: 'FINANCE',
+          asset_group: 'SHOW',
           asset_scope: 'SHOW',
           show_id: showId,
           name: `💰 ${prompts.label}`,
@@ -738,7 +742,7 @@ router.post('/:id/seed-finance-apps', async (req, res) => {
       if (!iconExists) {
         await Asset.create({
           asset_type: 'UI_OVERLAY',
-          asset_group: 'FINANCE',
+          asset_group: 'SHOW',
           asset_scope: 'SHOW',
           show_id: showId,
           name: `${prompts.icon} ${prompts.label} icon`,
@@ -851,7 +855,7 @@ router.post('/:id/redecorate-finance-app', async (req, res) => {
     if (assets.frame_url) {
       await sequelize.query(
         `UPDATE assets SET s3_url_processed = :url, updated_at = NOW()
-         WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND asset_group = 'FINANCE'
+         WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' 
            AND metadata::text LIKE :pattern AND deleted_at IS NULL`,
         { replacements: { url: assets.frame_url, showId, pattern: `%"overlay_type": "finance_${app_key}"%` } }
       );
@@ -860,7 +864,7 @@ router.post('/:id/redecorate-finance-app', async (req, res) => {
     if (regenerate_icon && assets.icon_url) {
       await sequelize.query(
         `UPDATE assets SET s3_url_processed = :url, updated_at = NOW()
-         WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' AND asset_group = 'FINANCE'
+         WHERE show_id = :showId AND asset_type = 'UI_OVERLAY' 
            AND metadata::text LIKE :pattern AND deleted_at IS NULL`,
         { replacements: { url: assets.icon_url, showId, pattern: `%"overlay_type": "finance_${app_key}_icon"%` } }
       );
