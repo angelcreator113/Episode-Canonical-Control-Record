@@ -597,6 +597,169 @@ router.get('/:id/financial-summary', async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id/financial-suggestions
+ * Proposes ready-to-add goals derived from what we already know about the
+ * show. Cheap to compute, deterministic (given the data) so repeated calls
+ * don't shuffle the recommendations.
+ *
+ * Returns { suggestions: [{ id, label, threshold, reward_coins,
+ * description, rationale, already_exists }] }
+ *
+ * - id is deterministic (so the UI can check if a suggestion was already
+ *   added to the ladder — we surface `already_exists` on matches).
+ * - rationale is author-facing copy explaining WHY this goal was suggested
+ *   ("your most expensive unowned piece is 4,500 coins").
+ * - reward_coins defaults to 10% of threshold rounded to nearest 50.
+ */
+router.get('/:id/financial-suggestions', async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const sequelize = Show.sequelize;
+    const showId = show.id;
+    const {
+      getCurrentBalance, getFinancialGoals, getStartingBalance,
+    } = require('../services/financialTransactionService');
+
+    const [balance, goals, startingBalance] = await Promise.all([
+      getCurrentBalance(sequelize, showId),
+      getFinancialGoals(sequelize, showId),
+      getStartingBalance(sequelize, showId),
+    ]);
+    const existingIds = new Set(goals.map(g => g.id));
+    const existingThresholds = new Set(goals.map(g => Number(g.threshold)));
+    const roundReward = (threshold) => Math.max(50, Math.round(threshold * 0.1 / 50) * 50);
+
+    const suggestions = [];
+
+    // 1. Nearest round milestone above current balance. Rounds up to the
+    //    next 500 coins so the goal feels tangible + unique. Skipped if we
+    //    already have a goal within 250 of that target.
+    const nextRound = Math.ceil((balance + 1) / 500) * 500;
+    if (!existingThresholds.has(nextRound) && nextRound > balance) {
+      const id = `auto-near-${nextRound}`;
+      suggestions.push({
+        id,
+        label: '🎯 Near-term target',
+        threshold: nextRound,
+        reward_coins: roundReward(nextRound),
+        description: `A short-term push. Current balance is ${balance.toLocaleString()} coins.`,
+        rationale: `Nearest 500-coin round number above the current balance.`,
+        already_exists: existingIds.has(id),
+      });
+    }
+
+    // 2. Double the starting balance — nice psychological marker.
+    const doubled = startingBalance * 2;
+    if (doubled > balance && !existingThresholds.has(doubled)) {
+      const id = `auto-doubled-start`;
+      suggestions.push({
+        id,
+        label: '📈 Double your seed',
+        threshold: doubled,
+        reward_coins: roundReward(doubled),
+        description: `Prove the hustle works — turn the starting ${startingBalance.toLocaleString()} into ${doubled.toLocaleString()}.`,
+        rationale: `2× the show's starting balance.`,
+        already_exists: existingIds.has(id),
+      });
+    }
+
+    // 3. Cover the next 3 upcoming events by cost_coins sum.
+    try {
+      const [upcoming] = await sequelize.query(
+        `SELECT id, name, cost_coins, prestige
+         FROM world_events
+         WHERE show_id = :showId AND status = 'ready' AND deleted_at IS NULL
+           AND used_in_episode_id IS NULL
+         ORDER BY COALESCE(prestige, 0) DESC, created_at DESC
+         LIMIT 3`,
+        { replacements: { showId } }
+      );
+      const upcomingCost = (upcoming || []).reduce((s, e) => s + (Number(e.cost_coins) || 0), 0);
+      if (upcomingCost > 0 && upcomingCost > balance && !existingThresholds.has(upcomingCost)) {
+        const id = `auto-cover-events`;
+        suggestions.push({
+          id,
+          label: '🎟️ Cover your calendar',
+          threshold: upcomingCost,
+          reward_coins: roundReward(upcomingCost),
+          description: `Enough to attend the next ${upcoming.length} ready events without going broke.`,
+          rationale: `Sum of cost_coins for ${upcoming.map(e => `"${e.name}"`).join(', ')}.`,
+          already_exists: existingIds.has(id),
+        });
+      }
+    } catch { /* events table issue — skip this suggestion, not fatal */ }
+
+    // 4. Dream piece — most expensive unowned wardrobe item locked by coin.
+    try {
+      const [dream] = await sequelize.query(
+        `SELECT name, coin_cost, tier, brand
+         FROM wardrobe
+         WHERE (show_id = :showId OR show_id IS NULL) AND deleted_at IS NULL
+           AND (is_owned = false OR is_owned IS NULL)
+           AND coin_cost IS NOT NULL AND coin_cost > 0
+         ORDER BY coin_cost DESC
+         LIMIT 1`,
+        { replacements: { showId } }
+      );
+      const d = dream?.[0];
+      if (d && d.coin_cost > balance && !existingThresholds.has(Number(d.coin_cost))) {
+        const id = `auto-dream-${d.coin_cost}`;
+        suggestions.push({
+          id,
+          label: `💎 Afford the ${d.tier || 'dream'} piece`,
+          threshold: Number(d.coin_cost),
+          reward_coins: roundReward(Number(d.coin_cost)),
+          description: `Unlock "${d.name}"${d.brand ? ` by ${d.brand}` : ''} — the priciest unowned piece in the closet.`,
+          rationale: `Most expensive wardrobe item with is_owned=false.`,
+          already_exists: existingIds.has(id),
+        });
+      }
+    } catch { /* wardrobe query issue — skip */ }
+
+    // 5. Best-ever episode match. "Your record episode netted +4,200; match it."
+    //    Skipped if record is zero / negative (no flex material).
+    try {
+      const [best] = await sequelize.query(
+        `SELECT e.episode_number, e.title,
+          (SUM(CASE WHEN ft.type IN ('income','reward') THEN ft.amount ELSE 0 END)
+           - SUM(CASE WHEN ft.type IN ('expense','deduction') THEN ft.amount ELSE 0 END))::bigint AS net
+         FROM episodes e
+         LEFT JOIN financial_transactions ft
+           ON ft.episode_id = e.id AND ft.show_id = :showId AND ft.status = 'executed' AND ft.deleted_at IS NULL
+         WHERE e.show_id = :showId AND e.deleted_at IS NULL
+         GROUP BY e.id, e.episode_number, e.title
+         HAVING COUNT(ft.id) > 0
+         ORDER BY net DESC
+         LIMIT 1`,
+        { replacements: { showId } }
+      );
+      const b = best?.[0];
+      const bestNet = Number(b?.net) || 0;
+      const matchTarget = balance + bestNet;
+      if (bestNet > 0 && !existingThresholds.has(matchTarget)) {
+        const id = `auto-match-best`;
+        suggestions.push({
+          id,
+          label: '🏆 Match your record',
+          threshold: matchTarget,
+          reward_coins: roundReward(matchTarget),
+          description: `Ep ${b.episode_number || '?'} — "${b.title || 'your best'}" — netted +${bestNet.toLocaleString()}. Do it again.`,
+          rationale: `Current balance + best-ever episode net profit.`,
+          already_exists: existingIds.has(id),
+        });
+      }
+    } catch { /* skip */ }
+
+    return res.json({ success: true, suggestions });
+  } catch (err) {
+    console.error('GET /shows/:id/financial-suggestions error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/v1/shows/:id/seed-balance
  * Idempotent: writes a single 'seed' transaction granting the starting
  * balance if one doesn't already exist. Safe to call multiple times — it
