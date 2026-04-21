@@ -306,6 +306,9 @@ function WorldAdmin() {
   // refetching on every click.
   const [financeSummary, setFinanceSummary] = useState(null);
   const [financeSummaryLoading, setFinanceSummaryLoading] = useState(false);
+  // Auto-generated goal suggestions for the Goals tab. One fetch per modal
+  // open — the algorithm is deterministic so refetching is wasteful.
+  const [financeSuggestions, setFinanceSuggestions] = useState(null);
   const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   const [selectedEvents, setSelectedEvents] = useState(new Set());
@@ -4516,8 +4519,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     // Non-blocking: modal pops immediately with a loading state.
                     setFinanceSummaryLoading(true);
                     try {
-                      const res = await api.get(`/api/v1/shows/${showId}/financial-summary`);
-                      setFinanceSummary(res.data);
+                      const [sumRes, sugRes] = await Promise.all([
+                        api.get(`/api/v1/shows/${showId}/financial-summary`),
+                        api.get(`/api/v1/shows/${showId}/financial-suggestions`).catch(() => null),
+                      ]);
+                      setFinanceSummary(sumRes.data);
+                      setFinanceSuggestions(sugRes?.data?.suggestions || []);
                     } catch { setFinanceSummary(null); }
                     finally { setFinanceSummaryLoading(false); }
                   }}
@@ -5841,6 +5848,56 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {/* ── GOALS TAB ──────────────────────────────────────── */}
                     {financeTab === 'goals' && (
                     <>
+                    {/* Auto-suggestions — generated from balance + upcoming events +
+                        wardrobe wishlist + best-ever episode. Each card shows the
+                        proposed label / threshold / reward plus a one-line rationale
+                        and a "+ Add" button that appends it to the draft goals list.
+                        Already-added suggestions are dimmed with an "Added" badge. */}
+                    {Array.isArray(financeSuggestions) && financeSuggestions.length > 0 && (
+                      <div style={{ marginBottom: 16, padding: '12px 14px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#4338ca', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>🤖 SUGGESTED GOALS</span>
+                          <span style={{ fontSize: 10, color: '#6366f1' }}>— derived from your balance + calendar + closet</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {financeSuggestions.map(sug => {
+                            const already = sug.already_exists || d.goals.some(g => g.id === sug.id || Number(g.threshold) === Number(sug.threshold));
+                            return (
+                              <div key={sug.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, background: '#fff', borderRadius: 6, border: '1px solid #e0e7ff', opacity: already ? 0.55 : 1 }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+                                    {sug.label}
+                                    <span style={{ marginLeft: 8, fontSize: 10, color: '#6366f1', fontFamily: "'DM Mono', monospace" }}>
+                                      {Number(sug.threshold).toLocaleString()} coins · +{Number(sug.reward_coins).toLocaleString()} reward
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{sug.description}</div>
+                                  <div style={{ fontSize: 9, color: '#94a3b8', fontFamily: "'DM Mono', monospace", fontStyle: 'italic', marginTop: 2 }}>{sug.rationale}</div>
+                                </div>
+                                {already ? (
+                                  <span style={{ fontSize: 10, fontWeight: 600, color: '#16a34a', padding: '4px 10px', background: '#f0fdf4', borderRadius: 5 }}>✓ Added</span>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setFinanceEditorDraft(p => ({ ...p, goals: [...p.goals, {
+                                        id: sug.id,
+                                        label: sug.label,
+                                        threshold: Number(sug.threshold),
+                                        reward_coins: Number(sug.reward_coins),
+                                        description: sug.description,
+                                        triggered_at: null,
+                                        episode_id: null,
+                                      }] }));
+                                    }}
+                                    style={{ padding: '5px 14px', fontSize: 11, fontWeight: 700, border: '1px solid #6366f1', borderRadius: 5, background: '#6366f1', color: '#fff', cursor: 'pointer' }}
+                                  >+ Add</button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {/* Starting balance */}
                     <div style={{ padding: '12px 14px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10, marginBottom: 14 }}>
                       <label style={{ fontSize: 10, fontWeight: 700, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>Starting balance (coins)</label>
