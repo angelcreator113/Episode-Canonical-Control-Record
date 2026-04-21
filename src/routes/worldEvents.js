@@ -2032,9 +2032,14 @@ router.get('/world/:showId/financial-pressure', optionalAuth, async (req, res) =
 });
 
 // POST /world/:showId/events/:eventId/generate-venue — Generate venue exterior + interior images
+// Body: { force?: boolean } — when `force` is true the endpoint regenerates
+// even if the event already has a scene_set_id attached. Otherwise it skips
+// and returns the existing scene set so the "Mark Ready" flow doesn't clobber
+// a venue the user deliberately picked.
 router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
+    const force = req.body?.force === true;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
@@ -2045,6 +2050,33 @@ router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async
     );
     const event = rows?.[0];
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    // Skip-and-return when a scene set is already attached. Hydrate a minimal
+    // result payload so the caller gets consistent shape (scene_set_id +
+    // images) whether we generated or skipped. This is what prevents the
+    // "Mark Ready" button from regenerating venue images every time the
+    // creator revisits an event that already has one.
+    if (event.scene_set_id && !force) {
+      let existing = null;
+      if (models.SceneSet) {
+        try {
+          existing = await models.SceneSet.findByPk(event.scene_set_id, {
+            attributes: ['id', 'name', 'base_still_url', 'canonical_description'],
+          });
+        } catch { /* non-blocking */ }
+      }
+      return res.json({
+        success: true,
+        skipped: true,
+        data: {
+          scene_set_id: event.scene_set_id,
+          venue_image_url: existing?.base_still_url || null,
+          venue_name: existing?.name || null,
+          reason: 'scene_set already attached — pass { force: true } to regenerate',
+        },
+        message: `Venue already attached to "${event.name}" — skipped regeneration`,
+      });
+    }
 
     if (typeof event.canon_consequences === 'string') {
       try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }

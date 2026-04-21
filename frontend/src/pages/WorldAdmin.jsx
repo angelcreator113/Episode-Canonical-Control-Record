@@ -3349,8 +3349,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         setToast(`Missing fields: ${missing.join(', ')}. Fill them or use AI Enhance first.`);
                         return;
                       }
-                      // Confirmation summary
-                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Save all fields\n• Generate social checklist\n• Generate venue images\n• Move to Events Library`;
+                      // Confirmation summary. The venue-image bullet is conditional:
+                      // if a scene set is already attached we'll skip regeneration
+                      // (the backend also guards this, but skipping the call
+                      // entirely saves a round-trip and makes the UX honest).
+                      const hasVenue = !!(md.scene_set_id || md.venue_location_id);
+                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Save all fields\n• Generate social checklist\n${hasVenue ? '• Keep the attached venue (no regeneration)' : '• Generate venue images'}\n• Move to Events Library`;
                       if (!window.confirm(summary)) return;
                       try {
                         // Save all hydrated fields + status in one PUT
@@ -3377,15 +3381,24 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               const withChecklist = { ...updated, canon_consequences: { ...updated.canon_consequences, automation: newAuto } };
                               setEventDetailModal(withChecklist);
                               setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: withChecklist.canon_consequences } : ev));
-                              setToast(`Ready! Checklist done. Generating venue images...`);
-                              // Auto-generate venue images
-                              try {
-                                const venueRes = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
-                                if (venueRes.data.success) {
-                                  setToast(`Venue images + scene set created!`);
-                                  loadData();
-                                }
-                              } catch { setToast('Ready! (venue generation skipped — no OPENAI_API_KEY or error)'); }
+                              // Only regenerate the venue if there isn't one
+                              // already on the event. Prevents Mark-Ready from
+                              // clobbering a scene set the creator deliberately
+                              // picked. The backend also guards this, but
+                              // skipping the call here is cheaper + cleaner.
+                              if (hasVenue) {
+                                setToast(`Ready! Checklist done. Kept attached venue.`);
+                                loadData();
+                              } else {
+                                setToast(`Ready! Checklist done. Generating venue images...`);
+                                try {
+                                  const venueRes = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
+                                  if (venueRes.data.success) {
+                                    setToast(venueRes.data.skipped ? `Ready! Kept attached venue.` : `Venue images + scene set created!`);
+                                    loadData();
+                                  }
+                                } catch { setToast('Ready! (venue generation skipped — no OPENAI_API_KEY or error)'); }
+                              }
                             }
                           } catch { /* non-blocking — checklist can be generated later */ }
                         }
