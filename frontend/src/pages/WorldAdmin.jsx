@@ -4546,6 +4546,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         { label: '✨ AI-enhance first 20', endpoint: '/api/v1/wardrobe/bulk/enhance', bodyFactory: () => ({ itemIds: filteredItems.slice(0, 20).map(i => i.id) }), confirmText: (n) => `Enhance ${n} items? This may take a while.`, emptyText: 'No items to enhance' },
                         { label: '🔍 AI-analyze first 20', endpoint: '/api/v1/wardrobe/bulk/analyze', bodyFactory: () => ({ itemIds: filteredItems.slice(0, 20).map(i => i.id), autoApply: true }), confirmText: (n) => `Analyze ${n} items with AI? This uses API credits.`, emptyText: 'No items to analyze' },
                         { label: '🖼 Regenerate missing thumbnails', endpoint: '/api/v1/wardrobe/bulk/regenerate-thumbnails', bodyFactory: () => ({ limit: 50 }), confirmText: () => 'Regenerate thumbnails for up to 50 items that are missing them?', emptyText: null },
+                        { label: '💰 Sync coin costs from prices', endpoint: `/api/v1/wardrobe/bulk/sync-coin-costs?show_id=${showId}`, bodyFactory: () => ({}), confirmText: () => 'Set coin_cost = price (1:1) for items that don\'t have one yet? Items with a manual coin_cost are left alone.', emptyText: null },
                       ].map(op => (
                         <button key={op.endpoint} onClick={async () => {
                           const body = op.bodyFactory();
