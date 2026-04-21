@@ -1,5 +1,7 @@
 'use strict';
 
+const { DEFAULT_STARTING_BALANCE, DEFAULT_GOALS } = require('../utils/financialRates');
+
 /**
  * Financial Transaction Service
  *
@@ -34,20 +36,50 @@ const TIMING_MULTIPLIERS = {
 
 // ─── GET CURRENT BALANCE ─────────────────────────────────────────────────────
 
+/**
+ * Read the starting balance from the Show's metadata JSON. Falls back to the
+ * module-level default when the show doesn't override. Used when:
+ *  - no transactions exist yet (new show),
+ *  - the transactions table is unavailable (legacy envs),
+ *  - seeding the first transaction.
+ */
+async function getStartingBalance(sequelize, showId) {
+  try {
+    const [row] = await sequelize.query(
+      `SELECT metadata FROM shows WHERE id = :showId LIMIT 1`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    const meta = typeof row?.metadata === 'string' ? JSON.parse(row.metadata) : row?.metadata;
+    const v = Number(meta?.starting_balance);
+    if (Number.isFinite(v) && v >= 0) return v;
+  } catch { /* fall through to default */ }
+  return DEFAULT_STARTING_BALANCE;
+}
+
 async function getCurrentBalance(sequelize, showId) {
   try {
     // Sum all executed transactions to get current balance
     const [row] = await sequelize.query(
-      `SELECT COALESCE(
-        SUM(CASE WHEN type = 'income' OR type = 'reward' THEN amount ELSE 0 END) -
-        SUM(CASE WHEN type = 'expense' OR type = 'deduction' THEN amount ELSE 0 END),
-        0
-      ) as balance
+      `SELECT
+        COUNT(*)::int as tx_count,
+        COALESCE(
+          SUM(CASE WHEN type = 'income' OR type = 'reward' THEN amount ELSE 0 END) -
+          SUM(CASE WHEN type = 'expense' OR type = 'deduction' THEN amount ELSE 0 END),
+          0
+        ) as balance
       FROM financial_transactions
       WHERE show_id = :showId AND status = 'executed' AND deleted_at IS NULL`,
       { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
     );
-    return parseFloat(row?.balance) || 0;
+    const balance = parseFloat(row?.balance) || 0;
+    // When the ledger is empty, Lala hasn't earned or spent anything yet —
+    // show the starting balance instead of 0 so the UI reflects her seed.
+    // Callers that care about "is there a real history" can use the ledger
+    // directly; most just want the displayable number.
+    if ((row?.tx_count || 0) === 0) {
+      return await getStartingBalance(sequelize, showId);
+    }
+    return balance;
   } catch {
     // Table might not exist yet — try character_state_history fallback
     try {
@@ -62,8 +94,130 @@ async function getCurrentBalance(sequelize, showId) {
         return parseFloat(json?.coins) || 0;
       }
     } catch { /* fall through */ }
-    return 500; // Default starting balance
+    return getStartingBalance(sequelize, showId);
   }
+}
+
+/**
+ * Seed the starting balance as a real transaction row. Idempotent: if a
+ * 'seed' transaction already exists for this show, returns it without making
+ * a duplicate. Call this from show-creation or the first-time someone opens
+ * the wardrobe so the ledger has a clean origin row instead of treating the
+ * starting balance as an invisible baseline.
+ */
+async function seedStartingBalance(sequelize, showId) {
+  try {
+    const [existing] = await sequelize.query(
+      `SELECT id, amount FROM financial_transactions
+       WHERE show_id = :showId AND category = 'seed' AND status = 'executed' AND deleted_at IS NULL
+       LIMIT 1`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (existing) return { seeded: false, existing };
+
+    const amount = await getStartingBalance(sequelize, showId);
+    if (!amount || amount <= 0) return { seeded: false, reason: 'starting_balance is 0' };
+
+    const tx = await logTransaction(sequelize, showId, {
+      type: 'income',
+      category: 'seed',
+      amount,
+      description: 'Starting balance',
+      source_type: 'show_init',
+      source_name: 'Initial grant',
+      balance_before: 0,
+      balance_after: amount,
+      status: 'executed',
+    });
+    return { seeded: true, transaction: tx };
+  } catch (err) {
+    console.warn('[FinancialTx] seedStartingBalance failed:', err.message);
+    return { seeded: false, error: err.message };
+  }
+}
+
+/**
+ * Read the show's financial goals (with any `triggered_at` timestamps carried
+ * forward from previous crossings). Falls back to DEFAULT_GOALS when the show
+ * hasn't configured its own ladder. `triggered_at` is stored on each goal so
+ * the milestone check can tell "already fired" from "not yet reached" without
+ * scanning the transaction ledger.
+ */
+async function getFinancialGoals(sequelize, showId) {
+  try {
+    const [row] = await sequelize.query(
+      `SELECT metadata FROM shows WHERE id = :showId LIMIT 1`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    const meta = typeof row?.metadata === 'string' ? JSON.parse(row.metadata) : row?.metadata;
+    const configured = Array.isArray(meta?.financial_goals) ? meta.financial_goals : null;
+    return configured && configured.length ? configured : DEFAULT_GOALS.map(g => ({ ...g, triggered_at: null }));
+  } catch {
+    return DEFAULT_GOALS.map(g => ({ ...g, triggered_at: null }));
+  }
+}
+
+/**
+ * Persist `triggered_at` for a specific goal back to shows.metadata so it
+ * doesn't re-fire on the next transaction. Non-destructive: preserves all
+ * other metadata keys. Best-effort — logs and moves on if the update fails.
+ */
+async function markGoalTriggered(sequelize, showId, goalId, triggeredAt) {
+  try {
+    const [row] = await sequelize.query(
+      `SELECT metadata FROM shows WHERE id = :showId LIMIT 1`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    const meta = typeof row?.metadata === 'string' ? JSON.parse(row.metadata) : (row?.metadata || {});
+    const goals = Array.isArray(meta.financial_goals) && meta.financial_goals.length
+      ? meta.financial_goals
+      : DEFAULT_GOALS.map(g => ({ ...g, triggered_at: null }));
+    const next = goals.map(g => g.id === goalId ? { ...g, triggered_at: triggeredAt } : g);
+    const nextMeta = { ...meta, financial_goals: next };
+    await sequelize.query(
+      `UPDATE shows SET metadata = :meta, updated_at = NOW() WHERE id = :showId`,
+      { replacements: { showId, meta: JSON.stringify(nextMeta) } }
+    );
+  } catch (err) {
+    console.warn('[FinancialTx] markGoalTriggered failed:', err.message);
+  }
+}
+
+/**
+ * Milestone engine — after a balance change, fire rewards for any goal
+ * whose threshold Lala just crossed upward. One-shot: triggered_at guards
+ * against re-firing when balance dips and returns above the threshold.
+ *
+ * Returns `{ triggered: [{ goal, payout_tx }] }` so callers (logTransaction,
+ * episodeCompletion) can surface the milestone to UI / Feed.
+ */
+async function checkMilestones(sequelize, showId, oldBalance, newBalance) {
+  // Only check on upward crossings — dropping below a threshold is its own
+  // narrative (financial pressure) but doesn't un-trigger a milestone.
+  if (newBalance <= oldBalance) return { triggered: [] };
+
+  const goals = await getFinancialGoals(sequelize, showId);
+  const crossed = goals.filter(g => !g.triggered_at && g.threshold > oldBalance && g.threshold <= newBalance);
+  if (!crossed.length) return { triggered: [] };
+
+  const triggered = [];
+  for (const goal of crossed) {
+    const reward = Number(goal.reward_coins) || 0;
+    const tx = await logTransaction(sequelize, showId, {
+      type: 'reward',
+      category: 'milestone',
+      amount: reward,
+      description: `Milestone: ${goal.label} — ${goal.description || ''}`.trim(),
+      source_type: 'milestone',
+      source_id: goal.id,
+      source_name: goal.label,
+      metadata: { goal_id: goal.id, threshold: goal.threshold },
+      status: 'executed',
+    });
+    await markGoalTriggered(sequelize, showId, goal.id, new Date().toISOString());
+    triggered.push({ goal, payout_tx: tx });
+  }
+  return { triggered };
 }
 
 // ─── LOG A SINGLE TRANSACTION ────────────────────────────────────────────────
@@ -346,6 +500,11 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
     },
     balance_before: balanceBefore,
     balance_after: balance,
+    // Milestones crossed in this episode. Checked on the full episode net
+    // (before → after) so a single episode can fire multiple milestones if
+    // Lala jumps from "rising-star" straight past "it-girl". Each entry has
+    // { goal, payout_tx } and the payout is already in the ledger.
+    milestones_triggered: (await checkMilestones(sequelize, showId, balanceBefore, balance)).triggered,
   };
 }
 
@@ -397,6 +556,11 @@ async function getFinancialLedger(showId, sequelize, options = {}) {
 
 module.exports = {
   getCurrentBalance,
+  getStartingBalance,
+  seedStartingBalance,
+  getFinancialGoals,
+  markGoalTriggered,
+  checkMilestones,
   logTransaction,
   calculateSocialTaskRewards,
   finalizeEpisodeFinancials,
