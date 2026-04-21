@@ -504,7 +504,32 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
     // (before → after) so a single episode can fire multiple milestones if
     // Lala jumps from "rising-star" straight past "it-girl". Each entry has
     // { goal, payout_tx } and the payout is already in the ledger.
-    milestones_triggered: (await checkMilestones(sequelize, showId, balanceBefore, balance)).triggered,
+    milestones_triggered: await (async () => {
+      const result = await checkMilestones(sequelize, showId, balanceBefore, balance);
+      // Feed integration — one post per milestone reached, plus an
+      // aggregate big-spend post when the episode moved a lot of coins.
+      // Wrapped in try/catch so a feed-table issue can't 500 the
+      // finalize endpoint.
+      try {
+        const feed = require('./financialFeedService');
+        if (result.triggered.length > 0) {
+          await feed.postMilestoneReached(sequelize, showId, result.triggered, { episodeId });
+        }
+        const goals = await getFinancialGoals(sequelize, showId);
+        const nextGoal = [...goals].sort((a, b) => a.threshold - b.threshold).find(g => !g.triggered_at);
+        await feed.postBigSpend(sequelize, showId, {
+          wardrobe_cost: parseFloat(event?.outfit_score?.outfit_cost) || 0,
+          event_cost: parseFloat(event?.cost_coins) || 0,
+        }, balance, {
+          episodeId,
+          eventId: event?.id,
+          nextGoalThreshold: nextGoal?.threshold,
+        });
+      } catch (feedErr) {
+        console.warn('[finalizeEpisodeFinancials] feed post failed:', feedErr.message);
+      }
+      return result.triggered;
+    })(),
   };
 }
 

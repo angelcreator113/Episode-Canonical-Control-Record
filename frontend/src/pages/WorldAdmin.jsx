@@ -293,6 +293,12 @@ function WorldAdmin() {
   const [eventFinancials, setEventFinancials] = useState(null);
   const [eventFinancialsLoading, setEventFinancialsLoading] = useState(false);
   const [financeConfig, setFinanceConfig] = useState(null);
+  // Modal state for the finance editor (starting balance + goals ladder).
+  // Kept separate from financeConfig so unsaved edits don't clobber the
+  // fetched state until the user clicks Save.
+  const [financeEditorOpen, setFinanceEditorOpen] = useState(false);
+  const [financeEditorDraft, setFinanceEditorDraft] = useState(null);
+  const [financeEditorSaving, setFinanceEditorSaving] = useState(false);
   const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   const [selectedEvents, setSelectedEvents] = useState(new Set());
@@ -4481,6 +4487,25 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       }}>{mode === 'grid' ? '▦' : '≣'}</button>
                   ))}
                 </div>
+                {/* Finance pill — shows live balance + opens editor for
+                    starting balance and goal ladder. Stays compact: when
+                    there's no next goal (Legacy reached), just the balance. */}
+                <button
+                  onClick={() => {
+                    setFinanceEditorDraft({
+                      starting_balance: financeConfig?.starting_balance ?? 1900,
+                      goals: (financeConfig?.goals || []).map(g => ({ ...g })),
+                    });
+                    setFinanceEditorOpen(true);
+                  }}
+                  title="Adjust Lala's starting balance and milestone goals"
+                  style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                >
+                  💰 {(financeConfig?.current_balance ?? 0).toLocaleString()}
+                  {financeConfig?.next_goal && (
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>→ {financeConfig.next_goal.label.replace(/[🌟👑💎🏆✨]\s*/, '')}</span>
+                  )}
+                </button>
                 <button onClick={() => window.open('/wardrobe/calendar', '_blank')} style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px' }}>📅 Calendar</button>
                 {/* "Require all slots" toggle — when on, the outfit scorer marks
                     every slot (jewelry, accessories, fragrance included) as
@@ -5576,6 +5601,145 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 </div>
               </div>
             )}
+
+            {/* ── Finance Editor Modal ── */}
+            {financeEditorOpen && financeEditorDraft && (() => {
+              const d = financeEditorDraft;
+              const setDraft = (patch) => setFinanceEditorDraft(p => ({ ...p, ...patch }));
+              const updateGoal = (idx, patch) => setFinanceEditorDraft(p => ({ ...p, goals: p.goals.map((g, i) => i === idx ? { ...g, ...patch } : g) }));
+              const removeGoal = (idx) => setFinanceEditorDraft(p => ({ ...p, goals: p.goals.filter((_, i) => i !== idx) }));
+              const addGoal = () => setFinanceEditorDraft(p => ({ ...p, goals: [...p.goals, {
+                id: `goal-${Date.now().toString(36)}`,
+                threshold: 0,
+                reward_coins: 0,
+                label: '🎯 New milestone',
+                description: '',
+                triggered_at: null,
+              }] }));
+              const save = async () => {
+                setFinanceEditorSaving(true);
+                try {
+                  // Normalise + sort: make sure threshold/reward are numbers
+                  // and the ladder is ordered so the "next goal" logic works.
+                  const cleanGoals = (d.goals || [])
+                    .map(g => ({ ...g, threshold: Number(g.threshold) || 0, reward_coins: Number(g.reward_coins) || 0 }))
+                    .sort((a, b) => a.threshold - b.threshold);
+                  await api.put(`/api/v1/shows/${showId}/financial-config`, {
+                    starting_balance: Number(d.starting_balance) || 0,
+                    financial_goals: cleanGoals,
+                  });
+                  // Re-seed so the ledger reflects the new starting balance.
+                  // Force=true soft-deletes the old seed and writes a fresh one.
+                  await api.post(`/api/v1/shows/${showId}/seed-balance`, { force: true });
+                  // Refresh local state.
+                  const res = await api.get(`/api/v1/shows/${showId}/financial-config`);
+                  setFinanceConfig(res.data);
+                  setFinanceEditorOpen(false);
+                  setToast('Finance config saved');
+                } catch (err) {
+                  setToast('Save failed: ' + (err.response?.data?.error || err.message));
+                } finally {
+                  setFinanceEditorSaving(false);
+                }
+              };
+              return (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !financeEditorSaving && setFinanceEditorOpen(false)}>
+                  <div style={{ background: '#fff', borderRadius: 14, maxWidth: 640, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>💰 Finance — Starting balance & goals</h3>
+                      <button onClick={() => setFinanceEditorOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                    </div>
+
+                    {/* Starting balance */}
+                    <div style={{ padding: '12px 14px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10, marginBottom: 14 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>Starting balance (coins)</label>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="100"
+                          value={d.starting_balance}
+                          onChange={e => setDraft({ starting_balance: e.target.value })}
+                          style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace", fontSize: 16, fontWeight: 700 }}
+                        />
+                        <span style={{ fontSize: 11, color: '#8a6d1f' }}>coins</span>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>
+                        Current balance: {(financeConfig?.current_balance ?? 0).toLocaleString()} coins. Saving will re-seed the starting balance — non-seed transactions stay intact.
+                      </div>
+                    </div>
+
+                    {/* Goals ladder */}
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>Milestone ladder ({d.goals.length})</label>
+                        <button onClick={addGoal} style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9cc', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#334155' }}>+ Add goal</button>
+                      </div>
+                      {d.goals.length === 0 && (
+                        <div style={{ fontSize: 12, color: '#94a3b8', padding: 12, textAlign: 'center', border: '1px dashed #e2e8f0', borderRadius: 8 }}>
+                          No milestones yet. Add one above.
+                        </div>
+                      )}
+                      {d.goals.map((g, i) => (
+                        <div key={g.id || i} style={{ padding: 10, marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 8, background: g.triggered_at ? '#f0fdf4' : '#fff' }}>
+                          <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                            <input
+                              value={g.label}
+                              onChange={e => updateGoal(i, { label: e.target.value })}
+                              placeholder="🌟 Rising Star"
+                              style={{ ...S.inp, flex: 2, margin: 0 }}
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="100"
+                              value={g.threshold}
+                              onChange={e => updateGoal(i, { threshold: e.target.value })}
+                              placeholder="threshold"
+                              title="Balance Lala must reach to trigger this goal"
+                              style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace" }}
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              value={g.reward_coins}
+                              onChange={e => updateGoal(i, { reward_coins: e.target.value })}
+                              placeholder="reward"
+                              title="Coins paid out when goal is reached"
+                              style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace" }}
+                            />
+                            <button
+                              onClick={() => removeGoal(i)}
+                              title="Delete this goal"
+                              style={{ background: 'none', border: '1px solid #fecaca', borderRadius: 6, color: '#dc2626', cursor: 'pointer', padding: '0 10px', fontSize: 14 }}
+                            >×</button>
+                          </div>
+                          <input
+                            value={g.description || ''}
+                            onChange={e => updateGoal(i, { description: e.target.value })}
+                            placeholder="Short description shown on the progress bar"
+                            style={{ ...S.inp, width: '100%', margin: 0, fontSize: 12 }}
+                          />
+                          {g.triggered_at && (
+                            <div style={{ fontSize: 10, color: '#16a34a', marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
+                              ✓ Triggered {new Date(g.triggered_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 10, borderTop: '1px solid #f0ece4' }}>
+                      <button onClick={() => setFinanceEditorOpen(false)} disabled={financeEditorSaving} style={{ ...S.secBtn, padding: '7px 16px' }}>Cancel</button>
+                      <button onClick={save} disabled={financeEditorSaving} style={{ ...S.primaryBtn, padding: '7px 22px' }}>
+                        {financeEditorSaving ? 'Saving…' : 'Save & re-seed'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Create Outfit Set Modal ── */}
             {showCreateOutfitSet && (
