@@ -309,6 +309,8 @@ function WorldAdmin() {
   // Auto-generated goal suggestions for the Goals tab. One fetch per modal
   // open — the algorithm is deterministic so refetching is wasteful.
   const [financeSuggestions, setFinanceSuggestions] = useState(null);
+  // Breakdowns tab data — income/expense rollups by category + closet value.
+  const [financeBreakdowns, setFinanceBreakdowns] = useState(null);
   const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   const [selectedEvents, setSelectedEvents] = useState(new Set());
@@ -4519,12 +4521,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     // Non-blocking: modal pops immediately with a loading state.
                     setFinanceSummaryLoading(true);
                     try {
-                      const [sumRes, sugRes] = await Promise.all([
+                      const [sumRes, sugRes, brkRes] = await Promise.all([
                         api.get(`/api/v1/shows/${showId}/financial-summary`),
                         api.get(`/api/v1/shows/${showId}/financial-suggestions`).catch(() => null),
+                        api.get(`/api/v1/shows/${showId}/financial-breakdowns`).catch(() => null),
                       ]);
                       setFinanceSummary(sumRes.data);
                       setFinanceSuggestions(sugRes?.data?.suggestions || []);
+                      setFinanceBreakdowns(brkRes?.data || null);
                     } catch { setFinanceSummary(null); }
                     finally { setFinanceSummaryLoading(false); }
                   }}
@@ -5687,6 +5691,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       {[
                         { key: 'overview',    label: 'Overview' },
                         { key: 'per_episode', label: 'Per Episode' },
+                        { key: 'breakdowns',  label: 'Breakdowns' },
+                        { key: 'closet',      label: 'Closet' },
                         { key: 'goals',       label: 'Goals' },
                       ].map(t => {
                         const active = financeTab === t.key;
@@ -5842,6 +5848,116 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             No episode-level transactions yet. Finalize episodes to populate.
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* ── BREAKDOWNS TAB ───────────────────────────────────
+                        Income and expense categories rendered as labelled bars
+                        (simpler + more scannable than a pie at this data size).
+                        Bars are scaled against the single largest category so
+                        the visual ratio reflects actual spend shape. */}
+                    {financeTab === 'breakdowns' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {!financeBreakdowns && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>No breakdown data yet.</div>}
+                        {financeBreakdowns && (() => {
+                          const incomeMax = Math.max(1, ...(financeBreakdowns.income?.breakdown || []).map(r => r.total));
+                          const expenseMax = Math.max(1, ...(financeBreakdowns.expenses?.breakdown || []).map(r => r.total));
+                          const renderBars = (items, max, color) => (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {items.map(r => (
+                                <div key={r.category} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ width: 140, fontSize: 11, color: '#475569', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.category}</div>
+                                  <div style={{ flex: 1, height: 14, background: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden' }}>
+                                    <div style={{ width: `${(r.total / max) * 100}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
+                                  </div>
+                                  <div style={{ width: 80, fontSize: 11, textAlign: 'right', fontFamily: "'DM Mono', monospace", color, fontWeight: 700 }}>
+                                    {r.total.toLocaleString()}
+                                  </div>
+                                  <div style={{ width: 30, fontSize: 9, textAlign: 'right', color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>×{r.tx_count}</div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                          return (
+                            <>
+                              <div style={{ padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>INCOME BY SOURCE</span>
+                                  <span style={{ fontSize: 11, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>total +{(financeBreakdowns.income?.total || 0).toLocaleString()}</span>
+                                </div>
+                                {(financeBreakdowns.income?.breakdown || []).length > 0
+                                  ? renderBars(financeBreakdowns.income.breakdown, incomeMax, '#16a34a')
+                                  : <div style={{ fontSize: 11, color: '#16a34a80', textAlign: 'center', padding: 10 }}>No income recorded yet.</div>}
+                              </div>
+                              <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>EXPENSES BY CATEGORY</span>
+                                  <span style={{ fontSize: 11, color: '#dc2626', fontFamily: "'DM Mono', monospace" }}>total -{(financeBreakdowns.expenses?.total || 0).toLocaleString()}</span>
+                                </div>
+                                {(financeBreakdowns.expenses?.breakdown || []).length > 0
+                                  ? renderBars(financeBreakdowns.expenses.breakdown, expenseMax, '#dc2626')
+                                  : <div style={{ fontSize: 11, color: '#dc262680', textAlign: 'center', padding: 10 }}>No expenses recorded yet.</div>}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>
+                                Bar length = share of its side's total. "×N" = how many transactions rolled into that row.
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* ── CLOSET TAB ───────────────────────────────────────
+                        Net-worth snapshot from the wardrobe. Owned value is the
+                        real money Lala has tied up in her closet; unowned is her
+                        aspirational inventory. Top 5 unowned-by-value shown so
+                        creators see the concrete upgrade path. */}
+                    {financeTab === 'closet' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {!financeBreakdowns?.closet && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>No closet data yet.</div>}
+                        {financeBreakdowns?.closet && (() => {
+                          const c = financeBreakdowns.closet;
+                          return (
+                            <>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                                <div style={{ padding: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: '#16a34a', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Owned closet value</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#16a34a', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.owned_value.toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: '#16a34a80', marginTop: 2 }}>{c.owned_count} pieces</div>
+                                </div>
+                                <div style={{ padding: 12, background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: '#4338ca', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Wishlist potential</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#4338ca', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.unowned_value.toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: '#4338ca80', marginTop: 2 }}>{c.unowned_count} pieces unowned</div>
+                                </div>
+                                <div style={{ padding: 12, background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Total catalog</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{(c.owned_value + c.unowned_value).toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: '#8a6d1f80', marginTop: 2 }}>{c.owned_count + c.unowned_count} pieces total</div>
+                                </div>
+                              </div>
+                              {c.wishlist && c.wishlist.length > 0 && (
+                                <div style={{ padding: '12px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>💎 TOP 5 DREAM PIECES</div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    {c.wishlist.map(w => (
+                                      <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 6, background: '#faf7f0', borderRadius: 6 }}>
+                                        {w.image_url && <img src={w.image_url} alt={w.name} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />}
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
+                                          <div style={{ fontSize: 10, color: '#64748b' }}>{w.brand || '—'} · {w.tier || 'basic'}</div>
+                                        </div>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+                                          💰 {w.coin_cost.toLocaleString()}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
 

@@ -597,6 +597,109 @@ router.get('/:id/financial-summary', async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id/financial-breakdowns
+ * Category rollups for the Breakdowns tab: income by source, expense by
+ * category, plus a closet-value snapshot (total cost of owned pieces,
+ * dream piece, biggest unowned). All read-only, cheap queries.
+ */
+router.get('/:id/financial-breakdowns', async (req, res) => {
+  try {
+    const Show = getShow();
+    const show = await Show.findByPk(req.params.id);
+    if (!show) return res.status(404).json({ error: 'Show not found' });
+    const sequelize = Show.sequelize;
+    const showId = show.id;
+
+    // Income / expense rollups by category. NULL categories bucket as
+    // 'uncategorized' so the pie charts don't silently drop rows.
+    const [incomeRows] = await sequelize.query(
+      `SELECT COALESCE(category, 'uncategorized') AS category,
+              COALESCE(SUM(amount), 0)::bigint AS total,
+              COUNT(*)::int AS tx_count
+       FROM financial_transactions
+       WHERE show_id = :showId AND type IN ('income', 'reward')
+         AND status = 'executed' AND deleted_at IS NULL
+       GROUP BY category
+       ORDER BY total DESC`,
+      { replacements: { showId } }
+    );
+    const [expenseRows] = await sequelize.query(
+      `SELECT COALESCE(category, 'uncategorized') AS category,
+              COALESCE(SUM(amount), 0)::bigint AS total,
+              COUNT(*)::int AS tx_count
+       FROM financial_transactions
+       WHERE show_id = :showId AND type IN ('expense', 'deduction')
+         AND status = 'executed' AND deleted_at IS NULL
+       GROUP BY category
+       ORDER BY total DESC`,
+      { replacements: { showId } }
+    );
+
+    const income = (incomeRows || []).map(r => ({ category: r.category, total: Number(r.total) || 0, tx_count: r.tx_count }));
+    const expenses = (expenseRows || []).map(r => ({ category: r.category, total: Number(r.total) || 0, tx_count: r.tx_count }));
+    const incomeTotal = income.reduce((s, r) => s + r.total, 0);
+    const expenseTotal = expenses.reduce((s, r) => s + r.total, 0);
+
+    // Closet snapshot. Owned value uses price (USD = coins) so the number
+    // matches what the wardrobe editor displays. Wishlist = most expensive
+    // unowned items Lala is gated on.
+    let closet = null;
+    try {
+      const [ownedRow] = await sequelize.query(
+        `SELECT COUNT(*)::int AS owned_count,
+                COALESCE(SUM(CASE WHEN price IS NOT NULL THEN price ELSE coin_cost END), 0)::bigint AS owned_value
+         FROM wardrobe
+         WHERE (show_id = :showId OR show_id IS NULL) AND deleted_at IS NULL
+           AND is_owned = true`,
+        { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+      );
+      const [unownedRow] = await sequelize.query(
+        `SELECT COUNT(*)::int AS unowned_count,
+                COALESCE(SUM(CASE WHEN coin_cost IS NOT NULL THEN coin_cost ELSE price END), 0)::bigint AS unowned_value
+         FROM wardrobe
+         WHERE (show_id = :showId OR show_id IS NULL) AND deleted_at IS NULL
+           AND (is_owned = false OR is_owned IS NULL)`,
+        { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+      );
+      const [wishlistRows] = await sequelize.query(
+        `SELECT id, name, coin_cost, price, tier, brand, s3_url_processed, s3_url
+         FROM wardrobe
+         WHERE (show_id = :showId OR show_id IS NULL) AND deleted_at IS NULL
+           AND (is_owned = false OR is_owned IS NULL)
+           AND COALESCE(coin_cost, price) IS NOT NULL
+         ORDER BY COALESCE(coin_cost, price) DESC
+         LIMIT 5`,
+        { replacements: { showId } }
+      );
+      closet = {
+        owned_count: ownedRow?.owned_count || 0,
+        owned_value: Number(ownedRow?.owned_value) || 0,
+        unowned_count: unownedRow?.unowned_count || 0,
+        unowned_value: Number(unownedRow?.unowned_value) || 0,
+        wishlist: (wishlistRows || []).map(w => ({
+          id: w.id,
+          name: w.name,
+          coin_cost: Number(w.coin_cost) || Number(w.price) || 0,
+          tier: w.tier,
+          brand: w.brand,
+          image_url: w.s3_url_processed || w.s3_url || null,
+        })),
+      };
+    } catch { /* wardrobe query issue — skip closet section gracefully */ }
+
+    return res.json({
+      success: true,
+      income: { breakdown: income, total: incomeTotal },
+      expenses: { breakdown: expenses, total: expenseTotal },
+      closet,
+    });
+  } catch (err) {
+    console.error('GET /shows/:id/financial-breakdowns error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/shows/:id/financial-suggestions
  * Proposes ready-to-add goals derived from what we already know about the
  * show. Cheap to compute, deterministic (given the data) so repeated calls
