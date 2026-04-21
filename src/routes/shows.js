@@ -467,15 +467,36 @@ router.put('/:id/financial-config', async (req, res) => {
  * balance if one doesn't already exist. Safe to call multiple times — it
  * won't duplicate the seed. Called automatically from the frontend when
  * the finance widget first loads on an empty ledger.
+ *
+ * Body: { force?: boolean } — when true, deletes the existing seed row
+ * (if any) and writes a fresh one with the current starting_balance. Use
+ * this after changing the starting balance via PUT /financial-config so
+ * the ledger reflects the new amount. Non-seed transactions are left
+ * untouched, so history from prior play sessions is preserved.
  */
 router.post('/:id/seed-balance', async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
     if (!show) return res.status(404).json({ error: 'Show not found' });
+    const force = req.body?.force === true;
+    const sequelize = Show.sequelize;
+    if (force) {
+      // Soft-delete any existing seed transactions so getCurrentBalance
+      // doesn't double-count. Uses the same deleted_at convention the
+      // rest of the codebase relies on for paranoid mode.
+      try {
+        await sequelize.query(
+          `UPDATE financial_transactions
+           SET deleted_at = NOW()
+           WHERE show_id = :showId AND category = 'seed' AND deleted_at IS NULL`,
+          { replacements: { showId: show.id } }
+        );
+      } catch { /* non-blocking */ }
+    }
     const { seedStartingBalance } = require('../services/financialTransactionService');
-    const result = await seedStartingBalance(Show.sequelize, show.id);
-    return res.json({ success: true, ...result });
+    const result = await seedStartingBalance(sequelize, show.id);
+    return res.json({ success: true, forced: !!force, ...result });
   } catch (err) {
     console.error('POST /shows/:id/seed-balance error:', err);
     return res.status(500).json({ error: err.message });
