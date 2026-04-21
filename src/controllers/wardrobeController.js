@@ -512,6 +512,21 @@ module.exports = {
    * PUT /api/v1/wardrobe/:id - Update wardrobe item
    */
   async updateWardrobeItem(req, res) {
+    // Guards for numeric columns. parseInt("") returns NaN, which sequelize
+    // rejects on INTEGER / DECIMAL columns — we'd 500 on any save where the
+    // form posts a blank numeric field. Return undefined for null / blank /
+    // NaN inputs so the field gets stripped from the update payload by the
+    // "remove undefined values" loop below.
+    const intOrUndef = (v) => {
+      if (v === null || v === undefined || v === '') return undefined;
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const floatOrUndef = (v) => {
+      if (v === null || v === undefined || v === '') return undefined;
+      const n = parseFloat(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -564,7 +579,7 @@ module.exports = {
         character: updates.character,
         clothing_category: updates.clothing_category ?? updates.clothingCategory,
         brand: updates.brand,
-        price: updates.price != null ? parseFloat(updates.price) : undefined,
+        price: floatOrUndef(updates.price),
         purchase_link: updates.purchase_link ?? updates.purchaseLink,
         website: updates.website,
         color: updates.color,
@@ -604,23 +619,24 @@ module.exports = {
             ? JSON.parse(updates.event_types)
             : updates.event_types
           : undefined,
-        outfit_match_weight: updates.outfit_match_weight != null ? parseInt(updates.outfit_match_weight) : undefined,
+        outfit_match_weight: intOrUndef(updates.outfit_match_weight),
         // Same coin_cost ↔ price auto-sync as POST. If the edit doesn't touch
         // coin_cost but DOES change price, recompute coin_cost so the two
         // fields don't silently drift. When coin_cost is explicitly set, it
         // wins (lets creators decouple story price from real-world price).
         coin_cost: (() => {
-          if (updates.coin_cost != null) return parseInt(updates.coin_cost);
-          if (updates.price != null) {
+          const explicit = intOrUndef(updates.coin_cost);
+          if (explicit !== undefined) return explicit;
+          const p = floatOrUndef(updates.price);
+          if (p !== undefined && p > 0) {
             const { USD_TO_COINS } = require('../utils/financialRates');
-            const p = parseFloat(updates.price);
-            if (Number.isFinite(p) && p > 0) return Math.round(p * USD_TO_COINS);
+            return Math.round(p * USD_TO_COINS);
           }
           return undefined;
         })(),
-        reputation_required: updates.reputation_required != null ? parseInt(updates.reputation_required) : undefined,
-        influence_required: updates.influence_required != null ? parseInt(updates.influence_required) : undefined,
-        season_unlock_episode: updates.season_unlock_episode != null ? parseInt(updates.season_unlock_episode) : undefined,
+        reputation_required: intOrUndef(updates.reputation_required),
+        influence_required: intOrUndef(updates.influence_required),
+        season_unlock_episode: intOrUndef(updates.season_unlock_episode),
         lala_reaction_own: updates.lala_reaction_own,
         lala_reaction_locked: updates.lala_reaction_locked,
         lala_reaction_reject: updates.lala_reaction_reject,
