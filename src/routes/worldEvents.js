@@ -2031,10 +2031,166 @@ router.get('/world/:showId/financial-pressure', optionalAuth, async (req, res) =
   }
 });
 
+// GET /world/:showId/events/:eventId/financial-forecast
+// Real-coin forecast for the event's financial impact. Replaces the static
+// tier-table estimate that previously lived inline in WorldAdmin's Financial
+// Preview card. Sources are honest about where each number came from:
+//
+//   income   = event_payment  + social_task_rewards + content_revenue_est
+//   expenses = event_cost     + outfit_retail (owned) + outfit_rentals
+//                             + drinks_est + valet_est + photo_booth_est
+//
+// If no outfit is picked, outfit_retail falls back to a prestige-tiered
+// estimate so the UI isn't blank on a fresh event. The Show's live balance
+// + goal ladder are included so the frontend can render a single combined
+// "can she afford this, and does this push her toward her next goal" view.
+router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    // Event row — raw SQL to tolerate unmigrated columns on older envs.
+    const [eventRows] = await models.sequelize.query(
+      `SELECT id, name, prestige, event_type, cost_coins, is_paid, payment_amount,
+              outfit_pieces, canon_consequences, dress_code
+       FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
+      { replacements: { eventId, showId } }
+    );
+    const event = eventRows?.[0];
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    const prestige = Number(event.prestige) || 5;
+    const outfitPieces = (() => {
+      if (!event.outfit_pieces) return [];
+      if (Array.isArray(event.outfit_pieces)) return event.outfit_pieces;
+      try { return JSON.parse(event.outfit_pieces); } catch { return []; }
+    })();
+    const automation = (() => {
+      if (!event.canon_consequences) return {};
+      if (typeof event.canon_consequences === 'object') return event.canon_consequences.automation || {};
+      try { return JSON.parse(event.canon_consequences)?.automation || {}; } catch { return {}; }
+    })();
+
+    const {
+      USD_TO_COINS, EVENT_EXTRAS, RENTAL_RATE, CONTENT_REVENUE_PER_PRESTIGE,
+    } = require('../utils/financialRates');
+    const {
+      getCurrentBalance, getFinancialGoals, calculateSocialTaskRewards,
+    } = require('../services/financialTransactionService');
+
+    // ── Outfit costs ────────────────────────────────────────────────
+    // Real data when an outfit has been picked; otherwise a prestige-tier
+    // fallback so a fresh event still shows a plausible number. Rentals +
+    // borrowed items cost a fraction of retail (RENTAL_RATE).
+    let outfitRetail = 0;
+    let outfitRentals = 0;
+    let outfitSource = 'none';
+    if (outfitPieces.length > 0) {
+      outfitSource = 'actual';
+      for (const p of outfitPieces) {
+        const price = (parseFloat(p.price) || 0) * USD_TO_COINS;
+        if (p.acquisition_type === 'rented' || p.acquisition_type === 'borrowed') {
+          outfitRentals += Math.round(price * RENTAL_RATE);
+        } else {
+          outfitRetail += Math.round(price);
+        }
+      }
+    } else {
+      outfitSource = 'estimate';
+      outfitRetail = prestige >= 8 ? 8000 : prestige >= 6 ? 3500 : prestige >= 4 ? 1200 : 400;
+    }
+
+    // ── Event extras (drinks / valet / photo booth) ──────────────────
+    const drinks = EVENT_EXTRAS.drinks(prestige);
+    const valet = EVENT_EXTRAS.valet(prestige);
+    // Photo booth only fires on events where it makes narrative sense —
+    // galas, premieres, launch parties. Detected from event_type or the
+    // dress code mentioning "red carpet".
+    const photoBoothPrompt = (event.dress_code || '').toLowerCase();
+    const wantsPhotoBooth = ['gala', 'premiere', 'launch', 'brand_deal'].includes(event.event_type)
+      || photoBoothPrompt.includes('red carpet') || photoBoothPrompt.includes('photo');
+    const photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
+
+    const eventCost = event.is_paid === false || event.is_paid === 0
+      ? (Number(event.cost_coins) || 0)
+      : 0; // is_paid true = brand is paying Lala, she doesn't owe the cover
+
+    // ── Income side ─────────────────────────────────────────────────
+    const eventPayment = (event.is_paid === true || event.is_paid === 1) ? (parseFloat(event.payment_amount) || 0) : 0;
+    const socialTasks = Array.isArray(automation.social_tasks) ? automation.social_tasks : [];
+    const taskRewards = calculateSocialTaskRewards(socialTasks);
+    const socialTaskRewards = taskRewards.reduce((s, t) => s + (t.reward || 0), 0);
+    // Content revenue forecast — conservative estimate from prestige.
+    // Real content revenue is computed at episode-complete time; this is
+    // just the "you'll probably earn this much in posts" preview.
+    const contentRevenueEst = CONTENT_REVENUE_PER_PRESTIGE * prestige;
+
+    const income = {
+      event_payment: eventPayment,
+      social_task_rewards: socialTaskRewards,
+      content_revenue_est: contentRevenueEst,
+      total: eventPayment + socialTaskRewards + contentRevenueEst,
+    };
+    const expenses = {
+      event_cost: eventCost,
+      outfit_retail: outfitRetail,
+      outfit_rentals: outfitRentals,
+      drinks_est: drinks,
+      valet_est: valet,
+      photo_booth_est: photoBooth,
+      total: eventCost + outfitRetail + outfitRentals + drinks + valet + photoBooth,
+    };
+    const net = income.total - expenses.total;
+
+    // ── Balance + milestones ────────────────────────────────────────
+    const [balance, goals] = await Promise.all([
+      getCurrentBalance(models.sequelize, showId),
+      getFinancialGoals(models.sequelize, showId),
+    ]);
+    const balanceAfter = balance + net;
+    const sortedGoals = [...goals].sort((a, b) => (a.threshold || 0) - (b.threshold || 0));
+    const nextGoal = sortedGoals.find(g => !g.triggered_at) || null;
+    // Pressure tiers drive feed tone + Lala mood downstream. "high" = event
+    // would drop her below 25% of the next-goal threshold; "medium" = below
+    // 50%; "low" = above. Falls back to flat "ok" when no goal ladder is set.
+    const affordability = {
+      can_afford: balanceAfter >= 0,
+      balance_before: balance,
+      balance_after: balanceAfter,
+      pressure: !nextGoal ? 'ok'
+        : balanceAfter < nextGoal.threshold * 0.25 ? 'high'
+        : balanceAfter < nextGoal.threshold * 0.5  ? 'medium'
+        : 'low',
+    };
+
+    return res.json({
+      success: true,
+      currency: 'coins',
+      event: { id: event.id, name: event.name, prestige, event_type: event.event_type },
+      income,
+      expenses,
+      net,
+      affordability,
+      next_goal: nextGoal,
+      outfit_source: outfitSource,
+      outfit_piece_count: outfitPieces.length,
+    });
+  } catch (err) {
+    console.error('[financial-forecast] error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /world/:showId/events/:eventId/generate-venue — Generate venue exterior + interior images
+// Body: { force?: boolean } — when `force` is true the endpoint regenerates
+// even if the event already has a scene_set_id attached. Otherwise it skips
+// and returns the existing scene set so the "Mark Ready" flow doesn't clobber
+// a venue the user deliberately picked.
 router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
+    const force = req.body?.force === true;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
@@ -2045,6 +2201,33 @@ router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async
     );
     const event = rows?.[0];
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    // Skip-and-return when a scene set is already attached. Hydrate a minimal
+    // result payload so the caller gets consistent shape (scene_set_id +
+    // images) whether we generated or skipped. This is what prevents the
+    // "Mark Ready" button from regenerating venue images every time the
+    // creator revisits an event that already has one.
+    if (event.scene_set_id && !force) {
+      let existing = null;
+      if (models.SceneSet) {
+        try {
+          existing = await models.SceneSet.findByPk(event.scene_set_id, {
+            attributes: ['id', 'name', 'base_still_url', 'canonical_description'],
+          });
+        } catch { /* non-blocking */ }
+      }
+      return res.json({
+        success: true,
+        skipped: true,
+        data: {
+          scene_set_id: event.scene_set_id,
+          venue_image_url: existing?.base_still_url || null,
+          venue_name: existing?.name || null,
+          reason: 'scene_set already attached — pass { force: true } to regenerate',
+        },
+        message: `Venue already attached to "${event.name}" — skipped regeneration`,
+      });
+    }
 
     if (typeof event.canon_consequences === 'string') {
       try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
@@ -2174,9 +2357,25 @@ router.put('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, re
       image_url: i.s3_url_processed || i.s3_url,
     }));
 
-    // Score the outfit
+    // Score the outfit. Pull show-level `required_slots` off the Show's
+    // metadata JSON so events on shows that demand a full 5-slot outfit
+    // (fragrance + jewelry + accessories) light up the missing-required
+    // treatment in the per-slot breakdown. Falls back to the scorer's
+    // default (outfit + shoes required) when the show doesn't set it.
     const { scoreOutfitForEvent, detectRepeats, getBrandRelationships, generateOutfitReactionTriggers } = require('../services/wardrobeIntelligenceService');
-    const outfitScore = scoreOutfitForEvent(items, event);
+    let scoringEvent = event;
+    try {
+      if (models.Show) {
+        const show = await models.Show.findByPk(showId, { attributes: ['metadata'] });
+        const required = show?.metadata?.required_slots;
+        if (Array.isArray(required) && required.length > 0) {
+          scoringEvent = { ...event, required_slots: required };
+        }
+      }
+    } catch (e) {
+      console.warn('[Outfit] Could not read show required_slots:', e.message);
+    }
+    const outfitScore = scoreOutfitForEvent(items, scoringEvent);
     const repeats = await detectRepeats(items, showId, models);
     const brandRels = await getBrandRelationships(showId, models);
     const feedTriggers = generateOutfitReactionTriggers(outfitScore, repeats, brandRels);

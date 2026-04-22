@@ -1044,6 +1044,104 @@ async function premiumEnhance(inputBuffer, character, options = {}) {
   };
 }
 
+// ─── COLORED BACKDROP VARIANTS ───────────────────────────────────────────────
+
+/**
+ * Canonical canvas size for wardrobe backdrop variants.
+ *
+ * 4:5 portrait (1080x1350) — same aspect as the wardrobe grid card and
+ * cleanly scales down to Lala's phone screens without awkward letterboxing.
+ * Every item gets the same dimensions so the grid reads as a uniform set
+ * regardless of how tight or wide the original photo framed the subject.
+ */
+const BACKDROP_CANVAS_W = 1080;
+const BACKDROP_CANVAS_H = 1350;
+const BACKDROP_SUBJECT_FIT = 0.80; // leave 10% margin each side
+
+/**
+ * Backdrop palette — pastel shades chosen to harmonize with the parchment
+ * (#FAF7F0) / gold (#B8962E) / ink (#2C2C2C) brand tokens. Each key matches
+ * the DB column suffix (s3_url_bg_<key>).
+ */
+const BACKDROP_PALETTE = {
+  pink: { r: 0xFC, g: 0xE4, b: 0xEC }, // #FCE4EC — soft rose
+  blue: { r: 0xDB, g: 0xEA, b: 0xFE }, // #DBEAFE — baby blue
+  teal: { r: 0xCC, g: 0xFB, b: 0xF1 }, // #CCFBF1 — light teal mint
+};
+
+/**
+ * Take a transparent-PNG cutout and composite it onto a colored canvas.
+ * Trims transparent padding first, then scales the subject to occupy
+ * BACKDROP_SUBJECT_FIT of the canvas and centers it — so a tightly-cropped
+ * source and a zoomed-out source both end up at visually equivalent size.
+ *
+ * @param {Buffer} transparentPngBuffer — the remove.bg output
+ * @param {{r,g,b}} backgroundColor
+ * @returns {Buffer} JPEG buffer at 1080x1350
+ */
+async function compositeOnBackdrop(transparentPngBuffer, backgroundColor) {
+  // 1. Trim the transparent margin so we measure only the subject.
+  const trimmed = await sharp(transparentPngBuffer)
+    .trim({ threshold: 10 })
+    .toBuffer();
+  const trimmedMeta = await sharp(trimmed).metadata();
+
+  // 2. Scale so the subject occupies 80% of the canvas in the binding
+  //    dimension, preserving aspect.
+  const fitW = BACKDROP_CANVAS_W * BACKDROP_SUBJECT_FIT;
+  const fitH = BACKDROP_CANVAS_H * BACKDROP_SUBJECT_FIT;
+  const scale = Math.min(fitW / trimmedMeta.width, fitH / trimmedMeta.height);
+  const targetW = Math.max(1, Math.round(trimmedMeta.width * scale));
+  const targetH = Math.max(1, Math.round(trimmedMeta.height * scale));
+
+  const scaledSubject = await sharp(trimmed)
+    .resize(targetW, targetH, { kernel: sharp.kernel.lanczos3 })
+    .png()
+    .toBuffer();
+
+  // 3. Create the colored canvas and composite the subject centered.
+  return sharp({
+    create: {
+      width: BACKDROP_CANVAS_W,
+      height: BACKDROP_CANVAS_H,
+      channels: 3,
+      background: backgroundColor,
+    },
+  })
+    .composite([{ input: scaledSubject, gravity: 'center' }])
+    .jpeg({ quality: 92, progressive: true, mozjpeg: true })
+    .toBuffer();
+}
+
+/**
+ * Generate all three backdrop variants from a transparent-PNG cutout,
+ * upload each to S3, and return the key/URL map. Each variant is produced
+ * and uploaded independently — if one fails, the others still persist,
+ * and the caller can write whatever succeeded to the row.
+ *
+ * @param {Buffer} transparentPngBuffer
+ * @param {string} character
+ * @returns {Promise<{ pink?, blue?, teal?, errors? }>}
+ */
+async function generateBackdropVariants(transparentPngBuffer, character) {
+  const result = {};
+  const errors = {};
+
+  for (const [key, bgColor] of Object.entries(BACKDROP_PALETTE)) {
+    try {
+      const buffer = await compositeOnBackdrop(transparentPngBuffer, bgColor);
+      const uploaded = await uploadWardrobeImage(buffer, character, `-bg-${key}`, 'image/jpeg');
+      result[key] = uploaded; // { s3Key, s3Url }
+    } catch (err) {
+      errors[key] = err.message || String(err);
+      console.warn(`[WardrobeImage] Backdrop ${key} failed: ${errors[key]}`);
+    }
+  }
+
+  if (Object.keys(errors).length > 0) result.errors = errors;
+  return result;
+}
+
 module.exports = {
   // Core functions
   sharpEnhanceWardrobe,
@@ -1051,18 +1149,25 @@ module.exports = {
   aiUpscaleImage,
   uploadWardrobeImage,
   processWardrobeUpload,
-  
+
   // New enhancement functions
   addDropShadow,
   autoCenterCrop,
   normalizeColors,
   enhanceTexture,
-  
+
   // AI analysis functions
   extractColors,
   suggestTags,
   analyzeImage,
-  
+
   // Premium pipeline
   premiumEnhance,
+
+  // Colored backdrop variants
+  compositeOnBackdrop,
+  generateBackdropVariants,
+  BACKDROP_CANVAS_W,
+  BACKDROP_CANVAS_H,
+  BACKDROP_PALETTE,
 };

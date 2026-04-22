@@ -89,6 +89,35 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      primary_image_variant: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        comment: 'User-selected preferred variant: original | processed | regenerated (NULL = auto)',
+      },
+      s3_key_bg_pink: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      s3_url_bg_pink: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      s3_key_bg_blue: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      s3_url_bg_blue: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      s3_key_bg_teal: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      s3_url_bg_teal: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
 
       // Shopping / sourcing
       brand: {

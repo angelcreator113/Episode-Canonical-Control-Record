@@ -56,6 +56,29 @@ module.exports = {
         isFavorite,
         tags,
         showId, // NEW: Primary show ownership
+        // ── Game-layer fields ───────────────────────────────────────
+        // These used to only be settable via PUT after creation. Accepting
+        // them on POST too so creators can author a fully gameplay-ready
+        // item in one step from the upload modal (matches the old
+        // WardrobeBrowser edit form's coin_cost / acquisition_type inputs).
+        coinCost,
+        acquisitionType,
+        lockType,
+        eraAlignment,
+        reputationRequired,
+        // Advanced game-layer (Part 2): Lala reactions, extra tag buckets,
+        // scoring weight, harder unlock gates, and visibility flags. Kept
+        // optional — anything unset falls back to the model's defaults.
+        aestheticTags,
+        eventTypes,
+        outfitMatchWeight,
+        influenceRequired,
+        seasonUnlockEpisode,
+        isOwned,
+        isVisible,
+        lalaReactionOwn,
+        lalaReactionLocked,
+        lalaReactionReject,
       } = req.body;
 
       // Validation - character is REQUIRED, name and category auto-fill
@@ -167,6 +190,41 @@ module.exports = {
         outfit_notes: outfitNotes || null,
         is_favorite: isFavorite === 'true' || isFavorite === true,
         tags: parsedTags,
+        // Game-layer — all optional; model defaults handle the rest.
+        // coin_cost defaults to price × USD_TO_COINS (1:1) when not explicitly
+        // provided, so uploading a $1,850 item automatically gets 1,850 coins
+        // without the creator having to duplicate the number into two fields.
+        coin_cost: (() => {
+          if (coinCost != null && coinCost !== '') return parseInt(coinCost, 10);
+          const { USD_TO_COINS } = require('../utils/financialRates');
+          const p = parseFloat(price);
+          return Number.isFinite(p) && p > 0 ? Math.round(p * USD_TO_COINS) : undefined;
+        })(),
+        acquisition_type: acquisitionType || undefined,
+        lock_type: lockType || undefined,
+        era_alignment: eraAlignment || undefined,
+        reputation_required: reputationRequired != null && reputationRequired !== '' ? parseInt(reputationRequired, 10) : undefined,
+        // Advanced game-layer. Tag arrays accept either a JSON array or a
+        // comma-separated string (UI sends CSV to match the basic `tags` field
+        // convention); ints are parsed when present.
+        aesthetic_tags: (() => {
+          if (!aestheticTags) return undefined;
+          if (Array.isArray(aestheticTags)) return aestheticTags;
+          try { return JSON.parse(aestheticTags); } catch { return String(aestheticTags).split(',').map(s => s.trim()).filter(Boolean); }
+        })(),
+        event_types: (() => {
+          if (!eventTypes) return undefined;
+          if (Array.isArray(eventTypes)) return eventTypes;
+          try { return JSON.parse(eventTypes); } catch { return String(eventTypes).split(',').map(s => s.trim()).filter(Boolean); }
+        })(),
+        outfit_match_weight: outfitMatchWeight != null && outfitMatchWeight !== '' ? parseInt(outfitMatchWeight, 10) : undefined,
+        influence_required: influenceRequired != null && influenceRequired !== '' ? parseInt(influenceRequired, 10) : undefined,
+        season_unlock_episode: seasonUnlockEpisode != null && seasonUnlockEpisode !== '' ? parseInt(seasonUnlockEpisode, 10) : undefined,
+        is_owned: isOwned != null ? (isOwned === 'true' || isOwned === true) : undefined,
+        is_visible: isVisible != null ? (isVisible === 'true' || isVisible === true) : undefined,
+        lala_reaction_own: lalaReactionOwn || undefined,
+        lala_reaction_locked: lalaReactionLocked || undefined,
+        lala_reaction_reject: lalaReactionReject || undefined,
       });
 
       // Auto background removal — runs async, updates the record when done
@@ -224,6 +282,43 @@ module.exports = {
               s3_url_processed: processedUrl,
             });
             console.log(`[Wardrobe] Background removed: ${wardrobeItem.id}`);
+
+            // Chain the colored-backdrop variants off the transparent cutout
+            // we just produced. Runs inline (user is still waiting on the
+            // async IIFE anyway, and Sharp is fast — each variant is ~100-200ms
+            // of CPU — so no need for a separate worker). Partial success is
+            // fine: we write whichever of pink/blue/teal produced a buffer.
+            try {
+              console.log(`[Wardrobe] Generating backdrop variants for ${wardrobeItem.id}...`);
+              const processedBuffer = Buffer.from(bgRes.data);
+              const { generateBackdropVariants } = wardrobeImageService;
+              const backdrops = await generateBackdropVariants(processedBuffer, character || 'uncategorized');
+
+              const updates = {};
+              if (backdrops.pink) {
+                updates.s3_key_bg_pink = backdrops.pink.s3Key;
+                updates.s3_url_bg_pink = backdrops.pink.s3Url;
+              }
+              if (backdrops.blue) {
+                updates.s3_key_bg_blue = backdrops.blue.s3Key;
+                updates.s3_url_bg_blue = backdrops.blue.s3Url;
+              }
+              if (backdrops.teal) {
+                updates.s3_key_bg_teal = backdrops.teal.s3Key;
+                updates.s3_url_bg_teal = backdrops.teal.s3Url;
+              }
+              if (Object.keys(updates).length > 0) {
+                await wardrobeItem.update(updates);
+              }
+              const ok = ['pink', 'blue', 'teal'].filter(k => backdrops[k]).join(',');
+              const failed = backdrops.errors ? ` (failed: ${Object.keys(backdrops.errors).join(',')})` : '';
+              console.log(`[Wardrobe] Backdrops generated for ${wardrobeItem.id}: ${ok || '(none)'}${failed}`);
+            } catch (bdErr) {
+              // Backdrop generation is a nice-to-have — never block the item
+              // from being usable. Log and move on; the user can regenerate
+              // later via an explicit endpoint.
+              console.warn(`[Wardrobe] Backdrop generation failed (non-blocking) for ${wardrobeItem.id}: ${bdErr.message}`);
+            }
           } catch (bgErr) {
             // Surface HTTP status + response body when the error came from
             // remove.bg, so pm2 logs tell us exactly why (credits, bad key,
@@ -417,6 +512,21 @@ module.exports = {
    * PUT /api/v1/wardrobe/:id - Update wardrobe item
    */
   async updateWardrobeItem(req, res) {
+    // Guards for numeric columns. parseInt("") returns NaN, which sequelize
+    // rejects on INTEGER / DECIMAL columns — we'd 500 on any save where the
+    // form posts a blank numeric field. Return undefined for null / blank /
+    // NaN inputs so the field gets stripped from the update payload by the
+    // "remove undefined values" loop below.
+    const intOrUndef = (v) => {
+      if (v === null || v === undefined || v === '') return undefined;
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const floatOrUndef = (v) => {
+      if (v === null || v === undefined || v === '') return undefined;
+      const n = parseFloat(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -466,16 +576,16 @@ module.exports = {
       // Map camelCase to snake_case (original fields)
       const updateData = {
         name: updates.name,
-        character: updates.character,
-        clothing_category: updates.clothing_category ?? updates.clothingCategory,
-        brand: updates.brand,
-        price: updates.price != null ? parseFloat(updates.price) : undefined,
+        character: updates.character ?? updates.defaultCharacter,
+        clothing_category: updates.clothing_category ?? updates.clothingCategory ?? updates.itemType,
+        brand: updates.brand ?? updates.vendor,
+        price: floatOrUndef(updates.price),
         purchase_link: updates.purchase_link ?? updates.purchaseLink,
         website: updates.website,
         color: updates.color,
         size: updates.size,
-        season: updates.season,
-        occasion: updates.occasion,
+        season: updates.season ?? updates.defaultSeason,
+        occasion: updates.occasion ?? updates.defaultOccasion,
         outfit_set_id: updates.outfit_set_id ?? updates.outfitSetId,
         outfit_set_name: updates.outfit_set_name ?? updates.outfitSetName,
         scene_description: updates.scene_description ?? updates.sceneDescription,
@@ -509,14 +619,30 @@ module.exports = {
             ? JSON.parse(updates.event_types)
             : updates.event_types
           : undefined,
-        outfit_match_weight: updates.outfit_match_weight != null ? parseInt(updates.outfit_match_weight) : undefined,
-        coin_cost: updates.coin_cost != null ? parseInt(updates.coin_cost) : undefined,
-        reputation_required: updates.reputation_required != null ? parseInt(updates.reputation_required) : undefined,
-        influence_required: updates.influence_required != null ? parseInt(updates.influence_required) : undefined,
-        season_unlock_episode: updates.season_unlock_episode != null ? parseInt(updates.season_unlock_episode) : undefined,
+        outfit_match_weight: intOrUndef(updates.outfit_match_weight),
+        // Same coin_cost ↔ price auto-sync as POST. If the edit doesn't touch
+        // coin_cost but DOES change price, recompute coin_cost so the two
+        // fields don't silently drift. When coin_cost is explicitly set, it
+        // wins (lets creators decouple story price from real-world price).
+        coin_cost: (() => {
+          const explicit = intOrUndef(updates.coin_cost);
+          if (explicit !== undefined) return explicit;
+          const p = floatOrUndef(updates.price);
+          if (p !== undefined && p > 0) {
+            const { USD_TO_COINS } = require('../utils/financialRates');
+            return Math.round(p * USD_TO_COINS);
+          }
+          return undefined;
+        })(),
+        reputation_required: intOrUndef(updates.reputation_required),
+        influence_required: intOrUndef(updates.influence_required),
+        season_unlock_episode: intOrUndef(updates.season_unlock_episode),
         lala_reaction_own: updates.lala_reaction_own,
         lala_reaction_locked: updates.lala_reaction_locked,
         lala_reaction_reject: updates.lala_reaction_reject,
+        // acquisition_type was missing from the PUT handler — added so the
+        // edit panel's "How Lala Got It" dropdown actually persists.
+        acquisition_type: updates.acquisition_type,
         updated_at: new Date(),
       };
 
@@ -934,14 +1060,68 @@ module.exports = {
       const mime = isPng ? 'image/png' : 'image/jpeg';
       const dataUri = `data:${mime};base64,${imageBuffer.toString('base64')}`;
 
-      // Default studio prompt — Kontext will use the reference image for
-      // identity (silhouette, color, pattern) and this prompt for the vibe.
-      const prompt = req.body?.prompt ||
-        'Professional studio product photograph of this clothing item. ' +
-        'Clean neutral off-white backdrop, soft even studio lighting, ' +
-        'invisible-mannequin pose showing the garment shape, no hanger, ' +
-        'no wrinkles, fashion e-commerce style, centered composition, ' +
-        'sharp focus on fabric details and trim.';
+      // Category-aware prompt. The previous one-size-fits-all prompt used
+      // "clothing item … invisible-mannequin pose showing the garment shape"
+      // which biased Kontext to produce clothing shapes even when the
+      // reference was a purse, jewelry, or perfume — turning a handbag into
+      // a sweater in at least one reported case. Each category now gets a
+      // prompt tuned to its own product-photography conventions.
+      const category = String(wardrobeItem.clothing_category || '').toLowerCase();
+      const isClothing = ['dress','top','bottom','outerwear','shoes','skirt','pants','jacket','coat','shirt','blouse','dresses','tops','bottoms'].includes(category);
+      const isBag = ['bag','purse','handbag','clutch','tote','backpack'].includes(category);
+      const isJewelry = ['jewelry','earring','earrings','necklace','bracelet','ring','brooch','pin'].includes(category);
+      const isPerfume = ['perfume','fragrance','cologne'].includes(category);
+      const isShoes = ['shoes','heels','boots','sneakers','sandals'].includes(category);
+
+      let defaultPrompt;
+      if (isBag) {
+        defaultPrompt =
+          'Professional studio product photograph of this handbag. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'bag standing upright or positioned naturally on a flat surface, ' +
+          'no model, no hands, no mannequin, no hanger, fashion e-commerce style, ' +
+          'centered composition, sharp focus on leather texture, hardware, and stitching details.';
+      } else if (isJewelry) {
+        defaultPrompt =
+          'Professional studio product photograph of this jewelry piece. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'jewelry laid flat or arranged to show its shape, no model, no hands, ' +
+          'no mannequin, luxury jewelry e-commerce style, centered composition, ' +
+          'sharp focus on metal finish, stones, and chain detail.';
+      } else if (isPerfume) {
+        defaultPrompt =
+          'Professional studio product photograph of this perfume bottle. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'bottle standing upright centered, no hands, no model, ' +
+          'luxury fragrance e-commerce style, centered composition, ' +
+          'sharp focus on bottle glass, cap, and label.';
+      } else if (isShoes) {
+        defaultPrompt =
+          'Professional studio product photograph of this pair of shoes. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'shoes positioned at a slight three-quarter angle, no model, no feet, ' +
+          'no mannequin, fashion e-commerce style, centered composition, ' +
+          'sharp focus on material, sole, and construction details.';
+      } else if (isClothing) {
+        defaultPrompt =
+          'Professional studio product photograph of this clothing item. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'invisible-mannequin pose showing the garment shape, no hanger, ' +
+          'no wrinkles, fashion e-commerce style, centered composition, ' +
+          'sharp focus on fabric details and trim.';
+      } else {
+        // Unknown / accessory: keep it generic — don't assume it's clothing.
+        defaultPrompt =
+          'Professional studio product photograph of this item. ' +
+          'Clean neutral off-white backdrop, soft even studio lighting, ' +
+          'item arranged naturally, no model, no hands, no mannequin, ' +
+          'e-commerce product photography style, centered composition, ' +
+          'sharp focus on material and texture details.';
+      }
+
+      // Explicit prompt in the request body always wins, so the frontend (or
+      // a power user) can override per-call if needed.
+      const prompt = req.body?.prompt || defaultPrompt;
 
       const { generateImageFromImage } = require('../services/imageGenerationService');
       const result = await generateImageFromImage(dataUri, prompt, {
@@ -1018,6 +1198,211 @@ module.exports = {
         error: 'Failed to regenerate product shot',
         message: error.message,
         detail: status ? { status, body } : undefined,
+      });
+    }
+  },
+
+  /**
+   * PATCH /api/v1/wardrobe/:id/primary-variant
+   *
+   * Persist the user's preference for which image variant the grid card
+   * should show (original | processed | regenerated | null=auto). The
+   * lightbox can preview any variant locally without hitting this, but
+   * writing changes which one non-hovering viewers see in the grid.
+   */
+  async setPrimaryImageVariant(req, res) {
+    try {
+      const { id } = req.params;
+      const { variant } = req.body || {};
+
+      const ALLOWED = new Set(['original', 'processed', 'regenerated', null]);
+      if (!ALLOWED.has(variant) && variant !== undefined) {
+        return res.status(400).json({
+          error: 'Invalid variant',
+          message: `variant must be one of: original, processed, regenerated, or null. Got: ${JSON.stringify(variant)}`,
+        });
+      }
+
+      const item = await Wardrobe.findOne({ where: { id, deleted_at: null } });
+      if (!item) return res.status(404).json({ error: 'Wardrobe item not found' });
+
+      // Refuse to set a variant the row doesn't actually have — otherwise
+      // the grid card would fall back to the default chain silently and the
+      // user would wonder why their click did nothing.
+      if (variant === 'regenerated' && !item.s3_url_regenerated) {
+        return res.status(400).json({ error: 'No regenerated image exists for this item yet' });
+      }
+      if (variant === 'processed' && !item.s3_url_processed) {
+        return res.status(400).json({ error: 'No background-removed image exists for this item yet' });
+      }
+      if (variant === 'original' && !item.s3_url) {
+        return res.status(400).json({ error: 'No original image exists for this item' });
+      }
+
+      await item.update({ primary_image_variant: variant === undefined ? null : variant });
+
+      return res.json({
+        success: true,
+        data: {
+          id: item.id,
+          primary_image_variant: item.primary_image_variant,
+        },
+      });
+    } catch (err) {
+      console.error('[Wardrobe] setPrimaryImageVariant failed:', err.message);
+      return res.status(500).json({
+        error: 'Failed to set primary image variant',
+        message: err.message,
+      });
+    }
+  },
+
+  /**
+   * POST /api/v1/wardrobe/:id/send-to-phone
+   *
+   * Promote a wardrobe item's colored backdrop variant into a phone screen
+   * (an Asset row with overlay_type='wardrobe_detail'). The user then drops
+   * into the existing UIOverlaysTab authoring UI to draw tap zones, set
+   * content zones, and configure price display on the phone — we don't
+   * duplicate any of that wardrobe-side.
+   *
+   * Body: { variant: 'pink'|'blue'|'teal', episodeId?: uuid, showId?: uuid }
+   * Variant picks which backdrop color gets used as the screen background.
+   * episodeId is optional — when provided the Asset is episode-scoped so
+   * different episodes can have different tap behavior on the same item.
+   */
+  async sendToPhone(req, res) {
+    try {
+      const { id } = req.params;
+      const { variant, episodeId, showId: bodyShowId } = req.body || {};
+
+      const VARIANT_TO_URL = {
+        pink: { key: 's3_key_bg_pink', url: 's3_url_bg_pink' },
+        blue: { key: 's3_key_bg_blue', url: 's3_url_bg_blue' },
+        teal: { key: 's3_key_bg_teal', url: 's3_url_bg_teal' },
+      };
+      if (!VARIANT_TO_URL[variant]) {
+        return res.status(400).json({
+          error: 'Invalid variant',
+          message: `variant must be one of: ${Object.keys(VARIANT_TO_URL).join(', ')}. Got: ${JSON.stringify(variant)}`,
+        });
+      }
+
+      const item = await Wardrobe.findOne({ where: { id, deleted_at: null } });
+      if (!item) return res.status(404).json({ error: 'Wardrobe item not found' });
+
+      const backdropKey = item[VARIANT_TO_URL[variant].key];
+      const backdropUrl = item[VARIANT_TO_URL[variant].url];
+      if (!backdropUrl) {
+        return res.status(400).json({
+          error: `No ${variant} backdrop exists for this item yet`,
+          message: 'Upload triggers backdrop generation; wait a few seconds after upload and try again. Existing pre-backdrop items can be reprocessed via the backfill script.',
+        });
+      }
+
+      // Resolve showId: explicit in body wins, else fall back to the wardrobe
+      // row's own show_id, else null (global scope).
+      const showId = bodyShowId || item.show_id || null;
+
+      const { Asset } = models;
+      if (!Asset) {
+        return res.status(500).json({ error: 'Asset model not available' });
+      }
+
+      // Pre-wire a default "Equip" tap zone that fills the outfit slot matching
+      // the item's clothing_category. The slot key convention (outfit_slot_<cat>)
+      // lets mission objectives watch for a specific equip via `state.outfit_slot_dress == <id>`.
+      // Unknown categories fall back to a generic wardrobe_equipped_id flag so the
+      // zone still does *something* useful and the user can refine later.
+      const CATEGORY_TO_SLOT = {
+        dress: 'outfit_slot_dress',
+        top: 'outfit_slot_top',
+        bottom: 'outfit_slot_bottom',
+        shoes: 'outfit_slot_shoes',
+        accessories: 'outfit_slot_accessory',
+        jewelry: 'outfit_slot_jewelry',
+        perfume: 'outfit_slot_perfume',
+      };
+      const slotKey = CATEGORY_TO_SLOT[(item.clothing_category || '').toLowerCase()] || 'wardrobe_equipped_id';
+      const defaultScreenLinks = [{
+        id: `zone-equip-${item.id}`,
+        x: 10, y: 65, w: 80, h: 25,
+        label: 'Equip',
+        actions: [
+          { type: 'set_state', key: slotKey, value: item.id },
+          { type: 'show_toast', text: `Equipped ${item.name || 'item'}`, tone: 'success' },
+        ],
+      }];
+
+      // Pre-seed content zones so the card already shows brand + price without
+      // the user having to wire it. Brand is placed above price; both read
+      // directly from this asset's metadata (wardrobe_brand / wardrobe_price).
+      const defaultContentZones = [];
+      if (item.brand) {
+        defaultContentZones.push({
+          id: `cz-brand-${item.id}`,
+          x: 8, y: 8, w: 84, h: 8,
+          content_type: 'wardrobe_brand',
+          content_config: { font_size: 11, color: '#ffffff', bg: 'rgba(0,0,0,0.35)' },
+        });
+      }
+      if (item.price) {
+        defaultContentZones.push({
+          id: `cz-price-${item.id}`,
+          x: 8, y: 18, w: 84, h: 10,
+          content_type: 'wardrobe_price',
+          content_config: { font_size: 14, color: '#ffffff', bg: 'rgba(0,0,0,0.45)' },
+        });
+      }
+
+      // Create the phone screen. UIOverlaysTab picks it up through the
+      // existing GET /api/v1/ui-overlays/:showId listing (filters by
+      // asset_type='UI_OVERLAY' + show_id + episode_id).
+      const assetName = `${item.name || 'Wardrobe Item'} — ${variant} detail`;
+      const asset = await Asset.create({
+        asset_type: 'UI_OVERLAY',
+        asset_group: 'WARDROBE',
+        asset_scope: episodeId ? 'EPISODE' : (showId ? 'SHOW' : 'GLOBAL'),
+        show_id: showId,
+        episode_id: episodeId || null,
+        name: assetName,
+        s3_url_processed: backdropUrl,
+        s3_key_raw: backdropKey,
+        content_type: 'image/jpeg',
+        metadata: {
+          overlay_type: 'wardrobe_detail',
+          wardrobe_id: item.id,
+          wardrobe_variant: variant,
+          // Pre-wired: the Equip zone fills the correct outfit slot on tap, and
+          // brand/price content zones are seeded from the item's own fields.
+          // The user can still draw more zones / tweak configs in UIOverlaysTab.
+          screen_links: defaultScreenLinks,
+          content_zones: defaultContentZones,
+          // Carry the price forward so the phone renderer can surface it
+          // when the screen's content_zones include a price zone.
+          wardrobe_price: item.price ? Number(item.price) : null,
+          wardrobe_brand: item.brand || null,
+        },
+      });
+
+      console.log(`[Wardrobe] Sent to phone — item=${id} variant=${variant} asset=${asset.id}`);
+
+      return res.json({
+        success: true,
+        data: {
+          asset_id: asset.id,
+          wardrobe_id: item.id,
+          variant,
+          show_id: showId,
+          episode_id: episodeId || null,
+          name: assetName,
+        },
+      });
+    } catch (err) {
+      console.error('[Wardrobe] sendToPhone failed:', err.message);
+      return res.status(500).json({
+        error: 'Failed to send wardrobe item to phone',
+        message: err.message,
       });
     }
   },

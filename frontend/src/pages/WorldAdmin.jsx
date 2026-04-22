@@ -19,6 +19,7 @@ import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
 import { InvitationButton, InvitationStyleFields } from '../components/InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
@@ -37,6 +38,9 @@ const EVENT_TYPES = ['invite', 'upgrade', 'guest', 'fail_test', 'deliverable', '
 const BIAS_OPTIONS = ['balanced', 'glam', 'cozy', 'couture', 'trendy', 'romantic'];
 const WARDROBE_TIER_COLORS = { basic: '#94a3b8', mid: '#6366f1', luxury: '#eab308', elite: '#ec4899' };
 const WARDROBE_TIER_ICONS = { basic: '👟', mid: '👠', luxury: '💎', elite: '👑' };
+// Legacy atomic list — kept only for any pre-existing lookup that still expects
+// the old 9-category shape. New UIs should import SLOT_KEYS / SLOT_DEFS from
+// lib/wardrobeSlots and group by slot.
 const WARDROBE_CATEGORIES = ['all', 'dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'];
 
 // Color name to hex mapping for swatches
@@ -139,6 +143,10 @@ function WorldAdmin() {
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
   const [lightboxItem, setLightboxItem] = useState(null);  // For fullscreen image view
+  const [regeneratingItemId, setRegeneratingItemId] = useState(null);  // AI product-shot regeneration in flight
+  const [lightboxVariant, setLightboxVariant] = useState(null);  // 'original' | 'processed' | 'regenerated' (overrides resolver in lightbox only)
+  const [promotingVariant, setPromotingVariant] = useState(false);  // PATCH in flight
+  const [sendingToPhone, setSendingToPhone] = useState(false);  // Send-to-phone POST in flight
   const [selectedWardrobeIds, setSelectedWardrobeIds] = useState(new Set());  // For bulk selection
   const [overlayData, setOverlayData] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
@@ -159,9 +167,51 @@ function WorldAdmin() {
   const [outfitScore, setOutfitScore] = useState(null);
   const [wardrobeUploading, setWardrobeUploading] = useState(false);
   const [wardrobeAnalyzing, setWardrobeAnalyzing] = useState(false);
+  // Inline error banner for the auto-fill button. Replaces the old alert()
+  // which users were dismissing without reading, making failures look silent.
+  const [wardrobeAutoFillError, setWardrobeAutoFillError] = useState(null);
   const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
   const [wardrobeUploadPreview, setWardrobeUploadPreview] = useState(null);
-  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' });
+  const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' });
+  // Reset the auto-fill error whenever the modal is closed or the file is
+  // swapped out — stale error text against a different image would be confusing.
+  useEffect(() => {
+    if (!showWardrobeUpload || !wardrobeUploadFile) setWardrobeAutoFillError(null);
+  }, [showWardrobeUpload, wardrobeUploadFile]);
+  // Sort order for the wardrobe grid. Mirrors the options previously in
+  // WardrobeBrowser so consolidating the upload path doesn't drop UX.
+  const [wardrobeSort, setWardrobeSort] = useState('recent'); // recent | name | price_asc | price_desc | most_used | last_used
+  // Secondary filters previously lived in WardrobeBrowser's sidebar. 'all' =
+  // unfiltered; season accepts spring|summer|fall|winter|all-season; occasion
+  // is a free-text substring match; color matches the lowercased name.
+  const [wardrobeSeasonFilter, setWardrobeSeasonFilter] = useState('all');
+  const [wardrobeOccasionFilter, setWardrobeOccasionFilter] = useState('all');
+  const [wardrobeColorFilter, setWardrobeColorFilter] = useState('all');
+  const [wardrobeStatusFilter, setWardrobeStatusFilter] = useState('all'); // all | used | unused | favorites
+  const [wardrobeFiltersOpen, setWardrobeFiltersOpen] = useState(false);
+  // Top-level view mode: 'all' is the full library, 'staging' shows only items
+  // never used in an episode (ported from WardrobeBrowser's two-tab split). It
+  // layers on top of the existing filters — a creator can still narrow staging
+  // by category, season, etc. Implementing client-side so we don't need to
+  // fetch from a second endpoint; the semantic matches usage_count === 0.
+  const [wardrobeTopTab, setWardrobeTopTab] = useState('all'); // all | staging
+  // Grid vs. list rendering. List view shows more metadata per row and is better
+  // for scanning long libraries; grid is the default thumbnail wall.
+  const [wardrobeViewMode, setWardrobeViewMode] = useState('grid'); // grid | list
+  // Pagination avoids rendering 500+ cards at once once creators start seeding
+  // real libraries. 48 per page lines up with the 4-wide grid.
+  const [wardrobePage, setWardrobePage] = useState(1);
+  const WARDROBE_PAGE_SIZE = 48;
+  // Per-item usage modal — lists the episodes that reference a wardrobe item.
+  // Populated on demand via GET /api/v1/wardrobe/:id/usage; also auto-opened
+  // when a delete is blocked because the item is still in use.
+  const [usageModalItem, setUsageModalItem] = useState(null);
+  const [itemUsage, setItemUsage] = useState(null);
+  // Outfit-set creation from the current bulk selection. `setName` lives here
+  // instead of inside the modal so it survives re-renders while the user types.
+  const [showCreateOutfitSet, setShowCreateOutfitSet] = useState(false);
+  const [outfitSetName, setOutfitSetName] = useState('');
+  const [creatingOutfitSet, setCreatingOutfitSet] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [subTab, setSubTab] = useState(null);
@@ -236,6 +286,31 @@ function WorldAdmin() {
   const [eventSearch, setEventSearch] = useState('');
   const [eventStatusFilter, setEventStatusFilter] = useState('all');
   const [eventDetailModal, setEventDetailModal] = useState(null);
+  // Live financial forecast for the open event + the show-level finance
+  // config (balance, goals, next goal, progress). The forecast fetches
+  // whenever the modal's event changes so a newly-picked outfit shows
+  // updated numbers; finance config fetches once per show open.
+  const [eventFinancials, setEventFinancials] = useState(null);
+  const [eventFinancialsLoading, setEventFinancialsLoading] = useState(false);
+  const [financeConfig, setFinanceConfig] = useState(null);
+  // Modal state for the finance editor (starting balance + goals ladder).
+  // Kept separate from financeConfig so unsaved edits don't clobber the
+  // fetched state until the user clicks Save.
+  const [financeEditorOpen, setFinanceEditorOpen] = useState(false);
+  const [financeEditorDraft, setFinanceEditorDraft] = useState(null);
+  const [financeEditorSaving, setFinanceEditorSaving] = useState(false);
+  // Finance page tabs — Overview, Per-Episode, Goals (later: Breakdowns).
+  const [financeTab, setFinanceTab] = useState('overview');
+  // Aggregated dashboard data (totals, by_episode, trend, burn_rate, runway).
+  // Fetched when the editor opens so the tabs render real numbers instead of
+  // refetching on every click.
+  const [financeSummary, setFinanceSummary] = useState(null);
+  const [financeSummaryLoading, setFinanceSummaryLoading] = useState(false);
+  // Auto-generated goal suggestions for the Goals tab. One fetch per modal
+  // open — the algorithm is deterministic so refetching is wasteful.
+  const [financeSuggestions, setFinanceSuggestions] = useState(null);
+  // Breakdowns tab data — income/expense rollups by category + closet value.
+  const [financeBreakdowns, setFinanceBreakdowns] = useState(null);
   const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
   const [selectedEvents, setSelectedEvents] = useState(new Set());
@@ -264,6 +339,39 @@ function WorldAdmin() {
   const [successMsg, setSuccessMsg] = useState(null);
 
   useEffect(() => { loadData(); }, [showId]);
+
+  // Load the show's finance config (balance + goal ladder) whenever the show
+  // changes. Kick off a seed-balance POST first — it's idempotent, so if the
+  // ledger already has a seed row it returns the existing one. This ensures
+  // the finance widget never shows 0 coins for a brand-new show.
+  useEffect(() => {
+    if (!showId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await api.post(`/api/v1/shows/${showId}/seed-balance`);
+        const res = await api.get(`/api/v1/shows/${showId}/financial-config`);
+        if (!cancelled) setFinanceConfig(res.data);
+      } catch { /* non-blocking */ }
+    })();
+    return () => { cancelled = true; };
+  }, [showId]);
+
+  // Forecast fetch — refire whenever the open event changes OR its
+  // outfit_pieces change (user saved a new outfit in the picker).
+  useEffect(() => {
+    if (!eventDetailModal?.id || !showId) { setEventFinancials(null); return; }
+    let cancelled = false;
+    setEventFinancialsLoading(true);
+    (async () => {
+      try {
+        const res = await api.get(`/api/v1/world/${showId}/events/${eventDetailModal.id}/financial-forecast`);
+        if (!cancelled) setEventFinancials(res.data);
+      } catch { if (!cancelled) setEventFinancials(null); }
+      if (!cancelled) setEventFinancialsLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [eventDetailModal?.id, eventDetailModal?.outfit_pieces, showId]);
 
   // Escape key closes modals
   useEffect(() => {
@@ -3016,41 +3124,95 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <div><label style={S.fLabel}>Success Unlock</label><input value={md.success_unlock || ''} onChange={e => setEventDetailModal({ ...md, success_unlock: e.target.value })} onBlur={e => updateField('success_unlock', e.target.value)} placeholder="Unlocks VIP access..." style={S.sel} /></div>
                   </div>
 
-                  {/* Financial Preview */}
+                  {/* Financial Preview — fetched from /financial-forecast.
+                      Shows real outfit cost from the picked pieces, event
+                      extras (drinks/valet/photo booth) scaled by prestige,
+                      social-task rewards, and a "next goal" progress bar.
+                      Falls back to a loading row while the fetch is in
+                      flight, and a graceful "—" when the endpoint errored
+                      (older env, missing columns). */}
                   {(() => {
-                    const p = md.prestige || 5;
-                    const eventIncome = md.is_paid ? (parseFloat(md.payment_amount) || 0) : 0;
-                    const eventExpense = parseFloat(md.cost_coins) || 0;
-                    // Estimate content revenue from social tasks
-                    const contentRevenue = md.event_type === 'brand_deal' ? eventIncome * 0.1 : 0;
-                    // Estimate outfit cost from prestige tier
-                    const estOutfitCost = p >= 8 ? 400 : p >= 6 ? 250 : p >= 4 ? 120 : 50;
-                    const totalIn = eventIncome + contentRevenue;
-                    const totalOut = eventExpense + estOutfitCost;
-                    const net = totalIn - totalOut;
+                    const fc = eventFinancials;
+                    const loading = eventFinancialsLoading && !fc;
+                    const income = fc?.income?.total ?? 0;
+                    const expenses = fc?.expenses?.total ?? 0;
+                    const net = fc?.net ?? 0;
+                    const aff = fc?.affordability || {};
+                    const nextGoal = fc?.next_goal || financeConfig?.next_goal;
+                    const currentBalance = financeConfig?.current_balance ?? 0;
+                    const balanceAfter = aff.balance_after ?? currentBalance;
                     return (
                       <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14, marginTop: 8, marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>Financial Preview</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>Financial Preview</div>
+                          {loading && <div style={{ fontSize: 10, color: '#94a3b8' }}>calculating…</div>}
+                        </div>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
-                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#16a34a' }}>Income</div>
-                            <div style={{ fontSize: 15, fontWeight: 800, color: '#16a34a' }}>{totalIn.toLocaleString()}</div>
-                            {eventIncome > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Payment: {eventIncome}</div>}
-                            {contentRevenue > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Content: +{contentRevenue}</div>}
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#16a34a' }}>Income (coins)</div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: '#16a34a' }}>{income.toLocaleString()}</div>
+                            {fc?.income?.event_payment > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Payment: {fc.income.event_payment}</div>}
+                            {fc?.income?.social_task_rewards > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Tasks: +{fc.income.social_task_rewards}</div>}
+                            {fc?.income?.content_revenue_est > 0 && <div style={{ fontSize: 9, color: '#16a34a80' }}>Content est: +{fc.income.content_revenue_est}</div>}
                           </div>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca' }}>
-                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#dc2626' }}>Expenses</div>
-                            <div style={{ fontSize: 15, fontWeight: 800, color: '#dc2626' }}>{totalOut.toLocaleString()}</div>
-                            {eventExpense > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Event: {eventExpense}</div>}
-                            <div style={{ fontSize: 9, color: '#dc262680' }}>Outfit (est): ~{estOutfitCost}</div>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#dc2626' }}>Expenses (coins)</div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: '#dc2626' }}>{expenses.toLocaleString()}</div>
+                            {fc?.expenses?.event_cost > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Event: {fc.expenses.event_cost}</div>}
+                            {fc?.expenses?.outfit_retail > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Outfit ({fc.outfit_source === 'actual' ? `${fc.outfit_piece_count} pieces` : 'est'}): {fc.expenses.outfit_retail}</div>}
+                            {fc?.expenses?.outfit_rentals > 0 && <div style={{ fontSize: 9, color: '#dc262680' }}>Rentals: +{fc.expenses.outfit_rentals}</div>}
+                            {(fc?.expenses?.drinks_est || fc?.expenses?.valet_est || fc?.expenses?.photo_booth_est) ? (
+                              <div style={{ fontSize: 9, color: '#dc262680' }}>
+                                Extras: {[
+                                  fc.expenses.drinks_est && `drinks ${fc.expenses.drinks_est}`,
+                                  fc.expenses.valet_est && `valet ${fc.expenses.valet_est}`,
+                                  fc.expenses.photo_booth_est && `photo ${fc.expenses.photo_booth_est}`,
+                                ].filter(Boolean).join(', ')}
+                              </div>
+                            ) : null}
                           </div>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}` }}>
                             <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626' }}>Net P&L</div>
                             <div style={{ fontSize: 15, fontWeight: 800, color: net >= 0 ? '#16a34a' : '#dc2626' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
-                            <div style={{ fontSize: 9, color: '#94a3b8' }}>{net >= 0 ? 'Profitable' : 'Costs more than earns'}</div>
+                            <div style={{ fontSize: 9, color: '#94a3b8' }}>
+                              {aff.balance_before != null
+                                ? `${aff.balance_before.toLocaleString()} → ${balanceAfter.toLocaleString()}`
+                                : (net >= 0 ? 'Profitable' : 'Costs more than earns')}
+                            </div>
                           </div>
                         </div>
-                        <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 4 }}>Estimates based on prestige {p} tier. Actual costs depend on wardrobe selection.</div>
+                        {/* Milestones progress — "next goal" bar + reward preview. */}
+                        {nextGoal && (
+                          <div style={{ marginTop: 10, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#854d0e' }}>
+                                Next: {nextGoal.label}
+                                {nextGoal.episode_id && (
+                                  <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 500, color: '#a16207' }}>
+                                    · ep-scoped
+                                  </span>
+                                )}
+                              </span>
+                              <span style={{ fontSize: 10, color: '#854d0e', fontFamily: "'DM Mono', monospace" }}>
+                                {balanceAfter.toLocaleString()} / {Number(nextGoal.threshold).toLocaleString()} coins
+                              </span>
+                            </div>
+                            <div style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{
+                                width: `${Math.max(0, Math.min(100, (balanceAfter / Number(nextGoal.threshold)) * 100))}%`,
+                                height: '100%',
+                                background: balanceAfter >= Number(nextGoal.threshold) ? '#16a34a' : '#d4a017',
+                                transition: 'width 0.3s',
+                              }} />
+                            </div>
+                            {nextGoal.reward_coins > 0 && (
+                              <div style={{ fontSize: 10, color: '#854d0e', marginTop: 3 }}>🎁 Reward on reach: +{Number(nextGoal.reward_coins).toLocaleString()} coins — {nextGoal.description}</div>
+                            )}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 6 }}>
+                          {fc ? `From ${fc.outfit_source === 'actual' ? 'picked outfit' : 'prestige estimate'} + event extras. Refreshes when outfit changes.` : 'Loading forecast…'}
+                        </div>
                         {/* Finalize Financials button — executes real transactions */}
                         {md.used_in_episode_id && (
                           <button
@@ -3299,8 +3461,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         setToast(`Missing fields: ${missing.join(', ')}. Fill them or use AI Enhance first.`);
                         return;
                       }
-                      // Confirmation summary
-                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Save all fields\n• Generate social checklist\n• Generate venue images\n• Move to Events Library`;
+                      // Confirmation summary. The venue-image bullet is conditional:
+                      // if a scene set is already attached we'll skip regeneration
+                      // (the backend also guards this, but skipping the call
+                      // entirely saves a round-trip and makes the UX honest).
+                      const hasVenue = !!(md.scene_set_id || md.venue_location_id);
+                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Save all fields\n• Generate social checklist\n${hasVenue ? '• Keep the attached venue (no regeneration)' : '• Generate venue images'}\n• Move to Events Library`;
                       if (!window.confirm(summary)) return;
                       try {
                         // Save all hydrated fields + status in one PUT
@@ -3327,15 +3493,24 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               const withChecklist = { ...updated, canon_consequences: { ...updated.canon_consequences, automation: newAuto } };
                               setEventDetailModal(withChecklist);
                               setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: withChecklist.canon_consequences } : ev));
-                              setToast(`Ready! Checklist done. Generating venue images...`);
-                              // Auto-generate venue images
-                              try {
-                                const venueRes = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
-                                if (venueRes.data.success) {
-                                  setToast(`Venue images + scene set created!`);
-                                  loadData();
-                                }
-                              } catch { setToast('Ready! (venue generation skipped — no OPENAI_API_KEY or error)'); }
+                              // Only regenerate the venue if there isn't one
+                              // already on the event. Prevents Mark-Ready from
+                              // clobbering a scene set the creator deliberately
+                              // picked. The backend also guards this, but
+                              // skipping the call here is cheaper + cleaner.
+                              if (hasVenue) {
+                                setToast(`Ready! Checklist done. Kept attached venue.`);
+                                loadData();
+                              } else {
+                                setToast(`Ready! Checklist done. Generating venue images...`);
+                                try {
+                                  const venueRes = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-venue`);
+                                  if (venueRes.data.success) {
+                                    setToast(venueRes.data.skipped ? `Ready! Kept attached venue.` : `Venue images + scene set created!`);
+                                    loadData();
+                                  }
+                                } catch { setToast('Ready! (venue generation skipped — no OPENAI_API_KEY or error)'); }
+                              }
                             }
                           } catch { /* non-blocking — checklist can be generated later */ }
                         }
@@ -3644,6 +3819,62 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 {outfitScore.repeats?.length > 0 && outfitScore.repeats.map((r, i) => (
                   <div key={`r${i}`} style={{ fontSize: 11, color: '#8b5cf6', marginTop: 3 }}>{r.narrative?.text}</div>
                 ))}
+
+                {/* ── Per-slot breakdown ────────────────────────────────
+                    One row per UI slot (outfit/shoes/jewelry/accessories/
+                    fragrance). Each row shows a progress bar + reason so the
+                    player can see exactly which slot is hurting the overall
+                    score. Status color: empty=gray, low=red, ok=amber,
+                    good=green. Required slots with empty status get the red
+                    "missing" treatment. */}
+                {Array.isArray(outfitScore.slots) && outfitScore.slots.length > 0 && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {outfitScore.slots.map(slot => {
+                      const emptyRequired = slot.status === 'empty' && slot.required;
+                      const color = emptyRequired ? '#dc2626'
+                        : slot.status === 'good' ? '#16a34a'
+                        : slot.status === 'ok' ? '#B8962E'
+                        : slot.status === 'low' ? '#dc2626'
+                        : '#94a3b8';
+                      const barWidth = slot.status === 'empty' ? 0 : slot.match;
+                      return (
+                        <div key={slot.slot} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 110, display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#444', fontWeight: 600, flexShrink: 0 }}>
+                            <span>{slot.icon}</span>
+                            <span>{slot.label}</span>
+                          </div>
+                          <div style={{ flex: 1, height: 6, background: 'rgba(0,0,0,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ width: `${barWidth}%`, height: '100%', background: color, transition: 'width 0.25s' }} />
+                          </div>
+                          <div style={{ width: 36, fontSize: 11, fontWeight: 700, color, textAlign: 'right', flexShrink: 0, fontFamily: "'DM Mono', monospace" }}>
+                            {slot.status === 'empty' ? (slot.required ? '!' : '—') : slot.match}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {/* Reason line per-row would crowd the grid; show only
+                        the first non-empty reason whose slot is dragging the
+                        score so players get one concrete thing to fix. */}
+                    {(() => {
+                      const weakest = outfitScore.slots
+                        .filter(s => s.reason && (s.status === 'low' || (s.status === 'empty' && s.required)))
+                        .sort((a, b) => a.match - b.match)[0];
+                      if (!weakest) return null;
+                      return (
+                        <div style={{ fontSize: 11, color: '#8b5cf6', marginTop: 4, fontStyle: 'italic' }}>
+                          💡 {weakest.reason}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+                {/* Surface items whose category isn't one of the 5 slots so
+                    the author can fix the category on the row. */}
+                {Array.isArray(outfitScore.unassigned) && outfitScore.unassigned.length > 0 && (
+                  <div style={{ marginTop: 8, padding: '6px 8px', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 6, fontSize: 11, color: '#c2410c' }}>
+                    ⚠️ Couldn't slot {outfitScore.unassigned.length} piece{outfitScore.unassigned.length > 1 ? 's' : ''} — check {outfitScore.unassigned.map(u => u.name).slice(0, 3).join(', ')}{outfitScore.unassigned.length > 3 ? '…' : ''}
+                  </div>
+                )}
               </div>
             )}
 
@@ -3922,27 +4153,78 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
       {/* ════════════════════════ WARDROBE ════════════════════════ */}
       {activeTab === 'wardrobe' && subTab === 'wardrobe-items' && (() => {
-        // Group items by type for summary
-        const typeGroups = {};
-        wardrobeItems.forEach(item => {
-          const t = item.clothing_category || item.itemType || item.item_type || 'other';
-          if (!typeGroups[t]) typeGroups[t] = [];
-          typeGroups[t].push(item);
-        });
+        // Group items by SLOT for the summary cards. Uses the shared slot helper
+        // so dress/top/bottom/outerwear all roll up under "Outfit", bag+accessory
+        // under "Accessories", etc. Items with an unknown category land in
+        // __unassigned so we can surface them (rare — usually legacy data).
+        const typeGroups = groupItemsBySlot(wardrobeItems);
+
+        // Quick helper — kept outside the filter so both the tab-count badge
+        // and the per-item filter share the exact same definition of "used".
+        const isItemUsed = (item) => Number(item.times_worn || item.totalUsageCount || item.total_usage_count || 0) > 0;
+        const stagingCount = wardrobeItems.filter(i => !isItemUsed(i)).length;
 
         const filteredItems = wardrobeItems.filter(item => {
+          // Top-tab: staging means never used. Applied before everything else
+          // so the count in the tab matches what the grid shows.
+          if (wardrobeTopTab === 'staging' && isItemUsed(item)) return false;
           const itemType = item.clothing_category || item.itemType || item.item_type || 'other';
-          if (wardrobeCatFilter !== 'all' && itemType !== wardrobeCatFilter) return false;
+          // Category pill filters by SLOT now — e.g. clicking "Outfit" matches
+          // dress, top, bottom, outerwear. Falls back to raw category match if
+          // the filter value isn't a known slot key (for legacy call sites).
+          if (wardrobeCatFilter !== 'all') {
+            const itemSlot = getSlotForCategory(itemType);
+            const filterIsSlot = SLOT_KEYS.includes(wardrobeCatFilter);
+            if (filterIsSlot ? itemSlot !== wardrobeCatFilter : itemType !== wardrobeCatFilter) return false;
+          }
           if (wardrobeFilter !== 'all') {
             const searchTerm = wardrobeFilter.toLowerCase();
             const nameMatch = (item.name || '').toLowerCase().includes(searchTerm);
             const descMatch = (item.description || '').toLowerCase().includes(searchTerm);
             const colorMatch = (item.color || '').toLowerCase().includes(searchTerm);
             const vendorMatch = (item.vendor || '').toLowerCase().includes(searchTerm);
-            if (!nameMatch && !descMatch && !colorMatch && !vendorMatch) return false;
+            const brandMatch = (item.brand || '').toLowerCase().includes(searchTerm);
+            const tagMatch = Array.isArray(item.tags) && item.tags.some(t => (t || '').toLowerCase().includes(searchTerm));
+            if (!nameMatch && !descMatch && !colorMatch && !vendorMatch && !brandMatch && !tagMatch) return false;
+          }
+          // Secondary filter panel — ported from WardrobeBrowser's sidebar.
+          if (wardrobeSeasonFilter !== 'all' && (item.season || '').toLowerCase() !== wardrobeSeasonFilter) return false;
+          if (wardrobeOccasionFilter !== 'all' && !(item.occasion || '').toLowerCase().includes(wardrobeOccasionFilter)) return false;
+          if (wardrobeColorFilter !== 'all' && (item.color || '').toLowerCase() !== wardrobeColorFilter) return false;
+          if (wardrobeStatusFilter !== 'all') {
+            const used = Number(item.times_worn || item.totalUsageCount || item.total_usage_count || 0) > 0;
+            if (wardrobeStatusFilter === 'used' && !used) return false;
+            if (wardrobeStatusFilter === 'unused' && used) return false;
+            if (wardrobeStatusFilter === 'favorites' && !item.is_favorite) return false;
           }
           return true;
         });
+
+        // Sort — matches the options WardrobeBrowser exposed. Comparator pulled
+        // inline to keep all the wardrobe-tab logic co-located inside this IIFE.
+        const usageCount = (i) => Number(i.times_worn || i.totalUsageCount || i.total_usage_count || 0);
+        const priceOf = (i) => Number(i.price || 0);
+        const timeOf = (i, key) => (i[key] ? new Date(i[key]).getTime() : 0);
+        filteredItems.sort((a, b) => {
+          switch (wardrobeSort) {
+            case 'name':       return (a.name || '').localeCompare(b.name || '');
+            case 'price_asc':  return priceOf(a) - priceOf(b);
+            case 'price_desc': return priceOf(b) - priceOf(a);
+            case 'most_used':  return usageCount(b) - usageCount(a);
+            case 'last_used':  return timeOf(b, 'last_worn_date') - timeOf(a, 'last_worn_date');
+            case 'favorites':  return (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0);
+            case 'recent':
+            default:           return timeOf(b, 'created_at') - timeOf(a, 'created_at');
+          }
+        });
+
+        // Pagination — slice after sort. `visibleItems` is what the grid
+        // renders; bulk ops still operate on all `filteredItems` so a selection
+        // across pages survives navigation.
+        const totalPages = Math.max(1, Math.ceil(filteredItems.length / WARDROBE_PAGE_SIZE));
+        const currentPage = Math.min(wardrobePage, totalPages);
+        const pageStart = (currentPage - 1) * WARDROBE_PAGE_SIZE;
+        const visibleItems = filteredItems.slice(pageStart, pageStart + WARDROBE_PAGE_SIZE);
 
         const openEditItem = (item) => {
           setEditingWardrobeItem(item);
@@ -3958,16 +4240,181 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             price: item.price || '',
             website: item.website || item.purchase_link || '',
             tags: Array.isArray(item.tags) ? item.tags.join(', ') : (typeof item.tags === 'string' ? item.tags : ''),
+            // Game-layer fields — hydrate from the row so the edit form shows what
+            // the backend has today. Empty string (not null) so controlled inputs
+            // stay controlled.
+            tier: item.tier || '',
+            coin_cost: item.coin_cost ?? '',
+            acquisition_type: item.acquisition_type || 'purchased',
+            lock_type: item.lock_type || 'none',
+            era_alignment: item.era_alignment || '',
+            reputation_required: item.reputation_required ?? '',
+            // Advanced gameplay — JSONB arrays show as CSV in the UI; numbers
+            // and booleans hydrate from the row. is_visible defaults true so
+            // items predating the flag still render as visible.
+            aesthetic_tags: Array.isArray(item.aesthetic_tags) ? item.aesthetic_tags.join(', ') : (item.aesthetic_tags || ''),
+            event_types: Array.isArray(item.event_types) ? item.event_types.join(', ') : (item.event_types || ''),
+            outfit_match_weight: item.outfit_match_weight ?? '',
+            influence_required: item.influence_required ?? '',
+            season_unlock_episode: item.season_unlock_episode ?? '',
+            is_owned: !!item.is_owned,
+            is_visible: item.is_visible !== false,
+            lala_reaction_own: item.lala_reaction_own || '',
+            lala_reaction_locked: item.lala_reaction_locked || '',
+            lala_reaction_reject: item.lala_reaction_reject || '',
           });
+        };
+
+        // Return { variant, url } picking the right S3 variant for grid/card
+        // display. Honors user's primary_image_variant choice first; otherwise
+        // falls back to the default preference chain (regenerated wins).
+        const resolveItemImageUrl = (item) => {
+          if (!item) return { variant: null, url: null };
+          const byVariant = {
+            regenerated: item.s3_url_regenerated,
+            processed: item.s3_url_processed,
+            original: item.s3_url || item.image_url,
+          };
+          const pick = item.primary_image_variant;
+          if (pick && byVariant[pick]) return { variant: pick, url: byVariant[pick] };
+          if (byVariant.regenerated) return { variant: 'regenerated', url: byVariant.regenerated };
+          if (byVariant.processed) return { variant: 'processed', url: byVariant.processed };
+          if (byVariant.original) return { variant: 'original', url: byVariant.original };
+          return { variant: null, url: null };
+        };
+
+        // PATCH primary_image_variant — the value shown in the grid card.
+        // null = "auto", same as no preference.
+        const promoteToPrimary = async (item, variant) => {
+          if (promotingVariant) return;
+          setPromotingVariant(true);
+          try {
+            const res = await fetch(`/api/v1/wardrobe/${item.id}/primary-variant`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ variant }),
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.error || err.message || `HTTP ${res.status}`);
+            }
+            setWardrobeItems(prev => prev.map(i =>
+              i.id === item.id ? { ...i, primary_image_variant: variant } : i
+            ));
+            setLightboxItem(prev => (prev && prev.id === item.id)
+              ? { ...prev, primary_image_variant: variant } : prev);
+          } catch (err) {
+            alert(`Couldn't set default: ${err.message}`);
+          } finally {
+            setPromotingVariant(false);
+          }
+        };
+
+        // Promote a colored-backdrop variant to a phone screen (Asset with
+        // overlay_type='wardrobe_detail'). After creation, switch the user
+        // into the UI Overlays tab so they can draw tap zones and content
+        // zones on the freshly-created screen — we delegate that authoring
+        // entirely to the existing overlay editor rather than reinvent it
+        // on the wardrobe side.
+        const handleSendToPhone = async (item, variant) => {
+          if (sendingToPhone) return;
+          if (!['pink', 'blue', 'teal'].includes(variant)) {
+            alert('Pick one of the colored backdrop variants (pink, blue, or teal) before sending to phone.');
+            return;
+          }
+          if (!confirm(
+            `Send "${item.name}" (${variant} backdrop) to Lala's phone?\n\n` +
+            `Creates a new phone screen using this variant. You'll be taken to the overlay editor to draw tap zones and content areas on it.`
+          )) return;
+
+          setSendingToPhone(true);
+          try {
+            const res = await fetch(`/api/v1/wardrobe/${item.id}/send-to-phone`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ variant, showId }),
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.message || err.error || `HTTP ${res.status}`);
+            }
+            const result = await res.json();
+            // Close lightbox + navigate to the overlay editor tab. The new
+            // Asset will appear in UIOverlaysTab's list automatically via
+            // its existing GET /api/v1/ui-overlays/:showId fetch.
+            setLightboxVariant(null);
+            setLightboxItem(null);
+            setSubTab('overlays-tab');
+            setSearchParams({ tab: 'overlays-tab' });
+            alert(`Sent to phone as "${result.data.name}". Opening overlay editor…`);
+          } catch (err) {
+            alert(`Send to phone failed: ${err.message}`);
+          } finally {
+            setSendingToPhone(false);
+          }
+        };
+
+        // Kick off an AI regeneration of the item as a clean studio product
+        // shot (Flux Kontext img2img). Preserves the original image; the
+        // regenerated variant lands on s3_url_regenerated and the grid/
+        // lightbox prefer it automatically once present.
+        const handleRegenerateProductShot = async (item, e) => {
+          if (e) e.stopPropagation();
+          if (regeneratingItemId) return;
+          if (!confirm(
+            `Regenerate "${item.name}" as a studio product shot?\n\n` +
+            `Uses AI image-to-image (~$0.04). The original photo is preserved; ` +
+            `the polished version replaces the visible card image when ready.`
+          )) return;
+
+          setRegeneratingItemId(item.id);
+          try {
+            const res = await fetch(`/api/v1/wardrobe/${item.id}/regenerate-product-shot`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.error || err.message || `HTTP ${res.status}`);
+            }
+            const result = await res.json();
+            const newUrl = result.data?.s3_url_regenerated;
+            if (!newUrl) throw new Error('No regenerated URL returned');
+
+            // Reflect in the grid immediately.
+            setWardrobeItems(prev => prev.map(i =>
+              i.id === item.id
+                ? { ...i, s3_url_regenerated: newUrl, regeneration_status: 'success' }
+                : i
+            ));
+            // And in the open lightbox if it's still this item.
+            setLightboxItem(prev => (prev && prev.id === item.id)
+              ? { ...prev, s3_url_regenerated: newUrl, regeneration_status: 'success' }
+              : prev);
+
+            alert('Product shot regenerated!');
+          } catch (err) {
+            alert(`Regeneration failed: ${err.message}`);
+          } finally {
+            setRegeneratingItemId(null);
+          }
         };
 
         const saveWardrobeItem = async () => {
           if (!editingWardrobeItem) return;
           setSavingWardrobe(true); setError(null);
           try {
+            // CSV → array for tag buckets. The PUT handler JSON.parses these,
+            // so we send actual arrays instead of CSV strings. Empty string
+            // becomes undefined so we don't wipe existing values on save.
+            const csvToArray = (v) => typeof v === 'string' && v.trim()
+              ? v.split(',').map(s => s.trim()).filter(Boolean)
+              : undefined;
             const payload = {
               ...wardrobeForm,
               tags: wardrobeForm.tags ? wardrobeForm.tags.split(',').map(s => s.trim()).filter(Boolean) : [],
+              aesthetic_tags: csvToArray(wardrobeForm.aesthetic_tags),
+              event_types: csvToArray(wardrobeForm.event_types),
               price: wardrobeForm.price ? parseFloat(wardrobeForm.price) : null,
             };
             const res = await api.put(`/api/v1/wardrobe/${editingWardrobeItem.id}`, payload);
@@ -4042,59 +4489,308 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: '#fef3c7', borderRadius: 6, border: '1px solid #fcd34d' }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e' }}>{selectedWardrobeIds.size} selected</span>
                     <button onClick={() => setSelectedWardrobeIds(new Set())} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, color: '#92400e' }}>✕</button>
+                    <button onClick={() => { setOutfitSetName(''); setShowCreateOutfitSet(true); }} style={{ padding: '2px 8px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>👗 Create set</button>
                     <button onClick={bulkDeleteSelected} style={{ padding: '2px 8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>🗑️ Delete</button>
                   </div>
                 )}
                 <span style={{ fontSize: 12, color: '#94a3b8' }}>{wardrobeItems.length} items</span>
+                {/* Grid / list toggle — list mode trades thumbnail size for more
+                    metadata per row, which is useful once libraries get large. */}
+                <div style={{ display: 'inline-flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+                  {['grid', 'list'].map(mode => (
+                    <button key={mode} onClick={() => setWardrobeViewMode(mode)} title={`${mode} view`}
+                      style={{
+                        padding: '4px 10px', fontSize: 12, cursor: 'pointer', border: 'none',
+                        background: wardrobeViewMode === mode ? '#1e293b' : '#fff',
+                        color: wardrobeViewMode === mode ? '#fff' : '#64748b',
+                      }}>{mode === 'grid' ? '▦' : '≣'}</button>
+                  ))}
+                </div>
+                {/* Finance pill — shows live balance + opens editor for
+                    starting balance and goal ladder. Stays compact: when
+                    there's no next goal (Legacy reached), just the balance. */}
+                <button
+                  onClick={async () => {
+                    setFinanceEditorDraft({
+                      starting_balance: financeConfig?.starting_balance ?? 1900,
+                      goals: (financeConfig?.goals || []).map(g => ({ ...g })),
+                    });
+                    setFinanceTab('overview');
+                    setFinanceEditorOpen(true);
+                    // Kick off the summary fetch so Overview renders real data.
+                    // Non-blocking: modal pops immediately with a loading state.
+                    setFinanceSummaryLoading(true);
+                    try {
+                      const [sumRes, sugRes, brkRes] = await Promise.all([
+                        api.get(`/api/v1/shows/${showId}/financial-summary`),
+                        api.get(`/api/v1/shows/${showId}/financial-suggestions`).catch(() => null),
+                        api.get(`/api/v1/shows/${showId}/financial-breakdowns`).catch(() => null),
+                      ]);
+                      setFinanceSummary(sumRes.data);
+                      setFinanceSuggestions(sugRes?.data?.suggestions || []);
+                      setFinanceBreakdowns(brkRes?.data || null);
+                    } catch { setFinanceSummary(null); }
+                    finally { setFinanceSummaryLoading(false); }
+                  }}
+                  title="Lala's finances — balance, trend, per-episode P&L, and goal ladder"
+                  style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                >
+                  💰 {(financeConfig?.current_balance ?? 0).toLocaleString()}
+                  {financeConfig?.next_goal && (
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>→ {financeConfig.next_goal.label.replace(/[🌟👑💎🏆✨]\s*/, '')}</span>
+                  )}
+                </button>
                 <button onClick={() => window.open('/wardrobe/calendar', '_blank')} style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px' }}>📅 Calendar</button>
-                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
+                {/* "Require all slots" toggle — when on, the outfit scorer marks
+                    every slot (jewelry, accessories, fragrance included) as
+                    required for this show. Persists to Show.metadata.required_slots. */}
+                {(() => {
+                  const allFive = ['outfit', 'shoes', 'jewelry', 'accessories', 'fragrance'];
+                  const current = Array.isArray(show?.metadata?.required_slots) ? show.metadata.required_slots : null;
+                  const requireAll = current && allFive.every(s => current.includes(s));
+                  const label = requireAll ? '✓ All slots required' : 'Require all slots';
+                  return (
+                    <button
+                      onClick={async () => {
+                        const next = requireAll ? ['outfit', 'shoes'] : allFive;
+                        try {
+                          await api.put(`/api/v1/shows/${showId}/wardrobe-config`, { required_slots: next });
+                          setShow(prev => prev ? { ...prev, metadata: { ...(prev.metadata || {}), required_slots: next } } : prev);
+                          setToast(requireAll ? 'Outfit + shoes required' : 'All 5 slots required');
+                        } catch (err) {
+                          setToast('Could not save: ' + (err.response?.data?.error || err.message));
+                        }
+                      }}
+                      title="Toggle whether every slot (including jewelry, accessories, fragrance) is required when scoring outfits against events"
+                      style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', background: requireAll ? '#fef3c7' : undefined, borderColor: requireAll ? '#d4a017' : undefined, color: requireAll ? '#854d0e' : undefined }}
+                    >{label}</button>
+                  );
+                })()}
+                {/* Bulk ops — kept behind a ⚡ menu-on-button so the toolbar doesn't get
+                    cluttered. Each action confirms before calling an expensive endpoint
+                    (AI analyze costs tokens). `window.confirm` is used for parity with
+                    the alert-based UX users already know from WardrobeBrowser. */}
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <details style={{ position: 'relative' }}>
+                    <summary style={{ ...S.secBtn, fontSize: 11, padding: '6px 10px', listStyle: 'none', cursor: 'pointer', userSelect: 'none' }}>
+                      ⚡ Bulk ops
+                    </summary>
+                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: 220, zIndex: 50, padding: 6 }}>
+                      {[
+                        { label: '✨ AI-enhance first 20', endpoint: '/api/v1/wardrobe/bulk/enhance', bodyFactory: () => ({ itemIds: filteredItems.slice(0, 20).map(i => i.id) }), confirmText: (n) => `Enhance ${n} items? This may take a while.`, emptyText: 'No items to enhance' },
+                        { label: '🔍 AI-analyze first 20', endpoint: '/api/v1/wardrobe/bulk/analyze', bodyFactory: () => ({ itemIds: filteredItems.slice(0, 20).map(i => i.id), autoApply: true }), confirmText: (n) => `Analyze ${n} items with AI? This uses API credits.`, emptyText: 'No items to analyze' },
+                        { label: '🖼 Regenerate missing thumbnails', endpoint: '/api/v1/wardrobe/bulk/regenerate-thumbnails', bodyFactory: () => ({ limit: 50 }), confirmText: () => 'Regenerate thumbnails for up to 50 items that are missing them?', emptyText: null },
+                        { label: '💰 Sync coin costs from prices', endpoint: `/api/v1/wardrobe/bulk/sync-coin-costs?show_id=${showId}`, bodyFactory: () => ({}), confirmText: () => 'Set coin_cost = price (1:1) for items that don\'t have one yet? Items with a manual coin_cost are left alone.', emptyText: null },
+                      ].map(op => (
+                        <button key={op.endpoint} onClick={async () => {
+                          const body = op.bodyFactory();
+                          const count = body.itemIds?.length;
+                          if (op.emptyText && count === 0) { setToast(op.emptyText); return; }
+                          if (!window.confirm(op.confirmText(count))) return;
+                          try {
+                            const res = await fetch(op.endpoint, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(body),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error || 'Operation failed');
+                            // Endpoints report either { succeeded, failed } or { processed, failed } — show both shapes.
+                            const succ = data.data?.succeeded?.length ?? data.data?.processed ?? 0;
+                            const fail = data.data?.failed?.length ?? data.data?.failed ?? 0;
+                            setToast(`Done: ${succ} ok, ${fail} failed`);
+                            // Reload via the existing effect that fetches wardrobeItems when showId changes.
+                            // Trigger that path by re-fetching manually:
+                            try { const r = await fetch(`/api/v1/shows/${showId}/wardrobe`); const j = await r.json(); if (j?.data) setWardrobeItems(j.data); } catch {}
+                          } catch (err) {
+                            setToast(`Bulk op failed: ${err.message}`);
+                          }
+                        }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 12, borderRadius: 6, color: '#334155' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                        >{op.label}</button>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+                <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>+ Upload Item</button>
               </div>
             </div>
 
-            {/* Type Summary Cards */}
-            {Object.keys(typeGroups).length > 0 && (
-              <div className="wa-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10, marginBottom: 16 }}>
-                {Object.entries(typeGroups).sort((a, b) => b[1].length - a[1].length).map(([type, items]) => {
-                  const isActive = wardrobeCatFilter === type;
-                  return (
-                    <div key={type} onClick={() => setWardrobeCatFilter(isActive ? 'all' : type)}
-                      style={{
-                        padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'pointer',
-                        background: isActive ? '#6366f118' : '#fff',
-                        border: isActive ? '2px solid #6366f1' : '1px solid #e2e8f0',
-                        transition: 'all 0.2s',
-                      }}>
-                      <div style={{ fontSize: 20 }}>{CAT_ICONS[type] || '🏷️'}</div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: isActive ? '#6366f1' : '#1a1a2e' }}>{items.length}</div>
-                      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>{type}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {/* Top tabs: All vs. Staging (never-used). The staging count lives
+                in the tab itself so creators can see at a glance how much of the
+                library is unassigned — catches the "forgot to assign" case fast. */}
+            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e2e8f0', marginBottom: 14 }}>
+              {[
+                { key: 'all', label: 'All items', count: wardrobeItems.length },
+                { key: 'staging', label: 'Staging (never used)', count: stagingCount },
+              ].map(tab => {
+                const active = wardrobeTopTab === tab.key;
+                return (
+                  <button key={tab.key} onClick={() => { setWardrobeTopTab(tab.key); setWardrobePage(1); }}
+                    style={{
+                      padding: '10px 18px', fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer',
+                      background: 'transparent', border: 'none',
+                      borderBottom: active ? '2px solid #6366f1' : '2px solid transparent',
+                      color: active ? '#1e293b' : '#64748b',
+                      marginBottom: -1,
+                    }}>
+                    {tab.label} <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4 }}>({tab.count})</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Slot summary cards — one per slot, in fixed order so the row
+                doesn't reshuffle as counts change. Each card is a shortcut to
+                filter the grid by that slot (clicking the active card clears
+                the filter). Unassigned items get a warning card only when
+                non-empty so creators can spot mis-categorised rows. */}
+            <div className="wa-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10, marginBottom: 16 }}>
+              {SLOT_KEYS.map(slotKey => {
+                const items = typeGroups[slotKey] || [];
+                const def = SLOT_DEFS[slotKey];
+                const isActive = wardrobeCatFilter === slotKey;
+                return (
+                  <div key={slotKey} onClick={() => setWardrobeCatFilter(isActive ? 'all' : slotKey)}
+                    title={def.desc}
+                    style={{
+                      padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'pointer',
+                      background: isActive ? '#6366f118' : '#fff',
+                      border: isActive ? '2px solid #6366f1' : '1px solid #e2e8f0',
+                      transition: 'all 0.2s',
+                    }}>
+                    <div style={{ fontSize: 20 }}>{def.icon}</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: isActive ? '#6366f1' : '#1a1a2e' }}>{items.length}</div>
+                    <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b' }}>{def.label}</div>
+                  </div>
+                );
+              })}
+              {(typeGroups.__unassigned?.length > 0) && (
+                <div title="These items have a clothing_category that doesn't map to any slot — edit to fix"
+                  style={{ padding: '12px 10px', borderRadius: 10, textAlign: 'center', cursor: 'default', background: '#fff7ed', border: '1px solid #fdba74' }}>
+                  <div style={{ fontSize: 20 }}>⚠️</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#c2410c' }}>{typeGroups.__unassigned.length}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#c2410c' }}>Unassigned</div>
+                </div>
+              )}
+            </div>
 
             {/* Search + Category Filter */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
               <input
                 type="text"
-                placeholder="Search by name, color, vendor..."
+                placeholder="Search name, brand, color, tags..."
                 value={wardrobeFilter === 'all' ? '' : wardrobeFilter}
                 onChange={e => setWardrobeFilter(e.target.value || 'all')}
                 style={{ ...S.inp, flex: '1 1 200px', minWidth: 150, margin: 0 }}
               />
+              <select
+                value={wardrobeSort}
+                onChange={e => setWardrobeSort(e.target.value)}
+                title="Sort wardrobe items"
+                style={{ ...S.sel, width: 'auto', minWidth: 140, margin: 0 }}
+              >
+                <option value="recent">Recently added</option>
+                <option value="name">Name (A–Z)</option>
+                <option value="price_asc">Price (low → high)</option>
+                <option value="price_desc">Price (high → low)</option>
+                <option value="most_used">Most used</option>
+                <option value="last_used">Last used</option>
+                <option value="favorites">Favorites first</option>
+              </select>
               <div style={{ width: 1, height: 24, background: '#e2e8f0', alignSelf: 'center' }} />
-              {WARDROBE_CATEGORIES.map(cat => (
-                <button key={cat} onClick={() => setWardrobeCatFilter(cat)}
+              {/* Category pills now filter by SLOT, not raw clothing_category.
+                  "all" clears the filter; each slot button routes dress/top/bottom
+                  under "Outfit", bag/accessory under "Accessories", etc. */}
+              {[{ key: 'all', label: 'all', icon: '🏷️' }, ...SLOT_KEYS.map(k => ({ key: k, label: SLOT_DEFS[k].label.toLowerCase(), icon: SLOT_DEFS[k].icon }))].map(opt => (
+                <button key={opt.key} onClick={() => setWardrobeCatFilter(opt.key)}
                   style={{
                     padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    background: wardrobeCatFilter === cat ? '#6366f1' : '#fff',
-                    color: wardrobeCatFilter === cat ? '#fff' : '#64748b',
-                    border: wardrobeCatFilter === cat ? '1px solid #6366f1' : '1px solid #e2e8f0',
+                    background: wardrobeCatFilter === opt.key ? '#6366f1' : '#fff',
+                    color: wardrobeCatFilter === opt.key ? '#fff' : '#64748b',
+                    border: wardrobeCatFilter === opt.key ? '1px solid #6366f1' : '1px solid #e2e8f0',
                   }}>
-                  {CAT_ICONS[cat] || '🏷️'} {cat}
+                  {opt.icon} {opt.label}
                 </button>
               ))}
+              {/* Filters toggle — keeps the advanced panel out of the way by default
+                  so the search row stays compact. Badge counts the non-default filters so
+                  users can see at a glance whether anything is narrowing the list. */}
+              {(() => {
+                const extraCount = [wardrobeSeasonFilter, wardrobeOccasionFilter, wardrobeColorFilter, wardrobeStatusFilter].filter(v => v !== 'all').length;
+                return (
+                  <button onClick={() => setWardrobeFiltersOpen(o => !o)} style={{
+                    padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    background: wardrobeFiltersOpen || extraCount > 0 ? '#1e293b' : '#fff',
+                    color: wardrobeFiltersOpen || extraCount > 0 ? '#fff' : '#64748b',
+                    border: `1px solid ${wardrobeFiltersOpen || extraCount > 0 ? '#1e293b' : '#e2e8f0'}`,
+                  }}>⚙ Filters{extraCount > 0 ? ` (${extraCount})` : ''}</button>
+                );
+              })()}
             </div>
+
+            {/* Advanced filter panel — status, season, occasion, color swatches */}
+            {wardrobeFiltersOpen && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16, padding: '12px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Status</label>
+                  <select value={wardrobeStatusFilter} onChange={e => setWardrobeStatusFilter(e.target.value)} style={{ ...S.sel, width: '100%', margin: 0 }}>
+                    <option value="all">All items</option>
+                    <option value="used">Used at least once</option>
+                    <option value="unused">Never used</option>
+                    <option value="favorites">♥ Favorites only</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Season</label>
+                  <select value={wardrobeSeasonFilter} onChange={e => setWardrobeSeasonFilter(e.target.value)} style={{ ...S.sel, width: '100%', margin: 0 }}>
+                    <option value="all">Any season</option>
+                    {['spring', 'summer', 'fall', 'winter', 'all-season'].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Occasion</label>
+                  <select value={wardrobeOccasionFilter} onChange={e => setWardrobeOccasionFilter(e.target.value)} style={{ ...S.sel, width: '100%', margin: 0 }}>
+                    <option value="all">Any occasion</option>
+                    {['gala', 'casual', 'formal', 'business', 'party', 'brunch', 'date_night', 'resort', 'editorial'].map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 6 }}>Color</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <button onClick={() => setWardrobeColorFilter('all')} style={{
+                      padding: '4px 10px', borderRadius: 16, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                      background: wardrobeColorFilter === 'all' ? '#1e293b' : '#fff',
+                      color: wardrobeColorFilter === 'all' ? '#fff' : '#64748b',
+                      border: `1px solid ${wardrobeColorFilter === 'all' ? '#1e293b' : '#e2e8f0'}`,
+                    }}>Any</button>
+                    {Object.entries(COLOR_TO_HEX).map(([name, hex]) => {
+                      const active = wardrobeColorFilter === name;
+                      return (
+                        <button key={name} onClick={() => setWardrobeColorFilter(active ? 'all' : name)} title={name} style={{
+                          padding: '2px 6px', borderRadius: 16, fontSize: 10, cursor: 'pointer',
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          background: active ? '#1e293b' : '#fff',
+                          color: active ? '#fff' : '#334155',
+                          border: `1px solid ${active ? '#1e293b' : '#e2e8f0'}`,
+                        }}>
+                          <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: hex, border: '1px solid rgba(0,0,0,0.2)' }} />
+                          {name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Clear-all: bulk reset so users don't have to touch each dropdown. Hidden when nothing is set. */}
+                {(wardrobeSeasonFilter !== 'all' || wardrobeOccasionFilter !== 'all' || wardrobeColorFilter !== 'all' || wardrobeStatusFilter !== 'all') && (
+                  <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
+                    <button onClick={() => { setWardrobeSeasonFilter('all'); setWardrobeOccasionFilter('all'); setWardrobeColorFilter('all'); setWardrobeStatusFilter('all'); }}
+                      style={{ padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Clear filters</button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ─── Edit Panel ─── */}
             {editingWardrobeItem && (
@@ -4124,10 +4820,16 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   </div>
                   <div>
                     <label style={S.fLabel}>Type</label>
+                    {/* Same slot-grouped structure as the upload modal so authors see
+                        a consistent category picker whether they're creating or editing. */}
                     <select value={wf.itemType} onChange={e => setWf('itemType', e.target.value)} style={S.sel}>
                       <option value="">Select...</option>
-                      {['dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'].map(c => (
-                        <option key={c} value={c}>{CAT_ICONS[c] || '🏷️'} {c}</option>
+                      {SLOT_KEYS.map(slot => (
+                        <optgroup key={slot} label={`${SLOT_DEFS[slot].icon} ${SLOT_DEFS[slot].label}`}>
+                          {SLOT_SUBCATEGORIES[slot].map(sub => (
+                            <option key={sub.value} value={sub.value}>{sub.label}</option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </div>
@@ -4184,6 +4886,117 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   </div>
                 </div>
 
+                {/* ── Gameplay section ─────────────────────────────────
+                    Same grid the upload modal uses so creators see consistent
+                    fields whether they're authoring or editing. Backend PUT
+                    already accepts all of these via updates.*. */}
+                <div style={{ marginBottom: 16, padding: '12px 14px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 10 }}>🎮 GAMEPLAY</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 10 }}>
+                    <div>
+                      <label style={S.fLabel}>Tier</label>
+                      <select value={wf.tier || ''} onChange={e => setWf('tier', e.target.value)} style={S.sel}>
+                        <option value="">Auto</option>
+                        <option value="basic">👟 Basic — Fast Fashion</option>
+                        <option value="mid">👠 Mid — Contemporary</option>
+                        <option value="luxury">💎 Luxury — Designer</option>
+                        <option value="elite">👑 Elite — Haute Couture</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={S.fLabel}>Story Price (coins)</label>
+                      <input type="number" min="0" step="1" value={wf.coin_cost ?? ''} onChange={e => setWf('coin_cost', e.target.value)} style={S.inp} placeholder="e.g., 2400" />
+                    </div>
+                    <div>
+                      <label style={S.fLabel}>How Lala Got It</label>
+                      <select value={wf.acquisition_type || 'purchased'} onChange={e => setWf('acquisition_type', e.target.value)} style={S.sel}>
+                        {['purchased', 'gifted', 'borrowed', 'rented', 'custom', 'vintage'].map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                    <div>
+                      <label style={S.fLabel}>Lock Type</label>
+                      <select value={wf.lock_type || 'none'} onChange={e => setWf('lock_type', e.target.value)} style={S.sel}>
+                        <option value="none">None (always available)</option>
+                        <option value="coin">🪙 Coin</option>
+                        <option value="reputation">⭐ Reputation</option>
+                        <option value="brand_exclusive">🔒 Brand exclusive</option>
+                        <option value="season_drop">📅 Season drop</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={S.fLabel}>Era Alignment</label>
+                      <select value={wf.era_alignment || ''} onChange={e => setWf('era_alignment', e.target.value)} style={S.sel}>
+                        <option value="">Any era</option>
+                        {['foundation', 'glow_up', 'luxury', 'prime', 'legacy'].map(e2 => <option key={e2} value={e2}>{e2}</option>)}
+                      </select>
+                    </div>
+                    {/* Rep-required only visible when the lock type asks for it. */}
+                    {wf.lock_type === 'reputation' && (
+                      <div>
+                        <label style={S.fLabel}>Reputation Required</label>
+                        <input type="number" min="0" step="1" value={wf.reputation_required ?? ''} onChange={e => setWf('reputation_required', e.target.value)} style={S.inp} placeholder="e.g., 5" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Advanced gameplay — same collapsible shape as the upload modal. */}
+                  <details style={{ marginTop: 14, paddingTop: 10, borderTop: '1px dashed #e6d9b8' }}>
+                    <summary style={{ fontSize: 12, fontWeight: 600, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
+                      ⋯ advanced gameplay
+                    </summary>
+                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div>
+                        <label style={S.fLabel}>Lala reaction (when owned)</label>
+                        <textarea rows={2} value={wf.lala_reaction_own || ''} onChange={e => setWf('lala_reaction_own', e.target.value)} style={{ ...S.tArea, minHeight: 44 }} placeholder="e.g., 'My ride-or-die for red carpets'" />
+                      </div>
+                      <div>
+                        <label style={S.fLabel}>Lala reaction (when locked)</label>
+                        <textarea rows={2} value={wf.lala_reaction_locked || ''} onChange={e => setWf('lala_reaction_locked', e.target.value)} style={{ ...S.tArea, minHeight: 44 }} placeholder="e.g., 'One day...'" />
+                      </div>
+                      <div>
+                        <label style={S.fLabel}>Lala reaction (when rejected)</label>
+                        <textarea rows={2} value={wf.lala_reaction_reject || ''} onChange={e => setWf('lala_reaction_reject', e.target.value)} style={{ ...S.tArea, minHeight: 44 }} placeholder="e.g., 'Not the vibe for tonight'" />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <label style={S.fLabel}>Aesthetic Tags <span style={{ fontWeight: 400, color: '#94a3b8' }}>(CSV)</span></label>
+                          <input value={wf.aesthetic_tags || ''} onChange={e => setWf('aesthetic_tags', e.target.value)} style={S.inp} placeholder="romantic, bold, editorial" />
+                        </div>
+                        <div>
+                          <label style={S.fLabel}>Event Types <span style={{ fontWeight: 400, color: '#94a3b8' }}>(CSV)</span></label>
+                          <input value={wf.event_types || ''} onChange={e => setWf('event_types', e.target.value)} style={S.inp} placeholder="gala, brunch, meetup" />
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                        <div>
+                          <label style={S.fLabel}>Match Weight (1-10)</label>
+                          <input type="number" min="1" max="10" step="1" value={wf.outfit_match_weight ?? ''} onChange={e => setWf('outfit_match_weight', e.target.value)} style={S.inp} placeholder="5" />
+                        </div>
+                        <div>
+                          <label style={S.fLabel}>Influence Required</label>
+                          <input type="number" min="0" step="1" value={wf.influence_required ?? ''} onChange={e => setWf('influence_required', e.target.value)} style={S.inp} placeholder="0" />
+                        </div>
+                        <div>
+                          <label style={S.fLabel}>Unlock Episode #</label>
+                          <input type="number" min="1" step="1" value={wf.season_unlock_episode ?? ''} onChange={e => setWf('season_unlock_episode', e.target.value)} style={S.inp} placeholder="1" />
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                          <input type="checkbox" checked={!!wf.is_owned} onChange={e => setWf('is_owned', e.target.checked)} />
+                          Lala already owns it
+                        </label>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                          <input type="checkbox" checked={wf.is_visible !== false} onChange={e => setWf('is_visible', e.target.checked)} />
+                          Visible in closet
+                        </label>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                   <button onClick={async (e) => {
@@ -4191,15 +5004,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     btn.disabled = true;
                     btn.textContent = '⏳ Enhancing...';
                     try {
-                      const imgUrl = editingWardrobeItem.s3_url_processed || editingWardrobeItem.s3_url || editingWardrobeItem.thumbnail_url;
-                      if (!imgUrl) { setToast('No image to analyze'); btn.disabled = false; btn.textContent = '✨ AI Enhance'; return; }
-                      // Download image and send to analyzer
-                      const imgRes = await fetch(imgUrl);
-                      const blob = await imgRes.blob();
-                      const fd = new FormData();
-                      fd.append('image', blob, 'wardrobe-item.jpg');
+                      // Server-fetch path: pass wardrobe_id so the backend pulls
+                      // the image from S3 itself. Avoids the browser CORS block
+                      // that was producing "Failed to fetch" when the client
+                      // tried to hit the S3 URL directly from dev.primepisodes.com.
                       const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-                      const res = await fetch('/api/v1/wardrobe-library/analyze-image', { method: 'POST', body: fd, headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+                      const res = await fetch('/api/v1/wardrobe-library/analyze-image', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                        },
+                        body: JSON.stringify({ wardrobe_id: editingWardrobeItem.id, showId }),
+                      });
                       const data = await res.json();
                       if (data.success && data.data) {
                         const ai = data.data;
@@ -4227,6 +5044,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   }} style={{ ...S.secBtn, background: '#FAF7F0', borderColor: '#D4AF37', color: '#B8962E' }}>
                     ✨ AI Enhance
                   </button>
+                  <button onClick={async () => {
+                    // Open the usage modal and lazy-fetch the episode list. The modal
+                    // opens immediately with a loading placeholder so users aren't
+                    // staring at a frozen button while the request is in flight.
+                    setUsageModalItem(editingWardrobeItem);
+                    setItemUsage(null);
+                    try {
+                      const res = await fetch(`/api/v1/wardrobe/${editingWardrobeItem.id}/usage`);
+                      const data = await res.json();
+                      if (res.ok) setItemUsage(data.data || data);
+                      else setToast(data.error || 'Could not load usage');
+                    } catch (err) { setToast('Could not load usage'); }
+                  }} style={{ ...S.secBtn }}>🔍 View usage</button>
                   <div style={{ flex: 1 }} />
                   <button onClick={() => setEditingWardrobeItem(null)} style={S.secBtn}>Cancel</button>
                   <button onClick={saveWardrobeItem} disabled={savingWardrobe} style={S.primaryBtn}>
@@ -4236,10 +5066,17 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               </div>
             )}
 
-            {/* Item Grid — visual cards with thumbnails */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
-              {filteredItems.map(item => {
-                const imgUrl = item.s3_url_processed || item.s3_url || item.thumbnail_url || item.image_url;
+            {/* Item Grid — visual cards with thumbnails. List mode swaps the grid
+                template for a vertical stack of wide rows. Both modes share the
+                same card internals below so there's a single source of truth. */}
+            <div style={{
+              display: wardrobeViewMode === 'list' ? 'flex' : 'grid',
+              flexDirection: wardrobeViewMode === 'list' ? 'column' : undefined,
+              gridTemplateColumns: wardrobeViewMode === 'list' ? undefined : 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: wardrobeViewMode === 'list' ? 8 : 14,
+            }}>
+              {visibleItems.map(item => {
+                const imgUrl = resolveItemImageUrl(item).url || item.thumbnail_url;
                 const itemType = item.clothing_category || item.itemType || item.item_type || '';
                 const tags = Array.isArray(item.tags) ? item.tags : [];
                 const isEditing = editingWardrobeItem?.id === item.id;
@@ -4247,15 +5084,18 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 const colorHex = getColorHex(item.color);
                 const hasRecentUsage = recentlyUsedItems.has(item.id);
 
+                const isListMode = wardrobeViewMode === 'list';
                 return (
                   <div key={item.id} onClick={() => openEditItem(item)}
                     style={{
-                      background: '#fff', 
-                      border: isBulkSelected ? '2px solid #eab308' : isEditing ? '2px solid #6366f1' : '1px solid #e2e8f0', 
+                      background: '#fff',
+                      border: isBulkSelected ? '2px solid #eab308' : isEditing ? '2px solid #6366f1' : '1px solid #e2e8f0',
                       borderRadius: 12,
                       overflow: 'hidden', cursor: 'pointer', transition: 'all 0.2s',
                       boxShadow: isBulkSelected ? '0 4px 16px rgba(234,179,8,0.25)' : isEditing ? '0 4px 16px rgba(99,102,241,0.2)' : 'none',
                       position: 'relative',
+                      display: isListMode ? 'flex' : undefined,
+                      alignItems: isListMode ? 'stretch' : undefined,
                     }}
                     onMouseEnter={e => { if (!isEditing && !isBulkSelected) e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                     onMouseLeave={e => { if (!isEditing && !isBulkSelected) e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
@@ -4275,9 +5115,43 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       {isBulkSelected && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</span>}
                     </div>
 
+                    {/* Favorite heart — click to toggle. Stops propagation so card's
+                        edit-open handler doesn't fire. PATCHes the single `is_favorite`
+                        field so the DB row updates even in environments where full
+                        row-update validation is stricter. */}
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const next = !item.is_favorite;
+                        // Optimistic update
+                        setWardrobeItems(prev => prev.map(w => w.id === item.id ? { ...w, is_favorite: next } : w));
+                        try {
+                          await fetch(`/api/v1/wardrobe/${item.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ is_favorite: next }),
+                          });
+                        } catch (err) {
+                          // Roll back + surface a toast so the UI doesn't drift from the DB.
+                          setWardrobeItems(prev => prev.map(w => w.id === item.id ? { ...w, is_favorite: !next } : w));
+                          setToast('Could not save favorite');
+                        }
+                      }}
+                      title={item.is_favorite ? 'Remove from favorites' : 'Mark as favorite'}
+                      style={{
+                        position: 'absolute', top: 6, right: hasRecentUsage ? 68 : 6, zIndex: 10,
+                        width: 26, height: 26, borderRadius: '50%',
+                        background: item.is_favorite ? 'rgba(220,38,38,0.92)' : 'rgba(255,255,255,0.9)',
+                        border: item.is_favorite ? '1px solid #dc2626' : '1px solid #d1d5db',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1,
+                        color: item.is_favorite ? '#fff' : '#9ca3af',
+                      }}
+                    >♥</button>
+
                     {/* Continuity warning badge */}
                     {hasRecentUsage && (
-                      <div style={{ 
+                      <div style={{
                         position: 'absolute', top: 8, right: 8, zIndex: 10,
                         padding: '2px 6px', background: '#fef3c7', border: '1px solid #fcd34d',
                         borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#92400e',
@@ -4286,10 +5160,16 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       </div>
                     )}
 
-                    {/* Image - click for lightbox */}
-                    <div 
-                      style={{ width: '100%', aspectRatio: '3/4', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}
-                      onClick={(e) => { if (imgUrl) { e.stopPropagation(); setLightboxItem(item); } }}
+                    {/* Image - click for lightbox. List mode shrinks it to a fixed
+                        square on the left so rows stay compact. */}
+                    <div
+                      style={{
+                        width: isListMode ? 80 : '100%',
+                        flexShrink: isListMode ? 0 : undefined,
+                        aspectRatio: isListMode ? '1/1' : '3/4',
+                        background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative',
+                      }}
+                      onClick={(e) => { if (imgUrl) { e.stopPropagation(); setLightboxVariant(null); setLightboxItem(item); } }}
                     >
                       {imgUrl ? (
                         <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#f8fafc' }}
@@ -4306,8 +5186,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       )}
                     </div>
 
-                    {/* Info */}
-                    <div style={{ padding: '10px 12px' }}>
+                    {/* Info — flex:1 so list mode pushes the info column to fill the row. */}
+                    <div style={{ padding: '10px 12px', flex: isListMode ? 1 : undefined, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                         {/* Color swatch */}
                         {colorHex && (
@@ -4352,6 +5232,20 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               })}
             </div>
 
+            {/* Pagination — shown only when more than one page of results. Buttons
+                clamp to 1..totalPages so clicking past the ends is a no-op. */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 20, padding: '12px 0' }}>
+                <button onClick={() => setWardrobePage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                  style={{ padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', color: currentPage === 1 ? '#cbd5e1' : '#334155', fontSize: 12, fontWeight: 600 }}>← Prev</button>
+                <span style={{ fontSize: 12, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>
+                  Page {currentPage} of {totalPages} · {filteredItems.length} items
+                </span>
+                <button onClick={() => setWardrobePage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                  style={{ padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', color: currentPage === totalPages ? '#cbd5e1' : '#334155', fontSize: 12, fontWeight: 600 }}>Next →</button>
+              </div>
+            )}
+
             {/* Empty state */}
             {filteredItems.length === 0 && (
               <div style={{ textAlign: 'center', padding: 48, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
@@ -4365,7 +5259,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     : 'Try a different search term or category filter.'}
                 </div>
                 {wardrobeItems.length === 0 && (
-                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
+                  <button onClick={() => { setWardrobeUploadForm({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' }); setWardrobeUploadFile(null); setWardrobeUploadPreview(null); setShowWardrobeUpload(true); }} style={S.primaryBtn}>
                     + Upload First Item
                   </button>
                 )}
@@ -4402,25 +5296,75 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <input id="wardrobe-upload-input" type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { setWardrobeUploadFile(f); setWardrobeUploadPreview(URL.createObjectURL(f)); } }} />
                   </div>
 
-                  {/* AI auto-fill */}
+                  {/* AI auto-fill — inline error banner sits right above the button
+                      so failures are visible without a modal. Common cause on dev:
+                      ANTHROPIC_API_KEY unset → server returns 503; we annotate that
+                      case so users don't have to dig through network tab. */}
+                  {wardrobeAutoFillError && (
+                    <div style={{ marginBottom: 10, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#991b1b', lineHeight: 1.5 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 2 }}>Auto-fill failed</div>
+                      <div>{wardrobeAutoFillError}</div>
+                      {/ANTHROPIC_API_KEY/i.test(wardrobeAutoFillError) && (
+                        <div style={{ marginTop: 4, fontSize: 11, color: '#7f1d1d' }}>
+                          The dev server is missing an Anthropic API key. Ask an admin to set <code>ANTHROPIC_API_KEY</code> in EC2 .env and restart PM2.
+                        </div>
+                      )}
+                      {/Failed to fetch|NetworkError|ERR_/i.test(wardrobeAutoFillError) && (
+                        <div style={{ marginTop: 4, fontSize: 11, color: '#7f1d1d' }}>
+                          The request didn't reach the server. Usually one of:
+                          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                            <li>Backend not yet running the latest build (ask an admin to check <code>pm2 status</code>)</li>
+                            <li>A stale Service Worker is intercepting — try a hard refresh (<code>Cmd/Ctrl+Shift+R</code>) or DevTools → Application → Service Workers → Unregister</li>
+                            <li>Browser extension blocking the request (disable ad/privacy blockers on this tab)</li>
+                          </ul>
+                        </div>
+                      )}
+                      {/^(413|payload too large)/i.test(wardrobeAutoFillError) && (
+                        <div style={{ marginTop: 4, fontSize: 11, color: '#7f1d1d' }}>
+                          Image exceeds the server's upload limit. Try a smaller photo (&lt; 5 MB) or crop it down.
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {wardrobeUploadFile && (
                     <button type="button" disabled={wardrobeAnalyzing} onClick={async () => {
                       setWardrobeAnalyzing(true);
+                      setWardrobeAutoFillError(null);
                       try {
                         const fd = new FormData(); fd.append('image', wardrobeUploadFile);
+                        // Pass show context so the server can enrich the prompt with
+                        // recent tier mix + episode event and get gameplay suggestions.
+                        // Without showId it falls back to the basic image-only flow.
+                        if (showId) fd.append('showId', showId);
                         const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-                        const res = await fetch(`/api/v1/wardrobe-library/analyze-image`, { method: 'POST', body: fd, headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+                        // Abort after 120s — Claude vision on a large image can take
+                        // 30-60s under load, but anything beyond 2 min means the
+                        // upstream is hung and we should surface that to the user.
+                        const ac = new AbortController();
+                        const timeout = setTimeout(() => ac.abort(), 120000);
+                        let res;
+                        try {
+                          res = await fetch(`/api/v1/wardrobe-library/analyze-image`, { method: 'POST', body: fd, headers: token ? { 'Authorization': `Bearer ${token}` } : {}, signal: ac.signal });
+                        } finally {
+                          clearTimeout(timeout);
+                        }
                         const data = await res.json().catch(() => ({}));
                         if (!res.ok || !data.success || !data.data) {
                           const msg = data.error || `${res.status} ${res.statusText || 'request failed'}`;
                           console.error('[Auto-fill] backend rejected:', msg, data);
-                          alert(`Auto-fill failed: ${msg}`);
+                          setWardrobeAutoFillError(msg);
                           return;
                         }
                         const ai = data.data;
                         const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
                         let aiPrice = '';
                         if (ai.price_estimate) { const n = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, '')); aiPrice = n && n >= 150 ? n.toFixed(2) : '150.00'; }
+                        // Coin cost — per user: "how much the outfit is", so default
+                        // to the AI's coin_cost if provided, else 1:1 with the dollar
+                        // price. Integer only since the Wardrobe model stores it as INT.
+                        const aiCoinCost = ai.coin_cost != null
+                          ? parseInt(String(ai.coin_cost).replace(/[^0-9]/g, ''), 10) || ''
+                          : (aiPrice ? parseInt(aiPrice, 10) : '');
                         setWardrobeUploadForm(prev => ({
                           ...prev,
                           name: ai.name || prev.name,
@@ -4434,10 +5378,31 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           tags: (ai.aesthetic_tags || []).join(', ') || prev.tags || '',
                           tier: ai.tier || prev.tier || '',
                           character: 'Lala',
+                          // Gameplay — only filled when the server ran gameplay mode
+                          // (i.e. we sent a showId). prev.X preserved so a second
+                          // pass doesn't clobber values the user has tweaked.
+                          ...(data.gameplay ? {
+                            coinCost: prev.coinCost || aiCoinCost,
+                            acquisitionType: prev.acquisitionType === 'purchased' && ai.acquisition_type ? ai.acquisition_type : (prev.acquisitionType || 'purchased'),
+                            lockType: prev.lockType === 'none' && ai.lock_type ? ai.lock_type : (prev.lockType || 'none'),
+                            eraAlignment: prev.eraAlignment || ai.era_alignment || '',
+                            aestheticTags: prev.aestheticTags || (ai.aesthetic_tags || []).join(', '),
+                            eventTypes: prev.eventTypes || (ai.event_types || []).join(', '),
+                            outfitMatchWeight: prev.outfitMatchWeight || (ai.outfit_match_weight != null ? String(ai.outfit_match_weight) : ''),
+                            lalaReactionOwn: prev.lalaReactionOwn || ai.lala_reaction_own || '',
+                            lalaReactionLocked: prev.lalaReactionLocked || ai.lala_reaction_locked || '',
+                            lalaReactionReject: prev.lalaReactionReject || ai.lala_reaction_reject || '',
+                          } : {}),
                         }));
                       } catch (err) {
                         console.error('[Auto-fill] threw:', err);
-                        alert(`Auto-fill failed: ${err.message || err}`);
+                        // AbortError means our 2-min timeout fired; give that a clear label
+                        // so users don't think "Failed to fetch" means permanent breakage.
+                        if (err.name === 'AbortError') {
+                          setWardrobeAutoFillError('Timed out after 2 minutes — the AI server is slow or overloaded. Try again.');
+                        } else {
+                          setWardrobeAutoFillError(err.message || String(err));
+                        }
                       } finally {
                         setWardrobeAnalyzing(false);
                       }
@@ -4453,9 +5418,36 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>brand</label><input value={wardrobeUploadForm.brand} onChange={e => setWardrobeUploadForm(p => ({ ...p, brand: e.target.value }))} placeholder="e.g., Zara" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>category *</label><select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Select...</option>{['dress', 'top', 'bottom', 'shoes', 'accessory', 'jewelry', 'bag', 'outerwear', 'perfume'].map(c => <option key={c} value={c}>{CAT_ICONS[c] || '🏷️'} {c}</option>)}</select></div>
+                      <div>
+                        <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>category *</label>
+                        {/* Grouped by the five UI slots (Outfit / Shoes / Jewelry /
+                            Accessories / Fragrance) — DB still stores the granular
+                            clothing_category so scoring + filters keep working. */}
+                        <select value={wardrobeUploadForm.clothingCategory} onChange={e => setWardrobeUploadForm(p => ({ ...p, clothingCategory: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}>
+                          <option value="">Select...</option>
+                          {SLOT_KEYS.map(slot => (
+                            <optgroup key={slot} label={`${SLOT_DEFS[slot].icon} ${SLOT_DEFS[slot].label}`}>
+                              {SLOT_SUBCATEGORIES[slot].map(sub => (
+                                <option key={sub.value} value={sub.value}>{sub.label}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>color</label><input value={wardrobeUploadForm.color} onChange={e => setWardrobeUploadForm(p => ({ ...p, color: e.target.value }))} placeholder="e.g., blush pink" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tier</label><select value={wardrobeUploadForm.tier || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tier: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}><option value="">Auto</option>{['basic', 'mid', 'luxury', 'elite'].map(t => <option key={t} value={t}>{WARDROBE_TIER_ICONS[t]} {t}</option>)}</select></div>
+                      <div>
+                        <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tier</label>
+                        {/* Tier descriptors mirror the old WardrobeBrowser edit form so the
+                            gameplay context is obvious — e.g. "Luxury" isn't just a label,
+                            it signals Designer-tier in-story. */}
+                        <select value={wardrobeUploadForm.tier || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tier: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fdfcfa' }}>
+                          <option value="">Auto</option>
+                          <option value="basic">👟 Basic — Fast Fashion</option>
+                          <option value="mid">👠 Mid — Contemporary</option>
+                          <option value="luxury">💎 Luxury — Designer</option>
+                          <option value="elite">👑 Elite — Haute Couture</option>
+                        </select>
+                      </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>price</label><input type="number" value={wardrobeUploadForm.price} onChange={e => setWardrobeUploadForm(p => ({ ...p, price: e.target.value }))} placeholder="650.00" step="0.01" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
@@ -4464,6 +5456,127 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     </div>
                     <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>description</label><textarea value={wardrobeUploadForm.description || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, description: e.target.value }))} placeholder="Material, style, fit, notable details..." rows={2} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa', resize: 'vertical', boxSizing: 'border-box' }} /></div>
                     <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>tags (comma-separated)</label><input value={wardrobeUploadForm.tags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, tags: e.target.value }))} placeholder="elegant, evening, silk" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                    {/* Purchase link so creators can source the real-world item later. Backend maps website → purchase_link. */}
+                    <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>website / purchase link</label><input type="url" value={wardrobeUploadForm.website || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, website: e.target.value }))} placeholder="https://..." style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+
+                    {/* ── Gameplay section ─────────────────────────────────
+                        Fields that drive the in-story unlock/purchase flow. Kept
+                        visually separate from the "what is this thing?" fields
+                        above so creators can scan past if they're just logging
+                        a piece without gameplay intent. */}
+                    <div style={{ marginTop: 4, padding: '10px 12px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>🎮 GAMEPLAY (OPTIONAL)</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+                        <div>
+                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>story price (LalaVerse coins)</label>
+                          <input type="number" min="0" step="1" value={wardrobeUploadForm.coinCost || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, coinCost: e.target.value }))} placeholder="e.g., 2400" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>how Lala got it</label>
+                          <select value={wardrobeUploadForm.acquisitionType || 'purchased'} onChange={e => setWardrobeUploadForm(p => ({ ...p, acquisitionType: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff' }}>
+                            {['purchased', 'gifted', 'borrowed', 'rented', 'custom', 'vintage'].map(a => <option key={a} value={a}>{a}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+                        <div>
+                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>lock type</label>
+                          <select value={wardrobeUploadForm.lockType || 'none'} onChange={e => setWardrobeUploadForm(p => ({ ...p, lockType: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff' }}>
+                            <option value="none">None (always available)</option>
+                            <option value="coin">🪙 Coin (pay to unlock)</option>
+                            <option value="reputation">⭐ Reputation gate</option>
+                            <option value="brand_exclusive">🔒 Brand exclusive</option>
+                            <option value="season_drop">📅 Season drop</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>era alignment</label>
+                          <select value={wardrobeUploadForm.eraAlignment || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, eraAlignment: e.target.value }))} style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff' }}>
+                            <option value="">Any era</option>
+                            <option value="foundation">Foundation</option>
+                            <option value="glow_up">Glow Up</option>
+                            <option value="luxury">Luxury</option>
+                            <option value="prime">Prime</option>
+                            <option value="legacy">Legacy</option>
+                          </select>
+                        </div>
+                      </div>
+                      {/* Rep requirement only shows when the lock gate asks for it. Keeps the
+                          form compact when it's irrelevant. */}
+                      {wardrobeUploadForm.lockType === 'reputation' && (
+                        <div>
+                          <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>reputation required</label>
+                          <input type="number" min="0" step="1" value={wardrobeUploadForm.reputationRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, reputationRequired: e.target.value }))} placeholder="e.g., 5" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                        </div>
+                      )}
+
+                      {/* ── Advanced gameplay (expandable) ─────────────────────
+                          Collapsed by default so creators logging a piece don't see
+                          12 extra inputs. Expand only when the item needs Lala
+                          reaction blurbs, aesthetic/event tag buckets, or the rarer
+                          scoring/gate knobs. */}
+                      <details style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e6d9b8' }}>
+                        <summary style={{ fontSize: 11, fontWeight: 600, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
+                          ⋯ advanced gameplay
+                        </summary>
+                        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {/* Lala reaction blurbs — what she says about this item in three states. */}
+                          <div>
+                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when she owns it)</label>
+                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionOwn || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionOwn: e.target.value }))} placeholder="e.g., 'My ride-or-die for red carpets'" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', resize: 'vertical', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when locked)</label>
+                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionLocked || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionLocked: e.target.value }))} placeholder="e.g., 'One day...'" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', resize: 'vertical', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>Lala reaction (when rejected)</label>
+                            <textarea rows={2} value={wardrobeUploadForm.lalaReactionReject || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, lalaReactionReject: e.target.value }))} placeholder="e.g., 'Not the vibe for tonight'" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', resize: 'vertical', boxSizing: 'border-box' }} />
+                          </div>
+                          {/* Tag buckets — distinct from the basic `tags` field above. */}
+                          <div>
+                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>aesthetic tags (CSV)</label>
+                            <input value={wardrobeUploadForm.aestheticTags || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, aestheticTags: e.target.value }))} placeholder="romantic, bold, editorial" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', boxSizing: 'border-box' }} />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>event types (CSV)</label>
+                            <input value={wardrobeUploadForm.eventTypes || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, eventTypes: e.target.value }))} placeholder="gala, brunch, meetup" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fff', boxSizing: 'border-box' }} />
+                          </div>
+                          {/* Numeric knobs — match-weight is 1-10, the rest are natural units. */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                            <div>
+                              <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>match weight (1-10)</label>
+                              <input type="number" min="1" max="10" step="1" value={wardrobeUploadForm.outfitMatchWeight || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, outfitMatchWeight: e.target.value }))} placeholder="5" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>influence required</label>
+                              <input type="number" min="0" step="1" value={wardrobeUploadForm.influenceRequired || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, influenceRequired: e.target.value }))} placeholder="0" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>unlock ep #</label>
+                              <input type="number" min="1" step="1" value={wardrobeUploadForm.seasonUnlockEpisode || ''} onChange={e => setWardrobeUploadForm(p => ({ ...p, seasonUnlockEpisode: e.target.value }))} placeholder="1" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, background: '#fff', boxSizing: 'border-box' }} />
+                            </div>
+                          </div>
+                          {/* Visibility flags — is_visible defaults true so this only
+                              surfaces for authors who want to hide an item or mark it owned up front. */}
+                          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                              <input type="checkbox" checked={!!wardrobeUploadForm.isOwned} onChange={e => setWardrobeUploadForm(p => ({ ...p, isOwned: e.target.checked }))} />
+                              Lala already owns it
+                            </label>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                              <input type="checkbox" checked={wardrobeUploadForm.isVisible !== false} onChange={e => setWardrobeUploadForm(p => ({ ...p, isVisible: e.target.checked }))} />
+                              Visible in closet
+                            </label>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                      <input type="checkbox" checked={!!wardrobeUploadForm.isFavorite} onChange={e => setWardrobeUploadForm(p => ({ ...p, isFavorite: e.target.checked }))} />
+                      ♥ Mark as favorite
+                    </label>
                   </div>
 
                   {/* Actions */}
@@ -4486,6 +5599,30 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         if (wardrobeUploadForm.occasion) fd.append('occasion', wardrobeUploadForm.occasion);
                         if (wardrobeUploadForm.tags) fd.append('tags', wardrobeUploadForm.tags);
                         if (wardrobeUploadForm.tier) fd.append('tier', wardrobeUploadForm.tier);
+                        if (wardrobeUploadForm.website) fd.append('purchaseLink', wardrobeUploadForm.website);
+                        if (wardrobeUploadForm.isFavorite) fd.append('isFavorite', 'true');
+                        // Gameplay fields — only send when set so the backend keeps model
+                        // defaults (acquisition_type='purchased', lock_type='none', etc.)
+                        // for anything the creator didn't touch.
+                        if (wardrobeUploadForm.coinCost) fd.append('coinCost', wardrobeUploadForm.coinCost);
+                        if (wardrobeUploadForm.acquisitionType && wardrobeUploadForm.acquisitionType !== 'purchased') fd.append('acquisitionType', wardrobeUploadForm.acquisitionType);
+                        if (wardrobeUploadForm.lockType && wardrobeUploadForm.lockType !== 'none') fd.append('lockType', wardrobeUploadForm.lockType);
+                        if (wardrobeUploadForm.eraAlignment) fd.append('eraAlignment', wardrobeUploadForm.eraAlignment);
+                        if (wardrobeUploadForm.reputationRequired) fd.append('reputationRequired', wardrobeUploadForm.reputationRequired);
+                        // Advanced gameplay — CSV tag buckets are sent raw; the
+                        // backend splits them. Numeric knobs only sent when set so
+                        // the model defaults stay intact. `is_visible` defaults
+                        // true server-side, so we only ship it when false.
+                        if (wardrobeUploadForm.aestheticTags) fd.append('aestheticTags', wardrobeUploadForm.aestheticTags);
+                        if (wardrobeUploadForm.eventTypes) fd.append('eventTypes', wardrobeUploadForm.eventTypes);
+                        if (wardrobeUploadForm.outfitMatchWeight) fd.append('outfitMatchWeight', wardrobeUploadForm.outfitMatchWeight);
+                        if (wardrobeUploadForm.influenceRequired) fd.append('influenceRequired', wardrobeUploadForm.influenceRequired);
+                        if (wardrobeUploadForm.seasonUnlockEpisode) fd.append('seasonUnlockEpisode', wardrobeUploadForm.seasonUnlockEpisode);
+                        if (wardrobeUploadForm.isOwned) fd.append('isOwned', 'true');
+                        if (wardrobeUploadForm.isVisible === false) fd.append('isVisible', 'false');
+                        if (wardrobeUploadForm.lalaReactionOwn) fd.append('lalaReactionOwn', wardrobeUploadForm.lalaReactionOwn);
+                        if (wardrobeUploadForm.lalaReactionLocked) fd.append('lalaReactionLocked', wardrobeUploadForm.lalaReactionLocked);
+                        if (wardrobeUploadForm.lalaReactionReject) fd.append('lalaReactionReject', wardrobeUploadForm.lalaReactionReject);
                         fd.append('showId', showId);
                         const res = await fetch('/api/v1/wardrobe', { method: 'POST', body: fd });
                         if (res.ok) {
@@ -4504,28 +5641,696 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               </div>
             )}
 
+            {/* ── Finance Editor Modal ── */}
+            {financeEditorOpen && financeEditorDraft && (() => {
+              const d = financeEditorDraft;
+              const setDraft = (patch) => setFinanceEditorDraft(p => ({ ...p, ...patch }));
+              const updateGoal = (idx, patch) => setFinanceEditorDraft(p => ({ ...p, goals: p.goals.map((g, i) => i === idx ? { ...g, ...patch } : g) }));
+              const removeGoal = (idx) => setFinanceEditorDraft(p => ({ ...p, goals: p.goals.filter((_, i) => i !== idx) }));
+              const addGoal = () => setFinanceEditorDraft(p => ({ ...p, goals: [...p.goals, {
+                id: `goal-${Date.now().toString(36)}`,
+                threshold: 0,
+                reward_coins: 0,
+                label: '🎯 New milestone',
+                description: '',
+                triggered_at: null,
+              }] }));
+              const save = async () => {
+                setFinanceEditorSaving(true);
+                try {
+                  // Normalise + sort: make sure threshold/reward are numbers
+                  // and the ladder is ordered so the "next goal" logic works.
+                  const cleanGoals = (d.goals || [])
+                    .map(g => ({ ...g, threshold: Number(g.threshold) || 0, reward_coins: Number(g.reward_coins) || 0 }))
+                    .sort((a, b) => a.threshold - b.threshold);
+                  await api.put(`/api/v1/shows/${showId}/financial-config`, {
+                    starting_balance: Number(d.starting_balance) || 0,
+                    financial_goals: cleanGoals,
+                  });
+                  // Re-seed so the ledger reflects the new starting balance.
+                  // Force=true soft-deletes the old seed and writes a fresh one.
+                  await api.post(`/api/v1/shows/${showId}/seed-balance`, { force: true });
+                  // Refresh local state.
+                  const res = await api.get(`/api/v1/shows/${showId}/financial-config`);
+                  setFinanceConfig(res.data);
+                  setFinanceEditorOpen(false);
+                  setToast('Finance config saved');
+                } catch (err) {
+                  setToast('Save failed: ' + (err.response?.data?.error || err.message));
+                } finally {
+                  setFinanceEditorSaving(false);
+                }
+              };
+              return (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !financeEditorSaving && setFinanceEditorOpen(false)}>
+                  <div style={{ background: '#fff', borderRadius: 14, maxWidth: 760, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>💰 Finance</h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {/* Seed finance apps — idempotent. Creates the 5 finance
+                            app screens + icons using AI-generated pink/teal
+                            frames, and appends the icons to the home screen in
+                            a 5-across grid at the bottom. Rerun any time to
+                            fill in missing apps. */}
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm('Create the 4 finance apps on Lala\'s phone?\n\n• Wallet / Insights / Breakdowns / Goals\n• Pink + teal AI-generated icons + screens\n• Icons auto-placed on the home screen\n\nCloset Value is skipped — add the closet_net_worth and closet_wishlist_grid content zones to your existing Closet screen instead.\n\nSafe to re-run — only fills in missing apps.')) return;
+                            try {
+                              const res = await api.post(`/api/v1/shows/${showId}/seed-finance-apps`, { auto_place: true });
+                              const created = (res.data.results || []).filter(r => r.created).length;
+                              const placed = res.data.placement?.placed;
+                              setToast(`Finance apps: ${created} created${placed ? ', icons placed on home screen' : ' (place manually in UI Overlays)'}`);
+                            } catch (err) {
+                              setToast('Seed failed: ' + (err.response?.data?.error || err.message));
+                            }
+                          }}
+                          title="Create 4 finance apps (Wallet, Insights, Breakdowns, Goals) on Lala's phone. Closet Value content zones go on your existing Closet screen."
+                          style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #fbcfe8', borderRadius: 6, background: 'linear-gradient(135deg, #FBCFE8 0%, #14B8A6 100%)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >📱 Seed Finance Apps</button>
+                        <button onClick={() => setFinanceEditorOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                      </div>
+                    </div>
+
+                    {/* Tab bar — switches between Overview (dashboard), Per-Episode
+                        (the P&L table), and Goals (starting balance + ladder editor). */}
+                    <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e2e8f0', marginBottom: 16 }}>
+                      {[
+                        { key: 'overview',    label: 'Overview' },
+                        { key: 'per_episode', label: 'Per Episode' },
+                        { key: 'breakdowns',  label: 'Breakdowns' },
+                        { key: 'closet',      label: 'Closet' },
+                        { key: 'goals',       label: 'Goals' },
+                      ].map(t => {
+                        const active = financeTab === t.key;
+                        return (
+                          <button key={t.key} onClick={() => setFinanceTab(t.key)}
+                            style={{
+                              padding: '8px 16px', fontSize: 12, fontWeight: active ? 700 : 500, cursor: 'pointer',
+                              background: 'transparent', border: 'none',
+                              borderBottom: active ? '2px solid #B8962E' : '2px solid transparent',
+                              color: active ? '#1a1a2e' : '#64748b',
+                              marginBottom: -1,
+                            }}>{t.label}</button>
+                        );
+                      })}
+                    </div>
+
+                    {/* ── OVERVIEW TAB ────────────────────────────────────
+                        Balance, next-goal bar, lifetime totals, burn rate, runway,
+                        and a simple 12-episode trend sparkline. All derived from
+                        /financial-summary so the numbers match the ledger. */}
+                    {financeTab === 'overview' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {financeSummaryLoading && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>Loading summary…</div>}
+                        {financeSummary && (() => {
+                          const t = financeSummary.totals || {};
+                          const balance = t.current_balance ?? 0;
+                          const trend = financeSummary.trend || [];
+                          const recentTrend = trend.slice(-12);
+                          const maxBal = Math.max(1, ...recentTrend.map(p => p.balance_after));
+                          const minBal = Math.min(0, ...recentTrend.map(p => p.balance_after));
+                          const range = maxBal - minBal || 1;
+                          const nextGoal = financeConfig?.next_goal;
+                          const progress = nextGoal ? Math.max(0, Math.min(1, balance / Number(nextGoal.threshold))) : 1;
+                          return (
+                            <>
+                              {/* Hero: balance + next goal */}
+                              <div style={{ padding: '14px 16px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10 }}>
+                                <div style={{ fontSize: 11, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 4 }}>CURRENT BALANCE</div>
+                                <div style={{ fontSize: 32, fontWeight: 900, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>
+                                  💰 {balance.toLocaleString()}<span style={{ fontSize: 14, fontWeight: 600, color: '#94a3b8', marginLeft: 8 }}>coins</span>
+                                </div>
+                                {nextGoal && (
+                                  <div style={{ marginTop: 10 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                                      <span style={{ color: '#854d0e', fontWeight: 600 }}>Next: {nextGoal.label}{nextGoal.episode_id && <span style={{ fontSize: 9, fontWeight: 500, color: '#a16207', marginLeft: 4 }}>· ep-scoped</span>}</span>
+                                      <span style={{ color: '#854d0e', fontFamily: "'DM Mono', monospace" }}>{balance.toLocaleString()} / {Number(nextGoal.threshold).toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+                                      <div style={{ width: `${progress * 100}%`, height: '100%', background: balance >= Number(nextGoal.threshold) ? '#16a34a' : '#d4a017', transition: 'width 0.3s' }} />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* KPI strip */}
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+                                {[
+                                  { label: 'Lifetime income', value: `+${(t.lifetime_income || 0).toLocaleString()}`, color: '#16a34a' },
+                                  { label: 'Lifetime expenses', value: `-${(t.lifetime_expenses || 0).toLocaleString()}`, color: '#dc2626' },
+                                  { label: 'Lifetime net', value: `${(t.net || 0) >= 0 ? '+' : ''}${(t.net || 0).toLocaleString()}`, color: (t.net || 0) >= 0 ? '#16a34a' : '#dc2626' },
+                                  { label: 'Burn rate', value: `${financeSummary.burn_rate_per_episode.toLocaleString()}/ep`, color: '#1a1a2e' },
+                                  { label: 'Avg income', value: `${(financeSummary.avg_income_per_episode || 0).toLocaleString()}/ep`, color: '#1a1a2e' },
+                                  { label: 'Runway', value: financeSummary.runway_episodes != null ? `${financeSummary.runway_episodes} eps` : '∞', color: '#1a1a2e' },
+                                ].map(kpi => (
+                                  <div key={kpi.label} style={{ padding: '10px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                                    <div style={{ fontSize: 9, color: '#64748b', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>{kpi.label}</div>
+                                    <div style={{ fontSize: 15, fontWeight: 700, color: kpi.color, fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{kpi.value}</div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Sparkline — last 12 episodes' ending balance. Rendered with
+                                  inline SVG (no chart library) so it survives any CSP + is
+                                  fast to paint. Each point is scaled into the 0-100 range */}
+                              {recentTrend.length > 1 && (
+                                <div style={{ padding: '12px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 10, color: '#64748b', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 6 }}>Balance — last {recentTrend.length} episodes</div>
+                                  <svg viewBox={`0 0 100 40`} preserveAspectRatio="none" style={{ width: '100%', height: 60 }}>
+                                    {/* Zero line */}
+                                    {minBal < 0 && (
+                                      <line x1="0" y1={40 - ((0 - minBal) / range) * 40} x2="100" y2={40 - ((0 - minBal) / range) * 40} stroke="#cbd5e1" strokeWidth="0.3" strokeDasharray="1,1" />
+                                    )}
+                                    <polyline
+                                      points={recentTrend.map((p, i) => {
+                                        const x = (i / Math.max(1, recentTrend.length - 1)) * 100;
+                                        const y = 40 - ((p.balance_after - minBal) / range) * 40;
+                                        return `${x},${y}`;
+                                      }).join(' ')}
+                                      fill="none"
+                                      stroke="#B8962E"
+                                      strokeWidth="0.8"
+                                      vectorEffect="non-scaling-stroke"
+                                    />
+                                    {recentTrend.map((p, i) => {
+                                      const x = (i / Math.max(1, recentTrend.length - 1)) * 100;
+                                      const y = 40 - ((p.balance_after - minBal) / range) * 40;
+                                      return <circle key={i} cx={x} cy={y} r="0.8" fill={p.net >= 0 ? '#16a34a' : '#dc2626'} vectorEffect="non-scaling-stroke" />;
+                                    })}
+                                  </svg>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: '#94a3b8', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>
+                                    <span>Ep {recentTrend[0]?.episode_number || '?'}</span>
+                                    <span>Ep {recentTrend[recentTrend.length - 1]?.episode_number || '?'}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                        {!financeSummaryLoading && !financeSummary && (
+                          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>
+                            No summary yet. Finalize an episode to populate.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── PER-EPISODE TAB ────────────────────────────────────
+                        Full-history P&L table, newest first. Colour-codes the net
+                        column red/green. Click a row to jump to that episode (TODO). */}
+                    {financeTab === 'per_episode' && (
+                      <div>
+                        {financeSummary && financeSummary.by_episode.length > 0 ? (
+                          <div style={{ overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ background: '#f8fafc', color: '#64748b', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', fontSize: 9, letterSpacing: 0.4 }}>
+                                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Ep</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'left' }}>Title</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Outfit</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Event</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Tasks</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Net</th>
+                                  <th style={{ padding: '8px 10px', textAlign: 'right' }}>Balance</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {financeSummary.by_episode.filter(e => e.tx_count > 0).map(e => (
+                                  <tr key={e.episode_id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                    <td style={{ padding: '7px 10px', fontFamily: "'DM Mono', monospace", color: '#64748b' }}>{e.episode_number ?? '—'}</td>
+                                    <td style={{ padding: '7px 10px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title || '(untitled)'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{e.outfit_cost ? `-${e.outfit_cost.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#dc2626' }}>{e.event_cost ? `-${e.event_cost.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#16a34a' }}>{e.task_rewards ? `+${e.task_rewards.toLocaleString()}` : '—'}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", fontWeight: 700, color: e.net >= 0 ? '#16a34a' : '#dc2626' }}>{e.net >= 0 ? '+' : ''}{e.net.toLocaleString()}</td>
+                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#1a1a2e' }}>{e.balance_after.toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 30 }}>
+                            No episode-level transactions yet. Finalize episodes to populate.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── BREAKDOWNS TAB ───────────────────────────────────
+                        Income and expense categories rendered as labelled bars
+                        (simpler + more scannable than a pie at this data size).
+                        Bars are scaled against the single largest category so
+                        the visual ratio reflects actual spend shape. */}
+                    {financeTab === 'breakdowns' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {!financeBreakdowns && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>No breakdown data yet.</div>}
+                        {financeBreakdowns && (() => {
+                          const incomeMax = Math.max(1, ...(financeBreakdowns.income?.breakdown || []).map(r => r.total));
+                          const expenseMax = Math.max(1, ...(financeBreakdowns.expenses?.breakdown || []).map(r => r.total));
+                          const renderBars = (items, max, color) => (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {items.map(r => (
+                                <div key={r.category} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ width: 140, fontSize: 11, color: '#475569', fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.category}</div>
+                                  <div style={{ flex: 1, height: 14, background: 'rgba(0,0,0,0.05)', borderRadius: 3, overflow: 'hidden' }}>
+                                    <div style={{ width: `${(r.total / max) * 100}%`, height: '100%', background: color, transition: 'width 0.3s' }} />
+                                  </div>
+                                  <div style={{ width: 80, fontSize: 11, textAlign: 'right', fontFamily: "'DM Mono', monospace", color, fontWeight: 700 }}>
+                                    {r.total.toLocaleString()}
+                                  </div>
+                                  <div style={{ width: 30, fontSize: 9, textAlign: 'right', color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>×{r.tx_count}</div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                          return (
+                            <>
+                              <div style={{ padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>INCOME BY SOURCE</span>
+                                  <span style={{ fontSize: 11, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>total +{(financeBreakdowns.income?.total || 0).toLocaleString()}</span>
+                                </div>
+                                {(financeBreakdowns.income?.breakdown || []).length > 0
+                                  ? renderBars(financeBreakdowns.income.breakdown, incomeMax, '#16a34a')
+                                  : <div style={{ fontSize: 11, color: '#16a34a80', textAlign: 'center', padding: 10 }}>No income recorded yet.</div>}
+                              </div>
+                              <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>EXPENSES BY CATEGORY</span>
+                                  <span style={{ fontSize: 11, color: '#dc2626', fontFamily: "'DM Mono', monospace" }}>total -{(financeBreakdowns.expenses?.total || 0).toLocaleString()}</span>
+                                </div>
+                                {(financeBreakdowns.expenses?.breakdown || []).length > 0
+                                  ? renderBars(financeBreakdowns.expenses.breakdown, expenseMax, '#dc2626')
+                                  : <div style={{ fontSize: 11, color: '#dc262680', textAlign: 'center', padding: 10 }}>No expenses recorded yet.</div>}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#94a3b8', textAlign: 'center' }}>
+                                Bar length = share of its side's total. "×N" = how many transactions rolled into that row.
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* ── CLOSET TAB ───────────────────────────────────────
+                        Net-worth snapshot from the wardrobe. Owned value is the
+                        real money Lala has tied up in her closet; unowned is her
+                        aspirational inventory. Top 5 unowned-by-value shown so
+                        creators see the concrete upgrade path. */}
+                    {financeTab === 'closet' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {!financeBreakdowns?.closet && <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 20 }}>No closet data yet.</div>}
+                        {financeBreakdowns?.closet && (() => {
+                          const c = financeBreakdowns.closet;
+                          return (
+                            <>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                                <div style={{ padding: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: '#16a34a', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Owned closet value</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#16a34a', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.owned_value.toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: '#16a34a80', marginTop: 2 }}>{c.owned_count} pieces</div>
+                                </div>
+                                <div style={{ padding: 12, background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: '#4338ca', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Wishlist potential</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#4338ca', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{c.unowned_value.toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: '#4338ca80', marginTop: 2 }}>{c.unowned_count} pieces unowned</div>
+                                </div>
+                                <div style={{ padding: 12, background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 9, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase' }}>Total catalog</div>
+                                  <div style={{ fontSize: 20, fontWeight: 800, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>{(c.owned_value + c.unowned_value).toLocaleString()}</div>
+                                  <div style={{ fontSize: 10, color: '#8a6d1f80', marginTop: 2 }}>{c.owned_count + c.unowned_count} pieces total</div>
+                                </div>
+                              </div>
+                              {c.wishlist && c.wishlist.length > 0 && (
+                                <div style={{ padding: '12px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5, marginBottom: 8 }}>💎 TOP 5 DREAM PIECES</div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    {c.wishlist.map(w => (
+                                      <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 6, background: '#faf7f0', borderRadius: 6 }}>
+                                        {w.image_url && <img src={w.image_url} alt={w.name} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />}
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
+                                          <div style={{ fontSize: 10, color: '#64748b' }}>{w.brand || '—'} · {w.tier || 'basic'}</div>
+                                        </div>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+                                          💰 {w.coin_cost.toLocaleString()}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* ── GOALS TAB ──────────────────────────────────────── */}
+                    {financeTab === 'goals' && (
+                    <>
+                    {/* Auto-suggestions — generated from balance + upcoming events +
+                        wardrobe wishlist + best-ever episode. Each card shows the
+                        proposed label / threshold / reward plus a one-line rationale
+                        and a "+ Add" button that appends it to the draft goals list.
+                        Already-added suggestions are dimmed with an "Added" badge. */}
+                    {Array.isArray(financeSuggestions) && financeSuggestions.length > 0 && (
+                      <div style={{ marginBottom: 16, padding: '12px 14px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#4338ca', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>🤖 SUGGESTED GOALS</span>
+                          <span style={{ fontSize: 10, color: '#6366f1' }}>— derived from your balance + calendar + closet</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {financeSuggestions.map(sug => {
+                            const already = sug.already_exists || d.goals.some(g => g.id === sug.id || Number(g.threshold) === Number(sug.threshold));
+                            return (
+                              <div key={sug.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, background: '#fff', borderRadius: 6, border: '1px solid #e0e7ff', opacity: already ? 0.55 : 1 }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+                                    {sug.label}
+                                    <span style={{ marginLeft: 8, fontSize: 10, color: '#6366f1', fontFamily: "'DM Mono', monospace" }}>
+                                      {Number(sug.threshold).toLocaleString()} coins · +{Number(sug.reward_coins).toLocaleString()} reward
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{sug.description}</div>
+                                  <div style={{ fontSize: 9, color: '#94a3b8', fontFamily: "'DM Mono', monospace", fontStyle: 'italic', marginTop: 2 }}>{sug.rationale}</div>
+                                </div>
+                                {already ? (
+                                  <span style={{ fontSize: 10, fontWeight: 600, color: '#16a34a', padding: '4px 10px', background: '#f0fdf4', borderRadius: 5 }}>✓ Added</span>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setFinanceEditorDraft(p => ({ ...p, goals: [...p.goals, {
+                                        id: sug.id,
+                                        label: sug.label,
+                                        threshold: Number(sug.threshold),
+                                        reward_coins: Number(sug.reward_coins),
+                                        description: sug.description,
+                                        triggered_at: null,
+                                        episode_id: null,
+                                      }] }));
+                                    }}
+                                    style={{ padding: '5px 14px', fontSize: 11, fontWeight: 700, border: '1px solid #6366f1', borderRadius: 5, background: '#6366f1', color: '#fff', cursor: 'pointer' }}
+                                  >+ Add</button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {/* Starting balance */}
+                    <div style={{ padding: '12px 14px', background: '#faf7f0', border: '1px solid #e6d9b8', borderRadius: 10, marginBottom: 14 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: '#8a6d1f', fontFamily: "'DM Mono', monospace", letterSpacing: 0.5 }}>Starting balance (coins)</label>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="100"
+                          value={d.starting_balance}
+                          onChange={e => setDraft({ starting_balance: e.target.value })}
+                          style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace", fontSize: 16, fontWeight: 700 }}
+                        />
+                        <span style={{ fontSize: 11, color: '#8a6d1f' }}>coins</span>
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>
+                        Current balance: {(financeConfig?.current_balance ?? 0).toLocaleString()} coins. Saving will re-seed the starting balance — non-seed transactions stay intact.
+                      </div>
+                    </div>
+
+                    {/* Goals ladder */}
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: '#1a1a2e' }}>Milestone ladder ({d.goals.length})</label>
+                        <button onClick={addGoal} style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #e0d9cc', borderRadius: 5, background: '#fff', cursor: 'pointer', color: '#334155' }}>+ Add goal</button>
+                      </div>
+                      {d.goals.length === 0 && (
+                        <div style={{ fontSize: 12, color: '#94a3b8', padding: 12, textAlign: 'center', border: '1px dashed #e2e8f0', borderRadius: 8 }}>
+                          No milestones yet. Add one above.
+                        </div>
+                      )}
+                      {d.goals.map((g, i) => (
+                        <div key={g.id || i} style={{ padding: 10, marginBottom: 8, border: '1px solid #e2e8f0', borderRadius: 8, background: g.triggered_at ? '#f0fdf4' : '#fff' }}>
+                          <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                            <input
+                              value={g.label}
+                              onChange={e => updateGoal(i, { label: e.target.value })}
+                              placeholder="🌟 Rising Star"
+                              style={{ ...S.inp, flex: 2, margin: 0 }}
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="100"
+                              value={g.threshold}
+                              onChange={e => updateGoal(i, { threshold: e.target.value })}
+                              placeholder="threshold"
+                              title="Balance Lala must reach to trigger this goal"
+                              style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace" }}
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              value={g.reward_coins}
+                              onChange={e => updateGoal(i, { reward_coins: e.target.value })}
+                              placeholder="reward"
+                              title="Coins paid out when goal is reached"
+                              style={{ ...S.inp, flex: 1, margin: 0, fontFamily: "'DM Mono', monospace" }}
+                            />
+                            <button
+                              onClick={() => removeGoal(i)}
+                              title="Delete this goal"
+                              style={{ background: 'none', border: '1px solid #fecaca', borderRadius: 6, color: '#dc2626', cursor: 'pointer', padding: '0 10px', fontSize: 14 }}
+                            >×</button>
+                          </div>
+                          <input
+                            value={g.description || ''}
+                            onChange={e => updateGoal(i, { description: e.target.value })}
+                            placeholder="Short description shown on the progress bar"
+                            style={{ ...S.inp, width: '100%', margin: 0, fontSize: 12 }}
+                          />
+                          {/* Episode scope — leave as "any episode" for ladder-style
+                              show-wide goals, or pin to a specific episode for per-
+                              episode targets ("hit 10k by end of Ep 3"). Episode-
+                              scoped goals only fire when that specific episode
+                              finalizes and the threshold gets crossed. */}
+                          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <label style={{ fontSize: 10, color: '#8a7e65', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>EPISODE:</label>
+                            <select
+                              value={g.episode_id || ''}
+                              onChange={e => updateGoal(i, { episode_id: e.target.value || null })}
+                              style={{ ...S.sel, width: '100%', margin: 0, fontSize: 12 }}
+                            >
+                              <option value="">Any episode (show-wide ladder)</option>
+                              {episodes.map(ep => (
+                                <option key={ep.id} value={ep.id}>
+                                  Ep {ep.episode_number || '?'}: {ep.title || 'Untitled'}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {g.triggered_at && (
+                            <div style={{ fontSize: 10, color: '#16a34a', marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
+                              ✓ Triggered {new Date(g.triggered_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 10, borderTop: '1px solid #f0ece4' }}>
+                      <button onClick={() => setFinanceEditorOpen(false)} disabled={financeEditorSaving} style={{ ...S.secBtn, padding: '7px 16px' }}>Cancel</button>
+                      <button onClick={save} disabled={financeEditorSaving} style={{ ...S.primaryBtn, padding: '7px 22px' }}>
+                        {financeEditorSaving ? 'Saving…' : 'Save & re-seed'}
+                      </button>
+                    </div>
+                    </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── Create Outfit Set Modal ── */}
+            {showCreateOutfitSet && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => !creatingOutfitSet && setShowCreateOutfitSet(false)}>
+                <div style={{ background: '#fff', borderRadius: 14, maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Create Outfit Set</h3>
+                    <button onClick={() => setShowCreateOutfitSet(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, fontFamily: "'DM Mono', monospace" }}>
+                    {selectedWardrobeIds.size} pieces selected
+                  </div>
+                  {/* Piece chips — visual confirmation of what goes into the set. */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                    {Array.from(selectedWardrobeIds).map(id => {
+                      const item = wardrobeItems.find(w => w.id === id);
+                      if (!item) return null;
+                      const img = item.s3_url_processed || item.s3_url || item.thumbnail_url;
+                      return (
+                        <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 8px' }}>
+                          {img && <img src={img} alt="" style={{ width: 24, height: 24, objectFit: 'cover', borderRadius: 4 }} />}
+                          <span style={{ fontSize: 11, color: '#334155' }}>{item.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <label style={{ fontSize: 11, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>set name</label>
+                  <input
+                    type="text"
+                    value={outfitSetName}
+                    onChange={e => setOutfitSetName(e.target.value)}
+                    placeholder="e.g., Floral Corset Set"
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 14, fontFamily: "'Lora', serif", marginTop: 4, marginBottom: 16, boxSizing: 'border-box' }}
+                    autoFocus
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <button onClick={() => setShowCreateOutfitSet(false)} style={{ padding: '7px 16px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
+                    <button
+                      disabled={!outfitSetName.trim() || creatingOutfitSet}
+                      onClick={async () => {
+                        setCreatingOutfitSet(true);
+                        try {
+                          const selectedArr = Array.from(selectedWardrobeIds);
+                          const payloadItems = selectedArr.map(id => {
+                            const item = wardrobeItems.find(w => w.id === id);
+                            return item ? { id: item.id, name: item.name, category: item.clothing_category || item.itemType, image: item.s3_url_processed || item.s3_url } : null;
+                          }).filter(Boolean);
+                          const res = await fetch('/api/v1/outfit-sets', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: outfitSetName.trim(), character: 'Lala', items: payloadItems, show_id: showId }),
+                          });
+                          if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Create failed'); }
+                          setToast(`Outfit set "${outfitSetName.trim()}" created`);
+                          setShowCreateOutfitSet(false);
+                          setSelectedWardrobeIds(new Set());
+                        } catch (err) { setToast('Failed to create set: ' + err.message); }
+                        setCreatingOutfitSet(false);
+                      }}
+                      style={{ padding: '7px 22px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (!outfitSetName.trim() || creatingOutfitSet) ? 0.4 : 1 }}
+                    >{creatingOutfitSet ? 'Creating...' : 'Create set'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Usage Modal — which episodes reference this item ── */}
+            {usageModalItem && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setUsageModalItem(null); setItemUsage(null); }}>
+                <div style={{ background: '#fff', borderRadius: 14, maxWidth: 520, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Item Usage: {usageModalItem.name}</h3>
+                    <button onClick={() => { setUsageModalItem(null); setItemUsage(null); }} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>
+                  </div>
+                  {/* Three states: loading, empty, populated — matches the existing WardrobeBrowser modal. */}
+                  {itemUsage == null ? (
+                    <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Loading usage data...</div>
+                  ) : !itemUsage.totalEpisodes ? (
+                    <div style={{ padding: 20, textAlign: 'center' }}>
+                      <p style={{ margin: '4px 0', fontSize: 13, color: '#334155' }}>This item isn't used in any episodes yet.</p>
+                      <p style={{ margin: '4px 0', fontSize: 12, color: '#94a3b8' }}>It can be safely deleted.</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
+                        <div><strong>Total episodes:</strong> {itemUsage.totalEpisodes}</div>
+                        <div><strong>Total shows:</strong> {itemUsage.totalShows}</div>
+                      </div>
+                      {(itemUsage.shows || []).map(show => (
+                        <div key={show.showId} style={{ marginBottom: 14 }}>
+                          <h4 style={{ margin: '4px 0 6px', fontSize: 13, color: '#1e293b' }}>{show.showName || 'Unknown Show'}</h4>
+                          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
+                            {(show.episodes || []).map(ep => (
+                              <li key={ep.episodeId}>Episode {ep.episodeNumber}: {ep.title}{ep.isFavorite && <span style={{ marginLeft: 4, color: '#eab308' }}>★</span>}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                    <button onClick={() => { setUsageModalItem(null); setItemUsage(null); }} style={{ padding: '7px 20px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Close</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* ── Lightbox Modal ── */}
             {lightboxItem && (() => {
-              const imgUrl = lightboxItem.s3_url_processed || lightboxItem.s3_url || lightboxItem.image_url;
+              // Build the list of variants that actually have a URL on this
+              // row. The lightbox lets the user preview any of them via a
+              // toggle without mutating DB state; only the "Set as default"
+              // button writes back via primary_image_variant.
+              const variants = [
+                { key: 'regenerated', label: '🎨 Product Shot', url: lightboxItem.s3_url_regenerated },
+                { key: 'processed',   label: '✂️ No BG',        url: lightboxItem.s3_url_processed },
+                { key: 'original',    label: '📷 Original',     url: lightboxItem.s3_url || lightboxItem.image_url },
+              ].filter(v => v.url);
+
+              // Selection: local toggle wins (if it points at a variant that
+              // exists on this item); else the row's primary pick; else the
+              // default preference chain.
+              const resolved = resolveItemImageUrl(lightboxItem);
+              const active = variants.find(v => v.key === lightboxVariant)
+                          || variants.find(v => v.key === resolved.variant)
+                          || variants[0];
+              const imgUrl = active?.url;
+              const currentPrimary = lightboxItem.primary_image_variant || resolved.variant;
+
               const itemType = lightboxItem.clothing_category || lightboxItem.itemType || lightboxItem.item_type || '';
               const colorHex = getColorHex(lightboxItem.color);
               return (
                 <div 
                   style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} 
-                  onClick={() => setLightboxItem(null)}
+                  onClick={() => { setLightboxVariant(null); setLightboxItem(null); }}
                 >
                   <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                     {/* Close button */}
-                    <button 
-                      onClick={() => setLightboxItem(null)} 
+                    <button
+                      onClick={() => { setLightboxVariant(null); setLightboxItem(null); }}
                       style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', padding: 8 }}
                     >✕</button>
-                    
+
+                    {/* Variant toggle — only renders when the row has more than one
+                        variant worth switching between. A star next to the label
+                        marks which one the grid card will use. */}
+                    {variants.length > 1 && (
+                      <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {variants.map(v => {
+                          const isActive = v.key === active.key;
+                          const isPrimary = v.key === currentPrimary;
+                          return (
+                            <button
+                              key={v.key}
+                              onClick={() => setLightboxVariant(v.key)}
+                              style={{
+                                padding: '6px 12px',
+                                background: isActive ? '#fff' : 'rgba(255,255,255,0.15)',
+                                color: isActive ? '#1a1a2e' : '#fff',
+                                border: isActive ? '2px solid #fff' : '2px solid rgba(255,255,255,0.25)',
+                                borderRadius: 20,
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              {isPrimary ? '★ ' : ''}{v.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {/* Main image */}
-                    <img 
-                      src={imgUrl} 
-                      alt={lightboxItem.name} 
-                      style={{ maxWidth: '100%', maxHeight: 'calc(90vh - 120px)', objectFit: 'contain', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }} 
+                    <img
+                      src={imgUrl}
+                      alt={lightboxItem.name}
+                      style={{ maxWidth: '100%', maxHeight: 'calc(90vh - 160px)', objectFit: 'contain', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
                     />
                     
                     {/* Item info bar */}
@@ -4542,9 +6347,36 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           {lightboxItem.price && <span style={{ color: '#16a34a', fontWeight: 600 }}> · ${parseFloat(lightboxItem.price).toFixed(0)}</span>}
                         </div>
                       </div>
-                      <button 
-                        onClick={() => { setLightboxItem(null); openEditItem(lightboxItem); }} 
-                        style={{ marginLeft: 'auto', padding: '6px 14px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                      {/* Only offer "Set as default for grid" when the user is
+                          actively previewing a NON-primary variant — otherwise
+                          the action would be a no-op. */}
+                      {active && active.key !== currentPrimary && (
+                        <button
+                          onClick={() => promoteToPrimary(lightboxItem, active.key)}
+                          disabled={promotingVariant}
+                          title={`Make the ${active.label} the image shown in the grid for this item`}
+                          style={{ marginLeft: 'auto', padding: '6px 14px', background: promotingVariant ? '#94a3b8' : '#0f766e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: promotingVariant ? 'wait' : 'pointer' }}
+                        >{promotingVariant ? 'Saving…' : '★ Set as default'}</button>
+                      )}
+                      {/* "Send to phone" only makes sense for a colored-backdrop
+                          variant — the phone uses it as a screen background. */}
+                      {active && ['pink', 'blue', 'teal'].includes(active.key) && (
+                        <button
+                          onClick={() => handleSendToPhone(lightboxItem, active.key)}
+                          disabled={sendingToPhone}
+                          title={`Create a Lala's-phone screen from the ${active.label} variant — opens the overlay editor so you can draw tap zones`}
+                          style={{ marginLeft: (active && active.key !== currentPrimary) ? 0 : 'auto', padding: '6px 14px', background: sendingToPhone ? '#94a3b8' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: sendingToPhone ? 'wait' : 'pointer' }}
+                        >{sendingToPhone ? 'Sending…' : '📱 Send to phone'}</button>
+                      )}
+                      <button
+                        onClick={() => handleRegenerateProductShot(lightboxItem)}
+                        disabled={regeneratingItemId === lightboxItem.id}
+                        title="AI image-to-image — swaps backdrop, removes hangers/dress-form residue, simulates invisible mannequin (~$0.04)"
+                        style={{ padding: '6px 14px', background: regeneratingItemId === lightboxItem.id ? '#94a3b8' : '#db2777', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: regeneratingItemId === lightboxItem.id ? 'wait' : 'pointer' }}
+                      >{regeneratingItemId === lightboxItem.id ? 'Regenerating…' : '🎨 Regenerate'}</button>
+                      <button
+                        onClick={() => { setLightboxVariant(null); setLightboxItem(null); openEditItem(lightboxItem); }}
+                        style={{ padding: '6px 14px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                       >Edit Item</button>
                     </div>
                   </div>

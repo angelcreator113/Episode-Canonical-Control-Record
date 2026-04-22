@@ -1,6 +1,7 @@
 // frontend/src/pages/SettingsPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import PageLayout from '../components/layout/PageLayout';
 import './SettingsPage.css';
 
 const FONT_OPTIONS = [
@@ -75,12 +76,12 @@ function SettingsPage() {
   ];
 
   return (
-    <div className="settings-page">
-      <header className="settings-header">
-        <h1>Settings</h1>
-        {saved && <span className="settings-saved-badge">Saved</span>}
-      </header>
-
+    <PageLayout
+      variant="narrow"
+      className="settings-page"
+      title="Settings"
+      actions={saved && <span className="settings-saved-badge">Saved</span>}
+    >
       <div className="settings-tabs">
         {tabs.map(tab => (
           <button
@@ -300,7 +301,7 @@ function SettingsPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageLayout>
   );
 }
 

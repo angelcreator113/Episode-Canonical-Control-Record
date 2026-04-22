@@ -1,5 +1,7 @@
 'use strict';
 
+const { SLOT_KEYS, SLOT_DEFS, groupItemsBySlot } = require('../utils/wardrobeSlots');
+
 /**
  * Wardrobe Intelligence Service
  *
@@ -16,6 +18,208 @@
 // ── 1. OUTFIT MATCH SCORING ─────────────────────────────────────────────────
 // Scores how well an outfit matches an event — NOT a filter, a narrative signal
 
+const TIER_VALUES = { basic: 1, mid: 2, luxury: 3, elite: 4 };
+const TIER_LABELS = { 1: 'basic', 2: 'mid', 3: 'luxury', 4: 'elite' };
+
+// ── Secondary evaluation signals ────────────────────────────────────────────
+// These fire on the aggregate outfit (not per-slot) and add narrative texture
+// that tier-gap alone can't express. Each helper returns either `null` (no
+// opinion) or a `{ type, text, narrative, delta }` signal that can be merged
+// into the main signals array + match score.
+
+// Rough color families for harmony detection. Items with unknown color names
+// fall through as "neutral" — no bonus, no penalty. Kept deliberately small:
+// expanding it past ~20 groups makes the signal noisy.
+const COLOR_FAMILIES = {
+  warm: ['red', 'orange', 'coral', 'rust', 'burgundy', 'maroon', 'terracotta', 'rose', 'pink'],
+  cool: ['blue', 'navy', 'teal', 'mint', 'green', 'emerald', 'aqua', 'sky'],
+  neutral: ['black', 'white', 'grey', 'gray', 'beige', 'cream', 'ivory', 'nude', 'tan', 'taupe'],
+  metallic: ['gold', 'silver', 'bronze', 'champagne', 'copper', 'rose gold'],
+  jewel: ['purple', 'violet', 'lavender', 'plum', 'amethyst', 'sapphire', 'ruby'],
+  pastel: ['blush', 'peach', 'lavender', 'mint', 'buttercream', 'powder'],
+};
+function classifyColor(name) {
+  if (!name || typeof name !== 'string') return 'unknown';
+  const lower = name.toLowerCase();
+  for (const [family, members] of Object.entries(COLOR_FAMILIES)) {
+    if (members.some(c => lower.includes(c))) return family;
+  }
+  return 'unknown';
+}
+
+/**
+ * Color harmony — rewards outfits whose pieces sit in the same family (or all
+ * neutrals + one accent), flags chaotic palettes. Neutrals + metallics are
+ * treated as universal anchors so "black dress + gold jewelry" reads as
+ * cohesive, not conflicted.
+ */
+function evaluateColorHarmony(items) {
+  const families = items.map(i => classifyColor(i.color)).filter(f => f !== 'unknown');
+  if (families.length < 2) return null;
+  const anchors = new Set(['neutral', 'metallic']);
+  const colorful = families.filter(f => !anchors.has(f));
+  const uniqueColorful = new Set(colorful);
+  if (uniqueColorful.size === 0) {
+    return { type: 'color_cohesive', text: 'All neutrals/metallics — classic palette', narrative: 'confidence_boost', delta: 6 };
+  }
+  if (uniqueColorful.size === 1) {
+    return { type: 'color_cohesive', text: `Anchored on ${[...uniqueColorful][0]} — palette holds together`, narrative: 'confidence_boost', delta: 6 };
+  }
+  if (uniqueColorful.size >= 3) {
+    return { type: 'color_busy', text: 'Three+ color families fighting — palette reads busy', narrative: 'mild_anxiety', delta: -8 };
+  }
+  return null;
+}
+
+/**
+ * Occasion precision — matches items' `occasion` tag against the event's
+ * dress_code / event_type keywords. Precise match (≥60% of items tagged for
+ * this occasion) bumps the score; 0% hits gets flagged.
+ */
+function evaluateOccasionPrecision(items, event) {
+  const target = (event?.event_type || '').toLowerCase();
+  const dressCode = (event?.dress_code || '').toLowerCase();
+  if (!target && !dressCode) return null;
+  const hits = items.filter(i => {
+    const occ = (i.occasion || '').toLowerCase();
+    if (!occ) return false;
+    if (target && occ.includes(target)) return true;
+    if (dressCode && (occ.includes(dressCode) || dressCode.includes(occ))) return true;
+    return false;
+  }).length;
+  const ratio = items.length ? hits / items.length : 0;
+  if (ratio >= 0.6) return { type: 'occasion_precise', text: 'Pieces are tagged for this occasion', narrative: 'strategic', delta: 6 };
+  if (ratio === 0 && items.length >= 3) return { type: 'occasion_miss', text: 'None of the pieces are tagged for this kind of event', narrative: 'mild_anxiety', delta: -6 };
+  return null;
+}
+
+/**
+ * Season match — if the event has a known month/season and items have season
+ * tags, reward alignment. An all-winter outfit at a summer brunch reads wrong.
+ */
+function evaluateSeasonMatch(items, event) {
+  const eventSeason = (event?.season || '').toLowerCase();
+  if (!eventSeason) return null;
+  const wrong = items.filter(i => {
+    const s = (i.season || '').toLowerCase();
+    return s && s !== 'all-season' && s !== eventSeason;
+  }).length;
+  if (wrong === 0) return null;
+  if (wrong >= Math.ceil(items.length / 2)) {
+    return { type: 'season_off', text: `Half the pieces are wrong-season for a ${eventSeason} event`, narrative: 'mild_anxiety', delta: -5 };
+  }
+  return { type: 'season_minor', text: `${wrong} piece${wrong > 1 ? 's are' : ' is'} wrong-season for a ${eventSeason} event`, narrative: 'mild_anxiety', delta: -2 };
+}
+
+/**
+ * Era consistency — items carry era_alignment (foundation/glow_up/luxury/
+ * prime/legacy). Mixing eras reads as "throwback"; a single-era outfit reads
+ * as intentional. Only fires when ≥50% of items have an era tag.
+ */
+function evaluateEraConsistency(items) {
+  const withEra = items.filter(i => i.era_alignment);
+  if (withEra.length < Math.ceil(items.length / 2)) return null;
+  const eras = new Set(withEra.map(i => i.era_alignment));
+  if (eras.size === 1) {
+    return { type: 'era_consistent', text: `Grounded in the ${[...eras][0]} era — reads intentional`, narrative: 'confidence_boost', delta: 4 };
+  }
+  if (eras.size >= 3) {
+    return { type: 'era_mixed', text: `Three eras mixed (${[...eras].join(', ')}) — reads like a throwback`, narrative: 'tension', delta: -3 };
+  }
+  return null;
+}
+
+/**
+ * Score a single slot against an event. Returns { match, status, reason } where
+ * match is 0–100 and status is one of: 'empty' (nothing in the slot), 'low'
+ * (<45), 'ok' (45–74), 'good' (75+). The reason is a short string the UI can
+ * render directly — keeps the rendering code dumb.
+ *
+ * Slot scoring works on the same prestige-expected-tier model as the overall
+ * score, but applied to THIS slot's items only, so creators can see exactly
+ * which slot is dragging the total down. Multi-item slots (jewelry, access-
+ * ories) average their pieces and add a small coordination bonus when 2+
+ * pieces share at least one aesthetic tag.
+ */
+function scoreSingleSlot(slotKey, items, event, expectedTier) {
+  const def = SLOT_DEFS[slotKey];
+  // Per-event override for which slots are required. Events on shows that
+  // demand a full 5-slot outfit (fragrance + jewelry + accessories included)
+  // pass `required_slots: ['outfit','shoes','jewelry','accessories','fragrance']`.
+  // Falls back to the slot def's own `required` when the event doesn't
+  // specify, so outfit + shoes stay required by default for everyone else.
+  const isRequired = Array.isArray(event?.required_slots)
+    ? event.required_slots.includes(slotKey)
+    : def.required;
+  if (!items || items.length === 0) {
+    return {
+      slot: slotKey,
+      label: def.label,
+      icon: def.icon,
+      required: isRequired,
+      items: [],
+      match: 0,
+      status: 'empty',
+      reason: isRequired ? `No ${def.label.toLowerCase()} selected — required for this event.` : null,
+    };
+  }
+
+  // Average tier across the items in this slot.
+  const tiers = items.map(i => TIER_VALUES[i.tier] || 2);
+  const avgTier = tiers.reduce((a, b) => a + b, 0) / tiers.length;
+  const gap = avgTier - expectedTier;
+
+  let match;
+  let reason;
+  if (gap >= 1.5) {
+    match = 75;
+    reason = `Tier is above the event — ${def.label} reads as overdressed.`;
+  } else if (Math.abs(gap) <= 0.5) {
+    match = 92;
+    reason = `Tier nails the event's prestige.`;
+  } else if (gap >= -1) {
+    match = 65;
+    reason = `Slightly under the event's tier — works but not hero-level.`;
+  } else {
+    match = 30;
+    reason = `Tier is well under what the event expects (need ${TIER_LABELS[Math.round(expectedTier)] || 'higher'}).`;
+  }
+
+  // Host-brand bonus — wearing the host brand on the key piece is a statement.
+  if (event && event.host_brand && items.some(i => i.brand === event.host_brand)) {
+    match = Math.min(100, match + 8);
+    reason = `${reason} Wearing ${event.host_brand} to their own event.`.trim();
+  }
+
+  // Multi-item coordination — reward jewelry/accessories that share tags.
+  if (def.multi && items.length >= 2) {
+    const tagSets = items.map(i => new Set((i.aesthetic_tags || []).map(t => String(t).toLowerCase())));
+    const shared = [...tagSets[0]].filter(t => tagSets.every(s => s.has(t)));
+    if (shared.length > 0) {
+      match = Math.min(100, match + 4);
+      reason = `${reason} Pieces coordinate on ${shared.slice(0, 2).join('/')}.`.trim();
+    }
+  }
+
+  // Borrowed/rented piece flag — doesn't tank the score, but surfaces.
+  const borrowed = items.find(i => i.acquisition_type === 'borrowed' || i.acquisition_type === 'rented');
+  if (borrowed) {
+    reason = `${reason} (${borrowed.name} is ${borrowed.acquisition_type}.)`.trim();
+  }
+
+  const status = match >= 75 ? 'good' : match >= 45 ? 'ok' : 'low';
+  return {
+    slot: slotKey,
+    label: def.label,
+    icon: def.icon,
+    required: isRequired,
+    items: items.map(i => ({ id: i.id, name: i.name, tier: i.tier, brand: i.brand })),
+    match: Math.round(match),
+    status,
+    reason,
+  };
+}
+
 function scoreOutfitForEvent(wardrobeItems, event) {
   if (!wardrobeItems?.length || !event) return null;
 
@@ -23,7 +227,6 @@ function scoreOutfitForEvent(wardrobeItems, event) {
   const _eventType = event.event_type || 'invite';
 
   // Calculate outfit tier (average of all pieces)
-  const TIER_VALUES = { basic: 1, mid: 2, luxury: 3, elite: 4 };
   const tierSum = wardrobeItems.reduce((s, i) => s + (TIER_VALUES[i.tier] || 2), 0);
   const avgTier = tierSum / wardrobeItems.length;
 
@@ -73,6 +276,34 @@ function scoreOutfitForEvent(wardrobeItems, event) {
     signals.push({ type: 'borrowed', text: 'Some pieces are borrowed — she\'s faking it', narrative: 'vulnerability' });
   }
 
+  // ── Secondary evaluation signals ─────────────────────────────────
+  // Layer color/occasion/season/era checks on top of the tier-gap score.
+  // Each helper returns either null or { type, text, narrative, delta }; we
+  // push the signal onto the stack and apply its delta to matchScore.
+  for (const sig of [
+    evaluateColorHarmony(wardrobeItems),
+    evaluateOccasionPrecision(wardrobeItems, event),
+    evaluateSeasonMatch(wardrobeItems, event),
+    evaluateEraConsistency(wardrobeItems),
+  ]) {
+    if (sig) {
+      matchScore += sig.delta || 0;
+      signals.push({ type: sig.type, text: sig.text, narrative: sig.narrative });
+    }
+  }
+
+  // ── Per-slot breakdown ─────────────────────────────────────────────
+  // Bucket the items into our 5 UI slots and score each one against the
+  // event independently. The aggregate `match_score` above stays the source
+  // of truth for narrative mood / signals; the `slots` array is purely a
+  // "where's the weak link?" readout that the outfit-picker modal renders
+  // as a row per slot.
+  const bySlot = groupItemsBySlot(wardrobeItems);
+  const slots = SLOT_KEYS.map(key => scoreSingleSlot(key, bySlot[key] || [], event, expectedTier));
+  const unassigned = bySlot.__unassigned && bySlot.__unassigned.length
+    ? bySlot.__unassigned.map(i => ({ id: i.id, name: i.name, clothing_category: i.clothing_category }))
+    : [];
+
   return {
     match_score: Math.max(0, Math.min(100, matchScore)),
     outfit_tier: avgTier,
@@ -83,6 +314,11 @@ function scoreOutfitForEvent(wardrobeItems, event) {
     brands,
     piece_count: wardrobeItems.length,
     narrative_mood: tierGap < -1 ? 'anxiety' : tierGap > 1 ? 'overcompensation' : Math.abs(tierGap) <= 0.5 ? 'confidence' : 'tension',
+    // New in the 5-slot redesign. Clients can render the breakdown without
+    // duplicating the tier-gap logic; legacy clients that only read
+    // match_score keep working.
+    slots,
+    unassigned,
   };
 }
 

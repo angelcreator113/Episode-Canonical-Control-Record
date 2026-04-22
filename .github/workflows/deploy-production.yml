@@ -255,8 +255,8 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           
-          # Ensure production .env has DB credentials
-          echo "🔑 Writing DB credentials to production .env..."
+          # Ensure production .env has DB credentials + third-party API keys
+          echo "🔑 Writing DB credentials + API keys to production .env..."
           # Write credentials to temp file, SCP to server, then merge into .env
           # This avoids all shell interpretation issues with special chars (e.g. !! in passwords)
           CREDS_FILE=$(mktemp)
@@ -266,6 +266,17 @@ jobs:
             'DB_USER=${{ secrets.PROD_DB_USER }}' \
             'DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}' \
             > "$CREDS_FILE"
+
+          # Optional API keys — only append when the secret is set, so a deploy
+          # without the secret configured doesn't wipe an existing value from a
+          # previous manual setup. If you rotate a key to a new value just set
+          # the secret; if you want to clear one, do so directly in .env on EC2.
+          if [ -n '${{ secrets.FAL_KEY }}' ]; then
+            echo 'FAL_KEY=${{ secrets.FAL_KEY }}' >> "$CREDS_FILE"
+          fi
+          if [ -n '${{ secrets.REMOVEBG_API_KEY }}' ]; then
+            echo 'REMOVEBG_API_KEY=${{ secrets.REMOVEBG_API_KEY }}' >> "$CREDS_FILE"
+          fi
 
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
             "$CREDS_FILE" ubuntu@${{ secrets.EC2_HOST }}:/tmp/db_creds.env
