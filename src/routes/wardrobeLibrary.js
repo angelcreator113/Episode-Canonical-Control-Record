@@ -120,10 +120,46 @@ router.get('/for-chapter/:chapterId', optionalAuth, async (req, res) => {
 // event_types, and Lala reaction blurbs.
 router.post('/analyze-image', optionalAuth, upload.single('image'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No image provided' });
     if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
-    const { showId, episodeId } = req.body || {};
+    const { showId, episodeId, wardrobe_id: wardrobeId, image_url: imageUrl } = req.body || {};
+
+    // ── Resolve image buffer ─────────────────────────────────────────
+    // Three input paths:
+    //   1. multipart/form-data with req.file (user upload — the original flow)
+    //   2. wardrobe_id — server fetches S3 image by looking up the row
+    //   3. image_url — server fetches the URL directly
+    // Paths 2 + 3 exist so the "AI Enhance" button on an already-uploaded item
+    // doesn't have to fetch the image client-side (S3 CORS blocks that on the
+    // dev environment). Server fetch sidesteps CORS entirely.
+    let sourceBuffer = null;
+    if (req.file) {
+      sourceBuffer = req.file.buffer;
+    } else if (wardrobeId || imageUrl) {
+      try {
+        let resolvedUrl = imageUrl;
+        if (!resolvedUrl && wardrobeId) {
+          const models = require('../models');
+          const [rows] = await models.sequelize.query(
+            `SELECT s3_url_processed, s3_url, thumbnail_url
+             FROM wardrobe WHERE id = :id AND deleted_at IS NULL LIMIT 1`,
+            { replacements: { id: wardrobeId } }
+          );
+          const w = rows?.[0];
+          resolvedUrl = w?.s3_url_processed || w?.s3_url || w?.thumbnail_url || null;
+        }
+        if (!resolvedUrl) return res.status(400).json({ error: 'No image URL resolvable for this wardrobe item' });
+        const axios = require('axios');
+        const imgRes = await axios.get(resolvedUrl, { responseType: 'arraybuffer', timeout: 30000 });
+        sourceBuffer = Buffer.from(imgRes.data);
+      } catch (fetchErr) {
+        console.error('[WardrobeAnalyze] server-side image fetch failed:', fetchErr.message);
+        return res.status(502).json({ error: 'Could not fetch the wardrobe image server-side', message: fetchErr.message });
+      }
+    } else {
+      return res.status(400).json({ error: 'Provide an image file, wardrobe_id, or image_url' });
+    }
+
     const wantsGameplay = !!showId;
 
     // ── Build context summary (only when gameplay is requested) ─────────
@@ -191,7 +227,7 @@ router.post('/analyze-image', optionalAuth, upload.single('image'), async (req, 
     // 1568px on the long side matches Anthropic's recommended max for vision and
     // keeps JPEG quality 85 under ~500 KB for typical garment shots.
     const sharp = require('sharp');
-    const processed = await sharp(req.file.buffer)
+    const processed = await sharp(sourceBuffer)
       .rotate()
       .resize(1568, 1568, { fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 85 })

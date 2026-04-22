@@ -5004,15 +5004,19 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     btn.disabled = true;
                     btn.textContent = '⏳ Enhancing...';
                     try {
-                      const imgUrl = editingWardrobeItem.s3_url_processed || editingWardrobeItem.s3_url || editingWardrobeItem.thumbnail_url;
-                      if (!imgUrl) { setToast('No image to analyze'); btn.disabled = false; btn.textContent = '✨ AI Enhance'; return; }
-                      // Download image and send to analyzer
-                      const imgRes = await fetch(imgUrl);
-                      const blob = await imgRes.blob();
-                      const fd = new FormData();
-                      fd.append('image', blob, 'wardrobe-item.jpg');
+                      // Server-fetch path: pass wardrobe_id so the backend pulls
+                      // the image from S3 itself. Avoids the browser CORS block
+                      // that was producing "Failed to fetch" when the client
+                      // tried to hit the S3 URL directly from dev.primepisodes.com.
                       const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-                      const res = await fetch('/api/v1/wardrobe-library/analyze-image', { method: 'POST', body: fd, headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+                      const res = await fetch('/api/v1/wardrobe-library/analyze-image', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                        },
+                        body: JSON.stringify({ wardrobe_id: editingWardrobeItem.id, showId }),
+                      });
                       const data = await res.json();
                       if (data.success && data.data) {
                         const ai = data.data;
