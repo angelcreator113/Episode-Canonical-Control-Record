@@ -468,7 +468,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [descRefining, setDescRefining] = useState(false);
   const [buildingSpec, setBuildingSpec] = useState(false);
   const [specProgress, setSpecProgress] = useState(null); // null | 'sending' | 'analyzing' | 'parsing' | 'done' | 'error'
-  const hasSpec = !!(set.scene_spec?.objects?.length);
+  const sceneSpec = set.scene_spec || set.visual_language?.scene_spec || null;
+  const hasSpec = !!(sceneSpec?.objects?.length);
+  const cameraContractCount = sceneSpec?.camera_contracts?.length || 0;
+  const sceneZoneCount = sceneSpec?.zones?.length || 0;
   const showToast = onToast || (() => {});
   const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
 
@@ -912,22 +915,54 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                     <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
                     <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
-                      Spec: {set.scene_spec.objects?.length || 0} objects · {set.scene_spec.zones?.length || 0} zones · {set.scene_spec.camera_contracts?.length || 0} contracts
+                      Spec: {sceneSpec?.objects?.length || 0} objects · {sceneZoneCount} zones · {cameraContractCount} contracts
                     </span>
                   </div>
-                  {set.scene_type === 'EVENT_LOCATION' && (set.scene_spec.camera_contracts?.length || 0) > 3 && (
+                  {cameraContractCount === 0 ? (
+                    <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
+                      This spec was saved without any camera contracts, so angle creation cannot run yet. Rebuild the spec to generate valid camera angles.
+                    </div>
+                  ) : null}
+                  {set.scene_type === 'EVENT_LOCATION' && cameraContractCount > 3 && (
                     <div style={{ fontSize: 10, color: '#f59e0b', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
-                      This event venue has {set.scene_spec.camera_contracts.length} angles — events typically only need 1-2. Hit "Rebuild Spec" in the Spec tab to regenerate with fewer angles.
+                      This event venue has {cameraContractCount} angles — events typically only need 1-2. Hit "Rebuild Spec" in the Spec tab to regenerate with fewer angles.
                     </div>
                   )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>Step 2: Create Camera Angles</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C' }}>{cameraContractCount > 0 ? 'Step 2: Create Camera Angles' : 'Step 2: Rebuild Scene Spec'}</span>
                   </div>
                   <div style={{ fontSize: 10, color: '#666', marginBottom: 8, lineHeight: 1.4 }}>
-                    Create {set.scene_spec?.camera_contracts?.length || 0} camera angles from your spec — each with required objects and validation rules.
+                    {cameraContractCount > 0
+                      ? `Create ${cameraContractCount} camera angles from your spec — each with required objects and validation rules.`
+                      : 'Your current spec has objects and zones but no camera contracts. Rebuild it so the angle generator has valid camera instructions.'}
                   </div>
                   <button onClick={async () => {
+                    if (cameraContractCount === 0) {
+                      setBuildingSpec(true);
+                      setSpecProgress('sending');
+                      showToast('Rebuilding spec to generate camera contracts...');
+                      try {
+                        const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
+                        const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
+                        const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+                        clearTimeout(progressTimer);
+                        clearTimeout(parseTimer);
+                        const d = await r.json();
+                        if (d.success) {
+                          showToast(`Spec rebuilt: ${d.data?.camera_contracts?.length || 0} camera contracts`);
+                          if (onRefresh) await onRefresh();
+                        } else {
+                          showToast(d.error || 'Failed', 'error');
+                        }
+                      } catch (e) {
+                        showToast(e.message, 'error');
+                      }
+                      setBuildingSpec(false);
+                      setSpecProgress(null);
+                      return;
+                    }
+
                     setSeeding(true);
                     showToast('Creating camera angles from spec...');
                     try {
@@ -939,8 +974,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       } else showToast(d.error || 'Failed', 'error');
                     } catch (e) { showToast(e.message, 'error'); }
                     setSeeding(false);
-                  }} disabled={seeding} className="scene-sets-btn-generate" style={{ width: '100%' }}>
-                    {seeding ? <><Loader size={12} className="spin" /> Creating {set.scene_spec?.camera_contracts?.length || 0} angles...</> : <><Camera size={12} /> Create {set.scene_spec?.camera_contracts?.length || 0} Camera Angles</>}
+                  }} disabled={seeding || buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
+                    {cameraContractCount === 0
+                      ? (buildingSpec
+                        ? <><Loader size={12} className="spin" /> Rebuilding spec...</>
+                        : <><RefreshCw size={12} /> Rebuild Spec For Angles</>)
+                      : (seeding
+                        ? <><Loader size={12} className="spin" /> Creating {cameraContractCount} angles...</>
+                        : <><Camera size={12} /> Create {cameraContractCount} Camera Angles</>)}
                   </button>
                 </>
               )}
@@ -951,7 +992,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                     <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
                     <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
-                      Spec: {set.scene_spec.objects?.length || 0} objects · {set.scene_spec.camera_contracts?.length || 0} contracts
+                      Spec: {sceneSpec?.objects?.length || 0} objects · {cameraContractCount} contracts
                     </span>
                   </div>
                   {set.scene_type === 'EVENT_LOCATION' && totalAngles > 3 && (
