@@ -64,9 +64,6 @@
 }
 
 .page-layout__content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xl);
   min-width: 0;
 }
 
@@ -82,7 +79,6 @@
     gap: var(--spacing-2xl);
   }
   .page-layout__title  { font-size: var(--text-4xl); }
-  .page-layout__content { gap: var(--spacing-2xl); }
 }
 
 @media (min-width: 1025px) {
