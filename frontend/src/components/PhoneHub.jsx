@@ -272,7 +272,30 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
   );
 });
 
-export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all', onEditZones }) {
+export default function PhoneHub({
+  screens = [],
+  activeScreen,
+  onSelectScreen,
+  onDelete,
+  onHideScreen,
+  hiddenScreens = [],
+  showHidden = false,
+  onToggleShowHidden,
+  onNavigate,
+  navigationHistory = [],
+  onBack,
+  skin = 'midnight',
+  onChangeSkin,
+  customFrameUrl,
+  globalFit,
+  gridFilter = 'all',
+  onEditZones,
+  // New: top-level tab state lifted into the parent so Zones and
+  // Missions can live on the same bar. Falls back to internal state when
+  // the parent doesn't pass it, so old call sites keep working.
+  activeTab: activeTabProp,
+  onChangeTab,
+}) {
   // Placements memo lives below the screenTypes/iconTypes declarations so it
   // doesn't TDZ-crash (useMemo body runs synchronously on first render).
 
@@ -283,7 +306,12 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
   const [skinPickerOpen, setSkinPickerOpen] = useState(false);
   // Grid section — show Screens or Icons at a time, not both stacked. Defaults
   // to Screens since that's the primary content.
-  const [gridSection, setGridSection] = useState('screens');
+  // Controlled-or-uncontrolled tab state. When the parent passes activeTab
+  // + onChangeTab we delegate; otherwise we keep the old internal behaviour
+  // so existing consumers don't break.
+  const [internalTab, setInternalTab] = useState('screens');
+  const gridSection = activeTabProp !== undefined ? activeTabProp : internalTab;
+  const setGridSection = onChangeTab || setInternalTab;
 
   // Only use custom frame if we have a URL AND it hasn't errored
   const useCustomFrame = customFrameUrl && !frameError;
@@ -451,20 +479,9 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
         )}
       </PhoneFrame>
 
-      {/* Edit Zones button — always visible below the phone, regardless of frame type */}
-      {onEditZones && phoneScreen?.url && (
-        <button onClick={onEditZones} style={{
-          marginTop: 10, padding: '10px 18px', fontSize: 12, fontWeight: 700,
-          border: 'none', borderRadius: 10,
-          background: '#B8962E', color: '#fff', cursor: 'pointer',
-          fontFamily: "'DM Mono', monospace", letterSpacing: 0.3,
-          boxShadow: '0 2px 8px rgba(184,150,46,0.3)',
-          minHeight: 40, width: '100%',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-        }}>
-          ✎ Edit Tap Zones
-        </button>
-      )}
+      {/* "Edit Tap Zones" button removed — the Zones tab in the section bar
+          is the canonical entry point now. `onEditZones` prop kept for any
+          external callers that still need to jump directly to zone editing. */}
 
       {/* Skin picker — hidden behind a ⚙ trigger since it's a rare customization.
           Not shown at all for custom frames (skins don't apply there). */}
@@ -545,6 +562,28 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
                 className={`phone-hub-section-tab ${gridSection === 'placements' ? 'active' : ''}`}
               >
                 Placements <span className="phone-hub-section-tab-count">· {placements.length}</span>
+              </button>
+            )}
+            {/* Zones tab — unified zone editor (tap zones, icon placement, content zones).
+                Replaces the old "Edit Tap Zones" button + full-width modal flow. */}
+            {onChangeTab && (
+              <button
+                type="button"
+                onClick={() => setGridSection('zones')}
+                className={`phone-hub-section-tab ${gridSection === 'zones' ? 'active' : ''}`}
+              >
+                Zones
+              </button>
+            )}
+            {/* Missions tab — promoted from the old toolbar button so all
+                phone-scoped surfaces sit on the same bar. */}
+            {onChangeTab && (
+              <button
+                type="button"
+                onClick={() => setGridSection('missions')}
+                className={`phone-hub-section-tab ${gridSection === 'missions' ? 'active' : ''}`}
+              >
+                Missions
               </button>
             )}
           </div>

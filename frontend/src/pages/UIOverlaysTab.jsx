@@ -57,7 +57,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [createMode, setCreateMode] = useState('phone'); // 'phone' or 'phone_icon'
   const [phoneSkin, setPhoneSkin] = useState('rosegold');
   const [customFrameUrl, setCustomFrameUrl] = useState(null);
-  const [editingLinks, setEditingLinks] = useState(false);
+  // Top-level tab bar state — replaces the old `editingLinks` boolean and
+  // PhoneHub's internal `gridSection`. Values: 'screens' | 'icons' |
+  // 'placements' | 'zones' | 'missions'. Centralizing this here means the
+  // tab bar can host all five sections and the phone stays in one place.
+  const [activeTab, setActiveTab] = useState('screens');
+  const editingLinks = activeTab === 'zones';  // kept as an alias so legacy
+                                                // references below keep working
+                                                // until 3c refactors them out.
   // 'zones' — draw-rectangle ScreenLinkEditor (the precise/advanced mode with conditions, variants, AI).
   // 'icons' — IconPlacementMode (tap the phone, pick an icon from the picker — simpler for placing
   // app-icon-style tap zones on a home screen). Both persist to the same screen_links array.
@@ -145,7 +152,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // Close detail panel — revert phone display to home screen
   const closePanel = useCallback(() => {
     setPanelOpen(false);
-    setEditingLinks(false);
+    setActiveTab('screens');
     undoStackRef.current = [];
     const home = overlays.find(o => o.is_home && o.generated && o.url)
       || overlays.find(o => o.generated && o.url && isScreen(o));
@@ -789,7 +796,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [panelAiBusy, setPanelAiBusy] = useState(false);
   // Missions modal (PR4). No per-episode context here — missions are show-scoped,
   // optionally per-episode, and that's picked inside the editor form.
-  const [missionsOpen, setMissionsOpen] = useState(false);
+  // Opened when activeTab === 'missions'; closing reverts to the Screens tab.
+  const missionsOpen = activeTab === 'missions';
 
   const handlePanelAddZones = async (hint) => {
     if (!activeScreen?.asset_id || !showId || panelAiBusy) return;
@@ -1169,9 +1177,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           </button>
           <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
-          <button onClick={() => setMissionsOpen(true)} disabled={!showId} className="overlays-header-btn">
-            <Target size={13} /> <span className="btn-label">Missions</span>
-          </button>
+          {/* Missions moved to the tab bar (see PhoneHub). Toolbar button removed. */}
           <button onClick={handleGenerateAll} disabled={generating || !showId} className="overlays-header-btn" style={{
             background: generating ? 'var(--lala-parchment-2)' : 'var(--lala-gold)',
             color: generating ? 'var(--lala-ink-faint)' : '#fff',
@@ -1245,7 +1251,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     </div>
                     <button onClick={() => {
                       if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
-                      setEditingLinks(false);
+                      setActiveTab('screens');
                       setNavHistory([]);
                     }} className="zone-editor-done-btn">
                       <Check size={14} /> Done
@@ -1360,7 +1366,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 <PhoneHub
                   screens={overlays}
                   activeScreen={activeScreen}
-                  onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setEditingLinks(false); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
+                  onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setActiveTab('screens'); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
                   onDelete={handleDeleteScreen}
                   onHideScreen={handleHideScreen}
                   hiddenScreens={hiddenScreens}
@@ -1373,7 +1379,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   onChangeSkin={handleChangeSkin}
                   customFrameUrl={customFrameUrl}
                   globalFit={globalFit}
-                  onEditZones={() => setEditingLinks(true)}
+                  onEditZones={() => setActiveTab('zones')}
+                  activeTab={activeTab}
+                  onChangeTab={setActiveTab}
                 />
               </OverlayErrorBoundary>
 
@@ -1684,7 +1692,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
       <MissionEditor
         open={missionsOpen}
         showId={showId}
-        onClose={() => setMissionsOpen(false)}
+        onClose={() => setActiveTab('screens')}
       />
 
       {/* AI proposal from the Assistant panel — separate modal from the one
