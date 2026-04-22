@@ -219,6 +219,19 @@
 
   /* Shape — single radius for Lala surfaces */
   --lala-radius: 8px;
+
+  /* ════════════════════════════════════════════════════════════
+     ZONE COLORS — Phone Hub Zones tab
+     ════════════════════════════════════════════════════════════
+     Color-code the three zone types so creators can see all of a
+     screen's zones at once without losing track of which is which.
+       --zone-tap     tap-navigation zones (ScreenLinkEditor rects)
+       --zone-icon    icon placements (IconPlacementMode dots)
+       --zone-content content-bound regions (ContentZoneEditor rects)
+  */
+  --zone-tap:     var(--primary);   /* #3b82f6 blue */
+  --zone-icon:    var(--lala-gold); /* #B8962E */
+  --zone-content: #d946ef;          /* magenta */
 }
 
 /* === BUTTON STYLES === */
