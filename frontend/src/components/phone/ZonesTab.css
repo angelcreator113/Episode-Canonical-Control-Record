@@ -181,3 +181,55 @@
     margin-inline: auto;
   }
 }
+
+/* ============================================
+   TOOLBAR DROPDOWN MENU
+   ─────────────────────────────────────────────
+   Used for the "+ Add" and "More" menus that
+   collapse the header toolbar down from 7
+   buttons to 3 (plus primary CTA).
+   ============================================ */
+
+.toolbar-menu__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  background: var(--lala-surface);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  box-shadow: 0 8px 24px rgba(28, 24, 20, 0.12);
+  padding: 6px;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toolbar-menu__list > button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  color: var(--lala-ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  transition: background 120ms ease;
+}
+
+.toolbar-menu__list > button:hover:not(:disabled) {
+  background: var(--lala-parchment-2);
+}
+
+.toolbar-menu__list > button:disabled {
+  color: var(--lala-ink-faint);
+  cursor: not-allowed;
+}
