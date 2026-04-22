@@ -17,6 +17,7 @@
 import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { MoreVertical, Trash2, EyeOff, Edit3, Settings } from 'lucide-react';
 import ScreenContentRenderer from './ScreenContentRenderer';
+import PhoneFrame from './phone/PhoneFrame';
 import { isIcon, isScreen, getScreenLinks, getIconUrls } from '../lib/overlayUtils';
 
 // Screen types are now fully dynamic — defined per-show in the database.
@@ -272,7 +273,6 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
 });
 
 export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, onDelete, onHideScreen, hiddenScreens = [], showHidden = false, onToggleShowHidden, onNavigate, navigationHistory = [], onBack, skin = 'midnight', onChangeSkin, customFrameUrl, globalFit, gridFilter = 'all', onEditZones }) {
-  const currentSkin = PHONE_SKINS.find(s => s.key === skin) || PHONE_SKINS[0];
   // Placements memo lives below the screenTypes/iconTypes declarations so it
   // doesn't TDZ-crash (useMemo body runs synchronously on first render).
 
@@ -380,167 +380,76 @@ export default function PhoneHub({ screens = [], activeScreen, onSelectScreen, o
     <div className="phone-hub-inner">
       {/* Phone Device */}
       <div className="phone-hub-device">
-      {useCustomFrame ? (
-        /* Custom uploaded phone frame */
-        <div className="phone-hub-frame">
-          {/* Screen content — rendered first, sits behind the frame */}
-          <div style={{
-            position: 'absolute', top: '6%', left: '6%', right: '6%', bottom: '6%',
-            borderRadius: 16, overflow: 'hidden', zIndex: 1,
-          }}>
-            {phoneScreen?.url ? (
-              <>
-                <img src={activeScreen.url} alt={activeScreen.name} style={getScreenImageStyle(activeScreen, globalFit)} />
-                <ScreenContentRenderer
-                  zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
-                  showId={activeScreen.show_id}
-                  screenMeta={activeScreen.metadata}
-                  interactive={false}
-                />
-                <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
-                {activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && (
-                  <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
-                )}
-              </>
-            ) : (
-              <div style={{ width: '100%', height: '100%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>
-                <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{phoneScreen ? 'Not generated' : 'Select a screen'}</span>
-              </div>
+      <PhoneFrame
+        skin={skin}
+        customFrameUrl={useCustomFrame ? customFrameUrl : null}
+        onCustomFrameLoad={() => setFrameLoaded(true)}
+        onCustomFrameError={() => { setFrameError(true); setFrameLoaded(false); }}
+      >
+        {phoneScreen?.url ? (
+          <>
+            <img
+              src={phoneScreen.url}
+              alt={phoneScreen.name}
+              style={getScreenImageStyle(phoneScreen, globalFit)}
+            />
+            <ScreenContentRenderer
+              zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+              showId={activeScreen.show_id}
+              screenMeta={activeScreen.metadata}
+              interactive={false}
+            />
+            <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+            {/* Persistent icons from home screen — show on non-home screens */}
+            {activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && (
+              <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
             )}
-            {navigationHistory.length > 0 && onBack && (
-              <button onClick={onBack} style={{
-                position: 'absolute', top: 6, left: 6, zIndex: 10,
-                padding: '3px 8px', fontSize: 9, fontWeight: 700, border: 'none',
-                borderRadius: 10, background: 'rgba(0,0,0,0.5)', color: '#fff',
-                cursor: 'pointer', backdropFilter: 'blur(4px)',
-              }}>← Back</button>
-            )}
-            {/* Floating "Edit Zones" pill removed — the below-phone "Edit Tap Zones"
-                button is the single entry point now, so the phone preview stays clean. */}
+          </>
+        ) : useCustomFrame ? (
+          <div style={{ width: '100%', height: '100%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>
+            <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{phoneScreen ? 'Not generated' : 'Select a screen'}</span>
           </div>
-          {/* Frame image — on top so it visually wraps the screen content */}
-          <img
-            src={customFrameUrl}
-            alt="Phone frame"
-            onLoad={() => setFrameLoaded(true)}
-            onError={() => { setFrameError(true); setFrameLoaded(false); }}
-            style={{
-              width: '100%', borderRadius: 24, display: 'block',
-              position: 'relative', zIndex: 2, pointerEvents: 'none',
-            }}
-          />
-        </div>
-      ) : (
-        /* Built-in iPhone-style phone frame with skin */
-        <div className="phone-hub-frame" style={{
-          background: currentSkin.body,
-          borderRadius: 44,
-          padding: '16px 12px 20px',
-          boxShadow: `0 8px 32px ${currentSkin.shadow}, inset 0 1px 0 ${currentSkin.accent}, 0 0 0 2px rgba(0,0,0,0.3)`,
-          position: 'relative',
-          border: '2px solid rgba(0,0,0,0.5)',
-        }}>
-        {/* Side buttons — volume + power */}
-        <div style={{ position: 'absolute', left: -5, top: '18%', width: 4, height: 28, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
-        <div style={{ position: 'absolute', left: -5, top: '26%', width: 4, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
-        <div style={{ position: 'absolute', left: -5, top: '34%', width: 4, height: 44, background: currentSkin.btn, borderRadius: '3px 0 0 3px', border: '1px solid rgba(0,0,0,0.3)', borderRight: 'none' }} />
-        <div style={{ position: 'absolute', right: -5, top: '24%', width: 4, height: 64, background: currentSkin.btn, borderRadius: '0 3px 3px 0', border: '1px solid rgba(0,0,0,0.3)', borderLeft: 'none' }} />
-
-        {/* Screen area — hard dark border ensures visibility against any content */}
-        <div style={{
-          width: '100%', aspectRatio: '9/19.5',
-          borderRadius: 24, overflow: 'hidden',
-          background: activeScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
-          position: 'relative',
-          border: '2.5px solid #111',
-          boxShadow: 'inset 0 0 6px rgba(0,0,0,0.4)',
-        }}>
-          {/* Dynamic Island */}
+        ) : (
           <div style={{
-            position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
-            width: 90, height: 24, borderRadius: 14,
-            background: '#000', zIndex: 5,
-            border: '1.5px solid #333',
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            color: '#555',
           }}>
-            {/* Camera dot */}
-            <div style={{
-              position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-              width: 8, height: 8, borderRadius: '50%',
-              background: '#1a1a2e',
-              border: '1px solid #333',
-            }} />
+            <span style={{ fontSize: 32 }}>📱</span>
+            <span style={{ fontSize: 11, marginTop: 8, fontFamily: "'DM Mono', monospace" }}>
+              {phoneScreen ? 'Not generated yet' : 'Select a screen'}
+            </span>
           </div>
+        )}
 
-          {phoneScreen?.url ? (
-            <>
-              <img
-                src={phoneScreen.url}
-                alt={phoneScreen.name}
-                style={getScreenImageStyle(phoneScreen, globalFit)}
-              />
-              <ScreenContentRenderer
-                zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
-                showId={activeScreen.show_id}
-                screenMeta={activeScreen.metadata}
-                interactive={false}
-              />
-              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
-              {/* Persistent icons from home screen — show on non-home screens */}
-              {activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && (
-                <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
-              )}
-            </>
-          ) : (
-            <div style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              color: '#555',
-            }}>
-              <span style={{ fontSize: 32 }}>📱</span>
-              <span style={{ fontSize: 11, marginTop: 8, fontFamily: "'DM Mono', monospace" }}>
-                {phoneScreen ? 'Not generated yet' : 'Select a screen'}
-              </span>
-            </div>
-          )}
+        {/* Back button for navigation — position shifts when Dynamic Island is present */}
+        {navigationHistory.length > 0 && onBack && (
+          <button onClick={onBack} style={{
+            position: 'absolute',
+            top: useCustomFrame ? 6 : 38,
+            left: useCustomFrame ? 6 : 8,
+            zIndex: 10,
+            padding: '3px 8px', fontSize: 9, fontWeight: 700, border: 'none',
+            borderRadius: 10, background: 'rgba(0,0,0,0.5)', color: '#fff',
+            cursor: 'pointer', backdropFilter: 'blur(4px)',
+          }}>← Back</button>
+        )}
 
-          {/* Back button for navigation */}
-          {navigationHistory.length > 0 && onBack && (
-            <button onClick={onBack} style={{
-              position: 'absolute', top: 38, left: 8, zIndex: 10,
-              padding: '3px 8px', fontSize: 9, fontWeight: 700, border: 'none',
-              borderRadius: 10, background: 'rgba(0,0,0,0.5)', color: '#fff',
-              cursor: 'pointer', backdropFilter: 'blur(4px)',
-            }}>← Back</button>
-          )}
-
-          {/* Screen name overlay */}
-          {phoneScreen && (
-            <div style={{
-              position: 'absolute', bottom: 0, left: 0, right: 0,
-              background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
-              padding: '20px 12px 10px',
-            }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{phoneScreen.name}</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', fontFamily: "'DM Mono', monospace" }}>
-                {phoneScreen.beat || phoneScreen.description?.slice(0, 40)}
-              </div>
-            </div>
-          )}
-
-          {/* Floating "Edit Zones" pill removed — see the single below-phone
-              "Edit Tap Zones" button; the phone preview stays clean. */}
-
-          {/* Home indicator bar */}
+        {/* Screen name overlay — built-in frame only (custom frames often have their own chrome) */}
+        {!useCustomFrame && phoneScreen && (
           <div style={{
-            position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)',
-            width: 100, height: 4, borderRadius: 2,
-            background: 'rgba(0,0,0,0.35)', zIndex: 5,
-            boxShadow: '0 0 4px rgba(0,0,0,0.2)',
-          }} />
-        </div>
-      </div>
-      )}
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
+            padding: '20px 12px 10px',
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{phoneScreen.name}</div>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', fontFamily: "'DM Mono', monospace" }}>
+              {phoneScreen.beat || phoneScreen.description?.slice(0, 40)}
+            </div>
+          </div>
+        )}
+      </PhoneFrame>
 
       {/* Edit Zones button — always visible below the phone, regardless of frame type */}
       {onEditZones && phoneScreen?.url && (
