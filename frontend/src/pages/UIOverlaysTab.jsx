@@ -623,7 +623,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         try {
           const fd = new FormData();
           fd.append('image', file);
-          await api.post(`/api/v1/ui-overlays/${showId}/upload/${targetKey}`, fd);
+          // Use newType.type_key — the earlier `targetKey` was scoped inside
+          // the 409-conflict branch above and is undefined here on the happy
+          // path. Caused "ReferenceError: targetKey is not defined" on every
+          // screen/icon create with an attached image.
+          await api.post(`/api/v1/ui-overlays/${showId}/upload/${newType.type_key}`, fd);
         } catch (upErr) {
           console.warn('[createScreen] image upload failed', upErr);
           flash('Created, but the image upload failed — upload from the card', 'error');
