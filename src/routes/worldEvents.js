@@ -979,9 +979,9 @@ router.post('/world/:showId/events/:eventId/generate-invitation', optionalAuth, 
   try {
     const { showId, eventId } = req.params;
 
-    if (!process.env.FAL_KEY && !process.env.OPENAI_API_KEY) {
+    if (!process.env.FAL_KEY) {
       return res.status(503).json({
-        error: 'No image generation API configured. Set FAL_KEY or OPENAI_API_KEY in .env.',
+        error: 'FAL_KEY not configured. Add it to your .env file.',
       });
     }
 
@@ -1241,8 +1241,8 @@ router.post('/world/:showId/events/batch-generate-invitations', optionalAuth, as
     const { showId } = req.params;
     const { eventIds } = req.body;
 
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(503).json({ success: false, error: 'OPENAI_API_KEY not configured' });
+    if (!process.env.FAL_KEY) {
+      return res.status(503).json({ success: false, error: 'FAL_KEY not configured. Add it to your .env file.' });
     }
 
     const models = await getModels();
@@ -2232,8 +2232,8 @@ router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async
     if (typeof event.canon_consequences === 'string') {
       try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
     }
-    if (!process.env.FAL_KEY && !process.env.OPENAI_API_KEY) {
-      return res.status(503).json({ success: false, error: 'No image generation API configured. Set FAL_KEY or OPENAI_API_KEY in .env.' });
+    if (!process.env.FAL_KEY) {
+      return res.status(503).json({ success: false, error: 'FAL_KEY not configured. Add it to your .env file.' });
     }
 
     event.show_id = showId;
