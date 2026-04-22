@@ -50,21 +50,36 @@ window.addEventListener('unhandledrejection', (e) => { if (isStaleChunkError(e))
 // Condition (c) preserves nested container scrolling — modals, lists,
 // carousels continue to receive their own touch events normally.
 (() => {
-  let startY = 0;
+  // Null (not 0) so touchmove can't fire before touchstart has set a real
+  // start Y. Previous version initialised to 0, which meant any early
+  // touchmove before touchstart was captured would see dy = clientY − 0 > 0
+  // and preventDefault() all scrolling on the page.
+  let startY = null;
+  let trackedId = null;
+  const MIN_DRAG_PX = 5;              // ignore jitter; only fire on real drags
   const rootScrollTop = () => Math.max(
     window.scrollY || 0,
     document.documentElement?.scrollTop || 0,
     document.body?.scrollTop || 0,
     document.scrollingElement?.scrollTop || 0,
   );
+  const resetTouch = () => { startY = null; trackedId = null; };
+
   document.addEventListener('touchstart', (e) => {
-    if (e.touches?.[0]) startY = e.touches[0].clientY;
-  }, { passive: true });
+    const t = e.touches?.[0];
+    if (!t) return;
+    startY = t.clientY;
+    trackedId = t.identifier;
+  }, { passive: true, capture: true });
+
   document.addEventListener('touchmove', (e) => {
-    if (!e.touches?.[0]) return;
-    const dy = e.touches[0].clientY - startY;
-    // Only relevant for downward drags (pull-to-refresh direction).
-    if (dy <= 0) return;
+    if (startY == null) return;       // no start recorded — pass through
+    const t = Array.from(e.touches || []).find(tt => tt.identifier === trackedId) || e.touches?.[0];
+    if (!t) return;
+    const dy = t.clientY - startY;
+    // Only relevant for downward drags (pull-to-refresh direction), past
+    // the jitter threshold so a static tap doesn't misfire.
+    if (dy <= MIN_DRAG_PX) return;
     // Only when the document is at the very top.
     if (rootScrollTop() > 0) return;
     // Let nested scroll containers handle their own gestures. Walk up from
@@ -76,7 +91,10 @@ window.addEventListener('unhandledrejection', (e) => { if (isStaleChunkError(e))
       el = el.parentElement;
     }
     e.preventDefault();
-  }, { passive: false });
+  }, { passive: false, capture: true });
+
+  document.addEventListener('touchend', resetTouch, { passive: true, capture: true });
+  document.addEventListener('touchcancel', resetTouch, { passive: true, capture: true });
 })();
 
 ReactDOM.createRoot(document.getElementById('root')).render(

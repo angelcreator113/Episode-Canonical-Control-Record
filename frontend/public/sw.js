@@ -8,7 +8,7 @@
  *   - Story content saved explicitly via postMessage from the app
  */
 
-const CACHE_NAME = 'lalaverse-v4';
+const CACHE_NAME = 'lalaverse-v5';
 const STORY_CACHE = 'lalaverse-stories-v1';
 
 // ── Install: skip waiting to activate immediately ──────────────────────
