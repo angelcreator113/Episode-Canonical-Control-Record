@@ -6,6 +6,7 @@ import { episodeService } from '../services/episodeService';
 import { showService } from '../services/showService';
 import universeService from '../services/universeService';
 import storytellerService from '../services/storytellerService';
+import PageLayout from '../components/layout/PageLayout';
 import './Home.css';
 
 const CHIP_COLORS = ['pink', 'purple', 'blue'];
@@ -98,7 +99,7 @@ function Home() {
   /* ══════════ RENDER ══════════ */
   return (
     <div className="home-page">
-      <div className="home-container">
+      <PageLayout variant="wide" className="home-container">
 
         {/* ─── Welcome Hero Strip ─── */}
         <header className="home-hero">
@@ -387,7 +388,7 @@ function Home() {
           </div>
         </section>
 
-      </div>
+      </PageLayout>
     </div>
   );
 }

@@ -763,3 +763,39 @@
     font-size: var(--text-lg); /* prevent iOS zoom */
   }
 }
+
+/* =============================================
+   TYPOGRAPHY UTILITIES
+   ─────────────────────────────────────────────
+   Adoption of the CLAUDE.md typography rule:
+     .prose  → Lora 17.5px for narrative body text
+     .ui     → DM Mono for labels, buttons, meta, chrome
+   Pair with .prose-dropcap for editorial drop-caps on
+   story surfaces. Use the family-only classes
+   (.font-prose / .font-ui) when you want the family
+   without forcing a size.
+   ============================================= */
+
+.prose {
+  font-family: var(--font-prose);
+  font-size: 1.09375rem; /* 17.5px — Lala editorial */
+  line-height: var(--leading-relaxed);
+  color: var(--lala-ink);
+}
+
+.prose p + p {
+  margin-top: var(--spacing-lg);
+}
+
+.prose em { font-style: italic; }
+.prose strong { font-weight: var(--font-semibold); }
+
+.ui {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+}
+
+.font-prose { font-family: var(--font-prose); }
+.font-ui    { font-family: var(--font-ui); }
