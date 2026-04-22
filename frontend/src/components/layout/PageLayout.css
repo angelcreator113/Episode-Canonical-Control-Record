@@ -1,0 +1,90 @@
+/* Canonical page container — every page should opt in.
+   Mobile-first horizontal padding, token-driven max-width per variant. */
+
+.page-layout {
+  width: 100%;
+  margin-inline: auto;
+  box-sizing: border-box;
+  /* Horizontal padding scales with viewport so it never crushes content
+     on small screens or feels pinched on huge ones. */
+  padding-inline: clamp(var(--spacing-lg), 4vw, var(--spacing-3xl));
+  padding-block: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.page-layout--default { max-width: var(--page-max-width); }
+.page-layout--wide    { max-width: 1600px; }
+.page-layout--narrow  { max-width: 720px; }
+.page-layout--prose {
+  max-width: 680px;
+  font-family: var(--font-prose);
+  font-size: 1.09375rem; /* 17.5px — Lala editorial body size */
+  line-height: var(--leading-relaxed);
+  color: var(--lala-ink);
+}
+
+.page-layout__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.page-layout__titles {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.page-layout__title {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-3xl);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+}
+
+.page-layout__subtitle {
+  margin: var(--spacing-xs) 0 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-snug);
+}
+
+.page-layout__actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.page-layout__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+  min-width: 0;
+}
+
+/* Prose variant uses Lora for its own content, but keeps the title/subtitle
+   in the UI font so chrome stays uniform across page types. */
+.page-layout--prose .page-layout__content {
+  font-family: var(--font-prose);
+}
+
+@media (min-width: 769px) {
+  .page-layout {
+    padding-block: var(--spacing-2xl);
+    gap: var(--spacing-2xl);
+  }
+  .page-layout__title  { font-size: var(--text-4xl); }
+  .page-layout__content { gap: var(--spacing-2xl); }
+}
+
+@media (min-width: 1025px) {
+  .page-layout__title { font-size: var(--text-5xl); }
+}
