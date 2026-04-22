@@ -355,10 +355,13 @@ body.page-story-engine .app-content {
 
 /* ── Mobile scroll fix ──────────────────────────────────────────────────
    MUST come after all base rules so it actually overrides them.
-   On mobile the body becomes the scroll container instead of .app-content.
-   This enables native pull-to-refresh, auto-hiding browser chrome on
-   scroll, and prevents content from being clipped inside nested
-   overflow:hidden wrappers.
+   On mobile the body becomes the scroll container instead of .app-content,
+   so content isn't clipped inside nested overflow:hidden wrappers and the
+   browser chrome can auto-hide on scroll.
+   overscroll-behavior-y is `none` (not `contain`) to *disable* native
+   pull-to-refresh — users were triggering it by accident on any upward
+   drag. `contain` only isolates the scroll chain; `none` also kills the
+   refresh gesture entirely.
    Full-screen modes (timeline, scene-composer, write-mode, etc.) opt out
    and keep their own contained scrolling via .full-screen overrides.
    ──────────────────────────────────────────────────────────────────────── */
@@ -366,9 +369,13 @@ body.page-story-engine .app-content {
   html, body {
     overflow-x: hidden;
     overflow-y: auto;
-    overscroll-behavior-y: contain;
+    overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
     max-width: 100vw;
+    /* Tell the browser this page only expects vertical panning — no
+       horizontal swipes, no two-finger zoom gestures at the root. Helps
+       some browsers suppress pull-to-refresh as a side effect. */
+    touch-action: pan-y;
   }
 
   .app-layout {
