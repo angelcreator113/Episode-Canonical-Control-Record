@@ -20,6 +20,7 @@ import MissionEditor from '../components/phone-editor/MissionEditor';
 import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import ScreenThumbnailStrip from '../components/phone/ScreenThumbnailStrip';
+import ToolbarMenu from '../components/phone/ToolbarMenu';
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
 
@@ -1119,18 +1120,23 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             )}
           </div>
           <div className="overlays-header-actions">
+            {/* Size-guide toggle stays as a small icon button (frequent quick-check). */}
             <button onClick={() => setShowSizeGuide(!showSizeGuide)} title="Upload size guide" aria-label="Toggle upload size guide" className="overlays-header-btn" style={{ color: '#aaa', border: '1px solid #eee' }}>
               <Info size={13} />
             </button>
-            <button onClick={() => setShowFlowMap(true)} disabled={!generatedCount} title="Screen flow map" className="overlays-header-btn" style={{ color: '#a889c8', border: '1px solid #a889c830' }}>
-              <GitBranch size={13} /> <span className="btn-label">Flow Map</span>
-            </button>
+            {/* Preview stays visible — it's the most common view action. */}
             <button onClick={() => setPreviewMode(true)} disabled={!generatedCount} title="Preview mode" className="overlays-header-btn" style={{ color: '#B8962E', border: '1px solid #B8962E30' }}>
               <Play size={13} /> <span className="btn-label">Preview</span>
             </button>
-            <button onClick={handleExportContactSheet} disabled={!generatedCount} title="Export contact sheet" className="overlays-header-btn" style={{ color: '#6bba9a', border: '1px solid #6bba9a30' }}>
-              <Download size={13} /> <span className="btn-label">Export</span>
-            </button>
+            {/* Flow Map + Export move into a "More" menu — used less often. */}
+            <ToolbarMenu label="More" disabled={!generatedCount}>
+              <button onClick={() => setShowFlowMap(true)} disabled={!generatedCount}>
+                <GitBranch size={13} /> Flow Map
+              </button>
+              <button onClick={handleExportContactSheet} disabled={!generatedCount}>
+                <Download size={13} /> Export contact sheet
+              </button>
+            </ToolbarMenu>
           </div>
         </div>
 
@@ -1148,35 +1154,41 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           </div>
         )}
 
-        {/* Action buttons row */}
+        {/* Action buttons row — creation actions collapse into a "+ Add"
+            dropdown; Generate All stays as the primary CTA at full size. */}
         <div className="overlays-toolbar">
-          <button onClick={() => frameInputRef.current?.click()} className="overlays-header-btn">
-            <Monitor size={13} /> <span className="btn-label">{customFrameUrl ? 'Change Frame' : 'Upload Frame'}</span>
-          </button>
-          {customFrameUrl && (
-            <button onClick={async () => {
-              if (!confirm('Remove custom phone frame?')) return;
-              frameRemovedRef.current = true;
-              setCustomFrameUrl(null);
-              flash('Using built-in frame');
-              if (showId) {
-                try { await api.delete(`/api/v1/ui-overlays/${showId}/frame`); } catch (err) {
-                  console.warn('[PhoneHub] Failed to delete frame:', err.message);
-                }
-              }
-            }} className="overlays-header-btn" style={{ color: '#dc2626', border: '1px solid #dc262620' }}>
-              <X size={13} /> <span className="btn-label">Remove Frame</span>
+          <ToolbarMenu label="Add" icon={<span style={{ fontWeight: 700, marginRight: 2 }}>+</span>} disabled={!showId && batchUploading}>
+            <button onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId}>
+              + New Screen
             </button>
-          )}
-          <button onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId} className="overlays-header-btn">
-            + <span className="btn-label">New Screen</span>
-          </button>
-          <button onClick={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }} disabled={!showId} className="overlays-header-btn">
-            + <span className="btn-label">New Icon</span>
-          </button>
-          <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId} className="overlays-header-btn">
-            <Upload size={13} /> <span className="btn-label">{batchUploading ? 'Uploading...' : 'Batch Upload'}</span>
-          </button>
+            <button onClick={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }} disabled={!showId}>
+              + New Icon
+            </button>
+            <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId}>
+              <Upload size={13} /> {batchUploading ? 'Uploading...' : 'Batch Upload'}
+            </button>
+            <button onClick={() => frameInputRef.current?.click()}>
+              <Monitor size={13} /> {customFrameUrl ? 'Change Frame' : 'Upload Frame'}
+            </button>
+            {customFrameUrl && (
+              <button
+                onClick={async () => {
+                  if (!confirm('Remove custom phone frame?')) return;
+                  frameRemovedRef.current = true;
+                  setCustomFrameUrl(null);
+                  flash('Using built-in frame');
+                  if (showId) {
+                    try { await api.delete(`/api/v1/ui-overlays/${showId}/frame`); } catch (err) {
+                      console.warn('[PhoneHub] Failed to delete frame:', err.message);
+                    }
+                  }
+                }}
+                style={{ color: '#dc2626' }}
+              >
+                <X size={13} /> Remove Frame
+              </button>
+            )}
+          </ToolbarMenu>
           <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
           {/* Missions moved to the tab bar (see PhoneHub). Toolbar button removed. */}
