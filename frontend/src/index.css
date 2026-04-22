@@ -71,17 +71,16 @@ body {
   overflow-x: hidden;
   width: 100%;
   position: relative;
-  /* Stop mobile browsers from interpreting a drag at the top of the page as
-     pull-to-refresh. `contain` keeps the scroll chain inside the element
-     boundary — swiping down at the top does nothing instead of yanking the
-     whole page. Applied on both html and body because Chrome/Safari differ
-     on which root element owns the overscroll gesture. */
-  overscroll-behavior-y: contain;
-  overscroll-behavior-x: contain;
+  /* Hard-disable mobile pull-to-refresh. `none` beats `contain` because
+     `contain` only isolates the scroll chain — the browser can still
+     interpret a top-of-page downward drag as a refresh gesture. `none`
+     suppresses the gesture entirely. Applied on both html and body
+     because Chrome and Safari disagree about which root owns overscroll. */
+  overscroll-behavior: none;
 }
 
 html {
-  overscroll-behavior-y: contain;
+  overscroll-behavior: none;
 }
 
 code {
