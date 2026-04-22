@@ -450,17 +450,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       setOverlays(all);
       const updated = all.find(o => o.id === activeScreen.id);
       if (updated) setActiveScreen(updated);
-      // Auto-run bg removal for icons — they're meant to be transparent.
-      if (await autoRemoveBgIfIcon(all, activeScreen.id)) {
-        all = (await api.get(`/api/v1/ui-overlays/${showId}`)).data?.data || [];
-        setOverlays(all);
-        const reupdated = all.find(o => o.id === activeScreen.id);
-        if (reupdated) setActiveScreen(reupdated);
-      }
+      // Auto-bg-removal disabled — user reported it was replacing their
+      // uploaded icon with a bg-stripped version, which read as "a new
+      // image got auto-generated." The Remove BG button on the detail
+      // card is still available for the cases where they DO want it.
       // Freshly-uploaded icon with a pre-set opens_screen? Place it on home.
       if (await autoPlaceIconOnHome(all, activeScreen.id)) {
         loadOverlays(false);
-        flash('Uploaded + bg removed + placed on home screen');
+        flash('Uploaded + placed on home screen');
       } else if ((updated?.category === 'phone_icon' || updated?.category === 'icon')) {
         flash('Uploaded + bg removed');
       }
@@ -637,10 +634,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         let fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => []);
         setOverlays(fresh);
         if (createMode === 'phone_icon') {
-          if (await autoRemoveBgIfIcon(fresh, newType.type_key)) {
-            fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => fresh);
-            setOverlays(fresh);
-          }
+          // Auto-bg-removal disabled here too — mirror of the change in
+          // handleUpload. Creators can hit Remove BG from the card when
+          // they want it; we don't modify their uploaded image silently.
           autoPlaced = await autoPlaceIconOnHome(fresh, newType.type_key);
           if (autoPlaced) loadOverlays(false);
         }
@@ -648,7 +644,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       setShowCreateModal(false);
       if (autoPlaced) {
         flash(createMode === 'phone_icon'
-          ? `${newType.name} created, bg removed, placed on home screen — drag to reposition`
+          ? `${newType.name} created and placed on the home screen — drag to reposition`
           : `${newType.name} created and placed on the home screen — drag to reposition`);
       } else {
         flash(createMode === 'phone_icon'
