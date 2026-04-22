@@ -1,25 +1,10 @@
 /* SettingsPage.css — Sacred narrative studio settings */
 
+/* Width + padding now come from PageLayout (variant="narrow").
+   Title comes from PageLayout's title prop. */
 .settings-page {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem 1.5rem 4rem;
-  font-family: 'Lora', serif;
-  color: #1C1814;
-}
-
-.settings-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.settings-header h1 {
-  font-size: var(--text-3xl);
-  font-weight: 700;
-  color: #1C1814;
-  margin: 0;
+  font-family: var(--font-prose);
+  color: var(--lala-ink);
 }
 
 .settings-saved-badge {
