@@ -2261,7 +2261,7 @@ The revised event should feel like a completely different experience from the si
                     style={{ ...S.sel, width: '100%', marginBottom: 6 }}
                   >
                     <option value="">— Choose a venue from World Locations —</option>
-                    {worldLocations.filter(l => l.location_type === 'venue' || l.venue_type).map(l => (
+                    {worldLocations.filter(l => l.location_type === 'venue' || l.location_type === 'interior' || l.venue_type).map(l => (
                       <option key={l.id} value={l.id}>🏪 {l.name}{l.venue_type ? ` (${l.venue_type.replace(/_/g, ' ')})` : ''}{l.district ? ` — ${l.district}` : ''}</option>
                     ))}
                     <option disabled>──── Other locations ────</option>
@@ -5694,7 +5694,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             fill in missing apps. */}
                         <button
                           onClick={async () => {
-                            if (!window.confirm('Create the 5 finance apps on Lala\'s phone?\n\n• 5 AI-generated icon images (pink + teal palette)\n• 5 stylized screens with pre-wired live-data zones\n• Icons auto-placed on the home screen\n\nSafe to re-run — only fills in missing apps.')) return;
+                            if (!window.confirm('Create the 4 finance apps on Lala\'s phone?\n\n• Wallet / Insights / Breakdowns / Goals\n• Pink + teal AI-generated icons + screens\n• Icons auto-placed on the home screen\n\nCloset Value is skipped — add the closet_net_worth and closet_wishlist_grid content zones to your existing Closet screen instead.\n\nSafe to re-run — only fills in missing apps.')) return;
                             try {
                               const res = await api.post(`/api/v1/shows/${showId}/seed-finance-apps`, { auto_place: true });
                               const created = (res.data.results || []).filter(r => r.created).length;
@@ -5704,7 +5704,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                               setToast('Seed failed: ' + (err.response?.data?.error || err.message));
                             }
                           }}
-                          title="Create the 5 finance apps (Wallet, Insights, Breakdowns, Closet, Goals) on Lala's phone with AI-generated pink+teal frames"
+                          title="Create 4 finance apps (Wallet, Insights, Breakdowns, Goals) on Lala's phone. Closet Value content zones go on your existing Closet screen."
                           style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, border: '1px solid #fbcfe8', borderRadius: 6, background: 'linear-gradient(135deg, #FBCFE8 0%, #14B8A6 100%)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}
                         >📱 Seed Finance Apps</button>
                         <button onClick={() => setFinanceEditorOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#999' }}>✕</button>

@@ -38,14 +38,12 @@ const axios = require('axios');
 // Maps use case tags to preferred provider
 
 const USE_CASE_PROVIDERS = {
-  // DALL-E preferred — quality matters, text rendering, photorealism
-  invitation:    'dalle',
-  scene:         'dalle',
-  venue:         'dalle',
-  character:     'dalle',
-  hero:          'dalle',
-
-  // Flux preferred — cheaper, no text needed
+  // All use cases route to Flux Pro
+  invitation:    'flux',
+  scene:         'flux',
+  venue:         'flux',
+  character:     'flux',
+  hero:          'flux',
   overlay:       'flux',
   icon:          'flux',
   frame:         'flux',
@@ -57,21 +55,9 @@ const USE_CASE_PROVIDERS = {
 // ── PROVIDER DETECTION ───────────────────────────────────────────────────────
 
 function getProvider(useCase) {
-  // Force via env
-  const forced = process.env.IMAGE_PROVIDER?.toLowerCase();
-  if (forced === 'dalle') return 'dalle';
-  if (forced === 'flux') return 'flux';
-
-  // Use-case routing (only when both providers available)
-  if (useCase && process.env.FAL_KEY && process.env.OPENAI_API_KEY) {
-    const preferred = USE_CASE_PROVIDERS[useCase];
-    if (preferred) return preferred;
-  }
-
-  // Auto-detect: prefer Flux if FAL_KEY exists (cheaper default)
-  if (process.env.FAL_KEY) return 'flux';
-  if (process.env.OPENAI_API_KEY) return 'dalle';
-  return null;
+  // IMAGE_PROVIDER env can still force a specific provider if needed
+  if (process.env.IMAGE_PROVIDER) return process.env.IMAGE_PROVIDER.toLowerCase();
+  return USE_CASE_PROVIDERS[useCase] || 'flux';
 }
 
 // ── DAILY IMAGE BUDGET TRACKING ─────────────────────────────────────────────
@@ -333,45 +319,18 @@ async function generateDallE(prompt, options = {}) {
  * @returns {{ url, provider, model, seed, cost_estimate, expires? }}
  */
 async function generateImage(prompt, options = {}) {
-  // Budget check
-  const estimatedCost = options.provider === 'flux' || (!options.provider && getProvider(options.useCase) === 'flux')
-    ? 0.005 : 0.08;
+  // Budget check — Flux Pro cost
+  const estimatedCost = 0.005;
   if (!checkImageBudget(estimatedCost)) {
     throw new Error(`Daily image budget exceeded ($${dailyImageSpend.toFixed(2)} / $${DAILY_IMAGE_BUDGET}). Try again tomorrow or increase AI_DAILY_IMAGE_BUDGET_USD.`);
   }
 
   const provider = options.provider || getProvider(options.useCase);
 
-  if (!provider) {
-    throw new Error('No image generation API configured. Set FAL_KEY (for Flux) or OPENAI_API_KEY (for DALL-E).');
-  }
+  console.log(`[ImageGen] ${options.useCase || 'default'} → ${provider} | ${prompt.slice(0, 60)}...`);
 
-  // Try primary provider, fall back to the other
-  if (provider === 'flux') {
-    try {
-      return await generateFlux(prompt, options);
-    } catch (fluxErr) {
-      const detail = fluxErr.response?.data ? JSON.stringify(fluxErr.response.data).slice(0, 300) : fluxErr.message;
-      console.warn(`[ImageGen] Flux failed: ${detail}`);
-      if (process.env.OPENAI_API_KEY) {
-        console.log('[ImageGen] Falling back to DALL-E...');
-        return await generateDallE(prompt, options);
-      }
-      throw fluxErr;
-    }
-  }
-
-  // DALL-E primary
-  try {
-    return await generateDallE(prompt, options);
-  } catch (dalleErr) {
-    console.warn(`[ImageGen] DALL-E failed: ${dalleErr.message}`);
-    if (process.env.FAL_KEY) {
-      console.log('[ImageGen] Falling back to Flux...');
-      return await generateFlux(prompt, options);
-    }
-    throw dalleErr;
-  }
+  // All routes go to Flux Pro
+  return generateFlux(prompt, options);
 }
 
 /**

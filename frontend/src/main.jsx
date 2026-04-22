@@ -33,26 +33,55 @@ window.addEventListener('error', (e) => { if (isStaleChunkError(e)) tryReload();
 window.addEventListener('unhandledrejection', (e) => { if (isStaleChunkError(e)) tryReload(); });
 
 // ── Block mobile pull-to-refresh ───────────────────────────────────────────
-// CSS `overscroll-behavior: contain` handles this on Chrome Android but iOS
-// Safari has unreliable support. This JS fallback catches downward drags
-// from the top of the page and preventDefault()s them before the browser
-// interprets the gesture as a refresh.
+// CSS `overscroll-behavior: none` should kill this on modern browsers, but
+// iOS Safari and older Chrome occasionally still fire the gesture. This JS
+// fallback preventDefault()s any downward drag that starts at the top of
+// whatever scroll container owns the page, before the browser interprets it
+// as refresh.
 //
-// Safety rails: only fires when (a) the document is at scrollTop 0, AND
-// (b) the gesture is downward, AND (c) no ancestor of the touch target
-// has its own scrollTop > 0. Condition (c) preserves nested-container
-// scrolling (modals, lists, carousels) — those can still handle their
-// own touch events without the guard interfering.
+// Covers all three possible "root scroll element" sources because browsers
+// disagree: some put the scroll on <html>, some on <body>, some expose it
+// via document.scrollingElement. We take the max of all three scrollTops.
+//
+// Safety rails: only fires when
+//   (a) the root scroll is at 0, AND
+//   (b) the touch gesture is downward, AND
+//   (c) no ancestor of the touch target has its own scrollTop > 0
+// Condition (c) preserves nested container scrolling — modals, lists,
+// carousels continue to receive their own touch events normally.
 (() => {
-  let startY = 0;
+  // Null (not 0) so touchmove can't fire before touchstart has set a real
+  // start Y. Previous version initialised to 0, which meant any early
+  // touchmove before touchstart was captured would see dy = clientY − 0 > 0
+  // and preventDefault() all scrolling on the page.
+  let startY = null;
+  let trackedId = null;
+  const MIN_DRAG_PX = 5;              // ignore jitter; only fire on real drags
+  const rootScrollTop = () => Math.max(
+    window.scrollY || 0,
+    document.documentElement?.scrollTop || 0,
+    document.body?.scrollTop || 0,
+    document.scrollingElement?.scrollTop || 0,
+  );
+  const resetTouch = () => { startY = null; trackedId = null; };
+
   document.addEventListener('touchstart', (e) => {
-    if (e.touches?.[0]) startY = e.touches[0].clientY;
-  }, { passive: true });
+    const t = e.touches?.[0];
+    if (!t) return;
+    startY = t.clientY;
+    trackedId = t.identifier;
+  }, { passive: true, capture: true });
+
   document.addEventListener('touchmove', (e) => {
-    if (!e.touches?.[0]) return;
-    const dy = e.touches[0].clientY - startY;
-    const atTop = (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
-    if (!atTop || dy <= 0) return;
+    if (startY == null) return;       // no start recorded — pass through
+    const t = Array.from(e.touches || []).find(tt => tt.identifier === trackedId) || e.touches?.[0];
+    if (!t) return;
+    const dy = t.clientY - startY;
+    // Only relevant for downward drags (pull-to-refresh direction), past
+    // the jitter threshold so a static tap doesn't misfire.
+    if (dy <= MIN_DRAG_PX) return;
+    // Only when the document is at the very top.
+    if (rootScrollTop() > 0) return;
     // Let nested scroll containers handle their own gestures. Walk up from
     // the touch target — if any ancestor has scrollTop > 0, bail without
     // calling preventDefault so it can scroll normally.
@@ -62,7 +91,10 @@ window.addEventListener('unhandledrejection', (e) => { if (isStaleChunkError(e))
       el = el.parentElement;
     }
     e.preventDefault();
-  }, { passive: false });
+  }, { passive: false, capture: true });
+
+  document.addEventListener('touchend', resetTouch, { passive: true, capture: true });
+  document.addEventListener('touchcancel', resetTouch, { passive: true, capture: true });
 })();
 
 ReactDOM.createRoot(document.getElementById('root')).render(

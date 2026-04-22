@@ -661,7 +661,14 @@ router.post('/:id/seed-finance-apps', async (req, res) => {
       ],
     };
 
-    const appKeys = Object.keys(APP_PROMPTS);
+    const appKeys = Array.isArray(req.body?.apps) && req.body.apps.length > 0
+      ? req.body.apps.filter(k => APP_PROMPTS[k])
+      // Default: skip 'closet' because most shows already have a Closet icon
+      // for the wardrobe grid. The closet_net_worth + closet_wishlist_grid
+      // content zones can be added to that existing screen instead. Pass
+      // { apps: ['closet', ...] } explicitly if a dedicated Closet Value
+      // screen is wanted.
+      : Object.keys(APP_PROMPTS).filter(k => k !== 'closet');
 
     // Force-rebuild: soft-delete existing finance assets for this show. The
     // sequelize paranoid flag takes care of the deleted_at stamp. We identify

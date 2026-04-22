@@ -131,8 +131,8 @@ router.post('/:showId/generate-all', optionalAuth, async (req, res) => {
     const { generateAllOverlays } = require('../services/uiOverlayService');
     const showId = req.params.showId;
 
-    if (!process.env.FAL_KEY && !process.env.OPENAI_API_KEY) {
-      return res.status(503).json({ success: false, error: 'No image generation API configured. Set FAL_KEY or OPENAI_API_KEY in your environment.' });
+    if (!process.env.FAL_KEY) {
+      return res.status(503).json({ success: false, error: 'FAL_KEY not configured. Add it to your .env file.' });
     }
 
     // Check if generation is already running for this show

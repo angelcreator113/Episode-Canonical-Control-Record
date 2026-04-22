@@ -140,14 +140,14 @@ Return ONLY the description paragraph, no labels or formatting.`,
 router.get('/generation-check', optionalAuth, (req, res) => {
   res.json({
     success: true,
-    openai: !!process.env.OPENAI_API_KEY,
+    flux: !!process.env.FAL_KEY,
     runway: !!process.env.RUNWAY_ML_API_KEY,
     anthropic: !!process.env.ANTHROPIC_API_KEY,
-    ready: !!(process.env.FAL_KEY || process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY),
+    ready: !!(process.env.FAL_KEY || process.env.RUNWAY_ML_API_KEY),
     s3_bucket: !!process.env.S3_PRIMARY_BUCKET || !!process.env.AWS_S3_BUCKET || !!process.env.S3_BUCKET_NAME,
-    message: process.env.FAL_KEY || process.env.OPENAI_API_KEY || process.env.RUNWAY_ML_API_KEY
+    message: process.env.FAL_KEY || process.env.RUNWAY_ML_API_KEY
       ? 'Image generation ready'
-      : 'No image generation API key configured. Set FAL_KEY (Flux), OPENAI_API_KEY (DALL-E), or RUNWAY_ML_API_KEY (Runway).',
+      : 'No image generation API key configured. Set FAL_KEY (Flux) or RUNWAY_ML_API_KEY (Runway).',
   });
 });
 
@@ -667,8 +667,8 @@ router.post('/:id/generate-base', validateUUIDParam('id'), optionalAuth, async (
       });
     }
 
-    if (!process.env.OPENAI_API_KEY && !process.env.RUNWAY_ML_API_KEY) {
-      return res.status(503).json({ success: false, error: 'No image generation API key configured (OPENAI_API_KEY or RUNWAY_ML_API_KEY)' });
+    if (!process.env.FAL_KEY && !process.env.RUNWAY_ML_API_KEY) {
+      return res.status(503).json({ success: false, error: 'No image generation API key configured. Set FAL_KEY (Flux) or RUNWAY_ML_API_KEY (Runway).' });
     }
 
     await set.update({ generation_status: 'generating' });
@@ -927,8 +927,8 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), optionalAu
     });
     if (!angle) return res.status(404).json({ success: false, error: 'Angle not found' });
 
-    if (!process.env.OPENAI_API_KEY && !process.env.RUNWAY_ML_API_KEY) {
-      return res.status(503).json({ success: false, error: 'No image generation API key configured (OPENAI_API_KEY or RUNWAY_ML_API_KEY)' });
+    if (!process.env.FAL_KEY && !process.env.RUNWAY_ML_API_KEY) {
+      return res.status(503).json({ success: false, error: 'No image generation API key configured. Set FAL_KEY (Flux) or RUNWAY_ML_API_KEY (Runway).' });
     }
 
     // Mark as generating
