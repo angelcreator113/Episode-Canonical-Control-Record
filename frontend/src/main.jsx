@@ -32,6 +32,39 @@ const tryReload = () => {
 window.addEventListener('error', (e) => { if (isStaleChunkError(e)) tryReload(); });
 window.addEventListener('unhandledrejection', (e) => { if (isStaleChunkError(e)) tryReload(); });
 
+// ── Block mobile pull-to-refresh ───────────────────────────────────────────
+// CSS `overscroll-behavior: contain` handles this on Chrome Android but iOS
+// Safari has unreliable support. This JS fallback catches downward drags
+// from the top of the page and preventDefault()s them before the browser
+// interprets the gesture as a refresh.
+//
+// Safety rails: only fires when (a) the document is at scrollTop 0, AND
+// (b) the gesture is downward, AND (c) no ancestor of the touch target
+// has its own scrollTop > 0. Condition (c) preserves nested-container
+// scrolling (modals, lists, carousels) — those can still handle their
+// own touch events without the guard interfering.
+(() => {
+  let startY = 0;
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches?.[0]) startY = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!e.touches?.[0]) return;
+    const dy = e.touches[0].clientY - startY;
+    const atTop = (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+    if (!atTop || dy <= 0) return;
+    // Let nested scroll containers handle their own gestures. Walk up from
+    // the touch target — if any ancestor has scrollTop > 0, bail without
+    // calling preventDefault so it can scroll normally.
+    let el = e.target;
+    while (el && el !== document.body && el.nodeType === 1) {
+      if (el.scrollTop > 0) return;
+      el = el.parentElement;
+    }
+    e.preventDefault();
+  }, { passive: false });
+})();
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <App />
 )
