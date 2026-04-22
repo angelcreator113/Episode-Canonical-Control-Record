@@ -2153,7 +2153,7 @@ The revised event should feel like a completely different experience from the si
                     style={{ ...S.sel, width: '100%', marginBottom: 6 }}
                   >
                     <option value="">— Choose a venue from World Locations —</option>
-                    {worldLocations.filter(l => l.location_type === 'venue' || l.venue_type).map(l => (
+                    {worldLocations.filter(l => l.location_type === 'venue' || l.location_type === 'interior' || l.venue_type).map(l => (
                       <option key={l.id} value={l.id}>🏪 {l.name}{l.venue_type ? ` (${l.venue_type.replace(/_/g, ' ')})` : ''}{l.district ? ` — ${l.district}` : ''}</option>
                     ))}
                     <option disabled>──── Other locations ────</option>
