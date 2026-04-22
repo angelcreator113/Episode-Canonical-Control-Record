@@ -719,52 +719,61 @@ router.post('/:id/seed-finance-apps', async (req, res) => {
       // Wrap per-app creates so one bad row doesn't 500 the whole endpoint.
       // The error surfaces in the response payload under results[n].error so
       // the UI can show which app(s) failed and why.
+      //
+      // Raw SQL (not Asset.create) because the model defines columns the
+      // deployed DB doesn't have yet on some environments (processing_status
+      // etc.). Explicit column list means we only touch columns we're sure
+      // exist — same pattern uiOverlayRoutes.js and worldEvents.js already use.
+      const { v4: uuidv4 } = require('uuid');
       try {
         if (!screenExists) {
-          await Asset.create({
-            asset_type: 'UI_OVERLAY',
-            asset_group: 'SHOW',
-            asset_scope: 'SHOW',
-            show_id: showId,
-            name: `💰 ${prompts.label}`,
-            s3_url_processed: assets.frame_url,
-            content_type: 'image/png',
-            metadata: {
-              overlay_type: screenType,
-              overlay_category: 'phone',
-              is_home: false,
-              screen_links: [
-                // Back arrow to home screen — tap zone top-left
-                { id: `back-${appKey}`, x: 2, y: 2, w: 10, h: 6, label: '←', actions: [{ type: 'navigate', target: 'home' }] },
-              ],
-              content_zones: APP_CONTENT_ZONES[appKey] || [],
-              theme: { pink: '#FBCFE8', teal: '#14B8A6', gold: '#B8962E' },
-            },
-          });
+          const screenMeta = {
+            overlay_type: screenType,
+            overlay_category: 'phone',
+            is_home: false,
+            screen_links: [
+              { id: `back-${appKey}`, x: 2, y: 2, w: 10, h: 6, label: '←', actions: [{ type: 'navigate', target: 'home' }] },
+            ],
+            content_zones: APP_CONTENT_ZONES[appKey] || [],
+            theme: { pink: '#FBCFE8', teal: '#14B8A6', gold: '#B8962E' },
+          };
+          await sequelize.query(
+            `INSERT INTO assets (id, name, asset_type, asset_group, asset_scope, show_id, s3_url_processed, content_type, metadata, created_at, updated_at)
+             VALUES (:id, :name, 'UI_OVERLAY', 'SHOW', 'SHOW', :showId, :url, 'image/png', :meta::jsonb, NOW(), NOW())`,
+            { replacements: {
+              id: uuidv4(),
+              name: `💰 ${prompts.label}`,
+              showId,
+              url: assets.frame_url || null,
+              meta: JSON.stringify(screenMeta),
+            }}
+          );
         }
 
         if (!iconExists) {
-          await Asset.create({
-            asset_type: 'UI_OVERLAY',
-            asset_group: 'SHOW',
-            asset_scope: 'SHOW',
-            show_id: showId,
-            name: `${prompts.icon} ${prompts.label} icon`,
-            s3_url_processed: assets.icon_url,
-            content_type: 'image/png',
-            metadata: {
-              overlay_type: iconType,
-              overlay_category: 'icon',
-              opens_screen: screenType,
-              label: prompts.label,
-              theme: { pink: '#FBCFE8', teal: '#14B8A6' },
-            },
-          });
+          const iconMeta = {
+            overlay_type: iconType,
+            overlay_category: 'icon',
+            opens_screen: screenType,
+            label: prompts.label,
+            theme: { pink: '#FBCFE8', teal: '#14B8A6' },
+          };
+          await sequelize.query(
+            `INSERT INTO assets (id, name, asset_type, asset_group, asset_scope, show_id, s3_url_processed, content_type, metadata, created_at, updated_at)
+             VALUES (:id, :name, 'UI_OVERLAY', 'SHOW', 'SHOW', :showId, :url, 'image/png', :meta::jsonb, NOW(), NOW())`,
+            { replacements: {
+              id: uuidv4(),
+              name: `${prompts.icon} ${prompts.label} icon`,
+              showId,
+              url: assets.icon_url || null,
+              meta: JSON.stringify(iconMeta),
+            }}
+          );
         }
 
         results.push({ app: appKey, created: true, frame_generated: !!assets.frame_url, icon_generated: !!assets.icon_url });
       } catch (createErr) {
-        console.error(`[seed-finance-apps] Asset.create failed for ${appKey}:`, createErr.message, createErr.stack);
+        console.error(`[seed-finance-apps] insert failed for ${appKey}:`, createErr.message, createErr.stack);
         results.push({ app: appKey, created: false, error: createErr.message, error_code: createErr.original?.code || null });
       }
     }
