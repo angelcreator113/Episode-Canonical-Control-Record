@@ -1769,14 +1769,15 @@ router.post('/:id/spec/validate-angle', validateUUIDParam('id'), optionalAuth, a
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    if (!set.scene_spec) return res.status(400).json({ success: false, error: 'No scene spec — generate one first' });
+    const spec = set.scene_spec || set.visual_language?.scene_spec || null;
+    if (!spec) return res.status(400).json({ success: false, error: 'No scene spec — generate one first' });
 
     const { image_url, angle_label } = req.body;
     if (!image_url || !angle_label) {
       return res.status(400).json({ success: false, error: 'image_url and angle_label are required' });
     }
 
-    const result = await sceneSpecService.validateAngleAgainstSpec(image_url, set.scene_spec, angle_label);
+    const result = await sceneSpecService.validateAngleAgainstSpec(image_url, spec, angle_label);
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('POST /:id/spec/validate-angle error:', err);
@@ -1789,7 +1790,8 @@ router.post('/:id/spec/create-angles', validateUUIDParam('id'), optionalAuth, as
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    if (!set.scene_spec?.camera_contracts?.length) {
+    const spec = set.scene_spec || set.visual_language?.scene_spec || null;
+    if (!spec?.camera_contracts?.length) {
       return res.status(400).json({ success: false, error: 'No camera contracts in scene spec' });
     }
 
@@ -1797,7 +1799,7 @@ router.post('/:id/spec/create-angles', validateUUIDParam('id'), optionalAuth, as
     const existing = await SceneAngle.findAll({ where: { scene_set_id: set.id }, attributes: ['angle_label'] });
     const existingLabels = new Set(existing.map(a => a.angle_label?.toUpperCase()));
 
-    const contracts = set.scene_spec.camera_contracts;
+    const contracts = spec.camera_contracts;
     const created = [];
 
     for (let i = 0; i < contracts.length; i++) {
