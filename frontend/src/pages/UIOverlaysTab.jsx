@@ -1368,10 +1368,38 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             reachable via the header buttons + grid tabs. */}
 
         <div className="phone-hub-layout">
-          {editingLinks && activeScreen?.url ? (
-            /* ── Unified Zones Tab — phone canvas on the left, controls on the right.
-                 Mode toggle (Tap / Icon / Content) swaps which drawing surface
-                 lives in the canvas column. Thumbnail strip replaces prev/next.
+          <div className="phone-hub-main">
+            <OverlayErrorBoundary>
+              <PhoneHub
+                screens={overlays}
+                activeScreen={activeScreen}
+                onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setActiveTab('screens'); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
+                onDelete={handleDeleteScreen}
+                onHideScreen={handleHideScreen}
+                hiddenScreens={hiddenScreens}
+                showHidden={showHidden}
+                onToggleShowHidden={() => setShowHidden(h => !h)}
+                onNavigate={handleNavigate}
+                navigationHistory={navHistory}
+                onBack={handleBack}
+                skin={phoneSkin}
+                onChangeSkin={handleChangeSkin}
+                customFrameUrl={customFrameUrl}
+                globalFit={globalFit}
+                onEditZones={() => setActiveTab('zones')}
+                activeTab={activeTab}
+                onChangeTab={setActiveTab}
+              />
+            </OverlayErrorBoundary>
+
+            {/* AI Assistant moved into the inline zone editor — it only
+                appears when you're actively editing zones since that's
+                what it acts on. */}
+          </div>
+
+          {editingLinks && activeScreen?.url && (
+            /* ── Unified Zones Tab — rendered as tab content inside the same
+                 Phone Hub shell so section tabs remain visible.
                  ── */
             (() => {
               const editableScreens = overlays.filter(o => o.generated && o.url && isScreen(o));
@@ -1501,7 +1529,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   ranAt: new Date().toLocaleTimeString(),
                 });
               };
-              const selectedTapZone = tapZonesDraft.find(zone => zone.id === tapSelectedZoneId) || null;
               return (
                 <div className={`zones-tab zones-tab--${zoneEditorMode}`}>
                     <div className="zones-tab__canvas">
@@ -1802,36 +1829,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 </div>
               );
             })()
-          ) : (
-            /* ── Phone Hub (phone + grid) ── */
-            <div className="phone-hub-main">
-              <OverlayErrorBoundary>
-                <PhoneHub
-                  screens={overlays}
-                  activeScreen={activeScreen}
-                  onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setActiveTab('screens'); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
-                  onDelete={handleDeleteScreen}
-                  onHideScreen={handleHideScreen}
-                  hiddenScreens={hiddenScreens}
-                  showHidden={showHidden}
-                  onToggleShowHidden={() => setShowHidden(h => !h)}
-                  onNavigate={handleNavigate}
-                  navigationHistory={navHistory}
-                  onBack={handleBack}
-                  skin={phoneSkin}
-                  onChangeSkin={handleChangeSkin}
-                  customFrameUrl={customFrameUrl}
-                  globalFit={globalFit}
-                  onEditZones={() => setActiveTab('zones')}
-                  activeTab={activeTab}
-                  onChangeTab={setActiveTab}
-                />
-              </OverlayErrorBoundary>
-
-              {/* AI Assistant moved into the inline zone editor — it only
-                  appears when you're actively editing zones since that's
-                  what it acts on. */}
-            </div>
           )}
         </div>
 
