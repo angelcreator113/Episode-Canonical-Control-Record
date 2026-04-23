@@ -41,6 +41,8 @@ export default function ContentZoneEditor({
   const [showPreview, setShowPreview] = useState(false);
   const [profiles, setProfiles] = useState([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
+  const [events, setEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
   const containerRef = useRef(null);
 
   useEffect(() => { setLocalZones(zones); setIsDirty(false); }, [zones]);
@@ -53,6 +55,17 @@ export default function ContentZoneEditor({
       .then(r => setProfiles(r.data?.data || r.data?.profiles || []))
       .catch(() => setProfiles([]))
       .finally(() => setProfilesLoading(false));
+  }, [showId]);
+
+  // Load calendar events for the event_invite picker. series_id is the same
+  // identifier as showId in this codebase.
+  useEffect(() => {
+    if (!showId) return;
+    setEventsLoading(true);
+    api.get(`/api/v1/calendar/events?series_id=${showId}`)
+      .then(r => setEvents(r.data?.events || []))
+      .catch(() => setEvents([]))
+      .finally(() => setEventsLoading(false));
   }, [showId]);
 
   const getRelativePos = useCallback((e) => {
@@ -278,6 +291,8 @@ export default function ContentZoneEditor({
                       zone={zone}
                       profiles={profiles}
                       profilesLoading={profilesLoading}
+                      events={events}
+                      eventsLoading={eventsLoading}
                       onUpdate={(changes) => updateZone(zone.id, changes)}
                       onAiFillZone={onAiFillZone}
                     />
@@ -293,7 +308,7 @@ export default function ContentZoneEditor({
 }
 
 // ── Zone configuration panel — type picker + type-specific config fields ──
-function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate, onAiFillZone }) {
+function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsLoading = false, onUpdate, onAiFillZone }) {
   const config = zone.content_config || {};
   // Inline AI proposal — keyed per-zone so each zone has its own review surface.
   const [aiProposal, setAiProposal] = useState(null);
@@ -426,6 +441,57 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate, onAiFillZo
                 </select>
               )}
             </div>
+          )}
+
+          {/* Event + inviter picker — for event_invite. The host profile is
+              stored on the zone (not on the event) so one event can be
+              invited by different characters on different screens. */}
+          {zone.content_type === 'event_invite' && (
+            <>
+              <div>
+                <label style={labelStyle}>EVENT</label>
+                {eventsLoading ? (
+                  <div style={{ fontSize: 10, color: '#999', padding: '6px 0', fontFamily: "'DM Mono', monospace" }}>Loading events...</div>
+                ) : events.length === 0 ? (
+                  <div style={{ fontSize: 10, color: '#b45309', padding: '6px 0' }}>No calendar events found for this show</div>
+                ) : (
+                  <select
+                    value={config.event_id || ''}
+                    onChange={(e) => handleConfigChange('event_id', e.target.value || null)}
+                    style={fieldStyle}
+                  >
+                    <option value="">— Select event —</option>
+                    {events.map(ev => {
+                      const when = ev.start_datetime ? new Date(ev.start_datetime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+                      return (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.title}{when ? ` — ${when}` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label style={labelStyle}>INVITER (OPTIONAL)</label>
+                {profilesLoading ? (
+                  <div style={{ fontSize: 10, color: '#999', padding: '6px 0', fontFamily: "'DM Mono', monospace" }}>Loading profiles...</div>
+                ) : profiles.length === 0 ? (
+                  <div style={{ fontSize: 10, color: '#999', padding: '6px 0' }}>No social profiles found for this show</div>
+                ) : (
+                  <select
+                    value={config.host_profile_id || ''}
+                    onChange={(e) => handleConfigChange('host_profile_id', e.target.value ? parseInt(e.target.value) : null)}
+                    style={fieldStyle}
+                  >
+                    <option value="">— No inviter shown —</option>
+                    {profiles.map(p => (
+                      <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.creator_name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </>
           )}
 
           {/* Max items — for lists (feed, DMs, notifications, comments, stories, wardrobe) */}

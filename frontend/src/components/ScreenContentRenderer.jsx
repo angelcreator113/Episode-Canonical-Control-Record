@@ -28,6 +28,7 @@ export const CONTENT_TYPES = [
   { key: 'wardrobe_price', label: 'Wardrobe Price', icon: '💰', desc: 'Price from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'wardrobe_brand', label: 'Wardrobe Brand', icon: '🏷️', desc: 'Brand name from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'comments_list', label: 'Comments', icon: '💭', desc: 'Post comment thread', group: 'social' },
+  { key: 'event_invite', label: 'Event Invite', icon: '💌', desc: 'Invitation card bound to a calendar event', group: 'messages' },
   { key: 'engagement_stats', label: 'Engagement Stats', icon: '📈', desc: 'Likes, reach, trending', group: 'stats' },
   { key: 'money_balance', label: 'Money Balance', icon: '💰', desc: 'Lala’s live coin balance + next goal', group: 'stats' },
   { key: 'balance_trend_sparkline', label: 'Balance Trend', icon: '📈', desc: 'Last 12 episodes balance line chart', group: 'stats' },
@@ -117,6 +118,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
       return <WardrobeBrandRenderer config={config} screenMeta={screenMeta} />;
     case 'comments_list':
       return <CommentsRenderer showId={showId} config={config} />;
+    case 'event_invite':
+      return <EventInviteRenderer showId={showId} config={config} />;
     case 'engagement_stats':
       return <EngagementStatsRenderer showId={showId} config={config} />;
     case 'money_balance':
@@ -777,6 +780,105 @@ function CommentsRenderer({ showId, config }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Event Invite ──
+// Binds to a StoryCalendarEvent picked in the zone config. Optionally shows a
+// social profile as the inviter (stored on the zone config, not the event —
+// StoryCalendarEvent has no host field yet, and keeping this per-zone lets one
+// event be invited by different characters on different screens).
+function EventInviteRenderer({ showId, config }) {
+  const eventId = config.event_id;
+  const hostProfileId = config.host_profile_id;
+  // List endpoint is the only way to load events today (no GET /events/:id).
+  // Filtering client-side is fine for the typical event count per show.
+  const eventsUrl = showId ? `/api/v1/calendar/events?series_id=${showId}` : null;
+  const hostUrl = hostProfileId ? `/api/v1/social-profiles/${hostProfileId}` : null;
+  const { data: eventsData, loading: eventsLoading } = useContentData(eventsUrl);
+  const { data: hostData, loading: hostLoading } = useContentData(hostUrl);
+
+  if (eventsLoading) return <ZoneLoader />;
+  if (!eventId) return <ZoneEmpty label="Pick an event" />;
+  const events = eventsData?.events || [];
+  const event = events.find(e => String(e.id) === String(eventId));
+  if (!event) return <ZoneEmpty label="Event not found" />;
+
+  const host = hostData?.data || hostData;
+  const when = event.start_datetime ? new Date(event.start_datetime) : null;
+  const whenLabel = when
+    ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : '';
+  const timeLabel = when
+    ? when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    : '';
+  const where = event.location_name || event.lalaverse_district || '';
+  const description = event.what_world_knows || '';
+
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      display: 'flex', flexDirection: 'column',
+      padding: 5,
+      background: config.bg || 'linear-gradient(180deg, rgba(45,30,60,0.92), rgba(28,20,40,0.92))',
+      color: '#fff',
+      borderRadius: 4,
+      overflow: 'hidden',
+    }}>
+      {/* Inviter row — avatar + handle; hidden if no host_profile_id set */}
+      {host && !hostLoading && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+          <div style={{
+            width: 14, height: 14, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #e8a0b4, #b8a9d4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 8, fontWeight: 700,
+            border: '1px solid rgba(255,255,255,0.3)',
+            flexShrink: 0,
+          }}>
+            {(host.display_name || host.handle || '?')[0].toUpperCase()}
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.6)', lineHeight: 1 }}>INVITES YOU</div>
+            <div style={{ fontSize: 8, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              @{host.handle}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Title */}
+      <div style={{ fontSize: 10, fontWeight: 800, lineHeight: 1.2, marginBottom: 3, textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>
+        {event.title}
+      </div>
+
+      {/* When / Where */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 3 }}>
+        {whenLabel && (
+          <div>
+            <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.3 }}>WHEN</div>
+            <div style={{ fontSize: 8, fontWeight: 700 }}>{whenLabel}{timeLabel ? ` · ${timeLabel}` : ''}</div>
+          </div>
+        )}
+        {where && (
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.3 }}>WHERE</div>
+            <div style={{ fontSize: 8, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{where}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Description — clamped to fit */}
+      {description && (
+        <div style={{
+          fontSize: 7, color: 'rgba(255,255,255,0.7)', lineHeight: 1.3,
+          display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+          overflow: 'hidden', marginTop: 'auto',
+        }}>
+          {description}
+        </div>
+      )}
     </div>
   );
 }

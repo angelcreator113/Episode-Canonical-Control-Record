@@ -77,6 +77,10 @@ export default function IconPlacementMode({
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [showPicker, setShowPicker] = useState(false);
   const [pendingPos, setPendingPos] = useState(null);
+  // Target chosen in the picker popup so placement and linking happen in
+  // one step. Persists across picker opens within a session so placing a
+  // row of icons into the same screen doesn't require re-selecting it.
+  const [pendingTarget, setPendingTarget] = useState('');
   const [dragging, setDragging] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
@@ -158,7 +162,8 @@ export default function IconPlacementMode({
     selectSingle(id);
   }, [multiSelectMode, selectSingle, toggleSelected]);
 
-  // Pick icon from grid → place at pending position
+  // Pick icon from grid → place at pending position, with the target chosen
+  // in the same popup so placement and linking are one action instead of two.
   const handlePickIcon = (ico) => {
     if (!pendingPos) return;
     const nextIndex = zones.length;
@@ -168,7 +173,7 @@ export default function IconPlacementMode({
       y: pendingPos.y - (HOME_GRID.height / 2),
       w: HOME_GRID.width,
       h: HOME_GRID.height,
-      target: '',
+      target: pendingTarget || '',
       label: (ico.name || '').replace(/\s*Icon$/i, ''),
       icon_url: ico.url,
       icon_overlay_id: ico.id,
@@ -485,16 +490,36 @@ export default function IconPlacementMode({
       </PhoneFrame>
       </div>
 
-      {/* Icon picker — shows when tapping the screen */}
+      {/* Icon picker — shows when tapping the screen. Surfaces both the icon
+          grid and a target-screen dropdown so placement and linking are a
+          single action. Target is optional and can be changed later from
+          the selected-icon panel below. */}
       {showPicker && (
         <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
-              PICK AN ICON
+              PICK AN ICON + WHERE IT OPENS
             </span>
             <button onClick={() => { setShowPicker(false); setPendingPos(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4 }}>
               <X size={16} />
             </button>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: '0.05em', marginBottom: 4, textTransform: 'uppercase' }}>
+              Opens screen
+            </label>
+            <select
+              value={pendingTarget}
+              onChange={(e) => setPendingTarget(e.target.value)}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, background: '#fff' }}
+            >
+              <option value="">— No target (set later) —</option>
+              {screenTypes.map(st => (
+                <option key={st.key} value={st.key}>
+                  {st.icon} {st.label}{generatedScreenKeys?.has(st.key) ? ' ✓' : ''}
+                </option>
+              ))}
+            </select>
           </div>
           {iconOverlays.length > 0 ? (
             <div style={{
