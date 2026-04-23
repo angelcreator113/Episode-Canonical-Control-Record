@@ -1,29 +1,8 @@
-/* ZonesTab — unified zone editor
-   Layout: left column = phone canvas (the active editor renders here);
-           right column = thumbnail strip, mode toggle, zone list, AI drawer.
-   The phone column is sticky so creators never lose their visual anchor
-   while scrolling through the right-side controls.
+/* ZonesTab — styles for the mode toggle + thumbnail strip + toolbar menu.
+   Layout (phone-left + controls-right + sticky phone) is inherited from
+   the phone-hub-inner / phone-hub-device / phone-hub-grid-section classes
+   so the Zones tab matches the Screens/Icons/Placements tabs exactly.
 */
-
-.zones-tab {
-  display: grid;
-  grid-template-columns: minmax(260px, 340px) 1fr;
-  gap: var(--spacing-xl);
-  align-items: start;
-}
-
-.zones-tab__canvas {
-  position: sticky;
-  top: 20px;
-  min-width: 0;
-}
-
-.zones-tab__controls {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-lg);
-  min-width: 0;
-}
 
 /* Mode toggle — Tap / Icon / Content. Matches the look of the existing
    in-editor mode toggle but pulls its active color from the zone tokens
@@ -169,18 +148,8 @@
   box-shadow: 0 1px 3px rgba(184, 150, 46, 0.4);
 }
 
-/* Tablet and narrower — stack phone above controls */
-@media (max-width: 1024px) {
-  .zones-tab {
-    grid-template-columns: 1fr;
-  }
-
-  .zones-tab__canvas {
-    position: static;
-    max-width: 340px;
-    margin-inline: auto;
-  }
-}
+/* Responsive stacking is handled by phone-hub-inner's own media queries
+   in PhoneHub.jsx — no overrides needed here. */
 
 /* ============================================
    TOOLBAR DROPDOWN MENU

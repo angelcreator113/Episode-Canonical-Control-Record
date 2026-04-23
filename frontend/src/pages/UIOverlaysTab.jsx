@@ -21,6 +21,7 @@ import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import ScreenThumbnailStrip from '../components/phone/ScreenThumbnailStrip';
 import ToolbarMenu from '../components/phone/ToolbarMenu';
+import PhoneFrame from '../components/phone/PhoneFrame';
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
 
@@ -1241,8 +1242,13 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 setZoneEditorMode(next);
               };
               return (
-                <div className="zones-tab">
-                  <div className="zones-tab__canvas">
+                /* Uses the same layout classes as the Screens/Icons/Placements
+                   tabs (phone-hub-inner + phone-hub-device + phone-hub-grid-section)
+                   so the Zones tab inherits identical column widths, gutters,
+                   and sticky phone behaviour. The right-side controls flow
+                   openly like the grid, not inside a bordered card. */
+                <div className="phone-hub-inner">
+                  <div className="phone-hub-device">
                     {zoneEditorMode === 'zones' ? (
                       <ScreenLinkEditor
                         ref={linkEditorRef}
@@ -1288,22 +1294,61 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         </div>
                       </div>
                     ) : (
-                      /* Content mode — migrated from the detail panel's old Content sub-tab.
-                         Same ContentZoneEditor, hosted in the shared Zones canvas now. */
-                      <ContentZoneEditor
-                        screenUrl={activeScreen.url}
-                        zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
-                        showId={showId}
-                        onSave={handleSaveContentZones}
-                        onAiFillZone={handleFillContentZone}
-                        compact
-                      />
+                      /* Content mode — ContentZoneEditor has no device chrome of
+                         its own, so we wrap it in PhoneFrame for visual parity
+                         with the other tabs' phone preview. */
+                      <PhoneFrame skin={phoneSkin} customFrameUrl={customFrameUrl}>
+                        <ContentZoneEditor
+                          screenUrl={activeScreen.url}
+                          zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                          showId={showId}
+                          onSave={handleSaveContentZones}
+                          onAiFillZone={handleFillContentZone}
+                          compact
+                        />
+                      </PhoneFrame>
                     )}
                   </div>
 
-                  <div className="zones-tab__controls">
-                    <div className="zone-editor-header">
-                      <div style={{ flex: 1 }} />
+                  <div className="phone-hub-grid-section">
+                    {/* Header row — mode toggle on the left, Done on the right,
+                        echoing the Screens tab's section-tab bar layout. */}
+                    <div className="phone-hub-section-tabs">
+                      <div className="zones-mode-toggle" role="tablist" aria-label="Zone edit mode">
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={zoneEditorMode === 'zones'}
+                          data-kind="tap"
+                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'zones' ? 'active' : ''}`}
+                          onClick={() => switchMode('zones')}
+                        >
+                          <span className="zones-mode-toggle__dot" data-kind="tap" />
+                          Tap
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={zoneEditorMode === 'icons'}
+                          data-kind="icon"
+                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'icons' ? 'active' : ''}`}
+                          onClick={() => switchMode('icons')}
+                        >
+                          <span className="zones-mode-toggle__dot" data-kind="icon" />
+                          Icon
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={zoneEditorMode === 'content'}
+                          data-kind="content"
+                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'content' ? 'active' : ''}`}
+                          onClick={() => switchMode('content')}
+                        >
+                          <span className="zones-mode-toggle__dot" data-kind="content" />
+                          Content
+                        </button>
+                      </div>
                       <button onClick={() => {
                         if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
                         setActiveTab('screens');
@@ -1320,44 +1365,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       globalFit={globalFit}
                       zoneCounts={zoneCounts}
                     />
-
-                    {/* Mode toggle — Tap (draw rects), Icon (tap to place),
-                        Content (bind data). Dot color matches the zone outline. */}
-                    <div className="zones-mode-toggle" role="tablist" aria-label="Zone edit mode">
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={zoneEditorMode === 'zones'}
-                        data-kind="tap"
-                        className={`zones-mode-toggle__btn ${zoneEditorMode === 'zones' ? 'active' : ''}`}
-                        onClick={() => switchMode('zones')}
-                      >
-                        <span className="zones-mode-toggle__dot" data-kind="tap" />
-                        Tap
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={zoneEditorMode === 'icons'}
-                        data-kind="icon"
-                        className={`zones-mode-toggle__btn ${zoneEditorMode === 'icons' ? 'active' : ''}`}
-                        onClick={() => switchMode('icons')}
-                      >
-                        <span className="zones-mode-toggle__dot" data-kind="icon" />
-                        Icon
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={zoneEditorMode === 'content'}
-                        data-kind="content"
-                        className={`zones-mode-toggle__btn ${zoneEditorMode === 'content' ? 'active' : ''}`}
-                        onClick={() => switchMode('content')}
-                      >
-                        <span className="zones-mode-toggle__dot" data-kind="content" />
-                        Content
-                      </button>
-                    </div>
 
                     {/* AI Assistant — screen-scoped, proposes tap zones for the
                         active screen. Not shown in Content mode (different editor). */}
