@@ -6,7 +6,7 @@
  * Right: screen type grid + actions
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
-import { useState, useEffect, useCallback, useRef, Component } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Component } from 'react';
 import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
@@ -45,6 +45,36 @@ class OverlayErrorBoundary extends Component {
   }
 }
 
+function zonesOverlap(a, b) {
+  const left = Math.max(a.x, b.x);
+  const right = Math.min(a.x + a.w, b.x + b.w);
+  const top = Math.max(a.y, b.y);
+  const bottom = Math.min(a.y + a.h, b.y + b.h);
+  return right > left && bottom > top;
+}
+
+function countZoneOverlaps(zones = []) {
+  let count = 0;
+  for (let i = 0; i < zones.length; i += 1) {
+    for (let j = i + 1; j < zones.length; j += 1) {
+      if (zonesOverlap(zones[i], zones[j])) count += 1;
+    }
+  }
+  return count;
+}
+
+function findZoneOverlapPairs(zones = []) {
+  const pairs = [];
+  for (let i = 0; i < zones.length; i += 1) {
+    for (let j = i + 1; j < zones.length; j += 1) {
+      if (zonesOverlap(zones[i], zones[j])) {
+        pairs.push([zones[i]?.id, zones[j]?.id]);
+      }
+    }
+  }
+  return pairs;
+}
+
 export default function UIOverlaysTab({ showId: propShowId }) {
   const [showId, setShowId] = useState(propShowId || null);
   const [shows, setShows] = useState([]);
@@ -72,6 +102,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // 'icons' — IconPlacementMode (tap the phone, pick an icon from the picker — simpler for placing
   // app-icon-style tap zones on a home screen). Both persist to the same screen_links array.
   const [zoneEditorMode, setZoneEditorMode] = useState('zones');
+  const [tapZonesDraft, setTapZonesDraft] = useState([]);
+  const [tapZonesDirty, setTapZonesDirty] = useState(false);
+  const [tapSelectedZoneId, setTapSelectedZoneId] = useState(null);
+  const [pendingIssueFocus, setPendingIssueFocus] = useState(null);
+  const [flowAudit, setFlowAudit] = useState(null);
   const [navHistory, setNavHistory] = useState([]);  // stack of screen keys for back navigation
   const [globalFit, setGlobalFit] = useState({});    // device-level fit applied to all screens
   const [activeVariantIdx, setActiveVariantIdx] = useState(0);
@@ -109,6 +144,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
   // Keep activeScreenRef in sync with activeScreen state
   useEffect(() => { activeScreenRef.current = activeScreen; }, [activeScreen]);
+
+  useEffect(() => {
+    if (!pendingIssueFocus || !activeScreen) return;
+    const sameScreen = activeScreen.id === pendingIssueFocus.screenId;
+    const sameMode = zoneEditorMode === pendingIssueFocus.mode;
+    if (!sameScreen || !sameMode) return;
+    if (pendingIssueFocus.mode === 'zones' && pendingIssueFocus.zoneId) {
+      linkEditorRef.current?.setSelectedZone?.(pendingIssueFocus.zoneId);
+    }
+    setPendingIssueFocus(null);
+  }, [pendingIssueFocus, activeScreen, zoneEditorMode]);
 
   // Load phone skin preference
   useEffect(() => {
@@ -322,6 +368,113 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       .catch(() => setOverlays([]))
       .finally(() => setLoading(false));
   }, [showId]);
+
+  const screenDiagnostics = useMemo(() => {
+    const screens = overlays.filter(o => o.generated && o.url && isScreen(o));
+    const generatedKeys = new Set(screens.map(s => s.id));
+    const diagnostics = new Map();
+
+    screens.forEach((screen) => {
+      const links = getScreenLinks(screen);
+      const contentZones = screen.content_zones || screen.metadata?.content_zones || [];
+      const iconCount = links.filter(link => (
+        !!link?.icon_overlay_id
+        || !!link?.icon_url
+        || (Array.isArray(link?.icon_urls) && link.icon_urls.length > 0)
+      )).length;
+      const tapCount = Math.max(0, links.length - iconCount);
+
+      const invalidBoundsZones = links.filter(link => {
+        if (typeof link?.x !== 'number' || typeof link?.y !== 'number' || typeof link?.w !== 'number' || typeof link?.h !== 'number') return true;
+        if (link.w <= 0 || link.h <= 0) return true;
+        if (link.x < 0 || link.y < 0) return true;
+        if ((link.x + link.w) > 100 || (link.y + link.h) > 100) return true;
+        return false;
+      });
+
+      const missingTargetZones = links.filter(link => !link?.target);
+      const brokenTargetZones = links.filter(link => link?.target && !generatedKeys.has(link.target));
+      const untypedContentZones = contentZones.filter(zone => !zone?.content_type);
+      const overlapPairs = findZoneOverlapPairs(links);
+
+      const invalidBounds = invalidBoundsZones.length;
+      const missingTarget = missingTargetZones.length;
+      const brokenTarget = brokenTargetZones.length;
+      const untypedContent = untypedContentZones.length;
+      const overlapCount = overlapPairs.length;
+
+      const issues = [];
+      const issueItems = [];
+      if (brokenTarget > 0) issues.push(`${brokenTarget} zone${brokenTarget > 1 ? 's have' : ' has'} a missing destination screen`);
+      if (brokenTarget > 0) {
+        issueItems.push({
+          id: `${screen.id}-broken-target`,
+          text: `${brokenTarget} broken target${brokenTarget > 1 ? 's' : ''}`,
+          mode: 'zones',
+          screenId: screen.id,
+          zoneId: brokenTargetZones[0]?.id,
+        });
+      }
+      if (invalidBounds > 0) issues.push(`${invalidBounds} zone${invalidBounds > 1 ? 's are' : ' is'} outside valid bounds`);
+      if (invalidBounds > 0) {
+        issueItems.push({
+          id: `${screen.id}-invalid-bounds`,
+          text: `${invalidBounds} zone${invalidBounds > 1 ? 's' : ''} out of bounds`,
+          mode: 'zones',
+          screenId: screen.id,
+          zoneId: invalidBoundsZones[0]?.id,
+        });
+      }
+      if (missingTarget > 0) issues.push(`${missingTarget} zone${missingTarget > 1 ? 's are' : ' is'} missing a target`);
+      if (missingTarget > 0) {
+        issueItems.push({
+          id: `${screen.id}-missing-target`,
+          text: `${missingTarget} zone${missingTarget > 1 ? 's' : ''} missing target`,
+          mode: 'zones',
+          screenId: screen.id,
+          zoneId: missingTargetZones[0]?.id,
+        });
+      }
+      if (untypedContent > 0) issues.push(`${untypedContent} content zone${untypedContent > 1 ? 's are' : ' is'} unassigned`);
+      if (untypedContent > 0) {
+        issueItems.push({
+          id: `${screen.id}-content-untyped`,
+          text: `${untypedContent} content zone${untypedContent > 1 ? 's' : ''} unassigned`,
+          mode: 'content',
+          screenId: screen.id,
+          zoneId: untypedContentZones[0]?.id,
+        });
+      }
+      if (overlapCount > 0) issues.push(`${overlapCount} zone overlap${overlapCount > 1 ? 's need' : ' needs'} review`);
+      if (overlapCount > 0) {
+        issueItems.push({
+          id: `${screen.id}-overlap`,
+          text: `${overlapCount} overlap${overlapCount > 1 ? 's' : ''} found`,
+          mode: 'zones',
+          screenId: screen.id,
+          zoneId: overlapPairs[0]?.[0],
+        });
+      }
+
+      let severity = 'ok';
+      if (brokenTarget > 0 || invalidBounds > 0) severity = 'error';
+      else if (issues.length > 0) severity = 'warn';
+
+      diagnostics.set(screen.id, {
+        counts: {
+          tap: tapCount,
+          icon: iconCount,
+          content: contentZones.length,
+        },
+        issues,
+        issueItems,
+        issueCount: issues.length,
+        severity,
+      });
+    });
+
+    return diagnostics;
+  }, [overlays]);
 
   useEffect(() => { loadOverlays(true); }, [loadOverlays]);
   useEffect(() => { return () => { if (pollRef.current) clearTimeout(pollRef.current); if (genTimeoutRef.current) clearTimeout(genTimeoutRef.current); }; }, []);
@@ -1215,10 +1368,38 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             reachable via the header buttons + grid tabs. */}
 
         <div className="phone-hub-layout">
-          {editingLinks && activeScreen?.url ? (
-            /* ── Unified Zones Tab — phone canvas on the left, controls on the right.
-                 Mode toggle (Tap / Icon / Content) swaps which drawing surface
-                 lives in the canvas column. Thumbnail strip replaces prev/next.
+          <div className="phone-hub-main">
+            <OverlayErrorBoundary>
+              <PhoneHub
+                screens={overlays}
+                activeScreen={activeScreen}
+                onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setActiveTab('screens'); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
+                onDelete={handleDeleteScreen}
+                onHideScreen={handleHideScreen}
+                hiddenScreens={hiddenScreens}
+                showHidden={showHidden}
+                onToggleShowHidden={() => setShowHidden(h => !h)}
+                onNavigate={handleNavigate}
+                navigationHistory={navHistory}
+                onBack={handleBack}
+                skin={phoneSkin}
+                onChangeSkin={handleChangeSkin}
+                customFrameUrl={customFrameUrl}
+                globalFit={globalFit}
+                onEditZones={() => setActiveTab('zones')}
+                activeTab={activeTab}
+                onChangeTab={setActiveTab}
+              />
+            </OverlayErrorBoundary>
+
+            {/* AI Assistant moved into the inline zone editor — it only
+                appears when you're actively editing zones since that's
+                what it acts on. */}
+          </div>
+
+          {editingLinks && activeScreen?.url && (
+            /* ── Unified Zones Tab — rendered as tab content inside the same
+                 Phone Hub shell so section tabs remain visible.
                  ── */
             (() => {
               const editableScreens = overlays.filter(o => o.generated && o.url && isScreen(o));
@@ -1227,22 +1408,130 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
                 setActiveScreen(target);
                 setNavHistory([]);
+                setFlowAudit(null);
               };
               // Aggregate zone counts per screen so the thumbnail strip can show a badge.
               const zoneCounts = new Map();
+              const screenHealth = new Map();
               editableScreens.forEach(s => {
+                const diag = screenDiagnostics.get(s.id);
+                if (diag?.counts) {
+                  zoneCounts.set(s.id, diag.counts);
+                  screenHealth.set(s.id, {
+                    severity: diag.severity,
+                    issueCount: diag.issueCount,
+                  });
+                  return;
+                }
                 const tap = (s.screen_links || s.metadata?.screen_links || []).length;
                 const content = (s.content_zones || s.metadata?.content_zones || []).length;
                 zoneCounts.set(s.id, { tap, icon: 0, content });
+                screenHealth.set(s.id, { severity: 'ok', issueCount: 0 });
               });
+              const activeHealth = screenDiagnostics.get(activeScreen.id) || {
+                issues: [],
+                issueItems: [],
+                issueCount: 0,
+                severity: 'ok',
+              };
               const switchMode = (next) => {
                 if (zoneEditorMode === next) return;
                 if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
                 setZoneEditorMode(next);
               };
+              const focusIssue = (issue) => {
+                if (!issue) return;
+                const targetScreen = editableScreens.find(s => s.id === issue.screenId);
+                if (targetScreen && targetScreen.id !== activeScreen.id) switchToScreen(targetScreen);
+                if (issue.mode && zoneEditorMode !== issue.mode) switchMode(issue.mode);
+                setPendingIssueFocus({
+                  screenId: issue.screenId || activeScreen.id,
+                  mode: issue.mode || 'zones',
+                  zoneId: issue.zoneId || null,
+                });
+              };
+              const runFlowAudit = () => {
+                const byId = new Map(editableScreens.map(screen => [screen.id, screen]));
+                const linksByScreen = new Map(editableScreens.map(screen => [screen.id, getScreenLinks(screen)]));
+                const deadLinks = [];
+                const graph = new Map();
+
+                editableScreens.forEach((screen) => {
+                  const links = linksByScreen.get(screen.id) || [];
+                  const targets = [];
+                  links.forEach((zone) => {
+                    if (!zone?.target) return;
+                    if (!byId.has(zone.target)) {
+                      deadLinks.push({
+                        sourceScreenId: screen.id,
+                        sourceScreenName: screen.name,
+                        zoneId: zone.id,
+                        zoneLabel: zone.label || zone.target || 'Unnamed zone',
+                        target: zone.target,
+                      });
+                      return;
+                    }
+                    targets.push(zone.target);
+                  });
+                  graph.set(screen.id, targets);
+                });
+
+                const visited = new Set();
+                const stack = [activeScreen.id];
+                while (stack.length) {
+                  const current = stack.pop();
+                  if (!current || visited.has(current)) continue;
+                  visited.add(current);
+                  (graph.get(current) || []).forEach(next => {
+                    if (!visited.has(next)) stack.push(next);
+                  });
+                }
+
+                const unreachable = editableScreens
+                  .filter(screen => !visited.has(screen.id))
+                  .map(screen => ({ id: screen.id, name: screen.name }));
+
+                const cycles = [];
+                const cycleKeys = new Set();
+                const state = new Map();
+                const path = [];
+                const dfs = (node) => {
+                  state.set(node, 1);
+                  path.push(node);
+                  (graph.get(node) || []).forEach((next) => {
+                    if (state.get(next) === 0 || !state.has(next)) {
+                      dfs(next);
+                      return;
+                    }
+                    if (state.get(next) === 1) {
+                      const idx = path.indexOf(next);
+                      const loop = [...path.slice(idx), next];
+                      const key = loop.join('>');
+                      if (!cycleKeys.has(key)) {
+                        cycleKeys.add(key);
+                        cycles.push(loop);
+                      }
+                    }
+                  });
+                  path.pop();
+                  state.set(node, 2);
+                };
+                editableScreens.forEach((screen) => {
+                  if (!state.has(screen.id)) dfs(screen.id);
+                });
+
+                setFlowAudit({
+                  deadLinks,
+                  unreachable,
+                  cycles,
+                  scanned: editableScreens.length,
+                  reached: visited.size,
+                  ranAt: new Date().toLocaleTimeString(),
+                });
+              };
               return (
-                <div className="zones-tab">
-                  <div className="zones-tab__canvas">
+                <div className={`zones-tab zones-tab--${zoneEditorMode}`}>
+                    <div className="zones-tab__canvas">
                     {zoneEditorMode === 'zones' ? (
                       <ScreenLinkEditor
                         ref={linkEditorRef}
@@ -1263,6 +1552,12 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         onRequestAiZones={handleRequestAiZones}
                         allScreens={overlays.filter(o => isScreen(o) && o.url).map(o => ({ id: o.id, name: o.name }))}
                         onBulkPlace={handleBulkPlaceZone}
+                        embedded
+                        onZonesChange={(zones, dirty, selectedId) => {
+                          setTapZonesDraft(zones || []);
+                          setTapZonesDirty(!!dirty);
+                          setTapSelectedZoneId(selectedId || null);
+                        }}
                       />
                     ) : zoneEditorMode === 'icons' ? (
                       <div style={{ position: 'relative' }}>
@@ -1301,109 +1596,239 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     )}
                   </div>
 
-                  <div className="zones-tab__controls">
-                    <div className="zone-editor-header">
-                      <div style={{ flex: 1 }} />
-                      <button onClick={() => {
-                        if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
-                        setActiveTab('screens');
-                        setNavHistory([]);
-                      }} className="zone-editor-done-btn">
-                        <Check size={14} /> Done
-                      </button>
-                    </div>
+                    <div className="zones-tab__controls">
+                      <div className="zones-tab__sidebar-card zones-tab__sidebar-card--primary">
+                      <div className="zone-editor-header">
+                        <div className="zones-tab__sidebar-meta">
+                          <div className="zones-tab__sidebar-label">Zones Workspace</div>
+                          <div className="zones-tab__sidebar-screen">{activeScreen?.name}</div>
+                        </div>
+                        <button onClick={() => {
+                          if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                          setActiveTab('screens');
+                          setNavHistory([]);
+                        }} className="zone-editor-done-btn">
+                          <Check size={14} /> Done
+                        </button>
+                      </div>
 
-                    <ScreenThumbnailStrip
-                      screens={editableScreens}
-                      activeId={activeScreen.id}
-                      onSelect={switchToScreen}
-                      globalFit={globalFit}
-                      zoneCounts={zoneCounts}
-                    />
+                      <ScreenThumbnailStrip
+                        screens={editableScreens}
+                        activeId={activeScreen.id}
+                        onSelect={switchToScreen}
+                        globalFit={globalFit}
+                        zoneCounts={zoneCounts}
+                        healthByScreen={screenHealth}
+                      />
 
-                    {/* Mode toggle — Tap (draw rects), Icon (tap to place),
-                        Content (bind data). Dot color matches the zone outline. */}
-                    <div className="zones-mode-toggle" role="tablist" aria-label="Zone edit mode">
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={zoneEditorMode === 'zones'}
-                        data-kind="tap"
-                        className={`zones-mode-toggle__btn ${zoneEditorMode === 'zones' ? 'active' : ''}`}
-                        onClick={() => switchMode('zones')}
-                      >
-                        <span className="zones-mode-toggle__dot" data-kind="tap" />
-                        Tap
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={zoneEditorMode === 'icons'}
-                        data-kind="icon"
-                        className={`zones-mode-toggle__btn ${zoneEditorMode === 'icons' ? 'active' : ''}`}
-                        onClick={() => switchMode('icons')}
-                      >
-                        <span className="zones-mode-toggle__dot" data-kind="icon" />
-                        Icon
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={zoneEditorMode === 'content'}
-                        data-kind="content"
-                        className={`zones-mode-toggle__btn ${zoneEditorMode === 'content' ? 'active' : ''}`}
-                        onClick={() => switchMode('content')}
-                      >
-                        <span className="zones-mode-toggle__dot" data-kind="content" />
-                        Content
-                      </button>
+                      {/* Mode toggle — Tap (draw rects), Icon (tap to place),
+                          Content (bind data). Dot color matches the zone outline. */}
+                      <div className="zones-mode-toggle" role="tablist" aria-label="Zone edit mode">
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={zoneEditorMode === 'zones'}
+                          data-kind="tap"
+                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'zones' ? 'active' : ''}`}
+                          onClick={() => switchMode('zones')}
+                        >
+                          <span className="zones-mode-toggle__dot" data-kind="tap" />
+                          Tap
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={zoneEditorMode === 'icons'}
+                          data-kind="icon"
+                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'icons' ? 'active' : ''}`}
+                          onClick={() => switchMode('icons')}
+                        >
+                          <span className="zones-mode-toggle__dot" data-kind="icon" />
+                          Icon
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={zoneEditorMode === 'content'}
+                          data-kind="content"
+                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'content' ? 'active' : ''}`}
+                          onClick={() => switchMode('content')}
+                        >
+                          <span className="zones-mode-toggle__dot" data-kind="content" />
+                          Content
+                        </button>
+                      </div>
+
+                      <div className={`zones-health zones-health--${activeHealth.severity}`}>
+                        <div className="zones-health__header">
+                          <span className="zones-health__label">Screen Health</span>
+                          <span className={`zones-health__badge zones-health__badge--${activeHealth.severity}`}>
+                            {activeHealth.issueCount > 0 ? `${activeHealth.issueCount} issue${activeHealth.issueCount > 1 ? 's' : ''}` : 'Ready'}
+                          </span>
+                        </div>
+                        {activeHealth.issueCount > 0 ? (
+                          <ul className="zones-health__list">
+                            {(activeHealth.issueItems || []).slice(0, 3).map((issue) => (
+                              <li key={issue.id}>
+                                <button
+                                  type="button"
+                                  className="zones-health__jump"
+                                  onClick={() => focusIssue(issue)}
+                                >
+                                  {issue.text}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="zones-health__ok">No blockers found for this screen.</div>
+                        )}
+                      </div>
+
+                      {zoneEditorMode === 'zones' && (
+                        <div className="zones-tab__sidebar-card">
+                          <div className="zones-tap-panel__header">
+                            <span className="zones-tap-panel__title">Tap Zones ({tapZonesDraft.length})</span>
+                            <div className="zones-tap-panel__actions">
+                              <button
+                                type="button"
+                                className="zones-tap-panel__btn"
+                                onClick={() => linkEditorRef.current?.addDefaultZone?.()}
+                              >
+                                Add
+                              </button>
+                              {tapZonesDirty && (
+                                <button
+                                  type="button"
+                                  className="zones-tap-panel__btn zones-tap-panel__btn--save"
+                                  onClick={() => linkEditorRef.current?.save?.()}
+                                >
+                                  Save
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {tapZonesDraft.length > 1 && (
+                            <div className="zones-tap-tools">
+                              <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('align_left')}>Align L</button>
+                              <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('align_center')}>Align C</button>
+                              <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('align_right')}>Align R</button>
+                              <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('distribute_horizontal')}>Dist H</button>
+                              <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('distribute_vertical')}>Dist V</button>
+                              <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('equal_size')}>Equal Size</button>
+                            </div>
+                          )}
+
+                          {tapZonesDraft.length === 0 ? (
+                            <div className="zones-tap-panel__empty">Draw on the phone to create your first tap zone.</div>
+                          ) : (
+                            <div className="zones-tap-panel__list">
+                              {tapZonesDraft.map((zone, index) => {
+                                const label = zone.label || zone.target || `Zone ${index + 1}`;
+                                const hasTarget = !!zone.target;
+                                const isSelected = tapSelectedZoneId === zone.id;
+                                return (
+                                  <div key={zone.id} className={`zones-tap-row ${isSelected ? 'active' : ''}`}>
+                                    <button
+                                      type="button"
+                                      className="zones-tap-row__select"
+                                      onClick={() => linkEditorRef.current?.setSelectedZone?.(zone.id)}
+                                    >
+                                      <span className="zones-tap-row__name">{label}</span>
+                                      <span className={`zones-tap-row__state ${hasTarget ? 'ok' : 'warn'}`}>
+                                        {hasTarget ? `navigate(${zone.target})` : 'no target'}
+                                      </span>
+                                    </button>
+
+                                    {isSelected && (
+                                      <div className="zones-tap-row__edit">
+                                        <input
+                                          value={zone.label || ''}
+                                          onChange={(e) => linkEditorRef.current?.updateZone?.(zone.id, { label: e.target.value })}
+                                          placeholder="Label"
+                                        />
+                                        <select
+                                          value={zone.target || ''}
+                                          onChange={(e) => {
+                                            const target = e.target.value;
+                                            linkEditorRef.current?.updateZone?.(zone.id, { target, label: zone.label || target || '' });
+                                          }}
+                                        >
+                                          <option value="">- Target -</option>
+                                          {overlays.filter(o => isScreen(o)).map(screen => (
+                                            <option key={screen.id} value={screen.id}>{screen.name}</option>
+                                          ))}
+                                        </select>
+                                        <button
+                                          type="button"
+                                          className="zones-tap-row__delete"
+                                          onClick={() => linkEditorRef.current?.removeZone?.(zone.id)}
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {zoneEditorMode === 'zones' && (
+                        <div className="zones-tab__sidebar-card">
+                          <div className="zones-flow__header">
+                            <span className="zones-flow__title">Flow Test</span>
+                            <button type="button" className="zones-tap-panel__btn" onClick={runFlowAudit}>Run</button>
+                          </div>
+                          {flowAudit ? (
+                            <div className="zones-flow__results">
+                              <div className="zones-flow__meta">Checked {flowAudit.scanned} screens, reached {flowAudit.reached}. Last run {flowAudit.ranAt}.</div>
+                              <div className="zones-flow__stat">Dead links: <strong>{flowAudit.deadLinks.length}</strong></div>
+                              <div className="zones-flow__stat">Unreachable screens: <strong>{flowAudit.unreachable.length}</strong></div>
+                              <div className="zones-flow__stat">Cycles: <strong>{flowAudit.cycles.length}</strong></div>
+
+                              {flowAudit.deadLinks.slice(0, 3).map((item) => (
+                                <button
+                                  key={`${item.sourceScreenId}-${item.zoneId}`}
+                                  type="button"
+                                  className="zones-flow__jump"
+                                  onClick={() => focusIssue({
+                                    screenId: item.sourceScreenId,
+                                    mode: 'zones',
+                                    zoneId: item.zoneId,
+                                  })}
+                                >
+                                  {item.sourceScreenName}: {item.zoneLabel} → {item.target}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="zones-flow__empty">Run a flow test to find dead links, loops, and unreachable screens.</div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* AI Assistant — screen-scoped, proposes tap zones for the
                         active screen. Not shown in Content mode (different editor). */}
-                    {activeScreen?.url && !activeScreen.placeholder && zoneEditorMode !== 'content' && (
-                      <AIAssistantPanel
-                        scope="screen"
-                        scopeLabel={`Screen: ${activeScreen.name}`}
-                        activeScreen={activeScreen}
-                        onRunAddZones={handlePanelAddZones}
-                        busy={panelAiBusy}
-                      />
-                    )}
-                  </div>
+                      {activeScreen?.url && !activeScreen.placeholder && zoneEditorMode !== 'content' && (
+                        <div className="zones-tab__sidebar-card">
+                        <AIAssistantPanel
+                          scope="screen"
+                          scopeLabel={`Screen: ${activeScreen.name}`}
+                          activeScreen={activeScreen}
+                          onRunAddZones={handlePanelAddZones}
+                          busy={panelAiBusy}
+                        />
+                        </div>
+                      )}
+                    </div>
                 </div>
               );
             })()
-          ) : (
-            /* ── Phone Hub (phone + grid) ── */
-            <div className="phone-hub-main">
-              <OverlayErrorBoundary>
-                <PhoneHub
-                  screens={overlays}
-                  activeScreen={activeScreen}
-                  onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setActiveTab('screens'); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
-                  onDelete={handleDeleteScreen}
-                  onHideScreen={handleHideScreen}
-                  hiddenScreens={hiddenScreens}
-                  showHidden={showHidden}
-                  onToggleShowHidden={() => setShowHidden(h => !h)}
-                  onNavigate={handleNavigate}
-                  navigationHistory={navHistory}
-                  onBack={handleBack}
-                  skin={phoneSkin}
-                  onChangeSkin={handleChangeSkin}
-                  customFrameUrl={customFrameUrl}
-                  globalFit={globalFit}
-                  onEditZones={() => setActiveTab('zones')}
-                  activeTab={activeTab}
-                  onChangeTab={setActiveTab}
-                />
-              </OverlayErrorBoundary>
-
-              {/* AI Assistant moved into the inline zone editor — it only
-                  appears when you're actively editing zones since that's
-                  what it acts on. */}
-            </div>
           )}
         </div>
 

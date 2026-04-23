@@ -13,15 +13,70 @@
  *   generatedScreenKeys — set of screen keys that have images
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Plus, Trash2, Save, X, Pin, Move } from 'lucide-react';
+import { Grid3x3, Save, Trash2, X, Pin } from 'lucide-react';
+
+const HOME_GRID = {
+  columns: 4,
+  originX: 8,
+  originY: 14,
+  stepX: 21,
+  stepY: 14,
+  width: 12,
+  height: 9,
+};
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getGridSlot(index) {
+  const col = index % HOME_GRID.columns;
+  const row = Math.floor(index / HOME_GRID.columns);
+  return {
+    x: HOME_GRID.originX + (col * HOME_GRID.stepX),
+    y: HOME_GRID.originY + (row * HOME_GRID.stepY),
+  };
+}
+
+function snapZoneToGrid(zone) {
+  const col = Math.round((zone.x - HOME_GRID.originX) / HOME_GRID.stepX);
+  const row = Math.round((zone.y - HOME_GRID.originY) / HOME_GRID.stepY);
+  const maxCol = HOME_GRID.columns - 1;
+  const maxRow = 5;
+  return {
+    ...zone,
+    x: clamp(HOME_GRID.originX + (clamp(col, 0, maxCol) * HOME_GRID.stepX), 0, 100 - zone.w),
+    y: clamp(HOME_GRID.originY + (clamp(row, 0, maxRow) * HOME_GRID.stepY), 0, 100 - zone.h),
+  };
+}
+
+function normalizeIconZone(zone, index) {
+  const slot = getGridSlot(index);
+  return {
+    ...zone,
+    w: HOME_GRID.width,
+    h: HOME_GRID.height,
+    x: clamp(slot.x, 0, 100 - HOME_GRID.width),
+    y: clamp(slot.y, 0, 100 - HOME_GRID.height),
+  };
+}
 
 export default function IconPlacementMode({ links = [], iconOverlays = [], onSave, screenTypes = [], generatedScreenKeys }) {
   const [zones, setZones] = useState(links);
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [showPicker, setShowPicker] = useState(false);
   const [pendingPos, setPendingPos] = useState(null);
   const [dragging, setDragging] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [gridSnap, setGridSnap] = useState(() => {
+    try {
+      return localStorage.getItem('phone_hub_icon_grid_snap') !== '0';
+    } catch {
+      return true;
+    }
+  });
   const containerRef = useRef(null);
 
   // Sync when links prop changes (switching screens)
@@ -29,8 +84,15 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
     setZones(links);
     setIsDirty(false);
     setSelectedId(null);
+    setSelectedIds(new Set());
     setShowPicker(false);
   }, [links]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('phone_hub_icon_grid_snap', gridSnap ? '1' : '0');
+    } catch {}
+  }, [gridSnap]);
 
   const getRelativePos = useCallback((e) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -51,24 +113,60 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
     setPendingPos(pos);
     setShowPicker(true);
     setSelectedId(null);
+    setSelectedIds(new Set());
   };
+
+  const isSelected = useCallback((id) => selectedIds.has(id), [selectedIds]);
+
+  const selectSingle = useCallback((id) => {
+    setSelectedId(id);
+    setSelectedIds(new Set([id]));
+  }, []);
+
+  const toggleSelected = useCallback((id) => {
+    setSelectedId(id);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedId(null);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleZoneClick = useCallback((e, id) => {
+    e.stopPropagation();
+    setShowPicker(false);
+    if (multiSelectMode || e.metaKey || e.ctrlKey || e.shiftKey) {
+      toggleSelected(id);
+      return;
+    }
+    selectSingle(id);
+  }, [multiSelectMode, selectSingle, toggleSelected]);
 
   // Pick icon from grid → place at pending position
   const handlePickIcon = (ico) => {
     if (!pendingPos) return;
-    const newZone = {
+    const nextIndex = zones.length;
+    const placedZone = normalizeIconZone({
       id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-      x: pendingPos.x - 5, // center the 10% default size
-      y: pendingPos.y - 5,
-      w: 10,
-      h: 8,
+      x: pendingPos.x - (HOME_GRID.width / 2),
+      y: pendingPos.y - (HOME_GRID.height / 2),
+      w: HOME_GRID.width,
+      h: HOME_GRID.height,
       target: '',
       label: (ico.name || '').replace(/\s*Icon$/i, ''),
       icon_url: ico.url,
       icon_overlay_id: ico.id,
-    };
+    }, nextIndex);
+    const newZone = gridSnap ? placedZone : { ...placedZone, x: clamp(placedZone.x, 0, 100 - placedZone.w), y: clamp(placedZone.y, 0, 100 - placedZone.h) };
     setZones(prev => [...prev, newZone]);
     setSelectedId(newZone.id);
+    setSelectedIds(new Set([newZone.id]));
     setShowPicker(false);
     setPendingPos(null);
     setIsDirty(true);
@@ -82,25 +180,40 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
       try { containerRef.current.setPointerCapture(e.pointerId); } catch {}
     }
     const pos = getRelativePos(e);
-    setDragging({ id: zone.id, startX: pos.x, startY: pos.y, origX: zone.x, origY: zone.y });
-    setSelectedId(zone.id);
+    const activeIds = isSelected(zone.id) ? Array.from(selectedIds) : [zone.id];
+    const originById = Object.fromEntries(
+      zones
+        .filter(z => activeIds.includes(z.id))
+        .map(z => [z.id, { x: z.x, y: z.y }])
+    );
+    setDragging({ ids: activeIds, startX: pos.x, startY: pos.y, originById });
+    if (!isSelected(zone.id)) selectSingle(zone.id);
   };
 
   const handleDragMove = (e) => {
     if (!dragging) return;
     e.preventDefault();
     const pos = getRelativePos(e);
-    setZones(prev => prev.map(z => z.id === dragging.id ? {
-      ...z,
-      x: Math.max(0, Math.min(100 - z.w, dragging.origX + (pos.x - dragging.startX))),
-      y: Math.max(0, Math.min(100 - z.h, dragging.origY + (pos.y - dragging.startY))),
-    } : z));
+    const deltaX = pos.x - dragging.startX;
+    const deltaY = pos.y - dragging.startY;
+    setZones(prev => prev.map(z => {
+      if (!dragging.ids.includes(z.id)) return z;
+      const origin = dragging.originById[z.id];
+      return {
+        ...z,
+        x: Math.max(0, Math.min(100 - z.w, origin.x + deltaX)),
+        y: Math.max(0, Math.min(100 - z.h, origin.y + deltaY)),
+      };
+    }));
     setIsDirty(true);
   };
 
   const handleDragEnd = (e) => {
     if (e?.target?.releasePointerCapture && e?.pointerId !== undefined) {
       try { e.target.releasePointerCapture(e.pointerId); } catch {}
+    }
+    if (dragging && gridSnap) {
+      setZones(prev => prev.map(z => dragging.ids.includes(z.id) ? snapZoneToGrid(z) : z));
     }
     setDragging(null);
   };
@@ -113,6 +226,18 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
   const removeZone = (id) => {
     setZones(prev => prev.filter(z => z.id !== id));
     if (selectedId === id) setSelectedId(null);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setIsDirty(true);
+  };
+
+  const removeSelected = () => {
+    if (!selectedIds.size) return;
+    setZones(prev => prev.filter(z => !selectedIds.has(z.id)));
+    clearSelection();
     setIsDirty(true);
   };
 
@@ -121,13 +246,113 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
     setIsDirty(false);
   };
 
+  const handleAutoLayout = () => {
+    setZones(prev => prev.map((zone, index) => normalizeIconZone(zone, index)));
+    setIsDirty(true);
+  };
+
+  const applyToSelected = (updater) => {
+    if (!selectedIds.size) return;
+    setZones(prev => updater(prev));
+    setIsDirty(true);
+  };
+
+  const handleMakeRow = () => {
+    const selectedZones = zones.filter(zone => selectedIds.has(zone.id)).sort((a, b) => a.x - b.x);
+    if (selectedZones.length < 2) return;
+    const averageY = selectedZones.reduce((sum, zone) => sum + zone.y, 0) / selectedZones.length;
+    const startX = clamp(Math.min(...selectedZones.map(zone => zone.x)), 0, 100 - HOME_GRID.width);
+    const updates = new Map(selectedZones.map((zone, index) => [zone.id, {
+      x: clamp(startX + (index * HOME_GRID.stepX), 0, 100 - zone.w),
+      y: clamp(averageY, 0, 100 - zone.h),
+    }]));
+    applyToSelected(prev => prev.map(zone => selectedIds.has(zone.id) ? { ...zone, ...updates.get(zone.id) } : zone));
+  };
+
+  const handleMakeColumn = () => {
+    const selectedZones = zones.filter(zone => selectedIds.has(zone.id)).sort((a, b) => a.y - b.y);
+    if (selectedZones.length < 2) return;
+    const averageX = selectedZones.reduce((sum, zone) => sum + zone.x, 0) / selectedZones.length;
+    const startY = clamp(Math.min(...selectedZones.map(zone => zone.y)), 0, 100 - HOME_GRID.height);
+    const updates = new Map(selectedZones.map((zone, index) => [zone.id, {
+      x: clamp(averageX, 0, 100 - zone.w),
+      y: clamp(startY + (index * HOME_GRID.stepY), 0, 100 - zone.h),
+    }]));
+    applyToSelected(prev => prev.map(zone => selectedIds.has(zone.id) ? { ...zone, ...updates.get(zone.id) } : zone));
+  };
+
+  const handleSnapSelected = () => {
+    applyToSelected(prev => prev.map(zone => selectedIds.has(zone.id) ? snapZoneToGrid(zone) : zone));
+  };
+
   const selected = selectedId ? zones.find(z => z.id === selectedId) : null;
+  const selectionCount = selectedIds.size;
+  const showBatchActions = selectionCount > 1;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Instructions */}
-      <div style={{ fontSize: 12, color: '#888', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: '4px 0' }}>
-        Tap the screen to place an icon. Drag to move.
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontSize: 12, color: '#888', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: '4px 0' }}>
+          Tap the screen to place an icon. Drag to move.
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setMultiSelectMode(v => !v);
+              if (multiSelectMode) clearSelection();
+            }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 12px', fontSize: 11, fontWeight: 700,
+              border: `1px solid ${multiSelectMode ? '#B8962E' : '#e8e0d0'}`,
+              borderRadius: 8,
+              background: multiSelectMode ? '#fdf8ee' : '#fff',
+              color: multiSelectMode ? '#B8962E' : '#6B6557',
+              cursor: 'pointer',
+              fontFamily: "'DM Mono', monospace",
+              minHeight: 36,
+            }}
+          >
+            <Grid3x3 size={13} /> {multiSelectMode ? 'Multi Select On' : 'Multi Select'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setGridSnap(v => !v)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 12px', fontSize: 11, fontWeight: 700,
+              border: `1px solid ${gridSnap ? '#B8962E' : '#e8e0d0'}`,
+              borderRadius: 8,
+              background: gridSnap ? '#fdf8ee' : '#fff',
+              color: gridSnap ? '#B8962E' : '#6B6557',
+              cursor: 'pointer',
+              fontFamily: "'DM Mono', monospace",
+              minHeight: 36,
+            }}
+          >
+            <Grid3x3 size={13} /> {gridSnap ? 'Snap On' : 'Snap Off'}
+          </button>
+          <button
+            type="button"
+            onClick={handleAutoLayout}
+            disabled={zones.length === 0}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 12px', fontSize: 11, fontWeight: 700,
+              border: '1px solid #e8e0d0',
+              borderRadius: 8,
+              background: '#fff',
+              color: zones.length === 0 ? '#b8b1a5' : '#6B6557',
+              cursor: zones.length === 0 ? 'not-allowed' : 'pointer',
+              fontFamily: "'DM Mono', monospace",
+              minHeight: 36,
+            }}
+          >
+            <Grid3x3 size={13} /> Auto Layout
+          </button>
+        </div>
       </div>
 
       {/* Phone screen overlay — icons are placed directly here */}
@@ -151,13 +376,38 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
           cursor: 'crosshair',
         }}
       >
+        {gridSnap && (
+          <>
+            {Array.from({ length: 24 }).map((_, index) => {
+              const slot = getGridSlot(index);
+              return (
+                <div
+                  key={`grid-${index}`}
+                  style={{
+                    position: 'absolute',
+                    left: `${slot.x}%`,
+                    top: `${slot.y}%`,
+                    width: `${HOME_GRID.width}%`,
+                    height: `${HOME_GRID.height}%`,
+                    border: '1px dashed rgba(184, 150, 46, 0.18)',
+                    borderRadius: 8,
+                    background: 'rgba(184, 150, 46, 0.03)',
+                    pointerEvents: 'none',
+                    zIndex: 0,
+                  }}
+                />
+              );
+            })}
+          </>
+        )}
+
         {/* Placed icons */}
         {zones.map(zone => (
           <div
             key={zone.id}
             data-icon-id={zone.id}
             onPointerDown={(e) => handleDragStart(e, zone)}
-            onClick={(e) => { e.stopPropagation(); setSelectedId(zone.id); setShowPicker(false); }}
+            onClick={(e) => handleZoneClick(e, zone.id)}
             style={{
               position: 'absolute',
               left: `${zone.x}%`, top: `${zone.y}%`,
@@ -165,10 +415,10 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
               cursor: dragging?.id === zone.id ? 'grabbing' : 'grab',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               borderRadius: 6,
-              border: selectedId === zone.id ? '2px solid #B8962E' : '1px solid transparent',
-              background: selectedId === zone.id ? 'rgba(184,150,46,0.1)' : 'transparent',
-              transition: selectedId === zone.id ? 'none' : 'border-color 0.15s',
-              zIndex: dragging?.id === zone.id ? 10 : 2,
+              border: isSelected(zone.id) ? '2px solid #B8962E' : '1px solid transparent',
+              background: isSelected(zone.id) ? 'rgba(184,150,46,0.1)' : 'transparent',
+              transition: isSelected(zone.id) ? 'none' : 'border-color 0.15s',
+              zIndex: dragging?.ids?.includes(zone.id) ? 10 : 2,
             }}
           >
             {zone.icon_url ? (
@@ -179,7 +429,7 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
               </div>
             )}
             {/* Delete button on selected */}
-            {selectedId === zone.id && (
+            {selectedId === zone.id && !showBatchActions && (
               <button
                 onClick={(e) => { e.stopPropagation(); removeZone(zone.id); }}
                 style={{
@@ -251,8 +501,30 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
         </div>
       )}
 
+      {showBatchActions && !showPicker && (
+        <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+              {selectionCount} ICONS SELECTED
+            </span>
+            <button onClick={clearSelection} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4, display: 'flex', alignItems: 'center' }}>
+              <X size={16} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+            <button onClick={handleMakeRow} style={batchBtnStyle}>Make Row</button>
+            <button onClick={handleMakeColumn} style={batchBtnStyle}>Make Column</button>
+            <button onClick={handleSnapSelected} style={batchBtnStyle}>Snap Selected</button>
+            <button onClick={removeSelected} style={{ ...batchBtnStyle, color: '#B84D2E', borderColor: '#f3c5b8' }}>Delete Selected</button>
+          </div>
+          <div style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace", lineHeight: 1.5 }}>
+            Ctrl/Cmd-click icons, or turn on Multi Select, then drag a selected icon to move the whole group.
+          </div>
+        </div>
+      )}
+
       {/* Selected icon controls */}
-      {selected && !showPicker && (
+      {selected && !showPicker && !showBatchActions && (
         <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {selected.icon_url && <img src={selected.icon_url} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />}
@@ -304,6 +576,21 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
             </div>
           </div>
 
+          {gridSnap && (
+            <button
+              type="button"
+              onClick={() => updateZone(selected.id, snapZoneToGrid(selected))}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                padding: '8px 12px', fontSize: 12, fontWeight: 600,
+                border: '1px solid #e0d9ce', borderRadius: 6,
+                background: '#fff', color: '#6B6557', cursor: 'pointer', minHeight: 36,
+              }}
+            >
+              <Grid3x3 size={12} /> Snap this icon to grid
+            </button>
+          )}
+
           {/* Pin toggle */}
           <button
             onClick={() => updateZone(selected.id, { persistent: !selected.persistent })}
@@ -343,3 +630,16 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
     </div>
   );
 }
+
+const batchBtnStyle = {
+  padding: '8px 12px',
+  fontSize: 11,
+  fontWeight: 700,
+  border: '1px solid #e8e0d0',
+  borderRadius: 8,
+  background: '#fff',
+  color: '#6B6557',
+  cursor: 'pointer',
+  fontFamily: "'DM Mono', monospace",
+  minHeight: 36,
+};

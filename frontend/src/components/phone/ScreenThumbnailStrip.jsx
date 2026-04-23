@@ -20,6 +20,7 @@ export default function ScreenThumbnailStrip({
   onSelect,
   globalFit,
   zoneCounts,
+  healthByScreen,
 }) {
   if (!screens.length) return null;
   return (
@@ -28,6 +29,7 @@ export default function ScreenThumbnailStrip({
         const isActive = s.id === activeId;
         const counts = zoneCounts?.get?.(s.id) || zoneCounts?.[s.id];
         const total = counts ? (counts.tap || 0) + (counts.icon || 0) + (counts.content || 0) : 0;
+        const health = healthByScreen?.get?.(s.id) || healthByScreen?.[s.id] || { severity: 'ok', issueCount: 0 };
         return (
           <button
             key={s.id}
@@ -50,6 +52,11 @@ export default function ScreenThumbnailStrip({
               )}
             </div>
             <span className="zones-thumbnail__label">{s.name}</span>
+            <span
+              className={`zones-thumbnail__health zones-thumbnail__health--${health.severity}`}
+              aria-label={health.issueCount > 0 ? `${health.issueCount} issues` : 'Healthy'}
+              title={health.issueCount > 0 ? `${health.issueCount} issues` : 'Healthy'}
+            />
             {total > 0 && (
               <span className="zones-thumbnail__count" aria-label={`${total} zones`}>
                 {total}
