@@ -1,0 +1,75 @@
+/* Section tabs — pill group with gold underline on active, mirrors the
+   editor modal's chapter-marker tab treatment. Kept in a standalone CSS
+   file (not inside PhoneHub's inline <style>) so the tabs can render
+   even when PhoneHub is unmounted. */
+.phone-hub-section-tabs {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--lala-parchment-3);
+}
+
+.phone-hub-section-tab-group {
+  display: flex;
+  gap: 2px;
+}
+
+.phone-hub-section-tab {
+  padding: 10px 16px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lala-ink-muted);
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.phone-hub-section-tab:hover {
+  color: var(--lala-ink);
+}
+
+.phone-hub-section-tab.active {
+  color: var(--lala-ink);
+  border-bottom-color: var(--lala-gold);
+}
+
+.phone-hub-section-tab-count {
+  color: var(--lala-gold);
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.phone-hub-show-hidden-btn {
+  font-size: var(--text-xs);
+  color: var(--lala-ink-muted);
+  background: var(--lala-surface);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  letter-spacing: 0.3px;
+  min-height: 32px;
+  font-weight: 600;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.phone-hub-show-hidden-btn:hover {
+  border-color: var(--lala-gold-line);
+  color: var(--lala-ink);
+}
+
+.phone-hub-show-hidden-btn.active {
+  background: var(--lala-gold-soft);
+  color: var(--lala-gold);
+  border-color: var(--lala-gold);
+}
