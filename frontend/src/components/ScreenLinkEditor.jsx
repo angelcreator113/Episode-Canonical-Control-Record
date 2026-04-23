@@ -70,8 +70,10 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   // zone (icon, label, position) onto each target screen.
   allScreens = [],
   onBulkPlace,
+  onZonesChange,
   readOnly = false,
   compact = false,
+  embedded = false,
 }, ref) {
   // Resolve the image URL: prefer the full screen object, fall back to legacy screenUrl prop.
   const resolvedScreenUrl = screen?.url || screenUrl;
@@ -149,6 +151,10 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     setUndoTick(t => t + 1);
   }, [links, iconOverlays]);
 
+  useEffect(() => {
+    if (onZonesChange) onZonesChange(zones, isDirty, selectedZone);
+  }, [zones, isDirty, selectedZone, onZonesChange]);
+
   // Save a snapshot of current zones before mutating, clearing redo since the timeline branched.
   const pushUndo = useCallback(() => {
     undoStack.current.push(JSON.stringify(zones));
@@ -179,6 +185,12 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   useImperativeHandle(ref, () => ({
     save: () => { if (onSave) onSave(zones); setIsDirty(false); },
     isDirty: () => isDirty,
+    getZones: () => zones,
+    addDefaultZone,
+    setSelectedZone: (id) => setSelectedZone(id || null),
+    updateZone: (id, changes) => updateZone(id, changes),
+    removeZone: (id) => removeZone(id),
+    transformZones: (kind) => transformZones(kind),
     undo,
     redo,
   }), [onSave, zones, isDirty, undo, redo]);
@@ -325,6 +337,56 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     setIsDirty(true);
   };
 
+  const transformZones = (kind) => {
+    if (!Array.isArray(zones) || zones.length < 2) return;
+    const clampX = (x, z) => Math.max(0, Math.min(100 - z.w, x));
+    const clampY = (y, z) => Math.max(0, Math.min(100 - z.h, y));
+    pushUndo();
+    setZones((prev) => {
+      if (!Array.isArray(prev) || prev.length < 2) return prev;
+      const sortedX = [...prev].sort((a, b) => a.x - b.x);
+      const sortedY = [...prev].sort((a, b) => a.y - b.y);
+
+      if (kind === 'align_left') {
+        const left = Math.min(...prev.map(z => z.x));
+        return prev.map(z => ({ ...z, x: clampX(left, z) }));
+      }
+      if (kind === 'align_center') {
+        const center = prev.reduce((sum, z) => sum + z.x + (z.w / 2), 0) / prev.length;
+        return prev.map(z => ({ ...z, x: clampX(center - (z.w / 2), z) }));
+      }
+      if (kind === 'align_right') {
+        const right = Math.max(...prev.map(z => z.x + z.w));
+        return prev.map(z => ({ ...z, x: clampX(right - z.w, z) }));
+      }
+      if (kind === 'distribute_horizontal') {
+        if (sortedX.length < 3) return prev;
+        const first = sortedX[0];
+        const last = sortedX[sortedX.length - 1];
+        const step = (last.x - first.x) / (sortedX.length - 1);
+        const nextX = new Map(sortedX.map((z, i) => [z.id, first.x + (step * i)]));
+        return prev.map(z => ({ ...z, x: clampX(nextX.get(z.id), z) }));
+      }
+      if (kind === 'distribute_vertical') {
+        if (sortedY.length < 3) return prev;
+        const first = sortedY[0];
+        const last = sortedY[sortedY.length - 1];
+        const step = (last.y - first.y) / (sortedY.length - 1);
+        const nextY = new Map(sortedY.map((z, i) => [z.id, first.y + (step * i)]));
+        return prev.map(z => ({ ...z, y: clampY(nextY.get(z.id), z) }));
+      }
+      if (kind === 'equal_size') {
+        const selected = prev.find(z => z.id === selectedZone) || prev[0];
+        return prev.map(z => {
+          const next = { ...z, w: selected.w, h: selected.h };
+          return { ...next, x: clampX(next.x, next), y: clampY(next.y, next) };
+        });
+      }
+      return prev;
+    });
+    setIsDirty(true);
+  };
+
   const handleSave = () => {
     if (onSave) onSave(zones);
     setIsDirty(false);
@@ -451,7 +513,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Toolbar — grouped into view toggles / layout tools / history so intent is readable.
           Wrapped in a parchment pill with subtle gold border so it reads as one cohesive control bar. */}
-      {!readOnly && (
+      {!readOnly && !embedded && (
         <div style={{
           display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap',
           padding: '4px', margin: '0 auto',
@@ -573,7 +635,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
       )}
 
       {/* Migration notice — one-time warning so users know to re-check pre-existing zones */}
-      {showMigrationNotice && (
+      {showMigrationNotice && !embedded && (
         <div style={{
           display: 'flex', alignItems: 'flex-start', gap: 8,
           padding: '10px 12px', borderRadius: 8,
@@ -814,7 +876,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
       </div>
 
       {/* Zone list + editor */}
-      {!readOnly && (
+      {!readOnly && !embedded && (
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 6 }}>
             {sel ? (
