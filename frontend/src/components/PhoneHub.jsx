@@ -18,6 +18,7 @@ import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { MoreVertical, Trash2, EyeOff, Edit3, Settings } from 'lucide-react';
 import ScreenContentRenderer from './ScreenContentRenderer';
 import PhoneFrame from './phone/PhoneFrame';
+import PhoneHubSectionTabs from './PhoneHubSectionTabs';
 import { isIcon, isScreen, getScreenLinks, getIconUrls } from '../lib/overlayUtils';
 
 // Screen types are now fully dynamic — defined per-show in the database.
@@ -295,6 +296,11 @@ export default function PhoneHub({
   // the parent doesn't pass it, so old call sites keep working.
   activeTab: activeTabProp,
   onChangeTab,
+  // When true, skip rendering the internal section tab bar. The parent
+  // is rendering its own <PhoneHubSectionTabs /> above this component so
+  // the tabs stay visible even when PhoneHub itself unmounts for tabs
+  // that have their own workspace (Zones, Content).
+  suppressSectionTabs = false,
 }) {
   // Placements memo lives below the screenTypes/iconTypes declarations so it
   // doesn't TDZ-crash (useMemo body runs synchronously on first render).
@@ -533,66 +539,22 @@ export default function PhoneHub({
       {/* Screen Slots Grid — Screens / Icons shown one at a time via tabs so the
           page stays focused on one surface instead of two stacked grids. */}
       <div className="phone-hub-grid-section">
-        {/* Section tabs */}
-        <div className="phone-hub-section-tabs">
-          <div className="phone-hub-section-tab-group">
-            <button
-              type="button"
-              onClick={() => setGridSection('screens')}
-              className={`phone-hub-section-tab ${gridSection === 'screens' ? 'active' : ''}`}
-            >
-              Screens <span className="phone-hub-section-tab-count">· {screenTypes.length}</span>
-            </button>
-            {(gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setGridSection('icons')}
-                className={`phone-hub-section-tab ${gridSection === 'icons' ? 'active' : ''}`}
-              >
-                Icons <span className="phone-hub-section-tab-count">· {iconTypes.length}</span>
-              </button>
-            )}
-            {/* Placements tab — icon-first view showing where each icon appears
-                across the show's screens. Hidden when there are no icons to
-                place (fresh shows) so the tab bar stays clean. */}
-            {iconTypes.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setGridSection('placements')}
-                className={`phone-hub-section-tab ${gridSection === 'placements' ? 'active' : ''}`}
-              >
-                Placements <span className="phone-hub-section-tab-count">· {placements.length}</span>
-              </button>
-            )}
-            {/* Zones tab — unified zone editor (tap zones, icon placement, content zones).
-                Replaces the old "Edit Tap Zones" button + full-width modal flow. */}
-            {onChangeTab && (
-              <button
-                type="button"
-                onClick={() => setGridSection('zones')}
-                className={`phone-hub-section-tab ${gridSection === 'zones' ? 'active' : ''}`}
-              >
-                Zones
-              </button>
-            )}
-            {/* Missions tab — promoted from the old toolbar button so all
-                phone-scoped surfaces sit on the same bar. */}
-            {onChangeTab && (
-              <button
-                type="button"
-                onClick={() => setGridSection('missions')}
-                className={`phone-hub-section-tab ${gridSection === 'missions' ? 'active' : ''}`}
-              >
-                Missions
-              </button>
-            )}
-          </div>
-          {hiddenScreens.length > 0 && onToggleShowHidden && (
-            <button onClick={onToggleShowHidden} className={`phone-hub-show-hidden-btn ${showHidden ? 'active' : ''}`}>
-              {showHidden ? 'Hide removed' : `Show removed (${hiddenScreens.length})`}
-            </button>
-          )}
-        </div>
+        {!suppressSectionTabs && (
+          <PhoneHubSectionTabs
+            activeTab={gridSection}
+            onChangeTab={setGridSection}
+            screenCount={screenTypes.length}
+            iconCount={iconTypes.length}
+            placementCount={placements.length}
+            hiddenCount={hiddenScreens.length}
+            showHidden={showHidden}
+            onToggleShowHidden={onToggleShowHidden}
+            gridFilter={gridFilter}
+            showZones={!!onChangeTab}
+            showContent={!!onChangeTab}
+            showMissions={!!onChangeTab}
+          />
+        )}
 
         {gridSection === 'screens' && (
           <div className="phone-hub-screen-grid">
@@ -662,67 +624,7 @@ export default function PhoneHub({
       <style>{`
         .phone-hub-inner { display: flex; gap: 24px; align-items: flex-start; }
         .phone-hub-device { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; position: sticky; top: 20px; align-self: flex-start; }
-        .phone-hub-frame { width: 280px; position: relative; }
         .phone-hub-grid-section { flex: 1; min-width: 0; }
-
-        /* Section tabs — pill group with gold underline on active,
-           mirrors the editor modal's chapter-marker tab treatment. */
-        .phone-hub-section-tabs {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 12px;
-          flex-wrap: wrap;
-          margin-bottom: 12px;
-          border-bottom: 1px solid var(--lala-parchment-3);
-        }
-        .phone-hub-section-tab-group { display: flex; gap: 2px; }
-        .phone-hub-section-tab {
-          padding: 10px 16px;
-          font-size: var(--text-xs);
-          font-weight: 700;
-          font-family: var(--font-ui);
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: var(--lala-ink-muted);
-          background: none;
-          border: none;
-          border-bottom: 3px solid transparent;
-          cursor: pointer;
-          transition: color 0.15s, border-color 0.15s;
-          white-space: nowrap;
-        }
-        .phone-hub-section-tab:hover { color: var(--lala-ink); }
-        .phone-hub-section-tab.active {
-          color: var(--lala-ink);
-          border-bottom-color: var(--lala-gold);
-        }
-        .phone-hub-section-tab-count {
-          color: var(--lala-gold);
-          font-weight: 700;
-          margin-left: 2px;
-        }
-
-        .phone-hub-show-hidden-btn {
-          font-size: var(--text-xs);
-          color: var(--lala-ink-muted);
-          background: var(--lala-surface);
-          border: 1px solid var(--lala-parchment-3);
-          border-radius: var(--lala-radius);
-          padding: 6px 12px;
-          cursor: pointer;
-          font-family: var(--font-ui);
-          letter-spacing: 0.3px;
-          min-height: 32px;
-          font-weight: 600;
-          transition: border-color 0.15s, color 0.15s, background 0.15s;
-        }
-        .phone-hub-show-hidden-btn:hover { border-color: var(--lala-gold-line); color: var(--lala-ink); }
-        .phone-hub-show-hidden-btn.active {
-          background: var(--lala-gold-soft);
-          color: var(--lala-gold);
-          border-color: var(--lala-gold);
-        }
 
         .phone-hub-screen-grid {
           display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 16px;

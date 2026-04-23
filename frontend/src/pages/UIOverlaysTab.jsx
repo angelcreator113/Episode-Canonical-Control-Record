@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Component } from 're
 import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
+import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import IconPlacementMode from '../components/IconPlacementMode';
 import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks } from '../lib/overlayUtils';
@@ -99,9 +100,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const editingLinks = activeTab === 'zones';  // kept as an alias so legacy
                                                 // references below keep working
                                                 // until 3c refactors them out.
+  const editingContent = activeTab === 'content';  // new Content top-level tab,
+                                                   // promoted out of the old
+                                                   // Zones mode toggle.
   // 'zones' — draw-rectangle ScreenLinkEditor (the precise/advanced mode with conditions, variants, AI).
   // 'icons' — IconPlacementMode (tap the phone, pick an icon from the picker — simpler for placing
   // app-icon-style tap zones on a home screen). Both persist to the same screen_links array.
+  // Content zones are a different feature (content_zones table) and now live on
+  // their own top-level tab instead of inside this toggle.
   const [zoneEditorMode, setZoneEditorMode] = useState('zones');
   const [tapZonesDraft, setTapZonesDraft] = useState([]);
   const [tapZonesDirty, setTapZonesDirty] = useState(false);
@@ -1226,6 +1232,23 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
     return Array.isArray(links) && links.length > 0;
   }).length;
 
+  // Counts for the section tab bar. We render the tab bar here (above the
+  // phone-hub-layout) so it stays visible across tab switches — including
+  // when PhoneHub unmounts for the Zones workspace. These mirror the
+  // derivations PhoneHub does internally.
+  const iconOverlays = overlays.filter(isIcon);
+  const placementsCount = useMemo(() => {
+    const iconUrls = new Set(iconOverlays.map(i => i.url).filter(Boolean));
+    const seen = new Set(iconUrls);  // library icons always count
+    screenOverlays.forEach(screen => {
+      const links = getScreenLinks(screen);
+      links.forEach(link => {
+        if (link.icon_url) seen.add(link.icon_url);
+      });
+    });
+    return seen.size;
+  }, [iconOverlays, screenOverlays]);
+
   // Lightweight mission count fetch — refreshes on mount + whenever the
   // missions modal closes (after a save/delete). Keeps the step header in
   // sync without prop-drilling the modal's internal list.
@@ -1369,7 +1392,19 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             reachable via the header buttons + grid tabs. */}
 
         <div className="phone-hub-layout">
-          {!(editingLinks && activeScreen?.url) && <div className="phone-hub-main">
+          {/* Section tabs rendered outside PhoneHub so they stay visible
+              even when PhoneHub unmounts for the Zones workspace. */}
+          <PhoneHubSectionTabs
+            activeTab={activeTab}
+            onChangeTab={setActiveTab}
+            screenCount={screenOverlays.length}
+            iconCount={iconOverlays.length}
+            placementCount={placementsCount}
+            hiddenCount={hiddenScreens.length}
+            showHidden={showHidden}
+            onToggleShowHidden={() => setShowHidden(h => !h)}
+          />
+          {!((editingLinks || editingContent) && activeScreen?.url) && <div className="phone-hub-main">
             <OverlayErrorBoundary>
               <PhoneHub
                 screens={overlays}
@@ -1390,6 +1425,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 onEditZones={() => setActiveTab('zones')}
                 activeTab={activeTab}
                 onChangeTab={setActiveTab}
+                suppressSectionTabs
               />
             </OverlayErrorBoundary>
 
@@ -1444,6 +1480,17 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 if (!issue) return;
                 const targetScreen = editableScreens.find(s => s.id === issue.screenId);
                 if (targetScreen && targetScreen.id !== activeScreen.id) switchToScreen(targetScreen);
+                // Content issues live on their own top-level tab now.
+                if (issue.mode === 'content') {
+                  if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                  setActiveTab('content');
+                  setPendingIssueFocus({
+                    screenId: issue.screenId || activeScreen.id,
+                    mode: 'content',
+                    zoneId: issue.zoneId || null,
+                  });
+                  return;
+                }
                 if (issue.mode && zoneEditorMode !== issue.mode) switchMode(issue.mode);
                 setPendingIssueFocus({
                   screenId: issue.screenId || activeScreen.id,
@@ -1532,7 +1579,31 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               };
               return (
                 <div className="phone-hub-zones-panel">
-                <div className={`zones-tab zones-tab--${zoneEditorMode}`}>
+                  {/* Sub-tabs — Tap and Icon are two views of the same data
+                      (screen_links). Placed at the top of the Zones surface so
+                      they feel like a second tier under the main tab bar,
+                      instead of a sidebar pill group. */}
+                  <div className="zones-subtabs" role="tablist" aria-label="Zone edit mode">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={zoneEditorMode === 'zones'}
+                      className={`zones-subtab ${zoneEditorMode === 'zones' ? 'active' : ''}`}
+                      onClick={() => switchMode('zones')}
+                    >
+                      Tap
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={zoneEditorMode === 'icons'}
+                      className={`zones-subtab ${zoneEditorMode === 'icons' ? 'active' : ''}`}
+                      onClick={() => switchMode('icons')}
+                    >
+                      Icon
+                    </button>
+                  </div>
+                <div className="zones-tab">
                     <div className="zones-tab__canvas">
                     {zoneEditorMode === 'zones' ? (
                       <ScreenLinkEditor
@@ -1561,7 +1632,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           setTapSelectedZoneId(selectedId || null);
                         }}
                       />
-                    ) : zoneEditorMode === 'icons' ? (
+                    ) : (
                       <IconPlacementMode
                         links={getScreenLinks(activeScreen)}
                         iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
@@ -1571,19 +1642,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         screenUrl={activeScreen.url}
                         phoneSkin={phoneSkin}
                         customFrameUrl={customFrameUrl}
-                      />
-                    ) : (
-                      /* Content mode — migrated from the detail panel's old Content sub-tab.
-                         Same ContentZoneEditor, hosted in the shared Zones canvas now. */
-                      <ContentZoneEditor
-                        screenUrl={activeScreen.url}
-                        zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
-                        showId={showId}
-                        onSave={handleSaveContentZones}
-                        onAiFillZone={handleFillContentZone}
-                        phoneSkin={phoneSkin}
-                        customFrameUrl={customFrameUrl}
-                        compact
                       />
                     )}
                   </div>
@@ -1612,44 +1670,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         zoneCounts={zoneCounts}
                         healthByScreen={screenHealth}
                       />
-
-                      {/* Mode toggle — Tap (draw rects), Icon (tap to place),
-                          Content (bind data). Dot color matches the zone outline. */}
-                      <div className="zones-mode-toggle" role="tablist" aria-label="Zone edit mode">
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={zoneEditorMode === 'zones'}
-                          data-kind="tap"
-                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'zones' ? 'active' : ''}`}
-                          onClick={() => switchMode('zones')}
-                        >
-                          <span className="zones-mode-toggle__dot" data-kind="tap" />
-                          Tap
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={zoneEditorMode === 'icons'}
-                          data-kind="icon"
-                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'icons' ? 'active' : ''}`}
-                          onClick={() => switchMode('icons')}
-                        >
-                          <span className="zones-mode-toggle__dot" data-kind="icon" />
-                          Icon
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={zoneEditorMode === 'content'}
-                          data-kind="content"
-                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'content' ? 'active' : ''}`}
-                          onClick={() => switchMode('content')}
-                        >
-                          <span className="zones-mode-toggle__dot" data-kind="content" />
-                          Content
-                        </button>
-                      </div>
 
                       <div className={`zones-health zones-health--${activeHealth.severity}`}>
                         <div className="zones-health__header">
@@ -1805,8 +1825,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     </div>
 
                     {/* AI Assistant — screen-scoped, proposes tap zones for the
-                        active screen. Not shown in Content mode (different editor). */}
-                      {activeScreen?.url && !activeScreen.placeholder && zoneEditorMode !== 'content' && (
+                        active screen. */}
+                      {activeScreen?.url && !activeScreen.placeholder && (
                         <div className="zones-tab__sidebar-card">
                         <AIAssistantPanel
                           scope="screen"
@@ -1823,6 +1843,64 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               );
             })()
           )}
+
+          {/* ── Content Workspace — top-level tab. Mirrors the Zones workspace
+               layout (sticky phone on the left, controls on the right) so the
+               phone sits in the exact same visual slot as Screens/Icons/Zones. */}
+          {editingContent && activeScreen?.url && (() => {
+            const editableScreens = overlays.filter(o => o.generated && o.url && isScreen(o));
+            const switchToScreen = (target) => {
+              if (!target || target.id === activeScreen.id) return;
+              setActiveScreen(target);
+              setNavHistory([]);
+            };
+            const contentZoneCounts = new Map();
+            editableScreens.forEach(s => {
+              const content = (s.content_zones || s.metadata?.content_zones || []).length;
+              contentZoneCounts.set(s.id, { tap: 0, icon: 0, content });
+            });
+            return (
+              <div className="phone-hub-zones-panel">
+                <div className="zones-tab">
+                  <div className="zones-tab__canvas">
+                    <ContentZoneEditor
+                      screenUrl={activeScreen.url}
+                      zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                      showId={showId}
+                      onSave={handleSaveContentZones}
+                      onAiFillZone={handleFillContentZone}
+                      phoneSkin={phoneSkin}
+                      customFrameUrl={customFrameUrl}
+                      compact
+                    />
+                  </div>
+                  <div className="zones-tab__controls">
+                    <div className="zones-tab__sidebar-card zones-tab__sidebar-card--primary">
+                      <div className="zone-editor-header">
+                        <div className="zones-tab__sidebar-meta">
+                          <div className="zones-tab__sidebar-label">Content</div>
+                          <div className="zones-tab__sidebar-screen">{activeScreen?.name}</div>
+                        </div>
+                        <button
+                          onClick={() => { setActiveTab('screens'); setNavHistory([]); }}
+                          className="zone-editor-done-btn"
+                        >
+                          <Check size={14} /> Done
+                        </button>
+                      </div>
+                      <ScreenThumbnailStrip
+                        screens={editableScreens}
+                        activeId={activeScreen.id}
+                        onSelect={switchToScreen}
+                        globalFit={globalFit}
+                        zoneCounts={contentZoneCounts}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
       {/* ── Floating Editor Modal ── */}

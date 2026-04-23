@@ -4,42 +4,51 @@
    so the Zones tab matches the Screens/Icons/Placements tabs exactly.
 */
 
+/* .phone-hub-frame was historically styled inside PhoneHub's inline <style>
+   block, which disappears when PhoneHub unmounts (e.g. during the Zones tab).
+   Re-declaring the rules here keeps the editor's phone the same width
+   whether PhoneHub is mounted or not. Keep the responsive breakpoints in
+   sync with PhoneHub's internal ones. */
+.phone-hub-frame {
+  width: 280px;
+  position: relative;
+}
+@media (max-width: 1024px) { .phone-hub-frame { width: 240px; } }
+@media (max-width: 768px)  { .phone-hub-frame { width: 220px; } }
+@media (max-width: 480px)  { .phone-hub-frame { width: 180px; } }
+@media (max-width: 375px)  { .phone-hub-frame { width: 160px; } }
+
+/* Mirrors .phone-hub-inner so the phone sits in the exact same visual slot
+   (sticky 280px column on the left, flex:1 controls on the right). When you
+   switch to the Zones tab, the phone no longer jumps — it lands where the
+   PhoneHub phone was. */
 .zones-tab {
-  display: grid;
-  /* Default fallback — overridden per mode below */
-  grid-template-columns: 1fr 340px;
-  gap: var(--spacing-xl);
-  align-items: start;
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
 }
 
-.zones-tab--zones {
-  grid-template-columns: 1fr minmax(280px, 340px);
-}
-
-.zones-tab--icons,
-.zones-tab--content {
-  grid-template-columns: minmax(300px, 40%) 1fr;
-}
-
 .zones-tab__canvas {
-  min-width: 0;
-}
-
-.zones-tab--icons .zones-tab__canvas,
-.zones-tab--content .zones-tab__canvas {
+  flex-shrink: 0;
   position: sticky;
   top: 20px;
+  align-self: flex-start;
+  width: 280px;
   min-width: 0;
 }
 
+@media (max-width: 1024px) { .zones-tab__canvas { width: 240px; } }
+@media (max-width: 768px)  { .zones-tab__canvas { width: 220px; } }
+
 .zones-tab__controls {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-width: 0;
 }
 
 .zones-tab__sidebar-card {
@@ -81,60 +90,41 @@
   white-space: nowrap;
 }
 
-/* Mode toggle — Tap / Icon / Content. Matches the look of the existing
-   in-editor mode toggle but pulls its active color from the zone tokens
-   so creators build the color ↔ mode association. */
-.zones-mode-toggle {
+/* Sub-tabs — second-tier tab row shown inside the Zones workspace to pick
+   between Tap and Icon editing modes. Visually echoes the main section
+   tabs (same typography, same gold-underline treatment) so the two rows
+   read as a connected hierarchy rather than unrelated controls. */
+.zones-subtabs {
   display: flex;
-  gap: 6px;
-  background: var(--lala-parchment-2);
-  border-radius: var(--lala-radius);
-  padding: 4px;
+  gap: 2px;
+  border-bottom: 1px solid var(--lala-parchment-3);
+  margin-bottom: 12px;
 }
 
-.zones-mode-toggle__btn {
-  flex: 1;
-  padding: 8px 12px;
-  font-size: var(--text-sm);
-  font-weight: var(--font-bold);
+.zones-subtab {
+  padding: 8px 14px;
+  font-size: var(--text-xs);
+  font-weight: 600;
   font-family: var(--font-ui);
-  letter-spacing: 0.04em;
   text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lala-ink-faint);
+  background: none;
   border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--lala-ink-muted);
+  border-bottom: 2px solid transparent;
   cursor: pointer;
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
 }
 
-.zones-mode-toggle__btn:hover {
+.zones-subtab:hover {
   color: var(--lala-ink);
 }
 
-.zones-mode-toggle__btn.active {
-  background: var(--lala-surface);
-  box-shadow: 0 1px 3px rgba(28, 24, 20, 0.08);
+.zones-subtab.active {
+  color: var(--lala-ink);
+  border-bottom-color: var(--lala-gold);
 }
-
-.zones-mode-toggle__btn.active[data-kind='tap']     { color: var(--zone-tap); }
-.zones-mode-toggle__btn.active[data-kind='icon']    { color: var(--zone-icon); }
-.zones-mode-toggle__btn.active[data-kind='content'] { color: var(--zone-content); }
-
-.zones-mode-toggle__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.zones-mode-toggle__dot[data-kind='tap']     { background: var(--zone-tap); }
-.zones-mode-toggle__dot[data-kind='icon']    { background: var(--zone-icon); }
-.zones-mode-toggle__dot[data-kind='content'] { background: var(--zone-content); }
 
 /* Thumbnail strip — horizontal scroll row of screen thumbnails.
    Each thumbnail shows the screen image, name, and zone count badge. */
@@ -515,27 +505,28 @@
   cursor: pointer;
 }
 
-/* Tablet and narrower — stack phone above controls */
+/* Tablet and narrower — stack phone above controls, matching PhoneHub's
+   .phone-hub-inner { flex-direction: column } breakpoint. */
 @media (max-width: 1024px) {
   .zones-tab {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    gap: 16px;
   }
 
-  .zones-tab__canvas,
-  .zones-tab--icons .zones-tab__canvas,
-  .zones-tab--content .zones-tab__canvas {
+  .zones-tab__canvas {
     position: static;
-    max-width: 340px;
-    margin-inline: auto;
-  }
-
-  .zones-tab--zones .zones-tab__canvas {
-    max-width: none;
-    margin-inline: 0;
+    width: 240px;
+    align-self: center;
   }
 
   .zones-tab__sidebar-card--primary {
     position: static;
+  }
+}
+
+@media (max-width: 480px) {
+  .zones-tab__canvas {
+    width: 180px;
   }
 }
 
