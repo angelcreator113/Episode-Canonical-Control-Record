@@ -17,10 +17,21 @@ import { Plus, Trash2, Save, X, Layers, Eye, EyeOff } from 'lucide-react';
 import { CONTENT_TYPES, CONTENT_TYPE_MAP } from './ScreenContentRenderer';
 import ConditionRow from './phone-editor/ConditionRow';
 import api from '../services/api';
+import PhoneFrame from './phone/PhoneFrame';
 
 const ZONE_COLORS = ['#e8a0b4', '#b8a9d4', '#7ab3d4', '#a8d5a2', '#c9a84c', '#6bba9a', '#e06060', '#b89060'];
 
-export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSave, onAiFillZone, readOnly = false, compact = false }) {
+export default function ContentZoneEditor({
+  screenUrl,
+  zones = [],
+  showId,
+  onSave,
+  onAiFillZone,
+  readOnly = false,
+  compact = false,
+  phoneSkin = 'rosegold',
+  customFrameUrl,
+}) {
   const [localZones, setLocalZones] = useState(zones);
   const [drawing, setDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState(null);
@@ -134,6 +145,8 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Screen with content zones */}
+      <div style={{ width: '100%', maxWidth: compact ? 260 : 300, margin: '0 auto' }}>
+      <PhoneFrame skin={phoneSkin} customFrameUrl={customFrameUrl}>
       <div
         ref={containerRef}
         onPointerDown={handlePointerDown}
@@ -143,14 +156,13 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
         onPointerLeave={() => { if (!drawing) return; }}
         style={{
           position: 'relative',
-          width: '100%', maxWidth: compact ? 240 : 320,
+          width: '100%',
+          height: '100%',
           margin: '0 auto',
           touchAction: 'none',
-          aspectRatio: '9/16',
-          borderRadius: 12, overflow: 'hidden',
+          overflow: 'hidden',
           cursor: readOnly ? 'default' : 'crosshair',
           userSelect: 'none',
-          border: '1px solid #e8e0d0',
         }}
       >
         {screenUrl ? (
@@ -200,6 +212,8 @@ export default function ContentZoneEditor({ screenUrl, zones = [], showId, onSav
             pointerEvents: 'none',
           }} />
         )}
+      </div>
+      </PhoneFrame>
       </div>
 
       {/* Zone list + config editor */}

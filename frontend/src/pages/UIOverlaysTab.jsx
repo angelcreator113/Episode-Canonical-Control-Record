@@ -1368,7 +1368,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             reachable via the header buttons + grid tabs. */}
 
         <div className="phone-hub-layout">
-          <div className="phone-hub-main">
+          {!(editingLinks && activeScreen?.url) && <div className="phone-hub-main">
             <OverlayErrorBoundary>
               <PhoneHub
                 screens={overlays}
@@ -1395,7 +1395,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             {/* AI Assistant moved into the inline zone editor — it only
                 appears when you're actively editing zones since that's
                 what it acts on. */}
-          </div>
+          </div>}
 
           {editingLinks && activeScreen?.url && (
             /* ── Unified Zones Tab — rendered as tab content inside the same
@@ -1530,6 +1530,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 });
               };
               return (
+                <div className="phone-hub-zones-panel">
                 <div className={`zones-tab zones-tab--${zoneEditorMode}`}>
                     <div className="zones-tab__canvas">
                     {zoneEditorMode === 'zones' ? (
@@ -1560,28 +1561,16 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         }}
                       />
                     ) : zoneEditorMode === 'icons' ? (
-                      <div style={{ position: 'relative' }}>
-                        <img
-                          src={activeScreen.url}
-                          alt={activeScreen.name}
-                          style={{
-                            position: 'absolute', inset: 0, margin: '0 auto',
-                            width: '100%', maxWidth: 340, aspectRatio: '9/19.5',
-                            objectFit: 'cover', borderRadius: 16, pointerEvents: 'none',
-                            zIndex: 0,
-                          }}
-                          draggable={false}
-                        />
-                        <div style={{ position: 'relative', zIndex: 1 }}>
-                          <IconPlacementMode
-                            links={getScreenLinks(activeScreen)}
-                            iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
-                            screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, icon: '📱', desc: o.description || '' }))}
-                            generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                            onSave={handleSaveLinks}
-                          />
-                        </div>
-                      </div>
+                      <IconPlacementMode
+                        links={getScreenLinks(activeScreen)}
+                        iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
+                        screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, icon: '📱', desc: o.description || '' }))}
+                        generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                        onSave={handleSaveLinks}
+                        screenUrl={activeScreen.url}
+                        phoneSkin={phoneSkin}
+                        customFrameUrl={customFrameUrl}
+                      />
                     ) : (
                       /* Content mode — migrated from the detail panel's old Content sub-tab.
                          Same ContentZoneEditor, hosted in the shared Zones canvas now. */
@@ -1591,6 +1580,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         showId={showId}
                         onSave={handleSaveContentZones}
                         onAiFillZone={handleFillContentZone}
+                        phoneSkin={phoneSkin}
+                        customFrameUrl={customFrameUrl}
                         compact
                       />
                     )}
@@ -1826,6 +1817,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         </div>
                       )}
                     </div>
+                </div>
                 </div>
               );
             })()

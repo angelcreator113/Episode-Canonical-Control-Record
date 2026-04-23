@@ -14,6 +14,7 @@
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Grid3x3, Save, Trash2, X, Pin } from 'lucide-react';
+import PhoneFrame from './phone/PhoneFrame';
 
 const HOME_GRID = {
   columns: 4,
@@ -61,7 +62,16 @@ function normalizeIconZone(zone, index) {
   };
 }
 
-export default function IconPlacementMode({ links = [], iconOverlays = [], onSave, screenTypes = [], generatedScreenKeys }) {
+export default function IconPlacementMode({
+  links = [],
+  iconOverlays = [],
+  onSave,
+  screenTypes = [],
+  generatedScreenKeys,
+  screenUrl,
+  phoneSkin = 'rosegold',
+  customFrameUrl,
+}) {
   const [zones, setZones] = useState(links);
   const [selectedId, setSelectedId] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -355,7 +365,9 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
         </div>
       </div>
 
-      {/* Phone screen overlay — icons are placed directly here */}
+      {/* Phone screen overlay — icons are placed directly inside shared phone chrome. */}
+      <div style={{ width: '100%', maxWidth: 300, margin: '0 auto' }}>
+      <PhoneFrame skin={phoneSkin} customFrameUrl={customFrameUrl}>
       <div
         ref={containerRef}
         onClick={handleTap}
@@ -364,18 +376,31 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
         onPointerCancel={handleDragEnd}
         style={{
           position: 'relative',
-          width: '100%', maxWidth: 340,
-          margin: '0 auto',
-          aspectRatio: '9/19.5',
-          borderRadius: 16,
+          width: '100%',
+          height: '100%',
           overflow: 'hidden',
           touchAction: 'none',
           userSelect: 'none',
-          border: '2px dashed #B8962E40',
           background: 'rgba(0,0,0,0.02)',
           cursor: 'crosshair',
         }}
       >
+        {screenUrl ? (
+          <img
+            src={screenUrl}
+            alt="Screen"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              pointerEvents: 'none',
+              zIndex: 0,
+            }}
+            draggable={false}
+          />
+        ) : null}
         {gridSnap && (
           <>
             {Array.from({ length: 24 }).map((_, index) => {
@@ -456,6 +481,8 @@ export default function IconPlacementMode({ links = [], iconOverlays = [], onSav
             pointerEvents: 'none', zIndex: 5,
           }} />
         )}
+      </div>
+      </PhoneFrame>
       </div>
 
       {/* Icon picker — shows when tapping the screen */}

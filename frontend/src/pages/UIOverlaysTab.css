@@ -134,6 +134,13 @@
   width: 100%;
 }
 
+/* Zones panel replaces PhoneHub entirely when active — no CSS trickery needed.
+   The panel simply renders in the same .phone-hub-layout slot. */
+.phone-hub-zones-panel {
+  width: 100%;
+  overflow-x: auto;
+}
+
 /* ── Inline Zone Editor (replaces PhoneHub when editing) ──
    Widened to accommodate the phone + zone list side-by-side layout.
    Previously capped at 520px (single-column) which squeezed the row. */
