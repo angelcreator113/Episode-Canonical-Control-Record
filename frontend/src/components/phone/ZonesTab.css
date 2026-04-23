@@ -12,78 +12,6 @@
   align-items: start;
 }
 
-.zones-tab-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding-top: 4px;
-}
-
-.zones-tab-shell__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px;
-  background: linear-gradient(180deg, var(--lala-surface) 0%, var(--lala-parchment) 100%);
-  border: 1px solid var(--lala-parchment-3);
-  border-radius: 18px;
-}
-
-.zones-tab-shell__meta {
-  min-width: 0;
-}
-
-.zones-tab-shell__eyebrow {
-  font-size: var(--text-xs);
-  font-family: var(--font-ui);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--lala-gold);
-  font-weight: var(--font-bold);
-  margin-bottom: 6px;
-}
-
-.zones-tab-shell__title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-
-.zones-tab-shell__title {
-  margin: 0;
-  font-family: var(--font-prose);
-  font-size: clamp(20px, 2.1vw, 28px);
-  font-weight: 600;
-  color: var(--lala-ink);
-}
-
-.zones-tab-shell__mode {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--lala-gold-soft);
-  border: 1px solid var(--lala-gold-line);
-  color: var(--lala-gold);
-  font-family: var(--font-ui);
-  font-size: var(--text-xs);
-  font-weight: var(--font-bold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.zones-tab-shell__desc {
-  margin: 0;
-  color: var(--lala-ink-muted);
-  font-size: var(--text-sm);
-  line-height: 1.55;
-  max-width: 720px;
-}
-
 .zones-tab--zones {
   grid-template-columns: minmax(620px, 1fr) minmax(280px, 340px);
 }
@@ -300,10 +228,6 @@
     grid-template-columns: 1fr;
   }
 
-  .zones-tab-shell__header {
-    padding: 14px 16px;
-  }
-
   .zones-tab__canvas,
   .zones-tab--icons .zones-tab__canvas,
   .zones-tab--content .zones-tab__canvas {
@@ -319,25 +243,6 @@
 
   .zones-tab__sidebar-card--primary {
     position: static;
-  }
-}
-
-@media (max-width: 640px) {
-  .zones-tab-shell {
-    gap: 14px;
-  }
-
-  .zones-tab-shell__header {
-    padding: 12px 14px;
-    border-radius: 16px;
-  }
-
-  .zones-tab-shell__title {
-    font-size: 20px;
-  }
-
-  .zones-tab-shell__desc {
-    font-size: var(--text-xs);
   }
 }
 

@@ -1241,21 +1241,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 setZoneEditorMode(next);
               };
               return (
-                <div className="zones-tab-shell">
-                  <div className="zones-tab-shell__header">
-                    <div className="zones-tab-shell__meta">
-                      <div className="zones-tab-shell__eyebrow">Phone Hub</div>
-                      <div className="zones-tab-shell__title-row">
-                        <h3 className="zones-tab-shell__title">Zones Editor</h3>
-                        <span className="zones-tab-shell__mode">{zoneEditorMode === 'zones' ? 'Tap' : zoneEditorMode === 'icons' ? 'Icon' : 'Content'}</span>
-                      </div>
-                      <p className="zones-tab-shell__desc">
-                        Edit interactions, icon placements, and live content for <strong>{activeScreen?.name}</strong> without leaving the Phone Hub.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className={`zones-tab zones-tab--${zoneEditorMode}`}>
+                <div className={`zones-tab zones-tab--${zoneEditorMode}`}>
                     <div className="zones-tab__canvas">
                     {zoneEditorMode === 'zones' ? (
                       <ScreenLinkEditor
@@ -1277,7 +1263,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         onRequestAiZones={handleRequestAiZones}
                         allScreens={overlays.filter(o => isScreen(o) && o.url).map(o => ({ id: o.id, name: o.name }))}
                         onBulkPlace={handleBulkPlaceZone}
-                        compact
                       />
                     ) : zoneEditorMode === 'icons' ? (
                       <div style={{ position: 'relative' }}>
@@ -1393,7 +1378,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         </div>
                       )}
                     </div>
-                  </div>
                 </div>
               );
             })()
