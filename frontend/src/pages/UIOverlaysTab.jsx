@@ -1241,7 +1241,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 setZoneEditorMode(next);
               };
               return (
-                <div className="zones-tab">
+                <div className={`zones-tab zones-tab--${zoneEditorMode}`}>
                   <div className="zones-tab__canvas">
                     {zoneEditorMode === 'zones' ? (
                       <ScreenLinkEditor
@@ -1263,6 +1263,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         onRequestAiZones={handleRequestAiZones}
                         allScreens={overlays.filter(o => isScreen(o) && o.url).map(o => ({ id: o.id, name: o.name }))}
                         onBulkPlace={handleBulkPlaceZone}
+                        compact
                       />
                     ) : zoneEditorMode === 'icons' ? (
                       <div style={{ position: 'relative' }}>
@@ -1302,73 +1303,80 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   </div>
 
                   <div className="zones-tab__controls">
-                    <div className="zone-editor-header">
-                      <div style={{ flex: 1 }} />
-                      <button onClick={() => {
-                        if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
-                        setActiveTab('screens');
-                        setNavHistory([]);
-                      }} className="zone-editor-done-btn">
-                        <Check size={14} /> Done
-                      </button>
-                    </div>
+                    <div className="zones-tab__sidebar-card zones-tab__sidebar-card--primary">
+                      <div className="zone-editor-header">
+                        <div className="zones-tab__sidebar-meta">
+                          <div className="zones-tab__sidebar-label">Zones Workspace</div>
+                          <div className="zones-tab__sidebar-screen">{activeScreen?.name}</div>
+                        </div>
+                        <button onClick={() => {
+                          if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                          setActiveTab('screens');
+                          setNavHistory([]);
+                        }} className="zone-editor-done-btn">
+                          <Check size={14} /> Done
+                        </button>
+                      </div>
 
-                    <ScreenThumbnailStrip
-                      screens={editableScreens}
-                      activeId={activeScreen.id}
-                      onSelect={switchToScreen}
-                      globalFit={globalFit}
-                      zoneCounts={zoneCounts}
-                    />
+                      <ScreenThumbnailStrip
+                        screens={editableScreens}
+                        activeId={activeScreen.id}
+                        onSelect={switchToScreen}
+                        globalFit={globalFit}
+                        zoneCounts={zoneCounts}
+                      />
 
-                    {/* Mode toggle — Tap (draw rects), Icon (tap to place),
-                        Content (bind data). Dot color matches the zone outline. */}
-                    <div className="zones-mode-toggle" role="tablist" aria-label="Zone edit mode">
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={zoneEditorMode === 'zones'}
-                        data-kind="tap"
-                        className={`zones-mode-toggle__btn ${zoneEditorMode === 'zones' ? 'active' : ''}`}
-                        onClick={() => switchMode('zones')}
-                      >
-                        <span className="zones-mode-toggle__dot" data-kind="tap" />
-                        Tap
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={zoneEditorMode === 'icons'}
-                        data-kind="icon"
-                        className={`zones-mode-toggle__btn ${zoneEditorMode === 'icons' ? 'active' : ''}`}
-                        onClick={() => switchMode('icons')}
-                      >
-                        <span className="zones-mode-toggle__dot" data-kind="icon" />
-                        Icon
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={zoneEditorMode === 'content'}
-                        data-kind="content"
-                        className={`zones-mode-toggle__btn ${zoneEditorMode === 'content' ? 'active' : ''}`}
-                        onClick={() => switchMode('content')}
-                      >
-                        <span className="zones-mode-toggle__dot" data-kind="content" />
-                        Content
-                      </button>
+                      {/* Mode toggle — Tap (draw rects), Icon (tap to place),
+                          Content (bind data). Dot color matches the zone outline. */}
+                      <div className="zones-mode-toggle" role="tablist" aria-label="Zone edit mode">
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={zoneEditorMode === 'zones'}
+                          data-kind="tap"
+                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'zones' ? 'active' : ''}`}
+                          onClick={() => switchMode('zones')}
+                        >
+                          <span className="zones-mode-toggle__dot" data-kind="tap" />
+                          Tap
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={zoneEditorMode === 'icons'}
+                          data-kind="icon"
+                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'icons' ? 'active' : ''}`}
+                          onClick={() => switchMode('icons')}
+                        >
+                          <span className="zones-mode-toggle__dot" data-kind="icon" />
+                          Icon
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={zoneEditorMode === 'content'}
+                          data-kind="content"
+                          className={`zones-mode-toggle__btn ${zoneEditorMode === 'content' ? 'active' : ''}`}
+                          onClick={() => switchMode('content')}
+                        >
+                          <span className="zones-mode-toggle__dot" data-kind="content" />
+                          Content
+                        </button>
+                      </div>
                     </div>
 
                     {/* AI Assistant — screen-scoped, proposes tap zones for the
                         active screen. Not shown in Content mode (different editor). */}
                     {activeScreen?.url && !activeScreen.placeholder && zoneEditorMode !== 'content' && (
-                      <AIAssistantPanel
-                        scope="screen"
-                        scopeLabel={`Screen: ${activeScreen.name}`}
-                        activeScreen={activeScreen}
-                        onRunAddZones={handlePanelAddZones}
-                        busy={panelAiBusy}
-                      />
+                      <div className="zones-tab__sidebar-card">
+                        <AIAssistantPanel
+                          scope="screen"
+                          scopeLabel={`Screen: ${activeScreen.name}`}
+                          activeScreen={activeScreen}
+                          onRunAddZones={handlePanelAddZones}
+                          busy={panelAiBusy}
+                        />
+                      </div>
                     )}
                   </div>
                 </div>

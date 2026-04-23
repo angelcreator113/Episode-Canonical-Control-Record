@@ -599,7 +599,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
           (>=900px) and stack vertically on mobile. Phone stays fixed-width on
           the left so tap-zone drawing is always at a consistent size; the
           zone list flexes to fill the remaining width. */}
-      <div className="sle-main-row">
+      <div className={`sle-main-row ${compact ? 'compact' : ''}`}>
 
       {/* Phone-frame wrapper — matches the selected phone skin exactly so the editor
           looks like the same device the user is editing for, not a generic stand-in.
@@ -1325,7 +1325,16 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
           gap: 20px;
           align-items: flex-start;
         }
+        .sle-main-row.compact {
+          flex-direction: column;
+          gap: 14px;
+        }
         .sle-main-row > .screen-link-editor-frame { flex-shrink: 0; }
+        .sle-main-row.compact > .screen-link-editor-frame {
+          width: 100%;
+          max-width: 340px;
+          margin: 0 auto;
+        }
         .sle-main-row > :last-child { flex: 1; min-width: 0; }
         @media (max-width: 900px) {
           .sle-main-row { flex-direction: column; align-items: stretch; }

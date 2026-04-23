@@ -12,7 +12,21 @@
   align-items: start;
 }
 
+.zones-tab--zones {
+  grid-template-columns: minmax(620px, 1fr) minmax(280px, 340px);
+}
+
+.zones-tab--icons,
+.zones-tab--content {
+  grid-template-columns: minmax(320px, 420px) minmax(280px, 1fr);
+}
+
 .zones-tab__canvas {
+  min-width: 0;
+}
+
+.zones-tab--icons .zones-tab__canvas,
+.zones-tab--content .zones-tab__canvas {
   position: sticky;
   top: 20px;
   min-width: 0;
@@ -23,6 +37,45 @@
   flex-direction: column;
   gap: var(--spacing-lg);
   min-width: 0;
+}
+
+.zones-tab__sidebar-card {
+  background: var(--lala-surface);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 8px 24px rgba(28, 24, 20, 0.05);
+}
+
+.zones-tab__sidebar-card--primary {
+  position: sticky;
+  top: 20px;
+}
+
+.zones-tab__sidebar-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.zones-tab__sidebar-label {
+  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lala-gold);
+  font-weight: var(--font-bold);
+}
+
+.zones-tab__sidebar-screen {
+  font-family: var(--font-prose);
+  font-size: var(--text-lg);
+  color: var(--lala-ink);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Mode toggle — Tap / Icon / Content. Matches the look of the existing
@@ -175,10 +228,21 @@
     grid-template-columns: 1fr;
   }
 
-  .zones-tab__canvas {
+  .zones-tab__canvas,
+  .zones-tab--icons .zones-tab__canvas,
+  .zones-tab--content .zones-tab__canvas {
     position: static;
     max-width: 340px;
     margin-inline: auto;
+  }
+
+  .zones-tab--zones .zones-tab__canvas {
+    max-width: none;
+    margin-inline: 0;
+  }
+
+  .zones-tab__sidebar-card--primary {
+    position: static;
   }
 }
 
