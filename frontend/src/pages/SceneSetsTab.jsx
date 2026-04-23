@@ -359,7 +359,11 @@ function GenerationProgress({ progress }) {
 function useElapsedTime(startTime, isDone) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    if (!startTime || isDone) return;
+    if (!startTime) {
+      setElapsed(0);
+      return;
+    }
+    if (isDone) return;
     const tick = () => setElapsed(Math.floor((Date.now() - startTime) / 1000));
     tick();
     const id = setInterval(tick, 1000);
@@ -473,7 +477,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const cameraContractCount = sceneSpec?.camera_contracts?.length || 0;
   const sceneZoneCount = sceneSpec?.zones?.length || 0;
   const showToast = onToast || (() => {});
-  const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
+  const activeGenerationStart = progress?.startTime || genStartTime;
+  const baseElapsed = useElapsedTime(activeGenerationStart, !isGenerating);
 
   // Track generation start time
   useEffect(() => {
@@ -655,7 +660,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         {isGenerating && (
           <div className="scene-sets-card-generating-overlay">
             <Loader size={24} className="spin" />
-            <span>Generating{genStartTime ? ` ${formatTime(baseElapsed)}` : '...'}</span>
+            <span>Generating{activeGenerationStart ? ` ${formatTime(baseElapsed)}` : '...'}</span>
           </div>
         )}
 
@@ -2491,6 +2496,7 @@ export default function SceneSetsTab() {
       : set.angles?.filter(a => a.generation_status === 'pending') || [];
     if (targets.length === 0) return;
     startGenerating(set.id);
+    const targetIds = new Set(targets.map(a => a.id));
 
     // Show progress immediately with all angles queued
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label || a.angle_name, status: 'queued' }));
@@ -2509,20 +2515,21 @@ export default function SceneSetsTab() {
           const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
           const checkJson = await checkRes.json();
           const freshAngles = checkJson.data?.angles || [];
-          const generating = freshAngles.filter(a => a.generation_status === 'generating').length;
-          const completed = freshAngles.filter(a => a.generation_status === 'complete').length;
-          const failed = freshAngles.filter(a => a.generation_status === 'failed').length;
-          const pending = freshAngles.filter(a => a.generation_status === 'pending').length;
+          const trackedAngles = freshAngles.filter(a => targetIds.has(a.id));
+          const generating = trackedAngles.filter(a => a.generation_status === 'generating').length;
+          const completed = trackedAngles.filter(a => a.generation_status === 'complete').length;
+          const failed = trackedAngles.filter(a => a.generation_status === 'failed').length;
+          const pending = trackedAngles.filter(a => a.generation_status === 'pending').length;
 
           // Find the current generating angle index
-          const currentGenerating = freshAngles.find(a => a.generation_status === 'generating');
+          const currentGenerating = trackedAngles.find(a => a.generation_status === 'generating');
           const currentIdx = currentGenerating
             ? progressAngles.findIndex(p => p.id === currentGenerating.id)
             : progressAngles.findIndex(p => p.status === 'queued');
 
           // Update each angle's status
           const updatedAngles = progressAngles.map(pa => {
-            const fresh = freshAngles.find(fa => fa.id === pa.id);
+            const fresh = trackedAngles.find(fa => fa.id === pa.id);
             if (!fresh) return pa;
             if (fresh.generation_status === 'complete') return { ...pa, status: 'done' };
             if (fresh.generation_status === 'failed') return { ...pa, status: 'failed' };
