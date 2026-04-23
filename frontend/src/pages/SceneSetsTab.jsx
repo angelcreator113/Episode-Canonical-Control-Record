@@ -872,8 +872,23 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           {/* ── Status + Next Action Panel (when NOT in pipeline) ── */}
           {!specStage && hasBase && (
             <div style={{ marginTop: 8, padding: '10px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
+              {hasSpec && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
+                  <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+                    Step 1 complete: {sceneSpec?.objects?.length || 0} objects · {sceneZoneCount} zones · {cameraContractCount} contracts
+                  </span>
+                </div>
+              )}
+
+              {!hasSpec && totalAngles > 0 && (
+                <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
+                  Step 1 is not done yet for this location. Angles exist, but no Scene Spec is saved. Build Scene Spec to lock object/zones continuity.
+                </div>
+              )}
+
               {/* Step 1: No spec yet */}
-              {!hasSpec && (
+              {!hasSpec && totalAngles === 0 && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
@@ -1057,8 +1072,40 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 
               {/* No spec but has angles (legacy) */}
               {!hasSpec && totalAngles > 0 && (
-                <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>
-                  {readyAngles}/{totalAngles} angles (no spec — build one for better consistency)
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>
+                    {readyAngles}/{totalAngles} angles (no spec — build one for better consistency)
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setBuildingSpec(true);
+                      setSpecProgress('sending');
+                      showToast('Building Scene Spec for this location...');
+                      try {
+                        const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
+                        const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
+                        const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+                        clearTimeout(progressTimer);
+                        clearTimeout(parseTimer);
+                        const d = await r.json();
+                        if (d.success) {
+                          showToast(`Scene spec built: ${d.data?.camera_contracts?.length || 0} contracts`);
+                          if (onRefresh) await onRefresh();
+                        } else {
+                          showToast(d.error || 'Failed', 'error');
+                        }
+                      } catch (e) {
+                        showToast(e.message, 'error');
+                      }
+                      setBuildingSpec(false);
+                      setSpecProgress(null);
+                    }}
+                    disabled={buildingSpec}
+                    className="scene-sets-btn-details"
+                    style={{ fontSize: 10, padding: '4px 8px' }}
+                  >
+                    {buildingSpec ? <><Loader size={10} className="spin" /> Building spec...</> : <><FileText size={10} /> Build Scene Spec</>}
+                  </button>
                 </div>
               )}
             </div>
