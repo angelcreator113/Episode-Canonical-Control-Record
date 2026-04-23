@@ -1650,7 +1650,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     )}
 
                     {hasSpec && (() => {
-                      const spec = set.scene_spec;
+                      const spec = sceneSpec;
                       return (
                         <>
                           {/* Room summary */}
@@ -2197,6 +2197,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   if (ps.canonical_description !== ns.canonical_description) return false;
   if (ps.cover_angle_id !== ns.cover_angle_id) return false;
   if (ps.show_id !== ns.show_id) return false;
+  if (ps.scene_spec !== ns.scene_spec) return false;
+  if (ps.visual_language?.scene_spec !== ns.visual_language?.scene_spec) return false;
   if (ps.time_of_day !== ns.time_of_day) return false;
   if (ps.season !== ns.season) return false;
   if ((ps.episodes || []).length !== (ns.episodes || []).length) return false;
@@ -2544,10 +2546,11 @@ export default function SceneSetsTab() {
     if (targets.length === 0) return;
     startGenerating(set.id);
     const targetIds = new Set(targets.map(a => a.id));
+    const batchStartTime = Date.now();
 
     // Show progress immediately with all angles queued
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label || a.angle_name, status: 'queued' }));
-    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: batchStartTime, completedCount: 0, failedCount: 0 });
 
     try {
       // Use the backend batch endpoint — it generates sequentially to avoid rate limits
@@ -2584,13 +2587,13 @@ export default function SceneSetsTab() {
             return pa;
           });
 
-          setProgress(set.id, {
+          setProgress(set.id, prev => ({
             angles: updatedAngles,
             currentIndex: currentIdx >= 0 ? currentIdx : 0,
-            startTime: Date.now() - (poll + 1) * 5000,
+            startTime: prev?.startTime || batchStartTime,
             completedCount: completed,
             failedCount: failed,
-          });
+          }));
 
           if (generating === 0 && pending === 0) {
             if (failed === 0) showToast(`All ${completed} angles generated!`);
@@ -2604,7 +2607,6 @@ export default function SceneSetsTab() {
       showToast(err?.message || 'Generation failed', 'error');
     } finally {
       setTimeout(() => stopGenerating(set.id), 3000);
-      stopGenerating(set.id);
     }
   };
 
@@ -2664,7 +2666,6 @@ export default function SceneSetsTab() {
       showToast(err?.message || 'Retry failed', 'error');
     } finally {
       setTimeout(() => stopGenerating(set.id), 3000);
-      stopGenerating(set.id);
     }
   };
 

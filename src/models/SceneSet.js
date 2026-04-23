@@ -98,7 +98,7 @@ module.exports = (sequelize) => {
     spectacle_value: { type: DataTypes.INTEGER, allowNull: true },
     cover_angle_id: { type: DataTypes.UUID, allowNull: true },
     // time_of_day, season — migration 20260706 (may not exist)
-    // scene_spec — migration 20260707 (may not exist)
+    scene_spec: { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
   }, {
     sequelize,
     modelName: 'SceneSet',
