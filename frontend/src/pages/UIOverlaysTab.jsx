@@ -1241,8 +1241,22 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 setZoneEditorMode(next);
               };
               return (
-                <div className={`zones-tab zones-tab--${zoneEditorMode}`}>
-                  <div className="zones-tab__canvas">
+                <div className="zones-tab-shell">
+                  <div className="zones-tab-shell__header">
+                    <div className="zones-tab-shell__meta">
+                      <div className="zones-tab-shell__eyebrow">Phone Hub</div>
+                      <div className="zones-tab-shell__title-row">
+                        <h3 className="zones-tab-shell__title">Zones Editor</h3>
+                        <span className="zones-tab-shell__mode">{zoneEditorMode === 'zones' ? 'Tap' : zoneEditorMode === 'icons' ? 'Icon' : 'Content'}</span>
+                      </div>
+                      <p className="zones-tab-shell__desc">
+                        Edit interactions, icon placements, and live content for <strong>{activeScreen?.name}</strong> without leaving the Phone Hub.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={`zones-tab zones-tab--${zoneEditorMode}`}>
+                    <div className="zones-tab__canvas">
                     {zoneEditorMode === 'zones' ? (
                       <ScreenLinkEditor
                         ref={linkEditorRef}
@@ -1302,8 +1316,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     )}
                   </div>
 
-                  <div className="zones-tab__controls">
-                    <div className="zones-tab__sidebar-card zones-tab__sidebar-card--primary">
+                    <div className="zones-tab__controls">
+                      <div className="zones-tab__sidebar-card zones-tab__sidebar-card--primary">
                       <div className="zone-editor-header">
                         <div className="zones-tab__sidebar-meta">
                           <div className="zones-tab__sidebar-label">Zones Workspace</div>
@@ -1367,8 +1381,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
 
                     {/* AI Assistant — screen-scoped, proposes tap zones for the
                         active screen. Not shown in Content mode (different editor). */}
-                    {activeScreen?.url && !activeScreen.placeholder && zoneEditorMode !== 'content' && (
-                      <div className="zones-tab__sidebar-card">
+                      {activeScreen?.url && !activeScreen.placeholder && zoneEditorMode !== 'content' && (
+                        <div className="zones-tab__sidebar-card">
                         <AIAssistantPanel
                           scope="screen"
                           scopeLabel={`Screen: ${activeScreen.name}`}
@@ -1376,8 +1390,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           onRunAddZones={handlePanelAddZones}
                           busy={panelAiBusy}
                         />
-                      </div>
-                    )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
