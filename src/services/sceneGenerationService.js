@@ -1543,9 +1543,12 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     prompt = `These objects MUST appear: ${relevantAnchors.join('; ')}. ${prompt}`;
   }
 
-  // Determine if base is usable as reference
-  const isMoodBoard = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
-  const referenceImageForEdit = isMoodBoard ? null : sceneSet.base_still_url;
+  // Keep base-image conditioning on by default. Only disable it for known
+  // non-spatial composites where continuity checks are meaningless.
+  const imageType = String(imageAnalysis?.image_type || '').toLowerCase();
+  const disableReferenceTypes = new Set(['moodboard', 'mood_board', 'collage', 'style_board']);
+  const shouldDisableReference = disableReferenceTypes.has(imageType);
+  const referenceImageForEdit = shouldDisableReference ? null : sceneSet.base_still_url;
 
   await SceneAngle.update(
     { generation_status: 'generating', runway_prompt: prompt },
