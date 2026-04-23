@@ -1561,28 +1561,16 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         }}
                       />
                     ) : zoneEditorMode === 'icons' ? (
-                      <div style={{ position: 'relative' }}>
-                        <img
-                          src={activeScreen.url}
-                          alt={activeScreen.name}
-                          style={{
-                            position: 'absolute', inset: 0, margin: '0 auto',
-                            width: '100%', maxWidth: 340, aspectRatio: '9/19.5',
-                            objectFit: 'cover', borderRadius: 16, pointerEvents: 'none',
-                            zIndex: 0,
-                          }}
-                          draggable={false}
-                        />
-                        <div style={{ position: 'relative', zIndex: 1 }}>
-                          <IconPlacementMode
-                            links={getScreenLinks(activeScreen)}
-                            iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
-                            screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, icon: '📱', desc: o.description || '' }))}
-                            generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                            onSave={handleSaveLinks}
-                          />
-                        </div>
-                      </div>
+                      <IconPlacementMode
+                        links={getScreenLinks(activeScreen)}
+                        iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
+                        screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, icon: '📱', desc: o.description || '' }))}
+                        generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
+                        onSave={handleSaveLinks}
+                        screenUrl={activeScreen.url}
+                        phoneSkin={phoneSkin}
+                        customFrameUrl={customFrameUrl}
+                      />
                     ) : (
                       /* Content mode — migrated from the detail panel's old Content sub-tab.
                          Same ContentZoneEditor, hosted in the shared Zones canvas now. */
@@ -1592,6 +1580,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         showId={showId}
                         onSave={handleSaveContentZones}
                         onAiFillZone={handleFillContentZone}
+                        phoneSkin={phoneSkin}
+                        customFrameUrl={customFrameUrl}
                         compact
                       />
                     )}
