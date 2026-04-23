@@ -382,7 +382,7 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh }) {
   const fileInputRef = useRef(null);
   const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
@@ -425,6 +425,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [showDetails, setShowDetails] = useState(false);
   const [editingAngleId, setEditingAngleId] = useState(null);
   const [editingAngleLabel, setEditingAngleLabel] = useState('');
+  const angleQuickUploadRef = useRef(null);
+  const [quickUploadAngleId, setQuickUploadAngleId] = useState(null);
   const [activeModalTab, setActiveModalTab] = useState('details');
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
@@ -564,6 +566,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       if (onToast) onToast('Rename failed', 'error');
     }
     setEditingAngleId(null);
+  };
+
+  const handleQuickAngleUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !quickUploadAngleId || !onUploadAngleImage) {
+      event.target.value = '';
+      return;
+    }
+    await onUploadAngleImage(set, quickUploadAngleId, file);
+    setQuickUploadAngleId(null);
+    event.target.value = '';
   };
 
   const handleSuggestAngles = async () => {
@@ -1237,6 +1250,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 
               {/* Tab content */}
               <div className="scene-sets-modal-body">
+                <input
+                  ref={angleQuickUploadRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleQuickAngleUpload}
+                />
                 {/* ═══ OVERVIEW TAB ═══ */}
                 {activeModalTab === 'details' && !showAddAngle && (
                   <div className="scene-sets-modal-section">
@@ -1574,6 +1594,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               {!isComplete && !isFailed && !isGen && (
                                 <button className="scene-sets-angle-row-btn" onClick={() => onGenerateAngle(set, a)} title="Generate">
                                   <Sparkles size={12} />
+                                </button>
+                              )}
+                              {!isGen && (
+                                <button
+                                  className="scene-sets-angle-row-btn"
+                                  onClick={() => {
+                                    setQuickUploadAngleId(a.id);
+                                    angleQuickUploadRef.current?.click();
+                                  }}
+                                  title={isComplete ? 'Replace image' : 'Upload image'}
+                                >
+                                  <Upload size={12} />
                                 </button>
                               )}
                               {isGen && <Loader size={14} className="spin" style={{ color: '#B8962E' }} />}
@@ -2844,7 +2876,7 @@ export default function SceneSetsTab() {
       } else {
         showToast(`Added angle "${angleData.angle_label}"`);
         // Auto-generate the angle image if the scene set has a base image
-        if (newAngle?.id && set.base_image_url) {
+        if (newAngle?.id && set.base_still_url) {
           handleGenerateAngle(set, newAngle);
         }
       }
@@ -2864,6 +2896,25 @@ export default function SceneSetsTab() {
     } catch {
       showToast('Failed to load prompt preview', 'error');
       return null;
+    }
+  };
+
+  const handleUploadAngleImage = async (set, angleId, file) => {
+    try {
+      const formData = new FormData();
+      formData.append('images', file);
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angleId}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Upload failed (${res.status})`);
+      }
+      showToast('Angle image uploaded');
+      await fetchSets();
+    } catch (err) {
+      showToast(err.message || 'Failed to upload angle image', 'error');
     }
   };
 
@@ -3081,6 +3132,7 @@ export default function SceneSetsTab() {
               onGenerateBase={handleGenerateBase}
               onRegenerateBase={handleRegenerateBase}
               onUploadBase={handleUploadBase}
+              onUploadAngleImage={handleUploadAngleImage}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
               onDeleteAllAngles={handleDeleteAllAngles}
