@@ -88,6 +88,10 @@ const VIDEO_DURATION_MAP = {
   OTHER:        5,
 };
 
+// Require stronger base-image continuity for angle generations.
+const CONSISTENCY_MIN_SCORE = 85;
+const CONSISTENCY_MAX_RETRIES = 1;
+
 // Video-specific movement descriptions for image_to_video (describe camera MOTION, not static composition)
 const VIDEO_MOVEMENT_MODIFIERS = {
   WIDE:         'Camera slowly pulls back and pans to reveal the full room. Steady, smooth cinematic pullback.',
@@ -240,6 +244,7 @@ async function startTextToImage(prompt, options = {}) {
         const result = await generateImageFromImage(referenceImageUrl, prompt.slice(0, 4000), {
           size: 'landscape',
           seed: options.seed,
+          guidanceScale: options.guidanceScale,
         });
         imageUrl = result?.url;
         console.log('[SceneGen] Flux Kontext still generated from base reference');
@@ -1018,6 +1023,18 @@ Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drif
   }
 }
 
+function buildIdentityLockPrompt(basePrompt, angleLabel, consistencyIssues = []) {
+  const issueText = (consistencyIssues || []).slice(0, 4).join('; ');
+  const lockText = [
+    `CRITICAL CONTINUITY: This MUST be the exact same room as the reference image for angle ${angleLabel}.`,
+    'Keep architecture, furniture identity, object positions, color palette, materials, and decor unchanged.',
+    'Only change camera viewpoint/composition. Do not redesign, replace, remove, or add major objects.',
+    issueText ? `Fix these continuity issues from the previous attempt: ${issueText}.` : '',
+  ].filter(Boolean).join(' ');
+
+  return `${lockText}\n\n${basePrompt}`;
+}
+
 
 // ─── MOOD VARIATION SYSTEM ───────────────────────────────────────────────────
 
@@ -1539,6 +1556,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
 
     let stillUrl, totalCost = 0, generatedSeed = null;
+    let usedCropOutpaint = false;
 
     // ── STEP 1: Try crop + outpaint (pixel-preserving) ──
     // For angles where we can crop from the base image, this gives the best
@@ -1548,6 +1566,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
         referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt
       );
       if (stillUrl) {
+        usedCropOutpaint = true;
         console.log(`[SceneGen] Crop+outpaint succeeded for ${angleLabel}`);
       }
     }
@@ -1600,12 +1619,36 @@ async function generateAngle(sceneAngle, sceneSet, models) {
         ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
         : undefined;
 
-      const { imageUrl } = await startTextToImage(prompt, { styleReference, referenceImages });
+      const { imageUrl } = await startTextToImage(prompt, {
+        styleReference,
+        referenceImages,
+        guidanceScale: 1.5,
+      });
       stillUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, sceneAngle.id);
       totalCost = 0.04;
       generatedSeed = null;
     }
     } // end of fallback full-generation block
+
+    let consistencyCheck = null;
+    if (referenceImageForEdit && stillUrl && !usedCropOutpaint) {
+      consistencyCheck = await checkAngleConsistency(referenceImageForEdit, stillUrl, sceneAngle.angle_name);
+      let retryCount = 0;
+
+      while ((consistencyCheck?.score || 0) < CONSISTENCY_MIN_SCORE && retryCount < CONSISTENCY_MAX_RETRIES) {
+        retryCount += 1;
+        console.warn(`[SceneGen] Consistency score ${consistencyCheck.score} below ${CONSISTENCY_MIN_SCORE} for ${angleLabel}; retrying (${retryCount}/${CONSISTENCY_MAX_RETRIES})`);
+
+        const retryPrompt = buildIdentityLockPrompt(prompt, angleLabel, consistencyCheck?.issues || []);
+        const { imageUrl: retryImageUrl } = await startTextToImage(retryPrompt, {
+          referenceImages: [{ uri: referenceImageForEdit, weight: 0.95 }],
+          guidanceScale: 1.3,
+        });
+
+        stillUrl = await downloadAndStoreStill(retryImageUrl, sceneSet.id, sceneAngle.id);
+        consistencyCheck = await checkAngleConsistency(referenceImageForEdit, stillUrl, sceneAngle.angle_name);
+      }
+    }
 
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
@@ -1621,6 +1664,15 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     }
 
     const qualityReview = sceneAngle.quality_review || {};
+    if (consistencyCheck) {
+      qualityReview.base_consistency = {
+        score: consistencyCheck.score,
+        pass: (consistencyCheck.score || 0) >= CONSISTENCY_MIN_SCORE,
+        issues: consistencyCheck.issues || [],
+        validated_at: new Date().toISOString(),
+        threshold: CONSISTENCY_MIN_SCORE,
+      };
+    }
     if (specValidation) {
       qualityReview.spec_validation = {
         score: specValidation.score,
