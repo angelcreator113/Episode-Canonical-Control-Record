@@ -134,26 +134,11 @@
   width: 100%;
 }
 
-/* Zones active: keep the shared section tabs visible, but hide PhoneHub's
-   own device/body so the dedicated Zones editor is the only canvas shown. */
-.phone-hub-main--zones .phone-hub-device {
-  display: none;
-}
-
-.phone-hub-main--zones .phone-hub-inner {
-  display: block;
-}
-
-.phone-hub-main--zones .phone-hub-grid-section {
-  width: 100%;
-}
-
-.phone-hub-main--zones .phone-hub-section-tabs {
-  margin-bottom: 6px;
-}
-
+/* Zones panel replaces PhoneHub entirely when active — no CSS trickery needed.
+   The panel simply renders in the same .phone-hub-layout slot. */
 .phone-hub-zones-panel {
-  margin-top: 4px;
+  width: 100%;
+  overflow-x: auto;
 }
 
 /* ── Inline Zone Editor (replaces PhoneHub when editing) ──

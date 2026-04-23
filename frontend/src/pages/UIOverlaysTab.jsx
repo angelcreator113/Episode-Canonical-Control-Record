@@ -1368,7 +1368,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             reachable via the header buttons + grid tabs. */}
 
         <div className="phone-hub-layout">
-          <div className={`phone-hub-main ${editingLinks ? 'phone-hub-main--zones' : ''}`}>
+          {!(editingLinks && activeScreen?.url) && <div className="phone-hub-main">
             <OverlayErrorBoundary>
               <PhoneHub
                 screens={overlays}
@@ -1395,7 +1395,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             {/* AI Assistant moved into the inline zone editor — it only
                 appears when you're actively editing zones since that's
                 what it acts on. */}
-          </div>
+          </div>}
 
           {editingLinks && activeScreen?.url && (
             /* ── Unified Zones Tab — rendered as tab content inside the same

@@ -7,18 +7,22 @@
 
 .zones-tab {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) 1fr;
+  /* Default fallback — overridden per mode below */
+  grid-template-columns: 1fr 340px;
   gap: var(--spacing-xl);
   align-items: start;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .zones-tab--zones {
-  grid-template-columns: minmax(620px, 1fr) minmax(280px, 340px);
+  grid-template-columns: 1fr minmax(280px, 340px);
 }
 
 .zones-tab--icons,
 .zones-tab--content {
-  grid-template-columns: minmax(320px, 420px) minmax(280px, 1fr);
+  grid-template-columns: minmax(300px, 40%) 1fr;
 }
 
 .zones-tab__canvas {
