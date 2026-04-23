@@ -171,6 +171,20 @@ jobs:
 
           SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2"
 
+          echo "🌐 Runner network diagnostics"
+          RUNNER_IP=$(curl -fsS https://api.ipify.org || true)
+          if [ -n "$RUNNER_IP" ]; then
+            echo "  - Runner public IP: $RUNNER_IP"
+            echo "  - If SSH fails, ensure Security Group allows TCP/22 from this IP (or GitHub Actions IP ranges)."
+          else
+            echo "  - Runner public IP: unavailable"
+          fi
+          if timeout 5 bash -c "cat < /dev/null > /dev/tcp/$EC2_HOST/22" 2>/dev/null; then
+            echo "  - Raw TCP probe: port 22 open"
+          else
+            echo "  - Raw TCP probe: port 22 closed/unreachable from runner"
+          fi
+
           echo "🔌 Probing SSH to $EC2_HOST..."
           REACHABLE=false
           for i in 1 2 3; do
@@ -193,6 +207,7 @@ jobs:
             echo "  2. Disk 100% full → instance becomes SSH-unresponsive"
             echo "     Recover via AWS SSM Session Manager, then clean ~/.pm2/logs/*.log"
             echo "  3. Security Group blocking port 22 from GitHub Actions runners"
+            echo "     Compare the runner public IP printed above with your inbound SG rules"
             echo "  4. EC2 out of memory and swapping — reboot from AWS console"
             echo ""
             echo "After fixing, re-run this workflow from the Actions tab."

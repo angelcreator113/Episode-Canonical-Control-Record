@@ -359,7 +359,11 @@ function GenerationProgress({ progress }) {
 function useElapsedTime(startTime, isDone) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    if (!startTime || isDone) return;
+    if (!startTime) {
+      setElapsed(0);
+      return;
+    }
+    if (isDone) return;
     const tick = () => setElapsed(Math.floor((Date.now() - startTime) / 1000));
     tick();
     const id = setInterval(tick, 1000);
@@ -378,7 +382,7 @@ function formatTime(secs) {
 // ─── SCENE SET CARD ───────────────────────────────────────────────────────────
 
 
-const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh }) {
+const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegenerateBase, onUploadBase, onUploadAngleImage, onGenerateAngle, onGenerateAll, onDeleteAllAngles, onDeleteSet, onAddAngle, onUpdatePrompt, onPreviewPrompt, onCascadeRegenerate, onSetCoverAngle, onLinkEpisodes, onUnlinkEpisode, onDeleteSingleAngle, isGeneratingProp, generationProgress, specStage, allShows, allEpisodes, onLoadEpisodes, onToast, onRefresh }) {
   const fileInputRef = useRef(null);
   const menuUploadRef = useRef(null);
   const menuRef = useRef(null);
@@ -421,6 +425,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const [showDetails, setShowDetails] = useState(false);
   const [editingAngleId, setEditingAngleId] = useState(null);
   const [editingAngleLabel, setEditingAngleLabel] = useState('');
+  const angleQuickUploadRef = useRef(null);
+  const [quickUploadAngleId, setQuickUploadAngleId] = useState(null);
   const [activeModalTab, setActiveModalTab] = useState('details');
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState('');
@@ -473,7 +479,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const cameraContractCount = sceneSpec?.camera_contracts?.length || 0;
   const sceneZoneCount = sceneSpec?.zones?.length || 0;
   const showToast = onToast || (() => {});
-  const baseElapsed = useElapsedTime(genStartTime, !isGenerating);
+  const activeGenerationStart = progress?.startTime || genStartTime;
+  const baseElapsed = useElapsedTime(activeGenerationStart, !isGenerating);
 
   // Track generation start time
   useEffect(() => {
@@ -559,6 +566,17 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       if (onToast) onToast('Rename failed', 'error');
     }
     setEditingAngleId(null);
+  };
+
+  const handleQuickAngleUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !quickUploadAngleId || !onUploadAngleImage) {
+      event.target.value = '';
+      return;
+    }
+    await onUploadAngleImage(set, quickUploadAngleId, file);
+    setQuickUploadAngleId(null);
+    event.target.value = '';
   };
 
   const handleSuggestAngles = async () => {
@@ -655,7 +673,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
         {isGenerating && (
           <div className="scene-sets-card-generating-overlay">
             <Loader size={24} className="spin" />
-            <span>Generating{genStartTime ? ` ${formatTime(baseElapsed)}` : '...'}</span>
+            <span>Generating{activeGenerationStart ? ` ${formatTime(baseElapsed)}` : '...'}</span>
           </div>
         )}
 
@@ -867,8 +885,23 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
           {/* ── Status + Next Action Panel (when NOT in pipeline) ── */}
           {!specStage && hasBase && (
             <div style={{ marginTop: 8, padding: '10px 12px', background: '#FAF7F0', borderRadius: 8, border: '1px solid #e8e0d0' }}>
+              {hasSpec && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <CheckCircle2 size={12} style={{ color: '#16a34a' }} />
+                  <span style={{ fontSize: 10, color: '#16a34a', fontFamily: "'DM Mono', monospace" }}>
+                    Step 1 complete: {sceneSpec?.objects?.length || 0} objects · {sceneZoneCount} zones · {cameraContractCount} contracts
+                  </span>
+                </div>
+              )}
+
+              {!hasSpec && totalAngles > 0 && (
+                <div style={{ fontSize: 10, color: '#92400e', marginBottom: 8, padding: '6px 8px', background: '#fef3c7', borderRadius: 6, lineHeight: 1.4 }}>
+                  Step 1 is not done yet for this location. Angles exist, but no Scene Spec is saved. Build Scene Spec to lock object/zones continuity.
+                </div>
+              )}
+
               {/* Step 1: No spec yet */}
-              {!hasSpec && (
+              {!hasSpec && totalAngles === 0 && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
@@ -1052,8 +1085,40 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 
               {/* No spec but has angles (legacy) */}
               {!hasSpec && totalAngles > 0 && (
-                <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>
-                  {readyAngles}/{totalAngles} angles (no spec — build one for better consistency)
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>
+                    {readyAngles}/{totalAngles} angles (no spec — build one for better consistency)
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setBuildingSpec(true);
+                      setSpecProgress('sending');
+                      showToast('Building Scene Spec for this location...');
+                      try {
+                        const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
+                        const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
+                        const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+                        clearTimeout(progressTimer);
+                        clearTimeout(parseTimer);
+                        const d = await r.json();
+                        if (d.success) {
+                          showToast(`Scene spec built: ${d.data?.camera_contracts?.length || 0} contracts`);
+                          if (onRefresh) await onRefresh();
+                        } else {
+                          showToast(d.error || 'Failed', 'error');
+                        }
+                      } catch (e) {
+                        showToast(e.message, 'error');
+                      }
+                      setBuildingSpec(false);
+                      setSpecProgress(null);
+                    }}
+                    disabled={buildingSpec}
+                    className="scene-sets-btn-details"
+                    style={{ fontSize: 10, padding: '4px 8px' }}
+                  >
+                    {buildingSpec ? <><Loader size={10} className="spin" /> Building spec...</> : <><FileText size={10} /> Build Scene Spec</>}
+                  </button>
                 </div>
               )}
             </div>
@@ -1185,6 +1250,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
 
               {/* Tab content */}
               <div className="scene-sets-modal-body">
+                <input
+                  ref={angleQuickUploadRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleQuickAngleUpload}
+                />
                 {/* ═══ OVERVIEW TAB ═══ */}
                 {activeModalTab === 'details' && !showAddAngle && (
                   <div className="scene-sets-modal-section">
@@ -1524,6 +1596,18 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                                   <Sparkles size={12} />
                                 </button>
                               )}
+                              {!isGen && (
+                                <button
+                                  className="scene-sets-angle-row-btn"
+                                  onClick={() => {
+                                    setQuickUploadAngleId(a.id);
+                                    angleQuickUploadRef.current?.click();
+                                  }}
+                                  title={isComplete ? 'Replace image' : 'Upload image'}
+                                >
+                                  <Upload size={12} />
+                                </button>
+                              )}
                               {isGen && <Loader size={14} className="spin" style={{ color: '#B8962E' }} />}
                             </div>
                           </div>
@@ -1598,7 +1682,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     )}
 
                     {hasSpec && (() => {
-                      const spec = set.scene_spec;
+                      const spec = sceneSpec;
                       return (
                         <>
                           {/* Room summary */}
@@ -2145,6 +2229,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   if (ps.canonical_description !== ns.canonical_description) return false;
   if (ps.cover_angle_id !== ns.cover_angle_id) return false;
   if (ps.show_id !== ns.show_id) return false;
+  if (ps.scene_spec !== ns.scene_spec) return false;
+  if (ps.visual_language?.scene_spec !== ns.visual_language?.scene_spec) return false;
   if (ps.time_of_day !== ns.time_of_day) return false;
   if (ps.season !== ns.season) return false;
   if ((ps.episodes || []).length !== (ns.episodes || []).length) return false;
@@ -2491,10 +2577,12 @@ export default function SceneSetsTab() {
       : set.angles?.filter(a => a.generation_status === 'pending') || [];
     if (targets.length === 0) return;
     startGenerating(set.id);
+    const targetIds = new Set(targets.map(a => a.id));
+    const batchStartTime = Date.now();
 
     // Show progress immediately with all angles queued
     const progressAngles = targets.map(a => ({ id: a.id, label: a.angle_label || a.angle_name, status: 'queued' }));
-    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: Date.now(), completedCount: 0, failedCount: 0 });
+    setProgress(set.id, { angles: progressAngles, currentIndex: 0, startTime: batchStartTime, completedCount: 0, failedCount: 0 });
 
     try {
       // Use the backend batch endpoint — it generates sequentially to avoid rate limits
@@ -2509,20 +2597,21 @@ export default function SceneSetsTab() {
           const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
           const checkJson = await checkRes.json();
           const freshAngles = checkJson.data?.angles || [];
-          const generating = freshAngles.filter(a => a.generation_status === 'generating').length;
-          const completed = freshAngles.filter(a => a.generation_status === 'complete').length;
-          const failed = freshAngles.filter(a => a.generation_status === 'failed').length;
-          const pending = freshAngles.filter(a => a.generation_status === 'pending').length;
+          const trackedAngles = freshAngles.filter(a => targetIds.has(a.id));
+          const generating = trackedAngles.filter(a => a.generation_status === 'generating').length;
+          const completed = trackedAngles.filter(a => a.generation_status === 'complete').length;
+          const failed = trackedAngles.filter(a => a.generation_status === 'failed').length;
+          const pending = trackedAngles.filter(a => a.generation_status === 'pending').length;
 
           // Find the current generating angle index
-          const currentGenerating = freshAngles.find(a => a.generation_status === 'generating');
+          const currentGenerating = trackedAngles.find(a => a.generation_status === 'generating');
           const currentIdx = currentGenerating
             ? progressAngles.findIndex(p => p.id === currentGenerating.id)
             : progressAngles.findIndex(p => p.status === 'queued');
 
           // Update each angle's status
           const updatedAngles = progressAngles.map(pa => {
-            const fresh = freshAngles.find(fa => fa.id === pa.id);
+            const fresh = trackedAngles.find(fa => fa.id === pa.id);
             if (!fresh) return pa;
             if (fresh.generation_status === 'complete') return { ...pa, status: 'done' };
             if (fresh.generation_status === 'failed') return { ...pa, status: 'failed' };
@@ -2530,13 +2619,13 @@ export default function SceneSetsTab() {
             return pa;
           });
 
-          setProgress(set.id, {
+          setProgress(set.id, prev => ({
             angles: updatedAngles,
             currentIndex: currentIdx >= 0 ? currentIdx : 0,
-            startTime: Date.now() - (poll + 1) * 5000,
+            startTime: prev?.startTime || batchStartTime,
             completedCount: completed,
             failedCount: failed,
-          });
+          }));
 
           if (generating === 0 && pending === 0) {
             if (failed === 0) showToast(`All ${completed} angles generated!`);
@@ -2550,7 +2639,6 @@ export default function SceneSetsTab() {
       showToast(err?.message || 'Generation failed', 'error');
     } finally {
       setTimeout(() => stopGenerating(set.id), 3000);
-      stopGenerating(set.id);
     }
   };
 
@@ -2610,7 +2698,6 @@ export default function SceneSetsTab() {
       showToast(err?.message || 'Retry failed', 'error');
     } finally {
       setTimeout(() => stopGenerating(set.id), 3000);
-      stopGenerating(set.id);
     }
   };
 
@@ -2789,7 +2876,7 @@ export default function SceneSetsTab() {
       } else {
         showToast(`Added angle "${angleData.angle_label}"`);
         // Auto-generate the angle image if the scene set has a base image
-        if (newAngle?.id && set.base_image_url) {
+        if (newAngle?.id && set.base_still_url) {
           handleGenerateAngle(set, newAngle);
         }
       }
@@ -2809,6 +2896,25 @@ export default function SceneSetsTab() {
     } catch {
       showToast('Failed to load prompt preview', 'error');
       return null;
+    }
+  };
+
+  const handleUploadAngleImage = async (set, angleId, file) => {
+    try {
+      const formData = new FormData();
+      formData.append('images', file);
+      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angleId}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Upload failed (${res.status})`);
+      }
+      showToast('Angle image uploaded');
+      await fetchSets();
+    } catch (err) {
+      showToast(err.message || 'Failed to upload angle image', 'error');
     }
   };
 
@@ -3026,6 +3132,7 @@ export default function SceneSetsTab() {
               onGenerateBase={handleGenerateBase}
               onRegenerateBase={handleRegenerateBase}
               onUploadBase={handleUploadBase}
+              onUploadAngleImage={handleUploadAngleImage}
               onGenerateAngle={handleGenerateAngle}
               onGenerateAll={handleGenerateAll}
               onDeleteAllAngles={handleDeleteAllAngles}

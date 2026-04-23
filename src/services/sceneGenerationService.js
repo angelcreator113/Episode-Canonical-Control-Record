@@ -8,7 +8,7 @@
  *   - Added negative_prompt to suppress common artifacts
  *   - Condensed LALAVERSE_VISUAL_ANCHOR to ~600 chars for better prompt budget
  *   - Style reference image support for visual consistency
- *   - Multi-variation generation (num_outputs) with auto-pick by quality score
+ *   - Single still generation per call (no multi-variation quality sort)
  *   - Camera motion control mapping for image_to_video
  *   - Scene-specific video duration per angle type
  *   - Post-processing pipeline integration (Sharp, Cloudinary, FFmpeg)
@@ -87,6 +87,10 @@ const VIDEO_DURATION_MAP = {
   OVERHEAD:     10,
   OTHER:        5,
 };
+
+// Require stronger base-image continuity for angle generations.
+const CONSISTENCY_MIN_SCORE = 85;
+const CONSISTENCY_MAX_RETRIES = 1;
 
 // Video-specific movement descriptions for image_to_video (describe camera MOTION, not static composition)
 const VIDEO_MOVEMENT_MODIFIERS = {
@@ -217,45 +221,88 @@ function runwayHeaders() {
 }
 
 /**
- * Step 1: Generate still image(s) from text prompt.
- * Supports num_outputs for multi-variation generation.
- * Supports style_reference for visual consistency.
+ * Step 1: Generate still image using Flux.
+ * Uses image-to-image when a base/reference image is available so camera
+ * angles stay anchored to the scene set's locked base still.
  */
 async function startTextToImage(prompt, options = {}) {
-  const { seed, numOutputs = 1, styleReference, referenceImages } = options;
-  const parsedSeed = seed != null && /^\d+$/.test(String(seed)) ? Number(seed) : undefined;
+  if (!process.env.FAL_KEY) {
+    throw new Error('FAL_KEY not configured');
+  }
 
-  const payload = {
-    model: 'gen4_image',
-    promptText: prompt,
-    ratio: '1920:1080',
-    ...(parsedSeed !== undefined ? { seed: parsedSeed } : {}),
-    ...(numOutputs > 1 ? { numOutputs } : {}),
-    ...(styleReference ? { styleReference } : {}),
-    ...(referenceImages && referenceImages.length > 0 ? { referenceImages } : {}),
-  };
+  const { generateImageFromImage, generateImageUrl } = require('./imageGenerationService');
+  const referenceImageUrl = options.referenceImage
+    || options.referenceImages?.find(img => img?.uri)?.uri
+    || null;
 
   const MAX_RETRIES = 3;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await axios.post(
-        `${RUNWAY_API_BASE}/text_to_image`,
-        payload,
-        { headers: runwayHeaders(), timeout: 30000 }
-      );
-      return { jobId: response.data.id };
+      let imageUrl;
+
+      if (referenceImageUrl) {
+        const result = await generateImageFromImage(referenceImageUrl, prompt.slice(0, 4000), {
+          size: 'landscape',
+          seed: options.seed,
+          guidanceScale: options.guidanceScale,
+        });
+        imageUrl = result?.url;
+        console.log('[SceneGen] Flux Kontext still generated from base reference');
+      } else {
+        imageUrl = await generateImageUrl(prompt.slice(0, 4000), {
+          provider: 'flux',
+          size: 'landscape',
+          quality: 'standard',
+          useCase: 'scene',
+          seed: options.seed,
+        });
+        console.log('[SceneGen] Flux still generated from prompt only');
+      }
+
+      if (!imageUrl) throw new Error('Flux did not return an image URL');
+
+      return { imageUrl, revisedPrompt: null };
     } catch (err) {
       const status = err.response?.status;
       const retryable = !status || status === 429 || status >= 500;
       if (err.response) {
-        console.error(`[SceneGen] text_to_image API error (attempt ${attempt}/${MAX_RETRIES}):`, JSON.stringify(err.response.data, null, 2));
+        console.error(`[SceneGen] Flux still error (attempt ${attempt}/${MAX_RETRIES}):`, JSON.stringify(err.response.data, null, 2));
       }
       if (!retryable || attempt === MAX_RETRIES) throw err;
       const backoff = attempt * 2000;
-      console.log(`[SceneGen] Retrying text_to_image in ${backoff}ms...`);
+      console.log(`[SceneGen] Retrying Flux still in ${backoff}ms...`);
       await sleep(backoff);
     }
   }
+}
+
+/**
+ * Download a temporary still URL and persist as a 1920x1080 JPEG in S3.
+ */
+async function downloadAndStoreStill(imageUrl, sceneSetId, suffix = 'still') {
+  const response = await axios.get(imageUrl, {
+    responseType: 'arraybuffer',
+    timeout: 60000,
+  });
+  const buffer = Buffer.from(response.data);
+
+  const processed = await sharp(buffer)
+    .resize(1920, 1080, { fit: 'cover', position: 'center' })
+    .jpeg({ quality: 92 })
+    .toBuffer();
+
+  const s3Key = `scene-sets/${sceneSetId}/stills/${Date.now()}-${suffix}.jpg`;
+  await s3.send(new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: s3Key,
+    Body: processed,
+    ContentType: 'image/jpeg',
+    CacheControl: 'max-age=31536000',
+  }));
+
+  const s3Url = `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+  console.log(`[SceneGen] Still stored: ${s3Key}`);
+  return s3Url;
 }
 
 /**
@@ -503,53 +550,29 @@ async function pollTask(jobId, maxWaitMs = 180000) {
 // ─── MULTI-VARIATION PICKER ─────────────────────────────────────────────────
 
 /**
- * Generate multiple variations and auto-select the best by quality score.
- * Returns the best result plus all variation data.
+ * Single-image helper used by callers that previously requested variations.
  */
 async function generateBestVariation(prompt, numVariations, options = {}) {
-  const { seed, styleReference } = options;
-  const variations = [];
-
-  console.log(`[SceneGen] Generating ${numVariations} variations for best-pick...`);
-
-  const { jobId } = await startTextToImage(prompt, {
-    seed,
-    numOutputs: Math.min(numVariations, 4),
-    styleReference,
-  });
-  const result = await pollTask(jobId);
-
-  if (result.status !== 'SUCCEEDED') {
-    return { best: null, variations: [], error: result.error };
+  const { setId } = options;
+  const requested = Number(numVariations) || 1;
+  if (requested > 1) {
+    console.log(`[SceneGen] Variation count (${requested}) requested; forcing single still generation.`);
   }
 
-  // Analyze each output for quality
-  for (let i = 0; i < result.outputs.length; i++) {
-    let quality = { qualityScore: 50, flags: [] };
-    try {
-      quality = await artifactDetection.analyzeImageQuality(result.outputs[i]);
-    } catch (err) {
-      console.warn(`[SceneGen] Quality analysis failed for variation ${i}: ${err.message}`);
-    }
-    variations.push({
-      index: i,
-      url: result.outputs[i],
-      qualityScore: quality.qualityScore,
-      flags: quality.flags,
-    });
-  }
-
-  // Sort by quality score descending
-  variations.sort((a, b) => (b.qualityScore || 0) - (a.qualityScore || 0));
-
-  const best = variations[0];
-  console.log(`[SceneGen] Best variation: #${best.index} (score: ${best.qualityScore}/100)`);
+  const { imageUrl } = await startTextToImage(prompt);
+  const storedUrl = await downloadAndStoreStill(imageUrl, setId || 'unknown', 'still');
+  const best = {
+    index: 0,
+    url: storedUrl,
+    qualityScore: null,
+    flags: [],
+  };
 
   return {
     best,
-    variations,
-    seed: result.seed,
-    creditsUsed: result.creditsUsed,
+    variations: [best],
+    seed: null,
+    creditsUsed: 0.04,
   };
 }
 
@@ -667,7 +690,7 @@ async function generateBaseScene(sceneSet, models) {
     console.log(`[SceneGen] Starting base still for: ${sceneSet.name}`);
 
     // Determine generation engine: DALL-E (default for stills) or Runway
-    const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
+    const useRunway = true;
     let stillUrl, lockedSeed = null, stillCredits = 0;
 
     if (!useRunway && OPENAI_API_KEY) {
@@ -694,31 +717,14 @@ async function generateBaseScene(sceneSet, models) {
         ? { uri: sceneSet.style_reference_url, weight: 0.7 }
         : undefined;
 
-      const numVariations = sceneSet.variation_count || 1;
       let stillOutputUrl, stillSeed;
 
-      if (numVariations > 1) {
-        const varResult = await generateBestVariation(prompt, numVariations, { styleReference });
-        if (!varResult.best) {
-          await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
-          throw new Error(`Base still multi-variation failed: ${varResult.error}`);
-        }
-        stillOutputUrl = varResult.best.url;
-        stillSeed = varResult.seed;
-        stillCredits = varResult.creditsUsed || 0;
-      } else {
-        const { jobId: stillJobId } = await startTextToImage(prompt, { styleReference });
-        const stillResult = await pollTask(stillJobId);
-        if (stillResult.status !== 'SUCCEEDED') {
-          await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
-          throw new Error(`Base still failed: ${stillResult.error}`);
-        }
-        stillOutputUrl = stillResult.outputUrl;
-        stillSeed = stillResult.seed;
-        stillCredits = stillResult.creditsUsed || 0;
-      }
+      const { imageUrl } = await startTextToImage(prompt, { styleReference });
+      stillOutputUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, 'base');
+      stillSeed = null;
+      stillCredits = 0.04;
 
-      stillUrl = await storeInS3(stillOutputUrl, sceneSet.id, 'base', 'still');
+      stillUrl = stillOutputUrl;
       lockedSeed = stillSeed != null ? String(stillSeed) : null;
     }
 
@@ -1015,6 +1021,18 @@ Score guide: 90+ = excellent (same room clearly), 70-89 = acceptable (minor drif
     console.warn(`[SceneGen] Consistency check failed (non-blocking): ${err.message}`);
     return { score: 100, issues: [], pass: true };
   }
+}
+
+function buildIdentityLockPrompt(basePrompt, angleLabel, consistencyIssues = []) {
+  const issueText = (consistencyIssues || []).slice(0, 4).join('; ');
+  const lockText = [
+    `CRITICAL CONTINUITY: This MUST be the exact same room as the reference image for angle ${angleLabel}.`,
+    'Keep architecture, furniture identity, object positions, color palette, materials, and decor unchanged.',
+    'Only change camera viewpoint/composition. Do not redesign, replace, remove, or add major objects.',
+    issueText ? `Fix these continuity issues from the previous attempt: ${issueText}.` : '',
+  ].filter(Boolean).join(' ');
+
+  return `${lockText}\n\n${basePrompt}`;
 }
 
 
@@ -1525,9 +1543,12 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     prompt = `These objects MUST appear: ${relevantAnchors.join('; ')}. ${prompt}`;
   }
 
-  // Determine if base is usable as reference
-  const isMoodBoard = imageAnalysis?.image_type && imageAnalysis.image_type !== 'room_photo';
-  const referenceImageForEdit = isMoodBoard ? null : sceneSet.base_still_url;
+  // Keep base-image conditioning on by default. Only disable it for known
+  // non-spatial composites where continuity checks are meaningless.
+  const imageType = String(imageAnalysis?.image_type || '').toLowerCase();
+  const disableReferenceTypes = new Set(['moodboard', 'mood_board', 'collage', 'style_board']);
+  const shouldDisableReference = disableReferenceTypes.has(imageType);
+  const referenceImageForEdit = shouldDisableReference ? null : sceneSet.base_still_url;
 
   await SceneAngle.update(
     { generation_status: 'generating', runway_prompt: prompt },
@@ -1538,6 +1559,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     console.log(`[SceneGen] Starting still for angle: ${sceneAngle.angle_name}`);
 
     let stillUrl, totalCost = 0, generatedSeed = null;
+    let usedCropOutpaint = false;
 
     // ── STEP 1: Try crop + outpaint (pixel-preserving) ──
     // For angles where we can crop from the base image, this gives the best
@@ -1547,6 +1569,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
         referenceImageForEdit, angleLabel, sceneSet.id, sceneAngle.id, prompt
       );
       if (stillUrl) {
+        usedCropOutpaint = true;
         console.log(`[SceneGen] Crop+outpaint succeeded for ${angleLabel}`);
       }
     }
@@ -1555,7 +1578,7 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     if (!stillUrl) {
 
     // Try DALL-E first, fall back to Runway
-    const useRunway = sceneSet.base_runway_model === 'runway' || !OPENAI_API_KEY;
+    const useRunway = true;
     if (!useRunway && OPENAI_API_KEY) {
       try {
         // Enhance prompt with style lock if available
@@ -1599,19 +1622,36 @@ async function generateAngle(sceneAngle, sceneSet, models) {
         ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
         : undefined;
 
-      const { jobId } = await startTextToImage(prompt, { styleReference, referenceImages });
-      const result = await pollTask(jobId);
-
-      if (result.status !== 'SUCCEEDED') {
-        await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
-        throw new Error(`Angle still failed: ${result.error}`);
-      }
-
-      stillUrl = await storeInS3(result.outputUrl, sceneSet.id, sceneAngle.id, 'still');
-      totalCost = result.creditsUsed || 0;
-      generatedSeed = result.seed ?? jobId;
+      const { imageUrl } = await startTextToImage(prompt, {
+        styleReference,
+        referenceImages,
+        guidanceScale: 1.5,
+      });
+      stillUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, sceneAngle.id);
+      totalCost = 0.04;
+      generatedSeed = null;
     }
     } // end of fallback full-generation block
+
+    let consistencyCheck = null;
+    if (referenceImageForEdit && stillUrl && !usedCropOutpaint) {
+      consistencyCheck = await checkAngleConsistency(referenceImageForEdit, stillUrl, sceneAngle.angle_name);
+      let retryCount = 0;
+
+      while ((consistencyCheck?.score || 0) < CONSISTENCY_MIN_SCORE && retryCount < CONSISTENCY_MAX_RETRIES) {
+        retryCount += 1;
+        console.warn(`[SceneGen] Consistency score ${consistencyCheck.score} below ${CONSISTENCY_MIN_SCORE} for ${angleLabel}; retrying (${retryCount}/${CONSISTENCY_MAX_RETRIES})`);
+
+        const retryPrompt = buildIdentityLockPrompt(prompt, angleLabel, consistencyCheck?.issues || []);
+        const { imageUrl: retryImageUrl } = await startTextToImage(retryPrompt, {
+          referenceImages: [{ uri: referenceImageForEdit, weight: 0.95 }],
+          guidanceScale: 1.3,
+        });
+
+        stillUrl = await downloadAndStoreStill(retryImageUrl, sceneSet.id, sceneAngle.id);
+        consistencyCheck = await checkAngleConsistency(referenceImageForEdit, stillUrl, sceneAngle.angle_name);
+      }
+    }
 
     console.log(`[SceneGen] Still complete for angle: ${sceneAngle.angle_name}`);
 
@@ -1627,6 +1667,15 @@ async function generateAngle(sceneAngle, sceneSet, models) {
     }
 
     const qualityReview = sceneAngle.quality_review || {};
+    if (consistencyCheck) {
+      qualityReview.base_consistency = {
+        score: consistencyCheck.score,
+        pass: (consistencyCheck.score || 0) >= CONSISTENCY_MIN_SCORE,
+        issues: consistencyCheck.issues || [],
+        validated_at: new Date().toISOString(),
+        threshold: CONSISTENCY_MIN_SCORE,
+      };
+    }
     if (specValidation) {
       qualityReview.spec_validation = {
         score: specValidation.score,
@@ -1739,19 +1788,16 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
     const styleReference = (sceneAngle.style_reference_url || sceneSet.style_reference_url)
       ? { uri: sceneAngle.style_reference_url || sceneSet.style_reference_url, weight: 0.7 }
       : undefined;
+    const referenceImages = sceneSet.base_still_url
+      ? [{ uri: sceneSet.base_still_url, weight: 0.8 }]
+      : undefined;
 
-    const { jobId: stillJobId } = await startTextToImage(refinedPrompt, {
+    const { imageUrl } = await startTextToImage(refinedPrompt, {
       seed: seedVariation,
       styleReference,
+      referenceImages,
     });
-    const stillResult = await pollTask(stillJobId);
-
-    if (stillResult.status !== 'SUCCEEDED') {
-      await SceneAngle.update({ generation_status: 'failed' }, { where: { id: sceneAngle.id } });
-      throw new Error(`Refined angle still failed: ${stillResult.error}`);
-    }
-
-    const stillUrl = await storeInS3(stillResult.outputUrl, sceneSet.id, sceneAngle.id, 'still');
+    const stillUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, sceneAngle.id);
 
     // Video with camera motion and duration
     const videoDuration = sceneAngle.video_duration || VIDEO_DURATION_MAP[angleLabel] || 5;
@@ -1759,8 +1805,8 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
 
     const { jobId: videoJobId } = await startImageToVideo(
       refinedPrompt,
-      stillResult.outputUrl,
-      { seed: stillResult.seed, duration: videoDuration, cameraMotion }
+      stillUrl,
+      { duration: videoDuration, cameraMotion }
     );
     const videoResult = await pollTask(videoJobId);
     let videoUrl = null;
@@ -1775,7 +1821,7 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
       console.warn(`[SceneGen] Quality analysis on refined image failed: ${qaErr.message}`);
     }
 
-    const totalCost = (stillResult.creditsUsed || 0) + (videoResult.creditsUsed || 0);
+    const totalCost = 0.04 + (videoResult.creditsUsed || 0);
 
     await SceneAngle.update({
       still_image_url: stillUrl,
@@ -1797,7 +1843,7 @@ async function regenerateAngleRefined(sceneAngle, sceneSet, artifactCategories, 
       success: true,
       stillUrl,
       videoUrl,
-      seed: stillResult.seed,
+      seed: null,
       qualityScore: qualityData.qualityScore,
       artifactFlags: qualityData.flags,
       attempt: (sceneAngle.generation_attempt || 0) + 1,
