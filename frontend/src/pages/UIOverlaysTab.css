@@ -134,6 +134,28 @@
   width: 100%;
 }
 
+/* Zones active: keep the shared section tabs visible, but hide PhoneHub's
+   own device/body so the dedicated Zones editor is the only canvas shown. */
+.phone-hub-main--zones .phone-hub-device {
+  display: none;
+}
+
+.phone-hub-main--zones .phone-hub-inner {
+  display: block;
+}
+
+.phone-hub-main--zones .phone-hub-grid-section {
+  width: 100%;
+}
+
+.phone-hub-main--zones .phone-hub-section-tabs {
+  margin-bottom: 6px;
+}
+
+.phone-hub-zones-panel {
+  margin-top: 4px;
+}
+
 /* ── Inline Zone Editor (replaces PhoneHub when editing) ──
    Widened to accommodate the phone + zone list side-by-side layout.
    Previously capped at 520px (single-column) which squeezed the row. */

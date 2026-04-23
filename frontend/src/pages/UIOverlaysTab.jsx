@@ -1368,7 +1368,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             reachable via the header buttons + grid tabs. */}
 
         <div className="phone-hub-layout">
-          <div className="phone-hub-main">
+          <div className={`phone-hub-main ${editingLinks ? 'phone-hub-main--zones' : ''}`}>
             <OverlayErrorBoundary>
               <PhoneHub
                 screens={overlays}
@@ -1530,6 +1530,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 });
               };
               return (
+                <div className="phone-hub-zones-panel">
                 <div className={`zones-tab zones-tab--${zoneEditorMode}`}>
                     <div className="zones-tab__canvas">
                     {zoneEditorMode === 'zones' ? (
@@ -1826,6 +1827,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         </div>
                       )}
                     </div>
+                </div>
                 </div>
               );
             })()
