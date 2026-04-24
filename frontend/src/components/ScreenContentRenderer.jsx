@@ -439,11 +439,10 @@ function WardrobeGridRenderer({ showId, config }) {
     <div style={{
       width: '100%', height: '100%', display: 'grid',
       gridTemplateColumns: `repeat(${config.columns || 2}, 1fr)`,
-      // Auto-rows so each row matches column width (square tiles); pack
-      // rows from the top, no vertical centering — sparse zones just have
-      // empty space below, which reads as room for more items rather than
-      // intentional center alignment.
-      gridAutoRows: '1fr',
+      // Rows sized to content (square tiles from column width); packed
+      // from the top so sparse zones leave empty space below rather than
+      // stretching tiles or pseudo-centering.
+      gridAutoRows: 'min-content',
       gap: 5, padding: 5, overflowY: 'auto',
       alignContent: 'start',
     }}>
