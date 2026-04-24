@@ -439,12 +439,13 @@ function WardrobeGridRenderer({ showId, config }) {
     <div style={{
       width: '100%', height: '100%', display: 'grid',
       gridTemplateColumns: `repeat(${config.columns || 2}, 1fr)`,
+      // Auto-rows so each row matches column width (square tiles); pack
+      // rows from the top, no vertical centering — sparse zones just have
+      // empty space below, which reads as room for more items rather than
+      // intentional center alignment.
+      gridAutoRows: '1fr',
       gap: 5, padding: 5, overflowY: 'auto',
-      // Center the tiles vertically + horizontally when there are fewer
-      // items than fill the zone. Avoids a couple of items hugging the
-      // top-left corner of a tall zone with empty space below.
-      alignContent: 'center',
-      justifyItems: 'center',
+      alignContent: 'start',
     }}>
       {items.map((item, i) => {
         const owned = item.is_owned === true;
