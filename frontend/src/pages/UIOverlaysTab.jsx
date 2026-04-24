@@ -1237,6 +1237,14 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
   // when PhoneHub unmounts for the Zones workspace. These mirror the
   // derivations PhoneHub does internally.
   const iconOverlays = overlays.filter(isIcon);
+  // Stable reference for consumers that do effect-dep comparison on this
+  // array (ScreenLinkEditor re-enriches zones whenever iconOverlays changes
+  // reference, which clobbers in-flight dropdown edits if we pass a fresh
+  // array every render).
+  const iconOverlaysForEditor = useMemo(
+    () => overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url),
+    [overlays]
+  );
   const placementsCount = useMemo(() => {
     const iconUrls = new Set(iconOverlays.map(i => i.url).filter(Boolean));
     const seen = new Set(iconUrls);  // library icons always count
@@ -1613,7 +1621,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         links={getScreenLinks(activeScreen)}
                         screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                        iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
+                        iconOverlays={iconOverlaysForEditor}
                         globalFit={globalFit}
                         customFrameUrl={customFrameUrl}
                         phoneSkin={phoneSkin}
@@ -1635,7 +1643,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     ) : (
                       <IconPlacementMode
                         links={getScreenLinks(activeScreen)}
-                        iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
+                        iconOverlays={iconOverlaysForEditor}
                         screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, icon: '📱', desc: o.description || '' }))}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                         onSave={handleSaveLinks}
@@ -1753,7 +1761,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                       value={zone.target || ''}
                                       onChange={(e) => {
                                         const target = e.target.value;
-                                        linkEditorRef.current?.setSelectedZone?.(zone.id);
                                         linkEditorRef.current?.updateZone?.(zone.id, { target, label: zone.label || target || '' });
                                       }}
                                     >
