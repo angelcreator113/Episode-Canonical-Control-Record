@@ -367,6 +367,7 @@ module.exports = {
         category,
         favorite,
         search,
+        is_owned,
         page = 1,
         limit = 50,
         sortBy = 'created_at',
@@ -385,14 +386,32 @@ module.exports = {
         where.character = character;
       }
 
-      // Filter by category
+      // Filter by category. Accepts a single value ("shoes") or a
+      // comma-separated list ("dress,top,bottom") so content-zone types
+      // that cover multiple clothing categories (e.g. Outfit = all clothes)
+      // can pass everything in one query.
       if (category) {
-        where.clothing_category = category;
+        const cats = String(category).split(',').map(c => c.trim()).filter(Boolean);
+        if (cats.length > 1) {
+          where.clothing_category = { [Op.in]: cats };
+        } else if (cats.length === 1) {
+          where.clothing_category = cats[0];
+        }
       }
 
       // Filter by favorite
       if (favorite === 'true') {
         where.is_favorite = true;
+      }
+
+      // Filter by ownership. Treat null/undefined as "not owned" so wishlist
+      // queries catch items that haven't had their flag written yet. Filter
+      // on the field (not a top-level Op.or) so it composes with `search`
+      // which also uses Op.or on the where object.
+      if (is_owned === 'true') {
+        where.is_owned = true;
+      } else if (is_owned === 'false') {
+        where.is_owned = { [Op.or]: [false, null] };
       }
 
       // Search by name, brand, color
@@ -434,7 +453,18 @@ module.exports = {
         if (colNames.has('deleted_at')) conditions.push('deleted_at IS NULL');
         if (show_id && colNames.has('show_id')) { conditions.push('show_id = :show_id'); replacements.show_id = show_id; }
         if (character && colNames.has('character')) { conditions.push('"character" = :character'); replacements.character = character; }
-        if (category && colNames.has('clothing_category')) { conditions.push('clothing_category = :category'); replacements.category = category; }
+        if (category && colNames.has('clothing_category')) {
+          const cats = String(category).split(',').map(c => c.trim()).filter(Boolean);
+          if (cats.length > 1) {
+            conditions.push('clothing_category IN (:categories)');
+            replacements.categories = cats;
+          } else if (cats.length === 1) {
+            conditions.push('clothing_category = :category');
+            replacements.category = cats[0];
+          }
+        }
+        if (is_owned === 'true' && colNames.has('is_owned')) { conditions.push('is_owned = true'); }
+        if (is_owned === 'false' && colNames.has('is_owned')) { conditions.push('(is_owned = false OR is_owned IS NULL)'); }
         if (search) { conditions.push('(name ILIKE :search OR brand ILIKE :search OR color ILIKE :search)'); replacements.search = `%${search}%`; }
 
         const realSortBy = colNames.has(safeSortBy) ? safeSortBy : 'created_at';

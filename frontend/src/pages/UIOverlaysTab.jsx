@@ -1236,6 +1236,14 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
   // when PhoneHub unmounts for the Zones workspace. These mirror the
   // derivations PhoneHub does internally.
   const iconOverlays = overlays.filter(isIcon);
+  // Stable reference for consumers that do effect-dep comparison on this
+  // array (ScreenLinkEditor re-enriches zones whenever iconOverlays changes
+  // reference, which clobbers in-flight dropdown edits if we pass a fresh
+  // array every render).
+  const iconOverlaysForEditor = useMemo(
+    () => overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url),
+    [overlays]
+  );
   const placementsCount = useMemo(() => {
     const iconUrls = new Set(iconOverlays.map(i => i.url).filter(Boolean));
     const seen = new Set(iconUrls);  // library icons always count
@@ -1612,7 +1620,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         links={getScreenLinks(activeScreen)}
                         screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                        iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
+                        iconOverlays={iconOverlaysForEditor}
                         globalFit={globalFit}
                         customFrameUrl={customFrameUrl}
                         phoneSkin={phoneSkin}
@@ -1634,7 +1642,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     ) : (
                       <IconPlacementMode
                         links={getScreenLinks(activeScreen)}
-                        iconOverlays={overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url)}
+                        iconOverlays={iconOverlaysForEditor}
                         screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, icon: '📱', desc: o.description || '' }))}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                         onSave={handleSaveLinks}
@@ -1736,50 +1744,39 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           ) : (
                             <div className="zones-tap-panel__list">
                               {tapZonesDraft.map((zone, index) => {
-                                const label = zone.label || zone.target || `Zone ${index + 1}`;
-                                const hasTarget = !!zone.target;
                                 const isSelected = tapSelectedZoneId === zone.id;
+                                const hasTarget = !!zone.target;
                                 return (
-                                  <div key={zone.id} className={`zones-tap-row ${isSelected ? 'active' : ''}`}>
+                                  <div key={zone.id} className={`zones-tap-row zones-tap-row--inline ${isSelected ? 'active' : ''}`}>
+                                    <input
+                                      className="zones-tap-row__label-input"
+                                      value={zone.label || ''}
+                                      onChange={(e) => linkEditorRef.current?.updateZone?.(zone.id, { label: e.target.value })}
+                                      onFocus={() => linkEditorRef.current?.setSelectedZone?.(zone.id)}
+                                      placeholder={`Zone ${index + 1}`}
+                                    />
+                                    <select
+                                      className={`zones-tap-row__target-select ${hasTarget ? '' : 'zones-tap-row__target-select--warn'}`}
+                                      value={zone.target || ''}
+                                      onChange={(e) => {
+                                        const target = e.target.value;
+                                        linkEditorRef.current?.updateZone?.(zone.id, { target, label: zone.label || target || '' });
+                                      }}
+                                    >
+                                      <option value="">— Opens: nothing —</option>
+                                      {overlays.filter(o => isScreen(o)).map(screen => (
+                                        <option key={screen.id} value={screen.id}>Opens: {screen.name}</option>
+                                      ))}
+                                    </select>
                                     <button
                                       type="button"
-                                      className="zones-tap-row__select"
-                                      onClick={() => linkEditorRef.current?.setSelectedZone?.(zone.id)}
+                                      className="zones-tap-row__delete-btn"
+                                      onClick={() => linkEditorRef.current?.removeZone?.(zone.id)}
+                                      aria-label={`Delete ${zone.label || `zone ${index + 1}`}`}
+                                      title="Delete"
                                     >
-                                      <span className="zones-tap-row__name">{label}</span>
-                                      <span className={`zones-tap-row__state ${hasTarget ? 'ok' : 'warn'}`}>
-                                        {hasTarget ? `navigate(${zone.target})` : 'no target'}
-                                      </span>
+                                      ×
                                     </button>
-
-                                    {isSelected && (
-                                      <div className="zones-tap-row__edit">
-                                        <input
-                                          value={zone.label || ''}
-                                          onChange={(e) => linkEditorRef.current?.updateZone?.(zone.id, { label: e.target.value })}
-                                          placeholder="Label"
-                                        />
-                                        <select
-                                          value={zone.target || ''}
-                                          onChange={(e) => {
-                                            const target = e.target.value;
-                                            linkEditorRef.current?.updateZone?.(zone.id, { target, label: zone.label || target || '' });
-                                          }}
-                                        >
-                                          <option value="">- Target -</option>
-                                          {overlays.filter(o => isScreen(o)).map(screen => (
-                                            <option key={screen.id} value={screen.id}>{screen.name}</option>
-                                          ))}
-                                        </select>
-                                        <button
-                                          type="button"
-                                          className="zones-tap-row__delete"
-                                          onClick={() => linkEditorRef.current?.removeZone?.(zone.id)}
-                                        >
-                                          Delete
-                                        </button>
-                                      </div>
-                                    )}
                                   </div>
                                 );
                               })}
@@ -1864,7 +1861,10 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   <div className="zones-tab__canvas">
                     <ContentZoneEditor
                       screenUrl={activeScreen.url}
+                      screen={activeScreen}
+                      globalFit={globalFit}
                       zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                      screenLinks={getScreenLinks(activeScreen)}
                       showId={showId}
                       onSave={handleSaveContentZones}
                       onAiFillZone={handleFillContentZone}

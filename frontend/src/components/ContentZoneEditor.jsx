@@ -15,15 +15,20 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Plus, Trash2, Save, X, Layers, Eye, EyeOff } from 'lucide-react';
 import { CONTENT_TYPES, CONTENT_TYPE_MAP } from './ScreenContentRenderer';
+import ScreenContentRenderer from './ScreenContentRenderer';
 import ConditionRow from './phone-editor/ConditionRow';
 import api from '../services/api';
 import PhoneFrame from './phone/PhoneFrame';
+import { getScreenImageStyle } from './PhoneHub';
 
 const ZONE_COLORS = ['#e8a0b4', '#b8a9d4', '#7ab3d4', '#a8d5a2', '#c9a84c', '#6bba9a', '#e06060', '#b89060'];
 
 export default function ContentZoneEditor({
   screenUrl,
+  screen,
+  globalFit,
   zones = [],
+  screenLinks = [],
   showId,
   onSave,
   onAiFillZone,
@@ -41,6 +46,8 @@ export default function ContentZoneEditor({
   const [showPreview, setShowPreview] = useState(false);
   const [profiles, setProfiles] = useState([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
+  const [events, setEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
   const containerRef = useRef(null);
 
   useEffect(() => { setLocalZones(zones); setIsDirty(false); }, [zones]);
@@ -53,6 +60,17 @@ export default function ContentZoneEditor({
       .then(r => setProfiles(r.data?.data || r.data?.profiles || []))
       .catch(() => setProfiles([]))
       .finally(() => setProfilesLoading(false));
+  }, [showId]);
+
+  // Load calendar events for the event_invite picker. series_id is the same
+  // identifier as showId in this codebase.
+  useEffect(() => {
+    if (!showId) return;
+    setEventsLoading(true);
+    api.get(`/api/v1/calendar/events?series_id=${showId}`)
+      .then(r => setEvents(r.data?.events || []))
+      .catch(() => setEvents([]))
+      .finally(() => setEventsLoading(false));
   }, [showId]);
 
   const getRelativePos = useCallback((e) => {
@@ -166,14 +184,65 @@ export default function ContentZoneEditor({
         }}
       >
         {screenUrl ? (
-          <img src={screenUrl} alt="Screen" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} draggable={false} />
+          <img
+            src={screenUrl}
+            alt="Screen"
+            style={{
+              ...(screen ? getScreenImageStyle(screen, globalFit) : { width: '100%', height: '100%', objectFit: 'cover' }),
+              pointerEvents: 'none',
+            }}
+            draggable={false}
+          />
         ) : (
           <div style={{ width: '100%', height: '100%', background: '#f5f3ee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 11 }}>
             No screen image
           </div>
         )}
 
-        {/* Existing content zones */}
+        {/* Overlay of tap zones / icons from the Zones tab — not editable
+            here (that's the Zones tab's job) but rendered at full fidelity
+            so the composed screen matches what you see everywhere else.
+            pointer-events: none so drawing content zones still works
+            through these. Empty zones (no icon set) get a faint dashed
+            outline so you still know a tap target lives there. */}
+        {screenLinks.map((link) => (
+          <div
+            key={`ghost-${link.id}`}
+            style={{
+              position: 'absolute',
+              left: `${link.x}%`, top: `${link.y}%`,
+              width: `${link.w}%`, height: `${link.h}%`,
+              pointerEvents: 'none',
+              border: link.icon_url ? 'none' : '1px dashed rgba(255,255,255,0.35)',
+              borderRadius: 4,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              zIndex: 1,
+            }}
+          >
+            {link.icon_url && (
+              <img
+                src={link.icon_url}
+                alt=""
+                style={{ width: '92%', height: '92%', objectFit: 'contain' }}
+                draggable={false}
+              />
+            )}
+          </div>
+        ))}
+
+        {/* Live content preview — renders each zone's actual content (wardrobe
+            items, feeds, etc.) in place so creators see what viewers will see
+            while authoring. Non-interactive so editor outlines on top still
+            handle selection/drag. Only rendered for zones that have a
+            content_type set; untyped zones just show the dashed outline. */}
+        <ScreenContentRenderer
+          zones={localZones.filter(z => z.content_type)}
+          showId={showId}
+          interactive={false}
+        />
+
+        {/* Existing content zones — editor chrome (outline + label) drawn on
+            top of the live content so you can still click to select/drag. */}
         {localZones.map((zone, i) => {
           const typeMeta = CONTENT_TYPE_MAP[zone.content_type];
           return (
@@ -187,13 +256,31 @@ export default function ContentZoneEditor({
                 width: `${zone.w}%`, height: `${zone.h}%`,
                 border: `2px ${zone.content_type ? 'solid' : 'dashed'} ${selectedZone === zone.id ? '#B8962E' : ZONE_COLORS[i % ZONE_COLORS.length]}`,
                 borderRadius: 4,
-                background: selectedZone === zone.id ? 'rgba(184,150,46,0.15)' : 'rgba(255,255,255,0.05)',
+                // Selected zone gets a light gold tint; unselected untyped
+                // zones get a faint fill so creators can see empty zones.
+                // Typed zones with live content rendered beneath use a
+                // transparent fill so the content shows through.
+                background: selectedZone === zone.id
+                  ? 'rgba(184,150,46,0.15)'
+                  : zone.content_type ? 'transparent' : 'rgba(255,255,255,0.05)',
                 cursor: readOnly ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
                 overflow: 'hidden',
+                zIndex: 5,
               }}
             >
-              <span style={{ fontSize: 7, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.8)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2, lineHeight: 1.2 }}>
+              {/* Tiny corner pill so the label is visible but doesn't cover
+                  the live content rendered beneath. */}
+              <span style={{
+                fontSize: 7,
+                color: '#fff',
+                fontFamily: "'DM Mono', monospace",
+                padding: '1px 4px',
+                margin: 2,
+                borderRadius: 3,
+                background: 'rgba(0,0,0,0.55)',
+                lineHeight: 1.2,
+              }}>
                 {typeMeta ? `${typeMeta.icon} ${typeMeta.label}` : zone.content_type || '?'}
               </span>
             </div>
@@ -278,6 +365,8 @@ export default function ContentZoneEditor({
                       zone={zone}
                       profiles={profiles}
                       profilesLoading={profilesLoading}
+                      events={events}
+                      eventsLoading={eventsLoading}
                       onUpdate={(changes) => updateZone(zone.id, changes)}
                       onAiFillZone={onAiFillZone}
                     />
@@ -293,7 +382,7 @@ export default function ContentZoneEditor({
 }
 
 // ── Zone configuration panel — type picker + type-specific config fields ──
-function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate, onAiFillZone }) {
+function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsLoading = false, onUpdate, onAiFillZone }) {
   const config = zone.content_config || {};
   // Inline AI proposal — keyed per-zone so each zone has its own review surface.
   const [aiProposal, setAiProposal] = useState(null);
@@ -428,8 +517,59 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate, onAiFillZo
             </div>
           )}
 
-          {/* Max items — for lists (feed, DMs, notifications, comments, stories, wardrobe) */}
-          {['feed_posts', 'dm_thread', 'notifications', 'comments_list', 'story_ring', 'wardrobe_grid'].includes(zone.content_type) && (
+          {/* Event + inviter picker — for event_invite. The host profile is
+              stored on the zone (not on the event) so one event can be
+              invited by different characters on different screens. */}
+          {zone.content_type === 'event_invite' && (
+            <>
+              <div>
+                <label style={labelStyle}>EVENT</label>
+                {eventsLoading ? (
+                  <div style={{ fontSize: 10, color: '#999', padding: '6px 0', fontFamily: "'DM Mono', monospace" }}>Loading events...</div>
+                ) : events.length === 0 ? (
+                  <div style={{ fontSize: 10, color: '#b45309', padding: '6px 0' }}>No calendar events found for this show</div>
+                ) : (
+                  <select
+                    value={config.event_id || ''}
+                    onChange={(e) => handleConfigChange('event_id', e.target.value || null)}
+                    style={fieldStyle}
+                  >
+                    <option value="">— Select event —</option>
+                    {events.map(ev => {
+                      const when = ev.start_datetime ? new Date(ev.start_datetime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+                      return (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.title}{when ? ` — ${when}` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+              </div>
+              <div>
+                <label style={labelStyle}>INVITER (OPTIONAL)</label>
+                {profilesLoading ? (
+                  <div style={{ fontSize: 10, color: '#999', padding: '6px 0', fontFamily: "'DM Mono', monospace" }}>Loading profiles...</div>
+                ) : profiles.length === 0 ? (
+                  <div style={{ fontSize: 10, color: '#999', padding: '6px 0' }}>No social profiles found for this show</div>
+                ) : (
+                  <select
+                    value={config.host_profile_id || ''}
+                    onChange={(e) => handleConfigChange('host_profile_id', e.target.value ? parseInt(e.target.value) : null)}
+                    style={fieldStyle}
+                  >
+                    <option value="">— No inviter shown —</option>
+                    {profiles.map(p => (
+                      <option key={p.id} value={p.id}>@{p.handle} — {p.display_name || p.creator_name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Max items — for lists (feed, DMs, notifications, comments, stories, wardrobe grids) */}
+          {['feed_posts', 'dm_thread', 'notifications', 'comments_list', 'story_ring', 'wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume'].includes(zone.content_type) && (
             <div>
               <label style={labelStyle}>MAX ITEMS</label>
               <input
@@ -444,20 +584,59 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, onUpdate, onAiFillZo
             </div>
           )}
 
-          {/* Grid columns — for wardrobe grid */}
+          {/* Wardrobe config — shown for all wardrobe category types. The
+              category is baked into the content_type (Outfit / Shoes /
+              Accessories / Perfume) so creators only pick scope + columns.
+              Legacy wardrobe_grid still gets the old Category selector. */}
           {zone.content_type === 'wardrobe_grid' && (
-            <div>
-              <label style={labelStyle}>COLUMNS</label>
-              <input
-                type="number"
-                min={2}
-                max={5}
-                value={config.columns || ''}
-                onChange={(e) => handleConfigChange('columns', parseInt(e.target.value) || undefined)}
-                placeholder="3"
-                style={fieldStyle}
-              />
-            </div>
+            <>
+              <div>
+                <label style={labelStyle}>CATEGORY</label>
+                <select
+                  value={config.category || ''}
+                  onChange={(e) => handleConfigChange('category', e.target.value || null)}
+                  style={fieldStyle}
+                >
+                  <option value="">All categories</option>
+                  <option value="dress">Dresses</option>
+                  <option value="top">Tops</option>
+                  <option value="bottom">Bottoms</option>
+                  <option value="shoes">Shoes</option>
+                  <option value="accessories">Accessories</option>
+                  <option value="jewelry">Jewelry</option>
+                  <option value="perfume">Perfume</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {['wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume'].includes(zone.content_type) && (
+            <>
+              <div>
+                <label style={labelStyle}>SHOW</label>
+                <select
+                  value={config.scope || 'all'}
+                  onChange={(e) => handleConfigChange('scope', e.target.value || 'all')}
+                  style={fieldStyle}
+                >
+                  <option value="all">Owned + Wishlist (mixed)</option>
+                  <option value="owned">Owned only</option>
+                  <option value="wishlist">Wishlist only</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>COLUMNS</label>
+                <input
+                  type="number"
+                  min={2}
+                  max={5}
+                  value={config.columns || ''}
+                  onChange={(e) => handleConfigChange('columns', parseInt(e.target.value) || undefined)}
+                  placeholder="3"
+                  style={fieldStyle}
+                />
+              </div>
+            </>
           )}
 
           {/* Outfit index — for outfit card */}

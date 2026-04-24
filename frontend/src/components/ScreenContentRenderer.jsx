@@ -23,11 +23,20 @@ export const CONTENT_TYPES = [
   { key: 'dm_thread', label: 'DM Thread', icon: '💬', desc: 'Message conversation', group: 'messages' },
   { key: 'notifications', label: 'Notifications', icon: '🔔', desc: 'Alert list', group: 'messages' },
   { key: 'story_ring', label: 'Story Avatars', icon: '⭕', desc: 'Row of story circles', group: 'social' },
-  { key: 'wardrobe_grid', label: 'Wardrobe Grid', icon: '👗', desc: 'Outfit item thumbnails', group: 'wardrobe' },
-  { key: 'outfit_card', label: 'Outfit Card', icon: '👠', desc: 'Single outfit set', group: 'wardrobe' },
+  // Named wardrobe categories — surface the four creators actually think
+  // in ("I want a shoes screen") instead of the technical "grid + category
+  // config" combo. Each renders via WardrobeGridRenderer with the
+  // category baked in; creators only pick scope (Owned / Wishlist / Both)
+  // and column count.
+  { key: 'wardrobe_outfit', label: 'Outfit', icon: '👗', desc: 'All clothes — dresses, tops, bottoms mixed', group: 'wardrobe' },
+  { key: 'wardrobe_shoes', label: 'Shoes', icon: '👠', desc: 'Shoes from the closet', group: 'wardrobe' },
+  { key: 'wardrobe_accessories', label: 'Accessories', icon: '👜', desc: 'Accessories + jewelry', group: 'wardrobe' },
+  { key: 'wardrobe_perfume', label: 'Perfume', icon: '🧴', desc: 'Fragrance collection', group: 'wardrobe' },
+  { key: 'outfit_card', label: 'Full Outfit', icon: '💃', desc: 'One complete composed look (multiple pieces)', group: 'wardrobe' },
   { key: 'wardrobe_price', label: 'Wardrobe Price', icon: '💰', desc: 'Price from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'wardrobe_brand', label: 'Wardrobe Brand', icon: '🏷️', desc: 'Brand name from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'comments_list', label: 'Comments', icon: '💭', desc: 'Post comment thread', group: 'social' },
+  { key: 'event_invite', label: 'Event Invite', icon: '💌', desc: 'Invitation card bound to a calendar event', group: 'messages' },
   { key: 'engagement_stats', label: 'Engagement Stats', icon: '📈', desc: 'Likes, reach, trending', group: 'stats' },
   { key: 'money_balance', label: 'Money Balance', icon: '💰', desc: 'Lala’s live coin balance + next goal', group: 'stats' },
   { key: 'balance_trend_sparkline', label: 'Balance Trend', icon: '📈', desc: 'Last 12 episodes balance line chart', group: 'stats' },
@@ -36,7 +45,6 @@ export const CONTENT_TYPES = [
   { key: 'goal_ladder', label: 'Goal Ladder', icon: '🏆', desc: 'Full milestone ladder with triggered status', group: 'stats' },
   { key: 'finance_kpis', label: 'Finance KPIs', icon: '🧮', desc: 'Burn rate / runway / avg income strip', group: 'stats' },
   { key: 'closet_net_worth', label: 'Closet Net Worth', icon: '💎', desc: 'Owned vs wishlist wardrobe value', group: 'stats' },
-  { key: 'closet_wishlist_grid', label: 'Dream Pieces', icon: '👗', desc: 'Top N unowned wardrobe items', group: 'wardrobe' },
   { key: 'custom_text', label: 'Custom Text', icon: '✏️', desc: 'Static text overlay', group: 'other' },
 ];
 
@@ -108,7 +116,18 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
     case 'story_ring':
       return <StoryRingRenderer showId={showId} config={config} />;
     case 'wardrobe_grid':
+      // Legacy: kept so zones created before the named-category types
+      // still render. The picker no longer offers this; new zones use
+      // wardrobe_outfit / wardrobe_shoes / wardrobe_accessories / wardrobe_perfume.
       return <WardrobeGridRenderer showId={showId} config={config} />;
+    case 'wardrobe_outfit':
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'dress,top,bottom' }} />;
+    case 'wardrobe_shoes':
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'shoes' }} />;
+    case 'wardrobe_accessories':
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'accessories,jewelry' }} />;
+    case 'wardrobe_perfume':
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'perfume' }} />;
     case 'outfit_card':
       return <OutfitCardRenderer showId={showId} config={config} />;
     case 'wardrobe_price':
@@ -117,6 +136,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
       return <WardrobeBrandRenderer config={config} screenMeta={screenMeta} />;
     case 'comments_list':
       return <CommentsRenderer showId={showId} config={config} />;
+    case 'event_invite':
+      return <EventInviteRenderer showId={showId} config={config} />;
     case 'engagement_stats':
       return <EngagementStatsRenderer showId={showId} config={config} />;
     case 'money_balance':
@@ -390,31 +411,111 @@ function StoryRingRenderer({ showId, config }) {
 
 // ── Wardrobe Grid ──
 function WardrobeGridRenderer({ showId, config }) {
-  const url = showId ? `/api/v1/wardrobe?show_id=${showId}&limit=${config.max_items || 6}` : null;
+  // Config: { category?, scope? ('all'|'owned'|'wishlist'), max_items?, columns? }
+  const maxItems = config.max_items || 12;
+  const params = new URLSearchParams({ show_id: String(showId || ''), limit: String(maxItems) });
+  if (config.category) params.set('category', config.category);
+  if (config.scope === 'owned') params.set('is_owned', 'true');
+  else if (config.scope === 'wishlist') params.set('is_owned', 'false');
+  const url = showId ? `/api/v1/wardrobe?${params.toString()}` : null;
   const { data, loading } = useContentData(url);
 
   if (loading) return <ZoneLoader />;
-  const items = (data?.data || data?.items || []).slice(0, config.max_items || 6);
-  if (!items.length) return <ZoneEmpty label="No wardrobe" />;
+  const items = (data?.data || data?.items || []).slice(0, maxItems);
+  if (!items.length) {
+    // Map the comma-joined category value back to a friendly label for
+    // the empty state. Falls back to the raw category for custom filters.
+    const friendly = ({
+      'dress,top,bottom': 'clothes',
+      'accessories,jewelry': 'accessories',
+    })[config.category] || config.category;
+    const emptyLabel = friendly
+      ? `No ${friendly}${config.scope === 'owned' ? ' owned' : config.scope === 'wishlist' ? ' on wishlist' : ''}`
+      : 'No wardrobe';
+    return <ZoneEmpty label={emptyLabel} />;
+  }
 
   return (
     <div style={{
       width: '100%', height: '100%', display: 'grid',
       gridTemplateColumns: `repeat(${config.columns || 3}, 1fr)`,
-      gap: 2, padding: 2, overflowY: 'auto',
+      gap: 4, padding: 4, overflowY: 'auto',
     }}>
-      {items.map((item, i) => (
-        <div key={item.id || i} style={{
-          aspectRatio: '1/1', borderRadius: 3, overflow: 'hidden',
-          background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.06)',
-        }}>
-          {(item.s3_url || item.thumbnail_url) ? (
-            <img src={item.thumbnail_url || item.s3_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>👗</div>
-          )}
-        </div>
-      ))}
+      {items.map((item, i) => {
+        const owned = item.is_owned === true;
+        const cost = item.coin_cost;
+        // Prefer the background-removed (cutout) image so tiles read as
+        // game-inventory icons — not raw photos with cluttered backgrounds.
+        // Falls back to the processed thumbnail, then the raw upload.
+        const img = item.s3_url_processed || item.thumbnail_url || item.s3_url;
+        return (
+          <div key={item.id || i} style={{
+            position: 'relative',
+            aspectRatio: '1/1',
+            borderRadius: 6,
+            overflow: 'hidden',
+            // Soft inventory-slot gradient so the cutout floats. Owned
+            // items get a faint green glow border, unowned stay neutral.
+            background: 'linear-gradient(160deg, rgba(255,255,255,0.10), rgba(0,0,0,0.25))',
+            border: `1px solid ${owned ? 'rgba(120, 200, 140, 0.55)' : 'rgba(255,255,255,0.12)'}`,
+            boxShadow: owned
+              ? 'inset 0 0 8px rgba(120, 200, 140, 0.18)'
+              : 'inset 0 0 6px rgba(0,0,0,0.25)',
+            padding: 3,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            {img ? (
+              <img
+                src={img}
+                alt={item.name}
+                style={{
+                  width: '100%', height: '100%',
+                  // Cutouts display best with contain — cover would crop
+                  // limbs/straps off transparent PNGs.
+                  objectFit: 'contain',
+                  filter: owned ? 'none' : 'saturate(0.85) brightness(0.92)',
+                }}
+              />
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, opacity: 0.5 }}>👗</div>
+            )}
+            {/* Badge — "OWNED" in green if she has it, coin cost in gold if she doesn't.
+                Cost hidden when it's zero/missing (gifts, vintage, etc.). */}
+            {owned ? (
+              <div style={{
+                position: 'absolute', top: 3, right: 3,
+                padding: '2px 5px', borderRadius: 999,
+                background: 'rgba(56, 128, 74, 0.95)',
+                color: '#fff', fontSize: 6, fontWeight: 800,
+                letterSpacing: 0.4, fontFamily: "'DM Mono', monospace",
+                textShadow: '0 1px 1px rgba(0,0,0,0.35)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+              }}>OWNED</div>
+            ) : cost ? (
+              /* Coin chip bottom-center — reads like a price tag / inventory
+                 badge. Gold pill with dark ring for contrast on any bg. */
+              <div style={{
+                position: 'absolute', bottom: 3, left: '50%',
+                transform: 'translateX(-50%)',
+                padding: '2px 6px', borderRadius: 999,
+                background: 'rgba(0,0,0,0.75)',
+                color: '#f2c94c',
+                fontSize: 7, fontWeight: 800,
+                fontFamily: "'DM Mono', monospace",
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                border: '1px solid rgba(242, 201, 76, 0.4)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                whiteSpace: 'nowrap',
+              }}>
+                <span style={{ fontSize: 8, lineHeight: 1 }}>♦</span>
+                {cost}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -777,6 +878,105 @@ function CommentsRenderer({ showId, config }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Event Invite ──
+// Binds to a StoryCalendarEvent picked in the zone config. Optionally shows a
+// social profile as the inviter (stored on the zone config, not the event —
+// StoryCalendarEvent has no host field yet, and keeping this per-zone lets one
+// event be invited by different characters on different screens).
+function EventInviteRenderer({ showId, config }) {
+  const eventId = config.event_id;
+  const hostProfileId = config.host_profile_id;
+  // List endpoint is the only way to load events today (no GET /events/:id).
+  // Filtering client-side is fine for the typical event count per show.
+  const eventsUrl = showId ? `/api/v1/calendar/events?series_id=${showId}` : null;
+  const hostUrl = hostProfileId ? `/api/v1/social-profiles/${hostProfileId}` : null;
+  const { data: eventsData, loading: eventsLoading } = useContentData(eventsUrl);
+  const { data: hostData, loading: hostLoading } = useContentData(hostUrl);
+
+  if (eventsLoading) return <ZoneLoader />;
+  if (!eventId) return <ZoneEmpty label="Pick an event" />;
+  const events = eventsData?.events || [];
+  const event = events.find(e => String(e.id) === String(eventId));
+  if (!event) return <ZoneEmpty label="Event not found" />;
+
+  const host = hostData?.data || hostData;
+  const when = event.start_datetime ? new Date(event.start_datetime) : null;
+  const whenLabel = when
+    ? when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : '';
+  const timeLabel = when
+    ? when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    : '';
+  const where = event.location_name || event.lalaverse_district || '';
+  const description = event.what_world_knows || '';
+
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      display: 'flex', flexDirection: 'column',
+      padding: 5,
+      background: config.bg || 'linear-gradient(180deg, rgba(45,30,60,0.92), rgba(28,20,40,0.92))',
+      color: '#fff',
+      borderRadius: 4,
+      overflow: 'hidden',
+    }}>
+      {/* Inviter row — avatar + handle; hidden if no host_profile_id set */}
+      {host && !hostLoading && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+          <div style={{
+            width: 14, height: 14, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #e8a0b4, #b8a9d4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 8, fontWeight: 700,
+            border: '1px solid rgba(255,255,255,0.3)',
+            flexShrink: 0,
+          }}>
+            {(host.display_name || host.handle || '?')[0].toUpperCase()}
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.6)', lineHeight: 1 }}>INVITES YOU</div>
+            <div style={{ fontSize: 8, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              @{host.handle}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Title */}
+      <div style={{ fontSize: 10, fontWeight: 800, lineHeight: 1.2, marginBottom: 3, textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>
+        {event.title}
+      </div>
+
+      {/* When / Where */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 3 }}>
+        {whenLabel && (
+          <div>
+            <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.3 }}>WHEN</div>
+            <div style={{ fontSize: 8, fontWeight: 700 }}>{whenLabel}{timeLabel ? ` · ${timeLabel}` : ''}</div>
+          </div>
+        )}
+        {where && (
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.3 }}>WHERE</div>
+            <div style={{ fontSize: 8, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{where}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Description — clamped to fit */}
+      {description && (
+        <div style={{
+          fontSize: 7, color: 'rgba(255,255,255,0.7)', lineHeight: 1.3,
+          display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+          overflow: 'hidden', marginTop: 'auto',
+        }}>
+          {description}
+        </div>
+      )}
     </div>
   );
 }
