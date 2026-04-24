@@ -17,6 +17,8 @@ import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks } fr
 import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
 import AIProposalReview from '../components/phone-editor/AIProposalReview';
 import MissionEditor from '../components/phone-editor/MissionEditor';
+import ConditionRow from '../components/phone-editor/ConditionRow';
+import ActionRow from '../components/phone-editor/ActionRow';
 // PhoneHubSteps removed — see below where the 4-step guide was deleted.
 import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
@@ -112,6 +114,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [tapZonesDraft, setTapZonesDraft] = useState([]);
   const [tapZonesDirty, setTapZonesDirty] = useState(false);
   const [tapSelectedZoneId, setTapSelectedZoneId] = useState(null);
+  // Which zone row has its advanced panel (conditions + actions) open.
+  // Kept separate from selection so picking a target doesn't auto-open a
+  // big drawer.
+  const [tapExpandedZoneId, setTapExpandedZoneId] = useState(null);
   const [pendingIssueFocus, setPendingIssueFocus] = useState(null);
   const [flowAudit, setFlowAudit] = useState(null);
   const [navHistory, setNavHistory] = useState([]);  // stack of screen keys for back navigation
@@ -1747,6 +1753,11 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                               {tapZonesDraft.map((zone, index) => {
                                 const isSelected = tapSelectedZoneId === zone.id;
                                 const hasTarget = !!zone.target;
+                                const isExpanded = tapExpandedZoneId === zone.id;
+                                const conditionCount = Array.isArray(zone.conditions) ? zone.conditions.length : 0;
+                                const actionCount = Array.isArray(zone.actions) ? zone.actions.length : 0;
+                                const advancedCount = conditionCount + actionCount;
+                                const screenOptions = overlays.filter(o => isScreen(o) && o.url).map(o => ({ id: o.id, name: o.name }));
                                 return (
                                   <div key={zone.id} className={`zones-tap-row zones-tap-row--inline ${isSelected ? 'active' : ''}`}>
                                     <input
@@ -1771,6 +1782,16 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                     </select>
                                     <button
                                       type="button"
+                                      className="zones-tap-row__expand-btn"
+                                      onClick={() => setTapExpandedZoneId(isExpanded ? null : zone.id)}
+                                      aria-label={isExpanded ? 'Hide advanced' : 'Show advanced'}
+                                      title={advancedCount > 0 ? `${advancedCount} advanced rule${advancedCount > 1 ? 's' : ''}` : 'Conditions + actions'}
+                                      aria-expanded={isExpanded}
+                                    >
+                                      {isExpanded ? '▴' : '▾'}{advancedCount > 0 ? ` ${advancedCount}` : ''}
+                                    </button>
+                                    <button
+                                      type="button"
                                       className="zones-tap-row__delete-btn"
                                       onClick={() => linkEditorRef.current?.removeZone?.(zone.id)}
                                       aria-label={`Delete ${zone.label || `zone ${index + 1}`}`}
@@ -1778,6 +1799,71 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                     >
                                       ×
                                     </button>
+                                    {isExpanded && (
+                                      <div className="zones-tap-row__advanced">
+                                        <div className="zones-tap-row__adv-section">
+                                          <div className="zones-tap-row__adv-header">
+                                            <span>VISIBLE WHEN{conditionCount > 0 ? ` (${conditionCount})` : ' — always'}</span>
+                                            <button
+                                              type="button"
+                                              className="zones-tap-panel__btn"
+                                              onClick={() => {
+                                                const next = [...(zone.conditions || []), { key: '', op: 'eq', value: true }];
+                                                linkEditorRef.current?.updateZone?.(zone.id, { conditions: next });
+                                              }}
+                                            >
+                                              + Condition
+                                            </button>
+                                          </div>
+                                          {(zone.conditions || []).map((cond, ci) => (
+                                            <ConditionRow
+                                              key={ci}
+                                              condition={cond}
+                                              onChange={(updated) => {
+                                                const next = [...(zone.conditions || [])];
+                                                next[ci] = updated;
+                                                linkEditorRef.current?.updateZone?.(zone.id, { conditions: next });
+                                              }}
+                                              onRemove={() => {
+                                                const next = (zone.conditions || []).filter((_, i) => i !== ci);
+                                                linkEditorRef.current?.updateZone?.(zone.id, { conditions: next.length ? next : undefined });
+                                              }}
+                                            />
+                                          ))}
+                                        </div>
+                                        <div className="zones-tap-row__adv-section">
+                                          <div className="zones-tap-row__adv-header">
+                                            <span>ON TAP{actionCount > 0 ? ` (${actionCount})` : ' — navigate only'}</span>
+                                            <button
+                                              type="button"
+                                              className="zones-tap-panel__btn"
+                                              onClick={() => {
+                                                const next = [...(zone.actions || []), { type: 'set_state', key: '', value: true }];
+                                                linkEditorRef.current?.updateZone?.(zone.id, { actions: next });
+                                              }}
+                                            >
+                                              + Action
+                                            </button>
+                                          </div>
+                                          {(zone.actions || []).map((act, ai) => (
+                                            <ActionRow
+                                              key={ai}
+                                              action={act}
+                                              screenOptions={screenOptions}
+                                              onChange={(updated) => {
+                                                const next = [...(zone.actions || [])];
+                                                next[ai] = updated;
+                                                linkEditorRef.current?.updateZone?.(zone.id, { actions: next });
+                                              }}
+                                              onRemove={() => {
+                                                const next = (zone.actions || []).filter((_, i) => i !== ai);
+                                                linkEditorRef.current?.updateZone?.(zone.id, { actions: next.length ? next : undefined });
+                                              }}
+                                            />
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
