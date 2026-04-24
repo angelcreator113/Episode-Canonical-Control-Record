@@ -389,13 +389,27 @@ module.exports = {
       // Filter by category. Accepts a single value ("shoes") or a
       // comma-separated list ("dress,top,bottom") so content-zone types
       // that cover multiple clothing categories (e.g. Outfit = all clothes)
-      // can pass everything in one query.
+      // can pass everything in one query. Match is forgiving — items with
+      // capitalized or pluralized clothing_category values (legacy data,
+      // hand entry) still hit, so creators don't lose items because of
+      // case mismatches.
       if (category) {
         const cats = String(category).split(',').map(c => c.trim()).filter(Boolean);
-        if (cats.length > 1) {
-          where.clothing_category = { [Op.in]: cats };
-        } else if (cats.length === 1) {
-          where.clothing_category = cats[0];
+        const expanded = new Set();
+        cats.forEach(c => {
+          const lower = c.toLowerCase();
+          expanded.add(lower);
+          expanded.add(lower.endsWith('s') ? lower.slice(0, -1) : `${lower}s`);
+          expanded.add(c.charAt(0).toUpperCase() + c.slice(1).toLowerCase());
+          // Title-case plural too (e.g. "Dresses")
+          const titlePlural = (lower.endsWith('s') ? lower : `${lower}s`);
+          expanded.add(titlePlural.charAt(0).toUpperCase() + titlePlural.slice(1));
+        });
+        const list = Array.from(expanded).filter(Boolean);
+        if (list.length > 1) {
+          where.clothing_category = { [Op.in]: list };
+        } else if (list.length === 1) {
+          where.clothing_category = list[0];
         }
       }
 
@@ -455,12 +469,22 @@ module.exports = {
         if (character && colNames.has('character')) { conditions.push('"character" = :character'); replacements.character = character; }
         if (category && colNames.has('clothing_category')) {
           const cats = String(category).split(',').map(c => c.trim()).filter(Boolean);
-          if (cats.length > 1) {
+          const expanded = new Set();
+          cats.forEach(c => {
+            const lower = c.toLowerCase();
+            expanded.add(lower);
+            expanded.add(lower.endsWith('s') ? lower.slice(0, -1) : `${lower}s`);
+            expanded.add(c.charAt(0).toUpperCase() + c.slice(1).toLowerCase());
+            const titlePlural = (lower.endsWith('s') ? lower : `${lower}s`);
+            expanded.add(titlePlural.charAt(0).toUpperCase() + titlePlural.slice(1));
+          });
+          const list = Array.from(expanded).filter(Boolean);
+          if (list.length > 1) {
             conditions.push('clothing_category IN (:categories)');
-            replacements.categories = cats;
-          } else if (cats.length === 1) {
+            replacements.categories = list;
+          } else if (list.length === 1) {
             conditions.push('clothing_category = :category');
-            replacements.category = cats[0];
+            replacements.category = list[0];
           }
         }
         if (is_owned === 'true' && colNames.has('is_owned')) { conditions.push('is_owned = true'); }
