@@ -537,8 +537,8 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
             </>
           )}
 
-          {/* Max items — for lists (feed, DMs, notifications, comments, stories, wardrobe) */}
-          {['feed_posts', 'dm_thread', 'notifications', 'comments_list', 'story_ring', 'wardrobe_grid'].includes(zone.content_type) && (
+          {/* Max items — for lists (feed, DMs, notifications, comments, stories, wardrobe grids) */}
+          {['feed_posts', 'dm_thread', 'notifications', 'comments_list', 'story_ring', 'wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume'].includes(zone.content_type) && (
             <div>
               <label style={labelStyle}>MAX ITEMS</label>
               <input
@@ -553,8 +553,10 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
             </div>
           )}
 
-          {/* Wardrobe grid extras — category filter, ownership scope, column
-              count. Category matches Wardrobe.clothing_category values. */}
+          {/* Wardrobe config — shown for all wardrobe category types. The
+              category is baked into the content_type (Outfit / Shoes /
+              Accessories / Perfume) so creators only pick scope + columns.
+              Legacy wardrobe_grid still gets the old Category selector. */}
           {zone.content_type === 'wardrobe_grid' && (
             <>
               <div>
@@ -574,6 +576,11 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
                   <option value="perfume">Perfume</option>
                 </select>
               </div>
+            </>
+          )}
+
+          {['wardrobe_grid', 'wardrobe_outfit', 'wardrobe_shoes', 'wardrobe_accessories', 'wardrobe_perfume'].includes(zone.content_type) && (
+            <>
               <div>
                 <label style={labelStyle}>SHOW</label>
                 <select

@@ -23,8 +23,16 @@ export const CONTENT_TYPES = [
   { key: 'dm_thread', label: 'DM Thread', icon: '💬', desc: 'Message conversation', group: 'messages' },
   { key: 'notifications', label: 'Notifications', icon: '🔔', desc: 'Alert list', group: 'messages' },
   { key: 'story_ring', label: 'Story Avatars', icon: '⭕', desc: 'Row of story circles', group: 'social' },
-  { key: 'wardrobe_grid', label: 'Wardrobe Grid', icon: '👗', desc: 'Outfit item thumbnails', group: 'wardrobe' },
-  { key: 'outfit_card', label: 'Outfit Card', icon: '👠', desc: 'Single outfit set', group: 'wardrobe' },
+  // Named wardrobe categories — surface the four creators actually think
+  // in ("I want a shoes screen") instead of the technical "grid + category
+  // config" combo. Each renders via WardrobeGridRenderer with the
+  // category baked in; creators only pick scope (Owned / Wishlist / Both)
+  // and column count.
+  { key: 'wardrobe_outfit', label: 'Outfit', icon: '👗', desc: 'All clothes — dresses, tops, bottoms mixed', group: 'wardrobe' },
+  { key: 'wardrobe_shoes', label: 'Shoes', icon: '👠', desc: 'Shoes from the closet', group: 'wardrobe' },
+  { key: 'wardrobe_accessories', label: 'Accessories', icon: '👜', desc: 'Accessories + jewelry', group: 'wardrobe' },
+  { key: 'wardrobe_perfume', label: 'Perfume', icon: '🧴', desc: 'Fragrance collection', group: 'wardrobe' },
+  { key: 'outfit_card', label: 'Full Outfit', icon: '💃', desc: 'One complete composed look (multiple pieces)', group: 'wardrobe' },
   { key: 'wardrobe_price', label: 'Wardrobe Price', icon: '💰', desc: 'Price from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'wardrobe_brand', label: 'Wardrobe Brand', icon: '🏷️', desc: 'Brand name from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'comments_list', label: 'Comments', icon: '💭', desc: 'Post comment thread', group: 'social' },
@@ -37,7 +45,6 @@ export const CONTENT_TYPES = [
   { key: 'goal_ladder', label: 'Goal Ladder', icon: '🏆', desc: 'Full milestone ladder with triggered status', group: 'stats' },
   { key: 'finance_kpis', label: 'Finance KPIs', icon: '🧮', desc: 'Burn rate / runway / avg income strip', group: 'stats' },
   { key: 'closet_net_worth', label: 'Closet Net Worth', icon: '💎', desc: 'Owned vs wishlist wardrobe value', group: 'stats' },
-  { key: 'closet_wishlist_grid', label: 'Dream Pieces', icon: '👗', desc: 'Top N unowned wardrobe items', group: 'wardrobe' },
   { key: 'custom_text', label: 'Custom Text', icon: '✏️', desc: 'Static text overlay', group: 'other' },
 ];
 
@@ -109,7 +116,18 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
     case 'story_ring':
       return <StoryRingRenderer showId={showId} config={config} />;
     case 'wardrobe_grid':
+      // Legacy: kept so zones created before the named-category types
+      // still render. The picker no longer offers this; new zones use
+      // wardrobe_outfit / wardrobe_shoes / wardrobe_accessories / wardrobe_perfume.
       return <WardrobeGridRenderer showId={showId} config={config} />;
+    case 'wardrobe_outfit':
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'dress,top,bottom' }} />;
+    case 'wardrobe_shoes':
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'shoes' }} />;
+    case 'wardrobe_accessories':
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'accessories,jewelry' }} />;
+    case 'wardrobe_perfume':
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'perfume' }} />;
     case 'outfit_card':
       return <OutfitCardRenderer showId={showId} config={config} />;
     case 'wardrobe_price':
