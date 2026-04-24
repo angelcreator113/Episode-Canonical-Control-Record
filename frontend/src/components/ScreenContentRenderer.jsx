@@ -439,44 +439,79 @@ function WardrobeGridRenderer({ showId, config }) {
     <div style={{
       width: '100%', height: '100%', display: 'grid',
       gridTemplateColumns: `repeat(${config.columns || 3}, 1fr)`,
-      gap: 3, padding: 3, overflowY: 'auto',
+      gap: 4, padding: 4, overflowY: 'auto',
     }}>
       {items.map((item, i) => {
         const owned = item.is_owned === true;
         const cost = item.coin_cost;
-        const img = item.thumbnail_url || item.s3_url_processed || item.s3_url;
+        // Prefer the background-removed (cutout) image so tiles read as
+        // game-inventory icons — not raw photos with cluttered backgrounds.
+        // Falls back to the processed thumbnail, then the raw upload.
+        const img = item.s3_url_processed || item.thumbnail_url || item.s3_url;
         return (
           <div key={item.id || i} style={{
             position: 'relative',
-            aspectRatio: '1/1', borderRadius: 4, overflow: 'hidden',
-            background: 'rgba(255,255,255,0.08)',
-            border: `1px solid ${owned ? 'rgba(120, 200, 140, 0.55)' : 'rgba(255,255,255,0.06)'}`,
+            aspectRatio: '1/1',
+            borderRadius: 6,
+            overflow: 'hidden',
+            // Soft inventory-slot gradient so the cutout floats. Owned
+            // items get a faint green glow border, unowned stay neutral.
+            background: 'linear-gradient(160deg, rgba(255,255,255,0.10), rgba(0,0,0,0.25))',
+            border: `1px solid ${owned ? 'rgba(120, 200, 140, 0.55)' : 'rgba(255,255,255,0.12)'}`,
+            boxShadow: owned
+              ? 'inset 0 0 8px rgba(120, 200, 140, 0.18)'
+              : 'inset 0 0 6px rgba(0,0,0,0.25)',
+            padding: 3,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}>
             {img ? (
-              <img src={img} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img
+                src={img}
+                alt={item.name}
+                style={{
+                  width: '100%', height: '100%',
+                  // Cutouts display best with contain — cover would crop
+                  // limbs/straps off transparent PNGs.
+                  objectFit: 'contain',
+                  filter: owned ? 'none' : 'saturate(0.85) brightness(0.92)',
+                }}
+              />
             ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>👗</div>
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, opacity: 0.5 }}>👗</div>
             )}
             {/* Badge — "OWNED" in green if she has it, coin cost in gold if she doesn't.
                 Cost hidden when it's zero/missing (gifts, vintage, etc.). */}
             {owned ? (
               <div style={{
-                position: 'absolute', top: 2, right: 2,
-                padding: '1px 4px', borderRadius: 3,
-                background: 'rgba(56, 128, 74, 0.92)',
+                position: 'absolute', top: 3, right: 3,
+                padding: '2px 5px', borderRadius: 999,
+                background: 'rgba(56, 128, 74, 0.95)',
                 color: '#fff', fontSize: 6, fontWeight: 800,
                 letterSpacing: 0.4, fontFamily: "'DM Mono', monospace",
                 textShadow: '0 1px 1px rgba(0,0,0,0.35)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
               }}>OWNED</div>
             ) : cost ? (
+              /* Coin chip bottom-center — reads like a price tag / inventory
+                 badge. Gold pill with dark ring for contrast on any bg. */
               <div style={{
-                position: 'absolute', bottom: 2, left: 2,
-                padding: '1px 4px', borderRadius: 3,
-                background: 'rgba(0,0,0,0.65)',
-                color: '#f2c94c', fontSize: 6, fontWeight: 800,
+                position: 'absolute', bottom: 3, left: '50%',
+                transform: 'translateX(-50%)',
+                padding: '2px 6px', borderRadius: 999,
+                background: 'rgba(0,0,0,0.75)',
+                color: '#f2c94c',
+                fontSize: 7, fontWeight: 800,
                 fontFamily: "'DM Mono', monospace",
-                textShadow: '0 1px 1px rgba(0,0,0,0.5)',
-              }}>♦ {cost}</div>
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                border: '1px solid rgba(242, 201, 76, 0.4)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                whiteSpace: 'nowrap',
+              }}>
+                <span style={{ fontSize: 8, lineHeight: 1 }}>♦</span>
+                {cost}
+              </div>
             ) : null}
           </div>
         );
