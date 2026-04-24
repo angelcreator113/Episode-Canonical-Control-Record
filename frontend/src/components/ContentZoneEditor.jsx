@@ -198,10 +198,12 @@ export default function ContentZoneEditor({
           </div>
         )}
 
-        {/* Ghost overlay of tap zones / icons from the Zones tab — read-only
-            here so you can see what's already on this screen while drawing
-            content zones and avoid stomping on existing icons. Click-through
-            via pointerEvents:none so drawing still works over these areas. */}
+        {/* Overlay of tap zones / icons from the Zones tab — not editable
+            here (that's the Zones tab's job) but rendered at full fidelity
+            so the composed screen matches what you see everywhere else.
+            pointer-events: none so drawing content zones still works
+            through these. Empty zones (no icon set) get a faint dashed
+            outline so you still know a tap target lives there. */}
         {screenLinks.map((link) => (
           <div
             key={`ghost-${link.id}`}
@@ -210,9 +212,8 @@ export default function ContentZoneEditor({
               left: `${link.x}%`, top: `${link.y}%`,
               width: `${link.w}%`, height: `${link.h}%`,
               pointerEvents: 'none',
-              border: '1px dashed rgba(255,255,255,0.35)',
+              border: link.icon_url ? 'none' : '1px dashed rgba(255,255,255,0.35)',
               borderRadius: 4,
-              background: 'rgba(255,255,255,0.04)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               zIndex: 1,
             }}
@@ -221,7 +222,7 @@ export default function ContentZoneEditor({
               <img
                 src={link.icon_url}
                 alt=""
-                style={{ width: '88%', height: '88%', objectFit: 'contain', opacity: 0.55 }}
+                style={{ width: '92%', height: '92%', objectFit: 'contain' }}
                 draggable={false}
               />
             )}
