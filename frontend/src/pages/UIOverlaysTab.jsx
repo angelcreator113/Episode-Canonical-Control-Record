@@ -1861,6 +1861,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   <div className="zones-tab__canvas">
                     <ContentZoneEditor
                       screenUrl={activeScreen.url}
+                      screen={activeScreen}
+                      globalFit={globalFit}
                       zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
                       screenLinks={getScreenLinks(activeScreen)}
                       showId={showId}

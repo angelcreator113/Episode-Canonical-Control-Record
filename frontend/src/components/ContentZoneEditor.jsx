@@ -18,11 +18,14 @@ import { CONTENT_TYPES, CONTENT_TYPE_MAP } from './ScreenContentRenderer';
 import ConditionRow from './phone-editor/ConditionRow';
 import api from '../services/api';
 import PhoneFrame from './phone/PhoneFrame';
+import { getScreenImageStyle } from './PhoneHub';
 
 const ZONE_COLORS = ['#e8a0b4', '#b8a9d4', '#7ab3d4', '#a8d5a2', '#c9a84c', '#6bba9a', '#e06060', '#b89060'];
 
 export default function ContentZoneEditor({
   screenUrl,
+  screen,
+  globalFit,
   zones = [],
   screenLinks = [],
   showId,
@@ -180,7 +183,15 @@ export default function ContentZoneEditor({
         }}
       >
         {screenUrl ? (
-          <img src={screenUrl} alt="Screen" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} draggable={false} />
+          <img
+            src={screenUrl}
+            alt="Screen"
+            style={{
+              ...(screen ? getScreenImageStyle(screen, globalFit) : { width: '100%', height: '100%', objectFit: 'cover' }),
+              pointerEvents: 'none',
+            }}
+            draggable={false}
+          />
         ) : (
           <div style={{ width: '100%', height: '100%', background: '#f5f3ee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 11 }}>
             No screen image
