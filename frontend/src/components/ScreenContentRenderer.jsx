@@ -438,8 +438,13 @@ function WardrobeGridRenderer({ showId, config }) {
   return (
     <div style={{
       width: '100%', height: '100%', display: 'grid',
-      gridTemplateColumns: `repeat(${config.columns || 3}, 1fr)`,
-      gap: 4, padding: 4, overflowY: 'auto',
+      gridTemplateColumns: `repeat(${config.columns || 2}, 1fr)`,
+      gap: 5, padding: 5, overflowY: 'auto',
+      // Center the tiles vertically + horizontally when there are fewer
+      // items than fill the zone. Avoids a couple of items hugging the
+      // top-left corner of a tall zone with empty space below.
+      alignContent: 'center',
+      justifyItems: 'center',
     }}>
       {items.map((item, i) => {
         const owned = item.is_owned === true;
@@ -451,8 +456,9 @@ function WardrobeGridRenderer({ showId, config }) {
         return (
           <div key={item.id || i} style={{
             position: 'relative',
+            width: '100%',
             aspectRatio: '1/1',
-            borderRadius: 6,
+            borderRadius: 8,
             overflow: 'hidden',
             // Soft inventory-slot gradient so the cutout floats. Owned
             // items get a faint green glow border, unowned stay neutral.
@@ -461,7 +467,7 @@ function WardrobeGridRenderer({ showId, config }) {
             boxShadow: owned
               ? 'inset 0 0 8px rgba(120, 200, 140, 0.18)'
               : 'inset 0 0 6px rgba(0,0,0,0.25)',
-            padding: 3,
+            padding: 4,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -475,11 +481,10 @@ function WardrobeGridRenderer({ showId, config }) {
                   // Cutouts display best with contain — cover would crop
                   // limbs/straps off transparent PNGs.
                   objectFit: 'contain',
-                  filter: owned ? 'none' : 'saturate(0.85) brightness(0.92)',
                 }}
               />
             ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, opacity: 0.5 }}>👗</div>
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, opacity: 0.5 }}>👗</div>
             )}
             {/* Badge — "OWNED" in green if she has it, coin cost in gold if she doesn't.
                 Cost hidden when it's zero/missing (gifts, vintage, etc.). */}
