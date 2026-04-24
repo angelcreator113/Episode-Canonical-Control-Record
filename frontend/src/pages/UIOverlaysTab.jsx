@@ -1737,50 +1737,40 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           ) : (
                             <div className="zones-tap-panel__list">
                               {tapZonesDraft.map((zone, index) => {
-                                const label = zone.label || zone.target || `Zone ${index + 1}`;
-                                const hasTarget = !!zone.target;
                                 const isSelected = tapSelectedZoneId === zone.id;
+                                const hasTarget = !!zone.target;
                                 return (
-                                  <div key={zone.id} className={`zones-tap-row ${isSelected ? 'active' : ''}`}>
+                                  <div key={zone.id} className={`zones-tap-row zones-tap-row--inline ${isSelected ? 'active' : ''}`}>
+                                    <input
+                                      className="zones-tap-row__label-input"
+                                      value={zone.label || ''}
+                                      onChange={(e) => linkEditorRef.current?.updateZone?.(zone.id, { label: e.target.value })}
+                                      onFocus={() => linkEditorRef.current?.setSelectedZone?.(zone.id)}
+                                      placeholder={`Zone ${index + 1}`}
+                                    />
+                                    <select
+                                      className={`zones-tap-row__target-select ${hasTarget ? '' : 'zones-tap-row__target-select--warn'}`}
+                                      value={zone.target || ''}
+                                      onFocus={() => linkEditorRef.current?.setSelectedZone?.(zone.id)}
+                                      onChange={(e) => {
+                                        const target = e.target.value;
+                                        linkEditorRef.current?.updateZone?.(zone.id, { target, label: zone.label || target || '' });
+                                      }}
+                                    >
+                                      <option value="">— Opens: nothing —</option>
+                                      {overlays.filter(o => isScreen(o)).map(screen => (
+                                        <option key={screen.id} value={screen.id}>Opens: {screen.name}</option>
+                                      ))}
+                                    </select>
                                     <button
                                       type="button"
-                                      className="zones-tap-row__select"
-                                      onClick={() => linkEditorRef.current?.setSelectedZone?.(zone.id)}
+                                      className="zones-tap-row__delete-btn"
+                                      onClick={() => linkEditorRef.current?.removeZone?.(zone.id)}
+                                      aria-label={`Delete ${zone.label || `zone ${index + 1}`}`}
+                                      title="Delete"
                                     >
-                                      <span className="zones-tap-row__name">{label}</span>
-                                      <span className={`zones-tap-row__state ${hasTarget ? 'ok' : 'warn'}`}>
-                                        {hasTarget ? `navigate(${zone.target})` : 'no target'}
-                                      </span>
+                                      ×
                                     </button>
-
-                                    {isSelected && (
-                                      <div className="zones-tap-row__edit">
-                                        <input
-                                          value={zone.label || ''}
-                                          onChange={(e) => linkEditorRef.current?.updateZone?.(zone.id, { label: e.target.value })}
-                                          placeholder="Label"
-                                        />
-                                        <select
-                                          value={zone.target || ''}
-                                          onChange={(e) => {
-                                            const target = e.target.value;
-                                            linkEditorRef.current?.updateZone?.(zone.id, { target, label: zone.label || target || '' });
-                                          }}
-                                        >
-                                          <option value="">- Target -</option>
-                                          {overlays.filter(o => isScreen(o)).map(screen => (
-                                            <option key={screen.id} value={screen.id}>{screen.name}</option>
-                                          ))}
-                                        </select>
-                                        <button
-                                          type="button"
-                                          className="zones-tap-row__delete"
-                                          onClick={() => linkEditorRef.current?.removeZone?.(zone.id)}
-                                        >
-                                          Delete
-                                        </button>
-                                      </div>
-                                    )}
                                   </div>
                                 );
                               })}

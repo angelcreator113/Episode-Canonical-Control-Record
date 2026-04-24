@@ -402,6 +402,81 @@
   box-shadow: 0 1px 6px rgba(184, 150, 46, 0.14);
 }
 
+/* Inline row — label + target dropdown + delete all visible at once, no
+   click-to-expand. Makes setting a target a single tap on the dropdown
+   instead of two (expand then pick). */
+.zones-tap-row--inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+}
+
+.zones-tap-row__label-input,
+.zones-tap-row__target-select {
+  min-width: 0;
+  width: 100%;
+  padding: 7px 8px;
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 6px;
+  background: var(--lala-surface);
+  color: var(--lala-ink);
+}
+
+.zones-tap-row__label-input:focus,
+.zones-tap-row__target-select:focus {
+  outline: none;
+  border-color: var(--lala-gold);
+  box-shadow: 0 0 0 2px rgba(184, 150, 46, 0.18);
+}
+
+/* When no target is picked, tint the dropdown so it reads as "this icon
+   won't do anything on tap." Matches the warn color used elsewhere. */
+.zones-tap-row__target-select--warn {
+  color: #ac4e4e;
+  border-color: rgba(172, 78, 78, 0.35);
+  background: rgba(172, 78, 78, 0.04);
+}
+
+.zones-tap-row__delete-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--lala-ink-faint);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.zones-tap-row__delete-btn:hover {
+  background: rgba(190, 59, 59, 0.1);
+  color: #a43131;
+}
+
+/* Narrow viewports — stack label/target/delete so each has breathing room. */
+@media (max-width: 640px) {
+  .zones-tap-row--inline {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "label  delete"
+      "target target";
+    row-gap: 6px;
+  }
+  .zones-tap-row__label-input  { grid-area: label; }
+  .zones-tap-row__target-select { grid-area: target; }
+  .zones-tap-row__delete-btn    { grid-area: delete; }
+}
+
 .zones-tap-row__select {
   width: 100%;
   border: none;
