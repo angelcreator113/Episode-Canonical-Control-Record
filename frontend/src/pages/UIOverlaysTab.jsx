@@ -1863,6 +1863,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                     <ContentZoneEditor
                       screenUrl={activeScreen.url}
                       zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                      screenLinks={getScreenLinks(activeScreen)}
                       showId={showId}
                       onSave={handleSaveContentZones}
                       onAiFillZone={handleFillContentZone}
