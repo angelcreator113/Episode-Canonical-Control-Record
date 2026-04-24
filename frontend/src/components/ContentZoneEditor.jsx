@@ -24,6 +24,7 @@ const ZONE_COLORS = ['#e8a0b4', '#b8a9d4', '#7ab3d4', '#a8d5a2', '#c9a84c', '#6b
 export default function ContentZoneEditor({
   screenUrl,
   zones = [],
+  screenLinks = [],
   showId,
   onSave,
   onAiFillZone,
@@ -185,6 +186,36 @@ export default function ContentZoneEditor({
             No screen image
           </div>
         )}
+
+        {/* Ghost overlay of tap zones / icons from the Zones tab — read-only
+            here so you can see what's already on this screen while drawing
+            content zones and avoid stomping on existing icons. Click-through
+            via pointerEvents:none so drawing still works over these areas. */}
+        {screenLinks.map((link) => (
+          <div
+            key={`ghost-${link.id}`}
+            style={{
+              position: 'absolute',
+              left: `${link.x}%`, top: `${link.y}%`,
+              width: `${link.w}%`, height: `${link.h}%`,
+              pointerEvents: 'none',
+              border: '1px dashed rgba(255,255,255,0.35)',
+              borderRadius: 4,
+              background: 'rgba(255,255,255,0.04)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              zIndex: 1,
+            }}
+          >
+            {link.icon_url && (
+              <img
+                src={link.icon_url}
+                alt=""
+                style={{ width: '88%', height: '88%', objectFit: 'contain', opacity: 0.55 }}
+                draggable={false}
+              />
+            )}
+          </div>
+        ))}
 
         {/* Existing content zones */}
         {localZones.map((zone, i) => {
