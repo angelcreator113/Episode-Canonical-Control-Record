@@ -42,15 +42,6 @@ export default function PhoneHubSectionTabs({
             Icons <span className="phone-hub-section-tab-count">· {iconCount}</span>
           </button>
         )}
-        {iconCount > 0 && (
-          <button
-            type="button"
-            onClick={() => onChangeTab('placements')}
-            className={`phone-hub-section-tab ${activeTab === 'placements' ? 'active' : ''}`}
-          >
-            Placements <span className="phone-hub-section-tab-count">· {placementCount}</span>
-          </button>
-        )}
         {showZones && (
           <button
             type="button"
