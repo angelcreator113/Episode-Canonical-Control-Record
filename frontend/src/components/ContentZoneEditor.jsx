@@ -510,20 +510,52 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
             </div>
           )}
 
-          {/* Grid columns — for wardrobe grid */}
+          {/* Wardrobe grid extras — category filter, ownership scope, column
+              count. Category matches Wardrobe.clothing_category values. */}
           {zone.content_type === 'wardrobe_grid' && (
-            <div>
-              <label style={labelStyle}>COLUMNS</label>
-              <input
-                type="number"
-                min={2}
-                max={5}
-                value={config.columns || ''}
-                onChange={(e) => handleConfigChange('columns', parseInt(e.target.value) || undefined)}
-                placeholder="3"
-                style={fieldStyle}
-              />
-            </div>
+            <>
+              <div>
+                <label style={labelStyle}>CATEGORY</label>
+                <select
+                  value={config.category || ''}
+                  onChange={(e) => handleConfigChange('category', e.target.value || null)}
+                  style={fieldStyle}
+                >
+                  <option value="">All categories</option>
+                  <option value="dress">Dresses</option>
+                  <option value="top">Tops</option>
+                  <option value="bottom">Bottoms</option>
+                  <option value="shoes">Shoes</option>
+                  <option value="accessories">Accessories</option>
+                  <option value="jewelry">Jewelry</option>
+                  <option value="perfume">Perfume</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>SHOW</label>
+                <select
+                  value={config.scope || 'all'}
+                  onChange={(e) => handleConfigChange('scope', e.target.value || 'all')}
+                  style={fieldStyle}
+                >
+                  <option value="all">Owned + Wishlist (mixed)</option>
+                  <option value="owned">Owned only</option>
+                  <option value="wishlist">Wishlist only</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>COLUMNS</label>
+                <input
+                  type="number"
+                  min={2}
+                  max={5}
+                  value={config.columns || ''}
+                  onChange={(e) => handleConfigChange('columns', parseInt(e.target.value) || undefined)}
+                  placeholder="3"
+                  style={fieldStyle}
+                />
+              </div>
+            </>
           )}
 
           {/* Outfit index — for outfit card */}

@@ -367,6 +367,7 @@ module.exports = {
         category,
         favorite,
         search,
+        is_owned,
         page = 1,
         limit = 50,
         sortBy = 'created_at',
@@ -393,6 +394,16 @@ module.exports = {
       // Filter by favorite
       if (favorite === 'true') {
         where.is_favorite = true;
+      }
+
+      // Filter by ownership. Treat null/undefined as "not owned" so wishlist
+      // queries catch items that haven't had their flag written yet. Filter
+      // on the field (not a top-level Op.or) so it composes with `search`
+      // which also uses Op.or on the where object.
+      if (is_owned === 'true') {
+        where.is_owned = true;
+      } else if (is_owned === 'false') {
+        where.is_owned = { [Op.or]: [false, null] };
       }
 
       // Search by name, brand, color
@@ -435,6 +446,8 @@ module.exports = {
         if (show_id && colNames.has('show_id')) { conditions.push('show_id = :show_id'); replacements.show_id = show_id; }
         if (character && colNames.has('character')) { conditions.push('"character" = :character'); replacements.character = character; }
         if (category && colNames.has('clothing_category')) { conditions.push('clothing_category = :category'); replacements.category = category; }
+        if (is_owned === 'true' && colNames.has('is_owned')) { conditions.push('is_owned = true'); }
+        if (is_owned === 'false' && colNames.has('is_owned')) { conditions.push('(is_owned = false OR is_owned IS NULL)'); }
         if (search) { conditions.push('(name ILIKE :search OR brand ILIKE :search OR color ILIKE :search)'); replacements.search = `%${search}%`; }
 
         const realSortBy = colNames.has(safeSortBy) ? safeSortBy : 'created_at';

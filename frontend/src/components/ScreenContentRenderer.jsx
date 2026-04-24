@@ -393,31 +393,70 @@ function StoryRingRenderer({ showId, config }) {
 
 // ── Wardrobe Grid ──
 function WardrobeGridRenderer({ showId, config }) {
-  const url = showId ? `/api/v1/wardrobe?show_id=${showId}&limit=${config.max_items || 6}` : null;
+  // Config: { category?, scope? ('all'|'owned'|'wishlist'), max_items?, columns? }
+  const maxItems = config.max_items || 12;
+  const params = new URLSearchParams({ show_id: String(showId || ''), limit: String(maxItems) });
+  if (config.category) params.set('category', config.category);
+  if (config.scope === 'owned') params.set('is_owned', 'true');
+  else if (config.scope === 'wishlist') params.set('is_owned', 'false');
+  const url = showId ? `/api/v1/wardrobe?${params.toString()}` : null;
   const { data, loading } = useContentData(url);
 
   if (loading) return <ZoneLoader />;
-  const items = (data?.data || data?.items || []).slice(0, config.max_items || 6);
-  if (!items.length) return <ZoneEmpty label="No wardrobe" />;
+  const items = (data?.data || data?.items || []).slice(0, maxItems);
+  if (!items.length) {
+    const emptyLabel = config.category
+      ? `No ${config.category}${config.scope === 'owned' ? ' owned' : config.scope === 'wishlist' ? ' on wishlist' : ''}`
+      : 'No wardrobe';
+    return <ZoneEmpty label={emptyLabel} />;
+  }
 
   return (
     <div style={{
       width: '100%', height: '100%', display: 'grid',
       gridTemplateColumns: `repeat(${config.columns || 3}, 1fr)`,
-      gap: 2, padding: 2, overflowY: 'auto',
+      gap: 3, padding: 3, overflowY: 'auto',
     }}>
-      {items.map((item, i) => (
-        <div key={item.id || i} style={{
-          aspectRatio: '1/1', borderRadius: 3, overflow: 'hidden',
-          background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.06)',
-        }}>
-          {(item.s3_url || item.thumbnail_url) ? (
-            <img src={item.thumbnail_url || item.s3_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>👗</div>
-          )}
-        </div>
-      ))}
+      {items.map((item, i) => {
+        const owned = item.is_owned === true;
+        const cost = item.coin_cost;
+        const img = item.thumbnail_url || item.s3_url_processed || item.s3_url;
+        return (
+          <div key={item.id || i} style={{
+            position: 'relative',
+            aspectRatio: '1/1', borderRadius: 4, overflow: 'hidden',
+            background: 'rgba(255,255,255,0.08)',
+            border: `1px solid ${owned ? 'rgba(120, 200, 140, 0.55)' : 'rgba(255,255,255,0.06)'}`,
+          }}>
+            {img ? (
+              <img src={img} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>👗</div>
+            )}
+            {/* Badge — "OWNED" in green if she has it, coin cost in gold if she doesn't.
+                Cost hidden when it's zero/missing (gifts, vintage, etc.). */}
+            {owned ? (
+              <div style={{
+                position: 'absolute', top: 2, right: 2,
+                padding: '1px 4px', borderRadius: 3,
+                background: 'rgba(56, 128, 74, 0.92)',
+                color: '#fff', fontSize: 6, fontWeight: 800,
+                letterSpacing: 0.4, fontFamily: "'DM Mono', monospace",
+                textShadow: '0 1px 1px rgba(0,0,0,0.35)',
+              }}>OWNED</div>
+            ) : cost ? (
+              <div style={{
+                position: 'absolute', bottom: 2, left: 2,
+                padding: '1px 4px', borderRadius: 3,
+                background: 'rgba(0,0,0,0.65)',
+                color: '#f2c94c', fontSize: 6, fontWeight: 800,
+                fontFamily: "'DM Mono', monospace",
+                textShadow: '0 1px 1px rgba(0,0,0,0.5)',
+              }}>♦ {cost}</div>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
