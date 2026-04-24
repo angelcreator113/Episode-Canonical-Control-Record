@@ -15,6 +15,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Plus, Trash2, Save, X, Layers, Eye, EyeOff } from 'lucide-react';
 import { CONTENT_TYPES, CONTENT_TYPE_MAP } from './ScreenContentRenderer';
+import ScreenContentRenderer from './ScreenContentRenderer';
 import ConditionRow from './phone-editor/ConditionRow';
 import api from '../services/api';
 import PhoneFrame from './phone/PhoneFrame';
@@ -229,7 +230,19 @@ export default function ContentZoneEditor({
           </div>
         ))}
 
-        {/* Existing content zones */}
+        {/* Live content preview — renders each zone's actual content (wardrobe
+            items, feeds, etc.) in place so creators see what viewers will see
+            while authoring. Non-interactive so editor outlines on top still
+            handle selection/drag. Only rendered for zones that have a
+            content_type set; untyped zones just show the dashed outline. */}
+        <ScreenContentRenderer
+          zones={localZones.filter(z => z.content_type)}
+          showId={showId}
+          interactive={false}
+        />
+
+        {/* Existing content zones — editor chrome (outline + label) drawn on
+            top of the live content so you can still click to select/drag. */}
         {localZones.map((zone, i) => {
           const typeMeta = CONTENT_TYPE_MAP[zone.content_type];
           return (
@@ -243,13 +256,31 @@ export default function ContentZoneEditor({
                 width: `${zone.w}%`, height: `${zone.h}%`,
                 border: `2px ${zone.content_type ? 'solid' : 'dashed'} ${selectedZone === zone.id ? '#B8962E' : ZONE_COLORS[i % ZONE_COLORS.length]}`,
                 borderRadius: 4,
-                background: selectedZone === zone.id ? 'rgba(184,150,46,0.15)' : 'rgba(255,255,255,0.05)',
+                // Selected zone gets a light gold tint; unselected untyped
+                // zones get a faint fill so creators can see empty zones.
+                // Typed zones with live content rendered beneath use a
+                // transparent fill so the content shows through.
+                background: selectedZone === zone.id
+                  ? 'rgba(184,150,46,0.15)'
+                  : zone.content_type ? 'transparent' : 'rgba(255,255,255,0.05)',
                 cursor: readOnly ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
                 overflow: 'hidden',
+                zIndex: 5,
               }}
             >
-              <span style={{ fontSize: 7, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.8)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2, lineHeight: 1.2 }}>
+              {/* Tiny corner pill so the label is visible but doesn't cover
+                  the live content rendered beneath. */}
+              <span style={{
+                fontSize: 7,
+                color: '#fff',
+                fontFamily: "'DM Mono', monospace",
+                padding: '1px 4px',
+                margin: 2,
+                borderRadius: 3,
+                background: 'rgba(0,0,0,0.55)',
+                lineHeight: 1.2,
+              }}>
                 {typeMeta ? `${typeMeta.icon} ${typeMeta.label}` : zone.content_type || '?'}
               </span>
             </div>

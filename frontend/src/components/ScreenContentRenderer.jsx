@@ -423,8 +423,14 @@ function WardrobeGridRenderer({ showId, config }) {
   if (loading) return <ZoneLoader />;
   const items = (data?.data || data?.items || []).slice(0, maxItems);
   if (!items.length) {
-    const emptyLabel = config.category
-      ? `No ${config.category}${config.scope === 'owned' ? ' owned' : config.scope === 'wishlist' ? ' on wishlist' : ''}`
+    // Map the comma-joined category value back to a friendly label for
+    // the empty state. Falls back to the raw category for custom filters.
+    const friendly = ({
+      'dress,top,bottom': 'clothes',
+      'accessories,jewelry': 'accessories',
+    })[config.category] || config.category;
+    const emptyLabel = friendly
+      ? `No ${friendly}${config.scope === 'owned' ? ' owned' : config.scope === 'wishlist' ? ' on wishlist' : ''}`
       : 'No wardrobe';
     return <ZoneEmpty label={emptyLabel} />;
   }
