@@ -418,6 +418,7 @@
 .zones-tap-row__target-select {
   min-width: 0;
   width: 100%;
+  min-height: 36px;
   padding: 7px 8px;
   font-size: var(--text-sm);
   font-family: var(--font-ui);

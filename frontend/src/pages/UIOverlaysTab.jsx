@@ -1750,9 +1750,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                     <select
                                       className={`zones-tap-row__target-select ${hasTarget ? '' : 'zones-tap-row__target-select--warn'}`}
                                       value={zone.target || ''}
-                                      onFocus={() => linkEditorRef.current?.setSelectedZone?.(zone.id)}
                                       onChange={(e) => {
                                         const target = e.target.value;
+                                        linkEditorRef.current?.setSelectedZone?.(zone.id);
                                         linkEditorRef.current?.updateZone?.(zone.id, { target, label: zone.label || target || '' });
                                       }}
                                     >
