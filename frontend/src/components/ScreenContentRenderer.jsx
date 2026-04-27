@@ -37,6 +37,7 @@ export const CONTENT_TYPES = [
   { key: 'wardrobe_brand', label: 'Wardrobe Brand', icon: '🏷️', desc: 'Brand name from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'comments_list', label: 'Comments', icon: '💭', desc: 'Post comment thread', group: 'social' },
   { key: 'event_invite', label: 'Event Invite', icon: '💌', desc: 'Invitation card bound to a calendar event', group: 'messages' },
+  { key: 'world_map', label: 'World Map', icon: '🗺️', desc: 'Auto-pinned locations on your show’s map', group: 'world' },
   { key: 'engagement_stats', label: 'Engagement Stats', icon: '📈', desc: 'Likes, reach, trending', group: 'stats' },
   { key: 'money_balance', label: 'Money Balance', icon: '💰', desc: 'Lala’s live coin balance + next goal', group: 'stats' },
   { key: 'balance_trend_sparkline', label: 'Balance Trend', icon: '📈', desc: 'Last 12 episodes balance line chart', group: 'stats' },
@@ -53,7 +54,7 @@ export const CONTENT_TYPE_MAP = Object.fromEntries(CONTENT_TYPES.map(t => [t.key
 // ── Main renderer — renders all content zones over a screen ──
 // `runtimeContext` is the optional phone-runtime context used to filter zones by
 // their `conditions` array. When absent, all zones render (editor "author view").
-export default function ScreenContentRenderer({ zones = [], showId, episodeId, interactive = false, runtimeContext = null, screenMeta = null }) {
+export default function ScreenContentRenderer({ zones = [], showId, episodeId, interactive = false, runtimeContext = null, screenMeta = null, mapEditable = false }) {
   if (!zones.length) return null;
 
   // Filter zones by `conditions` when a runtime context is provided. Editor/author
@@ -85,6 +86,7 @@ export default function ScreenContentRenderer({ zones = [], showId, episodeId, i
             showId={showId}
             episodeId={episodeId}
             screenMeta={screenMeta}
+            mapEditable={mapEditable}
           />
         </div>
       ))}
@@ -99,7 +101,7 @@ function evaluateZoneConditions(zone, ctx) {
 }
 
 // ── Dispatch to the right sub-renderer based on content_type ──
-function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
+function ContentZoneRenderer({ zone, showId, episodeId, screenMeta, mapEditable = false }) {
   const config = zone.content_config || {};
 
   switch (zone.content_type) {
@@ -146,6 +148,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
       return <CommentsRenderer showId={showId} config={config} />;
     case 'event_invite':
       return <EventInviteRenderer showId={showId} config={config} />;
+    case 'world_map':
+      return <WorldMapRenderer showId={showId} episodeId={episodeId} config={config} editable={mapEditable} />;
     case 'engagement_stats':
       return <EngagementStatsRenderer showId={showId} config={config} />;
     case 'money_balance':
@@ -993,6 +997,351 @@ function EventInviteRenderer({ showId, config }) {
           {description}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── World Map ──
+// Auto-pinned locations on the show's map. Normalized coordinates: each
+// location's coordinates field is interpreted as { x, y } percentages
+// (0-100) over the zone area. Legacy { lat, lng } entries are read as
+// { y: lat, x: lng } so old data keeps working.
+//
+// Layered features (driven from config):
+//   - icons by venue_type
+//   - special star for the show's main social profile's home_location_id
+//   - animated ring for any location hosting an event today/this episode
+//   - bigger dot for locations in the main profile's frequent_venues
+//   - district name labels, drawn from each pin's `district` field
+//   - hover/tap popup with name, district, venue_type, description
+//   - filter chips: type + district scoping via config
+//   - story path: line connecting locations referenced by current episode events
+function getNormalizedCoords(loc) {
+  const c = loc?.coordinates || {};
+  if (typeof c.x === 'number' && typeof c.y === 'number') return { x: c.x, y: c.y };
+  if (typeof c.lat === 'number' && typeof c.lng === 'number') return { x: c.lng, y: c.lat };
+  return null;
+}
+
+const VENUE_PIN = {
+  restaurant: '🍽️', cafe: '☕', club: '🪩', bar: '🍸', gym: '🏋️',
+  salon: '💅', gallery: '🖼️', shopping: '🛍️', school: '🏫', studio: '🎬',
+  office: '🏢', park: '🌳', beach: '🏖️', hotel: '🏨', theater: '🎭',
+  market: '🛒', station: '🚉', port: '⚓',
+};
+const TYPE_PIN = {
+  interior: '🏛️', exterior: '🌆', virtual: '🌀', transitional: '🚪',
+};
+
+function pinIconFor(loc) {
+  if (loc.venue_type && VENUE_PIN[loc.venue_type.toLowerCase()]) return VENUE_PIN[loc.venue_type.toLowerCase()];
+  if (loc.location_type && TYPE_PIN[loc.location_type.toLowerCase()]) return TYPE_PIN[loc.location_type.toLowerCase()];
+  return '📍';
+}
+
+function WorldMapRenderer({ showId, episodeId, config, editable = false }) {
+  const [locations, setLocations] = useState([]);
+  const [profile, setProfile] = useState(null);     // main social profile (for home + frequent venues)
+  const [events, setEvents] = useState([]);
+  const [activePin, setActivePin] = useState(null);
+  const [loading, setLoading] = useState(true);
+  // Calibration: when editable, lets the creator pick a location and click
+  // anywhere on the map to set its normalized coordinates. Saves to the
+  // WorldLocation via PUT /api/v1/world/locations/:id. Click an existing
+  // pin to "pick it up" and reposition.
+  const [pendingLocId, setPendingLocId] = useState(null);
+
+  useEffect(() => {
+    if (!showId) { setLoading(false); return; }
+    let cancelled = false;
+    Promise.all([
+      api.get('/api/v1/world/locations').catch(() => ({ data: { locations: [] } })),
+      api.get(`/api/v1/social-profiles?show_id=${showId}`).catch(() => ({ data: { profiles: [] } })),
+      api.get(`/api/v1/calendar/events?series_id=${showId}`).catch(() => ({ data: { events: [] } })),
+    ]).then(([locRes, profRes, evRes]) => {
+      if (cancelled) return;
+      setLocations(locRes.data?.locations || []);
+      // Pick the show's primary profile — first one with a home_location_id, falling back to first.
+      const profs = profRes.data?.data || profRes.data?.profiles || [];
+      setProfile(profs.find(p => p.home_location_id) || profs[0] || null);
+      setEvents(evRes.data?.events || []);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [showId]);
+
+  if (loading) return <ZoneLoader />;
+
+  const homeLocationId = profile?.home_location_id || null;
+  const frequentVenueIds = new Set(Array.isArray(profile?.frequent_venues) ? profile.frequent_venues : []);
+  // Locations with an event tied to this episode (or all events if no episode scope).
+  const eventLocationIds = new Set(
+    events
+      .filter(ev => !episodeId || ev.episode_id === episodeId || true) // currently no episode link on event
+      .map(ev => ev.location_id)
+      .filter(Boolean)
+  );
+
+  // Filter pool — by location_type / venue_type / district (config-driven)
+  const passesFilter = (loc) => {
+    if (config.only === 'homes' && loc.location_type !== 'interior') return false;
+    if (config.only === 'venues' && !loc.venue_type) return false;
+    if (config.district && (loc.district || '').toLowerCase() !== config.district.toLowerCase()) return false;
+    return true;
+  };
+
+  const visiblePins = locations
+    .filter(passesFilter)
+    .map(loc => ({ loc, coords: getNormalizedCoords(loc) }))
+    .filter(p => p.coords);
+
+  // Story path — line connecting locations in event order this episode.
+  // Skipped when fewer than 2 pins or path disabled.
+  const pathPoints = config.show_path !== false
+    ? events
+        .map(ev => {
+          const loc = locations.find(l => l.id === ev.location_id);
+          if (!loc) return null;
+          const coords = getNormalizedCoords(loc);
+          return coords ? coords : null;
+        })
+        .filter(Boolean)
+    : [];
+
+  // District labels — one label per unique district at the centroid of its pins.
+  const districtCentroids = new Map();
+  visiblePins.forEach(({ loc, coords }) => {
+    const d = loc.district;
+    if (!d) return;
+    if (!districtCentroids.has(d)) districtCentroids.set(d, { sumX: 0, sumY: 0, count: 0 });
+    const entry = districtCentroids.get(d);
+    entry.sumX += coords.x; entry.sumY += coords.y; entry.count += 1;
+  });
+
+  // In editable mode we still render even with zero placed pins so creators
+  // can place the first one. In view mode, fall through to empty state.
+  if (!visiblePins.length && !editable) {
+    return <ZoneEmpty label={locations.length ? 'No pins placed yet' : 'No locations'} />;
+  }
+
+  const handleMapClick = (e) => {
+    if (!editable || !pendingLocId) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+    // Optimistic local update; persist in the background.
+    setLocations(prev => prev.map(l =>
+      l.id === pendingLocId ? { ...l, coordinates: { x, y } } : l
+    ));
+    api.put(`/api/v1/world/locations/${pendingLocId}`, { coordinates: { x, y } }).catch((err) => {
+      console.error('[WorldMap] Failed to save pin', err);
+    });
+    setPendingLocId(null);
+  };
+
+  const unplaced = locations.filter(l => !getNormalizedCoords(l));
+
+  return (
+    <div
+      onClick={handleMapClick}
+      style={{
+        width: '100%', height: '100%', position: 'relative', overflow: 'hidden',
+        cursor: editable && pendingLocId ? 'crosshair' : 'default',
+      }}
+    >
+      {/* District labels — rendered behind pins so they don't block taps. */}
+      {config.show_districts !== false && Array.from(districtCentroids.entries()).map(([district, { sumX, sumY, count }]) => (
+        <div
+          key={`district-${district}`}
+          style={{
+            position: 'absolute',
+            left: `${sumX / count}%`, top: `${sumY / count}%`,
+            transform: 'translate(-50%, -150%)',
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 7, fontWeight: 800, letterSpacing: 0.6,
+            color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.7)',
+            textTransform: 'uppercase', pointerEvents: 'none',
+            opacity: 0.85, whiteSpace: 'nowrap',
+            zIndex: 1,
+          }}
+        >
+          {district}
+        </div>
+      ))}
+
+      {/* Story path — SVG line through episode events in order. Drawn under pins. */}
+      {pathPoints.length > 1 && (
+        <svg
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}
+          viewBox="0 0 100 100" preserveAspectRatio="none"
+        >
+          <polyline
+            points={pathPoints.map(p => `${p.x},${p.y}`).join(' ')}
+            fill="none"
+            stroke="rgba(242, 201, 76, 0.85)"
+            strokeWidth="0.6"
+            strokeDasharray="1.5 1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+
+      {/* Pins */}
+      {visiblePins.map(({ loc, coords }) => {
+        const isHome = loc.id === homeLocationId;
+        const isFrequent = frequentVenueIds.has(loc.id);
+        const hasEvent = eventLocationIds.has(loc.id);
+        const sizeBase = isHome ? 22 : isFrequent ? 18 : 14;
+        return (
+          <button
+            key={loc.id}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (editable) {
+                // Pick this pin up for repositioning. Next click on the map sets
+                // its new coords. Click the same pin again to cancel.
+                setPendingLocId(pendingLocId === loc.id ? null : loc.id);
+                return;
+              }
+              setActivePin(activePin === loc.id ? null : loc.id);
+            }}
+            style={{
+              position: 'absolute',
+              left: `${coords.x}%`, top: `${coords.y}%`,
+              transform: 'translate(-50%, -50%)',
+              width: sizeBase, height: sizeBase, padding: 0,
+              borderRadius: '50%',
+              background: isHome
+                ? 'linear-gradient(135deg, #f9d976, #c9a84c)'
+                : 'rgba(0,0,0,0.55)',
+              border: `1.5px solid ${isHome ? '#fff' : 'rgba(255,255,255,0.7)'}`,
+              boxShadow: isHome
+                ? '0 0 8px rgba(249, 217, 118, 0.7), 0 1px 3px rgba(0,0,0,0.4)'
+                : '0 1px 3px rgba(0,0,0,0.4)',
+              fontSize: isHome ? 11 : 9,
+              cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              zIndex: activePin === loc.id ? 10 : 5,
+            }}
+            title={loc.name}
+          >
+            {/* Event pulse ring */}
+            {hasEvent && (
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute', inset: -4,
+                  borderRadius: '50%',
+                  border: '2px solid rgba(242, 201, 76, 0.9)',
+                  animation: 'world-map-pulse 1.4s ease-out infinite',
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+            <span aria-hidden>{isHome ? '⭐' : pinIconFor(loc)}</span>
+          </button>
+        );
+      })}
+
+      {/* Hover/tap popup — shows for the active pin. */}
+      {activePin && (() => {
+        const pin = visiblePins.find(p => p.loc.id === activePin);
+        if (!pin) return null;
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${pin.coords.x}%`, top: `${pin.coords.y}%`,
+              transform: 'translate(-50%, calc(-100% - 14px))',
+              minWidth: 90, maxWidth: 160,
+              padding: '5px 7px',
+              background: 'rgba(20, 16, 28, 0.95)',
+              border: '1px solid rgba(255,255,255,0.18)',
+              borderRadius: 6,
+              boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+              color: '#fff',
+              zIndex: 20,
+              pointerEvents: 'none',
+            }}
+          >
+            <div style={{ fontSize: 8, fontWeight: 800, lineHeight: 1.2, marginBottom: 2 }}>{pin.loc.name}</div>
+            {pin.loc.district && (
+              <div style={{ fontSize: 6, color: 'rgba(255,255,255,0.6)', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 1 }}>
+                {pin.loc.district}{pin.loc.venue_type ? ` · ${pin.loc.venue_type}` : ''}
+              </div>
+            )}
+            {pin.loc.description && (
+              <div style={{ fontSize: 7, color: 'rgba(255,255,255,0.78)', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                {pin.loc.description}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Calibration toolbar — only visible when the renderer is rendered in
+          editor mode. Lets creators pick an unplaced location and click the
+          map to drop its pin. Click an existing pin to pick it up again. */}
+      {editable && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            left: 4, right: 4, bottom: 4,
+            padding: '4px 6px',
+            background: 'rgba(20, 16, 28, 0.92)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            borderRadius: 6,
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            zIndex: 30,
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 8,
+          }}
+        >
+          {pendingLocId ? (
+            <>
+              <span style={{ color: '#f2c94c' }}>📍 Click map to place</span>
+              <button
+                type="button"
+                onClick={() => setPendingLocId(null)}
+                style={{ marginLeft: 'auto', fontSize: 8, padding: '2px 6px', borderRadius: 3, border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#fff', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </>
+          ) : unplaced.length > 0 ? (
+            <>
+              <span style={{ color: 'rgba(255,255,255,0.65)' }}>{unplaced.length} unplaced</span>
+              <select
+                onChange={(e) => e.target.value && setPendingLocId(e.target.value)}
+                value=""
+                style={{ flex: 1, minWidth: 0, fontSize: 8, padding: '2px 4px', background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 3 }}
+              >
+                <option value="">Pick a location to place…</option>
+                {unplaced.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}{l.district ? ` (${l.district})` : ''}</option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <span style={{ color: 'rgba(255,255,255,0.65)' }}>All pins placed · click a pin to move</span>
+          )}
+        </div>
+      )}
+
+      {/* Inline keyframes — scoped here so the renderer is self-contained. */}
+      <style>{`
+        @keyframes world-map-pulse {
+          0%   { transform: scale(0.85); opacity: 0.9; }
+          70%  { transform: scale(1.6);  opacity: 0; }
+          100% { transform: scale(1.6);  opacity: 0; }
+        }
+      `}</style>
     </div>
   );
 }
