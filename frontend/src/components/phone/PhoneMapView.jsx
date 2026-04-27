@@ -141,13 +141,11 @@ export default function PhoneMapView({
         position: 'relative',
         width: '100%', maxHeight: '100%',
         aspectRatio: String(imgAspect),
-        // When the image is wider than the phone screen (almost always), the
-        // 100% width sets the stage width and aspectRatio derives the height.
-        // When the image happens to be taller than the phone, maxHeight clamps
-        // and width auto-adjusts.
+        zIndex: 1,
       }
     : {
         position: 'relative', width: '100%', height: '100%',
+        zIndex: 1,
       };
 
   return (
@@ -155,11 +153,31 @@ export default function PhoneMapView({
       width: '100%', height: '100%',
       position: 'relative',
       overflow: 'hidden',
-      // Soft dark backdrop fills the letterbox area above/below the map so
-      // empty space reads as intentional sky rather than blank screen.
-      background: bgUrl ? '#0e0a18' : 'transparent',
+      // Soft, cohesive backdrop. When the user has uploaded a screen image
+      // for "Map", it's rendered behind the WF illustration as a blurred,
+      // dimmed cover — so the letterbox bars carry the phone's existing
+      // pink/purple aesthetic instead of a stark dark void. Falls back to
+      // a dark color when nothing else is available.
+      background: !fallbackImageUrl && bgUrl ? '#0e0a18' : 'transparent',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
+      {fallbackImageUrl && bgUrl && (
+        <img
+          src={fallbackImageUrl}
+          alt=""
+          aria-hidden
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            objectFit: 'cover',
+            filter: 'blur(18px) brightness(0.7)',
+            transform: 'scale(1.1)',  /* hide blur edge bleed */
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+          draggable={false}
+        />
+      )}
       <div style={stageStyle}>
       {bgUrl && (
         <img

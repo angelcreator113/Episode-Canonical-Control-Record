@@ -448,8 +448,10 @@ export default function PhoneHub({
               interactive={false}
             />
             <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
-            {/* Persistent icons from home screen — show on non-home screens */}
-            {activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && (
+            {/* Persistent icons from home screen — show on non-home screens
+                except the Map, which is meant to be a full-bleed canvas
+                where home-screen icons would just clutter the world view. */}
+            {activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && !isMapScreen(phoneScreen) && (
               <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
             )}
           </>
