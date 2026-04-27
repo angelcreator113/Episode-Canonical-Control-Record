@@ -22,6 +22,7 @@ import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperat
 import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader, Sparkles, ChevronLeft } from 'lucide-react';
 import { getIconUrls } from '../lib/overlayUtils';
 import { getScreenImageStyle, PHONE_SKINS } from './PhoneHub';
+import ScreenContentRenderer from './ScreenContentRenderer';
 import ZoneBadges from './phone-editor/ZoneBadges';
 import ConditionRow from './phone-editor/ConditionRow';
 import ActionRow from './phone-editor/ActionRow';
@@ -74,6 +75,12 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   readOnly = false,
   compact = false,
   embedded = false,
+  // Existing content zones (read-only). Rendered behind the tap-zone
+  // editing chrome so creators have full visual context — they can see
+  // where wardrobe grids, feeds, etc. live and avoid placing icons over
+  // them. Pass `getContentZones(screen)` from the parent.
+  contentZones = [],
+  showId,
 }, ref) {
   // Resolve the image URL: prefer the full screen object, fall back to legacy screenUrl prop.
   const resolvedScreenUrl = screen?.url || screenUrl;
@@ -719,6 +726,19 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
           <div style={{ width: '100%', height: '100%', background: '#f5f3ee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 11 }}>
             No screen image
           </div>
+        )}
+
+        {/* Read-only preview of the screen's content zones (wardrobe grids,
+            feeds, world map, etc). Rendered non-interactively beneath the
+            tap-zone editing chrome so creators have full visual context
+            for where icons should go and what they're sitting on top of.
+            Mirror of the screenLinks ghosts shown in ContentZoneEditor. */}
+        {contentZones.length > 0 && (
+          <ScreenContentRenderer
+            zones={contentZones}
+            showId={showId || screen?.show_id}
+            interactive={false}
+          />
         )}
 
         {/* Existing zones — in preview mode, render without chrome so the surface

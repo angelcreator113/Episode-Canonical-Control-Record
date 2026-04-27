@@ -1659,6 +1659,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         allScreens={overlays.filter(o => isScreen(o) && o.url).map(o => ({ id: o.id, name: o.name }))}
                         onBulkPlace={handleBulkPlaceZone}
                         embedded
+                        contentZones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                        showId={showId}
                         onZonesChange={(zones, dirty, selectedId) => {
                           setTapZonesDraft(zones || []);
                           setTapZonesDirty(!!dirty);
@@ -1673,6 +1675,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                         onSave={handleSaveLinks}
                         screenUrl={activeScreen.url}
+                        contentZones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
+                        showId={showId}
                         phoneSkin={phoneSkin}
                         customFrameUrl={customFrameUrl}
                       />
