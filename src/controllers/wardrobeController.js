@@ -395,15 +395,30 @@ module.exports = {
       // case mismatches.
       if (category) {
         const cats = String(category).split(',').map(c => c.trim()).filter(Boolean);
+        // English plural rules: words ending in s/sh/ch/x take "es"
+        // (dress → dresses, watch → watches, box → boxes), everything
+        // else takes a plain "s". Without the "es" branch, "dress"
+        // would only generate "dresss" and miss the actual plural form,
+        // so creators tagging items "Dresses" wouldn't see them under
+        // Outfit. Add singular AND plural in original + capitalized
+        // forms so legacy/hand-typed values all hit.
+        const pluralOf = (w) => /(s|sh|ch|x|z)$/i.test(w) ? `${w}es` : `${w}s`;
+        const singularOf = (w) => {
+          if (/ies$/i.test(w)) return w.replace(/ies$/i, 'y');
+          if (/(s|sh|ch|x|z)es$/i.test(w)) return w.replace(/es$/i, '');
+          if (/s$/i.test(w) && !/ss$/i.test(w)) return w.replace(/s$/i, '');
+          return w;
+        };
+        const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
         const expanded = new Set();
         cats.forEach(c => {
           const lower = c.toLowerCase();
-          expanded.add(lower);
-          expanded.add(lower.endsWith('s') ? lower.slice(0, -1) : `${lower}s`);
-          expanded.add(c.charAt(0).toUpperCase() + c.slice(1).toLowerCase());
-          // Title-case plural too (e.g. "Dresses")
-          const titlePlural = (lower.endsWith('s') ? lower : `${lower}s`);
-          expanded.add(titlePlural.charAt(0).toUpperCase() + titlePlural.slice(1));
+          const sing = singularOf(lower);
+          const plur = pluralOf(sing);
+          [lower, sing, plur].forEach(form => {
+            expanded.add(form);
+            expanded.add(cap(form));
+          });
         });
         const list = Array.from(expanded).filter(Boolean);
         if (list.length > 1) {
@@ -469,14 +484,25 @@ module.exports = {
         if (character && colNames.has('character')) { conditions.push('"character" = :character'); replacements.character = character; }
         if (category && colNames.has('clothing_category')) {
           const cats = String(category).split(',').map(c => c.trim()).filter(Boolean);
+          // Same English plural rules as the ORM path so the raw-SQL
+          // fallback matches "Dresses" when filtering for "dress".
+          const pluralOf = (w) => /(s|sh|ch|x|z)$/i.test(w) ? `${w}es` : `${w}s`;
+          const singularOf = (w) => {
+            if (/ies$/i.test(w)) return w.replace(/ies$/i, 'y');
+            if (/(s|sh|ch|x|z)es$/i.test(w)) return w.replace(/es$/i, '');
+            if (/s$/i.test(w) && !/ss$/i.test(w)) return w.replace(/s$/i, '');
+            return w;
+          };
+          const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
           const expanded = new Set();
           cats.forEach(c => {
             const lower = c.toLowerCase();
-            expanded.add(lower);
-            expanded.add(lower.endsWith('s') ? lower.slice(0, -1) : `${lower}s`);
-            expanded.add(c.charAt(0).toUpperCase() + c.slice(1).toLowerCase());
-            const titlePlural = (lower.endsWith('s') ? lower : `${lower}s`);
-            expanded.add(titlePlural.charAt(0).toUpperCase() + titlePlural.slice(1));
+            const sing = singularOf(lower);
+            const plur = pluralOf(sing);
+            [lower, sing, plur].forEach(form => {
+              expanded.add(form);
+              expanded.add(cap(form));
+            });
           });
           const list = Array.from(expanded).filter(Boolean);
           if (list.length > 1) {
