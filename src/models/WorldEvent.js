@@ -104,6 +104,20 @@ module.exports = (sequelize) => {
       defaultValue: [],
     },
 
+    // ── Wardrobe ──
+    // Outfit chosen when the event is created. The episode reads this
+    // through used_in_episode_id so creators only pick wardrobe once
+    // (on the event) and every episode that uses the event inherits it.
+    outfit_set_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
+    outfit_pieces: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: [],
+    },
+
     // ── Narrative ──
     narrative_stakes: {
       type: DataTypes.TEXT,
