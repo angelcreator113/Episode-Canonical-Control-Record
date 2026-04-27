@@ -1890,6 +1890,57 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         </div>
                       )}
 
+                      {/* Persistent icons inherited from the Home screen —
+                          rendered everywhere via PersistentOverlay but only
+                          editable on the Home screen. Surface them here so
+                          creators can tell what's pinned and jump back to
+                          Home in one click instead of hunting for them. */}
+                      {zoneEditorMode === 'zones' && (() => {
+                        const homeScreen = overlays.find(o => o.is_home && isScreen(o))
+                          || overlays.find(o => o.generated && o.url && isScreen(o));
+                        if (!homeScreen || homeScreen.id === activeScreen.id) return null;
+                        const inherited = (getScreenLinks(homeScreen) || []).filter(l => l.persistent);
+                        if (!inherited.length) return null;
+                        return (
+                          <div className="zones-tab__sidebar-card">
+                            <div className="zones-tap-panel__header">
+                              <span className="zones-tap-panel__title">From Home ({inherited.length})</span>
+                              <button
+                                type="button"
+                                className="zones-tap-panel__btn"
+                                onClick={() => switchToScreen(homeScreen)}
+                                title="Jump to the Home screen to edit pinned icons"
+                              >
+                                Edit on Home →
+                              </button>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#999', lineHeight: 1.5, marginBottom: 8 }}>
+                              These icons are pinned on Home and shown on every screen, including this one. Edit them on the Home screen.
+                            </div>
+                            <div className="zones-tap-panel__list">
+                              {inherited.map((zone, idx) => {
+                                const targetName = zone.target ? (overlays.find(o => o.id === zone.target)?.name || zone.target) : null;
+                                return (
+                                  <div key={`pinned-${zone.id || idx}`} className="zones-tap-row" style={{ padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8, opacity: 0.85 }}>
+                                    {zone.icon_url && (
+                                      <img src={zone.icon_url} alt="" style={{ width: 22, height: 22, objectFit: 'contain', flexShrink: 0, opacity: 0.85 }} />
+                                    )}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div className="zones-tap-row__name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {zone.label || `Pinned ${idx + 1}`}
+                                      </div>
+                                      <div className="zones-tap-row__state" style={{ color: 'var(--lala-ink-faint)' }}>
+                                        {targetName ? `→ ${targetName}` : 'no target'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {zoneEditorMode === 'zones' && (
                         <div className="zones-tab__sidebar-card">
                           <div className="zones-flow__header">
