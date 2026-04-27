@@ -121,13 +121,21 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
       // wardrobe_outfit / wardrobe_shoes / wardrobe_accessories / wardrobe_perfume.
       return <WardrobeGridRenderer showId={showId} config={config} />;
     case 'wardrobe_outfit':
-      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'dress,top,bottom' }} />;
+      // All clothes — dresses + tops + bottoms + outerwear + skirts + pants
+      // + jackets + coats + shirts + blouses, etc. Backend forgiveness
+      // expands these to plural / capitalized variants automatically.
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'dress,top,bottom,outerwear,jacket,coat,skirt,pants,shirt,blouse' }} />;
     case 'wardrobe_shoes':
-      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'shoes' }} />;
+      // Includes specific footwear types so items tagged "heels" / "boots"
+      // etc. show up alongside generic "shoes."
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'shoes,heels,boots,sneakers,sandals,flats' }} />;
     case 'wardrobe_accessories':
-      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'accessories,jewelry' }} />;
+      // Wide net — bags + jewelry + hats/scarves/belts + hair pieces.
+      // Most "accessories" categories live under different exact tags
+      // in the wardrobe table.
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'accessories,jewelry,bag,purse,handbag,clutch,tote,backpack,hat,scarf,belt,glove,bow,hair,headband,hair_accessory,earring,necklace,bracelet,ring,brooch,pin,sunglasses,watch' }} />;
     case 'wardrobe_perfume':
-      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'perfume' }} />;
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'perfume,fragrance,cologne' }} />;
     case 'outfit_card':
       return <OutfitCardRenderer showId={showId} config={config} />;
     case 'wardrobe_price':
@@ -423,12 +431,15 @@ function WardrobeGridRenderer({ showId, config }) {
   if (loading) return <ZoneLoader />;
   const items = (data?.data || data?.items || []).slice(0, maxItems);
   if (!items.length) {
-    // Map the comma-joined category value back to a friendly label for
-    // the empty state. Falls back to the raw category for custom filters.
-    const friendly = ({
-      'dress,top,bottom': 'clothes',
-      'accessories,jewelry': 'accessories',
-    })[config.category] || config.category;
+    // The dispatcher passes a long comma-joined category list per type
+    // (Outfit, Shoes, Accessories, Perfume) — too ugly for a "No X" empty
+    // state. Detect the bucket by sniffing for a marker keyword.
+    const cat = (config.category || '').toLowerCase();
+    let friendly = config.category;
+    if (cat.includes('dress') || cat.includes('top') || cat.includes('bottom')) friendly = 'clothes';
+    else if (cat.includes('shoes') || cat.includes('heels') || cat.includes('boots')) friendly = 'shoes';
+    else if (cat.includes('accessor') || cat.includes('bag') || cat.includes('jewelry')) friendly = 'accessories';
+    else if (cat.includes('perfume') || cat.includes('fragrance')) friendly = 'perfume';
     const emptyLabel = friendly
       ? `No ${friendly}${config.scope === 'owned' ? ' owned' : config.scope === 'wishlist' ? ' on wishlist' : ''}`
       : 'No wardrobe';
