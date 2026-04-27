@@ -455,10 +455,13 @@ function WardrobeGridRenderer({ showId, config }) {
     items = items.filter(item => {
       const cat = (item.clothing_category || '').toLowerCase().trim();
       if (!cat) return true;  // untagged → falls into catch-all
-      // Drop the item if its category matches any inverse term in singular
-      // or plural form. Lenient on plural/case so "Dress" / "dresses" / "DRESS"
-      // all still get excluded.
-      return !inverseCats.some(inv => cat === inv || cat === `${inv}s` || cat === inv.slice(0, -1));
+      // Substring match against each inverse term so we catch irregular
+      // plurals (dress → dresses), compound names (evening dress, shirt
+      // dress, sundress), and trailing/leading whitespace or punctuation.
+      // Way more forgiving than exact equality and keeps items out of
+      // Accessories whenever any clothing/shoes/perfume keyword appears
+      // in the category at all.
+      return !inverseCats.some(inv => cat.includes(inv));
     });
   }
   items = items.slice(0, maxItems);
