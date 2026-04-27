@@ -40,6 +40,12 @@ export default function PhoneMapView({
   const [events, setEvents] = useState([]);
   const [activeKey, setActiveKey] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Image's natural aspect ratio (W / H). Used to size the inner stage so
+  // the whole map shows (letterboxed) on a tall phone screen instead of
+  // being cropped by object-fit: cover. Pins live inside this same stage,
+  // so their % coordinates stay aligned with what creators positioned on
+  // World Foundation.
+  const [imgAspect, setImgAspect] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,12 +131,45 @@ export default function PhoneMapView({
   // image (e.g. the phone screen's uploaded background) when WF has no map.
   const bgUrl = showBackground ? (mapImageUrl || fallbackImageUrl) : null;
 
+  // Outer container fills the phone screen; inner "stage" sizes itself to the
+  // image's aspect ratio (or 1:1 fallback before the image loads). The stage
+  // hosts both the image AND the pins, so pins use the same % coordinate
+  // space as the image — switching from cover to a "fit whole map" layout
+  // doesn't drift pins.
+  const stageStyle = imgAspect
+    ? {
+        position: 'relative',
+        width: '100%', maxHeight: '100%',
+        aspectRatio: String(imgAspect),
+        // When the image is wider than the phone screen (almost always), the
+        // 100% width sets the stage width and aspectRatio derives the height.
+        // When the image happens to be taller than the phone, maxHeight clamps
+        // and width auto-adjusts.
+      }
+    : {
+        position: 'relative', width: '100%', height: '100%',
+      };
+
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+    <div style={{
+      width: '100%', height: '100%',
+      position: 'relative',
+      overflow: 'hidden',
+      // Soft dark backdrop fills the letterbox area above/below the map so
+      // empty space reads as intentional sky rather than blank screen.
+      background: bgUrl ? '#0e0a18' : 'transparent',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={stageStyle}>
       {bgUrl && (
         <img
           src={bgUrl}
           alt="Map"
+          onLoad={(e) => {
+            const w = e.currentTarget.naturalWidth;
+            const h = e.currentTarget.naturalHeight;
+            if (w && h) setImgAspect(w / h);
+          }}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
             objectFit: 'cover', pointerEvents: 'none',
@@ -278,6 +317,7 @@ export default function PhoneMapView({
           )}
         </>
       )}
+      </div>
 
       <style>{`
         @keyframes phone-map-pulse {
