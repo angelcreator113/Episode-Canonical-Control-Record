@@ -234,11 +234,14 @@ export default function ContentZoneEditor({
             items, feeds, etc.) in place so creators see what viewers will see
             while authoring. Non-interactive so editor outlines on top still
             handle selection/drag. Only rendered for zones that have a
-            content_type set; untyped zones just show the dashed outline. */}
+            content_type set; untyped zones just show the dashed outline.
+            mapEditable=true enables the world_map calibration toolbar so
+            creators can place location pins from inside the editor. */}
         <ScreenContentRenderer
           zones={localZones.filter(z => z.content_type)}
           showId={showId}
           interactive={false}
+          mapEditable
         />
 
         {/* Existing content zones — editor chrome (outline + label) drawn on
@@ -256,10 +259,6 @@ export default function ContentZoneEditor({
                 width: `${zone.w}%`, height: `${zone.h}%`,
                 border: `2px ${zone.content_type ? 'solid' : 'dashed'} ${selectedZone === zone.id ? '#B8962E' : ZONE_COLORS[i % ZONE_COLORS.length]}`,
                 borderRadius: 4,
-                // Selected zone gets a light gold tint; unselected untyped
-                // zones get a faint fill so creators can see empty zones.
-                // Typed zones with live content rendered beneath use a
-                // transparent fill so the content shows through.
                 background: selectedZone === zone.id
                   ? 'rgba(184,150,46,0.15)'
                   : zone.content_type ? 'transparent' : 'rgba(255,255,255,0.05)',
@@ -267,6 +266,11 @@ export default function ContentZoneEditor({
                 display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
                 overflow: 'hidden',
                 zIndex: 5,
+                // World-map zones host a calibration toolbar + draggable pins
+                // beneath this chrome. Letting clicks fall through means
+                // calibration works; selection still happens via the
+                // right-panel zone list.
+                pointerEvents: zone.content_type === 'world_map' ? 'none' : 'auto',
               }}
             >
               {/* Tiny corner pill so the label is visible but doesn't cover
@@ -636,6 +640,52 @@ function ZoneConfigPanel({ zone, profiles, profilesLoading, events = [], eventsL
                   style={fieldStyle}
                 />
               </div>
+            </>
+          )}
+
+          {/* World map config — filter scope + label + path toggles. The
+              actual pin positions live on each WorldLocation's coordinates
+              field; this panel just controls what shows on the zone. */}
+          {zone.content_type === 'world_map' && (
+            <>
+              <div>
+                <label style={labelStyle}>SHOW</label>
+                <select
+                  value={config.only || 'all'}
+                  onChange={(e) => handleConfigChange('only', e.target.value === 'all' ? null : e.target.value)}
+                  style={fieldStyle}
+                >
+                  <option value="all">All locations</option>
+                  <option value="homes">Homes only (interiors)</option>
+                  <option value="venues">Venues only (with venue_type)</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>DISTRICT (OPTIONAL)</label>
+                <input
+                  type="text"
+                  value={config.district || ''}
+                  onChange={(e) => handleConfigChange('district', e.target.value || null)}
+                  placeholder="e.g. Dazzle District"
+                  style={fieldStyle}
+                />
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontFamily: "'DM Mono', monospace", color: '#6b6557' }}>
+                <input
+                  type="checkbox"
+                  checked={config.show_districts !== false}
+                  onChange={(e) => handleConfigChange('show_districts', e.target.checked)}
+                />
+                Show district labels
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontFamily: "'DM Mono', monospace", color: '#6b6557' }}>
+                <input
+                  type="checkbox"
+                  checked={config.show_path !== false}
+                  onChange={(e) => handleConfigChange('show_path', e.target.checked)}
+                />
+                Show story path between events
+              </label>
             </>
           )}
 

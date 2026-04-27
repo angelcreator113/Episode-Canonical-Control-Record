@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, ChevronRight } from 'lucide-react';
 import api from '../services/api';
 import { evaluate as evaluatePhoneConditions } from '../lib/phoneRuntime';
+import PhoneMapView from './phone/PhoneMapView';
 
 // ── Content type registry — maps type keys to renderer components and metadata ──
 export const CONTENT_TYPES = [
@@ -37,6 +38,7 @@ export const CONTENT_TYPES = [
   { key: 'wardrobe_brand', label: 'Wardrobe Brand', icon: '🏷️', desc: 'Brand name from the screen\u2019s wardrobe item', group: 'wardrobe' },
   { key: 'comments_list', label: 'Comments', icon: '💭', desc: 'Post comment thread', group: 'social' },
   { key: 'event_invite', label: 'Event Invite', icon: '💌', desc: 'Invitation card bound to a calendar event', group: 'messages' },
+  { key: 'world_map', label: 'World Map', icon: '🗺️', desc: 'Auto-pinned locations on your show’s map', group: 'world' },
   { key: 'engagement_stats', label: 'Engagement Stats', icon: '📈', desc: 'Likes, reach, trending', group: 'stats' },
   { key: 'money_balance', label: 'Money Balance', icon: '💰', desc: 'Lala’s live coin balance + next goal', group: 'stats' },
   { key: 'balance_trend_sparkline', label: 'Balance Trend', icon: '📈', desc: 'Last 12 episodes balance line chart', group: 'stats' },
@@ -53,7 +55,7 @@ export const CONTENT_TYPE_MAP = Object.fromEntries(CONTENT_TYPES.map(t => [t.key
 // ── Main renderer — renders all content zones over a screen ──
 // `runtimeContext` is the optional phone-runtime context used to filter zones by
 // their `conditions` array. When absent, all zones render (editor "author view").
-export default function ScreenContentRenderer({ zones = [], showId, episodeId, interactive = false, runtimeContext = null, screenMeta = null }) {
+export default function ScreenContentRenderer({ zones = [], showId, episodeId, interactive = false, runtimeContext = null, screenMeta = null, mapEditable = false }) {
   if (!zones.length) return null;
 
   // Filter zones by `conditions` when a runtime context is provided. Editor/author
@@ -85,6 +87,7 @@ export default function ScreenContentRenderer({ zones = [], showId, episodeId, i
             showId={showId}
             episodeId={episodeId}
             screenMeta={screenMeta}
+            mapEditable={mapEditable}
           />
         </div>
       ))}
@@ -99,7 +102,7 @@ function evaluateZoneConditions(zone, ctx) {
 }
 
 // ── Dispatch to the right sub-renderer based on content_type ──
-function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
+function ContentZoneRenderer({ zone, showId, episodeId, screenMeta, mapEditable = false }) {
   const config = zone.content_config || {};
 
   switch (zone.content_type) {
@@ -121,13 +124,21 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
       // wardrobe_outfit / wardrobe_shoes / wardrobe_accessories / wardrobe_perfume.
       return <WardrobeGridRenderer showId={showId} config={config} />;
     case 'wardrobe_outfit':
-      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'dress,top,bottom' }} />;
+      // All clothes — dresses + tops + bottoms + outerwear + skirts + pants
+      // + jackets + coats + shirts + blouses, etc. Backend forgiveness
+      // expands these to plural / capitalized variants automatically.
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'dress,top,bottom,outerwear,jacket,coat,skirt,pants,shirt,blouse' }} />;
     case 'wardrobe_shoes':
-      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'shoes' }} />;
+      // Includes specific footwear types so items tagged "heels" / "boots"
+      // etc. show up alongside generic "shoes."
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'shoes,heels,boots,sneakers,sandals,flats' }} />;
     case 'wardrobe_accessories':
-      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'accessories,jewelry' }} />;
+      // Wide net — bags + jewelry + hats/scarves/belts + hair pieces.
+      // Most "accessories" categories live under different exact tags
+      // in the wardrobe table.
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'accessories,jewelry,bag,purse,handbag,clutch,tote,backpack,hat,scarf,belt,glove,bow,hair,headband,hair_accessory,earring,necklace,bracelet,ring,brooch,pin,sunglasses,watch' }} />;
     case 'wardrobe_perfume':
-      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'perfume' }} />;
+      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'perfume,fragrance,cologne' }} />;
     case 'outfit_card':
       return <OutfitCardRenderer showId={showId} config={config} />;
     case 'wardrobe_price':
@@ -138,6 +149,8 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta }) {
       return <CommentsRenderer showId={showId} config={config} />;
     case 'event_invite':
       return <EventInviteRenderer showId={showId} config={config} />;
+    case 'world_map':
+      return <WorldMapRenderer showId={showId} episodeId={episodeId} config={config} editable={mapEditable} />;
     case 'engagement_stats':
       return <EngagementStatsRenderer showId={showId} config={config} />;
     case 'money_balance':
@@ -423,12 +436,15 @@ function WardrobeGridRenderer({ showId, config }) {
   if (loading) return <ZoneLoader />;
   const items = (data?.data || data?.items || []).slice(0, maxItems);
   if (!items.length) {
-    // Map the comma-joined category value back to a friendly label for
-    // the empty state. Falls back to the raw category for custom filters.
-    const friendly = ({
-      'dress,top,bottom': 'clothes',
-      'accessories,jewelry': 'accessories',
-    })[config.category] || config.category;
+    // The dispatcher passes a long comma-joined category list per type
+    // (Outfit, Shoes, Accessories, Perfume) — too ugly for a "No X" empty
+    // state. Detect the bucket by sniffing for a marker keyword.
+    const cat = (config.category || '').toLowerCase();
+    let friendly = config.category;
+    if (cat.includes('dress') || cat.includes('top') || cat.includes('bottom')) friendly = 'clothes';
+    else if (cat.includes('shoes') || cat.includes('heels') || cat.includes('boots')) friendly = 'shoes';
+    else if (cat.includes('accessor') || cat.includes('bag') || cat.includes('jewelry')) friendly = 'accessories';
+    else if (cat.includes('perfume') || cat.includes('fragrance')) friendly = 'perfume';
     const emptyLabel = friendly
       ? `No ${friendly}${config.scope === 'owned' ? ' owned' : config.scope === 'wishlist' ? ' on wishlist' : ''}`
       : 'No wardrobe';
@@ -438,8 +454,13 @@ function WardrobeGridRenderer({ showId, config }) {
   return (
     <div style={{
       width: '100%', height: '100%', display: 'grid',
-      gridTemplateColumns: `repeat(${config.columns || 3}, 1fr)`,
-      gap: 4, padding: 4, overflowY: 'auto',
+      gridTemplateColumns: `repeat(${config.columns || 2}, 1fr)`,
+      // Rows sized to content (square tiles from column width); packed
+      // from the top so sparse zones leave empty space below rather than
+      // stretching tiles or pseudo-centering.
+      gridAutoRows: 'min-content',
+      gap: 5, padding: 5, overflowY: 'auto',
+      alignContent: 'start',
     }}>
       {items.map((item, i) => {
         const owned = item.is_owned === true;
@@ -451,8 +472,9 @@ function WardrobeGridRenderer({ showId, config }) {
         return (
           <div key={item.id || i} style={{
             position: 'relative',
+            width: '100%',
             aspectRatio: '1/1',
-            borderRadius: 6,
+            borderRadius: 8,
             overflow: 'hidden',
             // Soft inventory-slot gradient so the cutout floats. Owned
             // items get a faint green glow border, unowned stay neutral.
@@ -461,7 +483,7 @@ function WardrobeGridRenderer({ showId, config }) {
             boxShadow: owned
               ? 'inset 0 0 8px rgba(120, 200, 140, 0.18)'
               : 'inset 0 0 6px rgba(0,0,0,0.25)',
-            padding: 3,
+            padding: 4,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -475,11 +497,10 @@ function WardrobeGridRenderer({ showId, config }) {
                   // Cutouts display best with contain — cover would crop
                   // limbs/straps off transparent PNGs.
                   objectFit: 'contain',
-                  filter: owned ? 'none' : 'saturate(0.85) brightness(0.92)',
                 }}
               />
             ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, opacity: 0.5 }}>👗</div>
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, opacity: 0.5 }}>👗</div>
             )}
             {/* Badge — "OWNED" in green if she has it, coin cost in gold if she doesn't.
                 Cost hidden when it's zero/missing (gifts, vintage, etc.). */}
@@ -978,6 +999,35 @@ function EventInviteRenderer({ showId, config }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ── World Map ──
+// Mirrors the World Foundation map's city positions onto the phone screen,
+// so the layout creators set on /world-foundation flows straight here.
+// Pin placement is done on World Foundation; this is read-only.
+//
+// Pins are city-level (Dazzle District, Echo Park, etc.) — DREAM_CITIES is
+// the canonical list shared with World Foundation. Each pin shows the city's
+// letter or icon plus a count of locations in that city.
+//
+// Layered features (config-driven):
+//   - gold star + glow on the city where Lala lives (derived from her main
+//     SocialProfile.home_location_id → location.city → city)
+//   - bigger pin on cities with frequent venues
+//   - animated pulse ring on cities hosting calendar events
+//   - district name label below each pin
+//   - tap a pin → popup with city blurb + location count
+//   - story path: dashed line through cities of episode events in order
+//   - filter chips: only homes / only venues / specific city
+function WorldMapRenderer({ showId, episodeId, config, editable = false }) {
+  return (
+    <PhoneMapView
+      showId={showId}
+      episodeId={episodeId}
+      config={config}
+      showBackground={false}
+    />
   );
 }
 
