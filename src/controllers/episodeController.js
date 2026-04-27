@@ -271,10 +271,25 @@ module.exports = {
       // Get show_id from request, let database foreign key constraint validate it
       const validatedShowId = req.body.show_id || null;
 
+      // Auto-assign the next episode number for this show when the creator
+      // didn't pick one. Without this, episodes default to whatever the
+      // form had stashed (often a stale number like 9 from a previous
+      // create) and creators end up with random numbering. If no other
+      // episodes exist yet, start at 1.
+      let resolvedEpisodeNumber = finalEpisodeNumber ? parseInt(finalEpisodeNumber) : null;
+      if (!resolvedEpisodeNumber && validatedShowId) {
+        try {
+          const max = await Episode.max('episode_number', { where: { show_id: validatedShowId } });
+          resolvedEpisodeNumber = (Number.isFinite(max) ? max : 0) + 1;
+        } catch (numErr) {
+          console.warn('[createEpisode] Failed to auto-number, falling back to null:', numErr.message);
+        }
+      }
+
       // Prepare episode data
       const episodeData = {
         title: finalTitle,
-        episode_number: finalEpisodeNumber ? parseInt(finalEpisodeNumber) : null,
+        episode_number: resolvedEpisodeNumber || null,
         season_number: finalSeasonNumber != null ? parseInt(finalSeasonNumber) : null,
         description: finalDescription || null,
         air_date: finalAirDate ? new Date(finalAirDate) : null,
@@ -364,7 +379,7 @@ module.exports = {
               episode: {
                 id: episode.id,
                 title: finalTitle,
-                episode_number: parseInt(finalEpisodeNumber),
+                episode_number: resolvedEpisodeNumber,
                 status: finalStatus,
                 categories: categories,
               },

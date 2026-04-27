@@ -307,6 +307,13 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       'venue_location_id', 'venue_name', 'venue_address', 'event_date', 'event_time',
       'guest_list', 'invitation_details',
       'theme', 'color_palette', 'mood', 'floral_style', 'border_style',
+      // Episode linking — set/clear from the episode's event picker so
+      // creators can link events to an episode without going through
+      // the inject flow. Null clears the link.
+      'used_in_episode_id',
+      // Wardrobe — outfit picked at event creation flows through to any
+      // episode the event is linked to.
+      'outfit_set_id', 'outfit_pieces',
     ];
     const _requiredStringFields = new Set(['name', 'event_type', 'status']);
 
