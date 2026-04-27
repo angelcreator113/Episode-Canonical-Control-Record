@@ -2056,9 +2056,13 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 { key: 'actions', label: 'Actions' },
                 ...(activeScreen?.url && !activeScreen.placeholder ? [
                   { key: 'fit', label: 'Image Fit' },
-                  // Tap Links and Content sub-tabs removed — zone editing (tap,
-                  // icon, content) lives on the top-level Zones tab now. The
-                  // "Edit zones →" button below deep-links into it.
+                ] : []),
+                // Placements tab — icons only. Shows every screen the icon
+                // is placed on, with one-click unlink + add-to-new-screen,
+                // so creators don't have to visit each screen to manage
+                // icon usage.
+                ...(isIcon(activeScreen) && activeScreen?.url ? [
+                  { key: 'placements', label: 'Placements' },
                 ] : []),
               ].map(tab => (
                 <button
@@ -2263,6 +2267,144 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   />
                 </div>
               )}
+
+              {/* ── Placements Tab (icons only) ── */}
+              {/* Shows every screen this icon is placed on, with a one-click
+                  unlink button per screen and an add-to-new-screen dropdown.
+                  Lets creators manage icon usage without visiting each
+                  screen's Zones tab. Saves go straight through the same
+                  screen-links endpoint Tap zones use. */}
+              {editorTab === 'placements' && isIcon(activeScreen) && activeScreen?.url && (() => {
+                const iconUrl = activeScreen.url;
+                const screenList = overlays.filter(o => isScreen(o));
+                const placements = [];
+                const placedScreenIds = new Set();
+                screenList.forEach(s => {
+                  const links = s.screen_links || s.metadata?.screen_links || [];
+                  const matching = links.filter(l => l.icon_url === iconUrl);
+                  if (matching.length) {
+                    placements.push({ screen: s, matchingCount: matching.length });
+                    placedScreenIds.add(s.id);
+                  }
+                });
+                const unplacedScreens = screenList.filter(s => !placedScreenIds.has(s.id));
+
+                const removeFromScreen = async (screen) => {
+                  const links = screen.screen_links || screen.metadata?.screen_links || [];
+                  const next = links.filter(l => l.icon_url !== iconUrl);
+                  try {
+                    await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${screen.asset_id}`, { screen_links: next });
+                    setOverlays(prev => prev.map(o => o.id === screen.id
+                      ? { ...o, screen_links: next, metadata: { ...(o.metadata || {}), screen_links: next } }
+                      : o));
+                    flash(`Removed from ${screen.name}`);
+                  } catch (err) {
+                    flash(`Failed: ${err?.message || 'unknown error'}`, 'error');
+                  }
+                };
+
+                const addToScreen = async (screen) => {
+                  if (!screen) return;
+                  const links = screen.screen_links || screen.metadata?.screen_links || [];
+                  const newLink = {
+                    id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+                    x: 8, y: 14, w: 12, h: 9,
+                    target: '',
+                    label: (activeScreen.name || '').replace(/\s*Icon$/i, ''),
+                    icon_url: iconUrl,
+                    icon_overlay_id: activeScreen.id,
+                  };
+                  const next = [...links, newLink];
+                  try {
+                    await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${screen.asset_id}`, { screen_links: next });
+                    setOverlays(prev => prev.map(o => o.id === screen.id
+                      ? { ...o, screen_links: next, metadata: { ...(o.metadata || {}), screen_links: next } }
+                      : o));
+                    flash(`Placed on ${screen.name}`);
+                  } catch (err) {
+                    flash(`Failed: ${err?.message || 'unknown error'}`, 'error');
+                  }
+                };
+
+                return (
+                  <div className="editor-tab-content">
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#2C2C2C', marginBottom: 4 }}>
+                        Placed on {placements.length} screen{placements.length === 1 ? '' : 's'}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#888', lineHeight: 1.5 }}>
+                        Add this icon to more screens, or remove it from screens it's already on. Targets and positions stay editable in each screen's Zones tab.
+                      </div>
+                    </div>
+
+                    {placements.length === 0 ? (
+                      <div style={{ fontSize: 11, color: '#999', padding: '12px 0' }}>
+                        Not placed on any screen yet.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                        {placements.map(({ screen, matchingCount }) => (
+                          <div key={screen.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: 8, border: '1px solid #e8e0d0', borderRadius: 8, background: '#fff',
+                          }}>
+                            {screen.url ? (
+                              <img src={screen.url} alt={screen.name} style={{ width: 32, height: 56, objectFit: 'cover', borderRadius: 4, background: '#f0f0f0', flexShrink: 0 }} />
+                            ) : (
+                              <div style={{ width: 32, height: 56, borderRadius: 4, background: '#f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>📱</div>
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#2C2C2C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {screen.name}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace" }}>
+                                {matchingCount} placement{matchingCount === 1 ? '' : 's'}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeFromScreen(screen)}
+                              style={{
+                                padding: '6px 10px', fontSize: 11, fontWeight: 600,
+                                border: '1px solid #f3c5b8', borderRadius: 6,
+                                background: '#fff', color: '#B84D2E',
+                                cursor: 'pointer', minHeight: 32,
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ paddingTop: 10, borderTop: '1px solid #f0ece4' }}>
+                      <label style={{ display: 'block', fontSize: 10, color: '#888', fontFamily: "'DM Mono', monospace", marginBottom: 4, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                        Place on another screen
+                      </label>
+                      {unplacedScreens.length === 0 ? (
+                        <div style={{ fontSize: 11, color: '#999', padding: '6px 0' }}>
+                          Already placed on every screen.
+                        </div>
+                      ) : (
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const screen = unplacedScreens.find(s => s.id === e.target.value);
+                            if (screen) addToScreen(screen);
+                          }}
+                          style={{ width: '100%', padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, background: '#fff' }}
+                        >
+                          <option value="">— Pick a screen —</option>
+                          {unplacedScreens.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Tap Links render block removed — the tab itself is gone (see tab definitions
                   above). Tap-zone editing lives on the main phone display via the
