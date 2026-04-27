@@ -160,7 +160,7 @@ const menuItemStyle = {
   borderBottom: '1px solid #f5f3ee',
 };
 
-const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false }) {
+const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onEditScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';
@@ -180,7 +180,19 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
       onClick={() => {
         if (menuOpen) return;
         if (isHidden && onHide) { onHide(type.key); return; }
-        screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true });
+        const target = screen
+          ? screen
+          : { ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true };
+        // Single click on a card with a real generated image → preview the
+        // screen on the phone. Cards without an image (placeholders that
+        // haven't been generated/uploaded yet) jump straight into the
+        // edit modal so creators can fill them in. Use the menu (⋮ → Edit)
+        // to open the editor for already-generated screens.
+        if (hasImage) {
+          onSelectScreen(target);
+        } else {
+          (onEditScreen || onSelectScreen)(target);
+        }
       }}
       className="screen-card"
       style={{
@@ -202,7 +214,14 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
           }}><MoreVertical size={14} /></button>
           {menuOpen && (
             <div style={{ position: 'absolute', top: '100%', right: isIcon ? 'auto' : 0, left: isIcon ? 0 : 'auto', marginTop: 4, background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, minWidth: 140, overflow: 'hidden' }}>
-              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); screen ? onSelectScreen(screen) : onSelectScreen({ ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true }); }} style={menuItemStyle}><Edit3 size={14} /> Edit</button>
+              <button onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen(false);
+                const target = screen
+                  ? screen
+                  : { ...type, id: type.key, name: type.label, beat: type.key, description: type.desc, placeholder: true };
+                (onEditScreen || onSelectScreen)(target);
+              }} style={menuItemStyle}><Edit3 size={14} /> Edit</button>
               {onHide && !hasImage && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); if (window.confirm(`Remove "${type.label}" from the grid? You can restore it later from "Show removed" at the top.`)) onHide(type.key); }} style={menuItemStyle}><EyeOff size={14} /> Hide</button>)}
               {onDelete && (screen?.generated || screen?.asset_id || screen?.url) && (<button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(screen); }} style={{ ...menuItemStyle, color: '#dc2626', borderBottom: 'none' }}><Trash2 size={14} /> Delete</button>)}
             </div>
@@ -278,6 +297,7 @@ export default function PhoneHub({
   screens = [],
   activeScreen,
   onSelectScreen,
+  onEditScreen,
   onDelete,
   onHideScreen,
   hiddenScreens = [],
@@ -575,7 +595,7 @@ export default function PhoneHub({
         {gridSection === 'screens' && (
           <div className="phone-hub-screen-grid">
             {screenTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} linkCount={screenReachById.get(s.id) || 0} />
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onEditScreen={onEditScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} linkCount={screenReachById.get(s.id) || 0} />
             ))}
           </div>
         )}
@@ -583,7 +603,7 @@ export default function PhoneHub({
         {gridSection === 'icons' && (gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
           <div className="phone-hub-icon-grid">
             {iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon linkCount={s.url && iconLinkByUrl.get(s.url)?.screenCount || 0} hasTargetedPlacement={!!(s.url && iconLinkByUrl.get(s.url)?.hasTargetedPlacement)} />
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onEditScreen={onEditScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon linkCount={s.url && iconLinkByUrl.get(s.url)?.screenCount || 0} hasTargetedPlacement={!!(s.url && iconLinkByUrl.get(s.url)?.hasTargetedPlacement)} />
             ))}
           </div>
         )}
