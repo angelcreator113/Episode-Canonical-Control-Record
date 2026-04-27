@@ -210,15 +210,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     flash('Undone');
   }, [flash]);
 
-  // Close detail panel — revert phone display to home screen
+  // Close detail panel. Leaves the active screen as-is so the phone keeps
+  // showing whatever the creator was previewing — closing the editor and
+  // having the phone snap back to Home was disorienting and made it hard to
+  // browse screens without committing to editing each one.
   const closePanel = useCallback(() => {
     setPanelOpen(false);
     setActiveTab('screens');
     undoStackRef.current = [];
-    const home = overlays.find(o => o.is_home && o.generated && o.url)
-      || overlays.find(o => o.generated && o.url && isScreen(o));
-    if (home) setActiveScreen(home);
-  }, [overlays]);
+  }, []);
 
   // Ctrl+Z and Escape listener
   useEffect(() => {
@@ -1422,7 +1422,26 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               <PhoneHub
                 screens={overlays}
                 activeScreen={activeScreen}
-                onSelectScreen={(s) => { setActiveScreen(s); setPanelOpen(true); setNavHistory([]); setActiveTab('screens'); setActiveVariantIdx(0); setAddingVariant(false); setEditingName(false); setEditorTab('actions'); }}
+                onSelectScreen={(s) => {
+                  // Preview-only: just swap which screen the phone is showing.
+                  // No modal, no nav history reset — creators can browse
+                  // screens by clicking cards without committing to editing.
+                  setActiveScreen(s);
+                  setNavHistory([]);
+                }}
+                onEditScreen={(s) => {
+                  // Full edit: select + open the detail modal. Triggered
+                  // from the card's ⋮ → Edit menu, or auto-fired when a
+                  // creator clicks a placeholder card (no image yet).
+                  setActiveScreen(s);
+                  setPanelOpen(true);
+                  setNavHistory([]);
+                  setActiveTab('screens');
+                  setActiveVariantIdx(0);
+                  setAddingVariant(false);
+                  setEditingName(false);
+                  setEditorTab('actions');
+                }}
                 onDelete={handleDeleteScreen}
                 onHideScreen={handleHideScreen}
                 hiddenScreens={hiddenScreens}
