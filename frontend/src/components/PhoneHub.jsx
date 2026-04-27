@@ -18,6 +18,7 @@ import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { MoreVertical, Trash2, EyeOff, Edit3, Settings } from 'lucide-react';
 import ScreenContentRenderer from './ScreenContentRenderer';
 import PhoneFrame from './phone/PhoneFrame';
+import PhoneMapView, { isMapScreen } from './phone/PhoneMapView';
 import PhoneHubSectionTabs from './PhoneHubSectionTabs';
 import { isIcon, isScreen, getScreenLinks, getIconUrls } from '../lib/overlayUtils';
 
@@ -420,13 +421,26 @@ export default function PhoneHub({
         onCustomFrameLoad={() => setFrameLoaded(true)}
         onCustomFrameError={() => { setFrameError(true); setFrameLoaded(false); }}
       >
-        {phoneScreen?.url ? (
+        {phoneScreen && (isMapScreen(phoneScreen) || phoneScreen.url) ? (
           <>
-            <img
-              src={phoneScreen.url}
-              alt={phoneScreen.name}
-              style={getScreenImageStyle(phoneScreen, globalFit)}
-            />
+            {/* Map screens render the live World Foundation map as their
+                base layer (image + city pins) instead of the uploaded
+                screen image. Falls back to the uploaded image if WF has
+                no map image set yet. Regular screens render the upload. */}
+            {isMapScreen(phoneScreen) ? (
+              <div style={{ position: 'absolute', inset: 0 }}>
+                <PhoneMapView
+                  showId={activeScreen.show_id}
+                  fallbackImageUrl={phoneScreen.url}
+                />
+              </div>
+            ) : (
+              <img
+                src={phoneScreen.url}
+                alt={phoneScreen.name}
+                style={getScreenImageStyle(phoneScreen, globalFit)}
+              />
+            )}
             <ScreenContentRenderer
               zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
               showId={activeScreen.show_id}
