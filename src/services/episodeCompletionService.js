@@ -505,7 +505,7 @@ ${narrativeLines.short || ''}`,
              completed_at = CASE WHEN :status = 'completed' THEN NOW() ELSE completed_at END,
              updated_at = NOW() WHERE id = :id`,
             { replacements: { val: newVal, status: newStatus, id: goal.id } }
-          ).catch(() => {});
+          ).catch(err => console.warn('[episodeCompletion] career_goals update failed:', err?.message));
         }
         console.log(`[episodeComplete] Career unlocks applied for tier ${evalResult.tier_final}: ${careerCtx.success_unlock}`);
       }
