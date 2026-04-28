@@ -1248,6 +1248,30 @@ router.post('/select', optionalAuth, async (req, res) => {
           `UPDATE character_state SET coins = coins - :cost, updated_at = NOW() WHERE id = :id`,
           { replacements: { cost, id: states[0].id } }
         );
+        // Mirror the spend into the financial ledger so the budget shown
+        // in event modals (and goal-progress, finalize-financials, etc.)
+        // tracks the same balance as the Characters tab. Without this,
+        // wardrobe purchases drop character_state.coins but the ledger
+        // never sees the spend, so getCurrentBalance keeps returning the
+        // pre-purchase number.
+        try {
+          const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
+          const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+          await logTransaction(models.sequelize, show_id, {
+            type: 'expense',
+            category: 'wardrobe_purchase',
+            amount: cost,
+            description: `Wardrobe purchase: ${item.name}`,
+            source_type: 'wardrobe',
+            source_id: wardrobe_id,
+            source_name: item.name,
+            balance_before: ledgerBefore,
+            balance_after: ledgerBefore - cost,
+            metadata: { wardrobe_id, item_name: item.name, flow: 'select' },
+          });
+        } catch (e) {
+          console.warn('[Wardrobe /select] ledger mirror failed:', e.message);
+        }
         // Mark item as owned
         await models.sequelize.query(
           `UPDATE wardrobe SET is_owned = true, updated_at = NOW() WHERE id = :wardrobe_id`,
@@ -1344,6 +1368,27 @@ router.post('/purchase', optionalAuth, async (req, res) => {
        WHERE show_id = :show_id AND character_key = 'lala'`,
       { replacements: { newCoins, show_id } }
     );
+
+    // 3b. Mirror the spend into the financial ledger (see /select for
+    // rationale). Non-fatal — purchase already succeeded.
+    try {
+      const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
+      const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+      await logTransaction(models.sequelize, show_id, {
+        type: 'expense',
+        category: 'wardrobe_purchase',
+        amount: cost,
+        description: `Wardrobe purchase: ${item.name}`,
+        source_type: 'wardrobe',
+        source_id: wardrobe_id,
+        source_name: item.name,
+        balance_before: ledgerBefore,
+        balance_after: ledgerBefore - cost,
+        metadata: { wardrobe_id, item_name: item.name, flow: 'purchase' },
+      });
+    } catch (e) {
+      console.warn('[Wardrobe /purchase] ledger mirror failed:', e.message);
+    }
 
     // 4. Mark item as owned
     await models.sequelize.query(
