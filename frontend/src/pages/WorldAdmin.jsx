@@ -1133,7 +1133,21 @@ The revised event should feel like a completely different experience from the si
     setSavingStats(true); setError(null);
     try {
       const res = await api.post(`/api/v1/characters/lala/state/update`, { show_id: showId, ...statForm, source: 'manual', notes: 'Manual edit from World Admin' });
-      if (res.data.success) { setCharState(p => ({ ...p, state: res.data.state })); setEditingStats(false); setSuccessMsg('Stats updated!'); }
+      if (res.data.success) {
+        setCharState(p => ({ ...p, state: res.data.state }));
+        setEditingStats(false);
+        setSuccessMsg('Stats updated!');
+        // The state/update route mirrors coin changes into the financial
+        // ledger. Refresh financeConfig so the event-modal Financial
+        // Preview (which keys off financeConfig.current_balance) refetches
+        // and shows the new balance instead of the stale one.
+        if (res.data.deltas?.coins !== undefined) {
+          try {
+            const fc = await api.get(`/api/v1/shows/${showId}/financial-config`);
+            setFinanceConfig(fc.data);
+          } catch { /* non-blocking */ }
+        }
+      }
     } catch (err) { setError(err.response?.data?.error || err.message); }
     finally { setSavingStats(false); }
   };
