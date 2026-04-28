@@ -2254,68 +2254,67 @@ The revised event should feel like a completely different experience from the si
                     </div>
                   </div>
                 ))}
-
-                {/* AI Fix suggestions */}
-                {aiFixSuggestions && aiFixSuggestions.length > 0 && (
-                  <div style={{ marginTop: 12, borderTop: '1px solid #fde68a', paddingTop: 12 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', marginBottom: 8 }}>✨ Amber's Suggestions</div>
-                    {aiFixSuggestions.map((s, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', background: '#fff', border: '1px solid #e0e7ff', borderRadius: 8, marginBottom: 6 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', marginBottom: 2 }}>
-                            {s.event_name && <span style={{ color: '#6366f1' }}>"{s.event_name}"</span>}
-                            {s.action && <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 6px', background: '#eef2ff', color: '#4338ca', borderRadius: 4, fontWeight: 700 }}>{s.action.replace(/_/g, ' ')}</span>}
-                          </div>
-                          <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>{s.suggestion}</div>
-                          {s.new_value && <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2, wordBreak: 'break-word' }}>→ {typeof s.new_value === 'object' ? s.new_value.name || JSON.stringify(s.new_value) : s.new_value}</div>}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-                          {s.action === 'create' && (s.new_value || s.suggestion) && (
-                            <button onClick={() => {
-                              let data = {};
-                              // Try new_value first (object or JSON string)
-                              if (s.new_value) {
-                                if (typeof s.new_value === 'object') data = s.new_value;
-                                else try { data = JSON.parse(s.new_value); } catch { data = { description: s.new_value }; }
-                              }
-                              // If new_value didn't have a name, try parsing from suggestion
-                              if (!data.name && s.suggestion) {
-                                try {
-                                  const match = s.suggestion.match(/\{[\s\S]*"name"[\s\S]*\}/);
-                                  if (match) data = { ...data, ...JSON.parse(match[0]) };
-                                } catch {}
-                              }
-                              // Map any non-standard field names
-                              if (data.dress_code_style && !data.dress_code) data.dress_code = data.dress_code_style;
-                              if (data.type && !data.event_type) data.event_type = data.type;
-                              // Stash the gap episode so saveEvent links the new
-                              // event after create. Field is non-API and ignored
-                              // by the backend's whitelist destructure.
-                              setEventForm({ ...EMPTY_EVENT, ...data, __pendingEpisodeLink: s.__targetEpisodeId || null });
-                              setEditingEvent('new');
-                              setAiFixSuggestions(prev => prev.filter(x => x !== s));
-                            }} style={{
-                              padding: '4px 12px', background: '#16a34a', color: '#fff',
-                              border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
-                              cursor: 'pointer', whiteSpace: 'nowrap',
-                            }}>+ Create</button>
-                          )}
-                          {s.action !== 'manual' && s.action !== 'create' && s.event_name && s.new_value && (
-                            <button onClick={() => applyAiFix(s)} style={{
-                              padding: '4px 12px', background: '#6366f1', color: '#fff',
-                              border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
-                              cursor: 'pointer', whiteSpace: 'nowrap',
-                            }}>Apply</button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    <button onClick={() => setAiFixSuggestions(null)} style={{ ...S.smBtn, marginTop: 4, fontSize: 10 }}>Dismiss</button>
-                  </div>
-                )}
               </div>
             ) : null;
           })()}
+
+          {/* Amber's Suggestions — rendered as a sibling of the warnings
+              card, not inside it. Used to live nested under "Story Logic
+              Warnings" so when applying a suggestion cleared the last
+              warning, the entire wrapper unmounted and any remaining
+              suggestion cards vanished with it. Now it stands alone and
+              persists until you Apply each card or hit Dismiss. */}
+          {aiFixSuggestions && aiFixSuggestions.length > 0 && (
+            <div style={{ background: '#fff', border: '1px solid #e0e7ff', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', marginBottom: 8 }}>✨ Amber's Suggestions ({aiFixSuggestions.length})</div>
+              {aiFixSuggestions.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', background: '#faf5ff', border: '1px solid #e0e7ff', borderRadius: 8, marginBottom: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', marginBottom: 2 }}>
+                      {s.event_name && <span style={{ color: '#6366f1' }}>"{s.event_name}"</span>}
+                      {s.action && <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 6px', background: '#eef2ff', color: '#4338ca', borderRadius: 4, fontWeight: 700 }}>{s.action.replace(/_/g, ' ')}</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>{s.suggestion}</div>
+                    {s.new_value && <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2, wordBreak: 'break-word' }}>→ {typeof s.new_value === 'object' ? s.new_value.name || JSON.stringify(s.new_value) : s.new_value}</div>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                    {s.action === 'create' && (s.new_value || s.suggestion) && (
+                      <button onClick={() => {
+                        let data = {};
+                        if (s.new_value) {
+                          if (typeof s.new_value === 'object') data = s.new_value;
+                          else try { data = JSON.parse(s.new_value); } catch { data = { description: s.new_value }; }
+                        }
+                        if (!data.name && s.suggestion) {
+                          try {
+                            const match = s.suggestion.match(/\{[\s\S]*"name"[\s\S]*\}/);
+                            if (match) data = { ...data, ...JSON.parse(match[0]) };
+                          } catch {}
+                        }
+                        if (data.dress_code_style && !data.dress_code) data.dress_code = data.dress_code_style;
+                        if (data.type && !data.event_type) data.event_type = data.type;
+                        setEventForm({ ...EMPTY_EVENT, ...data, __pendingEpisodeLink: s.__targetEpisodeId || null });
+                        setEditingEvent('new');
+                        setAiFixSuggestions(prev => prev.filter(x => x !== s));
+                      }} style={{
+                        padding: '4px 12px', background: '#16a34a', color: '#fff',
+                        border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}>+ Create</button>
+                    )}
+                    {s.action !== 'manual' && s.action !== 'create' && s.event_name && s.new_value && (
+                      <button onClick={() => applyAiFix(s)} style={{
+                        padding: '4px 12px', background: '#6366f1', color: '#fff',
+                        border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}>Apply</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => setAiFixSuggestions(null)} style={{ ...S.smBtn, marginTop: 4, fontSize: 10 }}>Dismiss all</button>
+            </div>
+          )}
 
           {/* Bulk action bar */}
           {bulkMode && selectedEvents.size > 0 && (
@@ -3477,9 +3476,23 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                 transition: 'width 0.3s',
                               }} />
                             </div>
-                            {nextGoal.reward_coins > 0 && (
-                              <div style={{ fontSize: 10, color: '#854d0e', marginTop: 3 }}>🎁 Reward on reach: +{Number(nextGoal.reward_coins).toLocaleString()} coins — {nextGoal.description}</div>
-                            )}
+                            {nextGoal.reward_coins > 0 && (() => {
+                              // Goal descriptions sometimes have a baked-in
+                              // "Current balance is N coins" sentence from
+                              // when the goal was created. That number is
+                              // a snapshot, not live, and reads as wrong
+                              // the moment the actual balance moves. Strip
+                              // it so the description doesn't argue with
+                              // the balance shown two lines above.
+                              const cleanDesc = String(nextGoal.description || '')
+                                .replace(/\s*Current balance is [-\d,]+\s*coins?\.?/gi, '')
+                                .trim();
+                              return (
+                                <div style={{ fontSize: 10, color: '#854d0e', marginTop: 3 }}>
+                                  🎁 Reward on reach: +{Number(nextGoal.reward_coins).toLocaleString()} coins{cleanDesc ? ` — ${cleanDesc}` : ''}
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
                         <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 6 }}>

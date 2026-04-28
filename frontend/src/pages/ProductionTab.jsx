@@ -159,7 +159,7 @@ export default function ProductionTab({ shows, universeId, onChanged, showToast,
       try {
         const res = await api.get(`/api/v1/characters/lala/state?show_id=${showId}`);
         const d = res.data;
-        setCharState(d?.characterState || d?.character_state || d);
+        setCharState(d?.state || d?.characterState || d?.character_state || d);
       } catch { /* optional */ }
     })();
   }, [showId]);
