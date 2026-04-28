@@ -24,6 +24,7 @@ import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
 import ScreenThumbnailStrip from '../components/phone/ScreenThumbnailStrip';
 import ToolbarMenu from '../components/phone/ToolbarMenu';
+import PhoneFrame from '../components/phone/PhoneFrame';
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
 

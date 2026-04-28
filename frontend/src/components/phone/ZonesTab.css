@@ -1,8 +1,7 @@
-/* ZonesTab — unified zone editor
-   Layout: left column = phone canvas (the active editor renders here);
-           right column = thumbnail strip, mode toggle, zone list, AI drawer.
-   The phone column is sticky so creators never lose their visual anchor
-   while scrolling through the right-side controls.
+/* ZonesTab — styles for the mode toggle + thumbnail strip + toolbar menu.
+   Layout (phone-left + controls-right + sticky phone) is inherited from
+   the phone-hub-inner / phone-hub-device / phone-hub-grid-section classes
+   so the Zones tab matches the Screens/Icons/Placements tabs exactly.
 */
 
 /* .phone-hub-frame was historically styled inside PhoneHub's inline <style>

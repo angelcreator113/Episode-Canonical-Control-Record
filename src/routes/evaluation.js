@@ -542,14 +542,11 @@ router.post('/episodes/:id/override', optionalAuth, async (req, res) => {
 // POST /api/v1/episodes/:id/accept
 // ═══════════════════════════════════════════
 
-// DEPRECATED: Use POST /world/:showId/episodes/:episodeId/complete instead
+// DEPRECATED: Proxies to unified completeEpisode pipeline.
+// Use POST /world/:showId/episodes/:episodeId/complete instead.
 router.post('/episodes/:id/accept', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      apply_scope = 'season',
-      allow_out_of_order = false,
-    } = req.body;
 
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
@@ -561,108 +558,19 @@ router.post('/episodes/:id/accept', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'Episode already accepted. Use re-evaluate first.' });
     }
 
-    if (episode.evaluation_status !== 'computed') {
-      return res.status(400).json({ error: 'Episode must be evaluated first.' });
-    }
-
-    const evalJson = JSON.parse(JSON.stringify(episode.evaluation_json));
-    if (!evalJson) return res.status(400).json({ error: 'No evaluation data found' });
-
-    const characterKey = evalJson.character_key || 'lala';
     const showId = episode.show_id;
-    const seasonId = apply_scope === 'global' ? null : null; // TODO: season support
+    if (!showId) return res.status(400).json({ error: 'Episode has no show_id; cannot complete.' });
 
-    // Get current state
-    const state = await getOrCreateCharacterState(models.sequelize, showId, seasonId, characterKey);
-    const warnings = [];
-
-    // Out-of-order check
-    if (state.last_applied_episode_id && state.last_applied_episode_id !== id) {
-      try {
-        const lastEp = await models.Episode.findByPk(state.last_applied_episode_id);
-        if (lastEp && episode.episode_number && lastEp.episode_number) {
-          if (episode.episode_number <= lastEp.episode_number) {
-            if (!allow_out_of_order) {
-              return res.status(400).json({
-                error: 'Out of order',
-                message: `Last accepted was Episode ${lastEp.episode_number}. This is Episode ${episode.episode_number}. Set allow_out_of_order=true to proceed.`,
-                code: 'OUT_OF_ORDER_APPLY',
-              });
-            }
-            warnings.push({
-              code: 'OUT_OF_ORDER_APPLY',
-              message: `Applied Episode ${episode.episode_number} before Episode ${lastEp.episode_number + 1}.`,
-            });
-          }
-        }
-      } catch (e) { /* skip */ }
-    }
-
-    // Apply stat deltas
-    const deltas = evalJson.stat_deltas || {};
-    const currentState = {
-      coins: state.coins,
-      reputation: state.reputation,
-      brand_trust: state.brand_trust,
-      influence: state.influence,
-      stress: state.stress,
-    };
-    const newState = applyDeltas(currentState, deltas);
-
-    // Update character_state
-    await models.sequelize.query(
-      `UPDATE character_state
-       SET coins = :coins, reputation = :reputation, brand_trust = :brand_trust,
-           influence = :influence, stress = :stress,
-           last_applied_episode_id = :episodeId, updated_at = NOW()
-       WHERE id = :stateId`,
-      {
-        replacements: {
-          ...newState,
-          episodeId: id,
-          stateId: state.id,
-        },
-      }
-    );
-
-    // Write to character_state_history ledger
-    await models.sequelize.query(
-      `INSERT INTO character_state_history
-       (id, show_id, season_id, character_key, episode_id, source, deltas_json, state_after_json, notes, created_at)
-       VALUES (:id, :showId, :seasonId, :characterKey, :episodeId, :source, :deltas, :stateAfter, :notes, NOW())`,
-      {
-        replacements: {
-          id: uuidv4(),
-          showId,
-          seasonId: seasonId || null,
-          characterKey,
-          episodeId: id,
-          source: (evalJson.overrides || []).length > 0 ? 'override' : 'computed',
-          deltas: JSON.stringify(deltas),
-          stateAfter: JSON.stringify(newState),
-          notes: evalJson.narrative_lines?.short || null,
-        },
-      }
-    );
-
-    // Mark episode as accepted
-    evalJson.accepted_at = new Date().toISOString();
-    await episode.update({
-      evaluation_json: evalJson,
-      evaluation_status: 'accepted',
-    });
+    // Proxy to unified completion pipeline (handles financials, social bonuses, wardrobe, history)
+    const { completeEpisode } = require('../services/episodeCompletionService');
+    const result = await completeEpisode(id, showId, models.sequelize);
 
     return res.json({
       success: true,
       episode_id: id,
       accepted: true,
-      applied_deltas: deltas,
-      previous_state: currentState,
-      new_state: newState,
-      tier_final: evalJson.tier_final,
-      score: evalJson.score,
-      narrative: evalJson.narrative_lines?.short,
-      warnings,
+      _deprecated: 'This endpoint proxies to the unified completeEpisode pipeline. Call POST /world/:showId/episodes/:id/complete directly.',
+      ...result,
     });
   } catch (error) {
     console.error('Accept error:', error);

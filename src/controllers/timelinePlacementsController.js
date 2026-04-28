@@ -2,6 +2,29 @@ const { models } = require('../models');
 const { TimelinePlacement, EpisodeScene, Asset, Wardrobe } = models;
 const { literal } = require('sequelize');
 
+const SCENE_INCLUDE = {
+  model: EpisodeScene,
+  as: 'scene',
+  attributes: ['id', 'title_override', 'scene_order', 'type'],
+  required: false,
+  paranoid: false,
+};
+
+const ASSET_INCLUDE = {
+  model: Asset,
+  as: 'asset',
+  required: false,
+  paranoid: false,
+  attributes: ['id', 'name', 'asset_type', 's3_url_processed', 's3_url_raw', 'metadata'],
+};
+
+const WARDROBE_INCLUDE = {
+  model: Wardrobe,
+  as: 'wardrobeItem',
+  required: false,
+  paranoid: false,
+};
+
 /**
  * Timeline Placements Controller
  * Manages asset/wardrobe placements on episode timeline
@@ -13,7 +36,7 @@ const { literal } = require('sequelize');
  */
 exports.listPlacements = async (req, res) => {
   try {
-    const { id: episodeId } = req.params;
+    const episodeId = req.params.episodeId || req.params.id;
     const { placementType, trackNumber, sceneId } = req.query;
 
     const where = { episode_id: episodeId };
@@ -24,24 +47,7 @@ exports.listPlacements = async (req, res) => {
 
     const placements = await TimelinePlacement.findAll({
       where,
-      include: [
-        {
-          model: EpisodeScene,
-          as: 'scene',
-          attributes: ['id', 'title_override', 'scene_order', 'type'],
-          required: false,
-        },
-        {
-          model: Asset,
-          as: 'asset',
-          required: false,
-        },
-        {
-          model: Wardrobe,
-          as: 'wardrobeItem',
-          required: false,
-        },
-      ],
+      include: [SCENE_INCLUDE, ASSET_INCLUDE, WARDROBE_INCLUDE],
       order: [
         ['track_number', 'ASC'],
         [literal(`CASE WHEN scene_id IS NOT NULL THEN 0 ELSE 1 END`)], // Scene-attached first
@@ -71,7 +77,7 @@ exports.listPlacements = async (req, res) => {
  */
 exports.createPlacement = async (req, res) => {
   try {
-    const { id: episodeId } = req.params;
+    const episodeId = req.params.episodeId || req.params.id;
     const {
       placementType,
       assetId,
@@ -140,21 +146,7 @@ exports.createPlacement = async (req, res) => {
 
     // Load with associations
     const result = await TimelinePlacement.findByPk(placement.id, {
-      include: [
-        {
-          model: EpisodeScene,
-          as: 'scene',
-          attributes: ['id', 'title_override', 'scene_order', 'type'],
-        },
-        {
-          model: Asset,
-          as: 'asset',
-        },
-        {
-          model: Wardrobe,
-          as: 'wardrobeItem',
-        },
-      ],
+      include: [SCENE_INCLUDE, ASSET_INCLUDE, WARDROBE_INCLUDE],
     });
 
     res.status(201).json({
@@ -177,7 +169,8 @@ exports.createPlacement = async (req, res) => {
  */
 exports.updatePlacement = async (req, res) => {
   try {
-    const { id: episodeId, placementId } = req.params;
+    const episodeId = req.params.episodeId || req.params.id;
+    const { placementId } = req.params;
     const {
       attachmentPoint,
       offsetSeconds,
@@ -217,21 +210,7 @@ exports.updatePlacement = async (req, res) => {
 
     // Reload with associations
     const result = await TimelinePlacement.findByPk(placement.id, {
-      include: [
-        {
-          model: EpisodeScene,
-          as: 'scene',
-          attributes: ['id', 'title_override', 'scene_order', 'type'],
-        },
-        {
-          model: Asset,
-          as: 'asset',
-        },
-        {
-          model: Wardrobe,
-          as: 'wardrobeItem',
-        },
-      ],
+      include: [SCENE_INCLUDE, ASSET_INCLUDE, WARDROBE_INCLUDE],
     });
 
     res.json({
@@ -254,7 +233,8 @@ exports.updatePlacement = async (req, res) => {
  */
 exports.deletePlacement = async (req, res) => {
   try {
-    const { id: episodeId, placementId } = req.params;
+    const episodeId = req.params.episodeId || req.params.id;
+    const { placementId } = req.params;
 
     const placement = await TimelinePlacement.findOne({
       where: {
@@ -293,7 +273,7 @@ exports.deletePlacement = async (req, res) => {
  */
 exports.getCurrentWardrobe = async (req, res) => {
   try {
-    const { id: episodeId } = req.params;
+    const episodeId = req.params.episodeId || req.params.id;
     const { character, sceneId, sceneOrder } = req.query;
 
     if (!character) {
@@ -343,11 +323,9 @@ exports.getCurrentWardrobe = async (req, res) => {
             },
           },
           attributes: ['id', 'title_override', 'scene_order', 'type'],
+          paranoid: false,
         },
-        {
-          model: Wardrobe,
-          as: 'wardrobeItem',
-        },
+        WARDROBE_INCLUDE,
       ],
       order: [[{ model: EpisodeScene, as: 'scene' }, 'scene_order', 'DESC']],
     });

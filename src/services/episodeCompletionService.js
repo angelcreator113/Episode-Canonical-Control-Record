@@ -134,16 +134,28 @@ async function completeEpisode(episodeId, showId, sequelize) {
     return { already_completed: true, message: 'Episode already completed', evaluation: episode.evaluation_json };
   }
 
-  // ── 2. Load event ──
+  // ── 2. Load event (prefer highest prestige for multi-event episodes) ──
   const [event] = await sequelize.query(
-    `SELECT * FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
+    `SELECT * FROM world_events WHERE used_in_episode_id = :episodeId ORDER BY prestige DESC NULLS LAST LIMIT 1`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => []);
 
-  // Parse outfit pieces
+  // Parse outfit pieces — prefer episode_wardrobe table over event column (which doesn't exist)
   let outfitPieces = [];
-  if (event?.outfit_pieces) {
-    outfitPieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : event.outfit_pieces;
+  try {
+    const wardrobeRows = await sequelize.query(
+      `SELECT w.brand, w.name, w.price, w.tier, w.clothing_category AS category
+       FROM episode_wardrobe ew
+       JOIN wardrobe w ON w.id = ew.wardrobe_id
+       WHERE ew.episode_id = :episodeId AND ew.approval_status = 'approved' AND ew.deleted_at IS NULL`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    outfitPieces = wardrobeRows || [];
+  } catch { /* non-blocking */ }
+
+  // Fallback: parse from event column if wardrobe table returned nothing
+  if (!outfitPieces.length && event?.outfit_pieces) {
+    outfitPieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : (event.outfit_pieces || []);
   }
 
   // ── 3. Load social tasks ──
@@ -466,6 +478,40 @@ ${narrativeLines.short || ''}`,
     console.log(`[Franchise Brain] Auto-pushed ${episodeKnowledge.length} entries for Episode ${episode.episode_number}`);
   } catch (brainErr) {
     console.warn('[Franchise Brain] Auto-push failed (non-blocking):', brainErr.message);
+  }
+
+
+  // \u2500\u2500 17. Career unlocks from episode brief (slay/pass only) \u2500\u2500
+  if (['slay', 'pass'].includes(evalResult.tier_final)) {
+    try {
+      const [brief] = await sequelize.query(
+        `SELECT career_context FROM episode_briefs WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+        { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+      ).catch(() => []);
+      const careerCtx = typeof brief?.career_context === 'string'
+        ? JSON.parse(brief.career_context)
+        : (brief?.career_context || {});
+      if (careerCtx?.success_unlock) {
+        const goals = await sequelize.query(
+          `SELECT id, current_value, target_value FROM career_goals
+           WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL`,
+          { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+        ).catch(() => []);
+        for (const goal of goals || []) {
+          const newVal = Math.min((parseInt(goal.current_value) || 0) + 1, parseInt(goal.target_value) || 10);
+          const newStatus = newVal >= (parseInt(goal.target_value) || 10) ? 'completed' : 'active';
+          await sequelize.query(
+            `UPDATE career_goals SET current_value = :val, status = :status,
+             completed_at = CASE WHEN :status = 'completed' THEN NOW() ELSE completed_at END,
+             updated_at = NOW() WHERE id = :id`,
+            { replacements: { val: newVal, status: newStatus, id: goal.id } }
+          ).catch(err => console.warn('[episodeCompletion] career_goals update failed:', err?.message));
+        }
+        console.log(`[episodeComplete] Career unlocks applied for tier ${evalResult.tier_final}: ${careerCtx.success_unlock}`);
+      }
+    } catch (careerErr) {
+      console.warn('[episodeComplete] Career unlock failed (non-blocking):', careerErr.message);
+    }
   }
 
   return {

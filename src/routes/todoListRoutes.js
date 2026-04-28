@@ -85,7 +85,7 @@ router.post('/episodes/:episodeId/todo/complete/:slot', optionalAuth, async (req
     const { sequelize } = req.app.get('models') || require('../models');
 
     const [todoList] = await sequelize.query(
-      'SELECT id, tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
+      'SELECT id, tasks, social_tasks FROM episode_todo_lists WHERE episode_id = :episodeId AND deleted_at IS NULL LIMIT 1',
       { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
     );
 
@@ -93,21 +93,39 @@ router.post('/episodes/:episodeId/todo/complete/:slot', optionalAuth, async (req
 
     const tasks = (typeof todoList.tasks === 'string'
       ? JSON.parse(todoList.tasks)
-      : todoList.tasks
+      : todoList.tasks || []
     ).map(t => t.slot === slot ? { ...t, completed } : t);
 
-    await sequelize.query(
-      'UPDATE episode_todo_lists SET tasks = :tasks, updated_at = NOW() WHERE id = :id',
-      { replacements: { tasks: JSON.stringify(tasks), id: todoList.id } }
-    );
+    // Also apply completion to social_tasks if the slot lives there
+    const socialTasksRaw = typeof todoList.social_tasks === 'string'
+      ? JSON.parse(todoList.social_tasks || '[]')
+      : (todoList.social_tasks || []);
+    const socialTaskSlots = new Set(socialTasksRaw.map(t => t.slot));
+    const updatedSocialTasks = socialTasksRaw.map(t => t.slot === slot ? { ...t, completed } : t);
+    const slotInSocial = socialTaskSlots.has(slot);
 
+    if (slotInSocial) {
+      await sequelize.query(
+        'UPDATE episode_todo_lists SET tasks = :tasks, social_tasks = :socialTasks, updated_at = NOW() WHERE id = :id',
+        { replacements: { tasks: JSON.stringify(tasks), socialTasks: JSON.stringify(updatedSocialTasks), id: todoList.id } }
+      );
+    } else {
+      await sequelize.query(
+        'UPDATE episode_todo_lists SET tasks = :tasks, updated_at = NOW() WHERE id = :id',
+        { replacements: { tasks: JSON.stringify(tasks), id: todoList.id } }
+      );
+    }
+
+    const allTasks = [...tasks, ...updatedSocialTasks];
     const completion = {
-      total: tasks.length,
-      completed: tasks.filter(t => t.completed).length,
-      all_required_done: tasks.filter(t => t.required).every(t => t.completed),
+      total: allTasks.length,
+      completed: allTasks.filter(t => t.completed).length,
+      all_required_done: allTasks.filter(t => t.required).every(t => t.completed),
+      social_tasks_completed: updatedSocialTasks.filter(t => t.completed).length,
+      social_tasks_total: updatedSocialTasks.length,
     };
 
-    return res.json({ success: true, tasks, completion });
+    return res.json({ success: true, tasks, social_tasks: updatedSocialTasks, completion });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
