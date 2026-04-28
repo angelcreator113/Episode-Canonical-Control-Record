@@ -367,7 +367,10 @@ function WorldAdmin() {
   }, [showId]);
 
   // Forecast fetch — refire whenever the open event changes OR its
-  // outfit_pieces change (user saved a new outfit in the picker).
+  // outfit_pieces change (user saved a new outfit in the picker), or
+  // when the show's starting balance is edited (Finance editor → save
+  // re-seeds the ledger and updates financeConfig.current_balance, which
+  // the forecast's balance_before/balance_after read from the server).
   useEffect(() => {
     if (!eventDetailModal?.id || !showId) { setEventFinancials(null); return; }
     let cancelled = false;
@@ -380,7 +383,7 @@ function WorldAdmin() {
       if (!cancelled) setEventFinancialsLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [eventDetailModal?.id, eventDetailModal?.outfit_pieces, showId]);
+  }, [eventDetailModal?.id, eventDetailModal?.outfit_pieces, showId, financeConfig?.current_balance]);
 
   // Escape key closes modals
   useEffect(() => {
