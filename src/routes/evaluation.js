@@ -239,12 +239,16 @@ router.get('/characters/:key/state', optionalAuth, async (req, res) => {
         influence: state.influence,
         stress: state.stress,
       },
+      // Surfaced so the Characters tab can render the "Default Stats"
+      // line from a single source of truth instead of a hardcoded
+      // literal that silently drifts when DEFAULT_STATS changes.
+      defaults: DEFAULT_STATS,
       last_applied_episode_id: state.last_applied_episode_id,
       state_id: state.id,
     });
   } catch (error) {
     if (error.message?.includes('does not exist')) {
-      return res.json({ success: true, character_key: req.params.key, state: { coins: 500, reputation: 1, brand_trust: 1, influence: 1, stress: 0 }, note: 'Table not yet created' });
+      return res.json({ success: true, character_key: req.params.key, state: { ...DEFAULT_STATS }, defaults: DEFAULT_STATS, note: 'Table not yet created' });
     }
     console.error('Get character state error:', error);
     return res.status(500).json({ error: 'Failed to get character state', message: error.message });
