@@ -313,6 +313,11 @@ function WorldAdmin() {
   const [financeBreakdowns, setFinanceBreakdowns] = useState(null);
   const [feedEventResults, setFeedEventResults] = useState({}); // { templateName: { status, event } }
   const [eventSort, setEventSort] = useState('name'); // name | prestige | cost | created | status
+  // Shared "Also draft a script" toggle — applies to single-event AND
+  // multi-event generate. Unchecked by default to keep token spend low
+  // unless the creator opts in. (Bulk-select state already lives above
+  // as bulkMode / selectedEvents — reused here for multi-event generate.)
+  const [draftScriptOnGenerate, setDraftScriptOnGenerate] = useState(false);
   const [selectedEvents, setSelectedEvents] = useState(new Set());
   const [bulkMode, setBulkMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -2175,10 +2180,42 @@ The revised event should feel like a completely different experience from the si
 
           {/* Bulk action bar */}
           {bulkMode && selectedEvents.size > 0 && (
-            <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '8px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '8px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#4338ca' }}>{selectedEvents.size} selected</span>
               {selectedEvents.size === 2 && (
                 <button onClick={() => { const ids = [...selectedEvents]; setCompareEvents(worldEvents.filter(ev => ids.includes(ev.id))); }} style={{ padding: '3px 10px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#7c3aed', fontWeight: 600 }}>🔍 Compare</button>
+              )}
+              {/* Multi-event generate — anchored on the first selected
+                  event, the rest auto-link via used_in_episode_id so
+                  locations / wardrobe / narrative all read through. */}
+              {selectedEvents.size >= 1 && (
+                <button onClick={async () => {
+                  if (selectedEvents.size === 0) return;
+                  const ids = Array.from(selectedEvents);
+                  try {
+                    setToast(`🎬 Generating episode from ${ids.length} event${ids.length === 1 ? '' : 's'}...`);
+                    const res = await api.post(`/api/v1/world/${showId}/events/generate-episode-from-many`, {
+                      event_ids: ids,
+                      draft_script: draftScriptOnGenerate,
+                    });
+                    if (res.data.success) {
+                      setEpisodeBlueprint(res.data.data);
+                      const ep = res.data.data.episode;
+                      const skipped = res.data.skipped_extras?.length || 0;
+                      setToast(`✅ Episode "${ep?.title}" created from ${1 + (res.data.linked_extras?.length || 0)} event${(res.data.linked_extras?.length || 0) === 0 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}${res.data.script_drafted ? ' + script' : ''}`);
+                      setSelectedEvents(new Set());
+                      setBulkMode(false);
+                      loadData();
+                    } else {
+                      setToast(res.data.error || 'Failed');
+                    }
+                  } catch (err) {
+                    setToast('Multi-event generate failed: ' + (err.response?.data?.error || err.message));
+                  }
+                  setTimeout(() => setToast(null), 6000);
+                }} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, borderRadius: 6, border: 'none', background: '#16a34a', color: '#fff', cursor: 'pointer' }}>
+                  🎬 Generate from {selectedEvents.size} event{selectedEvents.size === 1 ? '' : 's'}
+                </button>
               )}
               <span style={{ fontSize: 11, color: '#64748b' }}>Link to:</span>
               {episodes.slice(0, 6).map(ep => (
@@ -2419,6 +2456,19 @@ The revised event should feel like a completely different experience from the si
             </div>
           )}
 
+          {/* Generate-options toolbar — draft-script opt-in lives here so
+              both the per-event "Generate" button and the bulk-action
+              "Generate from N events" pick it up. Bulk-select toggle
+              isn't here because it already exists above the page in
+              the toolbar that drives Compare / Bulk Inject. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: '6px 10px', background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 8 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#2C2C2C', cursor: 'pointer' }}>
+              <input type="checkbox" checked={draftScriptOnGenerate} onChange={(e) => setDraftScriptOnGenerate(e.target.checked)} />
+              <strong>Also draft script when generating an episode</strong>
+              <span style={{ color: '#666', fontSize: 11 }}>(applies to single + bulk Generate)</span>
+            </label>
+          </div>
+
           {/* Events grid — filtered + sorted */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
             {worldEvents.filter(ev => {
@@ -2579,12 +2629,14 @@ The revised event should feel like a completely different experience from the si
                   {!linkedEpisode && (
                     <button onClick={async () => {
                       try {
-                        setToast('🎬 Generating episode...');
-                        const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/generate-episode`);
+                        setToast(`🎬 Generating episode${draftScriptOnGenerate ? ' + script' : ''}...`);
+                        const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/generate-episode`, {
+                          draft_script: draftScriptOnGenerate,
+                        });
                         if (res.data.success) {
                           setEpisodeBlueprint(res.data.data);
                           const ep = res.data.data.episode;
-                          setToast(`✅ Episode ${ep?.episode_number || ''} "${ep?.title}" created — ${res.data.data.scenePlan?.length || 14} beats, ${res.data.data.socialTasks?.length || 0} social tasks`);
+                          setToast(`✅ Episode ${ep?.episode_number || ''} "${ep?.title}" created — ${res.data.data.scenePlan?.length || 14} beats, ${res.data.data.socialTasks?.length || 0} social tasks${res.data.script_drafted ? ' + draft script' : ''}`);
                           loadData();
                         } else {
                           setToast(res.data.error || 'Failed');
@@ -2592,6 +2644,29 @@ The revised event should feel like a completely different experience from the si
                       } catch (err) { setToast('Episode generation failed: ' + (err.response?.data?.error || err.message)); }
                       setTimeout(() => setToast(null), 5000);
                     }} style={{ ...S.smBtn, background: '#f0fdf4', borderColor: '#bbf7d0', color: '#16a34a' }}>🎬 Generate Episode</button>
+                  )}
+                  {linkedEpisode && (
+                    <button onClick={async () => {
+                      if (!window.confirm(`Regenerate this episode? "${linkedEpisode.title || 'Untitled'}" will be soft-deleted and a fresh episode created from this event.`)) return;
+                      try {
+                        setToast(`🎬 Regenerating episode${draftScriptOnGenerate ? ' + script' : ''}...`);
+                        const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/regenerate-episode`);
+                        if (res.data.success) {
+                          // The regenerate endpoint doesn't currently
+                          // support draft_script — fire it as a follow-up
+                          // generate-script call when the toggle is on.
+                          if (draftScriptOnGenerate && res.data.data?.episode?.id) {
+                            try { await api.post(`/api/v1/world/${showId}/events/${ev.id}/generate-script`, { episode_id: res.data.data.episode.id }); } catch { /* non-fatal */ }
+                          }
+                          const ep = res.data.data.episode;
+                          setToast(`✅ Episode "${ep?.title}" regenerated`);
+                          loadData();
+                        } else {
+                          setToast(res.data.error || 'Failed');
+                        }
+                      } catch (err) { setToast('Regenerate failed: ' + (err.response?.data?.error || err.message)); }
+                      setTimeout(() => setToast(null), 5000);
+                    }} style={{ ...S.smBtn, background: '#fdf8ee', borderColor: '#e8d8b8', color: '#B8962E' }}>♻️ Regenerate Episode</button>
                   )}
                   <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>Delete</button>
                 </div>
