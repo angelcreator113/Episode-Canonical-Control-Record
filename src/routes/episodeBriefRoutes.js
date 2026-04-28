@@ -7,7 +7,8 @@
 
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { EpisodeBrief, ScenePlan, Episode, SceneSet } = require('../models');
 const { generateScenePlan, getScenePlanForScriptGenerator } = require('../services/scenePlannerService');
 
@@ -87,7 +88,7 @@ router.post('/:episodeId/lock', optionalAuth, async (req, res) => {
 
 // ── GENERATE SCENE PLAN (AI) ──────────────────────────────────────────────────
 
-router.post('/:episodeId/generate-plan', optionalAuth, async (req, res) => {
+router.post('/:episodeId/generate-plan', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { episodeId } = req.params;
 
@@ -198,7 +199,7 @@ router.post('/:episodeId/plan/lock-all', optionalAuth, async (req, res) => {
 
 // ── GENERATE GROUNDED SCRIPT ──────────────────────────────────────────────────
 
-router.post('/:episodeId/generate-script', optionalAuth, async (req, res) => {
+router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { showId } = req.body;
@@ -241,7 +242,7 @@ router.post('/:episodeId/generate-script', optionalAuth, async (req, res) => {
 
 // ── REWRITE SINGLE LINE (with Show Brain voice DNA) ───────────────────────────
 
-router.post('/:episodeId/rewrite-line', optionalAuth, async (req, res) => {
+router.post('/:episodeId/rewrite-line', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { line, speaker, beatName, beatContext, showId: _showId } = req.body;
     if (!line) return res.status(400).json({ error: 'line is required' });

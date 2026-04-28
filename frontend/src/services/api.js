@@ -41,22 +41,33 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Handle 401 Unauthorized
-    if (error.response?.status === 401) {
-      // In development, skip token removal — dev mode doesn't attach tokens
-      // so 401s are expected and shouldn't wipe stored credentials
-      if (!import.meta.env.DEV) {
+    // Handle 401 Unauthorized.
+    //
+    // We distinguish two flavors:
+    //  - AUTH_REQUIRED: the endpoint needs a logged-in user but the
+    //    server didn't choose to invalidate the session. The caller
+    //    sees a normal rejected promise and can show its own UI
+    //    (toast, "sign in to do that" hint). We do NOT wipe the
+    //    stored token or hard-redirect — that nuked the session
+    //    every time a write briefly raced an in-flight token refresh.
+    //  - AUTH_INVALID_TOKEN / AUTH_MISSING_TOKEN (legacy strict
+    //    middleware): treat as a real session failure and bounce.
+    if (error.response?.status === 401 && !import.meta.env.DEV) {
+      const code = error.response?.data?.code;
+      const isHardFail = code === 'AUTH_INVALID_TOKEN' || code === 'AUTH_MISSING_TOKEN' || !code;
+      if (isHardFail && code !== 'AUTH_REQUIRED') {
         localStorage.removeItem('authToken');
         localStorage.removeItem('token');
         window.location.href = '/login';
       }
+      // AUTH_REQUIRED: leave creds alone, let the caller handle UX.
     }
-    
+
     // Log errors in development
     if (process.env.NODE_ENV === 'development') {
       console.error('API Error:', error.response?.data || error.message);
     }
-    
+
     return Promise.reject(error);
   }
 );

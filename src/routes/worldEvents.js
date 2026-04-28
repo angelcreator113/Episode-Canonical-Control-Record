@@ -21,11 +21,20 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
 let optionalAuth;
+let requireAuth;
 try {
   const authModule = require('../middleware/auth');
   optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
+  requireAuth = authModule.requireAuth || authModule.authenticateToken || ((req, res, next) => next());
 } catch (e) {
   optionalAuth = (req, res, next) => next();
+  requireAuth = (req, res, next) => next();
+}
+let aiRateLimiter;
+try {
+  aiRateLimiter = require('../middleware/aiRateLimiter').aiRateLimiter;
+} catch {
+  aiRateLimiter = (req, res, next) => next();
 }
 
 async function getModels() {
@@ -704,7 +713,7 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
 let scriptSkeletonGenerator;
 try { scriptSkeletonGenerator = require('../utils/scriptSkeletonGenerator'); } catch (e) { scriptSkeletonGenerator = null; }
 
-router.post('/world/:showId/events/:eventId/generate-script', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const {
@@ -1600,7 +1609,7 @@ router.delete('/world/:showId/events/:eventId/invitation/:assetId', optionalAuth
 // Auto-generate a complete episode from an event
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     // Optional: when draft_script is true, also kick the script skeleton
@@ -1692,7 +1701,7 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
 // episode page through the existing read-through patterns.
 //
 // Body: { event_ids: [uuid, ...], draft_script?: bool }
-router.post('/world/:showId/events/generate-episode-from-many', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId } = req.params;
     const { event_ids: eventIds = [], draft_script: draftScript = false } = req.body || {};
@@ -1802,7 +1811,7 @@ router.post('/world/:showId/events/generate-episode-from-many', optionalAuth, as
 // episode first. Useful when the event has been edited (new outfit,
 // stakes, etc.) and the creator wants the episode to reflect those
 // changes without losing their place.
-router.post('/world/:showId/events/:eventId/regenerate-episode', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
