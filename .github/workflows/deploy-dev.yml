@@ -176,7 +176,7 @@ jobs:
           echo "$EC2_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-          SSH_OPTS="-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2"
+          SSH_OPTS="-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=2 -o ServerAliveInterval=10 -o ServerAliveCountMax=2"
 
           echo "🌐 Runner network diagnostics"
           RUNNER_IP=$(curl -fsS https://api.ipify.org || true)
@@ -195,21 +195,21 @@ jobs:
           echo "🔌 Probing SSH to $EC2_HOST..."
           REACHABLE=false
           LAST_ERR=""
-          for i in 1 2 3; do
+          for i in 1 2 3 4 5 6; do
             LAST_ERR=$(ssh $SSH_OPTS $EC2_USER@$EC2_HOST 'echo ok' 2>&1 >/dev/null || true)
             if [ -z "$LAST_ERR" ]; then
               echo "✅ SSH reachable (attempt $i)"
               REACHABLE=true
               break
             fi
-            if [ $i -lt 3 ]; then
-              echo "  ⏳ Attempt $i failed, retrying in 10s..."
-              sleep 10
+            if [ $i -lt 6 ]; then
+              echo "  ⏳ Attempt $i failed, retrying in 15s..."
+              sleep 15
             fi
           done
 
           if [ "$REACHABLE" != "true" ]; then
-            echo "::error title=EC2 dev SSH preflight failed::Could not open SSH session to $EC2_USER@$EC2_HOST after 3 attempts (45s). Deploy aborted before SCP."
+            echo "::error title=EC2 dev SSH preflight failed::Could not open SSH session to $EC2_USER@$EC2_HOST after 6 attempts (~3m). Deploy aborted before SCP."
             echo ""
             echo "Last SSH error:"
             echo "  $LAST_ERR"
@@ -255,6 +255,7 @@ jobs:
       - name: Deploy to EC2
         env:
           EC2_HOST: ${{ secrets.DEV_EC2_HOST }}
+          EC2_USER: ${{ secrets.DEV_EC2_USER }}
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           DEV_DB_HOST: ${{ secrets.DEV_DB_HOST }}
           DEV_DB_USER: ${{ secrets.DEV_DB_USER }}
@@ -280,10 +281,14 @@ jobs:
           echo "$EC2_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -o ConnectTimeout=30"
+          if [ -z "$EC2_USER" ]; then
+            EC2_USER="ubuntu"
+          fi
+
+          SSH_OPTS="-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -o ConnectTimeout=30 -o ConnectionAttempts=2"
 
           # Free disk space on EC2 before uploading
-          ssh $SSH_OPTS ubuntu@$EC2_HOST "
+          ssh $SSH_OPTS $EC2_USER@$EC2_HOST "
             echo '🧹 Cleaning up disk space...'
             echo \"Disk BEFORE: \$(df -h / | tail -1 | awk '{print \$4}')\"
             # Stop PM2 so files can be safely replaced
@@ -306,10 +311,10 @@ jobs:
           # Upload build artifact (includes pre-built node_modules from CI)
           scp $SSH_OPTS \
             episode-metadata-${{ github.sha }}.tar.gz \
-            ubuntu@$EC2_HOST:/tmp/dev-deploy.tar.gz
+            $EC2_USER@$EC2_HOST:/tmp/dev-deploy.tar.gz
 
           # ─── Deploy everything in a single SSH session ───
-          ssh $SSH_OPTS ubuntu@$EC2_HOST "
+          ssh $SSH_OPTS $EC2_USER@$EC2_HOST "
             set -eo pipefail
 
             # Use whatever Node is available on the system
