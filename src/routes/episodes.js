@@ -1010,7 +1010,7 @@ router.get(
 
     const links = await SceneSetEpisode.findAll({
       where: { episode_id: req.params.episodeId },
-      order: [['created_at', 'ASC']],
+      order: [['sort_order', 'ASC'], ['created_at', 'ASC']],
       include: [
         {
           model: SceneSet,
@@ -1030,7 +1030,8 @@ router.get(
       .filter((l) => l.sceneSet)
       .map((l) => ({
         ...l.sceneSet.toJSON(),
-        sortOrder: l.sort_order,
+        sortOrder: l.sort_order ?? 0,
+        isPrimary: (l.sort_order ?? 0) === 0,
         linkId: l.id,
       }));
 
@@ -1057,11 +1058,27 @@ router.post(
     }
 
     const created = [];
-    for (const setId of sceneSetIds) {
+    for (let i = 0; i < sceneSetIds.length; i += 1) {
+      const raw = sceneSetIds[i];
+      const setId = typeof raw === 'string' ? raw : raw?.sceneSetId;
+      const requestedOrder = (typeof raw === 'object' && raw !== null && raw.sortOrder !== undefined)
+        ? parseInt(raw.sortOrder, 10)
+        : i;
+      if (!setId) continue;
       const [link, wasCreated] = await SceneSetEpisode.findOrCreate({
         where: { episode_id: req.params.episodeId, scene_set_id: setId },
+        defaults: { sort_order: Number.isNaN(requestedOrder) ? i : requestedOrder },
       });
-      created.push({ id: link.id, sceneSetId: setId, created: wasCreated });
+      if (!wasCreated && link.sort_order !== (Number.isNaN(requestedOrder) ? i : requestedOrder)) {
+        await link.update({ sort_order: Number.isNaN(requestedOrder) ? i : requestedOrder });
+      }
+      created.push({
+        id: link.id,
+        sceneSetId: setId,
+        sortOrder: Number.isNaN(requestedOrder) ? i : requestedOrder,
+        isPrimary: (Number.isNaN(requestedOrder) ? i : requestedOrder) === 0,
+        created: wasCreated,
+      });
     }
 
     res.json({ success: true, data: created });
