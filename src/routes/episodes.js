@@ -303,9 +303,15 @@ router.post(
 );
 
 // UPDATE EPISODE
+// Uses optionalAuth to match the rest of the write endpoints in this
+// codebase (world events, generate-episode, scene-sets, etc.). The
+// previous strict authenticateToken caused a hard redirect to /login
+// every time a creator's token expired even though every other write
+// path tolerates a missing token. The controller already handles
+// req.user?.id with optional chaining and an 'unknown' fallback.
 router.put(
   '/:id',
-  authenticateToken,
+  optionalAuth,
   asyncHandler(episodeController.updateEpisode)
 );
 
