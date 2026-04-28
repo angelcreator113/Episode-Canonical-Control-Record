@@ -323,6 +323,10 @@ function WorldAdmin() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [aiFixLoading, setAiFixLoading] = useState(false);
   const [aiFixSuggestions, setAiFixSuggestions] = useState(null);
+  // Auto-Reorder previews its plan before touching the DB. null = no
+  // preview open; otherwise an array of { ep, current, proposed, changed }.
+  const [reorderPlan, setReorderPlan] = useState(null);
+  const [reorderApplying, setReorderApplying] = useState(false);
   const [aiRevising, setAiRevising] = useState(false);
   const [compareEvents, setCompareEvents] = useState(null); // [eventA, eventB]
   const [generating, setGenerating] = useState(false);
@@ -527,11 +531,12 @@ function WorldAdmin() {
   ];
 
   // Sequence validation — story logic warnings
-  const getSequenceWarnings = () => {
+  const getSequenceWarnings = (eventsArg) => {
+    const eventsForCheck = eventsArg || worldEvents;
     const warnings = [];
     const episodeEvents = episodes.map(ep => ({
       ep,
-      event: worldEvents.find(ev => ev.used_in_episode_id === ep.id),
+      event: eventsForCheck.find(ev => ev.used_in_episode_id === ep.id),
     }));
     const linked = episodeEvents.filter(e => e.event);
     const sorted = [...linked].sort((a, b) => (a.ep.episode_number || 0) - (b.ep.episode_number || 0));
@@ -556,13 +561,13 @@ function WorldAdmin() {
     }
 
     // 3. Duplicate event names
-    const names = worldEvents.map(ev => ev.name?.toLowerCase().trim());
+    const names = eventsForCheck.map(ev => ev.name?.toLowerCase().trim());
     for (let i = 0; i < names.length; i++) {
       for (let j = i + 1; j < names.length; j++) {
         if (names[i] && names[j] && names[i] === names[j]) {
-          warnings.push({ type: 'name', eventName: worldEvents[i].name, fixType: 'merge',
-            dupA: worldEvents[i], dupB: worldEvents[j],
-            msg: `⚠️ Duplicate event name: "${worldEvents[i].name}"` });
+          warnings.push({ type: 'name', eventName: eventsForCheck[i].name, fixType: 'merge',
+            dupA: eventsForCheck[i], dupB: eventsForCheck[j],
+            msg: `⚠️ Duplicate event name: "${eventsForCheck[i].name}"` });
         }
       }
     }
@@ -589,10 +594,10 @@ function WorldAdmin() {
     }
 
     // 6. Missing event types — check season has variety
-    const usedTypes = new Set(worldEvents.filter(ev => ev.status === 'used').map(ev => ev.event_type));
+    const usedTypes = new Set(eventsForCheck.filter(ev => ev.status === 'used').map(ev => ev.event_type));
     const essentialTypes = ['invite', 'deliverable', 'brand_deal'];
     for (const t of essentialTypes) {
-      if (worldEvents.length >= 6 && !usedTypes.has(t)) {
+      if (eventsForCheck.length >= 6 && !usedTypes.has(t)) {
         warnings.push({ type: 'missing_type', fixType: 'create',
           msg: `📋 No "${t.replace(/_/g, ' ')}" events linked — balanced arcs need variety in event types` });
       }
@@ -650,22 +655,50 @@ function WorldAdmin() {
   };
 
   // Auto-reorder all events by prestige ascending
-  const handleAutoReorder = async () => {
+  // Build a preview of the prestige-low-to-high reassignment without
+  // touching anything. The previous version went straight to a confirm()
+  // and silently overwrote curated assignments — this surfaces every
+  // change so the user can back out before committing.
+  const handleAutoReorder = () => {
     const linked = worldEvents.filter(ev => ev.used_in_episode_id);
+    if (linked.length === 0) {
+      setToast('No linked events to reorder'); setTimeout(() => setToast(null), 3000); return;
+    }
     const sortedByPrestige = [...linked].sort((a, b) => (a.prestige || 0) - (b.prestige || 0));
     const sortedEps = [...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
 
-    if (sortedByPrestige.length === 0) return;
-    if (!window.confirm(`Reorder ${sortedByPrestige.length} events by prestige (low → high) across episodes? This changes all assignments.`)) return;
+    const plan = sortedEps.map((ep, i) => {
+      const current = worldEvents.find(ev => ev.used_in_episode_id === ep.id) || null;
+      const proposed = sortedByPrestige[i] || null;
+      return {
+        ep,
+        current,
+        proposed,
+        changed: (current?.id || null) !== (proposed?.id || null),
+      };
+    });
+    setReorderPlan(plan);
+  };
 
+  const applyReorderPlan = async () => {
+    if (!reorderPlan) return;
+    const changes = reorderPlan.filter(p => p.changed && p.proposed);
+    if (changes.length === 0) { setReorderPlan(null); return; }
+    setReorderApplying(true);
     try {
-      for (let i = 0; i < sortedByPrestige.length && i < sortedEps.length; i++) {
-        await api.post(`/api/v1/world/${showId}/events/${sortedByPrestige[i].id}/inject`, { episode_id: sortedEps[i].id });
+      for (const p of changes) {
+        await api.post(`/api/v1/world/${showId}/events/${p.proposed.id}/inject`, { episode_id: p.ep.id });
       }
-      setToast('✅ Events reordered by prestige');
+      setToast(`✅ Reordered ${changes.length} event${changes.length === 1 ? '' : 's'} by prestige`);
       setTimeout(() => setToast(null), 3000);
+      setReorderPlan(null);
       loadData();
-    } catch { setToast('Reorder failed'); setTimeout(() => setToast(null), 3000); }
+    } catch (err) {
+      setToast(`Reorder failed: ${err.response?.data?.error || err.message}`);
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setReorderApplying(false);
+    }
   };
 
   // Merge duplicate events — keep first, delete second
@@ -683,17 +716,23 @@ function WorldAdmin() {
     } catch { setToast('Merge failed'); setTimeout(() => setToast(null), 3000); }
   };
 
-  // AI Rebalance — Amber reassigns all events optimally
+  // AI Rebalance — Amber drafts a list of variety-improving suggestions.
+  // Nothing is actually changed until the user reviews and clicks Apply on
+  // each card; the previous copy claimed it would reassign everything in
+  // one shot, which it doesn't.
   const handleAiRebalance = async () => {
-    if (!window.confirm('Let Amber reassign all events across episodes for optimal variety? This will change all assignments.')) return;
     setAiFixLoading(true);
+    setToast('Asking Amber for rebalance suggestions…');
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
-        warnings: [{ msg: 'REBALANCE: Reassign all events across episodes for maximum variety in type, prestige, dress code, and difficulty. Build a rising arc.' }],
+        warnings: [{ msg: 'REBALANCE: Suggest reassignments and changes across all events for maximum variety in type, prestige, dress code, and difficulty. Build a rising arc.' }],
         events: worldEvents,
         episodes,
       });
-      setAiFixSuggestions(res.data?.data || []);
+      const data = res.data?.data || [];
+      setAiFixSuggestions(data);
+      setToast(data.length ? `Amber drafted ${data.length} suggestion${data.length === 1 ? '' : 's'} — review below` : 'Amber had nothing to suggest');
+      setTimeout(() => setToast(null), 4000);
     } catch (err) {
       setToast(err.response?.data?.error || 'Rebalance failed');
       setTimeout(() => setToast(null), 3000);
@@ -791,9 +830,11 @@ function WorldAdmin() {
         if (!target) { flash('Could not parse target episode from suggestion'); return; }
 
         await api.post(`/api/v1/world/${showId}/events/${ev.id}/inject`, { episode_id: target.id });
-        setWorldEvents(prev => prev.map(e => e.id === ev.id ? { ...e, used_in_episode_id: target.id, status: 'used' } : e));
+        const nextEvents = worldEvents.map(e => e.id === ev.id ? { ...e, used_in_episode_id: target.id, status: 'used' } : e);
+        setWorldEvents(nextEvents);
         setAiFixSuggestions(prev => prev.filter(s => s !== suggestion));
-        flash(`Assigned "${ev.name}" to Ep ${target.episode_number}`);
+        flash(checkWarningCleared(suggestion, nextEvents)
+          || `Assigned "${ev.name}" to Ep ${target.episode_number}`);
         return;
       }
 
@@ -824,13 +865,33 @@ function WorldAdmin() {
 
       const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { ...ev, ...updates });
       if (res.data.success) {
-        setWorldEvents(prev => prev.map(e => e.id === ev.id ? res.data.event : e));
+        const nextEvents = worldEvents.map(e => e.id === ev.id ? res.data.event : e);
+        setWorldEvents(nextEvents);
         setAiFixSuggestions(prev => prev.filter(s => s !== suggestion));
-        flash(`Applied: ${suggestion.suggestion.slice(0, 60)}`);
+        flash(checkWarningCleared(suggestion, nextEvents)
+          || `Applied: ${suggestion.suggestion.slice(0, 60)}`);
       }
     } catch (err) {
       flash(`Failed: ${err.response?.data?.error || err.message}`);
     }
+  };
+
+  // After Apply, recompute warnings against the post-update event list and
+  // tell the user if Amber's "fix" actually addressed the warning it was
+  // tagged to. Returns a heads-up string when the warning persists, or
+  // null when the warning is gone (the success path).
+  const checkWarningCleared = (suggestion, nextEvents) => {
+    const targetMsg = suggestion.warning;
+    if (!targetMsg) return null;
+    const stillThere = getSequenceWarnings(nextEvents).some(w => {
+      // Both directions of substring match — the warning text the AI saw
+      // may have been truncated/paraphrased, and warning msgs change as
+      // event names/numbers change after edits.
+      const a = (w.msg || '').toLowerCase();
+      const b = (targetMsg || '').toLowerCase();
+      return a === b || a.includes(b.slice(0, 40)) || b.includes(a.slice(0, 40));
+    });
+    return stillThere ? '⚠️ Applied, but the warning is still here — try a different fix' : null;
   };
 
   // AI Revise — make an event more distinct from similar ones
@@ -2767,6 +2828,64 @@ The revised event should feel like a completely different experience from the si
 
         </div>
       )}
+          {reorderPlan && (() => {
+            const changes = reorderPlan.filter(p => p.changed);
+            return (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => !reorderApplying && setReorderPlan(null)}>
+                <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 720, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ padding: '20px 24px 12px', borderBottom: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>📊 Auto-Reorder Preview</div>
+                    <div style={{ fontSize: 13, color: '#64748b' }}>
+                      Sort linked events by prestige (low → high) across episodes.
+                      {' '}<b style={{ color: changes.length > 0 ? '#7c3aed' : '#64748b' }}>{changes.length}</b> of {reorderPlan.length} episodes would change.
+                    </div>
+                  </div>
+                  <div style={{ padding: '12px 24px' }}>
+                    {reorderPlan.length === 0 ? (
+                      <div style={{ fontSize: 13, color: '#64748b', padding: 12 }}>No episodes to reorder.</div>
+                    ) : (
+                      <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#94a3b8', textAlign: 'left' }}>
+                            <th style={{ padding: '6px 8px', fontWeight: 700 }}>Episode</th>
+                            <th style={{ padding: '6px 8px', fontWeight: 700 }}>Currently</th>
+                            <th style={{ padding: '6px 8px', fontWeight: 700, width: 24 }}></th>
+                            <th style={{ padding: '6px 8px', fontWeight: 700 }}>Proposed</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reorderPlan.map((p, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: p.changed ? '#faf5ff' : 'transparent' }}>
+                              <td style={{ padding: '8px', fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>Ep {p.ep.episode_number}</td>
+                              <td style={{ padding: '8px', color: p.current ? '#475569' : '#cbd5e1' }}>
+                                {p.current ? `${p.current.name} (P${p.current.prestige ?? '?'})` : '— empty —'}
+                              </td>
+                              <td style={{ padding: '8px', color: p.changed ? '#7c3aed' : '#cbd5e1', textAlign: 'center' }}>
+                                {p.changed ? '→' : '·'}
+                              </td>
+                              <td style={{ padding: '8px', color: p.proposed ? (p.changed ? '#7c3aed' : '#475569') : '#cbd5e1', fontWeight: p.changed ? 600 : 400 }}>
+                                {p.proposed ? `${p.proposed.name} (P${p.proposed.prestige ?? '?'})` : '— empty —'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                  <div style={{ padding: '12px 24px 20px', display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0' }}>
+                    <button onClick={() => setReorderPlan(null)} disabled={reorderApplying}
+                      style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#475569', cursor: reorderApplying ? 'wait' : 'pointer' }}>
+                      Cancel
+                    </button>
+                    <button onClick={applyReorderPlan} disabled={reorderApplying || changes.length === 0}
+                      style={{ padding: '8px 16px', background: changes.length === 0 ? '#e5e7eb' : '#7c3aed', color: changes.length === 0 ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: reorderApplying ? 'wait' : (changes.length === 0 ? 'not-allowed' : 'pointer') }}>
+                      {reorderApplying ? '⏳ Applying...' : changes.length === 0 ? 'No changes' : `Apply ${changes.length} reassignment${changes.length === 1 ? '' : 's'}`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           {eventDetailModal && (() => {
             // Hydrate missing fields from automation data + derive from context
             const auto = eventDetailModal.canon_consequences?.automation || {};
