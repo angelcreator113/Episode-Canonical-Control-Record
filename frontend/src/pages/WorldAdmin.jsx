@@ -170,13 +170,18 @@ function WorldAdmin() {
   // Inline error banner for the auto-fill button. Replaces the old alert()
   // which users were dismissing without reading, making failures look silent.
   const [wardrobeAutoFillError, setWardrobeAutoFillError] = useState(null);
+  const [wardrobeUploadBrandIsFictional, setWardrobeUploadBrandIsFictional] = useState(false);
+  const [wardrobeEditBrandIsFictional, setWardrobeEditBrandIsFictional] = useState(false);
   const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
   const [wardrobeUploadPreview, setWardrobeUploadPreview] = useState(null);
   const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' });
   // Reset the auto-fill error whenever the modal is closed or the file is
   // swapped out — stale error text against a different image would be confusing.
   useEffect(() => {
-    if (!showWardrobeUpload || !wardrobeUploadFile) setWardrobeAutoFillError(null);
+    if (!showWardrobeUpload || !wardrobeUploadFile) {
+      setWardrobeAutoFillError(null);
+      setWardrobeUploadBrandIsFictional(false);
+    }
   }, [showWardrobeUpload, wardrobeUploadFile]);
   // Sort order for the wardrobe grid. Mirrors the options previously in
   // WardrobeBrowser so consolidating the upload path doesn't drop UX.
@@ -4513,6 +4518,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
         const openEditItem = (item) => {
           setEditingWardrobeItem(item);
+          setWardrobeEditBrandIsFictional(false);
           setWardrobeForm({
             name: item.name || '',
             description: item.description || '',
@@ -5145,7 +5151,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   </div>
                   <div>
                     <label style={S.fLabel}>Vendor</label>
-                    <input value={wf.vendor} onChange={e => setWf('vendor', e.target.value)} style={S.inp} placeholder="Brand name..." />
+                    <input value={wf.vendor} onChange={e => { setWardrobeEditBrandIsFictional(false); setWf('vendor', e.target.value); }} style={S.inp} placeholder="Brand name..." />
+                    {wardrobeEditBrandIsFictional && (
+                      <div style={{ marginTop: 4, fontSize: 10, color: '#9A7B1F', fontFamily: "'DM Mono', monospace" }}>
+                        Fictional brand (auto-filled)
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={S.fLabel}>Price</label>
@@ -5305,6 +5316,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       const data = await res.json();
                       if (data.success && data.data) {
                         const ai = data.data;
+                        setWardrobeEditBrandIsFictional(!!ai.brand_is_fictional && !wf.vendor);
                         const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
                         // Only fill empty fields
                         setWardrobeForm(prev => ({
@@ -5641,6 +5653,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           return;
                         }
                         const ai = data.data;
+                        setWardrobeUploadBrandIsFictional(!!ai.brand_is_fictional);
                         const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
                         let aiPrice = '';
                         if (ai.price_estimate) { const n = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, '')); aiPrice = n && n >= 150 ? n.toFixed(2) : '150.00'; }
@@ -5700,7 +5713,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>name *</label><input value={wardrobeUploadForm.name} onChange={e => setWardrobeUploadForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Floral Mini Dress" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>brand</label><input value={wardrobeUploadForm.brand} onChange={e => setWardrobeUploadForm(p => ({ ...p, brand: e.target.value }))} placeholder="e.g., Zara" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                      <div>
+                        <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>brand</label>
+                        <input value={wardrobeUploadForm.brand} onChange={e => { setWardrobeUploadBrandIsFictional(false); setWardrobeUploadForm(p => ({ ...p, brand: e.target.value })); }} placeholder="e.g., Velvet House" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} />
+                        {wardrobeUploadBrandIsFictional && (
+                          <div style={{ marginTop: 4, fontSize: 10, color: '#9A7B1F', fontFamily: "'DM Mono', monospace" }}>
+                            Fictional brand (auto-filled)
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                       <div>
