@@ -552,7 +552,27 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
         try {
           const { buildSocialTasks } = require('./episodeGeneratorService');
           const eventType = i === 0 ? 'invite' : (i === 1 ? 'guest' : 'upgrade');
-          return buildSocialTasks(eventType, host ? { platform: host.platform || 'instagram', content_category: host.content_category } : null);
+          return buildSocialTasks(
+            eventType,
+            host
+              ? {
+                  platform: host.platform || 'instagram',
+                  content_category: host.content_category,
+                  handle: host.handle,
+                  display_name: host.display_name || hostName,
+                }
+              : null,
+            [],
+            {
+              event_name: eventName,
+              host_name: hostName,
+              host_handle: host?.handle || null,
+              host_brand: host?.brand_partnerships?.[0]?.brand || null,
+              venue_name: venueName,
+              dress_code: calendarEvent.activities?.dress_code || null,
+              guest_names: guestList.map(g => g.display_name || g.handle).filter(Boolean),
+            }
+          );
         } catch { return []; }
       })(),
     };
