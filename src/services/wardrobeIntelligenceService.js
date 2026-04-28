@@ -80,16 +80,21 @@ function evaluateOccasionPrecision(items, event) {
   const target = (event?.event_type || '').toLowerCase();
   const dressCode = (event?.dress_code || '').toLowerCase();
   if (!target && !dressCode) return null;
-  const hits = items.filter(i => {
+  const taggedItems = items.filter(i => {
     const occ = (i.occasion || '').toLowerCase();
-    if (!occ) return false;
+    return Boolean(occ);
+  });
+  if (taggedItems.length === 0) return null;
+
+  const hits = taggedItems.filter(i => {
+    const occ = (i.occasion || '').toLowerCase();
     if (target && occ.includes(target)) return true;
     if (dressCode && (occ.includes(dressCode) || dressCode.includes(occ))) return true;
     return false;
   }).length;
-  const ratio = items.length ? hits / items.length : 0;
+  const ratio = taggedItems.length ? hits / taggedItems.length : 0;
   if (ratio >= 0.6) return { type: 'occasion_precise', text: 'Pieces are tagged for this occasion', narrative: 'strategic', delta: 6 };
-  if (ratio === 0 && items.length >= 3) return { type: 'occasion_miss', text: 'None of the pieces are tagged for this kind of event', narrative: 'mild_anxiety', delta: -6 };
+  if (ratio === 0 && taggedItems.length >= 2) return { type: 'occasion_miss', text: 'Tagged pieces do not match this event type', narrative: 'mild_anxiety', delta: -6 };
   return null;
 }
 

@@ -2640,7 +2640,8 @@ router.put('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, re
     // Load wardrobe items
     const [items] = await models.sequelize.query(
       `SELECT id, name, clothing_category, brand, tier, price, color, is_owned,
-              acquisition_type, aesthetic_tags, s3_url, s3_url_processed, times_worn, last_worn_date
+              acquisition_type, aesthetic_tags, event_types, occasion, season, era_alignment,
+              s3_url, s3_url_processed, times_worn, last_worn_date
        FROM wardrobe WHERE id IN (:ids) AND deleted_at IS NULL`,
       { replacements: { ids: wardrobe_ids.length > 0 ? wardrobe_ids : ['00000000-0000-0000-0000-000000000000'] } }
     );
