@@ -330,6 +330,25 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
 
   // ── 1. Generate Social-Media-Ready Title + Description ──
   const eventData = typeof event.toJSON === 'function' ? event.toJSON() : event;
+    // \u2500\u2500 0b. Affordability guard \u2500\u2500
+    let affordabilityWarning = null;
+    try {
+      const [charState] = await models.sequelize.query(
+        `SELECT coins FROM character_state WHERE show_id = :showId AND character_key = 'justawoman' LIMIT 1`,
+        { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
+      ).catch(() => []);
+      const currentCoins = parseInt(charState?.coins) || 0;
+      const eventCost = parseFloat(event.cost_coins) || 0;
+      if (eventCost > 0 && currentCoins < eventCost) {
+        affordabilityWarning = {
+          coins_needed: eventCost,
+          coins_available: currentCoins,
+          shortfall: eventCost - currentCoins,
+        };
+        console.warn(`[EpisodeGenerator] Affordability warning: event costs ${eventCost} coins but character has ${currentCoins}`);
+      }
+    } catch { /* non-blocking */ }
+
   const outfitPieces = typeof eventData.outfit_pieces === 'string' ? JSON.parse(eventData.outfit_pieces || '[]') : (eventData.outfit_pieces || []);
   const outfitScore = typeof eventData.outfit_score === 'string' ? JSON.parse(eventData.outfit_score || 'null') : (eventData.outfit_score || null);
   const autoData = (typeof eventData.canon_consequences === 'string'
@@ -493,6 +512,7 @@ Return ONLY JSON.` }],
       event_metadata: {
         rewards: event.rewards || null,
         requirements: event.requirements || null,
+        affordability_warning: affordabilityWarning,
         browse_pool_bias: event.browse_pool_bias || null,
         browse_pool_size: event.browse_pool_size ?? null,
         overlay_template: event.overlay_template || null,
