@@ -13,7 +13,7 @@ const { literal } = require('sequelize');
  */
 exports.listPlacements = async (req, res) => {
   try {
-    const { id: episodeId } = req.params;
+    const { episodeId } = req.params;
     const { placementType, trackNumber, sceneId } = req.query;
 
     const where = { episode_id: episodeId };
@@ -30,16 +30,19 @@ exports.listPlacements = async (req, res) => {
           as: 'scene',
           attributes: ['id', 'title_override', 'scene_order', 'type'],
           required: false,
+          paranoid: false,
         },
         {
           model: Asset,
           as: 'asset',
           required: false,
+          paranoid: false,
         },
         {
           model: Wardrobe,
           as: 'wardrobeItem',
           required: false,
+          paranoid: false,
         },
       ],
       order: [
@@ -71,7 +74,7 @@ exports.listPlacements = async (req, res) => {
  */
 exports.createPlacement = async (req, res) => {
   try {
-    const { id: episodeId } = req.params;
+    const { episodeId } = req.params;
     const {
       placementType,
       assetId,
@@ -145,14 +148,17 @@ exports.createPlacement = async (req, res) => {
           model: EpisodeScene,
           as: 'scene',
           attributes: ['id', 'title_override', 'scene_order', 'type'],
+          paranoid: false,
         },
         {
           model: Asset,
           as: 'asset',
+          paranoid: false,
         },
         {
           model: Wardrobe,
           as: 'wardrobeItem',
+          paranoid: false,
         },
       ],
     });
@@ -177,7 +183,7 @@ exports.createPlacement = async (req, res) => {
  */
 exports.updatePlacement = async (req, res) => {
   try {
-    const { id: episodeId, placementId } = req.params;
+    const { episodeId, placementId } = req.params;
     const {
       attachmentPoint,
       offsetSeconds,
@@ -222,14 +228,17 @@ exports.updatePlacement = async (req, res) => {
           model: EpisodeScene,
           as: 'scene',
           attributes: ['id', 'title_override', 'scene_order', 'type'],
+          paranoid: false,
         },
         {
           model: Asset,
           as: 'asset',
+          paranoid: false,
         },
         {
           model: Wardrobe,
           as: 'wardrobeItem',
+          paranoid: false,
         },
       ],
     });
@@ -254,7 +263,7 @@ exports.updatePlacement = async (req, res) => {
  */
 exports.deletePlacement = async (req, res) => {
   try {
-    const { id: episodeId, placementId } = req.params;
+    const { episodeId, placementId } = req.params;
 
     const placement = await TimelinePlacement.findOne({
       where: {
@@ -293,7 +302,7 @@ exports.deletePlacement = async (req, res) => {
  */
 exports.getCurrentWardrobe = async (req, res) => {
   try {
-    const { id: episodeId } = req.params;
+    const { episodeId } = req.params;
     const { character, sceneId, sceneOrder } = req.query;
 
     if (!character) {
@@ -343,10 +352,12 @@ exports.getCurrentWardrobe = async (req, res) => {
             },
           },
           attributes: ['id', 'title_override', 'scene_order', 'type'],
+          paranoid: false,
         },
         {
           model: Wardrobe,
           as: 'wardrobeItem',
+          paranoid: false,
         },
       ],
       order: [[{ model: EpisodeScene, as: 'scene' }, 'scene_order', 'DESC']],
