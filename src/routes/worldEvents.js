@@ -2348,7 +2348,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
 
     // Event row — raw SQL to tolerate unmigrated columns on older envs.
     const [eventRows] = await models.sequelize.query(
-      `SELECT id, name, prestige, event_type, cost_coins, is_paid, payment_amount,
+      `SELECT id, name, prestige, event_type, cost_coins, is_paid, is_free, payment_amount,
               outfit_pieces, canon_consequences, dress_code
        FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
       { replacements: { eventId, showId } }
@@ -2408,12 +2408,13 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
       || photoBoothPrompt.includes('red carpet') || photoBoothPrompt.includes('photo');
     const photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
 
-    const eventCost = event.is_paid === false || event.is_paid === 0
-      ? (Number(event.cost_coins) || 0)
-      : 0; // is_paid true = brand is paying Lala, she doesn't owe the cover
+    const truthy = new Set([true, 1, '1', 'true', 'yes', 'y']);
+    const isPaid = truthy.has(event.is_paid);
+    const isFree = truthy.has(event.is_free);
+    const eventCost = isFree ? 0 : (isPaid ? 0 : (Number(event.cost_coins) || 0));
 
     // ── Income side ─────────────────────────────────────────────────
-    const eventPayment = (event.is_paid === true || event.is_paid === 1) ? (parseFloat(event.payment_amount) || 0) : 0;
+    const eventPayment = isPaid ? (parseFloat(event.payment_amount) || 0) : 0;
     const socialTasks = Array.isArray(automation.social_tasks) ? automation.social_tasks : [];
     const taskRewards = calculateSocialTaskRewards(socialTasks);
     const socialTaskRewards = taskRewards.reduce((s, t) => s + (t.reward || 0), 0);
