@@ -666,23 +666,6 @@ function WorldAdmin() {
     } catch { setToast('Merge failed'); setTimeout(() => setToast(null), 3000); }
   };
 
-  // Fill gap — suggest best unlinked event for an episode
-  const handleFillGap = (ep) => {
-    const unlinked = worldEvents.filter(ev => !ev.used_in_episode_id && ev.status !== 'used');
-    if (unlinked.length === 0) {
-      setToast('No unlinked events available — create a new one');
-      setTimeout(() => setToast(null), 3000);
-      return;
-    }
-    // Pick the best match: prefer matching career_tier to episode position
-    const epPos = ep.episode_number || 1;
-    const scored = unlinked.map(ev => ({
-      ev,
-      score: Math.abs((ev.prestige || 5) - (epPos * 0.7 + 2)) // rough fit
-    })).sort((a, b) => a.score - b.score);
-    setEventDetailModal(scored[0].ev);
-  };
-
   // AI Rebalance — Amber reassigns all events optimally
   const handleAiRebalance = async () => {
     if (!window.confirm('Let Amber reassign all events across episodes for optimal variety? This will change all assignments.')) return;
@@ -2098,16 +2081,10 @@ The revised event should feel like a completely different experience from the si
                         </button>
                       )}
                       {w.fixType === 'fill' && w.ep && (
-                        <>
-                          <button onClick={() => handleFillGap(w.ep)}
-                            style={{ padding: '2px 8px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                            📋 Suggest
-                          </button>
-                          <button onClick={() => handleAiGenerateForGap(w.ep)} disabled={aiFixLoading}
-                            style={{ padding: '2px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#7c3aed', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                            ✨ AI Create
-                          </button>
-                        </>
+                        <button onClick={() => handleAiGenerateForGap(w.ep)} disabled={aiFixLoading}
+                          style={{ padding: '2px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#7c3aed', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          ✨ AI Create
+                        </button>
                       )}
                       {w.eventName && (
                         <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
