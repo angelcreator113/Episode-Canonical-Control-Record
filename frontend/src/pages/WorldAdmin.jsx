@@ -442,7 +442,24 @@ function WorldAdmin() {
       };
       if (editingEvent === 'new') {
         const res = await api.post(`/api/v1/world/${showId}/events`, submitData);
-        if (res.data.success) { setWorldEvents(p => [res.data.event, ...p]); setEditingEvent(null); setSuccessMsg('Event created!'); }
+        if (res.data.success) {
+          let newEv = res.data.event;
+          // If this event was created from an AI gap suggestion, the target
+          // episode id was stashed on the form. Link it now via inject so
+          // the gap warning actually clears.
+          const linkEpId = eventForm.__pendingEpisodeLink;
+          if (linkEpId) {
+            try {
+              await api.post(`/api/v1/world/${showId}/events/${newEv.id}/inject`, { episode_id: linkEpId });
+              newEv = { ...newEv, used_in_episode_id: linkEpId, status: 'used' };
+            } catch (linkErr) {
+              console.warn('[AI gap] linking new event failed:', linkErr.response?.data?.error || linkErr.message);
+            }
+          }
+          setWorldEvents(p => [newEv, ...p]);
+          setEditingEvent(null);
+          setSuccessMsg(linkEpId ? 'Event created and linked to episode!' : 'Event created!');
+        }
       } else {
         const res = await api.put(`/api/v1/world/${showId}/events/${editingEvent}`, submitData);
         if (res.data.success) { setWorldEvents(p => p.map(e => e.id === editingEvent ? res.data.event : e)); setEditingEvent(null); setSuccessMsg('Event updated!'); }
@@ -709,7 +726,15 @@ function WorldAdmin() {
         events: worldEvents,
         episodes,
       });
-      setAiFixSuggestions(res.data?.data || []);
+      // Stash the gap episode on every suggestion so the + Create button
+      // can link the saved event back to the episode it was generated for.
+      // Without this the new event saves unlinked and the gap is still a gap.
+      const tagged = (res.data?.data || []).map(s => ({
+        ...s,
+        __targetEpisodeId: ep.id,
+        __targetEpisodeNumber: ep.episode_number,
+      }));
+      setAiFixSuggestions(tagged);
     } catch (err) {
       setToast(err.response?.data?.error || 'Generation failed');
       setTimeout(() => setToast(null), 3000);
@@ -735,9 +760,14 @@ function WorldAdmin() {
   };
 
   const applyAiFix = async (suggestion) => {
-    const ev = worldEvents.find(e => e.name === suggestion.event_name);
+    // Match by id first (stable across renames), then fall back to name.
+    // Without id-first matching, applying a "rename" suggestion would
+    // break any later suggestions that target the same event by its
+    // pre-rename name.
+    const ev = (suggestion.event_id && worldEvents.find(e => e.id === suggestion.event_id))
+      || worldEvents.find(e => e.name === suggestion.event_name);
     if (!ev) {
-      setToast(`Couldn't find event "${suggestion.event_name}"`);
+      setToast(`Couldn't find event "${suggestion.event_name || suggestion.event_id}"`);
       setTimeout(() => setToast(null), 3000);
       return;
     }
@@ -771,6 +801,21 @@ function WorldAdmin() {
       if (suggestion.action === 'swap_type' && suggestion.new_value) updates.event_type = suggestion.new_value;
       if (suggestion.action === 'rename' && suggestion.new_value) updates.name = suggestion.new_value;
       if (suggestion.action === 'change_prestige' && suggestion.new_value) updates.prestige = parseInt(suggestion.new_value) || ev.prestige;
+      // change_dress_code: new_value can be a plain string ("black-tie")
+      // or an object { dress_code, dress_code_keywords } when the AI is
+      // being thorough.
+      if (suggestion.action === 'change_dress_code' && suggestion.new_value) {
+        const v = suggestion.new_value;
+        if (typeof v === 'string') updates.dress_code = v;
+        else if (typeof v === 'object') {
+          if (v.dress_code) updates.dress_code = v.dress_code;
+          if (Array.isArray(v.dress_code_keywords)) updates.dress_code_keywords = v.dress_code_keywords;
+        }
+      }
+      if (suggestion.action === 'change_cost' && suggestion.new_value) {
+        const num = parseInt(String(suggestion.new_value).replace(/[^\d-]/g, ''), 10);
+        if (Number.isFinite(num)) updates.cost_coins = num;
+      }
 
       if (Object.keys(updates).length === 0) {
         flash(`No handler for action "${suggestion.action}"`);
@@ -2158,7 +2203,10 @@ The revised event should feel like a completely different experience from the si
                               // Map any non-standard field names
                               if (data.dress_code_style && !data.dress_code) data.dress_code = data.dress_code_style;
                               if (data.type && !data.event_type) data.event_type = data.type;
-                              setEventForm({ ...EMPTY_EVENT, ...data });
+                              // Stash the gap episode so saveEvent links the new
+                              // event after create. Field is non-API and ignored
+                              // by the backend's whitelist destructure.
+                              setEventForm({ ...EMPTY_EVENT, ...data, __pendingEpisodeLink: s.__targetEpisodeId || null });
                               setEditingEvent('new');
                               setAiFixSuggestions(prev => prev.filter(x => x !== s));
                             }} style={{

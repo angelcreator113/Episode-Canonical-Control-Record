@@ -925,8 +925,17 @@ router.post('/world/:showId/events/ai-fix', express.json({ limit: '2mb' }), opti
 
     const eventList = limitedEvents.map(ev => {
       const ep = episodes?.find(e => e.id === ev.used_in_episode_id);
-      return `- "${ev.name}" (type: ${ev.event_type}, prestige: ${ev.prestige}, dress: ${ev.dress_code || 'none'})${ep ? ` -> Ep ${ep.episode_number}: ${ep.title}` : ' -> unlinked'}`;
+      return `- id:${ev.id} "${ev.name}" (type: ${ev.event_type}, prestige: ${ev.prestige}, cost: ${ev.cost_coins ?? '?'}, dress: ${ev.dress_code || 'none'})${ep ? ` -> Ep ${ep.episode_number}: ${ep.title}` : ' -> unlinked'}`;
     }).join('\n');
+
+    // Episodes without an event — Claude needs to know these exist to
+    // suggest reassign targets for the gap warnings.
+    const linkedEpIds = new Set(limitedEvents.map(ev => ev.used_in_episode_id).filter(Boolean));
+    const openEpisodes = (episodes || [])
+      .filter(ep => !linkedEpIds.has(ep.id))
+      .slice(0, 20)
+      .map(ep => `- id:${ep.id} Ep ${ep.episode_number}: "${ep.title}"`)
+      .join('\n');
 
     const warningList = (warnings || []).slice(0, 10).map(w => `- ${w.msg || w}`).join('\n');
 
@@ -955,20 +964,26 @@ ${warningList}
 Here are all my events and their episode assignments:
 ${eventList}
 
+${openEpisodes ? `Episodes that have no event yet (use these as targets for "reassign"):\n${openEpisodes}\n` : ''}
 For each warning, suggest a specific fix. Return a JSON array:
 \`\`\`json
 [
   {
     "warning": "the warning text",
     "suggestion": "what to change",
-    "action": "swap_type" | "rename" | "change_prestige" | "reassign" | "merge_duplicates",
-    "event_name": "which event to change",
-    "new_value": "the suggested new value (new type, new name, new prestige number, etc.)"
+    "action": "swap_type" | "rename" | "change_prestige" | "change_dress_code" | "change_cost" | "reassign",
+    "event_id": "the id: prefix from the event list above — REQUIRED for stable matching",
+    "event_name": "the event's current name (informational)",
+    "new_value": "for reassign: the target episode id from the open-episodes list. for change_dress_code: a new dress code string. for change_cost: a new cost_coins integer. for swap_type/rename/change_prestige: the new value."
   }
 ]
 \`\`\`
 
 Guidelines:
+- Always include event_id so the apply step can match exactly even after renames
+- For "Same dress code N in a row": use change_dress_code with a different style
+- For "costs X coins at Tier Y" warnings: use change_cost with a lower number
+- For unlinked episodes (gap warnings): use reassign with new_value set to the open episode's id
 - For back-to-back same types: suggest changing one to a different event_type
 - For duplicates: suggest renaming to be distinct or merging them
 - For high prestige too early: suggest lowering prestige or swapping with a later episode
