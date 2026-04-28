@@ -2673,7 +2673,7 @@ router.put('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, re
       console.warn('[Outfit] Could not read show required_slots:', e.message);
     }
     const outfitScore = scoreOutfitForEvent(items, scoringEvent);
-    const repeats = await detectRepeats(items, showId, models);
+    const repeats = await detectRepeats(items, showId, models, { currentEventId: eventId });
     const brandRels = await getBrandRelationships(showId, models);
     const feedTriggers = generateOutfitReactionTriggers(outfitScore, repeats, brandRels);
 
@@ -2721,10 +2721,24 @@ router.get('/world/:showId/events/:eventId/wardrobe-options', optionalAuth, asyn
       { replacements: { showId } }
     );
 
+    // Keep recommendation scoring context aligned with outfit-save scoring.
+    let scoringEvent = event;
+    try {
+      if (models.Show) {
+        const show = await models.Show.findByPk(showId, { attributes: ['metadata'] });
+        const required = show?.metadata?.required_slots;
+        if (Array.isArray(required) && required.length > 0) {
+          scoringEvent = { ...event, required_slots: required };
+        }
+      }
+    } catch (e) {
+      console.warn('[Outfit] Could not read show required_slots for options:', e.message);
+    }
+
     // Score each item individually against the event
     const { scorePieceForEvent } = require('../services/wardrobeIntelligenceService');
     const scored = items.map(item => {
-      const singleScore = scorePieceForEvent(item, event);
+      const singleScore = scorePieceForEvent(item, scoringEvent);
       return {
         ...item,
         image_url: item.s3_url_processed || item.s3_url,
