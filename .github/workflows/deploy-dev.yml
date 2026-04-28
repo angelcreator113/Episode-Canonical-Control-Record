@@ -160,6 +160,7 @@ jobs:
       - name: Preflight — SSH reachability + disk-space guard
         env:
           EC2_HOST: ${{ secrets.DEV_EC2_HOST }}
+          EC2_USER: ${{ secrets.DEV_EC2_USER }}
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
           if [ -z "$EC2_HOST" ] || [ -z "$EC2_SSH_KEY" ]; then
@@ -167,11 +168,15 @@ jobs:
             exit 0
           fi
 
+          if [ -z "$EC2_USER" ]; then
+            EC2_USER="ubuntu"
+          fi
+
           mkdir -p ~/.ssh
           echo "$EC2_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2"
+          SSH_OPTS="-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2"
 
           echo "🌐 Runner network diagnostics"
           RUNNER_IP=$(curl -fsS https://api.ipify.org || true)
@@ -189,8 +194,10 @@ jobs:
 
           echo "🔌 Probing SSH to $EC2_HOST..."
           REACHABLE=false
+          LAST_ERR=""
           for i in 1 2 3; do
-            if ssh $SSH_OPTS ubuntu@$EC2_HOST 'echo ok' >/dev/null 2>&1; then
+            LAST_ERR=$(ssh $SSH_OPTS $EC2_USER@$EC2_HOST 'echo ok' 2>&1 >/dev/null || true)
+            if [ -z "$LAST_ERR" ]; then
               echo "✅ SSH reachable (attempt $i)"
               REACHABLE=true
               break
@@ -202,15 +209,22 @@ jobs:
           done
 
           if [ "$REACHABLE" != "true" ]; then
-            echo "::error title=EC2 dev host unreachable::$EC2_HOST is not accepting SSH on port 22 after 3 attempts (45s). Deploy aborted before SCP."
+            echo "::error title=EC2 dev SSH preflight failed::Could not open SSH session to $EC2_USER@$EC2_HOST after 3 attempts (45s). Deploy aborted before SCP."
+            echo ""
+            echo "Last SSH error:"
+            echo "  $LAST_ERR"
             echo ""
             echo "Most common causes (ordered by likelihood):"
-            echo "  1. EC2 instance stopped or rebooting — check AWS console and start it"
-            echo "  2. Disk 100% full → instance becomes SSH-unresponsive"
+            echo "  1. Wrong username or SSH key for this host"
+            echo "     - Current user: $EC2_USER"
+            echo "     - If your AMI user is ec2-user, ubuntu, or admin, set DEV_EC2_USER accordingly"
+            echo "     - Ensure EC2_SSH_KEY matches the instance key pair private key"
+            echo "  2. EC2 instance stopped or rebooting — check AWS console and start it"
+            echo "  3. Disk 100% full → instance becomes SSH-unresponsive"
             echo "     Recover via AWS SSM Session Manager or reboot, then clean ~/.pm2/logs/*.log"
-            echo "  3. Security Group blocking port 22 from GitHub Actions runners"
+            echo "  4. Security Group blocking port 22 from GitHub Actions runners"
             echo "     Compare the runner public IP printed above with your inbound SG rules"
-            echo "  4. EC2 out of memory and swapping — reboot from AWS console"
+            echo "  5. EC2 out of memory and swapping — reboot from AWS console"
             echo ""
             echo "After fixing, re-run this workflow from the Actions tab (top-right → Re-run failed jobs)."
             exit 1
@@ -218,7 +232,7 @@ jobs:
 
           echo ""
           echo "💾 Checking disk space on EC2..."
-          FREE_MB=$(ssh $SSH_OPTS ubuntu@$EC2_HOST 'df -BM --output=avail / | tail -1 | tr -d " M"')
+          FREE_MB=$(ssh $SSH_OPTS $EC2_USER@$EC2_HOST 'df -BM --output=avail / | tail -1 | tr -d " M"')
           echo "  Free space on /: ${FREE_MB}MB"
 
           MIN_FREE_MB=500
@@ -226,7 +240,7 @@ jobs:
             echo "::error title=EC2 disk almost full::Only ${FREE_MB}MB free on /, need at least ${MIN_FREE_MB}MB for the ~100MB tarball + extraction overhead."
             echo ""
             echo "Top space consumers on the instance:"
-            ssh $SSH_OPTS ubuntu@$EC2_HOST 'sudo du -hx / 2>/dev/null | sort -hr | head -10' || true
+            ssh $SSH_OPTS $EC2_USER@$EC2_HOST 'sudo du -hx / 2>/dev/null | sort -hr | head -10' || true
             echo ""
             echo "Quick cleanup (run via AWS SSM or SSH):"
             echo "  rm -rf ~/.pm2/logs/*.log"
