@@ -12,11 +12,21 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 const generationStatus = {};
 
 // GET /api/v1/ui-overlays/:showId — list existing overlays (all from DB)
+//
+// Optional query: ?episode_id=<uuid>
+//   When present, returns show-level overlays (episode_id IS NULL) merged
+//   with episode-level overrides (episode_id = X) for that episode.
+//   Episode-level rows take priority over show-level rows that share the
+//   same `name` (the Phone Hub key for "this is the Camera screen") — so
+//   a Camera override placed on episode 5 swaps out the show's default
+//   Camera screen only when episode 5 is the active context.
+//   When omitted, only show-level rows are returned (the default phone).
 router.get('/:showId', optionalAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getAllOverlayTypes } = require('../services/uiOverlayService');
     const showId = req.params.showId;
+    const episodeId = (req.query.episode_id || '').trim() || null;
 
     // All overlay types come from the DB
     const allTypes = await getAllOverlayTypes(showId, models);
@@ -25,16 +35,25 @@ router.get('/:showId', optionalAuth, async (req, res) => {
     // This is the same pattern used by the /debug endpoint which works reliably
     let existing = [];
     try {
+      const baseSelect = `SELECT id, name, asset_type, asset_role,
+                                 s3_url_processed, s3_url_raw,
+                                 episode_id,
+                                 metadata::text as metadata_text
+                          FROM assets
+                          WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId AND deleted_at IS NULL`;
+      // When scoped to an episode, pull both show-level (episode_id IS NULL)
+      // and episode-level rows. The merge below collapses duplicates so
+      // the episode override beats the show default. Without an episode_id
+      // we exclude episode-scoped rows entirely so they don't pollute the
+      // default phone.
+      const where = episodeId
+        ? `${baseSelect} AND (episode_id IS NULL OR episode_id = :episodeId)`
+        : `${baseSelect} AND episode_id IS NULL`;
       const [rows] = await models.sequelize.query(
-        `SELECT id, name, asset_type, asset_role,
-                s3_url_processed, s3_url_raw,
-                metadata::text as metadata_text
-         FROM assets
-         WHERE asset_type = 'UI_OVERLAY' AND show_id = :showId AND deleted_at IS NULL
-         ORDER BY created_at DESC`,
-        { replacements: { showId } }
+        `${where} ORDER BY created_at DESC`,
+        { replacements: { showId, episodeId } }
       );
-      existing = (rows || []).map(r => {
+      const all = (rows || []).map(r => {
         let meta = {};
         try { meta = r.metadata_text ? JSON.parse(r.metadata_text) : {}; } catch { /* skip */ }
         return {
@@ -45,8 +64,21 @@ router.get('/:showId', optionalAuth, async (req, res) => {
           url: r.s3_url_processed || r.s3_url_raw,
           bg_removed: meta.bg_removed || false,
           custom_prompt: meta.custom_prompt || null,
+          episode_id: r.episode_id || null,
+          is_episode_override: !!(episodeId && r.episode_id === episodeId),
         };
       });
+      // Merge show-level + episode-level: episode override wins on
+      // matching `name`. Order is preserved by inserting overrides
+      // before defaults so the consumer sees the active version first.
+      if (episodeId) {
+        const overrides = all.filter(a => a.is_episode_override);
+        const overrideNames = new Set(overrides.map(a => a.name));
+        const defaults = all.filter(a => !a.is_episode_override && !overrideNames.has(a.name));
+        existing = [...overrides, ...defaults];
+      } else {
+        existing = all;
+      }
     } catch (queryErr) {
       console.error('[UIOverlay] Asset query failed:', queryErr.message);
     }
