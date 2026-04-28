@@ -183,7 +183,71 @@ router.post('/episodes/:episodeId/todo/lock', optionalAuth, async (req, res) => 
       { replacements: { assetUrl, episodeId } }
     );
 
-    return res.json({ success: true, message: `Checklist locked with ${includedTasks.length} tasks`, assetUrl });
+    // Materialize the locked PNG as an Asset row so the rest of the
+    // system (timeline placements, video composition, asset library)
+    // can reference it by FK. Idempotent: skip if a wardrobe-list
+    // asset for this episode already exists; refresh its URL instead.
+    let assetId = null;
+    try {
+      const [existing] = await sequelize.query(
+        `SELECT id FROM assets
+          WHERE episode_id = :episodeId
+            AND asset_role = 'UI.OVERLAY.WARDROBE_LIST'
+            AND deleted_at IS NULL
+          LIMIT 1`,
+        { replacements: { episodeId } }
+      );
+      if (existing && existing.length) {
+        assetId = existing[0].id;
+        await sequelize.query(
+          `UPDATE assets SET s3_url_processed = :assetUrl, updated_at = NOW() WHERE id = :id`,
+          { replacements: { assetUrl, id: assetId } }
+        );
+      } else {
+        const newAssetId = uuidv4();
+        await sequelize.query(
+          `INSERT INTO assets (id, asset_type, asset_role, asset_scope, episode_id, name, s3_url_processed, approval_status, created_at, updated_at)
+           VALUES (:id, 'UI_OVERLAY', 'UI.OVERLAY.WARDROBE_LIST', 'EPISODE', :episodeId, :name, :assetUrl, 'approved', NOW(), NOW())`,
+          { replacements: { id: newAssetId, episodeId, name: `Wardrobe Checklist — ${event?.name || 'Episode'}`, assetUrl } }
+        );
+        assetId = newAssetId;
+      }
+    } catch (assetErr) {
+      // Asset creation shouldn't block the lock response — the PNG is
+      // already in S3 and the todo list row is updated.
+      console.warn('[TodoList] Asset row creation skipped:', assetErr.message);
+    }
+
+    // Auto-place the wardrobe checklist on the first scene so the
+    // timeline knows where to render it. Same idempotent helper used
+    // by approve-invitation; failures are non-blocking.
+    let placementId = null;
+    if (assetId) {
+      try {
+        const models = req.app.get('models') || require('../models');
+        const { placeOverlayOnFirstScene } = require('../services/timelinePlacementService');
+        const placement = await placeOverlayOnFirstScene(models, {
+          episodeId,
+          assetId,
+          defaults: {
+            duration: 8,
+            zIndex: 15,
+            properties: { kind: 'wardrobe_checklist', source: 'todo-lock' },
+          },
+        });
+        placementId = placement?.id || null;
+      } catch (placeErr) {
+        console.warn('[TodoList] Placement skipped:', placeErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Checklist locked with ${includedTasks.length} tasks`,
+      assetUrl,
+      asset_id: assetId,
+      placement_id: placementId,
+    });
   } catch (err) {
     console.error('[TodoList] Lock error:', err);
     return res.status(500).json({ error: err.message });

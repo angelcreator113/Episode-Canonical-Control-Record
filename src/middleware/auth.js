@@ -247,6 +247,50 @@ module.exports = {
   authorize,
   authorizeRole,
   optionalAuth,
+  // requireAuth — same as authenticateToken, but returns a distinct
+  // response code (`AUTH_REQUIRED`) that the frontend interceptor
+  // recognizes as "this endpoint needs a token, but failing it should
+  // NOT wipe credentials or force a redirect to /login." Use on
+  // mutations that creators may invoke while their session is mid-
+  // refresh. Functionally identical to authenticateToken otherwise.
+  requireAuth: async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({
+        error: 'Authorization required',
+        message: 'This action requires a signed-in user.',
+        code: 'AUTH_REQUIRED',
+      });
+    }
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
+      return res.status(401).json({
+        error: 'Authorization required',
+        message: 'Invalid authorization header. Use: Bearer <token>',
+        code: 'AUTH_REQUIRED',
+      });
+    }
+    try {
+      const decoded = await verifyToken(parts[1]);
+      req.user = {
+        id: decoded.sub,
+        email: decoded.email,
+        name: decoded.name,
+        groups: decoded['cognito:groups'] || decoded.groups || [],
+        tokenUse: decoded.token_use,
+        issuedAt: decoded.iat,
+        expiresAt: decoded.exp,
+        raw: decoded,
+      };
+      next();
+    } catch (error) {
+      return res.status(401).json({
+        error: 'Authorization required',
+        message: error.message,
+        code: 'AUTH_REQUIRED',
+      });
+    }
+  },
   verifyToken,
   verifyGroup,
 };

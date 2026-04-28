@@ -23,6 +23,14 @@ module.exports = (sequelize) => {
     lala_state_snapshot: { type: DataTypes.JSONB, allowNull: true },
     event_id: { type: DataTypes.UUID, allowNull: true },
     event_difficulty: { type: DataTypes.JSONB, allowNull: true },
+    // Captures which saved OutfitSet drove this episode at generate time.
+    // Separate from the individual EpisodeWardrobe rows so we keep the
+    // "this came from set X" audit trail even after the pieces explode.
+    outfit_set_id: { type: DataTypes.UUID, allowNull: true },
+    // AI-drafted beat outline at generate time. Each entry:
+    // { beat_number, summary, dramatic_function }. Lets the Suggest-Scenes
+    // feature have something to chew on before a script exists.
+    beat_outline: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },
     status: { type: DataTypes.ENUM('draft', 'locked'), allowNull: false, defaultValue: 'draft' },
     ai_generated_at: { type: DataTypes.DATE, allowNull: true },
   }, {

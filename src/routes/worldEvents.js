@@ -21,11 +21,20 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
 let optionalAuth;
+let requireAuth;
 try {
   const authModule = require('../middleware/auth');
   optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
+  requireAuth = authModule.requireAuth || authModule.authenticateToken || ((req, res, next) => next());
 } catch (e) {
   optionalAuth = (req, res, next) => next();
+  requireAuth = (req, res, next) => next();
+}
+let aiRateLimiter;
+try {
+  aiRateLimiter = require('../middleware/aiRateLimiter').aiRateLimiter;
+} catch {
+  aiRateLimiter = (req, res, next) => next();
 }
 
 async function getModels() {
@@ -704,7 +713,7 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
 let scriptSkeletonGenerator;
 try { scriptSkeletonGenerator = require('../utils/scriptSkeletonGenerator'); } catch (e) { scriptSkeletonGenerator = null; }
 
-router.post('/world/:showId/events/:eventId/generate-script', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const {
@@ -1175,7 +1184,35 @@ router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, a
       { replacements: { assetId, eventId } }
     );
 
-    return res.json({ success: true, message: 'Invitation approved and linked to event', episodeId });
+    // Auto-create a TimelinePlacement so the invite is queued for the
+    // video composer to render. Default: scene-start of the first
+    // scene, 5s duration, overlay z-index. Idempotent — re-approving
+    // the same invite won't pile up duplicate placements. Non-blocking
+    // so a failure here doesn't fail the approval response.
+    let placement = null;
+    if (episodeId) {
+      try {
+        const { placeOverlayOnFirstScene } = require('../services/timelinePlacementService');
+        placement = await placeOverlayOnFirstScene(models, {
+          episodeId,
+          assetId,
+          defaults: {
+            duration: 5,
+            zIndex: 20,
+            properties: { kind: 'invitation', source: 'approve-invitation' },
+          },
+        });
+      } catch (placeErr) {
+        console.warn('[approve-invitation] Placement skipped:', placeErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Invitation approved and linked to event',
+      episodeId,
+      placement_id: placement?.id || null,
+    });
   } catch (err) {
     console.error('[InviteGen] Approve error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -1600,9 +1637,14 @@ router.delete('/world/:showId/events/:eventId/invitation/:assetId', optionalAuth
 // Auto-generate a complete episode from an event
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
+    // Optional: when draft_script is true, also kick the script skeleton
+    // generator so the new episode has a starting script. Otherwise the
+    // creator gets the title + beat outline only and writes the script
+    // themselves later.
+    const draftScript = !!(req.body && req.body.draft_script);
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
@@ -1639,14 +1681,217 @@ router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, asy
       wardrobeItems,
     });
 
+    // Optional: drop in a script skeleton right after the episode lands.
+    // Reuses the same skeleton generator as POST /generate-script, just
+    // inlined so the creator doesn't need a second click. Failures are
+    // non-fatal — the episode is already saved.
+    let scriptDrafted = false;
+    if (draftScript && result?.episode?.id) {
+      try {
+        const scriptSkeletonGenerator = require('../utils/scriptSkeletonGenerator');
+        if (scriptSkeletonGenerator) {
+          const skeleton = scriptSkeletonGenerator.generateScriptSkeleton(event, {
+            includeNarration: true,
+            includeAnimations: true,
+          });
+          if (skeleton && models.Episode) {
+            await models.Episode.update(
+              { script_content: skeleton },
+              { where: { id: result.episode.id } }
+            );
+            scriptDrafted = true;
+          }
+        }
+      } catch (scriptErr) {
+        console.warn('[generate-episode] Script draft failed (non-fatal):', scriptErr.message);
+      }
+    }
+
     return res.status(201).json({
       success: true,
       data: result,
-      message: `Episode "${result.episode.title}" created with ${result.scenePlan.length} beats, ${result.socialTasks.length} social tasks`,
+      script_drafted: scriptDrafted,
+      message: `Episode "${result.episode.title}" created with ${result.scenePlan.length} beats, ${result.socialTasks.length} social tasks${scriptDrafted ? ' + draft script' : ''}`,
     });
   } catch (error) {
     console.error('Generate episode error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message, stack: error.stack?.slice(0, 500) });
+  }
+});
+
+// POST /world/:showId/events/generate-episode-from-many
+//
+// Generate a single episode from multiple events. The first event in the
+// list is the "anchor" — it drives title generation, outfit, and brief
+// fields the way the single-event generator does. The remaining events
+// are linked to the same episode via used_in_episode_id, so their
+// locations, dress codes, narrative stakes, and outfits all show on the
+// episode page through the existing read-through patterns.
+//
+// Body: { event_ids: [uuid, ...], draft_script?: bool }
+router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { event_ids: eventIds = [], draft_script: draftScript = false } = req.body || {};
+    if (!Array.isArray(eventIds) || eventIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'event_ids array required' });
+    }
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    // Load every requested event in one query so we can validate up front.
+    const [rows] = await models.sequelize.query(
+      `SELECT * FROM world_events WHERE show_id = :showId AND id IN (:eventIds)`,
+      { replacements: { showId, eventIds } }
+    );
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'No matching events found' });
+    }
+    const eventsById = new Map(rows.map(r => [r.id, r]));
+    // Order the events list to match the input order so the first ID is
+    // the anchor regardless of DB return order.
+    const ordered = eventIds.map(id => eventsById.get(id)).filter(Boolean);
+    const anchor = ordered[0];
+    const extras = ordered.slice(1);
+
+    // Anchor must not already have an episode — same guard as the
+    // single-event generator. Extras that are already linked to other
+    // episodes are skipped with a warning.
+    if (anchor.used_in_episode_id) {
+      return res.status(409).json({
+        success: false,
+        error: 'The anchor event already has an episode. Regenerate it first to combine.',
+      });
+    }
+
+    let wardrobeItems = [];
+    try {
+      const [w] = await models.sequelize.query(
+        `SELECT id, name, coin_cost, price, acquisition_type FROM wardrobe WHERE show_id = :showId AND deleted_at IS NULL`,
+        { replacements: { showId } }
+      );
+      wardrobeItems = w || [];
+    } catch { /* wardrobe may not exist yet */ }
+
+    const episodeGenerator = require('../services/episodeGeneratorService');
+    const result = await episodeGenerator.generateEpisodeFromEvent(anchor, models, { showId, wardrobeItems });
+    const newEpisodeId = result?.episode?.id;
+
+    // Link the extra events to the same episode. Skip ones that already
+    // link somewhere (they'd violate the partial unique index anyway).
+    const linkedExtras = [];
+    const skippedExtras = [];
+    for (const ev of extras) {
+      if (ev.used_in_episode_id) {
+        skippedExtras.push({ id: ev.id, name: ev.name, reason: 'already linked elsewhere' });
+        continue;
+      }
+      try {
+        await models.sequelize.query(
+          `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW() WHERE id = :evId`,
+          { replacements: { episodeId: newEpisodeId, evId: ev.id } }
+        );
+        linkedExtras.push({ id: ev.id, name: ev.name });
+      } catch (linkErr) {
+        skippedExtras.push({ id: ev.id, name: ev.name, reason: linkErr.message });
+      }
+    }
+
+    let scriptDrafted = false;
+    if (draftScript && newEpisodeId) {
+      try {
+        const scriptSkeletonGenerator = require('../utils/scriptSkeletonGenerator');
+        if (scriptSkeletonGenerator) {
+          const skeleton = scriptSkeletonGenerator.generateScriptSkeleton(anchor, {
+            includeNarration: true,
+            includeAnimations: true,
+          });
+          if (skeleton && models.Episode) {
+            await models.Episode.update({ script_content: skeleton }, { where: { id: newEpisodeId } });
+            scriptDrafted = true;
+          }
+        }
+      } catch (scriptErr) {
+        console.warn('[generate-from-many] Script draft failed (non-fatal):', scriptErr.message);
+      }
+    }
+
+    return res.status(201).json({
+      success: true,
+      data: result,
+      anchor_event_id: anchor.id,
+      linked_extras: linkedExtras,
+      skipped_extras: skippedExtras,
+      script_drafted: scriptDrafted,
+      message: `Episode "${result.episode.title}" created from ${1 + linkedExtras.length} event${linkedExtras.length === 0 ? '' : 's'}${skippedExtras.length ? ` (${skippedExtras.length} skipped)` : ''}`,
+    });
+  } catch (error) {
+    console.error('Multi-event generate error:', error.message, error.stack?.slice(0, 500));
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /world/:showId/events/:eventId/regenerate-episode
+//
+// Tear down the existing episode generated from this event and create a
+// fresh one. Same generator service, but unblocks the "already used"
+// guard by clearing used_in_episode_id + soft-deleting the previous
+// episode first. Useful when the event has been edited (new outfit,
+// stakes, etc.) and the creator wants the episode to reflect those
+// changes without losing their place.
+router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    // Look up the previously-generated episode_id, if any.
+    const [evRows] = await models.sequelize.query(
+      'SELECT id, used_in_episode_id FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
+      { replacements: { eventId, showId } }
+    );
+    const event = evRows?.[0];
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    const oldEpisodeId = event.used_in_episode_id || null;
+    if (oldEpisodeId) {
+      // Soft-delete the previous episode (paranoid mode handles this) and
+      // unhook the event so the generator's duplicate-guard passes. We
+      // intentionally don't cascade-delete briefs / wardrobe / scene-plan
+      // because Sequelize paranoid will mask them via the same deleted_at
+      // and they'll be hidden from queries.
+      await models.sequelize.query('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :eventId', { replacements: { eventId } });
+      await models.sequelize.query('UPDATE episodes SET deleted_at = NOW() WHERE id = :episodeId AND deleted_at IS NULL', { replacements: { episodeId: oldEpisodeId } });
+    }
+
+    // Re-fetch the event row in full so the generator gets every column.
+    const [fullRows] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1',
+      { replacements: { eventId, showId } }
+    );
+    const fullEvent = fullRows?.[0];
+
+    let wardrobeItems = [];
+    try {
+      const [rows] = await models.sequelize.query(
+        `SELECT id, name, coin_cost, price, acquisition_type FROM wardrobe WHERE show_id = :showId AND deleted_at IS NULL`,
+        { replacements: { showId } }
+      );
+      wardrobeItems = rows || [];
+    } catch { /* wardrobe may not exist yet */ }
+
+    const episodeGenerator = require('../services/episodeGeneratorService');
+    const result = await episodeGenerator.generateEpisodeFromEvent(fullEvent, models, { showId, wardrobeItems });
+
+    return res.status(201).json({
+      success: true,
+      data: result,
+      replaced_episode_id: oldEpisodeId,
+      message: `Episode regenerated. Previous episode${oldEpisodeId ? ' soft-deleted' : ' did not exist'}.`,
+    });
+  } catch (error) {
+    console.error('Regenerate episode error:', error.message, error.stack?.slice(0, 500));
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
