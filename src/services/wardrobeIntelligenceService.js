@@ -220,6 +220,99 @@ function scoreSingleSlot(slotKey, items, event, expectedTier) {
   };
 }
 
+function getExpectedTier(eventPrestige) {
+  return eventPrestige <= 3 ? 1.5 : eventPrestige <= 5 ? 2 : eventPrestige <= 7 ? 3 : 3.5;
+}
+
+function getTierAlignmentScore(tierGap) {
+  if (tierGap >= 1.5) return 72;
+  if (tierGap > 1) return 80;
+  if (Math.abs(tierGap) <= 0.5) return 94;
+  if (tierGap >= -1) return 66;
+  if (tierGap >= -1.5) return 48;
+  return 28;
+}
+
+function scorePieceForEvent(item, event) {
+  if (!item || !event) return null;
+
+  const eventPrestige = event.prestige || 5;
+  const expectedTier = getExpectedTier(eventPrestige);
+  const itemTier = TIER_VALUES[item.tier] || 2;
+  const tierGap = itemTier - expectedTier;
+
+  const signals = [];
+  let attributeScore = 50;
+
+  const baseTierScore = getTierAlignmentScore(tierGap);
+  if (tierGap > 1) {
+    signals.push({ type: 'overdressed', text: 'This piece reads above the room tier', narrative: 'confidence_or_overcompensation' });
+  } else if (Math.abs(tierGap) <= 0.5) {
+    signals.push({ type: 'perfect_match', text: 'This piece matches the event tier', narrative: 'confidence_boost' });
+  } else if (tierGap >= -1) {
+    signals.push({ type: 'slight_under', text: 'This piece is slightly under event tier', narrative: 'mild_anxiety' });
+  } else {
+    signals.push({ type: 'underdressed', text: 'This piece is under event tier for the room', narrative: 'anxiety' });
+  }
+
+  if (event.host_brand && item.brand && item.brand === event.host_brand) {
+    attributeScore += 22;
+    signals.push({ type: 'brand_match', text: `Host-brand alignment: ${event.host_brand}`, narrative: 'strategic' });
+  }
+
+  const target = (event.event_type || '').toLowerCase();
+  const dressCode = (event.dress_code || '').toLowerCase();
+  const occasion = (item.occasion || '').toLowerCase();
+  if (occasion && (target || dressCode)) {
+    if ((target && occasion.includes(target)) || (dressCode && (occasion.includes(dressCode) || dressCode.includes(occasion)))) {
+      attributeScore += 12;
+      signals.push({ type: 'occasion_precise', text: 'Occasion tag aligns to this event', narrative: 'strategic' });
+    } else {
+      attributeScore -= 5;
+      signals.push({ type: 'occasion_miss', text: 'Occasion tag does not align cleanly', narrative: 'mild_anxiety' });
+    }
+  }
+
+  const eventSeason = (event.season || '').toLowerCase();
+  const itemSeason = (item.season || '').toLowerCase();
+  if (eventSeason && itemSeason && itemSeason !== 'all-season' && itemSeason !== eventSeason) {
+    attributeScore -= 4;
+    signals.push({ type: 'season_off', text: `Season mismatch for ${eventSeason} event`, narrative: 'mild_anxiety' });
+  }
+
+  if (item.acquisition_type === 'borrowed' || item.acquisition_type === 'rented') {
+    attributeScore -= 1;
+    signals.push({ type: 'borrowed', text: `Piece is ${item.acquisition_type}`, narrative: 'vulnerability' });
+  }
+
+  const timesWorn = parseInt(item.times_worn, 10) || 0;
+  if (timesWorn >= 6 && eventPrestige >= 8) {
+    attributeScore -= 3;
+    signals.push({ type: 'repeat_fatigue', text: 'Heavy repeat on a high-prestige event', narrative: 'tension' });
+  } else if (timesWorn >= 3) {
+    attributeScore += 3;
+    signals.push({ type: 'signature_piece', text: 'Repeat wear can read as signature styling', narrative: 'confidence_boost' });
+  }
+
+  attributeScore = Math.max(0, Math.min(100, attributeScore));
+  const matchScore = Math.round((baseTierScore * 0.65) + (attributeScore * 0.35));
+
+  let narrativeMood = 'neutral';
+  if (matchScore >= 80) narrativeMood = 'confidence';
+  else if (tierGap < -1) narrativeMood = 'anxiety';
+  else if (tierGap > 1) narrativeMood = 'overcompensation';
+  else if (matchScore < 55) narrativeMood = 'tension';
+
+  return {
+    match_score: Math.max(0, Math.min(100, matchScore)),
+    piece_tier: itemTier,
+    expected_tier: expectedTier,
+    tier_gap: tierGap,
+    signals,
+    narrative_mood: narrativeMood,
+  };
+}
+
 function scoreOutfitForEvent(wardrobeItems, event) {
   if (!wardrobeItems?.length || !event) return null;
 
@@ -235,37 +328,38 @@ function scoreOutfitForEvent(wardrobeItems, event) {
 
   // Prestige alignment: how well does outfit tier match event prestige?
   // Prestige 1-3 → basic/mid fine. Prestige 7-10 → need luxury/elite
-  const expectedTier = eventPrestige <= 3 ? 1.5 : eventPrestige <= 5 ? 2 : eventPrestige <= 7 ? 3 : 3.5;
+  const expectedTier = getExpectedTier(eventPrestige);
   const tierGap = avgTier - expectedTier;
 
-  let matchScore = 50; // neutral baseline
+  const tierComponent = getTierAlignmentScore(tierGap);
+  let secondaryDelta = 0;
   const signals = [];
 
   // Overdressed (+)
   if (tierGap > 1) {
-    matchScore += 15;
+    secondaryDelta += 10;
     signals.push({ type: 'overdressed', text: 'She\'s overdressed — power move or trying too hard', narrative: 'confidence_or_overcompensation' });
   }
   // Perfect match
   else if (Math.abs(tierGap) <= 0.5) {
-    matchScore += 30;
+    secondaryDelta += 16;
     signals.push({ type: 'perfect_match', text: 'Outfit matches the room perfectly', narrative: 'confidence_boost' });
   }
   // Slightly under
   else if (tierGap >= -1) {
-    matchScore += 10;
+    secondaryDelta += 4;
     signals.push({ type: 'slight_under', text: 'Slightly underdressed — she knows it', narrative: 'mild_anxiety' });
   }
   // Very underdressed
   else {
-    matchScore -= 15;
+    secondaryDelta -= 14;
     signals.push({ type: 'underdressed', text: 'She\'s underdressed for this event — everyone will notice', narrative: 'anxiety' });
   }
 
   // Brand alignment with event
   const brands = [...new Set(wardrobeItems.map(i => i.brand).filter(Boolean))];
   if (event.host_brand && brands.includes(event.host_brand)) {
-    matchScore += 20;
+    secondaryDelta += 16;
     signals.push({ type: 'brand_match', text: `Wearing ${event.host_brand} to their own event — smart`, narrative: 'strategic' });
   }
 
@@ -273,6 +367,7 @@ function scoreOutfitForEvent(wardrobeItems, event) {
   const _allOwned = wardrobeItems.every(i => i.is_owned || i.acquisition_type === 'purchased');
   const hasBorrowed = wardrobeItems.some(i => i.acquisition_type === 'borrowed' || i.acquisition_type === 'rented');
   if (hasBorrowed) {
+    secondaryDelta -= 1;
     signals.push({ type: 'borrowed', text: 'Some pieces are borrowed — she\'s faking it', narrative: 'vulnerability' });
   }
 
@@ -287,7 +382,7 @@ function scoreOutfitForEvent(wardrobeItems, event) {
     evaluateEraConsistency(wardrobeItems),
   ]) {
     if (sig) {
-      matchScore += sig.delta || 0;
+      secondaryDelta += sig.delta || 0;
       signals.push({ type: sig.type, text: sig.text, narrative: sig.narrative });
     }
   }
@@ -300,6 +395,14 @@ function scoreOutfitForEvent(wardrobeItems, event) {
   // as a row per slot.
   const bySlot = groupItemsBySlot(wardrobeItems);
   const slots = SLOT_KEYS.map(key => scoreSingleSlot(key, bySlot[key] || [], event, expectedTier));
+  const scoredSlots = slots.filter(s => s.required || (s.items && s.items.length > 0));
+  const slotComponent = scoredSlots.length
+    ? scoredSlots.reduce((sum, s) => sum + (s.match || 0), 0) / scoredSlots.length
+    : tierComponent;
+
+  const secondaryComponent = Math.max(0, Math.min(100, 50 + secondaryDelta));
+  const matchScore = Math.round((tierComponent * 0.50) + (slotComponent * 0.25) + (secondaryComponent * 0.25));
+
   const unassigned = bySlot.__unassigned && bySlot.__unassigned.length
     ? bySlot.__unassigned.map(i => ({ id: i.id, name: i.name, clothing_category: i.clothing_category }))
     : [];
@@ -579,6 +682,7 @@ function buildScriptContext(outfitScore, repeats, brandRelationships, growthArc,
 }
 
 module.exports = {
+  scorePieceForEvent,
   scoreOutfitForEvent,
   detectRepeats,
   getBrandRelationships,

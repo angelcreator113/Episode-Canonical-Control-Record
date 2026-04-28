@@ -165,18 +165,27 @@ function WorldAdmin() {
   const [outfitSelected, setOutfitSelected] = useState(new Set());
   const [outfitSaving, setOutfitSaving] = useState(false);
   const [outfitScore, setOutfitScore] = useState(null);
+  const [outfitSlotFilter, setOutfitSlotFilter] = useState('all');
+  const [outfitTierFilter, setOutfitTierFilter] = useState('all');
+  const [outfitHideWorn, setOutfitHideWorn] = useState(false);
+  const [outfitShowAllRepeats, setOutfitShowAllRepeats] = useState(false);
   const [wardrobeUploading, setWardrobeUploading] = useState(false);
   const [wardrobeAnalyzing, setWardrobeAnalyzing] = useState(false);
   // Inline error banner for the auto-fill button. Replaces the old alert()
   // which users were dismissing without reading, making failures look silent.
   const [wardrobeAutoFillError, setWardrobeAutoFillError] = useState(null);
+  const [wardrobeUploadBrandIsFictional, setWardrobeUploadBrandIsFictional] = useState(false);
+  const [wardrobeEditBrandIsFictional, setWardrobeEditBrandIsFictional] = useState(false);
   const [wardrobeUploadFile, setWardrobeUploadFile] = useState(null);
   const [wardrobeUploadPreview, setWardrobeUploadPreview] = useState(null);
   const [wardrobeUploadForm, setWardrobeUploadForm] = useState({ name: '', character: 'Lala', clothingCategory: '', brand: '', price: '', color: '', size: '', website: '', isFavorite: false, coinCost: '', acquisitionType: 'purchased', lockType: 'none', eraAlignment: '', reputationRequired: '', aestheticTags: '', eventTypes: '', outfitMatchWeight: '', influenceRequired: '', seasonUnlockEpisode: '', isOwned: false, isVisible: true, lalaReactionOwn: '', lalaReactionLocked: '', lalaReactionReject: '' });
   // Reset the auto-fill error whenever the modal is closed or the file is
   // swapped out — stale error text against a different image would be confusing.
   useEffect(() => {
-    if (!showWardrobeUpload || !wardrobeUploadFile) setWardrobeAutoFillError(null);
+    if (!showWardrobeUpload || !wardrobeUploadFile) {
+      setWardrobeAutoFillError(null);
+      setWardrobeUploadBrandIsFictional(false);
+    }
   }, [showWardrobeUpload, wardrobeUploadFile]);
   // Sort order for the wardrobe grid. Mirrors the options previously in
   // WardrobeBrowser so consolidating the upload path doesn't drop UX.
@@ -2753,6 +2762,10 @@ The revised event should feel like a completely different experience from the si
                     setOutfitPickerEvent(ev);
                     setOutfitSelected(new Set());
                     setOutfitScore(null);
+                    setOutfitSlotFilter('all');
+                    setOutfitTierFilter('all');
+                    setOutfitHideWorn(false);
+                    setOutfitShowAllRepeats(false);
                     try {
                       const res = await api.get(`/api/v1/world/${showId}/events/${ev.id}/wardrobe-options`);
                       setOutfitOptions(res.data.items || []);
@@ -3540,6 +3553,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           setOutfitPickerEvent(md);
                           setOutfitSelected(new Set());
                           setOutfitScore(null);
+                          setOutfitSlotFilter('all');
+                          setOutfitTierFilter('all');
+                          setOutfitHideWorn(false);
+                          setOutfitShowAllRepeats(false);
                           try {
                             const res = await api.get(`/api/v1/world/${showId}/events/${md.id}/wardrobe-options`);
                             setOutfitOptions(res.data.items || []);
@@ -4101,9 +4118,21 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 {outfitScore.signals?.map((s, i) => (
                   <div key={i} style={{ fontSize: 11, color: '#666', marginTop: 3 }}>{s.text}</div>
                 ))}
-                {outfitScore.repeats?.length > 0 && outfitScore.repeats.map((r, i) => (
-                  <div key={`r${i}`} style={{ fontSize: 11, color: '#8b5cf6', marginTop: 3 }}>{r.narrative?.text}</div>
-                ))}
+                {outfitScore.repeats?.length > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    {(outfitShowAllRepeats ? outfitScore.repeats : outfitScore.repeats.slice(0, 2)).map((r, i) => (
+                      <div key={`r${i}`} style={{ fontSize: 11, color: '#8b5cf6', marginTop: 3 }}>{r.narrative?.text}</div>
+                    ))}
+                    {outfitScore.repeats.length > 2 && (
+                      <button
+                        onClick={() => setOutfitShowAllRepeats(v => !v)}
+                        style={{ marginTop: 4, padding: 0, border: 'none', background: 'none', cursor: 'pointer', fontSize: 10, color: '#8b5cf6', fontFamily: "'DM Mono', monospace" }}
+                      >
+                        {outfitShowAllRepeats ? 'Show fewer repeats' : `Show ${outfitScore.repeats.length - 2} more repeats`}
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* ── Per-slot breakdown ────────────────────────────────
                     One row per UI slot (outfit/shoes/jewelry/accessories/
@@ -4184,64 +4213,127 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               </div>
             )}
 
-            {/* Save + Score button */}
-            {outfitSelected.size > 0 && (
-              <button disabled={outfitSaving} onClick={async () => {
-                setOutfitSaving(true);
-                try {
-                  const res = await api.put(`/api/v1/world/${showId}/events/${outfitPickerEvent.id}/outfit`, {
-                    wardrobe_ids: Array.from(outfitSelected),
-                  });
-                  setOutfitScore(res.data.score);
-                  setToast(`Outfit saved — match ${res.data.score?.match_score}/100 (${res.data.score?.narrative_mood})`);
-                  loadData();
-                } catch (err) { setToast('Save failed: ' + err.message); }
-                setOutfitSaving(false);
-              }} style={{ width: '100%', padding: '10px', marginBottom: 16, border: 'none', borderRadius: 8, background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: outfitSaving ? 0.5 : 1 }}>
-                {outfitSaving ? 'Saving...' : outfitScore ? 'Update Outfit' : `Save Outfit (${outfitSelected.size} pieces)`}
-              </button>
-            )}
+            {/* Closet filters + grid */}
+            {(() => {
+              const filteredOutfitOptions = outfitOptions.filter((item) => {
+                const slot = getSlotForCategory(item.clothing_category) || 'other';
+                if (outfitSlotFilter !== 'all' && slot !== outfitSlotFilter) return false;
+                if (outfitTierFilter !== 'all' && (item.tier || 'basic') !== outfitTierFilter) return false;
+                if (outfitHideWorn && ((parseInt(item.times_worn, 10) || 0) > 0 || !!item.last_worn_date)) return false;
+                return true;
+              });
 
-            {/* Closet grid */}
-            <div style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace", marginBottom: 8 }}>
-              {outfitOptions.length} pieces in closet — tap to select
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
-              {outfitOptions.map(item => {
-                const selected = outfitSelected.has(item.id);
-                return (
-                  <div key={item.id} onClick={() => {
-                    const s = new Set(outfitSelected);
-                    if (selected) s.delete(item.id); else s.add(item.id);
-                    setOutfitSelected(s);
-                    setOutfitScore(null);
-                  }} style={{
-                    border: selected ? '2px solid #B8962E' : '1px solid #e8e0d0', borderRadius: 10,
-                    overflow: 'hidden', cursor: 'pointer', background: selected ? '#faf5ea' : '#fff',
-                    transition: 'all 0.15s',
-                  }}>
-                    <div style={{ aspectRatio: '1', background: '#f8f8f8', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                      {item.image_url ? (
-                        <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <span style={{ fontSize: 32, color: '#ddd' }}>👗</span>
-                      )}
+              return (
+                <>
+                  <div style={{ marginBottom: 10, padding: '8px 10px', border: '1px solid #e8e0d0', borderRadius: 8, background: '#faf7f0' }}>
+                    <div style={{ fontSize: 10, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>FILTERS</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                      <button onClick={() => setOutfitSlotFilter('all')} style={{ ...S.smBtn, background: outfitSlotFilter === 'all' ? '#B8962E' : '#fff', color: outfitSlotFilter === 'all' ? '#fff' : '#555', borderColor: '#e8d9b8' }}>All Slots</button>
+                      {SLOT_KEYS.map(slot => (
+                        <button key={slot} onClick={() => setOutfitSlotFilter(slot)} style={{ ...S.smBtn, background: outfitSlotFilter === slot ? '#B8962E' : '#fff', color: outfitSlotFilter === slot ? '#fff' : '#555', borderColor: '#e8d9b8' }}>
+                          {SLOT_DEFS[slot]?.icon} {SLOT_DEFS[slot]?.label}
+                        </button>
+                      ))}
                     </div>
-                    <div style={{ padding: '6px 8px' }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
-                      <div style={{ fontSize: 10, color: '#888' }}>{item.clothing_category} · {item.tier || 'basic'}</div>
-                      {item.brand && <div style={{ fontSize: 9, color: '#aaa' }}>{item.brand}</div>}
-                      {item.price > 0 && <div style={{ fontSize: 10, color: '#B8962E', fontWeight: 600 }}>${item.price}</div>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <select value={outfitTierFilter} onChange={e => setOutfitTierFilter(e.target.value)} style={{ ...S.sel, width: 140, minHeight: 30, fontSize: 11 }}>
+                        <option value="all">All tiers</option>
+                        <option value="basic">Basic</option>
+                        <option value="mid">Mid</option>
+                        <option value="luxury">Luxury</option>
+                        <option value="elite">Elite</option>
+                      </select>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#666', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}>
+                        <input type="checkbox" checked={outfitHideWorn} onChange={e => setOutfitHideWorn(e.target.checked)} />
+                        Hide already worn
+                      </label>
+                      <div style={{ marginLeft: 'auto', fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>
+                        Showing {filteredOutfitOptions.length}/{outfitOptions.length}
+                      </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
 
-            {outfitOptions.length === 0 && (
-              <div style={{ textAlign: 'center', padding: 40, color: '#aaa' }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>👗</div>
-                <p style={{ fontSize: 13 }}>No wardrobe pieces yet. Upload items in the Wardrobe tab first.</p>
+                  <div style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace", marginBottom: 8 }}>
+                    {filteredOutfitOptions.length} pieces in closet — tap to select
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8, paddingBottom: outfitSelected.size > 0 ? 84 : 0 }}>
+                    {filteredOutfitOptions.map(item => {
+                      const selected = outfitSelected.has(item.id);
+                      return (
+                        <div key={item.id} onClick={() => {
+                          const s = new Set(outfitSelected);
+                          if (selected) s.delete(item.id); else s.add(item.id);
+                          setOutfitSelected(s);
+                          setOutfitScore(null);
+                        }} style={{
+                          border: selected ? '2px solid #B8962E' : '1px solid #e8e0d0', borderRadius: 10,
+                          overflow: 'hidden', cursor: 'pointer', background: selected ? '#faf5ea' : '#fff',
+                          transition: 'all 0.15s',
+                        }}>
+                          <div style={{ aspectRatio: '1', background: '#f8f8f8', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                            {item.image_url ? (
+                              <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <span style={{ fontSize: 32, color: '#ddd' }}>👗</span>
+                            )}
+                          </div>
+                          <div style={{ padding: '6px 8px' }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: '#2C2C2C', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+                            <div style={{ fontSize: 10, color: '#888' }}>{item.clothing_category} · {item.tier || 'basic'}</div>
+                            {item.brand && <div style={{ fontSize: 9, color: '#aaa' }}>{item.brand}</div>}
+                            {item.price > 0 && <div style={{ fontSize: 10, color: '#B8962E', fontWeight: 600 }}>${item.price}</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {outfitOptions.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: 40, color: '#aaa' }}>
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>👗</div>
+                      <p style={{ fontSize: 13 }}>No wardrobe pieces yet. Upload items in the Wardrobe tab first.</p>
+                    </div>
+                  )}
+
+                  {outfitOptions.length > 0 && filteredOutfitOptions.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: 24, color: '#999', border: '1px dashed #e8e0d0', borderRadius: 10, marginTop: 8 }}>
+                      No pieces match these filters. Try clearing a filter.
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* Sticky action footer */}
+            {outfitSelected.size > 0 && (
+              <div style={{ position: 'sticky', bottom: 0, marginTop: 12, background: '#fff', paddingTop: 10, borderTop: '1px solid #f1e8d6', zIndex: 2 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, color: '#666' }}>
+                    {outfitSelected.size} selected
+                    {outfitScore?.match_score != null && (
+                      <span style={{ marginLeft: 8, color: '#B8962E', fontWeight: 700 }}>
+                        Match {outfitScore.match_score}/100
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={() => { setOutfitSelected(new Set()); setOutfitScore(null); }} style={{ ...S.smBtn, padding: '3px 8px' }}>
+                    Clear
+                  </button>
+                </div>
+                <button disabled={outfitSaving} onClick={async () => {
+                  setOutfitSaving(true);
+                  try {
+                    const res = await api.put(`/api/v1/world/${showId}/events/${outfitPickerEvent.id}/outfit`, {
+                      wardrobe_ids: Array.from(outfitSelected),
+                    });
+                    setOutfitScore(res.data.score);
+                    setToast(`Outfit saved — match ${res.data.score?.match_score}/100 (${res.data.score?.narrative_mood})`);
+                    loadData();
+                  } catch (err) { setToast('Save failed: ' + err.message); }
+                  setOutfitSaving(false);
+                }} style={{ width: '100%', padding: '10px', border: 'none', borderRadius: 8, background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: outfitSaving ? 0.5 : 1 }}>
+                  {outfitSaving ? 'Saving...' : outfitScore ? 'Update Outfit' : `Save Outfit (${outfitSelected.size} pieces)`}
+                </button>
               </div>
             )}
           </div>
@@ -4513,6 +4605,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
         const openEditItem = (item) => {
           setEditingWardrobeItem(item);
+          setWardrobeEditBrandIsFictional(false);
           setWardrobeForm({
             name: item.name || '',
             description: item.description || '',
@@ -5145,7 +5238,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   </div>
                   <div>
                     <label style={S.fLabel}>Vendor</label>
-                    <input value={wf.vendor} onChange={e => setWf('vendor', e.target.value)} style={S.inp} placeholder="Brand name..." />
+                    <input value={wf.vendor} onChange={e => { setWardrobeEditBrandIsFictional(false); setWf('vendor', e.target.value); }} style={S.inp} placeholder="Brand name..." />
+                    {wardrobeEditBrandIsFictional && (
+                      <div style={{ marginTop: 4, fontSize: 10, color: '#9A7B1F', fontFamily: "'DM Mono', monospace" }}>
+                        Fictional brand (auto-filled)
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={S.fLabel}>Price</label>
@@ -5305,6 +5403,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       const data = await res.json();
                       if (data.success && data.data) {
                         const ai = data.data;
+                        setWardrobeEditBrandIsFictional(!!ai.brand_is_fictional && !wf.vendor);
                         const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
                         // Only fill empty fields
                         setWardrobeForm(prev => ({
@@ -5641,6 +5740,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           return;
                         }
                         const ai = data.data;
+                        setWardrobeUploadBrandIsFictional(!!ai.brand_is_fictional);
                         const catMap = { dress: 'dress', top: 'top', bottom: 'bottom', shoes: 'shoes', accessory: 'accessory', jewelry: 'jewelry', bag: 'bag', outerwear: 'outerwear', perfume: 'perfume', skirt: 'bottom', pants: 'bottom', shirt: 'top', blouse: 'top', fragrance: 'perfume' };
                         let aiPrice = '';
                         if (ai.price_estimate) { const n = parseFloat(String(ai.price_estimate).replace(/[^0-9.]/g, '')); aiPrice = n && n >= 150 ? n.toFixed(2) : '150.00'; }
@@ -5700,7 +5800,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                       <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>name *</label><input value={wardrobeUploadForm.name} onChange={e => setWardrobeUploadForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g., Floral Mini Dress" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
-                      <div><label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>brand</label><input value={wardrobeUploadForm.brand} onChange={e => setWardrobeUploadForm(p => ({ ...p, brand: e.target.value }))} placeholder="e.g., Zara" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} /></div>
+                      <div>
+                        <label style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>brand</label>
+                        <input value={wardrobeUploadForm.brand} onChange={e => { setWardrobeUploadBrandIsFictional(false); setWardrobeUploadForm(p => ({ ...p, brand: e.target.value })); }} placeholder="e.g., Velvet House" style={{ width: '100%', padding: '7px 9px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 13, fontFamily: "'Lora', serif", background: '#fdfcfa' }} />
+                        {wardrobeUploadBrandIsFictional && (
+                          <div style={{ marginTop: 4, fontSize: 10, color: '#9A7B1F', fontFamily: "'DM Mono', monospace" }}>
+                            Fictional brand (auto-filled)
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                       <div>

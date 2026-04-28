@@ -169,6 +169,7 @@ router.post('/', optionalAuth, async (req, res) => {
       episode_ids,
       time_of_day,
       season,
+      world_location_id,
     } = req.body;
 
     if (!name || !scene_type) {
@@ -184,6 +185,7 @@ router.post('/', optionalAuth, async (req, res) => {
       beat_numbers: beat_numbers || [],
       universe_id: universe_id || null,
       show_id: show_id || null,
+      world_location_id: world_location_id || null,
       base_runway_model: base_runway_model || 'gen3a_turbo',
       time_of_day: time_of_day || null,
       season: season || null,
@@ -257,6 +259,7 @@ router.put('/:id', validateUUIDParam('id'), optionalAuth, async (req, res) => {
     const allowed = [
       'name', 'scene_type', 'canonical_description',
       'mood_tags', 'aesthetic_tags', 'beat_numbers',
+      'world_location_id',
       'base_runway_model', 'base_still_url', 'notes',
       'style_reference_url', 'negative_prompt', 'variation_count',
       'time_of_day', 'season',

@@ -22,6 +22,42 @@ const authMiddleware = isDevelopment
     }
   : authenticate;
 
+const FAKE_BRAND_PREFIXES = [
+  'Maison', 'Atelier', 'House of', 'Studio', 'Velour', 'Aurelia', 'Lunette', 'Noveau',
+];
+const FAKE_BRAND_SUFFIXES = [
+  'Noir', 'Vale', 'Row', 'Couture', 'Collective', 'Societe', 'Muse', 'Line',
+];
+
+function hashString(input = '') {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function toTitleWords(input = '') {
+  return String(input)
+    .trim()
+    .replace(/[^a-zA-Z0-9\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function makeFictionalBrand(seed = '') {
+  const normalized = toTitleWords(seed) || 'Lala Signature';
+  const h = hashString(normalized);
+  const prefix = FAKE_BRAND_PREFIXES[h % FAKE_BRAND_PREFIXES.length];
+  const suffix = FAKE_BRAND_SUFFIXES[(h >> 3) % FAKE_BRAND_SUFFIXES.length];
+  const root = normalized.split(' ').slice(0, 1).join('') || 'Lala';
+  return `${prefix} ${root} ${suffix}`.replace(/\s+/g, ' ').trim();
+}
+
 // Configure multer for file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -249,7 +285,7 @@ Analyze this image and return JSON:
   "description": "2-3 sentences: material, style, fit, notable details",
   "season": "spring|summer|fall|winter|all-season",
   "occasion": "casual|formal|business|party|athletic|brunch|date_night|resort",
-  "brand_guess": "brand name if identifiable, or null",
+  "brand_guess": "fictional brand name only (never a real-world brand). If no logo is visible, invent one that fits the item style.",
   "price_estimate": "estimated retail price as a single number, minimum $150. This is a luxury fashion world — price as if sold at a high-end boutique. Examples: 250, 450, 1200",
   "aesthetic_tags": ["tag1", "tag2", "tag3"],
   "tier": "basic|mid|luxury|elite",
@@ -268,7 +304,7 @@ Return ONLY the JSON.`;
   "description": "2-3 sentences: material, style, fit, notable details",
   "season": "spring|summer|fall|winter|all-season",
   "occasion": "casual|formal|business|party|athletic|brunch|date_night|resort",
-  "brand_guess": "brand name if identifiable, or null",
+  "brand_guess": "fictional brand name only (never a real-world brand). If no logo is visible, invent one that fits the item style.",
   "price_estimate": "estimated retail price as a single number, minimum $150. Luxury-boutique pricing.",
   "aesthetic_tags": ["tag1", "tag2", "tag3"],
   "tier": "basic|mid|luxury|elite",
@@ -304,6 +340,11 @@ Return ONLY the JSON.`;
     if (!match) return res.status(500).json({ error: 'AI analysis failed — no JSON returned' });
 
     const analysis = JSON.parse(match[0]);
+    // Auto-fill safety: always emit fictional brands so generated wardrobe
+    // entries never leak real-world brand names into the LalaVerse.
+    const brandSeed = analysis.brand_guess || analysis.name || `${analysis.item_type || ''} ${analysis.color || ''}`;
+    analysis.brand_guess = makeFictionalBrand(brandSeed);
+    analysis.brand_is_fictional = true;
     return res.json({ success: true, data: analysis, gameplay: wantsGameplay });
   } catch (err) {
     console.error('[WardrobeAnalyze] Error:', err.message);

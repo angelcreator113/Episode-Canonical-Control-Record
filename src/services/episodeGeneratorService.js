@@ -581,12 +581,18 @@ Return ONLY JSON.` }],
   // event. findOrCreate is idempotent so a re-run (regenerate flow)
   // doesn't pile up duplicates.
   if (models.SceneSetEpisode) {
-    const linkedSetIds = new Set([venueSceneSetId, homeSceneSetId].filter(Boolean));
-    for (const setId of linkedSetIds) {
+    const orderedSetIds = [venueSceneSetId, homeSceneSetId].filter(Boolean);
+    const uniqueOrderedSetIds = orderedSetIds.filter((setId, idx) => orderedSetIds.indexOf(setId) === idx);
+    for (let i = 0; i < uniqueOrderedSetIds.length; i += 1) {
+      const setId = uniqueOrderedSetIds[i];
       try {
-        await models.SceneSetEpisode.findOrCreate({
+        const [link, created] = await models.SceneSetEpisode.findOrCreate({
           where: { episode_id: episode.id, scene_set_id: setId },
+          defaults: { sort_order: i },
         });
+        if (!created && link.sort_order !== i) {
+          await link.update({ sort_order: i });
+        }
       } catch (linkErr) {
         // Junction insert failure shouldn't fail the whole episode
         // generation. Log and move on; creator can manually link later.

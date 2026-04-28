@@ -13,12 +13,23 @@ Deploy the current code to the dev server. Follow this exact procedure:
 4. On EC2:
    ```bash
    cd /home/ubuntu/episode-metadata
-   git pull
+   git pull origin dev
    npm install --production
-   pm2 restart ecosystem.config.js
+   cd frontend
+   NODE_OPTIONS='--max-old-space-size=1536' npm run build
+   sudo cp -r dist/. /var/www/html/
+   sudo chown -R www-data:www-data /var/www/html
+   sudo systemctl reload nginx
+   cd ..
+   pm2 restart episode-api
+   pm2 restart episode-worker
    pm2 logs --lines 20
    ```
 5. Verify the app is responding: check for crash loops in PM2 logs
+
+## Critical frontend note
+- Building frontend alone is not enough on dev.
+- Nginx serves static files from `/var/www/html`, so every deploy must copy `frontend/dist` into that directory.
 
 ## Important
 - The dev server is `54.163.229.144` — NOT `52.91.217.230`

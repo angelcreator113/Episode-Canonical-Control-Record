@@ -2721,9 +2721,9 @@ router.get('/world/:showId/events/:eventId/wardrobe-options', optionalAuth, asyn
     );
 
     // Score each item individually against the event
-    const { scoreOutfitForEvent } = require('../services/wardrobeIntelligenceService');
+    const { scorePieceForEvent } = require('../services/wardrobeIntelligenceService');
     const scored = items.map(item => {
-      const singleScore = scoreOutfitForEvent([item], event);
+      const singleScore = scorePieceForEvent(item, event);
       return {
         ...item,
         image_url: item.s3_url_processed || item.s3_url,
