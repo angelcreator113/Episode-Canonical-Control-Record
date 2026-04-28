@@ -13,7 +13,7 @@ const { literal } = require('sequelize');
  */
 exports.listPlacements = async (req, res) => {
   try {
-    const { episodeId } = req.params;
+    const episodeId = req.params.episodeId || req.params.id;
     const { placementType, trackNumber, sceneId } = req.query;
 
     const where = { episode_id: episodeId };
@@ -74,7 +74,7 @@ exports.listPlacements = async (req, res) => {
  */
 exports.createPlacement = async (req, res) => {
   try {
-    const { episodeId } = req.params;
+    const episodeId = req.params.episodeId || req.params.id;
     const {
       placementType,
       assetId,
@@ -183,7 +183,8 @@ exports.createPlacement = async (req, res) => {
  */
 exports.updatePlacement = async (req, res) => {
   try {
-    const { episodeId, placementId } = req.params;
+    const episodeId = req.params.episodeId || req.params.id;
+    const { placementId } = req.params;
     const {
       attachmentPoint,
       offsetSeconds,
@@ -263,7 +264,8 @@ exports.updatePlacement = async (req, res) => {
  */
 exports.deletePlacement = async (req, res) => {
   try {
-    const { episodeId, placementId } = req.params;
+    const episodeId = req.params.episodeId || req.params.id;
+    const { placementId } = req.params;
 
     const placement = await TimelinePlacement.findOne({
       where: {
@@ -302,7 +304,7 @@ exports.deletePlacement = async (req, res) => {
  */
 exports.getCurrentWardrobe = async (req, res) => {
   try {
-    const { episodeId } = req.params;
+    const episodeId = req.params.episodeId || req.params.id;
     const { character, sceneId, sceneOrder } = req.query;
 
     if (!character) {
