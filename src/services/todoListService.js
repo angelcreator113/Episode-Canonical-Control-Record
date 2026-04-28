@@ -164,6 +164,48 @@ function loadFonts() {
   } catch { fontsLoaded = true; }
 }
 
+function wrapTextWithEllipsis(ctx, text, maxWidth, maxLines) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return ['To Do'];
+
+  const lines = [];
+  let current = words[0];
+
+  for (let i = 1; i < words.length; i += 1) {
+    const next = `${current} ${words[i]}`;
+    if (ctx.measureText(next).width <= maxWidth) {
+      current = next;
+      continue;
+    }
+    lines.push(current);
+    current = words[i];
+    if (lines.length === maxLines - 1) break;
+  }
+
+  const consumedWords = lines.join(' ').split(/\s+/).filter(Boolean).length;
+  const remaining = words.slice(consumedWords);
+  const lastLineRaw = remaining.length ? remaining.join(' ') : current;
+
+  let lastLine = lastLineRaw;
+  if (lines.length >= maxLines) {
+    lastLine = lines.pop() || lastLineRaw;
+  }
+  while (ctx.measureText(lastLine).width > maxWidth && lastLine.length > 1) {
+    lastLine = lastLine.slice(0, -1).trimEnd();
+  }
+
+  const hasTrimmed = (consumedWords + remaining.length) < words.length || ctx.measureText(lastLineRaw).width > maxWidth;
+  if (hasTrimmed && !lastLine.endsWith('...')) {
+    while (ctx.measureText(`${lastLine}...`).width > maxWidth && lastLine.length > 1) {
+      lastLine = lastLine.slice(0, -1).trimEnd();
+    }
+    lastLine = `${lastLine}...`;
+  }
+
+  lines.push(lastLine);
+  return lines.slice(0, maxLines);
+}
+
 // ─── CANVAS RENDERER ──────────────────────────────────────────────────────────
 
 /**
@@ -179,7 +221,7 @@ function renderTodoAsset(tasks, event, options = {}) {
   const listType = options.listType || 'wardrobe';
   const W = options.width || 520;
   const PADDING = 28;
-  const HEADER_H = 90;
+  const HEADER_H = 118;
   const TASK_H = 64;
   const FOOTER_H = 40;
   const H = HEADER_H + (tasks.length * TASK_H) + FOOTER_H + (PADDING * 2);
@@ -224,15 +266,25 @@ function renderTodoAsset(tasks, event, options = {}) {
   // Header — different titles per list type
   let y = PADDING;
 
-  ctx.font = `bold ${Math.round(W * 0.044)}px CormorantGaramond, serif`;
+  const titleFontSize = Math.round(W * 0.044);
+  const titleLineHeight = Math.round(titleFontSize * 1.15);
+  const titleMaxWidth = W - (PADDING * 2);
+  const rawTitle = event.name?.split(' — ')[0] || 'To Do';
+
+  ctx.font = `bold ${titleFontSize}px CormorantGaramond, serif`;
   ctx.fillStyle = '#1A1A1A';
   ctx.textAlign = 'center';
-  ctx.fillText(event.name?.split(' — ')[0] || 'To Do', W / 2, y + 32);
+  const titleLines = wrapTextWithEllipsis(ctx, rawTitle, titleMaxWidth, 2);
+  let titleY = y + 26;
+  for (const line of titleLines) {
+    ctx.fillText(line, W / 2, titleY);
+    titleY += titleLineHeight;
+  }
 
   ctx.font = `italic ${Math.round(W * 0.028)}px CormorantGaramond, serif`;
   ctx.fillStyle = accentColor;
   const subtitle = listType === 'career' ? 'Career Checklist' : 'Wardrobe Shopping List';
-  ctx.fillText(subtitle, W / 2, y + 56);
+  ctx.fillText(subtitle, W / 2, titleY + 6);
 
   // Header divider
   y = HEADER_H;
