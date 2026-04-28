@@ -140,6 +140,28 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   };
   const linkableEvents = allEvents.filter(e => !e.used_in_episode_id);
 
+  // Regenerate this episode from one of its linked events. The backend
+  // soft-deletes the current episode and re-runs the generator on the
+  // event — useful after editing the event (new outfit, stakes, etc.).
+  // After success we navigate to the new episode since the old id is
+  // no longer the active one.
+  const regenerateFromEvent = async (ev) => {
+    if (!showId) return;
+    if (!window.confirm(`Regenerate episode from "${ev.name}"? The current episode will be soft-deleted and a fresh one created.`)) return;
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/regenerate-episode`);
+      const newId = res.data?.data?.episode?.id;
+      if (newId && newId !== episode.id) {
+        navigate(`/episodes/${newId}`, { replace: true });
+      } else {
+        // Same id (rare) — just refresh
+        if (typeof onUpdate === 'function') onUpdate({});
+      }
+    } catch (err) {
+      alert('Regenerate failed: ' + (err?.response?.data?.error || err.message));
+    }
+  };
+
   // Read-through summary: aggregate the linked events' narrative fields so
   // the episode page can display them without copying onto the episode
   // itself. Single source of truth — when the event changes, the episode
@@ -285,13 +307,22 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                       {ev.event_type && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#6366f1' }}>{ev.event_type}</span>}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => unlinkEvent(ev.id)}
-                    disabled={linkBusy}
-                    title="Unlink event from this episode"
-                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}
-                  >×</button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    <button
+                      type="button"
+                      onClick={() => regenerateFromEvent(ev)}
+                      disabled={linkBusy}
+                      title="Regenerate this episode from the event (soft-deletes the current episode)"
+                      style={{ background: '#fdf8ee', border: '1px solid #e8d8b8', color: '#B8962E', cursor: 'pointer', fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}
+                    >♻️</button>
+                    <button
+                      type="button"
+                      onClick={() => unlinkEvent(ev.id)}
+                      disabled={linkBusy}
+                      title="Unlink event from this episode"
+                      style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14, padding: '0 4px', lineHeight: 1 }}
+                    >×</button>
+                  </div>
                 </div>
               ))}
             </div>
