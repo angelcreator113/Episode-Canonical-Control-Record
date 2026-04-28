@@ -2,6 +2,29 @@ const { models } = require('../models');
 const { TimelinePlacement, EpisodeScene, Asset, Wardrobe } = models;
 const { literal } = require('sequelize');
 
+const SCENE_INCLUDE = {
+  model: EpisodeScene,
+  as: 'scene',
+  attributes: ['id', 'title_override', 'scene_order', 'type'],
+  required: false,
+  paranoid: false,
+};
+
+const ASSET_INCLUDE = {
+  model: Asset,
+  as: 'asset',
+  required: false,
+  paranoid: false,
+  attributes: ['id', 'name', 'asset_type', 's3_url_processed', 's3_url_raw', 'metadata'],
+};
+
+const WARDROBE_INCLUDE = {
+  model: Wardrobe,
+  as: 'wardrobeItem',
+  required: false,
+  paranoid: false,
+};
+
 /**
  * Timeline Placements Controller
  * Manages asset/wardrobe placements on episode timeline
@@ -24,27 +47,7 @@ exports.listPlacements = async (req, res) => {
 
     const placements = await TimelinePlacement.findAll({
       where,
-      include: [
-        {
-          model: EpisodeScene,
-          as: 'scene',
-          attributes: ['id', 'title_override', 'scene_order', 'type'],
-          required: false,
-          paranoid: false,
-        },
-        {
-          model: Asset,
-          as: 'asset',
-          required: false,
-          paranoid: false,
-        },
-        {
-          model: Wardrobe,
-          as: 'wardrobeItem',
-          required: false,
-          paranoid: false,
-        },
-      ],
+      include: [SCENE_INCLUDE, ASSET_INCLUDE, WARDROBE_INCLUDE],
       order: [
         ['track_number', 'ASC'],
         [literal(`CASE WHEN scene_id IS NOT NULL THEN 0 ELSE 1 END`)], // Scene-attached first
@@ -143,24 +146,7 @@ exports.createPlacement = async (req, res) => {
 
     // Load with associations
     const result = await TimelinePlacement.findByPk(placement.id, {
-      include: [
-        {
-          model: EpisodeScene,
-          as: 'scene',
-          attributes: ['id', 'title_override', 'scene_order', 'type'],
-          paranoid: false,
-        },
-        {
-          model: Asset,
-          as: 'asset',
-          paranoid: false,
-        },
-        {
-          model: Wardrobe,
-          as: 'wardrobeItem',
-          paranoid: false,
-        },
-      ],
+      include: [SCENE_INCLUDE, ASSET_INCLUDE, WARDROBE_INCLUDE],
     });
 
     res.status(201).json({
@@ -224,24 +210,7 @@ exports.updatePlacement = async (req, res) => {
 
     // Reload with associations
     const result = await TimelinePlacement.findByPk(placement.id, {
-      include: [
-        {
-          model: EpisodeScene,
-          as: 'scene',
-          attributes: ['id', 'title_override', 'scene_order', 'type'],
-          paranoid: false,
-        },
-        {
-          model: Asset,
-          as: 'asset',
-          paranoid: false,
-        },
-        {
-          model: Wardrobe,
-          as: 'wardrobeItem',
-          paranoid: false,
-        },
-      ],
+      include: [SCENE_INCLUDE, ASSET_INCLUDE, WARDROBE_INCLUDE],
     });
 
     res.json({
@@ -356,11 +325,7 @@ exports.getCurrentWardrobe = async (req, res) => {
           attributes: ['id', 'title_override', 'scene_order', 'type'],
           paranoid: false,
         },
-        {
-          model: Wardrobe,
-          as: 'wardrobeItem',
-          paranoid: false,
-        },
+        WARDROBE_INCLUDE,
       ],
       order: [[{ model: EpisodeScene, as: 'scene' }, 'scene_order', 'DESC']],
     });
