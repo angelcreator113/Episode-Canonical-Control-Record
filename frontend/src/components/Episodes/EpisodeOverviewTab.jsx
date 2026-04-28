@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 
 /**
  * EpisodeOverviewTab — Episode Dashboard
@@ -37,6 +38,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   // to the episode directly; the Locations card reads them through the
   // linked events. One source of truth.
   const [worldLocations, setWorldLocations] = useState([]);
+  // AI scene-set suggester state — fetch is one-shot, the modal is the
+  // creator's review surface, and apply links the chosen sets via the
+  // existing /scene-sets endpoint.
+  const [sceneSuggestion, setSceneSuggestion] = useState(null);
+  const [suggestBusy, setSuggestBusy] = useState(false);
+  const [applyBusy, setApplyBusy] = useState(false);
   const [formData, setFormData] = useState({
     title: episode.title || '',
     logline: episode.logline || episode.description || '',
@@ -354,8 +361,58 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         <button onClick={() => navigate(`/episodes/${episode.id}/script-writer`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#B8962E', border: 'none', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✦ Script Writer</button>
         {showId && <button onClick={() => navigate(`/shows/${showId}/world?tab=events`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🎭 Producer Mode</button>}
         <button onClick={() => navigate(`/episodes/${episode.id}/plan`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🎬 Scene Plan</button>
+        {/* AI scene-set suggester — disabled until the episode has a script
+            since there's nothing to analyze otherwise. Fires the suggest
+            endpoint then opens SceneSuggestionReview for the creator to
+            approve / discard. */}
+        <button
+          onClick={async () => {
+            setSuggestBusy(true);
+            try {
+              const { data } = await api.post(`/api/v1/episodes/${episode.id}/suggest-scenes`);
+              if (data?.success && data?.proposal) {
+                setSceneSuggestion({ proposal: data.proposal, contextSummary: data.context_summary });
+              } else {
+                alert(data?.error || 'No suggestions returned');
+              }
+            } catch (err) {
+              alert(err?.response?.data?.error || err.message || 'Failed to fetch suggestions');
+            } finally {
+              setSuggestBusy(false);
+            }
+          }}
+          disabled={!scriptInfo?.exists || suggestBusy}
+          title={!scriptInfo?.exists ? 'Add a script first' : 'AI suggests scene sets per beat'}
+          style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e8d8b8', color: '#B8962E', fontSize: 11, fontWeight: 600, cursor: !scriptInfo?.exists || suggestBusy ? 'not-allowed' : 'pointer', opacity: !scriptInfo?.exists ? 0.55 : 1 }}
+        >
+          {suggestBusy ? '✦ Thinking…' : '✦ Suggest Scenes'}
+        </button>
         <button onClick={() => setIsEditing(true)} style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✏️ Edit Details</button>
       </div>
+      {sceneSuggestion && (
+        <SceneSuggestionReview
+          proposal={sceneSuggestion.proposal}
+          contextSummary={sceneSuggestion.contextSummary}
+          busy={applyBusy}
+          onReject={() => setSceneSuggestion(null)}
+          onApprove={async ({ sceneSetIds }) => {
+            if (!sceneSetIds.length) { setSceneSuggestion(null); return; }
+            setApplyBusy(true);
+            try {
+              await api.post(`/api/v1/episodes/${episode.id}/scene-sets`, { sceneSetIds });
+              // Refresh the episode's linked sets so the Locations / Scene
+              // Plan UI reflects the new links without a full page reload.
+              const { data } = await api.get(`/api/v1/episodes/${episode.id}/scene-sets`);
+              setSceneSets(data?.data || []);
+              setSceneSuggestion(null);
+            } catch (err) {
+              alert(err?.response?.data?.error || err.message || 'Failed to apply');
+            } finally {
+              setApplyBusy(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

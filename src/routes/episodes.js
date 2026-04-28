@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const multer = require('multer');
+const Anthropic = require('@anthropic-ai/sdk');
 const episodeController = require('../controllers/episodeController');
 const sceneController = require('../controllers/sceneController');
 const wardrobeController = require('../controllers/wardrobeController');
@@ -1076,6 +1077,135 @@ router.delete(
     });
 
     res.json({ success: true, deleted: deleted > 0 });
+  })
+);
+
+// POST /api/v1/episodes/:episodeId/suggest-scenes
+// AI scene-set suggester. Reads the episode's script + the show's scene
+// sets, asks Claude to map beats → scene sets and recommend a still count
+// per beat, returns a structured proposal for creator review. Doesn't
+// mutate anything — apply happens via the existing /scene-sets POST or
+// /scenes/from-angle once the creator approves.
+router.post(
+  '/:episodeId/suggest-scenes',
+  validateUUIDParam('episodeId'),
+  asyncHandler(async (req, res) => {
+    const { models } = require('../models');
+    const { Episode, SceneSet } = models;
+
+    const episode = await Episode.findByPk(req.params.episodeId);
+    if (!episode) {
+      return res.status(404).json({ success: false, error: 'Episode not found' });
+    }
+    const script = (episode.script_content || '').trim();
+    if (!script) {
+      return res.status(400).json({
+        success: false,
+        error: 'Episode has no script yet. Add a script before requesting scene suggestions.',
+      });
+    }
+
+    const sets = await SceneSet.findAll({
+      where: { show_id: episode.show_id },
+      attributes: [
+        'id', 'name', 'set_type', 'canonical_description', 'script_context',
+        'aesthetic_tags', 'mood_tags', 'variation_count', 'base_still_url',
+      ],
+    });
+
+    // Compact summary for the prompt — avoid blowing the token budget on
+    // unused Sequelize metadata. Stripped to the fields that actually
+    // help Claude pick a match.
+    const setSummary = sets.map(s => ({
+      id: s.id,
+      name: s.name,
+      type: s.set_type,
+      description: s.canonical_description || '',
+      script_context: s.script_context || '',
+      aesthetic_tags: s.aesthetic_tags || [],
+      mood_tags: s.mood_tags || [],
+      stills_available: s.variation_count || 1,
+    }));
+
+    const systemPrompt = [
+      'You are a TV producer assistant helping plan scene coverage for an episode.',
+      'You will be given the episode script and the show\'s available scene sets.',
+      'Break the script into 3-12 beats (one major story moment per beat).',
+      'For each beat, pick the best matching scene set from the provided list — match by location/mood/script_context.',
+      'If no set is a good match, set scene_set_id to null and propose a brief new_set_name + new_set_description so the creator can decide whether to make it.',
+      'Recommend a still count per beat: 1 for short moments / phone calls, 2-3 for dialogue scenes, 4-5 for montages or key story beats. Cap at the set\'s stills_available where you can.',
+      'Respond ONLY with strict JSON in the exact schema below. No prose, no markdown.',
+      '{ "beats": [ { "beat_number": 1, "beat_summary": "...", "scene_set_id": "uuid|null", "new_set_name": "...|null", "new_set_description": "...|null", "stills_to_use": 2, "reason": "..." } ] }',
+    ].join('\n');
+
+    const userMessage = [
+      `EPISODE: ${episode.title || 'Untitled'} (#${episode.episode_number || '?'})`,
+      episode.description ? `LOGLINE: ${episode.description}` : '',
+      '',
+      'SCENE SETS AVAILABLE:',
+      JSON.stringify(setSummary, null, 2),
+      '',
+      'EPISODE SCRIPT:',
+      script.slice(0, 18000),  // hard cap so a runaway script doesn't blow the budget
+      '',
+      'Suggest a scene-set assignment per beat. Respond with JSON only.',
+    ].filter(Boolean).join('\n');
+
+    try {
+      const anthropic = new Anthropic();
+      const PRIMARY_MODEL = 'claude-sonnet-4-6';
+      const FALLBACK_MODEL = 'claude-sonnet-4-20250514';
+      const callClaude = async (model) => anthropic.messages.create({
+        model,
+        max_tokens: 4000,
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: userMessage }],
+      });
+
+      let resp;
+      try { resp = await callClaude(PRIMARY_MODEL); }
+      catch (err) {
+        if (err.status === 529 || /overloaded/i.test(err.message || '')) {
+          resp = await callClaude(FALLBACK_MODEL);
+        } else { throw err; }
+      }
+      const text = resp.content[0]?.text || '';
+      // Tolerant JSON extraction — Claude occasionally wraps even
+      // ONLY-JSON responses in code fences.
+      const cleaned = text.replace(/```json|```/g, '');
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (!match) {
+        return res.status(502).json({ success: false, error: 'AI returned no parseable proposal', raw: text });
+      }
+      const parsed = JSON.parse(match[0]);
+
+      // Resolve scene_set_id back to its name + still URL for the review
+      // modal so the creator sees what they're approving.
+      const setsById = new Map(sets.map(s => [s.id, s]));
+      const beats = (parsed.beats || []).map((b, i) => {
+        const set = b.scene_set_id ? setsById.get(b.scene_set_id) : null;
+        return {
+          beat_number: b.beat_number ?? i + 1,
+          beat_summary: b.beat_summary || '',
+          scene_set_id: set ? set.id : null,
+          scene_set_name: set ? set.name : null,
+          scene_set_thumb: set ? set.base_still_url : null,
+          new_set_name: b.new_set_name || null,
+          new_set_description: b.new_set_description || null,
+          stills_to_use: Number.isFinite(b.stills_to_use) ? b.stills_to_use : 1,
+          reason: b.reason || '',
+        };
+      });
+
+      res.json({
+        success: true,
+        proposal: { beats },
+        context_summary: `${beats.length} beats · ${sets.length} scene sets available`,
+      });
+    } catch (err) {
+      console.error('[suggest-scenes] AI call failed:', err);
+      res.status(500).json({ success: false, error: err.message || 'AI call failed' });
+    }
   })
 );
 
