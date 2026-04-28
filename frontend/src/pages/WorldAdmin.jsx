@@ -6697,9 +6697,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{STAT_ICONS[key]}</span>
                       <span style={{ flex: '0 0 100px', fontSize: 13, color: '#64748b', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
                       {editingStats ? (
+                        // Coins: no min/max — the backend stores any
+                        // integer and downstream logic handles negative
+                        // balances. The arbitrary -9999/99999 caps used
+                        // to block legitimate late-show balances. Other
+                        // stats stay 0–10 to match the backend clamp.
                         <input type="number" value={statForm[key] ?? val} onChange={e => setStatForm(p => ({ ...p, [key]: parseInt(e.target.value) }))}
                           style={{ width: 80, padding: '4px 8px', border: '1px solid #6366f1', borderRadius: 4, fontSize: 14, fontWeight: 700, textAlign: 'right', marginLeft: 'auto' }}
-                          min={key === 'coins' ? -9999 : 0} max={key === 'coins' ? 99999 : 10} />
+                          {...(isCoin ? {} : { min: 0, max: 10 })} />
                       ) : (
                         <>
                           {barMax != null ? (
@@ -6725,14 +6730,24 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             <div style={{ padding: 14, background: '#f8fafc', borderRadius: 8 }}>
               <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>Character Rules</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {[
-                  ['Voice Activation', 'Required ✅'],
-                  ['Idle Behaviors', 'Wave, mirror glance, inspect'],
-                  ['Default Stats', '500 coins, 1 rep, 1 trust, 1 inf, 0 stress'],
-                  ['Fail Behavior', 'Forced smile, softer voice, stress anim'],
-                ].map(([l, v]) => (
-                  <div key={l}><div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{l}</div><div style={{ fontSize: 13, color: '#1a1a2e' }}>{v}</div></div>
-                ))}
+                {(() => {
+                  // Default Stats line is sourced from charState.defaults
+                  // (server returns DEFAULT_STATS from evaluationFormula.js)
+                  // so it stays accurate if the constants ever change. Falls
+                  // back to the historical literal if the API's older.
+                  const d = charState?.defaults;
+                  const defaultStatsLine = d
+                    ? `${(d.coins ?? 0).toLocaleString()} coins, ${d.reputation ?? 0} rep, ${d.brand_trust ?? 0} trust, ${d.influence ?? 0} inf, ${d.stress ?? 0} stress`
+                    : '500 coins, 1 rep, 1 trust, 1 inf, 0 stress';
+                  return [
+                    ['Voice Activation', 'Required ✅'],
+                    ['Idle Behaviors', 'Wave, mirror glance, inspect'],
+                    ['Default Stats', defaultStatsLine],
+                    ['Fail Behavior', 'Forced smile, softer voice, stress anim'],
+                  ].map(([l, v]) => (
+                    <div key={l}><div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{l}</div><div style={{ fontSize: 13, color: '#1a1a2e' }}>{v}</div></div>
+                  ));
+                })()}
               </div>
             </div>
           </div>
