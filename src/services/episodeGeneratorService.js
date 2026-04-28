@@ -352,10 +352,20 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
         ? `Outfit (${outfitPieces.length} pieces, $${totalOutfitCost} total): ${outfitPieces.map(p => `${p.name}${p.brand ? ` by ${p.brand}` : ''} (${p.tier || 'basic'}, $${p.price || 0})`).join(', ')}${brands.length > 0 ? `\nBrands worn: ${brands.join(', ')}` : ''}`
         : 'No outfit picked yet';
       const moodContext = outfitScore?.narrative_mood || 'neutral';
-      const dressCode = eventData.dress_code ? `Dress code: ${eventData.dress_code}` : '';
+      // Dress code line — fold in keywords too when the event has them.
+      // Both the free-text dress_code and the parsed keywords give Claude
+      // more signal for tone (e.g. "chic" + ["sleek","monochrome","gold"]).
+      const dressKeywords = Array.isArray(eventData.dress_code_keywords) && eventData.dress_code_keywords.length
+        ? ` (keywords: ${eventData.dress_code_keywords.slice(0, 8).join(', ')})`
+        : '';
+      const dressCode = eventData.dress_code ? `Dress code: ${eventData.dress_code}${dressKeywords}` : '';
+      // Brand context — when the event is a brand deal / hosted by a
+      // brand, surfaces it for AI-generated titles ("...for Maison Belle").
+      const brandLine = eventData.host_brand ? `Host brand: ${eventData.host_brand}` : '';
       const financialContext = [
         autoData.payment_amount ? `Paid event: $${autoData.payment_amount}` : `Costs ${eventData.cost_coins || 0} coins`,
         dressCode,
+        brandLine,
       ].filter(Boolean).join('\n');
 
       const response = await client.messages.create({
@@ -432,15 +442,61 @@ Return ONLY JSON.` }],
   // ── 2. Create Episode Brief ──
   let brief = null;
   if (EpisodeBrief) {
+    // Snapshot every load-bearing field from the event onto the brief at
+    // generate time. Closes the long list of silent data drops surfaced by
+    // the field-level audit. Snapshot semantics (not read-through) for
+    // story-progression metadata so re-edits to the event don't retroactively
+    // change what an already-generated episode "remembers."
     brief = await EpisodeBrief.create({
       episode_id: episode.id,
       show_id: showId,
       event_id: event.id,
-      // Capture the OutfitSet that drove this episode (when the event
-      // had one picked). Pieces still get exploded into EpisodeWardrobe
-      // rows; this preserves the "which set" audit trail those rows
-      // alone would lose.
       outfit_set_id: event.outfit_set_id || null,
+      // Direct invite asset reference so the episode doesn't have to
+      // join through assets.metadata to find its invite.
+      invitation_asset_id: event.invitation_asset_id || null,
+      // Story scaffolding — season + arc the event belongs to.
+      season_id: event.season_id || null,
+      arc_id: event.arc_id || null,
+      // Cross-episode narrative chain. Everything related to "this event
+      // came from / leads to" lives here so the brief alone tells you
+      // where in the chain this episode sits.
+      narrative_chain: {
+        parent_event_id: event.parent_event_id || null,
+        chain_position: event.chain_position ?? null,
+        chain_reason: event.chain_reason || null,
+        seeds_future_events: event.seeds_future_events || [],
+      },
+      // Full canon_consequences (previously only the automation key was
+      // read; the rest was dropped).
+      canon_consequences: event.canon_consequences || {},
+      // Career-progression context the player runtime gates on.
+      career_context: {
+        career_tier: event.career_tier ?? null,
+        career_milestone: event.career_milestone || null,
+        fail_consequence: event.fail_consequence || null,
+        success_unlock: event.success_unlock || null,
+      },
+      // Difficulty knobs — strictness + deadline_*. event_difficulty is
+      // an existing column, finally getting populated.
+      event_difficulty: {
+        strictness: event.strictness ?? null,
+        deadline_type: event.deadline_type || null,
+        deadline_minutes: event.deadline_minutes ?? null,
+      },
+      // Catch-all for the rest of the event metadata that influences
+      // gameplay/visuals but isn't story-critical.
+      event_metadata: {
+        rewards: event.rewards || null,
+        requirements: event.requirements || null,
+        browse_pool_bias: event.browse_pool_bias || null,
+        browse_pool_size: event.browse_pool_size ?? null,
+        overlay_template: event.overlay_template || null,
+        required_ui_overlays: event.required_ui_overlays || [],
+        host_brand: event.host_brand || null,
+        dress_code_keywords: event.dress_code_keywords || [],
+        location_hint: event.location_hint || null,
+      },
       // AI-drafted beat outline from the same Claude call that generated
       // the title — gives creators something to anchor edits against and
       // feeds Suggest-Scenes before any script exists.
@@ -489,6 +545,28 @@ Return ONLY JSON.` }],
         scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId });
       } catch (beatErr) {
         console.warn(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
+      }
+    }
+  }
+
+  // ── Link the chosen scene set(s) to the episode via SceneSetEpisode ──
+  // Critical fix: scene_set_id was reaching scene_plans rows but never
+  // creating the episode↔scene_set junction record that the episode page's
+  // /scene-sets endpoint queries. Without this, creators saw "no scene
+  // sets" on the episode even though they explicitly picked one on the
+  // event. findOrCreate is idempotent so a re-run (regenerate flow)
+  // doesn't pile up duplicates.
+  if (models.SceneSetEpisode) {
+    const linkedSetIds = new Set([venueSceneSetId, homeSceneSetId].filter(Boolean));
+    for (const setId of linkedSetIds) {
+      try {
+        await models.SceneSetEpisode.findOrCreate({
+          where: { episode_id: episode.id, scene_set_id: setId },
+        });
+      } catch (linkErr) {
+        // Junction insert failure shouldn't fail the whole episode
+        // generation. Log and move on; creator can manually link later.
+        console.warn(`[EpisodeGenerator] SceneSetEpisode link failed for set ${setId}:`, linkErr.message);
       }
     }
   }

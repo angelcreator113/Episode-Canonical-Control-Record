@@ -23,6 +23,27 @@ module.exports = (sequelize) => {
     lala_state_snapshot: { type: DataTypes.JSONB, allowNull: true },
     event_id: { type: DataTypes.UUID, allowNull: true },
     event_difficulty: { type: DataTypes.JSONB, allowNull: true },
+    // Direct FK to the invite asset (separate from going through
+    // assets.metadata). Lets episode pages read the invite without a
+    // metadata sub-query.
+    invitation_asset_id: { type: DataTypes.UUID, allowNull: true },
+    // Story scaffolding snapshotted from the event.
+    season_id: { type: DataTypes.UUID, allowNull: true },
+    arc_id: { type: DataTypes.UUID, allowNull: true },
+    // narrative_chain holds parent_event_id, chain_position, chain_reason,
+    // seeds_future_events. Grouped because they're always read together
+    // when reasoning about cross-episode chains.
+    narrative_chain: { type: DataTypes.JSONB, allowNull: true, defaultValue: {} },
+    // Full canon_consequences object — previously only the automation
+    // sub-key was being read, the rest discarded.
+    canon_consequences: { type: DataTypes.JSONB, allowNull: true, defaultValue: {} },
+    // Career-context: tier, milestone, fail_consequence, success_unlock.
+    // Used by the player runtime to gate progression.
+    career_context: { type: DataTypes.JSONB, allowNull: true, defaultValue: {} },
+    // Catch-all for the rest of the event metadata that affects gameplay
+    // but isn't story-critical: rewards, requirements, browse_pool_*,
+    // overlay_template, required_ui_overlays.
+    event_metadata: { type: DataTypes.JSONB, allowNull: true, defaultValue: {} },
     // Captures which saved OutfitSet drove this episode at generate time.
     // Separate from the individual EpisodeWardrobe rows so we keep the
     // "this came from set X" audit trail even after the pieces explode.
