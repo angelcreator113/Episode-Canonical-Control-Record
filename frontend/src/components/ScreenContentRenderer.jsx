@@ -133,10 +133,14 @@ function ContentZoneRenderer({ zone, showId, episodeId, screenMeta, mapEditable 
       // etc. show up alongside generic "shoes."
       return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'shoes,heels,boots,sneakers,sandals,flats' }} />;
     case 'wardrobe_accessories':
-      // Wide net — bags + jewelry + hats/scarves/belts + hair pieces.
-      // Most "accessories" categories live under different exact tags
-      // in the wardrobe table.
-      return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'accessories,jewelry,bag,purse,handbag,clutch,tote,backpack,hat,scarf,belt,glove,bow,hair,headband,hair_accessory,earring,necklace,bracelet,ring,brooch,pin,sunglasses,watch' }} />;
+      // Catch-all: show anything that isn't clearly clothes, shoes, or
+      // perfume. Items with an unrecognized category (or no category at
+      // all) also fall through to here, so creators don't lose items
+      // because of inconsistent tagging.
+      return <WardrobeGridRenderer showId={showId} config={{
+        ...config,
+        inverse_category: 'dress,top,bottom,outerwear,jacket,coat,skirt,pants,shirt,blouse,shoes,heels,boots,sneakers,sandals,flats,perfume,fragrance,cologne',
+      }} />;
     case 'wardrobe_perfume':
       return <WardrobeGridRenderer showId={showId} config={{ ...config, category: 'perfume,fragrance,cologne' }} />;
     case 'outfit_card':
@@ -424,24 +428,48 @@ function StoryRingRenderer({ showId, config }) {
 
 // ── Wardrobe Grid ──
 function WardrobeGridRenderer({ showId, config }) {
-  // Config: { category?, scope? ('all'|'owned'|'wishlist'), max_items?, columns? }
+  // Config: { category?, inverse_category?, scope? ('all'|'owned'|'wishlist'),
+  //           max_items?, columns? }
+  // inverse_category turns this into a catch-all: the API isn't asked to
+  // filter by category at all; instead we fetch everything and drop items
+  // whose clothing_category matches the inverse list. Items with no
+  // category set still slip through — that's intentional, untagged stuff
+  // belongs in the catch-all bucket.
   const maxItems = config.max_items || 12;
-  const params = new URLSearchParams({ show_id: String(showId || ''), limit: String(maxItems) });
-  if (config.category) params.set('category', config.category);
+  const inverseCats = config.inverse_category
+    ? config.inverse_category.split(',').map(c => c.trim().toLowerCase()).filter(Boolean)
+    : null;
+  // Inverse mode pulls a wider page so post-filtering still leaves enough
+  // tiles to fill the grid.
+  const fetchLimit = inverseCats ? Math.max(maxItems * 4, 60) : maxItems;
+  const params = new URLSearchParams({ show_id: String(showId || ''), limit: String(fetchLimit) });
+  if (config.category && !inverseCats) params.set('category', config.category);
   if (config.scope === 'owned') params.set('is_owned', 'true');
   else if (config.scope === 'wishlist') params.set('is_owned', 'false');
   const url = showId ? `/api/v1/wardrobe?${params.toString()}` : null;
   const { data, loading } = useContentData(url);
 
   if (loading) return <ZoneLoader />;
-  const items = (data?.data || data?.items || []).slice(0, maxItems);
+  let items = data?.data || data?.items || [];
+  if (inverseCats) {
+    items = items.filter(item => {
+      const cat = (item.clothing_category || '').toLowerCase().trim();
+      if (!cat) return true;  // untagged → falls into catch-all
+      // Substring match against each inverse term so we catch irregular
+      // plurals (dress → dresses), compound names (evening dress, shirt
+      // dress, sundress), and trailing/leading whitespace or punctuation.
+      // Way more forgiving than exact equality and keeps items out of
+      // Accessories whenever any clothing/shoes/perfume keyword appears
+      // in the category at all.
+      return !inverseCats.some(inv => cat.includes(inv));
+    });
+  }
+  items = items.slice(0, maxItems);
   if (!items.length) {
-    // The dispatcher passes a long comma-joined category list per type
-    // (Outfit, Shoes, Accessories, Perfume) — too ugly for a "No X" empty
-    // state. Detect the bucket by sniffing for a marker keyword.
     const cat = (config.category || '').toLowerCase();
     let friendly = config.category;
-    if (cat.includes('dress') || cat.includes('top') || cat.includes('bottom')) friendly = 'clothes';
+    if (inverseCats) friendly = 'accessories';
+    else if (cat.includes('dress') || cat.includes('top') || cat.includes('bottom')) friendly = 'clothes';
     else if (cat.includes('shoes') || cat.includes('heels') || cat.includes('boots')) friendly = 'shoes';
     else if (cat.includes('accessor') || cat.includes('bag') || cat.includes('jewelry')) friendly = 'accessories';
     else if (cat.includes('perfume') || cat.includes('fragrance')) friendly = 'perfume';

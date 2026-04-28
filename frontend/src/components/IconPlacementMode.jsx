@@ -15,6 +15,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Grid3x3, Save, Trash2, X, Pin } from 'lucide-react';
 import PhoneFrame from './phone/PhoneFrame';
+import ScreenContentRenderer from './ScreenContentRenderer';
 
 const HOME_GRID = {
   columns: 4,
@@ -71,6 +72,11 @@ export default function IconPlacementMode({
   screenUrl,
   phoneSkin = 'rosegold',
   customFrameUrl,
+  // Read-only context: existing content zones to render behind the icon
+  // placement layer so creators see where wardrobe grids / feeds /
+  // world map sit. Mirror of the screen-link ghosts in ContentZoneEditor.
+  contentZones = [],
+  showId,
 }) {
   const [zones, setZones] = useState(links);
   const [selectedId, setSelectedId] = useState(null);
@@ -406,6 +412,17 @@ export default function IconPlacementMode({
             draggable={false}
           />
         ) : null}
+        {/* Read-only preview of the screen's content zones. Sits between
+            the screen image and the icon-placement layer so creators see
+            wardrobe grids / feeds / world map and don't drop icons over
+            them. Mirror of the symmetric preview in ScreenLinkEditor. */}
+        {contentZones.length > 0 && (
+          <ScreenContentRenderer
+            zones={contentZones}
+            showId={showId}
+            interactive={false}
+          />
+        )}
         {gridSnap && (
           <>
             {Array.from({ length: 24 }).map((_, index) => {

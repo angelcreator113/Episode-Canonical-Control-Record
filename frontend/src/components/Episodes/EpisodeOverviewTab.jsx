@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 
 /**
  * EpisodeOverviewTab — Episode Dashboard
@@ -25,11 +26,24 @@ const TIER_CONFIG = {
 function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
-  const [linkedEvent, setLinkedEvent] = useState(null);
+  const [allEvents, setAllEvents] = useState([]);  // every event in the show — drives the linker dropdown
+  const [linkedEvents, setLinkedEvents] = useState([]);  // events whose used_in_episode_id is this episode
   const [sceneSets, setSceneSets] = useState([]);
   const [brief, setBrief] = useState(null);
   const [scriptInfo, setScriptInfo] = useState(null);
   const [totalEpisodes, setTotalEpisodes] = useState(0);
+  const [linkBusy, setLinkBusy] = useState(false);
+  // World locations for the show — needed to resolve venue_location_id on
+  // each linked event into a name + thumbnail. Locations don't propagate
+  // to the episode directly; the Locations card reads them through the
+  // linked events. One source of truth.
+  const [worldLocations, setWorldLocations] = useState([]);
+  // AI scene-set suggester state — fetch is one-shot, the modal is the
+  // creator's review surface, and apply links the chosen sets via the
+  // existing /scene-sets endpoint.
+  const [sceneSuggestion, setSceneSuggestion] = useState(null);
+  const [suggestBusy, setSuggestBusy] = useState(false);
+  const [applyBusy, setApplyBusy] = useState(false);
   const [formData, setFormData] = useState({
     title: episode.title || '',
     logline: episode.logline || episode.description || '',
@@ -48,13 +62,16 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const loadContext = async () => {
     if (showId) {
       api.get(`/api/v1/world/${showId}/events`).then(({ data }) => {
-        setLinkedEvent((data?.events || []).find(e => e.used_in_episode_id === episode.id) || null);
+        const events = data?.events || [];
+        setAllEvents(events);
+        setLinkedEvents(events.filter(e => e.used_in_episode_id === episode.id));
       }).catch(() => {});
       api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(({ data }) => {
         setTotalEpisodes((data?.data || data || []).length);
       }).catch(() => {});
     }
     api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => setSceneSets(data?.data || [])).catch(() => {});
+    api.get(`/api/v1/world/locations`).then(({ data }) => setWorldLocations(data?.locations || [])).catch(() => {});
     api.get(`/api/v1/episode-brief/${episode.id}`).then(({ data }) => setBrief(data?.data || null)).catch(() => {});
     api.get(`/api/v1/episodes/${episode.id}/scripts?includeAllVersions=false`).then(({ data }) => {
       const scripts = data?.data || data?.scripts || [];
@@ -69,10 +86,78 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   }
   const tier = evalData?.tier_final ? TIER_CONFIG[evalData.tier_final] : null;
 
-  // Parse outfit
-  let outfitPieces = linkedEvent?.outfit_pieces;
-  if (typeof outfitPieces === 'string') try { outfitPieces = JSON.parse(outfitPieces); } catch { outfitPieces = []; }
-  if (!Array.isArray(outfitPieces)) outfitPieces = [];
+  // First linked event drives the legacy single-event display fields
+  // (prestige, outfit). When multiple events are linked, the rest still
+  // render as chips below.
+  const primaryEvent = linkedEvents[0] || null;
+
+  // Aggregate outfit pieces across all linked events so multi-event
+  // episodes show the combined wardrobe count. Each event's
+  // outfit_pieces is parsed leniently (string OR array OR null) so
+  // legacy data with stringified JSON keeps working.
+  const outfitPieces = (() => {
+    const all = [];
+    linkedEvents.forEach(ev => {
+      let pieces = ev.outfit_pieces;
+      if (typeof pieces === 'string') try { pieces = JSON.parse(pieces); } catch { pieces = []; }
+      if (Array.isArray(pieces)) all.push(...pieces);
+    });
+    return all;
+  })();
+
+  // Link / unlink handlers — call the world-events PUT to set or clear
+  // used_in_episode_id, then refresh the local list. Events the show
+  // already has but aren't linked anywhere are eligible for linking;
+  // events linked to a different episode are filtered out.
+  const linkEvent = async (eventId) => {
+    if (!eventId || !showId) return;
+    setLinkBusy(true);
+    try {
+      await api.put(`/api/v1/world/${showId}/events/${eventId}`, { used_in_episode_id: episode.id });
+      const ev = allEvents.find(e => e.id === eventId);
+      if (ev) {
+        setLinkedEvents(prev => [...prev, { ...ev, used_in_episode_id: episode.id }]);
+        setAllEvents(prev => prev.map(e => e.id === eventId ? { ...e, used_in_episode_id: episode.id } : e));
+      }
+    } catch (err) {
+      console.error('[Episode] Failed to link event:', err);
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+  const unlinkEvent = async (eventId) => {
+    if (!eventId || !showId) return;
+    setLinkBusy(true);
+    try {
+      await api.put(`/api/v1/world/${showId}/events/${eventId}`, { used_in_episode_id: null });
+      setLinkedEvents(prev => prev.filter(e => e.id !== eventId));
+      setAllEvents(prev => prev.map(e => e.id === eventId ? { ...e, used_in_episode_id: null } : e));
+    } catch (err) {
+      console.error('[Episode] Failed to unlink event:', err);
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+  const linkableEvents = allEvents.filter(e => !e.used_in_episode_id);
+
+  // Locations derived from the linked events. Each event can point at a
+  // WorldLocation via venue_location_id; we resolve those to full
+  // location objects (name, district, image) for display. Deduped by id
+  // so two events at the same venue don't show twice. Falls back to the
+  // event's free-text venue_name when no FK is set.
+  const eventLocations = (() => {
+    const seen = new Map();
+    linkedEvents.forEach(ev => {
+      if (ev.venue_location_id) {
+        const loc = worldLocations.find(l => l.id === ev.venue_location_id);
+        if (loc && !seen.has(loc.id)) seen.set(loc.id, { kind: 'location', loc, eventName: ev.name });
+      } else if (ev.venue_name) {
+        const key = `name:${ev.venue_name.toLowerCase()}`;
+        if (!seen.has(key)) seen.set(key, { kind: 'venue_name', name: ev.venue_name, eventName: ev.name });
+      }
+    });
+    return Array.from(seen.values());
+  })();
 
   // Financials
   const income = parseFloat(episode.total_income) || 0;
@@ -159,29 +244,55 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 12 }}>
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Status</div><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{episode.status || 'draft'}</div></div>
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Episode</div><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>#{episode.episode_number || '?'}</div></div>
-        <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Prestige</div><div style={{ fontSize: 14, fontWeight: 700, color: '#B8962E' }}>{linkedEvent?.prestige || '—'}/10</div></div>
+        <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Prestige</div><div style={{ fontSize: 14, fontWeight: 700, color: '#B8962E' }}>{primaryEvent?.prestige || '—'}/10</div></div>
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Outfit</div><div style={{ fontSize: 14, fontWeight: 700, color: '#ec4899' }}>{outfitPieces.length || '—'} pcs</div></div>
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Net P&L</div><div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? '#16a34a' : net < 0 ? '#dc2626' : '#94a3b8' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div></div>
       </div>
 
       {/* Two-column: Event + Season Position */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-        {/* Event */}
+        {/* Events — multi-link. Each linked event is a chip with × to
+            unlink. The dropdown below lists every show event not yet
+            linked anywhere; picking one stamps it with this episode's
+            used_in_episode_id. */}
         <div style={S.card}>
-          <span style={S.label}>💌 Event</span>
-          {linkedEvent ? (
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>{linkedEvent.name}</div>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {linkedEvent.host && <span style={{ padding: '2px 6px', background: '#f1f5f9', borderRadius: 4, fontSize: 9, color: '#64748b' }}>{linkedEvent.host}</span>}
-                {linkedEvent.dress_code && <span style={{ padding: '2px 6px', background: '#faf5ea', borderRadius: 4, fontSize: 9, color: '#B8962E' }}>{linkedEvent.dress_code}</span>}
-                {linkedEvent.event_type && <span style={{ padding: '2px 6px', background: '#eef2ff', borderRadius: 4, fontSize: 9, color: '#6366f1' }}>{linkedEvent.event_type}</span>}
-              </div>
-              {linkedEvent.narrative_stakes && <div style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic', marginTop: 6 }}>{linkedEvent.narrative_stakes}</div>}
-            </div>
+          <span style={S.label}>💌 Events ({linkedEvents.length})</span>
+          {linkedEvents.length === 0 ? (
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>No events linked</div>
           ) : (
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>No event linked</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+              {linkedEvents.map(ev => (
+                <div key={ev.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '6px 8px', background: '#faf5ea', border: '1px solid #f3e2b3', borderRadius: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.name}</div>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+                      {ev.host && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#64748b' }}>{ev.host}</span>}
+                      {ev.dress_code && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#B8962E' }}>{ev.dress_code}</span>}
+                      {ev.event_type && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#6366f1' }}>{ev.event_type}</span>}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => unlinkEvent(ev.id)}
+                    disabled={linkBusy}
+                    title="Unlink event from this episode"
+                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}
+                  >×</button>
+                </div>
+              ))}
+            </div>
           )}
+          <select
+            value=""
+            disabled={linkBusy || linkableEvents.length === 0}
+            onChange={(e) => { if (e.target.value) linkEvent(e.target.value); e.target.value = ''; }}
+            style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, color: '#64748b', cursor: linkableEvents.length === 0 ? 'not-allowed' : 'pointer' }}
+          >
+            <option value="">{linkableEvents.length === 0 ? 'No unlinked events available' : '+ Link an event…'}</option>
+            {linkableEvents.map(ev => (
+              <option key={ev.id} value={ev.id}>{ev.name}{ev.event_type ? ` (${ev.event_type})` : ''}</option>
+            ))}
+          </select>
         </div>
 
         {/* Season Position */}
@@ -202,19 +313,33 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
 
       {/* Locations + Script */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-        {/* Locations */}
+        {/* Locations — derived from the linked events' venue_location_id
+            (or venue_name when no FK is set). No standalone state on the
+            episode; locations are always read through the events so
+            there's no risk of drift. Hint creators that empty = link an
+            event with a venue. */}
         <div style={S.card}>
-          <span style={S.label}>📍 Locations ({sceneSets.length})</span>
-          {sceneSets.length > 0 ? (
+          <span style={S.label}>📍 Locations ({eventLocations.length})</span>
+          {eventLocations.length > 0 ? (
             <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
-              {sceneSets.map(ss => (
-                <div key={ss.id} style={{ flexShrink: 0 }}>
-                  {ss.base_still_url ? <img src={ss.base_still_url} alt={ss.name} style={{ width: 80, height: 50, objectFit: 'cover', borderRadius: 6, border: '1px solid #e2e8f0' }} /> : <div style={{ width: 80, height: 50, background: '#f1f5f9', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1' }}>📍</div>}
-                  <div style={{ fontSize: 9, fontWeight: 600, color: '#64748b', marginTop: 2 }}>{ss.name}</div>
-                </div>
-              ))}
+              {eventLocations.map((entry, i) => {
+                const name = entry.kind === 'location' ? entry.loc.name : entry.name;
+                const district = entry.kind === 'location' ? entry.loc.district : null;
+                return (
+                  <div key={i} style={{ flexShrink: 0, minWidth: 80 }}>
+                    <div style={{ width: 80, height: 50, background: '#f1f5f9', borderRadius: 6, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 18 }}>📍</div>
+                    <div style={{ fontSize: 9, fontWeight: 600, color: '#1a1a2e', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                    {district && <div style={{ fontSize: 8, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{district}</div>}
+                    <div style={{ fontSize: 8, color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>via {entry.eventName}</div>
+                  </div>
+                );
+              })}
             </div>
-          ) : <div style={{ fontSize: 12, color: '#94a3b8' }}>No locations yet</div>}
+          ) : (
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+              {linkedEvents.length === 0 ? 'Link an event to see its location here' : 'Linked events have no venue set'}
+            </div>
+          )}
         </div>
 
         {/* Script */}
@@ -236,8 +361,58 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         <button onClick={() => navigate(`/episodes/${episode.id}/script-writer`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#B8962E', border: 'none', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✦ Script Writer</button>
         {showId && <button onClick={() => navigate(`/shows/${showId}/world?tab=events`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🎭 Producer Mode</button>}
         <button onClick={() => navigate(`/episodes/${episode.id}/plan`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🎬 Scene Plan</button>
+        {/* AI scene-set suggester — disabled until the episode has a script
+            since there's nothing to analyze otherwise. Fires the suggest
+            endpoint then opens SceneSuggestionReview for the creator to
+            approve / discard. */}
+        <button
+          onClick={async () => {
+            setSuggestBusy(true);
+            try {
+              const { data } = await api.post(`/api/v1/episodes/${episode.id}/suggest-scenes`);
+              if (data?.success && data?.proposal) {
+                setSceneSuggestion({ proposal: data.proposal, contextSummary: data.context_summary });
+              } else {
+                alert(data?.error || 'No suggestions returned');
+              }
+            } catch (err) {
+              alert(err?.response?.data?.error || err.message || 'Failed to fetch suggestions');
+            } finally {
+              setSuggestBusy(false);
+            }
+          }}
+          disabled={!scriptInfo?.exists || suggestBusy}
+          title={!scriptInfo?.exists ? 'Add a script first' : 'AI suggests scene sets per beat'}
+          style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e8d8b8', color: '#B8962E', fontSize: 11, fontWeight: 600, cursor: !scriptInfo?.exists || suggestBusy ? 'not-allowed' : 'pointer', opacity: !scriptInfo?.exists ? 0.55 : 1 }}
+        >
+          {suggestBusy ? '✦ Thinking…' : '✦ Suggest Scenes'}
+        </button>
         <button onClick={() => setIsEditing(true)} style={{ padding: '6px 14px', borderRadius: 6, background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✏️ Edit Details</button>
       </div>
+      {sceneSuggestion && (
+        <SceneSuggestionReview
+          proposal={sceneSuggestion.proposal}
+          contextSummary={sceneSuggestion.contextSummary}
+          busy={applyBusy}
+          onReject={() => setSceneSuggestion(null)}
+          onApprove={async ({ sceneSetIds }) => {
+            if (!sceneSetIds.length) { setSceneSuggestion(null); return; }
+            setApplyBusy(true);
+            try {
+              await api.post(`/api/v1/episodes/${episode.id}/scene-sets`, { sceneSetIds });
+              // Refresh the episode's linked sets so the Locations / Scene
+              // Plan UI reflects the new links without a full page reload.
+              const { data } = await api.get(`/api/v1/episodes/${episode.id}/scene-sets`);
+              setSceneSets(data?.data || []);
+              setSceneSuggestion(null);
+            } catch (err) {
+              alert(err?.response?.data?.error || err.message || 'Failed to apply');
+            } finally {
+              setApplyBusy(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
