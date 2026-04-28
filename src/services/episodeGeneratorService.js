@@ -338,6 +338,7 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   let episodeTitle = eventData.name || `Episode ${nextNumber}`;
   let episodeDescription = eventData.description || `Based on: ${eventData.name}`;
   let episodeTags = [];
+  let aiBeatOutline = [];
 
   try {
     if (process.env.ANTHROPIC_API_KEY) {
@@ -359,8 +360,11 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
 
       const response = await client.messages.create({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 400,
-        messages: [{ role: 'user', content: `Generate a social-media-ready episode title and description for "Styling Adventures with Lala."
+        // Bumped from 400 to 1500 — the beat outline adds ~6-8 short
+        // beats which would otherwise truncate. Title+desc+tags together
+        // are still well under half this budget.
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: `Generate a social-media-ready episode for "Styling Adventures with Lala" — title, description, tags, AND a draft beat outline so the creator has structure to work from before any script exists.
 
 EVENT: ${eventData.name}
 Type: ${eventData.event_type} | Prestige: ${prestige}/10
@@ -374,8 +378,18 @@ Return JSON:
 {
   "title": "Clickable title (YouTube/TikTok style — curiosity gap, emotional hook, 60 chars max). Examples: 'I Wore a $200 Dress to a $10,000 Event', 'She Invited Me and THIS Happened', 'GRWM for the Most Important Night'",
   "description": "2-3 sentence YouTube description with keywords. Mention the event, outfit, stakes. Make it searchable.",
-  "tags": ["5-8 hashtags without #, lowercase, searchable terms like 'fashion', 'grwm', 'luxury event', 'outfit challenge'"]
+  "tags": ["5-8 hashtags without #, lowercase, searchable terms like 'fashion', 'grwm', 'luxury event', 'outfit challenge'"],
+  "beats": [
+    { "beat_number": 1, "summary": "GRWM — Lala picks the outfit", "dramatic_function": "setup" },
+    { "beat_number": 2, "summary": "...", "dramatic_function": "rising_action" }
+  ]
 }
+
+Beat outline rules:
+- 5 to 8 beats total (one per major story moment)
+- summary is one short sentence describing what happens
+- dramatic_function: setup | rising_action | turn | climax | resolution | tag
+- Beats should arc from arrival/setup → tension/turn → climax → outcome.
 
 Return ONLY JSON.` }],
       });
@@ -387,6 +401,16 @@ Return ONLY JSON.` }],
         episodeTitle = parsed.title || episodeTitle;
         episodeDescription = parsed.description || episodeDescription;
         episodeTags = parsed.tags || [];
+        // Beat outline: normalize each entry so the brief's JSONB always
+        // holds the same shape regardless of small Claude formatting
+        // variations.
+        if (Array.isArray(parsed.beats)) {
+          aiBeatOutline = parsed.beats.map((b, i) => ({
+            beat_number: Number.isFinite(b.beat_number) ? b.beat_number : i + 1,
+            summary: String(b.summary || '').trim(),
+            dramatic_function: b.dramatic_function || null,
+          })).filter(b => b.summary);
+        }
       }
     }
   } catch (titleErr) {
@@ -412,6 +436,15 @@ Return ONLY JSON.` }],
       episode_id: episode.id,
       show_id: showId,
       event_id: event.id,
+      // Capture the OutfitSet that drove this episode (when the event
+      // had one picked). Pieces still get exploded into EpisodeWardrobe
+      // rows; this preserves the "which set" audit trail those rows
+      // alone would lose.
+      outfit_set_id: event.outfit_set_id || null,
+      // AI-drafted beat outline from the same Claude call that generated
+      // the title — gives creators something to anchor edits against and
+      // feeds Suggest-Scenes before any script exists.
+      beat_outline: aiBeatOutline,
       episode_archetype: inferArchetype(event),
       designed_intent: inferIntent(event),
       narrative_purpose: `${event.name} — ${event.description || 'Event-driven episode'}`,
