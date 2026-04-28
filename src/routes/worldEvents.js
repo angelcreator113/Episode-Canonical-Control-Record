@@ -332,6 +332,18 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       'prestige', 'cost_coins', 'strictness', 'deadline_minutes',
       'browse_pool_size', 'payment_amount', 'career_tier',
     ]);
+    const uuidFields = new Set([
+      'season_id', 'arc_id', 'scene_set_id', 'source_calendar_event_id',
+      'venue_location_id', 'used_in_episode_id', 'outfit_set_id',
+    ]);
+    const scalarStringFields = new Set([
+      'name', 'event_type', 'host', 'host_brand', 'description',
+      'deadline_type', 'dress_code', 'location_hint', 'narrative_stakes',
+      'overlay_template', 'browse_pool_bias', 'status',
+      'career_milestone', 'fail_consequence', 'success_unlock',
+      'venue_name', 'venue_address', 'event_date', 'event_time',
+      'theme', 'mood', 'floral_style', 'border_style',
+    ]);
     const jsonFields = new Set([
       'dress_code_keywords', 'canon_consequences', 'seeds_future_events',
       'required_ui_overlays', 'rewards', 'requirements', 'color_palette',
@@ -346,9 +358,17 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       return value;
     };
 
+    const unwrapScalar = (value) => {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        if (value.value !== undefined) return value.value;
+        if (value.id !== undefined) return value.id;
+      }
+      return value;
+    };
+
     for (const field of allowedFields) {
       if (updates[field] !== undefined) {
-        let val = normalizeNullLike(updates[field]);
+        let val = normalizeNullLike(unwrapScalar(updates[field]));
 
         if (field === 'career_tier' && typeof val === 'string') {
           const tierMap = { emerging: 1, rising: 2, established: 3, elite: 4, icon: 5 };
@@ -370,6 +390,15 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 
         if (jsonFields.has(field)) {
           val = val === null ? null : JSON.stringify(val);
+        }
+
+        if (val !== null && (uuidFields.has(field) || scalarStringFields.has(field))) {
+          if (typeof val !== 'string') {
+            return res.status(400).json({
+              error: `Invalid value for ${field}`,
+              message: `${field} must be a string, UUID, or null`,
+            });
+          }
         }
 
         if (field === 'scene_set_id' && val !== null) {
