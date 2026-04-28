@@ -11,6 +11,50 @@ const express = require('express');
 const router = express.Router();
 const { optionalAuth } = require('../middleware/auth');
 
+// ── GET FEED TIMELINE (QUERY COMPAT) ────────────────────────────────────────
+// GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
+router.get('/', optionalAuth, async (req, res) => {
+  try {
+    const { show_id, episode_id, profile_id, narrative_function, limit, offset } = req.query;
+    const { FeedPost, SocialProfile } = require('../models');
+
+    if (!show_id && !episode_id) {
+      return res.status(400).json({ error: 'show_id or episode_id is required' });
+    }
+
+    const where = { deleted_at: null };
+    if (show_id) where.show_id = show_id;
+    if (episode_id) where.episode_id = episode_id;
+    if (profile_id) where.social_profile_id = profile_id;
+    if (narrative_function) where.narrative_function = narrative_function;
+
+    const posts = await FeedPost.findAll({
+      where,
+      order: [['posted_at', 'DESC'], ['sort_order', 'ASC']],
+      limit: parseInt(limit, 10) || 50,
+      offset: parseInt(offset, 10) || 0,
+      include: SocialProfile ? [{
+        model: SocialProfile,
+        as: 'socialProfile',
+        attributes: ['id', 'handle', 'display_name', 'platform', 'archetype',
+          'follower_tier', 'aesthetic_dna'],
+        required: false,
+      }] : [],
+    });
+
+    const total = await FeedPost.count({ where });
+
+    return res.json({
+      data: posts,
+      count: posts.length,
+      total,
+      hasMore: (parseInt(offset, 10) || 0) + posts.length < total,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GENERATE FEED POSTS FOR EPISODE ──────────────────────────────────────────
 // POST /api/v1/feed-posts/:episodeId/generate
 router.post('/:episodeId/generate', optionalAuth, async (req, res) => {
