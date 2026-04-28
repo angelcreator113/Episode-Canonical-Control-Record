@@ -2369,7 +2369,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
     })();
 
     const {
-      USD_TO_COINS, EVENT_EXTRAS, RENTAL_RATE, CONTENT_REVENUE_PER_PRESTIGE,
+      USD_TO_COINS, EVENT_EXTRAS, RENTAL_RATE,
     } = require('../utils/financialRates');
     const {
       getCurrentBalance, getFinancialGoals, calculateSocialTaskRewards,
@@ -2418,10 +2418,11 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
     const socialTasks = Array.isArray(automation.social_tasks) ? automation.social_tasks : [];
     const taskRewards = calculateSocialTaskRewards(socialTasks);
     const socialTaskRewards = taskRewards.reduce((s, t) => s + (t.reward || 0), 0);
-    // Content revenue forecast — conservative estimate from prestige.
-    // Real content revenue is computed at episode-complete time; this is
-    // just the "you'll probably earn this much in posts" preview.
-    const contentRevenueEst = CONTENT_REVENUE_PER_PRESTIGE * prestige;
+    // Content bonus uses the same rule as finalize-financials: brand deals
+    // get a 10% post-delivery bonus on top of event payment.
+    const contentRevenueEst = (event.event_type === 'brand_deal' && eventPayment > 0)
+      ? Math.round(eventPayment * 0.1)
+      : 0;
 
     const income = {
       event_payment: eventPayment,
