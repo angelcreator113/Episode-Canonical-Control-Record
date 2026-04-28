@@ -1,7 +1,7 @@
 # Simple deployment script for dev site
 $ErrorActionPreference = "Stop"
 
-$EC2_HOST = "ubuntu@52.91.217.230"
+$EC2_HOST = "ubuntu@54.163.229.144"
 $KEY_FILE = "C:\Users\12483\episode-prod-key.pem"
 $PROJECT_ROOT = "C:\Users\12483\Projects\Episode-Canonical-Control-Record-1"
 
@@ -60,7 +60,7 @@ Write-Host "  Uploaded successfully" -ForegroundColor Green
 # Step 4: Deploy on EC2
 Write-Host "`n[4/4] Deploying on EC2..." -ForegroundColor Yellow
 
-ssh -i $KEY_FILE $EC2_HOST "set -e; echo 'Backing up...'; sudo rm -rf /var/www/html.backup 2>/dev/null || true; sudo mv /var/www/html /var/www/html.backup 2>/dev/null || true; echo 'Extracting...'; sudo mkdir -p /var/www/html; cd /var/www/html; sudo tar -xzf /tmp/frontend-build.tar.gz; sudo chown -R www-data:www-data /var/www/html; sudo chmod -R 755 /var/www/html; echo 'Restarting Nginx...'; sudo systemctl restart nginx; echo 'Deployment complete!'; ls -lh /var/www/html/"
+ssh -i $KEY_FILE $EC2_HOST "set -e; echo 'Backing up...'; sudo rm -rf /var/www/html.backup 2>/dev/null || true; sudo mv /var/www/html /var/www/html.backup 2>/dev/null || true; echo 'Extracting...'; sudo mkdir -p /var/www/html; cd /var/www/html; sudo tar -xzf /tmp/frontend-build.tar.gz; sudo chown -R www-data:www-data /var/www/html; sudo chmod -R 755 /var/www/html; echo 'Restarting Nginx...'; sudo systemctl reload nginx; echo 'Restarting API...'; pm2 restart episode-api || true; echo 'Deployment complete!'; ls -lh /var/www/html/"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  Deployment failed" -ForegroundColor Red
