@@ -736,26 +736,55 @@ function WorldAdmin() {
 
   const applyAiFix = async (suggestion) => {
     const ev = worldEvents.find(e => e.name === suggestion.event_name);
-    if (!ev) return;
+    if (!ev) {
+      setToast(`Couldn't find event "${suggestion.event_name}"`);
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
 
-    const updates = {};
-    if (suggestion.action === 'swap_type' && suggestion.new_value) updates.event_type = suggestion.new_value;
-    if (suggestion.action === 'rename' && suggestion.new_value) updates.name = suggestion.new_value;
-    if (suggestion.action === 'change_prestige' && suggestion.new_value) updates.prestige = parseInt(suggestion.new_value) || ev.prestige;
-
-    if (Object.keys(updates).length === 0) return;
+    const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
     try {
+      // Reassign — set used_in_episode_id via the inject endpoint, which
+      // also stamps status='used' and bumps times_used. The AI may put the
+      // target in new_value as a UUID, an episode number, or a phrase like
+      // "Ep 3" / "Episode 3", so try a couple of shapes before giving up.
+      if (suggestion.action === 'reassign') {
+        const raw = String(suggestion.new_value || suggestion.suggestion || '');
+        let target = null;
+        const uuidMatch = raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+        if (uuidMatch) target = episodes.find(e => e.id === uuidMatch[0]);
+        if (!target) {
+          const numMatch = raw.match(/\d+/);
+          if (numMatch) target = episodes.find(e => e.episode_number === parseInt(numMatch[0], 10));
+        }
+        if (!target) { flash('Could not parse target episode from suggestion'); return; }
+
+        await api.post(`/api/v1/world/${showId}/events/${ev.id}/inject`, { episode_id: target.id });
+        setWorldEvents(prev => prev.map(e => e.id === ev.id ? { ...e, used_in_episode_id: target.id, status: 'used' } : e));
+        setAiFixSuggestions(prev => prev.filter(s => s !== suggestion));
+        flash(`Assigned "${ev.name}" to Ep ${target.episode_number}`);
+        return;
+      }
+
+      const updates = {};
+      if (suggestion.action === 'swap_type' && suggestion.new_value) updates.event_type = suggestion.new_value;
+      if (suggestion.action === 'rename' && suggestion.new_value) updates.name = suggestion.new_value;
+      if (suggestion.action === 'change_prestige' && suggestion.new_value) updates.prestige = parseInt(suggestion.new_value) || ev.prestige;
+
+      if (Object.keys(updates).length === 0) {
+        flash(`No handler for action "${suggestion.action}"`);
+        return;
+      }
+
       const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { ...ev, ...updates });
       if (res.data.success) {
         setWorldEvents(prev => prev.map(e => e.id === ev.id ? res.data.event : e));
         setAiFixSuggestions(prev => prev.filter(s => s !== suggestion));
-        setToast(`Applied: ${suggestion.suggestion.slice(0, 60)}`);
-        setTimeout(() => setToast(null), 3000);
+        flash(`Applied: ${suggestion.suggestion.slice(0, 60)}`);
       }
     } catch (err) {
-      setToast(`Failed: ${err.message}`);
-      setTimeout(() => setToast(null), 3000);
+      flash(`Failed: ${err.response?.data?.error || err.message}`);
     }
   };
 
