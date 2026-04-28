@@ -1184,7 +1184,35 @@ router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, a
       { replacements: { assetId, eventId } }
     );
 
-    return res.json({ success: true, message: 'Invitation approved and linked to event', episodeId });
+    // Auto-create a TimelinePlacement so the invite is queued for the
+    // video composer to render. Default: scene-start of the first
+    // scene, 5s duration, overlay z-index. Idempotent — re-approving
+    // the same invite won't pile up duplicate placements. Non-blocking
+    // so a failure here doesn't fail the approval response.
+    let placement = null;
+    if (episodeId) {
+      try {
+        const { placeOverlayOnFirstScene } = require('../services/timelinePlacementService');
+        placement = await placeOverlayOnFirstScene(models, {
+          episodeId,
+          assetId,
+          defaults: {
+            duration: 5,
+            zIndex: 20,
+            properties: { kind: 'invitation', source: 'approve-invitation' },
+          },
+        });
+      } catch (placeErr) {
+        console.warn('[approve-invitation] Placement skipped:', placeErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Invitation approved and linked to event',
+      episodeId,
+      placement_id: placement?.id || null,
+    });
   } catch (err) {
     console.error('[InviteGen] Approve error:', err);
     return res.status(500).json({ success: false, error: err.message });
