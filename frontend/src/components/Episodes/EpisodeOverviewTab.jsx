@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
+import TimelinePlacementsSection from '../episode/TimelinePlacementsSection';
 
 /**
  * EpisodeOverviewTab — Episode Dashboard
@@ -435,6 +436,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           )}
         </div>
       )}
+
+      {/* Video UI overlays — invites, checklists, etc. on the rendered
+          video frame. Auto-populated when an invite is approved or the
+          wardrobe checklist is locked, manually editable here. */}
+      <TimelinePlacementsSection episodeId={episode.id} />
 
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
