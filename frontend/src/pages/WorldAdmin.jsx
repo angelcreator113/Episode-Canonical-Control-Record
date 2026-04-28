@@ -1137,6 +1137,13 @@ The revised event should feel like a completely different experience from the si
         setCharState(p => ({ ...p, state: res.data.state }));
         setEditingStats(false);
         setSuccessMsg('Stats updated!');
+        // Refresh the on-page Stat Change Ledger so the entry the backend
+        // just wrote (manual delta + history row) shows up immediately
+        // instead of waiting for a full page reload.
+        try {
+          const h = await api.get(`/api/v1/world/${showId}/history`);
+          setStateHistory(h.data?.history || []);
+        } catch { /* non-blocking */ }
         // The state/update route mirrors coin changes into the financial
         // ledger. Refresh financeConfig so the event-modal Financial
         // Preview (which keys off financeConfig.current_balance) refetches
@@ -6675,24 +6682,43 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
             {charState ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-                {Object.entries(charState.state || {}).map(([key, val]) => (
-                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{STAT_ICONS[key]}</span>
-                    <span style={{ flex: '0 0 100px', fontSize: 13, color: '#64748b', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
-                    {editingStats ? (
-                      <input type="number" value={statForm[key] ?? val} onChange={e => setStatForm(p => ({ ...p, [key]: parseInt(e.target.value) }))}
-                        style={{ width: 80, padding: '4px 8px', border: '1px solid #6366f1', borderRadius: 4, fontSize: 14, fontWeight: 700, textAlign: 'right', marginLeft: 'auto' }}
-                        min={key === 'coins' ? -9999 : 0} max={key === 'coins' ? 99999 : 10} />
-                    ) : (
-                      <>
-                        <div style={{ flex: 1, height: 10, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, (val / (key === 'coins' ? 500 : 10)) * 100))}%`, borderRadius: 5, background: key === 'stress' ? (val >= 5 ? '#dc2626' : '#eab308') : key === 'coins' ? (val < 0 ? '#dc2626' : '#6366f1') : '#6366f1', transition: 'width 0.3s' }} />
-                        </div>
-                        <span style={{ flex: '0 0 40px', textAlign: 'right', fontSize: 15, fontWeight: 700, color: (key === 'stress' && val >= 5) || (key === 'coins' && val < 0) ? '#dc2626' : '#1a1a2e' }}>{val}</span>
-                      </>
-                    )}
-                  </div>
-                ))}
+                {Object.entries(charState.state || {}).map(([key, val]) => {
+                  // Coin bar used to scale to a hardcoded 500 (the default
+                  // starting balance), so it pegged at 100% for any later
+                  // balance and was useless as a progress signal. Now it
+                  // tracks progress toward the next financial goal when one
+                  // exists; without a goal we render the value as text only
+                  // (no fake bar) so it doesn't lie about being "full".
+                  const isCoin = key === 'coins';
+                  const goalThreshold = financeConfig?.next_goal?.threshold;
+                  const barMax = isCoin ? (goalThreshold || null) : 10;
+                  return (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{STAT_ICONS[key]}</span>
+                      <span style={{ flex: '0 0 100px', fontSize: 13, color: '#64748b', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
+                      {editingStats ? (
+                        <input type="number" value={statForm[key] ?? val} onChange={e => setStatForm(p => ({ ...p, [key]: parseInt(e.target.value) }))}
+                          style={{ width: 80, padding: '4px 8px', border: '1px solid #6366f1', borderRadius: 4, fontSize: 14, fontWeight: 700, textAlign: 'right', marginLeft: 'auto' }}
+                          min={key === 'coins' ? -9999 : 0} max={key === 'coins' ? 99999 : 10} />
+                      ) : (
+                        <>
+                          {barMax != null ? (
+                            <div style={{ flex: 1, height: 10, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, (val / barMax) * 100))}%`, borderRadius: 5, background: key === 'stress' ? (val >= 5 ? '#dc2626' : '#eab308') : isCoin ? (val < 0 ? '#dc2626' : '#6366f1') : '#6366f1', transition: 'width 0.3s' }} />
+                            </div>
+                          ) : (
+                            <div style={{ flex: 1, fontSize: 11, color: '#94a3b8', textAlign: 'right', paddingRight: 8 }}>
+                              {isCoin ? 'no active goal' : ''}
+                            </div>
+                          )}
+                          <span style={{ flex: '0 0 60px', textAlign: 'right', fontSize: 15, fontWeight: 700, color: (key === 'stress' && val >= 5) || (isCoin && val < 0) ? '#dc2626' : '#1a1a2e' }}>
+                            {isCoin ? Number(val).toLocaleString() : val}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : <p style={S.muted}>No stats initialized. Evaluate an episode to auto-seed defaults.</p>}
 
