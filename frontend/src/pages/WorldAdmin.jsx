@@ -323,6 +323,10 @@ function WorldAdmin() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [aiFixLoading, setAiFixLoading] = useState(false);
   const [aiFixSuggestions, setAiFixSuggestions] = useState(null);
+  // Auto-Reorder previews its plan before touching the DB. null = no
+  // preview open; otherwise an array of { ep, current, proposed, changed }.
+  const [reorderPlan, setReorderPlan] = useState(null);
+  const [reorderApplying, setReorderApplying] = useState(false);
   const [aiRevising, setAiRevising] = useState(false);
   const [compareEvents, setCompareEvents] = useState(null); // [eventA, eventB]
   const [generating, setGenerating] = useState(false);
@@ -363,7 +367,10 @@ function WorldAdmin() {
   }, [showId]);
 
   // Forecast fetch — refire whenever the open event changes OR its
-  // outfit_pieces change (user saved a new outfit in the picker).
+  // outfit_pieces change (user saved a new outfit in the picker), or
+  // when the show's starting balance is edited (Finance editor → save
+  // re-seeds the ledger and updates financeConfig.current_balance, which
+  // the forecast's balance_before/balance_after read from the server).
   useEffect(() => {
     if (!eventDetailModal?.id || !showId) { setEventFinancials(null); return; }
     let cancelled = false;
@@ -376,7 +383,7 @@ function WorldAdmin() {
       if (!cancelled) setEventFinancialsLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [eventDetailModal?.id, eventDetailModal?.outfit_pieces, showId]);
+  }, [eventDetailModal?.id, eventDetailModal?.outfit_pieces, showId, financeConfig?.current_balance]);
 
   // Escape key closes modals
   useEffect(() => {
@@ -442,7 +449,24 @@ function WorldAdmin() {
       };
       if (editingEvent === 'new') {
         const res = await api.post(`/api/v1/world/${showId}/events`, submitData);
-        if (res.data.success) { setWorldEvents(p => [res.data.event, ...p]); setEditingEvent(null); setSuccessMsg('Event created!'); }
+        if (res.data.success) {
+          let newEv = res.data.event;
+          // If this event was created from an AI gap suggestion, the target
+          // episode id was stashed on the form. Link it now via inject so
+          // the gap warning actually clears.
+          const linkEpId = eventForm.__pendingEpisodeLink;
+          if (linkEpId) {
+            try {
+              await api.post(`/api/v1/world/${showId}/events/${newEv.id}/inject`, { episode_id: linkEpId });
+              newEv = { ...newEv, used_in_episode_id: linkEpId, status: 'used' };
+            } catch (linkErr) {
+              console.warn('[AI gap] linking new event failed:', linkErr.response?.data?.error || linkErr.message);
+            }
+          }
+          setWorldEvents(p => [newEv, ...p]);
+          setEditingEvent(null);
+          setSuccessMsg(linkEpId ? 'Event created and linked to episode!' : 'Event created!');
+        }
       } else {
         const res = await api.put(`/api/v1/world/${showId}/events/${editingEvent}`, submitData);
         if (res.data.success) { setWorldEvents(p => p.map(e => e.id === editingEvent ? res.data.event : e)); setEditingEvent(null); setSuccessMsg('Event updated!'); }
@@ -510,11 +534,12 @@ function WorldAdmin() {
   ];
 
   // Sequence validation — story logic warnings
-  const getSequenceWarnings = () => {
+  const getSequenceWarnings = (eventsArg) => {
+    const eventsForCheck = eventsArg || worldEvents;
     const warnings = [];
     const episodeEvents = episodes.map(ep => ({
       ep,
-      event: worldEvents.find(ev => ev.used_in_episode_id === ep.id),
+      event: eventsForCheck.find(ev => ev.used_in_episode_id === ep.id),
     }));
     const linked = episodeEvents.filter(e => e.event);
     const sorted = [...linked].sort((a, b) => (a.ep.episode_number || 0) - (b.ep.episode_number || 0));
@@ -539,13 +564,13 @@ function WorldAdmin() {
     }
 
     // 3. Duplicate event names
-    const names = worldEvents.map(ev => ev.name?.toLowerCase().trim());
+    const names = eventsForCheck.map(ev => ev.name?.toLowerCase().trim());
     for (let i = 0; i < names.length; i++) {
       for (let j = i + 1; j < names.length; j++) {
         if (names[i] && names[j] && names[i] === names[j]) {
-          warnings.push({ type: 'name', eventName: worldEvents[i].name, fixType: 'merge',
-            dupA: worldEvents[i], dupB: worldEvents[j],
-            msg: `⚠️ Duplicate event name: "${worldEvents[i].name}"` });
+          warnings.push({ type: 'name', eventName: eventsForCheck[i].name, fixType: 'merge',
+            dupA: eventsForCheck[i], dupB: eventsForCheck[j],
+            msg: `⚠️ Duplicate event name: "${eventsForCheck[i].name}"` });
         }
       }
     }
@@ -572,10 +597,10 @@ function WorldAdmin() {
     }
 
     // 6. Missing event types — check season has variety
-    const usedTypes = new Set(worldEvents.filter(ev => ev.status === 'used').map(ev => ev.event_type));
+    const usedTypes = new Set(eventsForCheck.filter(ev => ev.status === 'used').map(ev => ev.event_type));
     const essentialTypes = ['invite', 'deliverable', 'brand_deal'];
     for (const t of essentialTypes) {
-      if (worldEvents.length >= 6 && !usedTypes.has(t)) {
+      if (eventsForCheck.length >= 6 && !usedTypes.has(t)) {
         warnings.push({ type: 'missing_type', fixType: 'create',
           msg: `📋 No "${t.replace(/_/g, ' ')}" events linked — balanced arcs need variety in event types` });
       }
@@ -633,22 +658,50 @@ function WorldAdmin() {
   };
 
   // Auto-reorder all events by prestige ascending
-  const handleAutoReorder = async () => {
+  // Build a preview of the prestige-low-to-high reassignment without
+  // touching anything. The previous version went straight to a confirm()
+  // and silently overwrote curated assignments — this surfaces every
+  // change so the user can back out before committing.
+  const handleAutoReorder = () => {
     const linked = worldEvents.filter(ev => ev.used_in_episode_id);
+    if (linked.length === 0) {
+      setToast('No linked events to reorder'); setTimeout(() => setToast(null), 3000); return;
+    }
     const sortedByPrestige = [...linked].sort((a, b) => (a.prestige || 0) - (b.prestige || 0));
     const sortedEps = [...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
 
-    if (sortedByPrestige.length === 0) return;
-    if (!window.confirm(`Reorder ${sortedByPrestige.length} events by prestige (low → high) across episodes? This changes all assignments.`)) return;
+    const plan = sortedEps.map((ep, i) => {
+      const current = worldEvents.find(ev => ev.used_in_episode_id === ep.id) || null;
+      const proposed = sortedByPrestige[i] || null;
+      return {
+        ep,
+        current,
+        proposed,
+        changed: (current?.id || null) !== (proposed?.id || null),
+      };
+    });
+    setReorderPlan(plan);
+  };
 
+  const applyReorderPlan = async () => {
+    if (!reorderPlan) return;
+    const changes = reorderPlan.filter(p => p.changed && p.proposed);
+    if (changes.length === 0) { setReorderPlan(null); return; }
+    setReorderApplying(true);
     try {
-      for (let i = 0; i < sortedByPrestige.length && i < sortedEps.length; i++) {
-        await api.post(`/api/v1/world/${showId}/events/${sortedByPrestige[i].id}/inject`, { episode_id: sortedEps[i].id });
+      for (const p of changes) {
+        await api.post(`/api/v1/world/${showId}/events/${p.proposed.id}/inject`, { episode_id: p.ep.id });
       }
-      setToast('✅ Events reordered by prestige');
+      setToast(`✅ Reordered ${changes.length} event${changes.length === 1 ? '' : 's'} by prestige`);
       setTimeout(() => setToast(null), 3000);
+      setReorderPlan(null);
       loadData();
-    } catch { setToast('Reorder failed'); setTimeout(() => setToast(null), 3000); }
+    } catch (err) {
+      setToast(`Reorder failed: ${err.response?.data?.error || err.message}`);
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setReorderApplying(false);
+    }
   };
 
   // Merge duplicate events — keep first, delete second
@@ -666,34 +719,23 @@ function WorldAdmin() {
     } catch { setToast('Merge failed'); setTimeout(() => setToast(null), 3000); }
   };
 
-  // Fill gap — suggest best unlinked event for an episode
-  const handleFillGap = (ep) => {
-    const unlinked = worldEvents.filter(ev => !ev.used_in_episode_id && ev.status !== 'used');
-    if (unlinked.length === 0) {
-      setToast('No unlinked events available — create a new one');
-      setTimeout(() => setToast(null), 3000);
-      return;
-    }
-    // Pick the best match: prefer matching career_tier to episode position
-    const epPos = ep.episode_number || 1;
-    const scored = unlinked.map(ev => ({
-      ev,
-      score: Math.abs((ev.prestige || 5) - (epPos * 0.7 + 2)) // rough fit
-    })).sort((a, b) => a.score - b.score);
-    setEventDetailModal(scored[0].ev);
-  };
-
-  // AI Rebalance — Amber reassigns all events optimally
+  // AI Rebalance — Amber drafts a list of variety-improving suggestions.
+  // Nothing is actually changed until the user reviews and clicks Apply on
+  // each card; the previous copy claimed it would reassign everything in
+  // one shot, which it doesn't.
   const handleAiRebalance = async () => {
-    if (!window.confirm('Let Amber reassign all events across episodes for optimal variety? This will change all assignments.')) return;
     setAiFixLoading(true);
+    setToast('Asking Amber for rebalance suggestions…');
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
-        warnings: [{ msg: 'REBALANCE: Reassign all events across episodes for maximum variety in type, prestige, dress code, and difficulty. Build a rising arc.' }],
+        warnings: [{ msg: 'REBALANCE: Suggest reassignments and changes across all events for maximum variety in type, prestige, dress code, and difficulty. Build a rising arc.' }],
         events: worldEvents,
         episodes,
       });
-      setAiFixSuggestions(res.data?.data || []);
+      const data = res.data?.data || [];
+      setAiFixSuggestions(data);
+      setToast(data.length ? `Amber drafted ${data.length} suggestion${data.length === 1 ? '' : 's'} — review below` : 'Amber had nothing to suggest');
+      setTimeout(() => setToast(null), 4000);
     } catch (err) {
       setToast(err.response?.data?.error || 'Rebalance failed');
       setTimeout(() => setToast(null), 3000);
@@ -726,7 +768,15 @@ function WorldAdmin() {
         events: worldEvents,
         episodes,
       });
-      setAiFixSuggestions(res.data?.data || []);
+      // Stash the gap episode on every suggestion so the + Create button
+      // can link the saved event back to the episode it was generated for.
+      // Without this the new event saves unlinked and the gap is still a gap.
+      const tagged = (res.data?.data || []).map(s => ({
+        ...s,
+        __targetEpisodeId: ep.id,
+        __targetEpisodeNumber: ep.episode_number,
+      }));
+      setAiFixSuggestions(tagged);
     } catch (err) {
       setToast(err.response?.data?.error || 'Generation failed');
       setTimeout(() => setToast(null), 3000);
@@ -752,28 +802,99 @@ function WorldAdmin() {
   };
 
   const applyAiFix = async (suggestion) => {
-    const ev = worldEvents.find(e => e.name === suggestion.event_name);
-    if (!ev) return;
+    // Match by id first (stable across renames), then fall back to name.
+    // Without id-first matching, applying a "rename" suggestion would
+    // break any later suggestions that target the same event by its
+    // pre-rename name.
+    const ev = (suggestion.event_id && worldEvents.find(e => e.id === suggestion.event_id))
+      || worldEvents.find(e => e.name === suggestion.event_name);
+    if (!ev) {
+      setToast(`Couldn't find event "${suggestion.event_name || suggestion.event_id}"`);
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
 
-    const updates = {};
-    if (suggestion.action === 'swap_type' && suggestion.new_value) updates.event_type = suggestion.new_value;
-    if (suggestion.action === 'rename' && suggestion.new_value) updates.name = suggestion.new_value;
-    if (suggestion.action === 'change_prestige' && suggestion.new_value) updates.prestige = parseInt(suggestion.new_value) || ev.prestige;
-
-    if (Object.keys(updates).length === 0) return;
+    const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
     try {
+      // Reassign — set used_in_episode_id via the inject endpoint, which
+      // also stamps status='used' and bumps times_used. The AI may put the
+      // target in new_value as a UUID, an episode number, or a phrase like
+      // "Ep 3" / "Episode 3", so try a couple of shapes before giving up.
+      if (suggestion.action === 'reassign') {
+        const raw = String(suggestion.new_value || suggestion.suggestion || '');
+        let target = null;
+        const uuidMatch = raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+        if (uuidMatch) target = episodes.find(e => e.id === uuidMatch[0]);
+        if (!target) {
+          const numMatch = raw.match(/\d+/);
+          if (numMatch) target = episodes.find(e => e.episode_number === parseInt(numMatch[0], 10));
+        }
+        if (!target) { flash('Could not parse target episode from suggestion'); return; }
+
+        await api.post(`/api/v1/world/${showId}/events/${ev.id}/inject`, { episode_id: target.id });
+        const nextEvents = worldEvents.map(e => e.id === ev.id ? { ...e, used_in_episode_id: target.id, status: 'used' } : e);
+        setWorldEvents(nextEvents);
+        setAiFixSuggestions(prev => prev.filter(s => s !== suggestion));
+        flash(checkWarningCleared(suggestion, nextEvents)
+          || `Assigned "${ev.name}" to Ep ${target.episode_number}`);
+        return;
+      }
+
+      const updates = {};
+      if (suggestion.action === 'swap_type' && suggestion.new_value) updates.event_type = suggestion.new_value;
+      if (suggestion.action === 'rename' && suggestion.new_value) updates.name = suggestion.new_value;
+      if (suggestion.action === 'change_prestige' && suggestion.new_value) updates.prestige = parseInt(suggestion.new_value) || ev.prestige;
+      // change_dress_code: new_value can be a plain string ("black-tie")
+      // or an object { dress_code, dress_code_keywords } when the AI is
+      // being thorough.
+      if (suggestion.action === 'change_dress_code' && suggestion.new_value) {
+        const v = suggestion.new_value;
+        if (typeof v === 'string') updates.dress_code = v;
+        else if (typeof v === 'object') {
+          if (v.dress_code) updates.dress_code = v.dress_code;
+          if (Array.isArray(v.dress_code_keywords)) updates.dress_code_keywords = v.dress_code_keywords;
+        }
+      }
+      if (suggestion.action === 'change_cost' && suggestion.new_value) {
+        const num = parseInt(String(suggestion.new_value).replace(/[^\d-]/g, ''), 10);
+        if (Number.isFinite(num)) updates.cost_coins = num;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        flash(`No handler for action "${suggestion.action}"`);
+        return;
+      }
+
       const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { ...ev, ...updates });
       if (res.data.success) {
-        setWorldEvents(prev => prev.map(e => e.id === ev.id ? res.data.event : e));
+        const nextEvents = worldEvents.map(e => e.id === ev.id ? res.data.event : e);
+        setWorldEvents(nextEvents);
         setAiFixSuggestions(prev => prev.filter(s => s !== suggestion));
-        setToast(`Applied: ${suggestion.suggestion.slice(0, 60)}`);
-        setTimeout(() => setToast(null), 3000);
+        flash(checkWarningCleared(suggestion, nextEvents)
+          || `Applied: ${suggestion.suggestion.slice(0, 60)}`);
       }
     } catch (err) {
-      setToast(`Failed: ${err.message}`);
-      setTimeout(() => setToast(null), 3000);
+      flash(`Failed: ${err.response?.data?.error || err.message}`);
     }
+  };
+
+  // After Apply, recompute warnings against the post-update event list and
+  // tell the user if Amber's "fix" actually addressed the warning it was
+  // tagged to. Returns a heads-up string when the warning persists, or
+  // null when the warning is gone (the success path).
+  const checkWarningCleared = (suggestion, nextEvents) => {
+    const targetMsg = suggestion.warning;
+    if (!targetMsg) return null;
+    const stillThere = getSequenceWarnings(nextEvents).some(w => {
+      // Both directions of substring match — the warning text the AI saw
+      // may have been truncated/paraphrased, and warning msgs change as
+      // event names/numbers change after edits.
+      const a = (w.msg || '').toLowerCase();
+      const b = (targetMsg || '').toLowerCase();
+      return a === b || a.includes(b.slice(0, 40)) || b.includes(a.slice(0, 40));
+    });
+    return stillThere ? '⚠️ Applied, but the warning is still here — try a different fix' : null;
   };
 
   // AI Revise — make an event more distinct from similar ones
@@ -1012,7 +1133,28 @@ The revised event should feel like a completely different experience from the si
     setSavingStats(true); setError(null);
     try {
       const res = await api.post(`/api/v1/characters/lala/state/update`, { show_id: showId, ...statForm, source: 'manual', notes: 'Manual edit from World Admin' });
-      if (res.data.success) { setCharState(p => ({ ...p, state: res.data.state })); setEditingStats(false); setSuccessMsg('Stats updated!'); }
+      if (res.data.success) {
+        setCharState(p => ({ ...p, state: res.data.state }));
+        setEditingStats(false);
+        setSuccessMsg('Stats updated!');
+        // Refresh the on-page Stat Change Ledger so the entry the backend
+        // just wrote (manual delta + history row) shows up immediately
+        // instead of waiting for a full page reload.
+        try {
+          const h = await api.get(`/api/v1/world/${showId}/history`);
+          setStateHistory(h.data?.history || []);
+        } catch { /* non-blocking */ }
+        // The state/update route mirrors coin changes into the financial
+        // ledger. Refresh financeConfig so the event-modal Financial
+        // Preview (which keys off financeConfig.current_balance) refetches
+        // and shows the new balance instead of the stale one.
+        if (res.data.deltas?.coins !== undefined) {
+          try {
+            const fc = await api.get(`/api/v1/shows/${showId}/financial-config`);
+            setFinanceConfig(fc.data);
+          } catch { /* non-blocking */ }
+        }
+      }
     } catch (err) { setError(err.response?.data?.error || err.message); }
     finally { setSavingStats(false); }
   };
@@ -2098,16 +2240,10 @@ The revised event should feel like a completely different experience from the si
                         </button>
                       )}
                       {w.fixType === 'fill' && w.ep && (
-                        <>
-                          <button onClick={() => handleFillGap(w.ep)}
-                            style={{ padding: '2px 8px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                            📋 Suggest
-                          </button>
-                          <button onClick={() => handleAiGenerateForGap(w.ep)} disabled={aiFixLoading}
-                            style={{ padding: '2px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#7c3aed', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                            ✨ AI Create
-                          </button>
-                        </>
+                        <button onClick={() => handleAiGenerateForGap(w.ep)} disabled={aiFixLoading}
+                          style={{ padding: '2px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#7c3aed', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          ✨ AI Create
+                        </button>
                       )}
                       {w.eventName && (
                         <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
@@ -2152,7 +2288,10 @@ The revised event should feel like a completely different experience from the si
                               // Map any non-standard field names
                               if (data.dress_code_style && !data.dress_code) data.dress_code = data.dress_code_style;
                               if (data.type && !data.event_type) data.event_type = data.type;
-                              setEventForm({ ...EMPTY_EVENT, ...data });
+                              // Stash the gap episode so saveEvent links the new
+                              // event after create. Field is non-API and ignored
+                              // by the backend's whitelist destructure.
+                              setEventForm({ ...EMPTY_EVENT, ...data, __pendingEpisodeLink: s.__targetEpisodeId || null });
                               setEditingEvent('new');
                               setAiFixSuggestions(prev => prev.filter(x => x !== s));
                             }} style={{
@@ -2713,6 +2852,64 @@ The revised event should feel like a completely different experience from the si
 
         </div>
       )}
+          {reorderPlan && (() => {
+            const changes = reorderPlan.filter(p => p.changed);
+            return (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => !reorderApplying && setReorderPlan(null)}>
+                <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 720, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ padding: '20px 24px 12px', borderBottom: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>📊 Auto-Reorder Preview</div>
+                    <div style={{ fontSize: 13, color: '#64748b' }}>
+                      Sort linked events by prestige (low → high) across episodes.
+                      {' '}<b style={{ color: changes.length > 0 ? '#7c3aed' : '#64748b' }}>{changes.length}</b> of {reorderPlan.length} episodes would change.
+                    </div>
+                  </div>
+                  <div style={{ padding: '12px 24px' }}>
+                    {reorderPlan.length === 0 ? (
+                      <div style={{ fontSize: 13, color: '#64748b', padding: 12 }}>No episodes to reorder.</div>
+                    ) : (
+                      <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#94a3b8', textAlign: 'left' }}>
+                            <th style={{ padding: '6px 8px', fontWeight: 700 }}>Episode</th>
+                            <th style={{ padding: '6px 8px', fontWeight: 700 }}>Currently</th>
+                            <th style={{ padding: '6px 8px', fontWeight: 700, width: 24 }}></th>
+                            <th style={{ padding: '6px 8px', fontWeight: 700 }}>Proposed</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reorderPlan.map((p, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: p.changed ? '#faf5ff' : 'transparent' }}>
+                              <td style={{ padding: '8px', fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>Ep {p.ep.episode_number}</td>
+                              <td style={{ padding: '8px', color: p.current ? '#475569' : '#cbd5e1' }}>
+                                {p.current ? `${p.current.name} (P${p.current.prestige ?? '?'})` : '— empty —'}
+                              </td>
+                              <td style={{ padding: '8px', color: p.changed ? '#7c3aed' : '#cbd5e1', textAlign: 'center' }}>
+                                {p.changed ? '→' : '·'}
+                              </td>
+                              <td style={{ padding: '8px', color: p.proposed ? (p.changed ? '#7c3aed' : '#475569') : '#cbd5e1', fontWeight: p.changed ? 600 : 400 }}>
+                                {p.proposed ? `${p.proposed.name} (P${p.proposed.prestige ?? '?'})` : '— empty —'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                  <div style={{ padding: '12px 24px 20px', display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0' }}>
+                    <button onClick={() => setReorderPlan(null)} disabled={reorderApplying}
+                      style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#475569', cursor: reorderApplying ? 'wait' : 'pointer' }}>
+                      Cancel
+                    </button>
+                    <button onClick={applyReorderPlan} disabled={reorderApplying || changes.length === 0}
+                      style={{ padding: '8px 16px', background: changes.length === 0 ? '#e5e7eb' : '#7c3aed', color: changes.length === 0 ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: reorderApplying ? 'wait' : (changes.length === 0 ? 'not-allowed' : 'pointer') }}>
+                      {reorderApplying ? '⏳ Applying...' : changes.length === 0 ? 'No changes' : `Apply ${changes.length} reassignment${changes.length === 1 ? '' : 's'}`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           {eventDetailModal && (() => {
             // Hydrate missing fields from automation data + derive from context
             const auto = eventDetailModal.canon_consequences?.automation || {};
@@ -6485,38 +6682,72 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
             {charState ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-                {Object.entries(charState.state || {}).map(([key, val]) => (
-                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{STAT_ICONS[key]}</span>
-                    <span style={{ flex: '0 0 100px', fontSize: 13, color: '#64748b', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
-                    {editingStats ? (
-                      <input type="number" value={statForm[key] ?? val} onChange={e => setStatForm(p => ({ ...p, [key]: parseInt(e.target.value) }))}
-                        style={{ width: 80, padding: '4px 8px', border: '1px solid #6366f1', borderRadius: 4, fontSize: 14, fontWeight: 700, textAlign: 'right', marginLeft: 'auto' }}
-                        min={key === 'coins' ? -9999 : 0} max={key === 'coins' ? 99999 : 10} />
-                    ) : (
-                      <>
-                        <div style={{ flex: 1, height: 10, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, (val / (key === 'coins' ? 500 : 10)) * 100))}%`, borderRadius: 5, background: key === 'stress' ? (val >= 5 ? '#dc2626' : '#eab308') : key === 'coins' ? (val < 0 ? '#dc2626' : '#6366f1') : '#6366f1', transition: 'width 0.3s' }} />
-                        </div>
-                        <span style={{ flex: '0 0 40px', textAlign: 'right', fontSize: 15, fontWeight: 700, color: (key === 'stress' && val >= 5) || (key === 'coins' && val < 0) ? '#dc2626' : '#1a1a2e' }}>{val}</span>
-                      </>
-                    )}
-                  </div>
-                ))}
+                {Object.entries(charState.state || {}).map(([key, val]) => {
+                  // Coin bar used to scale to a hardcoded 500 (the default
+                  // starting balance), so it pegged at 100% for any later
+                  // balance and was useless as a progress signal. Now it
+                  // tracks progress toward the next financial goal when one
+                  // exists; without a goal we render the value as text only
+                  // (no fake bar) so it doesn't lie about being "full".
+                  const isCoin = key === 'coins';
+                  const goalThreshold = financeConfig?.next_goal?.threshold;
+                  const barMax = isCoin ? (goalThreshold || null) : 10;
+                  return (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{STAT_ICONS[key]}</span>
+                      <span style={{ flex: '0 0 100px', fontSize: 13, color: '#64748b', textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
+                      {editingStats ? (
+                        // Coins: no min/max — the backend stores any
+                        // integer and downstream logic handles negative
+                        // balances. The arbitrary -9999/99999 caps used
+                        // to block legitimate late-show balances. Other
+                        // stats stay 0–10 to match the backend clamp.
+                        <input type="number" value={statForm[key] ?? val} onChange={e => setStatForm(p => ({ ...p, [key]: parseInt(e.target.value) }))}
+                          style={{ width: 80, padding: '4px 8px', border: '1px solid #6366f1', borderRadius: 4, fontSize: 14, fontWeight: 700, textAlign: 'right', marginLeft: 'auto' }}
+                          {...(isCoin ? {} : { min: 0, max: 10 })} />
+                      ) : (
+                        <>
+                          {barMax != null ? (
+                            <div style={{ flex: 1, height: 10, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, (val / barMax) * 100))}%`, borderRadius: 5, background: key === 'stress' ? (val >= 5 ? '#dc2626' : '#eab308') : isCoin ? (val < 0 ? '#dc2626' : '#6366f1') : '#6366f1', transition: 'width 0.3s' }} />
+                            </div>
+                          ) : (
+                            <div style={{ flex: 1, fontSize: 11, color: '#94a3b8', textAlign: 'right', paddingRight: 8 }}>
+                              {isCoin ? 'no active goal' : ''}
+                            </div>
+                          )}
+                          <span style={{ flex: '0 0 60px', textAlign: 'right', fontSize: 15, fontWeight: 700, color: (key === 'stress' && val >= 5) || (isCoin && val < 0) ? '#dc2626' : '#1a1a2e' }}>
+                            {isCoin ? Number(val).toLocaleString() : val}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : <p style={S.muted}>No stats initialized. Evaluate an episode to auto-seed defaults.</p>}
 
             <div style={{ padding: 14, background: '#f8fafc', borderRadius: 8 }}>
               <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>Character Rules</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {[
-                  ['Voice Activation', 'Required ✅'],
-                  ['Idle Behaviors', 'Wave, mirror glance, inspect'],
-                  ['Default Stats', '500 coins, 1 rep, 1 trust, 1 inf, 0 stress'],
-                  ['Fail Behavior', 'Forced smile, softer voice, stress anim'],
-                ].map(([l, v]) => (
-                  <div key={l}><div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{l}</div><div style={{ fontSize: 13, color: '#1a1a2e' }}>{v}</div></div>
-                ))}
+                {(() => {
+                  // Default Stats line is sourced from charState.defaults
+                  // (server returns DEFAULT_STATS from evaluationFormula.js)
+                  // so it stays accurate if the constants ever change. Falls
+                  // back to the historical literal if the API's older.
+                  const d = charState?.defaults;
+                  const defaultStatsLine = d
+                    ? `${(d.coins ?? 0).toLocaleString()} coins, ${d.reputation ?? 0} rep, ${d.brand_trust ?? 0} trust, ${d.influence ?? 0} inf, ${d.stress ?? 0} stress`
+                    : '500 coins, 1 rep, 1 trust, 1 inf, 0 stress';
+                  return [
+                    ['Voice Activation', 'Required ✅'],
+                    ['Idle Behaviors', 'Wave, mirror glance, inspect'],
+                    ['Default Stats', defaultStatsLine],
+                    ['Fail Behavior', 'Forced smile, softer voice, stress anim'],
+                  ].map(([l, v]) => (
+                    <div key={l}><div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{l}</div><div style={{ fontSize: 13, color: '#1a1a2e' }}>{v}</div></div>
+                  ));
+                })()}
               </div>
             </div>
           </div>

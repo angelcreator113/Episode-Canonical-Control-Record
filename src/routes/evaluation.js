@@ -239,12 +239,16 @@ router.get('/characters/:key/state', optionalAuth, async (req, res) => {
         influence: state.influence,
         stress: state.stress,
       },
+      // Surfaced so the Characters tab can render the "Default Stats"
+      // line from a single source of truth instead of a hardcoded
+      // literal that silently drifts when DEFAULT_STATS changes.
+      defaults: DEFAULT_STATS,
       last_applied_episode_id: state.last_applied_episode_id,
       state_id: state.id,
     });
   } catch (error) {
     if (error.message?.includes('does not exist')) {
-      return res.json({ success: true, character_key: req.params.key, state: { coins: 500, reputation: 1, brand_trust: 1, influence: 1, stress: 0 }, note: 'Table not yet created' });
+      return res.json({ success: true, character_key: req.params.key, state: { ...DEFAULT_STATS }, defaults: DEFAULT_STATS, note: 'Table not yet created' });
     }
     console.error('Get character state error:', error);
     return res.status(500).json({ error: 'Failed to get character state', message: error.message });
@@ -734,6 +738,32 @@ router.post('/characters/:key/state/update', optionalAuth, async (req, res) => {
           },
         }
       );
+    }
+
+    // Mirror coin changes into the financial transaction ledger so the
+    // event-modal Financial Preview, episode finalize, and goal milestones
+    // all see the same balance the Characters tab is showing. Without this
+    // mirror, character_state.coins and the ledger drift — editing coins
+    // here used to leave events still planning against the old budget.
+    if (deltas.coins !== undefined && key === 'lala') {
+      try {
+        const { getCurrentBalance, logTransaction } = require('../services/financialTransactionService');
+        const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+        const adjustment = newState.coins - ledgerBefore;
+        if (adjustment !== 0) {
+          await logTransaction(models.sequelize, show_id, {
+            type: adjustment > 0 ? 'income' : 'expense',
+            category: 'manual_adjustment',
+            amount: Math.abs(adjustment),
+            description: 'Manual coin adjustment from Characters tab',
+            balance_before: ledgerBefore,
+            balance_after: ledgerBefore + adjustment,
+            metadata: { source: 'character_state_update', delta: adjustment },
+          });
+        }
+      } catch (e) {
+        console.warn('[CharState] Ledger mirror failed:', e.message);
+      }
     }
 
     return res.json({
