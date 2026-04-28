@@ -2553,6 +2553,7 @@ router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async
 router.post('/world/:showId/events/:eventId/generate-social-checklist', optionalAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
+    const force = req.body?.force === true;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
@@ -2580,12 +2581,12 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', optional
     }
 
     const socialChecklistService = require('../services/socialChecklistService');
-    const result = await socialChecklistService.generateSocialChecklist(event, models);
+    const result = await socialChecklistService.generateSocialChecklist(event, models, { forceRebuild: force });
 
     return res.json({
       success: true,
       data: result,
-      message: `Social checklist generated with ${result.tasks.length} tasks`,
+      message: `${force ? 'Social tasks regenerated' : 'Social checklist generated'} with ${result.tasks.length} tasks`,
     });
   } catch (error) {
     console.error('Generate social checklist error:', error);

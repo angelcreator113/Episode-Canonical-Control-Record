@@ -3692,6 +3692,39 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   />
 
                   {/* Social Tasks Overlay */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+                    <button
+                      onClick={async () => {
+                        try {
+                          setToast('Regenerating social tasks...');
+                          const regen = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-social-checklist`, { force: true });
+                          if (regen.data?.success) {
+                            const tasks = regen.data?.data?.tasks || [];
+                            const assetUrl = regen.data?.data?.assetUrl || auto.social_checklist_url || null;
+                            const assetId = regen.data?.data?.assetId || auto.social_checklist_asset_id || null;
+                            const newAuto = {
+                              ...auto,
+                              social_tasks: tasks,
+                              social_checklist_url: assetUrl,
+                              social_checklist_asset_id: assetId,
+                            };
+                            const updated = {
+                              ...eventDetailModal,
+                              canon_consequences: { ...eventDetailModal.canon_consequences, automation: newAuto },
+                            };
+                            setEventDetailModal(updated);
+                            setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: updated.canon_consequences } : ev));
+                            setToast(`Regenerated ${tasks.length} social tasks for this invite`);
+                          }
+                        } catch (err) {
+                          setToast('Failed: ' + (err.response?.data?.error || err.message));
+                        }
+                      }}
+                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e8d9b8', background: '#faf5ea', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
+                    >
+                      Regenerate Social Tasks
+                    </button>
+                  </div>
                   <OverlayApprovalPanel
                     event={md}
                     showId={showId}
