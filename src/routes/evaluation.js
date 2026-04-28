@@ -747,7 +747,14 @@ router.post('/characters/:key/state/update', optionalAuth, async (req, res) => {
     // here used to leave events still planning against the old budget.
     if (deltas.coins !== undefined && key === 'lala') {
       try {
-        const { getCurrentBalance, logTransaction } = require('../services/financialTransactionService');
+        const {
+          seedStartingBalance, getCurrentBalance, logTransaction,
+        } = require('../services/financialTransactionService');
+        // Force the seed row first. getCurrentBalance has a fallback that
+        // returns starting_balance when tx_count is 0; without a real seed
+        // transaction the ledger SUM stays at 0 and our adjustment lands
+        // off-target. seedStartingBalance is idempotent — safe to call.
+        await seedStartingBalance(models.sequelize, show_id);
         const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
         const adjustment = newState.coins - ledgerBefore;
         if (adjustment !== 0) {

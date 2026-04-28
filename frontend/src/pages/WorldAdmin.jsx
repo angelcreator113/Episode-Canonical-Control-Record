@@ -3477,9 +3477,23 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                 transition: 'width 0.3s',
                               }} />
                             </div>
-                            {nextGoal.reward_coins > 0 && (
-                              <div style={{ fontSize: 10, color: '#854d0e', marginTop: 3 }}>🎁 Reward on reach: +{Number(nextGoal.reward_coins).toLocaleString()} coins — {nextGoal.description}</div>
-                            )}
+                            {nextGoal.reward_coins > 0 && (() => {
+                              // Goal descriptions sometimes have a baked-in
+                              // "Current balance is N coins" sentence from
+                              // when the goal was created. That number is
+                              // a snapshot, not live, and reads as wrong
+                              // the moment the actual balance moves. Strip
+                              // it so the description doesn't argue with
+                              // the balance shown two lines above.
+                              const cleanDesc = String(nextGoal.description || '')
+                                .replace(/\s*Current balance is [-\d,]+\s*coins?\.?/gi, '')
+                                .trim();
+                              return (
+                                <div style={{ fontSize: 10, color: '#854d0e', marginTop: 3 }}>
+                                  🎁 Reward on reach: +{Number(nextGoal.reward_coins).toLocaleString()} coins{cleanDesc ? ` — ${cleanDesc}` : ''}
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
                         <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 6 }}>
