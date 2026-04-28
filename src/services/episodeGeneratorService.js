@@ -451,6 +451,10 @@ Return ONLY JSON.` }],
       episode_id: episode.id,
       show_id: showId,
       event_id: event.id,
+      // Capture the OutfitSet that drove this episode (when the event
+      // had one picked). Pieces still get exploded into EpisodeWardrobe
+      // rows; this preserves the "which set" audit trail those rows
+      // alone would lose.
       outfit_set_id: event.outfit_set_id || null,
       // Direct invite asset reference so the episode doesn't have to
       // join through assets.metadata to find its invite.
