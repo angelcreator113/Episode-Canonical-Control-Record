@@ -2347,13 +2347,28 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Event row — raw SQL to tolerate unmigrated columns on older envs.
-    const [eventRows] = await models.sequelize.query(
-      `SELECT id, name, prestige, event_type, cost_coins, is_paid, is_free, payment_amount,
-              outfit_pieces, canon_consequences, dress_code
-       FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
-      { replacements: { eventId, showId } }
-    );
-    const event = eventRows?.[0];
+    let event = null;
+    try {
+      const [eventRows] = await models.sequelize.query(
+        `SELECT id, name, prestige, event_type, cost_coins, is_paid, is_free, payment_amount,
+                outfit_pieces, canon_consequences, dress_code
+         FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
+        { replacements: { eventId, showId } }
+      );
+      event = eventRows?.[0] || null;
+    } catch (err) {
+      if (err?.original?.code !== '42703' && !String(err?.message || '').includes('is_free')) throw err;
+      const [fallbackRows] = await models.sequelize.query(
+        `SELECT id, name, prestige, event_type, cost_coins, is_paid, payment_amount,
+                outfit_pieces, canon_consequences, dress_code
+         FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
+        { replacements: { eventId, showId } }
+      );
+      event = fallbackRows?.[0] ? {
+        ...fallbackRows[0],
+        is_free: fallbackRows[0].is_paid === 'free',
+      } : null;
+    }
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     const prestige = Number(event.prestige) || 5;
