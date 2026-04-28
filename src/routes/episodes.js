@@ -11,7 +11,8 @@ const outfitSetsController = require('../controllers/outfitSetsController');
 const episodeAssetsController = require('../controllers/episodeAssetsController');
 const timelinePlacementsController = require('../controllers/timelinePlacementsController');
 const videoCompositionController = require('../controllers/videoCompositionController');
-const { authenticateToken, optionalAuth } = require('../middleware/auth');
+const { authenticateToken, optionalAuth, requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { requirePermission: _requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateEpisodeQuery, validateUUIDParam } = require('../middleware/requestValidation');
@@ -872,7 +873,7 @@ router.delete('/:id/wardrobe-defaults/:character', async (req, res) => {
 let scriptSkeletonGenerator;
 try { scriptSkeletonGenerator = require('../utils/scriptSkeletonGenerator'); } catch (e) { scriptSkeletonGenerator = null; }
 
-router.post('/:id/generate-beats', asyncHandler(async (req, res) => {
+router.post('/:id/generate-beats', requireAuth, aiRateLimiter, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { models, sequelize } = require('../models');
   const { Episode } = models;
@@ -1094,6 +1095,8 @@ router.delete(
 // /scenes/from-angle once the creator approves.
 router.post(
   '/:episodeId/suggest-scenes',
+  requireAuth,
+  aiRateLimiter,
   validateUUIDParam('episodeId'),
   asyncHandler(async (req, res) => {
     const { models } = require('../models');

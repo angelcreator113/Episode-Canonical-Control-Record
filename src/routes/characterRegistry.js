@@ -10,11 +10,20 @@ const express = require('express');
 const router = express.Router();
 
 let optionalAuth;
+let requireAuth;
 try {
   const authModule = require('../middleware/auth');
   optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
+  requireAuth = authModule.requireAuth || authModule.authenticateToken || ((req, res, next) => next());
 } catch {
   optionalAuth = (req, res, next) => next();
+  requireAuth = (req, res, next) => next();
+}
+let aiRateLimiter;
+try {
+  aiRateLimiter = require('../middleware/aiRateLimiter').aiRateLimiter;
+} catch {
+  aiRateLimiter = (req, res, next) => next();
 }
 const { Op } = require('sequelize');
 const { autoCreateFeedProfile } = require('../services/feedAutoGeneration');
@@ -1884,7 +1893,7 @@ router.post('/registries/:registryId/backfill-all', async (req, res) => {
  * Backfill: infer deep_profile from a character's existing profile fields.
  * For characters created before the deep_profile system existed.
  */
-router.post('/characters/:id/deep-profile/generate', async (req, res) => {
+router.post('/characters/:id/deep-profile/generate', requireAuth, aiRateLimiter, async (req, res) => {
   const { id } = req.params;
   const db = getModels();
   try {
