@@ -71,7 +71,16 @@ const EMPTY_EVENT = {
   narrative_stakes: '', browse_pool_bias: 'balanced', browse_pool_size: 8,
   is_paid: 'no', payment_amount: 0, career_tier: 1,
   career_milestone: '', fail_consequence: '', success_unlock: '',
-  requirements: {}, scene_set_id: null,
+  // Rewards: what Lala wins for completing this event. Stat deltas
+  // (coins/reputation/brand_trust/influence) feed the future
+  // episode-completion delta logic; outcomes is a free-text list
+  // surfaced to the writer for narrative beats.
+  rewards: { coins: 0, reputation: 0, brand_trust: 0, influence: 0, outcomes: [] },
+  // Requirements: pre-flight gates the next-event suggester reads
+  // (careerGoals.js:655-656). reputation_min and brand_trust_min
+  // dock the event's score by -5 when unmet, so creators see why.
+  requirements: { reputation_min: 0, brand_trust_min: 0, coins_min: 0 },
+  scene_set_id: null,
   venue_name: '', venue_address: '', event_date: '', event_time: '',
   theme: '', color_palette: [], mood: '', floral_style: '', border_style: '',
   // Narrative chain — links this event to the one before it and what
@@ -2750,6 +2759,87 @@ The revised event should feel like a completely different experience from the si
                   }}
                   style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
                 />
+              </div>
+
+              {/* ── Rewards & Requirements ────────────────────────────────────
+                  Stat-delta rewards (coins/reputation/brand_trust/influence)
+                  fund Lala's progression after success; the outcomes list
+                  feeds the writer's narrative beats. Requirements are pre-
+                  flight gates the next-event suggester reads (careerGoals.js
+                  applies a -5 score penalty when reputation_min or
+                  brand_trust_min isn't met). All numeric — leave at 0 to
+                  skip that gate or reward. */}
+              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
+                <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>🏆 Rewards & Requirements</label>
+
+                {/* Rewards row */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ ...S.fLabel, fontSize: 10, color: '#16a34a', marginBottom: 6 }}>REWARDS — granted on success</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
+                    {[
+                      { key: 'coins', label: '🪙 Coins', placeholder: '500' },
+                      { key: 'reputation', label: '⭐ Reputation', placeholder: '1' },
+                      { key: 'brand_trust', label: '🤝 Brand Trust', placeholder: '1' },
+                      { key: 'influence', label: '📣 Influence', placeholder: '1' },
+                    ].map(f => (
+                      <div key={f.key}>
+                        <label style={{ ...S.fLabel, fontSize: 10 }}>{f.label}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={eventForm.rewards?.[f.key] ?? 0}
+                          onChange={e => setEventForm(p => ({
+                            ...p,
+                            rewards: { ...(p.rewards || {}), [f.key]: parseInt(e.target.value, 10) || 0 },
+                          }))}
+                          placeholder={f.placeholder}
+                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <label style={{ ...S.fLabel, fontSize: 10 }}>Narrative outcomes (one per line)</label>
+                  <textarea
+                    value={Array.isArray(eventForm.rewards?.outcomes) ? eventForm.rewards.outcomes.join('\n') : ''}
+                    onChange={e => setEventForm(p => ({
+                      ...p,
+                      rewards: {
+                        ...(p.rewards || {}),
+                        outcomes: e.target.value.split('\n').map(s => s.trim()).filter(Boolean),
+                      },
+                    }))}
+                    placeholder={'One per line — what unlocks narratively.\nExample:\nLala lands on the Maison Belle radar\nFirst paid styling gig confirmed'}
+                    rows={2}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  />
+                </div>
+
+                {/* Requirements row */}
+                <div>
+                  <div style={{ ...S.fLabel, fontSize: 10, color: '#dc2626', marginBottom: 6 }}>REQUIREMENTS — gates that dock score when unmet</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    {[
+                      { key: 'reputation_min', label: '⭐ Reputation min', placeholder: '3' },
+                      { key: 'brand_trust_min', label: '🤝 Brand Trust min', placeholder: '2' },
+                      { key: 'coins_min', label: '🪙 Coins min', placeholder: '100' },
+                    ].map(f => (
+                      <div key={f.key}>
+                        <label style={{ ...S.fLabel, fontSize: 10 }}>{f.label}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={eventForm.requirements?.[f.key] ?? 0}
+                          onChange={e => setEventForm(p => ({
+                            ...p,
+                            requirements: { ...(p.requirements || {}), [f.key]: parseInt(e.target.value, 10) || 0 },
+                          }))}
+                          placeholder={f.placeholder}
+                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <FG label="Description" value={eventForm.description} onChange={v => setEventForm(p => ({ ...p, description: v }))} placeholder="Full event description..." textarea full />
