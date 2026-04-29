@@ -14,7 +14,7 @@ import EpisodeTodoList from '../components/Episodes/EpisodeTodoList';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import EpisodeScenesTab from '../components/Episodes/EpisodeScenesTab';
 import PhonePreviewMode from '../components/PhonePreviewMode';
-import usePhonePlaythrough from '../hooks/usePhonePlaythrough';
+import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import './EpisodeDetail.css';
 
@@ -36,39 +36,10 @@ const EpisodeDetail = () => {
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [episodeScenes, setEpisodeScenes] = useState([]);
 
-  // ── Play on Phone state ──────────────────────────────────────────────────
-  // When true, the PhonePreviewMode overlay is mounted in player mode
-  // (state persists server-side via usePhonePlaythrough).
-  const [playingPhone, setPlayingPhone] = useState(false);
-  const [phoneOverlays, setPhoneOverlays] = useState([]);
-  const [phoneMissions, setPhoneMissions] = useState([]);
-  const [phoneSkin, setPhoneSkin] = useState('rosegold');
-  const [globalFit, setGlobalFit] = useState({});
-  const playthrough = usePhonePlaythrough(playingPhone ? episode?.id : null);
-
-  // Lazy-load overlays only when the user clicks Play — no need to pay the cost
-  // on every episode page view.
-  const startPlayingPhone = useCallback(async () => {
-    const showId = episode?.show_id || episode?.showId;
-    if (!showId) return;
-    try {
-      const res = await api.get(`/api/v1/ui-overlays/${showId}`);
-      const overlays = res.data?.data || [];
-      setPhoneOverlays(overlays.filter(o => o.generated && o.url));
-      // Pull the saved frame settings so the player sees the same skin creators set.
-      const frameRes = await api.get(`/api/v1/ui-overlays/${showId}/frame`).catch(() => ({ data: {} }));
-      if (frameRes.data?.global_fit) setGlobalFit(frameRes.data.global_fit);
-      if (frameRes.data?.phone_skin) setPhoneSkin(frameRes.data.phone_skin);
-      // Missions scoped to this episode OR show-wide — observers track progress
-      // live as the user plays. Fail-open: if the missions endpoint errors (e.g.
-      // table not deployed yet), we just skip the mission UI.
-      const missionsRes = await api.get(`/api/v1/ui-overlays/${showId}/missions?episode_id=${encodeURIComponent(episode.id)}`).catch(() => ({ data: {} }));
-      setPhoneMissions(missionsRes.data?.missions || []);
-      setPlayingPhone(true);
-    } catch (err) {
-      console.error('[EpisodeDetail] Failed to load phone overlays:', err);
-    }
-  }, [episode]);
+  // Play-on-Phone is its own self-contained feature; the hook owns all
+  // state (screens, missions, frame settings, server-backed playthrough)
+  // and exposes a single start() that fetches lazily on the first click.
+  const phone = usePhonePlayback(episode);
 
   // Tab structure: 4 main tabs with sub-tabs. Brief was merged into Overview
   // — the snapshot now flows inline under Identity / Source / Stakes /
@@ -538,7 +509,7 @@ const EpisodeDetail = () => {
         </div>
         <div className="ed-header-actions">
           <button
-            onClick={startPlayingPhone}
+            onClick={phone.start}
             style={{padding:'5px 12px', background:'linear-gradient(135deg,#B8962E,#8a6c1d)', border:'none', borderRadius:6, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontFamily:"'DM Mono', monospace", letterSpacing:0.3}}
           >
             ▶ Play on Phone
@@ -994,20 +965,20 @@ const EpisodeDetail = () => {
         episodeId={episodeId}
       />
 
-      {/* ── Play on Phone overlay ───────────────────────────────────────────── */}
-      {playingPhone && phoneOverlays.length > 0 && (
+      {/* ── Play on Phone overlay — state owned by usePhonePlayback ─────── */}
+      {phone.isPlaying && phone.overlays.length > 0 && (
         <PhonePreviewMode
-          screens={phoneOverlays}
+          screens={phone.overlays}
           initialScreen={
-            playthrough.state?.last_screen_id
-              ? phoneOverlays.find(s => s.id === playthrough.state.last_screen_id)
-              : phoneOverlays.find(s => s.is_home) || phoneOverlays[0]
+            phone.playthrough.state?.last_screen_id
+              ? phone.overlays.find(s => s.id === phone.playthrough.state.last_screen_id)
+              : phone.overlays.find(s => s.is_home) || phone.overlays[0]
           }
-          globalFit={globalFit}
-          phoneSkin={phoneSkin}
-          playthrough={playthrough}
-          missions={phoneMissions}
-          onClose={() => setPlayingPhone(false)}
+          globalFit={phone.globalFit}
+          phoneSkin={phone.skin}
+          playthrough={phone.playthrough}
+          missions={phone.missions}
+          onClose={phone.stop}
         />
       )}
 
