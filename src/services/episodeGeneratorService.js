@@ -573,10 +573,9 @@ Return ONLY JSON.` }],
 
   // ── 3. Create Scene Plan (14 beats) ──
   const scenePlanRows = [];
-  // Keep these in outer scope — SceneSetEpisode linking runs even when
-  // ScenePlan model/table isn't available in a given environment.
-  let homeSceneSetId = null;
-  let venueSceneSetId = null;
+  // Use a container object instead of bare identifiers so downstream
+  // access is resilient even if a scope mutation slips in later edits.
+  const sceneSetIds = { home: null, venue: null };
   if (ScenePlan) {
     // Try to find scene sets for home and venue
 
@@ -584,17 +583,17 @@ Return ONLY JSON.` }],
       const [homeSets] = await models.sequelize.query(
         `SELECT id FROM scene_sets WHERE scene_type = 'HOME_BASE' AND deleted_at IS NULL LIMIT 1`
       );
-      homeSceneSetId = homeSets?.[0]?.id || null;
+      sceneSetIds.home = homeSets?.[0]?.id || null;
 
       if (event.scene_set_id) {
-        venueSceneSetId = event.scene_set_id;
+        sceneSetIds.venue = event.scene_set_id;
       }
     } catch { /* scene_sets query failed — no scene sets linked */ }
 
     for (const beat of BEAT_TEMPLATES) {
       const sceneSetId = beat.phase === 'before' || beat.phase === 'after'
-        ? homeSceneSetId
-        : venueSceneSetId;
+        ? sceneSetIds.home
+        : sceneSetIds.venue;
 
       try {
         const beatId = require('uuid').v4();
@@ -622,7 +621,7 @@ Return ONLY JSON.` }],
   // event. findOrCreate is idempotent so a re-run (regenerate flow)
   // doesn't pile up duplicates.
   if (models.SceneSetEpisode) {
-    const orderedSetIds = [venueSceneSetId, homeSceneSetId].filter(Boolean);
+    const orderedSetIds = [sceneSetIds.venue, sceneSetIds.home].filter(Boolean);
     const uniqueOrderedSetIds = orderedSetIds.filter((setId, idx) => orderedSetIds.indexOf(setId) === idx);
     for (let i = 0; i < uniqueOrderedSetIds.length; i += 1) {
       const setId = uniqueOrderedSetIds[i];
