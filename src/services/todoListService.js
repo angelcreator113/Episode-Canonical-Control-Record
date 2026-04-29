@@ -218,6 +218,21 @@ function fitTextToWidth(ctx, text, maxWidth) {
   return `${fitted}...`;
 }
 
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
 // ─── CANVAS RENDERER ──────────────────────────────────────────────────────────
 
 /**
@@ -234,7 +249,7 @@ function renderTodoAsset(tasks, event, options = {}) {
   const W = options.width || 520;
   const PADDING = 28;
   const HEADER_H = 118;
-  const TASK_H = 64;
+  const TASK_H = 68;
   const FOOTER_H = 40;
   const H = HEADER_H + (tasks.length * TASK_H) + FOOTER_H + (PADDING * 2);
 
@@ -312,13 +327,24 @@ function renderTodoAsset(tasks, event, options = {}) {
   for (const task of tasks) {
     const taskY = y;
     const checkSize = 18;
+    const rowHeight = TASK_H - 6;
+    const rowY = taskY + 2;
+    const rowX = PADDING - 6;
+    const rowW = W - (PADDING * 2) + 12;
     const checkX = PADDING;
     const checkY = taskY + (TASK_H / 2) - (checkSize / 2);
     const badgeReservedWidth = task.required ? 0 : 52;
 
+    // Refined row surface to match invitation/social quality
+    drawRoundedRect(ctx, rowX, rowY, rowW, rowHeight, 10);
+    ctx.fillStyle = task.completed ? 'rgba(232,245,233,0.55)' : 'rgba(255,255,255,0.72)';
+    ctx.fill();
+    ctx.strokeStyle = task.completed ? 'rgba(26,122,64,0.20)' : 'rgba(184,150,46,0.16)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
     // Checkbox — plain rect
-    ctx.beginPath();
-    ctx.rect(checkX, checkY, checkSize, checkSize);
+    drawRoundedRect(ctx, checkX, checkY, checkSize, checkSize, 3);
     ctx.strokeStyle = task.required ? accentColor : accentColor + '70';
     ctx.lineWidth = 1.5;
     ctx.stroke();
@@ -341,21 +367,30 @@ function renderTodoAsset(tasks, event, options = {}) {
     ctx.textAlign = 'left';
     ctx.font = `bold ${labelFontSize}px LibreBaskerville, serif`;
     ctx.fillStyle = task.completed ? '#AAA' : '#1A1A1A';
-    ctx.fillText(fitTextToWidth(ctx, task.label, labelW), labelX, taskY + 22);
+    ctx.fillText(fitTextToWidth(ctx, task.label, labelW), labelX, taskY + 24);
 
     // Task description
     if (task.description) {
       ctx.font = `italic ${descriptionFontSize}px LibreBaskerville, serif`;
       ctx.fillStyle = task.completed ? '#CCC' : '#666';
-      ctx.fillText(fitTextToWidth(ctx, task.description, labelW), labelX, taskY + 42);
+      ctx.fillText(fitTextToWidth(ctx, task.description, labelW), labelX, taskY + 45);
     }
 
     // Optional badge
     if (!task.required) {
-      ctx.font = `${Math.round(W * 0.022)}px LibreBaskerville, serif`;
-      ctx.fillStyle = accentColor + '80';
+      const badgeText = 'optional';
+      const badgeFont = `${Math.round(W * 0.020)}px LibreBaskerville, serif`;
+      ctx.font = badgeFont;
+      const badgeW = Math.ceil(ctx.measureText(badgeText).width) + 10;
+      const badgeH = 12;
+      const badgeX = W - PADDING - badgeW;
+      const badgeY = taskY + 16;
+      drawRoundedRect(ctx, badgeX, badgeY - 9, badgeW, badgeH, 6);
+      ctx.fillStyle = accentColor + '1F';
+      ctx.fill();
       ctx.textAlign = 'right';
-      ctx.fillText('optional', W - PADDING, taskY + 22);
+      ctx.fillStyle = accentColor + 'A0';
+      ctx.fillText(badgeText, W - PADDING - 4, taskY + 25);
       ctx.textAlign = 'left';
     }
 
@@ -364,7 +399,7 @@ function renderTodoAsset(tasks, event, options = {}) {
       ctx.beginPath();
       ctx.moveTo(PADDING + checkSize + 12, taskY + TASK_H);
       ctx.lineTo(W - PADDING, taskY + TASK_H);
-      ctx.strokeStyle = '#EEE';
+      ctx.strokeStyle = 'rgba(184,150,46,0.12)';
       ctx.lineWidth = 0.5;
       ctx.stroke();
     }
