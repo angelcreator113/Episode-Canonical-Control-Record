@@ -654,6 +654,9 @@ router.get('/world/:showId/suggest-events', optionalAuth, async (req, res) => {
       let reqsMet = true;
       if (reqs.reputation_min && (charState.reputation || 0) < reqs.reputation_min) reqsMet = false;
       if (reqs.brand_trust_min && (charState.brand_trust || 0) < reqs.brand_trust_min) reqsMet = false;
+      // coins_min — gate on Lala's current balance. Editor in WorldAdmin
+      // exposes this alongside the other two minimums.
+      if (reqs.coins_min && (charState.coins || 0) < reqs.coins_min) reqsMet = false;
       if (!reqsMet) { score -= 5; reasons.push('requirements not met'); }
 
       // Goal alignment
