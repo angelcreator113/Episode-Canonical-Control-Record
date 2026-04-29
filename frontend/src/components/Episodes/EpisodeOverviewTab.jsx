@@ -30,7 +30,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const [allEvents, setAllEvents] = useState([]);  // every event in the show — drives the linker dropdown
   const [linkedEvents, setLinkedEvents] = useState([]);  // events whose used_in_episode_id is this episode
   const [sceneSets, setSceneSets] = useState([]);
-  const [brief, setBrief] = useState(null);
   const [scriptInfo, setScriptInfo] = useState(null);
   const [totalEpisodes, setTotalEpisodes] = useState(0);
   const [linkBusy, setLinkBusy] = useState(false);
@@ -73,7 +72,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
     }
     api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => setSceneSets(data?.data || [])).catch(() => {});
     api.get(`/api/v1/world/locations`).then(({ data }) => setWorldLocations(data?.locations || [])).catch(() => {});
-    api.get(`/api/v1/episode-brief/${episode.id}`).then(({ data }) => setBrief(data?.data || null)).catch(() => {});
     api.get(`/api/v1/episodes/${episode.id}/scripts?includeAllVersions=false`).then(({ data }) => {
       const scripts = data?.data || data?.scripts || [];
       if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
@@ -344,10 +342,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         {/* Season Position */}
         <div style={S.card}>
           <span style={S.label}>📺 Season Position</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            {brief?.episode_archetype && <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#6366f1' }}>{brief.episode_archetype}</span>}
-            {brief?.designed_intent && <span style={{ padding: '2px 8px', background: TIER_CONFIG[brief.designed_intent]?.bg || '#f1f5f9', borderRadius: 4, fontSize: 10, fontWeight: 600, color: TIER_CONFIG[brief.designed_intent]?.color || '#94a3b8' }}>{brief.designed_intent.toUpperCase()}</span>}
-          </div>
           <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             {Array.from({ length: totalEpisodes || 6 }, (_, i) => (
               <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: (i + 1) === (episode.episode_number || 1) ? '#B8962E' : (i + 1) < (episode.episode_number || 1) ? '#d1fae5' : '#f1f5f9' }} />

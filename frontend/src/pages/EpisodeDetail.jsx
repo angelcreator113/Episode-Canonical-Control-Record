@@ -5,6 +5,9 @@ import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
 import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
+import EpisodeBriefTab from '../components/Episodes/EpisodeBriefTab';
+import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggestionsOverlay';
+import EpisodePhoneMissionsTab from '../components/Episodes/EpisodePhoneMissionsTab';
 import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
 import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
 import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
@@ -70,14 +73,16 @@ const EpisodeDetail = () => {
     }
   }, [episode]);
 
-  // Tab structure: 4 main tabs with sub-tabs
+  // Tab structure: 5 main tabs with sub-tabs
   const EP_TABS = [
     { key: 'overview', icon: '📋', label: 'Overview' },
+    { key: 'brief', icon: '✨', label: 'Brief' },
     { key: 'scripts', icon: '📝', label: 'Script' },
     { key: 'production', icon: '🎬', label: 'Production', subs: [
       { key: 'assets', label: 'Assets' },
       { key: 'scenes', label: 'Scenes' },
       { key: 'wardrobe', label: 'Wardrobe' },
+      { key: 'phone', label: 'Phone' },
       { key: 'checklist', label: 'Checklist' },
     ]},
     { key: 'results', icon: '👑', label: 'Results', subs: [
@@ -93,6 +98,7 @@ const EpisodeDetail = () => {
       'assets': ['production', 'assets'],
       'scenes': ['production', 'scenes'],
       'wardrobe': ['production', 'wardrobe'],
+      'phone': ['production', 'phone'],
       'checklist': ['production', 'checklist'],
       'production': ['production', 'assets'],
       'evaluation': ['results', 'evaluation'],
@@ -218,6 +224,19 @@ const EpisodeDetail = () => {
       localStorage.setItem('working-episode-title', episode.title || episode.episodeTitle || 'Untitled');
     }
   }, [episodeId, episode]);
+
+  // ── End-of-show suggestions overlay ──────────────────────────────────────
+  // Auto-opens once when an evaluated episode loads. The dismissal is per-
+  // episode (localStorage key includes the id) so closing on Episode 1
+  // doesn't suppress the overlay for Episode 2. Creators can re-open manually
+  // via the "🧭 What's next" button in the header.
+  const [showNextSuggestions, setShowNextSuggestions] = useState(false);
+  useEffect(() => {
+    if (!episode?.id || !episode?.evaluation_json) return;
+    let dismissed = false;
+    try { dismissed = localStorage.getItem(`nextSuggestions:dismissed:${episode.id}`) === '1'; } catch {}
+    if (!dismissed) setShowNextSuggestions(true);
+  }, [episode?.id, episode?.evaluation_json]);
 
   // Handle episode updates from Overview tab
   const handleUpdateEpisode = async (updates) => {
@@ -623,6 +642,18 @@ const EpisodeDetail = () => {
           >
             ▶ Play on Phone
           </button>
+          {/* Re-open the end-of-show suggestions overlay. Only useful once
+              the episode has evaluated — before that there's no state to
+              base suggestions on. */}
+          {episode?.evaluation_json && (
+            <button
+              onClick={() => setShowNextSuggestions(true)}
+              title="Re-open the end-of-show next-event suggestions"
+              style={{padding:'5px 12px', background:'#fff', border:'1px solid #e2e8f0', borderRadius:6, color:'#64748b', fontSize:12, fontWeight:600, cursor:'pointer'}}
+            >
+              🧭 What's next
+            </button>
+          )}
           <Link
             to={`/episodes/${episode.id}/todo`}
             style={{padding:'5px 10px', background:'#FAF7F0', border:'1px solid #e8e0d0', borderRadius:6, color:'#B8962E', fontSize:12, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'4px'}}
@@ -745,6 +776,12 @@ const EpisodeDetail = () => {
             show={episode.show}
             onUpdate={handleUpdateEpisode}
           />
+        )}
+
+        {/* Brief Tab — surfaces the EpisodeBrief snapshot (creative intent
+            + frozen event context that EpisodeOverviewTab doesn't show). */}
+        {activeTab === 'brief' && (
+          <EpisodeBriefTab episode={episode} />
         )}
 
         {/* Scripts Tab */}
@@ -898,6 +935,13 @@ const EpisodeDetail = () => {
         {/* Distribution Tab */}
         {activeTab === 'results' && epSubTab === 'distribution' && (
           <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
+        )}
+
+        {/* Phone missions sub-tab — episode-scoped view of show-wide +
+            episode-specific missions, with inline active toggle and a jump
+            into the existing MissionEditor for full CRUD. */}
+        {activeTab === 'production' && epSubTab === 'phone' && (
+          <EpisodePhoneMissionsTab episode={episode} />
         )}
 
         {/* Production Tab */}
@@ -1066,6 +1110,17 @@ const EpisodeDetail = () => {
           playthrough={playthrough}
           missions={phoneMissions}
           onClose={() => setPlayingPhone(false)}
+        />
+      )}
+
+      {/* End-of-show next-event suggestions overlay. Auto-opens once per
+          evaluated episode (per-episode dismissal in localStorage); creator
+          can re-open via the "🧭 What's next" header button. */}
+      {showNextSuggestions && episode && (
+        <NextEventSuggestionsOverlay
+          episode={episode}
+          showId={episode.show_id || episode.show?.id}
+          onClose={() => setShowNextSuggestions(false)}
         />
       )}
     </div>

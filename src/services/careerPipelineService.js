@@ -337,7 +337,7 @@ async function getAccessibleCareerTier(showId, models) {
   const { sequelize } = models;
   try {
     const [states] = await sequelize.query(
-      `SELECT reputation FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
+      `SELECT reputation FROM character_state WHERE show_id = :showId AND character_key = 'justawoman' LIMIT 1`,
       { replacements: { showId } }
     );
     const rep = states?.[0]?.reputation || 0;
