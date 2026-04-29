@@ -2416,7 +2416,22 @@ The revised event should feel like a completely different experience from the si
           {/* Event editor */}
           {editingEvent && (
             <div style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>{editingEvent === 'new' ? '✨ New Event' : '✏️ Edit Event'}</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 16px' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{editingEvent === 'new' ? '✨ New Event' : '✏️ Edit Event'}</h3>
+                {/* Read-only badge when this event was spawned from a feed
+                    profile (worldEvents.js POST /from-profile sets the FK).
+                    Lets creators see the lineage without diving into the
+                    canon_consequences JSON, and hints to edit the source
+                    profile rather than this event for new traits. */}
+                {eventForm.source_profile_id && (
+                  <span
+                    title="Created from a feed profile — edit the profile to change brand, lifestyle, or persona traits."
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: '#fdf2f8', color: '#be185d', border: '1px solid #fbcfe8', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4 }}
+                  >
+                    🌐 FROM FEED · profile #{eventForm.source_profile_id}
+                  </span>
+                )}
+              </div>
               {/* Duplicate detection warning + AI Revise */}
               {eventForm.name && findSimilarEvents(eventForm.name).length > 0 && (
                 <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
