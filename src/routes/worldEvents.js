@@ -1681,7 +1681,7 @@ router.delete('/world/:showId/events/:eventId/invitation/:assetId', optionalAuth
 // Auto-generate a complete episode from an event
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     // Optional: when draft_script is true, also kick the script skeleton
@@ -1883,7 +1883,7 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
 // episode first. Useful when the event has been edited (new outfit,
 // stakes, etc.) and the creator wants the episode to reflect those
 // changes without losing their place.
-router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/:eventId/regenerate-episode', optionalAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
@@ -2348,13 +2348,28 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     // Event row — raw SQL to tolerate unmigrated columns on older envs.
-    const [eventRows] = await models.sequelize.query(
-      `SELECT id, name, prestige, event_type, cost_coins, is_paid, payment_amount,
-              outfit_pieces, canon_consequences, dress_code
-       FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
-      { replacements: { eventId, showId } }
-    );
-    const event = eventRows?.[0];
+    let event = null;
+    try {
+      const [eventRows] = await models.sequelize.query(
+        `SELECT id, name, prestige, event_type, cost_coins, is_paid, is_free, payment_amount,
+                outfit_pieces, canon_consequences, dress_code
+         FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
+        { replacements: { eventId, showId } }
+      );
+      event = eventRows?.[0] || null;
+    } catch (err) {
+      if (err?.original?.code !== '42703' && !String(err?.message || '').includes('is_free')) throw err;
+      const [fallbackRows] = await models.sequelize.query(
+        `SELECT id, name, prestige, event_type, cost_coins, is_paid, payment_amount,
+                outfit_pieces, canon_consequences, dress_code
+         FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
+        { replacements: { eventId, showId } }
+      );
+      event = fallbackRows?.[0] ? {
+        ...fallbackRows[0],
+        is_free: fallbackRows[0].is_paid === 'free',
+      } : null;
+    }
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     const prestige = Number(event.prestige) || 5;
@@ -2370,7 +2385,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
     })();
 
     const {
-      USD_TO_COINS, EVENT_EXTRAS, RENTAL_RATE, CONTENT_REVENUE_PER_PRESTIGE,
+      USD_TO_COINS, EVENT_EXTRAS, RENTAL_RATE,
     } = require('../utils/financialRates');
     const {
       getCurrentBalance, getFinancialGoals, calculateSocialTaskRewards,
@@ -2409,19 +2424,21 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
       || photoBoothPrompt.includes('red carpet') || photoBoothPrompt.includes('photo');
     const photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
 
-    const eventCost = event.is_paid === false || event.is_paid === 0
-      ? (Number(event.cost_coins) || 0)
-      : 0; // is_paid true = brand is paying Lala, she doesn't owe the cover
+    const truthy = new Set([true, 1, '1', 'true', 'yes', 'y']);
+    const isPaid = truthy.has(event.is_paid);
+    const isFree = truthy.has(event.is_free);
+    const eventCost = isFree ? 0 : (isPaid ? 0 : (Number(event.cost_coins) || 0));
 
     // ── Income side ─────────────────────────────────────────────────
-    const eventPayment = (event.is_paid === true || event.is_paid === 1) ? (parseFloat(event.payment_amount) || 0) : 0;
+    const eventPayment = isPaid ? (parseFloat(event.payment_amount) || 0) : 0;
     const socialTasks = Array.isArray(automation.social_tasks) ? automation.social_tasks : [];
     const taskRewards = calculateSocialTaskRewards(socialTasks);
     const socialTaskRewards = taskRewards.reduce((s, t) => s + (t.reward || 0), 0);
-    // Content revenue forecast — conservative estimate from prestige.
-    // Real content revenue is computed at episode-complete time; this is
-    // just the "you'll probably earn this much in posts" preview.
-    const contentRevenueEst = CONTENT_REVENUE_PER_PRESTIGE * prestige;
+    // Content bonus uses the same rule as finalize-financials: brand deals
+    // get a 10% post-delivery bonus on top of event payment.
+    const contentRevenueEst = (event.event_type === 'brand_deal' && eventPayment > 0)
+      ? Math.round(eventPayment * 0.1)
+      : 0;
 
     const income = {
       event_payment: eventPayment,
@@ -2553,6 +2570,7 @@ router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async
 router.post('/world/:showId/events/:eventId/generate-social-checklist', optionalAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
+    const force = req.body?.force === true;
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
@@ -2580,12 +2598,12 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', optional
     }
 
     const socialChecklistService = require('../services/socialChecklistService');
-    const result = await socialChecklistService.generateSocialChecklist(event, models);
+    const result = await socialChecklistService.generateSocialChecklist(event, models, { forceRebuild: force });
 
     return res.json({
       success: true,
       data: result,
-      message: `Social checklist generated with ${result.tasks.length} tasks`,
+      message: `${force ? 'Social tasks regenerated' : 'Social checklist generated'} with ${result.tasks.length} tasks`,
     });
   } catch (error) {
     console.error('Generate social checklist error:', error);
@@ -2641,7 +2659,8 @@ router.put('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, re
     // Load wardrobe items
     const [items] = await models.sequelize.query(
       `SELECT id, name, clothing_category, brand, tier, price, color, is_owned,
-              acquisition_type, aesthetic_tags, s3_url, s3_url_processed, times_worn, last_worn_date
+              acquisition_type, aesthetic_tags, event_types, occasion, season, era_alignment,
+              s3_url, s3_url_processed, times_worn, last_worn_date
        FROM wardrobe WHERE id IN (:ids) AND deleted_at IS NULL`,
       { replacements: { ids: wardrobe_ids.length > 0 ? wardrobe_ids : ['00000000-0000-0000-0000-000000000000'] } }
     );
@@ -2673,7 +2692,7 @@ router.put('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, re
       console.warn('[Outfit] Could not read show required_slots:', e.message);
     }
     const outfitScore = scoreOutfitForEvent(items, scoringEvent);
-    const repeats = await detectRepeats(items, showId, models);
+    const repeats = await detectRepeats(items, showId, models, { currentEventId: eventId });
     const brandRels = await getBrandRelationships(showId, models);
     const feedTriggers = generateOutfitReactionTriggers(outfitScore, repeats, brandRels);
 
@@ -2721,10 +2740,24 @@ router.get('/world/:showId/events/:eventId/wardrobe-options', optionalAuth, asyn
       { replacements: { showId } }
     );
 
+    // Keep recommendation scoring context aligned with outfit-save scoring.
+    let scoringEvent = event;
+    try {
+      if (models.Show) {
+        const show = await models.Show.findByPk(showId, { attributes: ['metadata'] });
+        const required = show?.metadata?.required_slots;
+        if (Array.isArray(required) && required.length > 0) {
+          scoringEvent = { ...event, required_slots: required };
+        }
+      }
+    } catch (e) {
+      console.warn('[Outfit] Could not read show required_slots for options:', e.message);
+    }
+
     // Score each item individually against the event
     const { scorePieceForEvent } = require('../services/wardrobeIntelligenceService');
     const scored = items.map(item => {
-      const singleScore = scorePieceForEvent(item, event);
+      const singleScore = scorePieceForEvent(item, scoringEvent);
       return {
         ...item,
         image_url: item.s3_url_processed || item.s3_url,

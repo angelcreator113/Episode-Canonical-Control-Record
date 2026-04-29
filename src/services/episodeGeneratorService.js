@@ -149,7 +149,18 @@ const CATEGORY_TASKS = {
 
 // ─── BUILD SOCIAL TASKS (event type + platform + category) ──────────────────
 
-function buildSocialTasks(eventType, hostProfile = null, outfitPieces = []) {
+function buildSocialTasks(eventType, hostProfile = null, outfitPieces = [], context = {}) {
+  const hostName = context.host_name || hostProfile?.display_name || hostProfile?.name || null;
+  const hostHandle = context.host_handle || hostProfile?.handle || null;
+  const hostBrand = context.host_brand || hostProfile?.host_brand || null;
+  const venueName = context.venue_name || null;
+  const eventName = context.event_name || null;
+  const dressCode = context.dress_code || null;
+  const guestNames = Array.isArray(context.guest_names)
+    ? context.guest_names.filter(Boolean).slice(0, 3)
+    : [];
+  const hostRef = hostHandle ? `@${String(hostHandle).replace(/^@/, '')}` : hostName;
+
   // 1. Start with event-type base tasks
   const base = SOCIAL_TASK_TEMPLATES[eventType] || SOCIAL_TASK_TEMPLATES.default;
   const tasks = [
@@ -173,6 +184,34 @@ function buildSocialTasks(eventType, hostProfile = null, outfitPieces = []) {
         task.description = `Film arrival in the ${mainPiece?.name || 'outfit'} — full look reveal at the venue`;
       } else if (task.slot === 'recap') {
         task.description = `Carousel: outfit flat lay + event moments + ${outfitPieces.length} pieces styled`;
+      }
+    }
+  }
+
+  // 1c. Make tasks host/invite aware so prompts make narrative sense.
+  for (const task of tasks) {
+    if (task.slot === 'arrival' && venueName) {
+      task.description = `Capture arrival at ${venueName}${hostRef ? ` for ${hostRef}'s invite` : ''} — establish place + status immediately`;
+    } else if (task.slot === 'host_photo' && hostRef) {
+      task.description = `Create a post with ${hostRef}${hostBrand ? ` (${hostBrand})` : ''} — signal relationship, not just attendance`;
+    } else if (task.slot === 'thank_host' && hostRef) {
+      task.description = `Public thank-you to ${hostRef}${eventName ? ` for ${eventName}` : ''} — maintain social capital`;
+    } else if (task.slot === 'bts_stories') {
+      const guestLine = guestNames.length > 0 ? `, plus guests like ${guestNames.join(', ')}` : '';
+      task.description = `Stories: show access signals (room, energy${guestLine}) without leaking everything`;
+    } else if (task.slot === 'presence') {
+      task.description = `${eventName ? `Post from ${eventName}` : 'Post from the invite'} so your attendance is visible to the right audience`;
+    } else if (task.slot === 'network') {
+      task.description = `Capture at least 2 networking moments${guestNames.length > 0 ? ` (aim for ${guestNames.slice(0, 2).join(' + ')})` : ''} to extend reach`;
+    } else if (task.slot === 'teaser' && (hostBrand || hostRef)) {
+      task.description = `Tease the ${hostBrand || hostRef} collaboration without disclosing deliverables`;
+    }
+  }
+
+  if (dressCode) {
+    for (const task of tasks) {
+      if (task.slot === 'grwm' || task.slot === 'outfit_reveal') {
+        task.description = `${task.description} (dress code: ${dressCode})`;
       }
     }
   }
@@ -310,11 +349,14 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     // Column may not exist, skip check
   }
 
-  // Get next episode number (include deleted episodes so numbers are never reused)
+  // Get next episode number from active episodes only. Soft-deleted
+  // regenerate history should not inflate visible episode numbering.
   let nextNumber = 1;
   try {
     const [rows] = await models.sequelize.query(
-      `SELECT COALESCE(MAX(episode_number), 0) + 1 as next_num FROM episodes WHERE show_id = :showId`,
+      `SELECT COALESCE(MAX(episode_number), 0) + 1 as next_num
+       FROM episodes
+       WHERE show_id = :showId AND deleted_at IS NULL`,
       { replacements: { showId } }
     );
     nextNumber = parseInt(rows?.[0]?.next_num) || 1;
@@ -323,7 +365,6 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
       where: { show_id: showId },
       order: [['episode_number', 'DESC']],
       attributes: ['episode_number'],
-      paranoid: false,
     });
     nextNumber = (lastEpisode?.episode_number || 0) + 1;
   }
@@ -534,26 +575,27 @@ Return ONLY JSON.` }],
 
   // ── 3. Create Scene Plan (14 beats) ──
   const scenePlanRows = [];
+  // Use a container object instead of bare identifiers so downstream
+  // access is resilient even if a scope mutation slips in later edits.
+  const sceneSetIds = { home: null, venue: null };
   if (ScenePlan) {
     // Try to find scene sets for home and venue
-    let homeSceneSetId = null;
-    let venueSceneSetId = null;
 
     try {
       const [homeSets] = await models.sequelize.query(
         `SELECT id FROM scene_sets WHERE scene_type = 'HOME_BASE' AND deleted_at IS NULL LIMIT 1`
       );
-      homeSceneSetId = homeSets?.[0]?.id || null;
+      sceneSetIds.home = homeSets?.[0]?.id || null;
 
       if (event.scene_set_id) {
-        venueSceneSetId = event.scene_set_id;
+        sceneSetIds.venue = event.scene_set_id;
       }
     } catch { /* scene_sets query failed — no scene sets linked */ }
 
     for (const beat of BEAT_TEMPLATES) {
       const sceneSetId = beat.phase === 'before' || beat.phase === 'after'
-        ? homeSceneSetId
-        : venueSceneSetId;
+        ? sceneSetIds.home
+        : sceneSetIds.venue;
 
       try {
         const beatId = require('uuid').v4();
@@ -581,7 +623,7 @@ Return ONLY JSON.` }],
   // event. findOrCreate is idempotent so a re-run (regenerate flow)
   // doesn't pile up duplicates.
   if (models.SceneSetEpisode) {
-    const orderedSetIds = [venueSceneSetId, homeSceneSetId].filter(Boolean);
+    const orderedSetIds = [sceneSetIds.venue, sceneSetIds.home].filter(Boolean);
     const uniqueOrderedSetIds = orderedSetIds.filter((setId, idx) => orderedSetIds.indexOf(setId) === idx);
     for (let i = 0; i < uniqueOrderedSetIds.length; i += 1) {
       const setId = uniqueOrderedSetIds[i];
@@ -640,13 +682,23 @@ Return ONLY JSON.` }],
       const hostProfileId = automation.host_profile_id;
       if (hostProfileId) {
         const [rows] = await models.sequelize.query(
-          'SELECT platform, content_category, archetype, follower_tier FROM social_profiles WHERE id = :id LIMIT 1',
+          'SELECT platform, content_category, archetype, follower_tier, handle, display_name FROM social_profiles WHERE id = :id LIMIT 1',
           { replacements: { id: hostProfileId } }
         );
         hostProfile = rows?.[0] || null;
       }
     } catch { /* non-blocking */ }
-    socialTasks = buildSocialTasks(eventType, hostProfile, outfitPieces);
+    socialTasks = buildSocialTasks(eventType, hostProfile, outfitPieces, {
+      event_name: event.name,
+      host_name: event.host || automation.host_display_name,
+      host_handle: automation.host_handle,
+      host_brand: event.host_brand || automation.host_brand,
+      venue_name: event.venue_name || automation.venue_name,
+      dress_code: event.dress_code,
+      guest_names: Array.isArray(automation.guest_profiles)
+        ? automation.guest_profiles.map(g => g.display_name || g.handle).filter(Boolean)
+        : [],
+    });
   }
 
   // Wardrobe tasks (the standard 7 slots)

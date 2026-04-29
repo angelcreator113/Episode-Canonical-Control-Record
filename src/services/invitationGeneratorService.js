@@ -205,8 +205,9 @@ async function findBrandStyleReference(sequelize, event) { // eslint-disable-lin
 
 // ─── ASSET RECORD ─────────────────────────────────────────────────────────────
 
-async function createInvitationAsset(models, event, s3Url, showId, version, resolvedTheme) {
+async function createInvitationAsset(models, event, s3ProcessedUrl, showId, version, resolvedTheme, s3RawUrl = null) {
   const { Asset } = models;
+  const rawUrl = s3RawUrl || s3ProcessedUrl;
 
   const asset = await Asset.create({
     id: uuidv4(),
@@ -218,8 +219,8 @@ async function createInvitationAsset(models, event, s3Url, showId, version, reso
     purpose: 'MAIN',
     category: 'overlay',
     entity_type: 'prop',
-    s3_url_raw: s3Url,
-    s3_url_processed: s3Url,
+    s3_url_raw: rawUrl,
+    s3_url_processed: s3ProcessedUrl,
     processing_status: 'none',
     mood_tags: [
       event.mood,
@@ -248,8 +249,8 @@ async function createInvitationAsset(models, event, s3Url, showId, version, reso
       id: uuidv4(),
       name: `${event.name} — Invitation v${version}`,
       asset_type: 'INVITATION_LETTER',
-      s3_url_raw: s3Url,
-      s3_url_processed: s3Url,
+      s3_url_raw: rawUrl,
+      s3_url_processed: s3ProcessedUrl,
       show_id: showId || null,
       metadata: {
         source: 'invitation-generator-v2',
@@ -268,11 +269,11 @@ async function createInvitationAsset(models, event, s3Url, showId, version, reso
          VALUES (:id, :name, 'INVITATION_LETTER', :url, :url, :showId, :metadata, NOW(), NOW())`,
         { replacements: {
           id: assetId, name: `${event.name} — Invitation v${version}`,
-          url: s3Url, showId: showId || null,
+          url: s3ProcessedUrl, showId: showId || null,
           metadata: JSON.stringify({ source: 'invitation-generator-v2', event_id: event.id, theme: resolvedTheme, version }),
         } }
       );
-      return { id: assetId, s3_url_processed: s3Url };
+      return { id: assetId, s3_url_processed: s3ProcessedUrl };
     });
   });
 
@@ -328,103 +329,63 @@ async function generateInvitation(eventId, models, showId) {
   const eventDate = auto.event_date || event.event_date || '';
   const eventTime = auto.event_time || event.event_time || 'Evening';
 
-  // Use Claude's prose if available, otherwise structured text
-  let cardText;
+  // Use Claude's prose if available, otherwise structured text. This object is
+  // used for deterministic server-side compositing so invitation text is
+  // always visible, regardless of model text-rendering quality.
+  let invitationContent;
   if (invitationText?.opening && invitationText?.body) {
-    cardText = [
-      invitationText.opening,
-      '',
-      invitationText.body,
-      '',
-      invitationText.closing || 'We look forward to your presence.',
-    ].join('\n');
+    invitationContent = {
+      eventName: event.name?.split(' — ')[0]?.trim() || event.name || 'Invitation',
+      eventSubtitle: event.name?.includes(' — ') ? event.name.split(' — ')[1].trim() : null,
+      opening: invitationText.opening,
+      body: invitationText.body,
+      closing: invitationText.closing || 'We look forward to your presence.',
+      hostName,
+      hostBrand: event.host_brand || '',
+      prestige: event.prestige || 5,
+    };
   } else {
-    cardText = [
-      `You are invited to`,
-      `${event.name}`,
-      `Hosted by ${hostName}`,
-      venueName ? `at ${venueName}` : '',
-      eventDate ? `${eventDate} · ${eventTime}` : eventTime,
-      event.dress_code ? `Dress Code: ${event.dress_code}` : '',
-    ].filter(Boolean).join('\n');
+    invitationContent = {
+      eventName: event.name?.split(' — ')[0]?.trim() || event.name || 'Invitation',
+      eventSubtitle: event.name?.includes(' — ') ? event.name.split(' — ')[1].trim() : null,
+      opening: 'You are invited to',
+      body: [
+        `Hosted by ${hostName}`,
+        venueName ? `at ${venueName}` : '',
+        eventDate ? `${eventDate} · ${eventTime}` : eventTime,
+        event.dress_code ? `Dress Code: ${event.dress_code}` : '',
+      ].filter(Boolean).join('. '),
+      closing: 'We look forward to your presence.',
+      hostName,
+      hostBrand: event.host_brand || '',
+      prestige: event.prestige || 5,
+    };
   }
 
-  // Step 2: Generate invitation image with text baked in via Flux
-  const prestige = event.prestige || 5;
-  const themeConfig = (resolvedTheme && THEME_PRESETS[resolvedTheme]) || DEFAULT_THEME;
+  // Step 2: Generate a text-free luxury background card.
+  const backgroundPrompt = buildBackgroundPrompt(event);
+  console.log('[InviteGen] Generating invitation background (text-free)...');
+  const backgroundImageUrl = await callDallE3(backgroundPrompt);
+  if (!backgroundImageUrl) throw new Error('Image generation did not return a URL');
 
-  const richness = prestige >= 8
-    ? 'Maximum luxury — gold leaf, embossed textures, opulent'
-    : prestige >= 5
-      ? 'Refined elegance — tasteful gold accents, sophisticated'
-      : 'Clean and minimal — understated luxury';
+  const bgResponse = await axios.get(backgroundImageUrl, { responseType: 'arraybuffer', timeout: 60000 });
+  const backgroundBuffer = Buffer.from(bgResponse.data);
 
-  const prompt = `Create a luxury event invitation card, portrait orientation, ready to share on Instagram.
+  // Keep raw background so edit/re-render can reliably composite new text.
+  const rawBackgroundUrl = await uploadToS3(backgroundBuffer, eventId, `v${version}-bg`, 'image/jpeg');
 
-CARD DESIGN:
-- Background: ${themeConfig.background}
-- Border: ${themeConfig.border}
-- Richness level: ${richness}
-- ${themeConfig.atmosphere}
-- The card fills the entire image edge to edge
-
-THE INVITATION TEXT TO RENDER ON THE CARD (SPELL EVERY WORD EXACTLY AS WRITTEN):
-
-${cardText}
-
-CRITICAL TEXT RULES:
-- SPELL EVERY WORD EXACTLY — do not change, abbreviate, or misspell any word
-- The event name "${event.name}" must be spelled EXACTLY as shown, letter by letter
-- If you cannot render text perfectly, use FEWER words rather than misspelled words
-
-TYPOGRAPHY RULES:
-- The event name should be the largest, most prominent text — centered
-- Invitation prose in elegant serif font, well-spaced, perfectly readable
-- All text PERFECTLY LEGIBLE — sharp, high contrast against background
-- Elegant serif fonts — Vogue, Maison Belle, luxury fashion house aesthetic
-- Gold or dark text depending on background lightness
-- Generous line spacing between paragraphs
-- Text centered with decorative elements framing the edges only
-
-Style: Luxury fashion house invitation card. Like Chanel or Dior event stationery.
-No photos, no people — pure typography + decorative design.
-The card should look like it was printed by a luxury stationer.`;
-
-  console.log(`[InviteGen] Generating invitation with prose baked in...`);
-  const imageUrl = await callDallE3(prompt);
-
-  if (!imageUrl) throw new Error('Image generation did not return a URL');
-
-  // Download generated image
-  const imgResponse = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 60000 });
-  let finalBuffer = Buffer.from(imgResponse.data);
-
-  // Remove background → transparent PNG (if REMOVEBG_API_KEY configured)
-  let bgRemoved = false;
-  if (process.env.REMOVEBG_API_KEY) {
-    try {
-      console.log('[InviteGen] Removing background...');
-      const bgRes = await axios.post(
-        'https://api.remove.bg/v1.0/removebg',
-        { image_url: imageUrl, size: 'auto', format: 'png' },
-        { headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY }, responseType: 'arraybuffer', timeout: 45000 }
-      );
-      finalBuffer = Buffer.from(bgRes.data);
-      bgRemoved = true;
-      console.log('[InviteGen] Background removed → transparent PNG');
-    } catch (bgErr) {
-      console.warn('[InviteGen] Background removal failed (non-blocking):', bgErr.message);
-    }
+  // Step 3: Composite invitation text server-side (guaranteed readability).
+  let finalBuffer = await compositeInvitation(backgroundBuffer, event, invitationContent);
+  if (!finalBuffer) {
+    throw new Error('Invitation text compositing failed');
   }
 
-  // Upload to S3
-  const contentType = bgRemoved ? 'image/png' : 'image/jpeg';
-  const suffix = bgRemoved ? `v${version}-nobg` : `v${version}`;
-  const s3Url = await uploadToS3(finalBuffer, eventId, suffix, contentType);
+  // Upload final invitation image.
+  const s3Url = await uploadToS3(finalBuffer, eventId, `v${version}`, 'image/png');
   console.log(`[InviteGen] Invitation v${version} stored: ${s3Url}`);
 
   // Store invitation text on the event for reference/editing
-  if (invitationText || cardText) {
+  if (invitationContent) {
     try {
       await sequelize.query(
         `UPDATE world_events SET canon_consequences = jsonb_set(
@@ -432,14 +393,14 @@ The card should look like it was printed by a luxury stationer.`;
           '{invitation_text}',
           :textJson::jsonb
         ), updated_at = NOW() WHERE id = :eventId`,
-        { replacements: { textJson: JSON.stringify(invitationText || { raw: cardText }), eventId } }
+        { replacements: { textJson: JSON.stringify(invitationContent), eventId } }
       );
     } catch { /* non-blocking */ }
   }
 
   // Create Asset record (pending_review — not linked to event until approved)
   // Previous versions are NOT deleted — kept for history
-  const asset = await createInvitationAsset(models, event, s3Url, showId, version, resolvedTheme);
+  const asset = await createInvitationAsset(models, event, s3Url, showId, version, resolvedTheme, rawBackgroundUrl);
 
   // If event is already injected into an episode, link asset to it
   // so it appears in the episode's Assets tab once approved

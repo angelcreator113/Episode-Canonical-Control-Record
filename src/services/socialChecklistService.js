@@ -245,26 +245,42 @@ async function uploadChecklist(buffer, eventId) {
 
 // ─── MAIN: GENERATE SOCIAL CHECKLIST ────────────────────────────────────────
 
-async function generateSocialChecklist(event, models) {
+async function generateSocialChecklist(event, models, options = {}) {
+  const forceRebuild = options.forceRebuild === true;
   let tasks = event.canon_consequences?.automation?.social_tasks || [];
   if (!Array.isArray(tasks)) tasks = [];
 
-  if (tasks.length === 0) {
+  if (forceRebuild || tasks.length === 0) {
     // Generate tasks on the fly
     const { buildSocialTasks } = require('./episodeGeneratorService');
     const eventType = event.event_type || 'invite';
     const auto = event.canon_consequences?.automation || {};
+    const outfitPieces = (() => {
+      if (!event.outfit_pieces) return [];
+      if (Array.isArray(event.outfit_pieces)) return event.outfit_pieces;
+      try { return JSON.parse(event.outfit_pieces); } catch { return []; }
+    })();
     let hostProfile = null;
     if (auto.host_profile_id) {
       try {
         const [rows] = await models.sequelize.query(
-          'SELECT platform, content_category, archetype FROM social_profiles WHERE id = :id LIMIT 1',
+          'SELECT platform, content_category, archetype, handle, display_name FROM social_profiles WHERE id = :id LIMIT 1',
           { replacements: { id: auto.host_profile_id } }
         );
         hostProfile = rows?.[0] || null;
       } catch { /* non-blocking */ }
     }
-    tasks = buildSocialTasks(eventType, hostProfile);
+    tasks = buildSocialTasks(eventType, hostProfile, outfitPieces, {
+      event_name: event.name,
+      host_name: event.host || auto.host_display_name,
+      host_handle: auto.host_handle,
+      host_brand: event.host_brand || auto.host_brand,
+      venue_name: event.venue_name || auto.venue_name,
+      dress_code: event.dress_code,
+      guest_names: Array.isArray(auto.guest_profiles)
+        ? auto.guest_profiles.map(g => g.display_name || g.handle).filter(Boolean)
+        : [],
+    });
   }
 
   // Render checklist image (optional — may fail if canvas not available)
