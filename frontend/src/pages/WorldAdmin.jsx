@@ -2662,6 +2662,55 @@ The revised event should feel like a completely different experience from the si
                 />
               </div>
 
+              {/* ── Production Overlays ───────────────────────────────────────
+                  Names of UI overlay types that auto-place on the episode's
+                  timeline at generation time (matches by ui_overlay_types
+                  type_key OR name). Defaults are the four canonical screens;
+                  add show-specific ones (CountdownTimer, SponsorBug, etc.)
+                  per event when needed. */}
+              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
+                <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>📱 Required UI Overlays</label>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+                  Auto-placed on the timeline when an episode is generated. Phone screens (Lala-side) and on-screen production overlays are both supported — add by name; the generator resolves to whichever asset has been built.
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8, minHeight: 28 }}>
+                  {(eventForm.required_ui_overlays || []).map((name, i) => (
+                    <span key={`${name}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: '#fff', border: '1px solid #e8d8b8', borderRadius: 4, fontSize: 11, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>
+                      {name}
+                      <button
+                        type="button"
+                        onClick={() => setEventForm(p => ({
+                          ...p,
+                          required_ui_overlays: (p.required_ui_overlays || []).filter((_, idx) => idx !== i),
+                        }))}
+                        style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}
+                        title="Remove"
+                      >×</button>
+                    </span>
+                  ))}
+                  {(eventForm.required_ui_overlays || []).length === 0 && (
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No overlays — episode timeline starts empty.</span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Add overlay name (Enter or comma to add) — e.g. CountdownTimer, SponsorBug"
+                  onKeyDown={e => {
+                    if (e.key !== 'Enter' && e.key !== ',') return;
+                    e.preventDefault();
+                    const v = e.currentTarget.value.trim().replace(/,$/, '');
+                    if (!v) return;
+                    setEventForm(p => {
+                      const existing = p.required_ui_overlays || [];
+                      if (existing.includes(v)) return p;
+                      return { ...p, required_ui_overlays: [...existing, v] };
+                    });
+                    e.currentTarget.value = '';
+                  }}
+                  style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                />
+              </div>
+
               <FG label="Description" value={eventForm.description} onChange={v => setEventForm(p => ({ ...p, description: v }))} placeholder="Full event description..." textarea full />
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
                 <button onClick={() => setEditingEvent(null)} style={S.secBtn}>Cancel</button>
