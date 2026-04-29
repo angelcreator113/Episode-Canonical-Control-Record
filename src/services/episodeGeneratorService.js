@@ -573,10 +573,12 @@ Return ONLY JSON.` }],
 
   // ── 3. Create Scene Plan (14 beats) ──
   const scenePlanRows = [];
+  // Keep these in outer scope — SceneSetEpisode linking runs even when
+  // ScenePlan model/table isn't available in a given environment.
+  let homeSceneSetId = null;
+  let venueSceneSetId = null;
   if (ScenePlan) {
     // Try to find scene sets for home and venue
-    let homeSceneSetId = null;
-    let venueSceneSetId = null;
 
     try {
       const [homeSets] = await models.sequelize.query(
