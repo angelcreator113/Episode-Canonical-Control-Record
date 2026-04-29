@@ -1243,20 +1243,19 @@ router.post('/select', optionalAuth, async (req, res) => {
       );
       const currentCoins = states?.[0]?.coins ?? 0;
       if (currentCoins >= cost) {
-        // Deduct coins
-        await models.sequelize.query(
-          `UPDATE character_state SET coins = coins - :cost, updated_at = NOW() WHERE id = :id`,
-          { replacements: { cost, id: states[0].id } }
-        );
-        // Mirror the spend into the financial ledger so the budget shown
-        // in event modals (and goal-progress, finalize-financials, etc.)
-        // tracks the same balance as the Characters tab. Without this,
-        // wardrobe purchases drop character_state.coins but the ledger
-        // never sees the spend, so getCurrentBalance keeps returning the
-        // pre-purchase number.
-        try {
-          const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
-          const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+        // Atomic dual-write: deduct from character_state AND log the ledger
+        // row inside one Sequelize transaction. Either both happen or
+        // neither — fixes the prior bug where a failing ledger insert left
+        // coins decremented in character_state with no audit trail (silent
+        // money loss). logTransaction rethrows when given a transaction
+        // option so the rollback cascades up.
+        const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
+        const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+        await models.sequelize.transaction(async (t) => {
+          await models.sequelize.query(
+            `UPDATE character_state SET coins = coins - :cost, updated_at = NOW() WHERE id = :id`,
+            { replacements: { cost, id: states[0].id }, transaction: t }
+          );
           await logTransaction(models.sequelize, show_id, {
             type: 'expense',
             category: 'wardrobe_purchase',
@@ -1268,10 +1267,9 @@ router.post('/select', optionalAuth, async (req, res) => {
             balance_before: ledgerBefore,
             balance_after: ledgerBefore - cost,
             metadata: { wardrobe_id, item_name: item.name, flow: 'select' },
+            transaction: t,
           });
-        } catch (e) {
-          console.warn('[Wardrobe /select] ledger mirror failed:', e.message);
-        }
+        });
         // Mark item as owned
         await models.sequelize.query(
           `UPDATE wardrobe SET is_owned = true, updated_at = NOW() WHERE id = :wardrobe_id`,
@@ -1361,19 +1359,19 @@ router.post('/purchase', optionalAuth, async (req, res) => {
       });
     }
 
-    // 3. Deduct coins
+    // 3. Deduct coins + log ledger row atomically — same pattern as the
+    // /select route. Either both writes succeed or both roll back, so a
+    // failing ledger insert can no longer leave coins missing without an
+    // audit trail.
     const newCoins = currentCoins - cost;
-    await models.sequelize.query(
-      `UPDATE character_state SET coins = :newCoins, updated_at = NOW()
-       WHERE show_id = :show_id AND character_key = 'lala'`,
-      { replacements: { newCoins, show_id } }
-    );
-
-    // 3b. Mirror the spend into the financial ledger (see /select for
-    // rationale). Non-fatal — purchase already succeeded.
-    try {
-      const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
-      const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+    const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
+    const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+    await models.sequelize.transaction(async (t) => {
+      await models.sequelize.query(
+        `UPDATE character_state SET coins = :newCoins, updated_at = NOW()
+         WHERE show_id = :show_id AND character_key = 'lala'`,
+        { replacements: { newCoins, show_id }, transaction: t }
+      );
       await logTransaction(models.sequelize, show_id, {
         type: 'expense',
         category: 'wardrobe_purchase',
@@ -1385,10 +1383,9 @@ router.post('/purchase', optionalAuth, async (req, res) => {
         balance_before: ledgerBefore,
         balance_after: ledgerBefore - cost,
         metadata: { wardrobe_id, item_name: item.name, flow: 'purchase' },
+        transaction: t,
       });
-    } catch (e) {
-      console.warn('[Wardrobe /purchase] ledger mirror failed:', e.message);
-    }
+    });
 
     // 4. Mark item as owned
     await models.sequelize.query(

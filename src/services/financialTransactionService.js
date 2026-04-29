@@ -238,6 +238,11 @@ async function checkMilestones(sequelize, showId, oldBalance, newBalance, opts =
 
 async function logTransaction(sequelize, showId, tx) {
   const id = uuidv4();
+  // When a Sequelize transaction is passed in, we both run the INSERT inside
+  // it AND rethrow on failure so the caller's transaction can roll back.
+  // Without this, the outer transaction would commit a half-baked state
+  // (e.g. character_state.coins decremented but no ledger row).
+  const t = tx.transaction || null;
   try {
     await sequelize.query(
       `INSERT INTO financial_transactions
@@ -247,27 +252,31 @@ async function logTransaction(sequelize, showId, tx) {
        VALUES (:id, :showId, :episodeId, :eventId, :type, :category, :amount, :description,
         :sourceType, :sourceId, :sourceName, :balanceBefore, :balanceAfter,
         :metadata, :status, NOW(), NOW())`,
-      { replacements: {
-        id,
-        showId,
-        episodeId: tx.episode_id || null,
-        eventId: tx.event_id || null,
-        type: tx.type,
-        category: tx.category,
-        amount: tx.amount,
-        description: tx.description || null,
-        sourceType: tx.source_type || null,
-        sourceId: tx.source_id || null,
-        sourceName: tx.source_name || null,
-        balanceBefore: tx.balance_before ?? null,
-        balanceAfter: tx.balance_after ?? null,
-        metadata: JSON.stringify(tx.metadata || {}),
-        status: tx.status || 'executed',
-      }}
+      {
+        replacements: {
+          id,
+          showId,
+          episodeId: tx.episode_id || null,
+          eventId: tx.event_id || null,
+          type: tx.type,
+          category: tx.category,
+          amount: tx.amount,
+          description: tx.description || null,
+          sourceType: tx.source_type || null,
+          sourceId: tx.source_id || null,
+          sourceName: tx.source_name || null,
+          balanceBefore: tx.balance_before ?? null,
+          balanceAfter: tx.balance_after ?? null,
+          metadata: JSON.stringify(tx.metadata || {}),
+          status: tx.status || 'executed',
+        },
+        ...(t ? { transaction: t } : {}),
+      }
     );
     return { id, ...tx };
   } catch (err) {
     console.warn('[FinancialTx] Log failed:', err.message);
+    if (t) throw err;  // propagate so the outer transaction rolls back
     return null;
   }
 }
