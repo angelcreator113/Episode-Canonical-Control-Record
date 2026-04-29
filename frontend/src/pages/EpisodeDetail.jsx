@@ -1,19 +1,26 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
-import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
+// EpisodeOverviewTab is the default tab and the most-viewed surface — keep
+// it eager so the first paint doesn't flash a Suspense fallback. Same for
+// the always-mounted SceneLibraryPicker modal and the lightweight
+// NextEventSuggestionsOverlay (mounts conditionally on evaluated episodes).
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
 import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggestionsOverlay';
-import EpisodePhoneMissionsTab from '../components/Episodes/EpisodePhoneMissionsTab';
-import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
-import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
-import EpisodeWardrobeGameplay from '../components/EpisodeWardrobeGameplay';
-import EpisodeTodoList from '../components/Episodes/EpisodeTodoList';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
-import EpisodeScenesTab from '../components/Episodes/EpisodeScenesTab';
-import PhonePreviewMode from '../components/PhonePreviewMode';
+// Lazy-loaded tab bodies — each becomes its own JS chunk that's only
+// fetched when the user clicks into the tab. PhonePreviewMode is lazy
+// because the player overlay only mounts when "Play on Phone" is clicked.
+const EpisodeAssetsTab = lazy(() => import('../components/Episodes/EpisodeAssetsTab'));
+const EpisodePhoneMissionsTab = lazy(() => import('../components/Episodes/EpisodePhoneMissionsTab'));
+const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
+const EpisodeDistributionTab = lazy(() => import('../components/Episodes/EpisodeDistributionTab'));
+const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobeGameplay'));
+const EpisodeTodoList = lazy(() => import('../components/Episodes/EpisodeTodoList'));
+const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenesTab'));
+const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import './EpisodeDetail.css';
@@ -644,8 +651,11 @@ const EpisodeDetail = () => {
           );
         })()}
 
-        {/* Content Area */}
+        {/* Content Area — Suspense catches any lazy-loaded tab body that
+            hasn't been fetched yet. Fallback matches the existing tab
+            transition spinner so the swap feels intentional, not janky. */}
         <div className="ed-content">
+        <Suspense fallback={<div className="ed-loading"><div className="ed-spinner" /></div>}>
         {/* Overview Tab */}
         {tabKey === 'overview' && (
           <EpisodeOverviewTab
@@ -959,6 +969,7 @@ const EpisodeDetail = () => {
             </div>
           );
         })()}
+        </Suspense>
       </div>
 
       {/* Scene Library Picker Modal */}
@@ -970,21 +981,26 @@ const EpisodeDetail = () => {
         episodeId={episodeId}
       />
 
-      {/* ── Play on Phone overlay — state owned by usePhonePlayback ─────── */}
+      {/* ── Play on Phone overlay — state owned by usePhonePlayback. The
+            preview component is lazy-loaded; Suspense renders nothing while
+            the chunk arrives so the modal just appears (no janky fallback
+            since it's already an overlay on top of the page). ─────────── */}
       {phone.isPlaying && phone.overlays.length > 0 && (
-        <PhonePreviewMode
-          screens={phone.overlays}
-          initialScreen={
-            phone.playthrough.state?.last_screen_id
-              ? phone.overlays.find(s => s.id === phone.playthrough.state.last_screen_id)
-              : phone.overlays.find(s => s.is_home) || phone.overlays[0]
-          }
-          globalFit={phone.globalFit}
-          phoneSkin={phone.skin}
-          playthrough={phone.playthrough}
-          missions={phone.missions}
-          onClose={phone.stop}
-        />
+        <Suspense fallback={null}>
+          <PhonePreviewMode
+            screens={phone.overlays}
+            initialScreen={
+              phone.playthrough.state?.last_screen_id
+                ? phone.overlays.find(s => s.id === phone.playthrough.state.last_screen_id)
+                : phone.overlays.find(s => s.is_home) || phone.overlays[0]
+            }
+            globalFit={phone.globalFit}
+            phoneSkin={phone.skin}
+            playthrough={phone.playthrough}
+            missions={phone.missions}
+            onClose={phone.stop}
+          />
+        </Suspense>
       )}
 
       {/* End-of-show next-event suggestions overlay. Auto-opens once per
