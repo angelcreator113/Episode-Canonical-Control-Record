@@ -67,6 +67,14 @@ module.exports = (sequelize) => {
     invitation_asset_id: { type: DataTypes.UUID, allowNull: true },
     // invitation_details — migration 20260709 (may not exist)
 
+    // ── Feed Origin ──
+    // FK to social_profiles when this event was spawned via
+    // POST /world/:showId/events/from-profile. Mirrors the value buried in
+    // canon_consequences.automation.host_profile_id but is queryable, so
+    // joins, dashboards, and downstream services don't have to extract from
+    // JSONB. Migration 20260807; nullable for events created any other way.
+    source_profile_id: { type: DataTypes.INTEGER, allowNull: true },
+
     // ── Scoring ──
     prestige: {
       type: DataTypes.INTEGER,
@@ -276,6 +284,14 @@ module.exports = (sequelize) => {
       WorldEvent.belongsTo(models.Episode, {
         foreignKey: 'used_in_episode_id',
         as: 'usedInEpisode',
+      });
+    }
+    // Source feed profile — durable FK alongside the legacy JSONB copy in
+    // canon_consequences.automation.host_profile_id (migration 20260807).
+    if (models.SocialProfile) {
+      WorldEvent.belongsTo(models.SocialProfile, {
+        foreignKey: 'source_profile_id',
+        as: 'sourceProfile',
       });
     }
     // Source calendar event — source_calendar_event_id may not exist (migration 20260711)
