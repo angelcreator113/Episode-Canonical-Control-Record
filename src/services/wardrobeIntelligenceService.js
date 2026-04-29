@@ -179,6 +179,54 @@ function evaluateEraConsistency(items) {
 }
 
 /**
+ * evaluateCharacterMoodFit — same outfit, different headspace, different
+ * score. Reads character_state.stress and character_state.reputation and
+ * modulates the outfit signal:
+ *
+ *   - High stress wearing a confidence outfit → relief delta (+4)
+ *   - High stress wearing a tense/anxious outfit → compounded penalty (-3)
+ *   - Low rep wearing a strongly overdressed outfit → "trying too hard"
+ *     overcompensation penalty (-3)
+ *   - Low rep wearing tier-matched outfit → authenticity boost (+2)
+ *   - High rep wearing underdressed outfit → reputation expects more (-4)
+ *
+ * Returns null when characterState isn't available (UI calls without it
+ * to avoid extra DB hops). Without this, the same dress at the same gala
+ * always scored the same regardless of Lala's headspace — the wardrobe
+ * was context-blind to her actual state.
+ *
+ * tier_gap is the same metric scoreOutfitForEvent already computes (avg
+ * outfit tier minus expected event tier).
+ */
+function evaluateCharacterMoodFit(tierGap, narrativeMood, characterState) {
+  if (!characterState) return null;
+  const stress = parseInt(characterState.stress, 10) || 0;
+  const reputation = parseInt(characterState.reputation, 10) || 0;
+
+  // Stress relief from a confident outfit
+  if (stress >= 7 && narrativeMood === 'confidence') {
+    return { type: 'mood_relief', text: 'Stressed Lala in a confidence look — the outfit is doing the work', narrative: 'stress_relief', delta: 4 };
+  }
+  // Stress compounded by an anxious outfit
+  if (stress >= 7 && (narrativeMood === 'anxiety' || narrativeMood === 'tension')) {
+    return { type: 'mood_compound', text: 'Already stressed and the outfit reads anxious — the room will feel it', narrative: 'compound_stress', delta: -3 };
+  }
+  // Low-rep character overdressed = trying too hard
+  if (reputation <= 2 && tierGap > 1) {
+    return { type: 'overcompensation', text: 'Reaching for a tier she hasn\'t earned yet — reads as trying too hard', narrative: 'overcompensation', delta: -3 };
+  }
+  // Low-rep character tier-matched = knowing your place, authentic
+  if (reputation <= 2 && Math.abs(tierGap) <= 0.5) {
+    return { type: 'authentic_fit', text: 'Dressing for her current tier, not chasing — reads authentic', narrative: 'authenticity', delta: 2 };
+  }
+  // High-rep character underdressed = reputation expects more
+  if (reputation >= 7 && tierGap < -1) {
+    return { type: 'rep_underdressed', text: 'Her reputation precedes her — this look feels beneath her now', narrative: 'rep_drag', delta: -4 };
+  }
+  return null;
+}
+
+/**
  * Score a single slot against an event. Returns { match, status, reason } where
  * match is 0–100 and status is one of: 'empty' (nothing in the slot), 'low'
  * (<45), 'ok' (45–74), 'good' (75+). The reason is a short string the UI can
@@ -370,7 +418,7 @@ function scorePieceForEvent(item, event) {
   };
 }
 
-function scoreOutfitForEvent(wardrobeItems, event) {
+function scoreOutfitForEvent(wardrobeItems, event, characterState = null) {
   if (!wardrobeItems?.length || !event) return null;
 
   const eventPrestige = event.prestige || 5;
@@ -432,15 +480,20 @@ function scoreOutfitForEvent(wardrobeItems, event) {
   // Layer color/occasion/season/era checks on top of the tier-gap score.
   // Each helper returns either null or { type, text, narrative, delta }; we
   // push the signal onto the stack and apply its delta to matchScore.
+  // Compute provisional narrative_mood from tier gap so the mood-fit
+  // helper can compare against character headspace. Mood is finalized
+  // below after all secondary signals are in.
+  const provisionalMood = tierGap < -1 ? 'anxiety' : tierGap > 1 ? 'overcompensation' : Math.abs(tierGap) <= 0.5 ? 'confidence' : 'tension';
   for (const sig of [
     evaluateColorHarmony(wardrobeItems),
     evaluateOccasionPrecision(wardrobeItems, event),
     evaluateSeasonMatch(wardrobeItems, event),
     evaluateEraConsistency(wardrobeItems),
+    evaluateCharacterMoodFit(tierGap, provisionalMood, characterState),
   ]) {
     if (sig) {
       secondaryDelta += sig.delta || 0;
-      signals.push({ type: sig.type, text: sig.text, narrative: sig.narrative });
+      signals.push({ type: sig.type, text: sig.text, narrative: sig.narrative, delta: sig.delta });
     }
   }
 
