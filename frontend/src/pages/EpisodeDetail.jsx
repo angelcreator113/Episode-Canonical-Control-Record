@@ -5,6 +5,7 @@ import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
 import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
+import EpisodeBriefTab from '../components/Episodes/EpisodeBriefTab';
 import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
 import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
 import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
@@ -70,9 +71,10 @@ const EpisodeDetail = () => {
     }
   }, [episode]);
 
-  // Tab structure: 4 main tabs with sub-tabs
+  // Tab structure: 5 main tabs with sub-tabs
   const EP_TABS = [
     { key: 'overview', icon: '📋', label: 'Overview' },
+    { key: 'brief', icon: '✨', label: 'Brief' },
     { key: 'scripts', icon: '📝', label: 'Script' },
     { key: 'production', icon: '🎬', label: 'Production', subs: [
       { key: 'assets', label: 'Assets' },
@@ -745,6 +747,12 @@ const EpisodeDetail = () => {
             show={episode.show}
             onUpdate={handleUpdateEpisode}
           />
+        )}
+
+        {/* Brief Tab — surfaces the EpisodeBrief snapshot (creative intent
+            + frozen event context that EpisodeOverviewTab doesn't show). */}
+        {activeTab === 'brief' && (
+          <EpisodeBriefTab episode={episode} />
         )}
 
         {/* Scripts Tab */}
