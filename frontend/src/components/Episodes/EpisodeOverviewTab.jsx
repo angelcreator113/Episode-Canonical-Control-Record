@@ -737,6 +737,38 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         </SectionBand>
       )}
 
+      {/* STAKES band — what's at risk this episode? Career context (tier,
+          milestone, success unlock, fail consequence) + difficulty knobs
+          (strictness, deadline). Snapshot from the source event — not
+          editable here; change them on the event itself. */}
+      {hasStakesBand && (
+        <SectionBand title="Stakes">
+          <div style={{ display: 'grid', gridTemplateColumns: hasCareerCtx && hasEventDiff ? '1fr 1fr' : '1fr', gap: 12 }}>
+            {hasCareerCtx && (
+              <div style={S.card}>
+                <span style={S.label}>💼 Career Context</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
+                  {careerCtx.career_tier && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Tier</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_tier}</div></div>}
+                  {careerCtx.career_milestone && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Milestone</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_milestone}</div></div>}
+                  {careerCtx.success_unlock && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Success unlock</span><div style={{ fontSize: 11, color: '#16a34a', lineHeight: 1.5 }}>{careerCtx.success_unlock}</div></div>}
+                  {careerCtx.fail_consequence && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Fail consequence</span><div style={{ fontSize: 11, color: '#dc2626', lineHeight: 1.5 }}>{careerCtx.fail_consequence}</div></div>}
+                </div>
+              </div>
+            )}
+            {hasEventDiff && (
+              <div style={S.card}>
+                <span style={S.label}>⚡ Event Difficulty</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 4 }}>
+                  {eventDiff.strictness != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Strictness</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.strictness}/10</div></div>}
+                  {eventDiff.deadline_type && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Deadline</span><div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{eventDiff.deadline_type}</div></div>}
+                  {eventDiff.deadline_minutes != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Minutes</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.deadline_minutes}</div></div>}
+                </div>
+              </div>
+            )}
+          </div>
+        </SectionBand>
+      )}
+
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={() => navigate(`/episodes/${episode.id}/script-writer`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#B8962E', border: 'none', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✦ Script Writer</button>
