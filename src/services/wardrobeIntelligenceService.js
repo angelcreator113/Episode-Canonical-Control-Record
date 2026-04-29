@@ -443,6 +443,42 @@ const ARC_TIER_CAPS = {
  * Returns null when arcStage isn't provided (UI calls without it to
  * avoid a separate DB lookup).
  */
+/**
+ * evaluateRarityBonus — outfit pieces with non-trivial unlock gates
+ * (brand_exclusive, season_drop, reputation, coin) feel rarer than
+ * generic ownable pieces. The lock_type field exists on every wardrobe
+ * row but no scorer ever read it. Now hitting the runway in a
+ * brand-exclusive piece adds narrative weight ('she got the invite-only
+ * version'); pulling out a season_drop reads as cultural currency.
+ *
+ * Counts pieces with lock_type ∈ {brand_exclusive, season_drop,
+ * reputation, coin}. Trivial 'none' / null pieces don't count.
+ *
+ *   ≥1 brand_exclusive or season_drop → +5 (rarity surfaces)
+ *   ≥2 of these                       → +8 (curated, intentional)
+ *   ≥1 reputation/coin gate           → +2 (earned)
+ *
+ * Caps at +8. Returns null when nothing qualifies so the signal stays
+ * out of the breakdown for ordinary outfits.
+ */
+function evaluateRarityBonus(items) {
+  if (!items?.length) return null;
+  const elite = items.filter(i => ['brand_exclusive', 'season_drop'].includes(i.lock_type));
+  const earned = items.filter(i => ['reputation', 'coin'].includes(i.lock_type));
+  if (elite.length === 0 && earned.length === 0) return null;
+  if (elite.length >= 2) {
+    const tags = [...new Set(elite.map(i => i.lock_type))].join('+');
+    return { type: 'rarity_curated', text: `Multiple ${tags} pieces — outfit reads as curated, not borrowed`, narrative: 'cultural_currency', delta: 8 };
+  }
+  if (elite.length >= 1) {
+    return { type: 'rarity_signature', text: `Wearing ${elite[0].lock_type.replace('_', ' ')} — rarity reads`, narrative: 'cultural_currency', delta: 5 };
+  }
+  if (earned.length >= 1) {
+    return { type: 'rarity_earned', text: `${earned.length} earned-unlock piece${earned.length > 1 ? 's' : ''} — feels worked-for`, narrative: 'authenticity', delta: 2 };
+  }
+  return null;
+}
+
 function evaluateAuthenticityFit(avgTier, arcStage) {
   if (!arcStage) return null;
   const cap = ARC_TIER_CAPS[arcStage];
@@ -538,6 +574,7 @@ function scoreOutfitForEvent(wardrobeItems, event, ctx = {}) {
     evaluateEraConsistency(wardrobeItems),
     evaluateCharacterMoodFit(tierGap, provisionalMood, characterState),
     evaluateAuthenticityFit(avgTier, arcStage),
+    evaluateRarityBonus(wardrobeItems),
   ]) {
     if (sig) {
       secondaryDelta += sig.delta || 0;
