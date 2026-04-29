@@ -1681,7 +1681,7 @@ router.delete('/world/:showId/events/:eventId/invitation/:assetId', optionalAuth
 // Auto-generate a complete episode from an event
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     // Optional: when draft_script is true, also kick the script skeleton
