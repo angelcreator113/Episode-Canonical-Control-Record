@@ -201,8 +201,10 @@ async function completeEpisode(episodeId, showId, sequelize) {
         strictness: event.strictness, event_type: event.event_type,
       } : {};
       const outfitResult = await getOutfitScore(models, episodeId, eventContext);
-      outfitMatch = Math.round((outfitResult?.score || 0) * 0.25);
-      accessoryMatch = Math.round(((outfitResult?.aesthetic_synergy || 0) + (outfitResult?.coverage || 0)) * 0.5);
+      // Outfit match scaled to the 0-35 cap (formerly 0-25). Score is 0-100
+      // from scoreOutfitForEvent; multiply by 0.35 to use the full new range.
+      outfitMatch = Math.round((outfitResult?.score || 0) * 0.35);
+      accessoryMatch = Math.round(((outfitResult?.breakdown?.aesthetic || 0) + (outfitResult?.breakdown?.coverage || 0)) * 0.5);
     }
   } catch { /* wardrobe scoring not available */ }
 
