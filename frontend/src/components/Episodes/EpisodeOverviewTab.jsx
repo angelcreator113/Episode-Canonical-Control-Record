@@ -292,9 +292,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   })();
 
   // Financials
-  const income = parseFloat(episode.total_income) || 0;
-  const expenses = parseFloat(episode.total_expenses) || 0;
-  const net = income - expenses;
+  // P&L derivation moved below the ledger derivations so it can prefer
+  // the live ledger sums over the cached columns. See block after
+  // hasFinancials.
 
   // ── Brief snapshot derivations ────────────────────────────────────────
   // Read-only objects come from the source event at generation time.
@@ -338,6 +338,22 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const ledgerExpenseTotal = ledgerExpense.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
   const ledgerNet = ledgerIncomeTotal - ledgerExpenseTotal;
   const hasFinancials = ledger.transactions.length > 0;
+  // Episode P&L — when the episode has real ledger transactions, prefer
+  // those (post-completion truth). Otherwise fall back to the columns
+  // populated at generation time, which are predictions until the
+  // creator hits Complete and finalizeEpisodeFinancials runs. The
+  // distinction matters: the columns can show +500 from a paid event
+  // that hasn't actually been credited yet.
+  const isAccepted = episode.evaluation_status === 'accepted';
+  const colIncome = parseFloat(episode.total_income) || 0;
+  const colExpenses = parseFloat(episode.total_expenses) || 0;
+  const income = hasFinancials ? ledgerIncomeTotal : colIncome;
+  const expenses = hasFinancials ? ledgerExpenseTotal : colExpenses;
+  const net = income - expenses;
+  // Show an EST pill when displaying predictions (no ledger rows yet
+  // AND not accepted). When accepted but no ledger rows (rare edge),
+  // the columns ARE the truth from the prior finalize, so no badge.
+  const netIsPrediction = !hasFinancials && !isAccepted && (income !== 0 || expenses !== 0);
   const hasNarChain = Object.keys(narChain).length > 0;
   const hasSourceBand = hasFeedOrigin || hasNarChain;
   const hasStakesBand = hasCareerCtx || hasEventDiff || hasRewards || hasFinancials;
@@ -425,7 +441,19 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Episode</div><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>#{episode.episode_number || '?'}</div></div>
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Prestige</div><div style={{ fontSize: 14, fontWeight: 700, color: '#B8962E' }}>{primaryEvent?.prestige || '—'}/10</div></div>
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Outfit</div><div style={{ fontSize: 14, fontWeight: 700, color: '#ec4899' }}>{outfitPieces.length || '—'} pcs</div></div>
-        <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Net P&L</div><div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? '#16a34a' : net < 0 ? '#dc2626' : '#94a3b8' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div></div>
+        <div style={S.card}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>Net P&L</span>
+            {/* EST pill: predictions from generator-time columns, not yet
+                committed to the ledger. Disappears once the episode is
+                completed and finalizeEpisodeFinancials writes real
+                transactions. Tooltip nudges creators toward Complete. */}
+            {netIsPrediction && (
+              <span title="Estimate from event metadata — values become real after Complete Episode runs the financial pipeline." style={{ padding: '0 4px', borderRadius: 3, fontSize: 8, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: '#fefce8', color: '#a16207', border: '1px solid #fde68a' }}>EST</span>
+            )}
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? '#16a34a' : net < 0 ? '#dc2626' : '#94a3b8' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div>
+        </div>
       </div>
 
       {/* IDENTITY band — what is this episode? Creative intent + allowed
