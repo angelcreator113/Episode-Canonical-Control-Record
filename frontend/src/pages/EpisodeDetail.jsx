@@ -7,6 +7,7 @@ import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
 import EpisodeBriefTab from '../components/Episodes/EpisodeBriefTab';
 import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggestionsOverlay';
+import EpisodePhoneMissionsTab from '../components/Episodes/EpisodePhoneMissionsTab';
 import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
 import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
 import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
@@ -81,6 +82,7 @@ const EpisodeDetail = () => {
       { key: 'assets', label: 'Assets' },
       { key: 'scenes', label: 'Scenes' },
       { key: 'wardrobe', label: 'Wardrobe' },
+      { key: 'phone', label: 'Phone' },
       { key: 'checklist', label: 'Checklist' },
     ]},
     { key: 'results', icon: '👑', label: 'Results', subs: [
@@ -96,6 +98,7 @@ const EpisodeDetail = () => {
       'assets': ['production', 'assets'],
       'scenes': ['production', 'scenes'],
       'wardrobe': ['production', 'wardrobe'],
+      'phone': ['production', 'phone'],
       'checklist': ['production', 'checklist'],
       'production': ['production', 'assets'],
       'evaluation': ['results', 'evaluation'],
@@ -932,6 +935,13 @@ const EpisodeDetail = () => {
         {/* Distribution Tab */}
         {activeTab === 'results' && epSubTab === 'distribution' && (
           <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
+        )}
+
+        {/* Phone missions sub-tab — episode-scoped view of show-wide +
+            episode-specific missions, with inline active toggle and a jump
+            into the existing MissionEditor for full CRUD. */}
+        {activeTab === 'production' && epSubTab === 'phone' && (
+          <EpisodePhoneMissionsTab episode={episode} />
         )}
 
         {/* Production Tab */}
