@@ -1883,7 +1883,7 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
 // episode first. Useful when the event has been edited (new outfit,
 // stakes, etc.) and the creator wants the episode to reflect those
 // changes without losing their place.
-router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/:eventId/regenerate-episode', optionalAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
