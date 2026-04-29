@@ -2084,6 +2084,7 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
       event_type: 'invite',
       host: p.display_name || p.handle,
       host_brand: hostBrand,
+      source_profile_id: p.id,
       prestige,
       cost_coins: costCoins,
       strictness,
@@ -3694,6 +3695,202 @@ router.post('/world/:showId/events/:eventId/generate-lists', optionalAuth, async
     });
   } catch (err) {
     console.error('[WorldEvents] Generate lists error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── NEXT-EVENT SUGGESTIONS ────────────────────────────────────────────────────
+//
+// State-aware recommendations for what episode to make next. Reads the live
+// character_state (coins, reputation, stress, brand_trust, influence), looks
+// at the previous episode's brief for chain seeds + brand continuity, and
+// scores every unused event with a deterministic rubric. No AI in the loop —
+// the rubric is the algorithm, every score has bullet-point justifications,
+// and the creator still has to pick.
+//
+// Trigger surface: the "end of show" overlay on EpisodeDetail when the
+// episode is evaluated. See NextEventSuggestionsOverlay.jsx for the consumer.
+//
+// The thresholds 250 (pressure) and 100 (critical) are deliberate product
+// constants set with the showrunner; tweak in one place here if those move.
+const COINS_PRESSURE = 250;
+const COINS_CRITICAL = 100;
+
+router.get('/world/:showId/events/next-suggestions', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { from_episode_id: fromEpisodeId } = req.query;
+    const models = require('../models');
+    const { sequelize, WorldEvent, EpisodeBrief, Episode } = models;
+
+    // ── 1. Live character state ──
+    // character_key is 'justawoman' (matches episodeCompletionService:176).
+    // Note: careerPipelineService.getAccessibleCareerTier queries 'lala' as
+    // of writing, which is a pre-existing bug — don't reuse that helper here.
+    const [stateRows] = await sequelize.query(
+      `SELECT coins, reputation, brand_trust, influence, stress
+       FROM character_state
+       WHERE show_id = :showId AND character_key = 'justawoman'
+       LIMIT 1`,
+      { replacements: { showId } }
+    );
+    const state = stateRows?.[0] || { coins: 500, reputation: 1, brand_trust: 1, influence: 1, stress: 0 };
+
+    // Reputation → career tier gate. Tier 1: rep 0-2, Tier 2: rep 3-4, etc.
+    const careerTier = Math.min(5, Math.floor((state.reputation || 0) / 2) + 1);
+
+    // ── 2. Previous episode context for chain + brand continuity ──
+    let prevBrief = null;
+    let prevEvent = null;
+    if (fromEpisodeId) {
+      prevBrief = await EpisodeBrief.findOne({ where: { episode_id: fromEpisodeId } });
+      // The event the previous episode came from — needed for brand-continuity
+      // bonus and direct chain matching (parent_event_id pointing here).
+      const [prevEventRows] = await sequelize.query(
+        `SELECT id, host_brand, source_profile_id FROM world_events
+         WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL LIMIT 1`,
+        { replacements: { episodeId: fromEpisodeId } }
+      );
+      prevEvent = prevEventRows?.[0] || null;
+    }
+    const prevSeeds = Array.isArray(prevBrief?.narrative_chain?.seeds_future_events)
+      ? prevBrief.narrative_chain.seeds_future_events
+      : [];
+    const prevHostBrand = prevEvent?.host_brand || null;
+    const prevEventId = prevEvent?.id || null;
+
+    // ── 3. Candidate events ──
+    // Only events that are draft/ready and haven't been used in another
+    // episode yet. We don't filter by career_tier here — we score it instead,
+    // so creators can see "this is locked, you'd need higher rep."
+    const candidates = await WorldEvent.findAll({
+      where: {
+        show_id: showId,
+        status: ['draft', 'ready'],
+        used_in_episode_id: null,
+        deleted_at: null,
+      },
+      limit: 50,
+    });
+
+    // ── 4. Score each candidate ──
+    const scored = candidates.map(ev => {
+      const e = ev.toJSON();
+      let score = 0;
+      const reasons = [];
+
+      // Affordability check first — it's the most common dealbreaker.
+      const affordable = (e.cost_coins || 0) <= (state.coins || 0);
+      if (!affordable) {
+        score -= 50;
+        reasons.push({ kind: 'block', text: `Can't afford (cost ${e.cost_coins}, have ${state.coins})` });
+      }
+
+      // Financial pressure — paid events get a graduated bonus when Lala's
+      // running low. The two thresholds are set above as product constants.
+      const payment = parseInt(e.payment_amount, 10) || 0;
+      const isPaid = !!e.is_paid && payment > 0;
+      if (isPaid) {
+        if (state.coins < COINS_CRITICAL) {
+          score += 30;
+          reasons.push({ kind: 'boost', text: `Lala is broke — paid event (+${payment} coins)` });
+        } else if (state.coins < COINS_PRESSURE) {
+          // Linear ramp from +25 at coins=100 down to +5 at coins=250
+          const ramp = Math.round(25 - ((state.coins - COINS_CRITICAL) / (COINS_PRESSURE - COINS_CRITICAL)) * 20);
+          score += ramp;
+          reasons.push({ kind: 'boost', text: `Lala needs coins (+${payment})` });
+        } else {
+          score += 5;
+        }
+      }
+
+      // Stress relief: high stress → bias toward easier (low-strictness) events.
+      if ((state.stress || 0) >= 6 && (e.strictness || 5) <= 4) {
+        score += 10;
+        reasons.push({ kind: 'boost', text: 'Low-pressure recovery (Lala is stressed)' });
+      }
+
+      // Direct chain continuation — strongest signal.
+      if (prevEventId && e.parent_event_id === prevEventId) {
+        score += 30;
+        reasons.push({ kind: 'boost', text: 'Direct chain continuation' });
+      } else if (prevSeeds.length > 0) {
+        // Soft seed match: if any seed string mentions this event's name or
+        // type, count it as planted by the previous episode.
+        const evHaystack = `${e.name || ''} ${e.event_type || ''} ${e.career_milestone || ''}`.toLowerCase();
+        const seedHit = prevSeeds.some(seed => {
+          const s = (typeof seed === 'string' ? seed : JSON.stringify(seed)).toLowerCase();
+          return s.length > 4 && evHaystack.includes(s.slice(0, 20));
+        });
+        if (seedHit) {
+          score += 18;
+          reasons.push({ kind: 'boost', text: 'Seeded by last episode' });
+        }
+      }
+
+      // Reputation alignment — closer prestige to current rep is better.
+      const prestigeDelta = Math.abs((e.prestige || 5) - (state.reputation || 0));
+      score += Math.max(0, 10 - prestigeDelta);
+
+      // Brand continuity — same host brand as the prior episode.
+      if (prevHostBrand && e.host_brand === prevHostBrand) {
+        score += 8;
+        reasons.push({ kind: 'boost', text: `Brand continuity (${e.host_brand})` });
+      }
+
+      // Career tier gate — penalise if locked, but still surface it so the
+      // creator sees what's coming.
+      if (e.career_tier && e.career_tier > careerTier) {
+        score -= 20;
+        reasons.push({ kind: 'block', text: `Career tier locked (need tier ${e.career_tier}, currently ${careerTier})` });
+      }
+
+      return {
+        event: {
+          id: e.id,
+          name: e.name,
+          event_type: e.event_type,
+          host: e.host,
+          host_brand: e.host_brand,
+          prestige: e.prestige,
+          cost_coins: e.cost_coins,
+          payment_amount: e.payment_amount,
+          is_paid: e.is_paid,
+          strictness: e.strictness,
+          career_tier: e.career_tier,
+          career_milestone: e.career_milestone,
+          source_profile_id: e.source_profile_id,
+        },
+        score,
+        affordable,
+        reasons,
+      };
+    });
+
+    // ── 5. Top 5 by score ──
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.slice(0, 5);
+
+    return res.json({
+      data: {
+        state: {
+          coins: state.coins,
+          reputation: state.reputation,
+          brand_trust: state.brand_trust,
+          influence: state.influence,
+          stress: state.stress,
+          career_tier: careerTier,
+        },
+        thresholds: {
+          coins_pressure: COINS_PRESSURE,
+          coins_critical: COINS_CRITICAL,
+        },
+        suggestions: top,
+        candidate_count: candidates.length,
+      },
+    });
+  } catch (err) {
+    console.error('[WorldEvents] Next suggestions error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
