@@ -663,6 +663,80 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       <TimelinePlacementsSection episodeId={episode.id} />
       </SectionBand>
 
+      {/* SOURCE band — where this episode came from. Feed Origin (when the
+          source event was created from a SocialProfile) + Narrative Chain
+          (parent event, seeds for future events). Both render only when
+          their data exists, and the band itself only renders when at
+          least one is present. */}
+      {hasSourceBand && (
+        <SectionBand title="Source">
+          {hasFeedOrigin && (
+            <div style={S.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #f1f5f9' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>🌐 {automation.host_display_name || automation.host_handle || 'Unknown profile'}</div>
+                  {automation.host_handle && <div style={{ fontSize: 10, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>@{String(automation.host_handle).replace(/^@/, '')}</div>}
+                  {automation.content_category && <div style={{ marginTop: 3, display: 'inline-block', padding: '1px 6px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{automation.content_category}</div>}
+                </div>
+                <Link to="/feed" style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 10, fontWeight: 600, textDecoration: 'none' }}>Feed →</Link>
+              </div>
+              {(automation.follow_motivation || automation.follow_emotion || automation.follow_trigger || automation.event_excitement != null) && (
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ ...S.label, marginBottom: 4 }}>Why this hooked Lala</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, fontSize: 11 }}>
+                    {automation.follow_motivation && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Motivation</span><div style={{ color: '#1a1a2e' }}>{automation.follow_motivation}</div></div>}
+                    {automation.follow_emotion && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Emotion</span><div style={{ color: '#1a1a2e' }}>{automation.follow_emotion}</div></div>}
+                    {automation.follow_trigger && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Trigger</span><div style={{ color: '#1a1a2e' }}>{automation.follow_trigger}</div></div>}
+                    {automation.event_excitement != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Excitement</span><div style={{ color: '#B8962E', fontWeight: 700 }}>{automation.event_excitement}/10</div></div>}
+                  </div>
+                </div>
+              )}
+              {(automation.lifestyle_claim || automation.lifestyle_reality || automation.lifestyle_gap) && (
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ ...S.label, marginBottom: 4 }}>Lifestyle gap</label>
+                  {automation.lifestyle_claim && <div style={{ fontSize: 11, color: '#475569', marginBottom: 3 }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Claim</span>{automation.lifestyle_claim}</div>}
+                  {automation.lifestyle_reality && <div style={{ fontSize: 11, color: '#475569', marginBottom: 3 }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Reality</span>{automation.lifestyle_reality}</div>}
+                  {automation.lifestyle_gap && <div style={{ fontSize: 11, color: '#dc2626', fontStyle: 'italic' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6, fontStyle: 'normal' }}>Gap</span>{automation.lifestyle_gap}</div>}
+                </div>
+              )}
+              {(automation.host_brand || automation.beauty_factor) && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 11 }}>
+                  {automation.host_brand && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Brand</span><div style={{ color: '#1a1a2e', fontWeight: 600 }}>{automation.host_brand}</div></div>}
+                  {automation.beauty_factor && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Beauty hook</span><div style={{ color: '#1a1a2e' }}>{automation.beauty_factor}{automation.beauty_description ? ` — ${automation.beauty_description}` : ''}</div></div>}
+                </div>
+              )}
+            </div>
+          )}
+          {hasNarChain && (
+            <div style={S.card}>
+              <span style={S.label}>🔗 Narrative Chain</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: seeds.length || narChain.chain_reason ? 10 : 0, marginTop: 4 }}>
+                {narChain.chain_position != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Chain position</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{narChain.chain_position}</div></div>}
+                {narChain.parent_event_id && (
+                  <div>
+                    <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Parent event</span>
+                    {parentEvent ? (
+                      parentEvent.used_in_episode_id
+                        ? <Link to={`/episodes/${parentEvent.used_in_episode_id}`} style={{ display: 'block', fontSize: 12, color: '#B8962E', fontWeight: 600 }}>{parentEvent.name} →</Link>
+                        : <div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{parentEvent.name} <span style={{ fontSize: 9, color: '#94a3b8' }}>(no episode yet)</span></div>
+                    ) : <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>{String(narChain.parent_event_id).slice(0, 8)}…</div>}
+                  </div>
+                )}
+              </div>
+              {narChain.chain_reason && <div style={{ marginBottom: seeds.length ? 10 : 0 }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Chain reason</span><div style={{ fontSize: 11, color: '#475569', lineHeight: 1.5, fontStyle: 'italic' }}>{narChain.chain_reason}</div></div>}
+              {seeds.length > 0 && (
+                <div>
+                  <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Seeds for future events</span>
+                  <ul style={{ margin: '4px 0 0', padding: '0 0 0 18px', fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
+                    {seeds.map((seed, i) => <li key={i}>{typeof seed === 'string' ? seed : JSON.stringify(seed)}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </SectionBand>
+      )}
+
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={() => navigate(`/episodes/${episode.id}/script-writer`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#B8962E', border: 'none', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✦ Script Writer</button>
