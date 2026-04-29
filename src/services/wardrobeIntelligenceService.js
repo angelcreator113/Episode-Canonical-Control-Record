@@ -418,8 +418,55 @@ function scorePieceForEvent(item, event) {
   };
 }
 
-function scoreOutfitForEvent(wardrobeItems, event, characterState = null) {
+/**
+ * Tier value lookup used by both the outfit scorer and the authenticity
+ * gate (kept here so the gate can use the same scale without re-deriving).
+ * Defined inline as a const since TIER_VALUES is already exported.
+ */
+const ARC_TIER_CAPS = {
+  // Average outfit tier the arc stage can authentically pull off without
+  // reading as overreach. Above the cap → "trying too hard" penalty.
+  foundation: 1.5,  // basic + occasional mid
+  building: 2.2,    // mid solid, occasional luxury
+  glow_up: 2.8,     // luxury comfortable, occasional elite
+  prime: 4.0,       // no ceiling
+};
+
+/**
+ * evaluateAuthenticityFit — penalize outfits that exceed what the
+ * character's wardrobe arc stage can support. Foundation Lala in an
+ * all-elite gala outfit reads as overreach; prime Lala in the same
+ * outfit reads as her standard. Without this, low-arc characters could
+ * borrow/rent their way to perfect scores and never feel like they
+ * earned the tier.
+ *
+ * Returns null when arcStage isn't provided (UI calls without it to
+ * avoid a separate DB lookup).
+ */
+function evaluateAuthenticityFit(avgTier, arcStage) {
+  if (!arcStage) return null;
+  const cap = ARC_TIER_CAPS[arcStage];
+  if (cap == null) return null;
+  const overreach = avgTier - cap;
+  if (overreach <= 0) return null;
+  if (overreach >= 1.5) {
+    return { type: 'arc_overreach_strong', text: `Wearing ${arcStage}+two-tiers above her arc — reads loud / borrowed / unearned`, narrative: 'overreach', delta: -6 };
+  }
+  if (overreach >= 0.8) {
+    return { type: 'arc_overreach', text: `One tier above what her ${arcStage} arc has earned — reads as stretching`, narrative: 'overreach', delta: -4 };
+  }
+  return { type: 'arc_stretch', text: `Slightly above her ${arcStage} arc — borderline authentic`, narrative: 'mild_stretch', delta: -2 };
+}
+
+function scoreOutfitForEvent(wardrobeItems, event, ctx = {}) {
   if (!wardrobeItems?.length || !event) return null;
+  // Backwards compat: previous signature accepted characterState as the
+  // 3rd positional arg. If a non-null non-object is passed, or an object
+  // with state-shaped keys but no `characterState` wrapper, treat it as
+  // the legacy characterState.
+  const characterState = ctx?.characterState
+    ?? (ctx && ('coins' in ctx || 'stress' in ctx || 'reputation' in ctx) ? ctx : null);
+  const arcStage = ctx?.arcStage || null;
 
   const eventPrestige = event.prestige || 5;
   const _eventType = event.event_type || 'invite';
@@ -490,6 +537,7 @@ function scoreOutfitForEvent(wardrobeItems, event, characterState = null) {
     evaluateSeasonMatch(wardrobeItems, event),
     evaluateEraConsistency(wardrobeItems),
     evaluateCharacterMoodFit(tierGap, provisionalMood, characterState),
+    evaluateAuthenticityFit(avgTier, arcStage),
   ]) {
     if (sig) {
       secondaryDelta += sig.delta || 0;

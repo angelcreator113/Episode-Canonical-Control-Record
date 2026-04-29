@@ -203,9 +203,17 @@ async function completeEpisode(episodeId, showId, sequelize) {
         season: event.season,
       } : {};
       // Pass characterState so the scorer can run evaluateCharacterMoodFit
-      // (stress + reputation modulate the outfit signal). Without this,
-      // wardrobe scoring is context-blind to Lala's actual headspace.
-      const outfitResult = await getOutfitScore(models, episodeId, eventContext, characterState);
+      // (stress + reputation modulate the outfit signal). Also pass the
+      // wardrobe arc stage so evaluateAuthenticityFit can penalize tier
+      // overreach (foundation Lala in elite outfit reads as unearned).
+      // Both lookups fail-open (null) so a missing arc/state doesn't block.
+      let arcStage = null;
+      try {
+        const { getWardrobeGrowthArc } = require('./wardrobeIntelligenceService');
+        const arc = await getWardrobeGrowthArc(showId, models);
+        arcStage = arc?.arc_stage || null;
+      } catch { /* no-op — authenticity signal just doesn't fire */ }
+      const outfitResult = await getOutfitScore(models, episodeId, eventContext, characterState, arcStage);
       // Outfit match scaled to the 0-35 cap (formerly 0-25). Score is 0-100
       // from scoreOutfitForEvent; multiply by 0.35 to use the full new range.
       outfitMatch = Math.round((outfitResult?.score || 0) * 0.35);
