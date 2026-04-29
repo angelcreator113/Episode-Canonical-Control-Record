@@ -300,9 +300,21 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const hasCareerCtx = Object.keys(careerCtx).length > 0;
   const hasEventDiff = Object.keys(eventDiff).length > 0;
   const hasEventMeta = Object.keys(eventMeta).length > 0;
+  // Rewards: prefer the live event (creator may have edited after generation)
+  // and fall back to the brief's snapshot. Either source has the same shape:
+  // { coins, reputation, brand_trust, influence, outcomes }.
+  const liveRewards = (linkedEvents[0] && linkedEvents[0].rewards) || null;
+  const rewardsRaw = liveRewards || eventMeta.rewards || {};
+  const rewards = (typeof rewardsRaw === 'string'
+    ? (() => { try { return JSON.parse(rewardsRaw); } catch { return {}; } })()
+    : rewardsRaw) || {};
+  const rewardOutcomes = Array.isArray(rewards.outcomes) ? rewards.outcomes : [];
+  const rewardStats = ['coins', 'reputation', 'brand_trust', 'influence']
+    .filter(k => (parseInt(rewards[k], 10) || 0) > 0);
+  const hasRewards = rewardStats.length > 0 || rewardOutcomes.length > 0;
   const hasNarChain = Object.keys(narChain).length > 0;
   const hasSourceBand = hasFeedOrigin || hasNarChain;
-  const hasStakesBand = hasCareerCtx || hasEventDiff;
+  const hasStakesBand = hasCareerCtx || hasEventDiff || hasRewards;
   const hasReferenceBand = hasCanonCons || beatOutline.length > 0 || hasEventMeta;
 
   const handleSave = async () => {
@@ -694,33 +706,84 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           milestone, success unlock, fail consequence) + difficulty knobs
           (strictness, deadline). Snapshot from the source event — not
           editable here; change them on the event itself. */}
-      {hasStakesBand && (
-        <SectionBand title="Stakes">
-          <div style={{ display: 'grid', gridTemplateColumns: hasCareerCtx && hasEventDiff ? '1fr 1fr' : '1fr', gap: 12 }}>
-            {hasCareerCtx && (
-              <div style={S.card}>
-                <span style={S.label}>💼 Career Context</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
-                  {careerCtx.career_tier && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Tier</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_tier}</div></div>}
-                  {careerCtx.career_milestone && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Milestone</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_milestone}</div></div>}
-                  {careerCtx.success_unlock && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Success unlock</span><div style={{ fontSize: 11, color: '#16a34a', lineHeight: 1.5 }}>{careerCtx.success_unlock}</div></div>}
-                  {careerCtx.fail_consequence && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Fail consequence</span><div style={{ fontSize: 11, color: '#dc2626', lineHeight: 1.5 }}>{careerCtx.fail_consequence}</div></div>}
+      {hasStakesBand && (() => {
+        // Layout: span the available columns evenly. 3 cards → three columns,
+        // 2 → two, 1 → full width. Keeps the band tidy regardless of which
+        // pieces of brief data exist on this episode.
+        const cardCount = (hasCareerCtx ? 1 : 0) + (hasEventDiff ? 1 : 0) + (hasRewards ? 1 : 0);
+        const gridCols = cardCount >= 3 ? 'repeat(3, 1fr)' : cardCount === 2 ? '1fr 1fr' : '1fr';
+        // Pending vs earned: read evaluation_json.tier_final to badge each
+        // reward. slay/pass = earned (matches episodeCompletionService gate),
+        // safe/fail = missed (rewards don't fire), undefined = pending.
+        const tier = evalData?.tier_final || null;
+        const rewardStatus = !tier ? 'pending' : (['slay', 'pass'].includes(tier) ? 'earned' : 'missed');
+        const statusCfg = {
+          pending: { label: 'PENDING', bg: '#fefce8', color: '#a16207', border: '#fde68a' },
+          earned: { label: 'EARNED', bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+          missed: { label: 'MISSED', bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+        }[rewardStatus];
+        const statIcons = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣' };
+        return (
+          <SectionBand title="Stakes">
+            <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 12 }}>
+              {hasCareerCtx && (
+                <div style={S.card}>
+                  <span style={S.label}>💼 Career Context</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
+                    {careerCtx.career_tier && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Tier</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_tier}</div></div>}
+                    {careerCtx.career_milestone && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Milestone</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_milestone}</div></div>}
+                    {careerCtx.success_unlock && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Success unlock</span><div style={{ fontSize: 11, color: '#16a34a', lineHeight: 1.5 }}>{careerCtx.success_unlock}</div></div>}
+                    {careerCtx.fail_consequence && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Fail consequence</span><div style={{ fontSize: 11, color: '#dc2626', lineHeight: 1.5 }}>{careerCtx.fail_consequence}</div></div>}
+                  </div>
                 </div>
-              </div>
-            )}
-            {hasEventDiff && (
-              <div style={S.card}>
-                <span style={S.label}>⚡ Event Difficulty</span>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 4 }}>
-                  {eventDiff.strictness != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Strictness</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.strictness}/10</div></div>}
-                  {eventDiff.deadline_type && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Deadline</span><div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{eventDiff.deadline_type}</div></div>}
-                  {eventDiff.deadline_minutes != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Minutes</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.deadline_minutes}</div></div>}
+              )}
+              {hasEventDiff && (
+                <div style={S.card}>
+                  <span style={S.label}>⚡ Event Difficulty</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 4 }}>
+                    {eventDiff.strictness != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Strictness</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.strictness}/10</div></div>}
+                    {eventDiff.deadline_type && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Deadline</span><div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{eventDiff.deadline_type}</div></div>}
+                    {eventDiff.deadline_minutes != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Minutes</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.deadline_minutes}</div></div>}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </SectionBand>
-      )}
+              )}
+              {hasRewards && (
+                <div style={S.card}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={S.label}>🏆 Rewards</span>
+                    <span
+                      title={
+                        rewardStatus === 'pending' ? 'Episode not evaluated yet — rewards will fire on slay/pass.' :
+                        rewardStatus === 'earned' ? 'Episode landed slay or pass — rewards applied.' :
+                        'Episode landed safe or fail — rewards did not fire.'
+                      }
+                      style={{ padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: statusCfg.bg, color: statusCfg.color, border: `1px solid ${statusCfg.border}` }}
+                    >{statusCfg.label}</span>
+                  </div>
+                  {rewardStats.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(rewardStats.length, 4)}, 1fr)`, gap: 8, marginTop: 4 }}>
+                      {rewardStats.map(k => (
+                        <div key={k}>
+                          <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>{statIcons[k]} {k.replace('_', ' ')}</span>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: rewardStatus === 'earned' ? '#16a34a' : rewardStatus === 'missed' ? '#94a3b8' : '#1a1a2e' }}>+{rewards[k]}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {rewardOutcomes.length > 0 && (
+                    <div style={{ marginTop: rewardStats.length ? 8 : 4 }}>
+                      <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Outcomes</span>
+                      <ul style={{ margin: '2px 0 0', padding: '0 0 0 16px', fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
+                        {rewardOutcomes.map((o, i) => <li key={i}>{o}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </SectionBand>
+        );
+      })()}
 
       {/* REFERENCE band — heavy snapshot data that creators rarely need
           but should be able to inspect. All collapsed by default; clicking
