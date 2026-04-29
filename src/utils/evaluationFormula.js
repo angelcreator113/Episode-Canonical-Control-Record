@@ -114,10 +114,15 @@ function evaluate({ state, event, style = {}, intent = null, bonuses = {} }) {
   score -= stressPenalty;
   breakdown.stress_penalty = { value: -stressPenalty, max: -20, detail: `Stress ${s.stress} × 2` };
 
-  // Outfit match: 0-25
-  const outfitMatch = clamp(st.outfit_match ?? 0, 0, 25); // no outfit = 0, not a free bonus
+  // Outfit match: 0-35 (raised from 25 — outfit excellence used to top
+  // out at ~6 pts of the final score, so even a perfect outfit barely
+  // moved the tier needle. Raising the cap lets a SLAY-tier outfit
+  // contribute meaningfully without making outfit the only thing that
+  // matters. With 35 here + 15 accessory + 50 stat-based = 100; outfit
+  // becomes a real tier driver, not a footnote.)
+  const outfitMatch = clamp(st.outfit_match ?? 0, 0, 35); // no outfit = 0, not a free bonus
   score += outfitMatch;
-  breakdown.outfit_match = { value: outfitMatch, max: 25, detail: st.outfit_match != null ? 'From wardrobe tags' : 'No outfit assigned (0 points)' };
+  breakdown.outfit_match = { value: outfitMatch, max: 35, detail: st.outfit_match != null ? 'From wardrobe tags' : 'No outfit assigned (0 points)' };
 
   // Accessories match: 0-15
   const accessoryMatch = clamp(st.accessory_match ?? 0, 0, 15); // no accessories = 0, not a free bonus
