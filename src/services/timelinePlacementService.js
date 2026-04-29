@@ -89,7 +89,83 @@ async function placeOverlayOnFirstScene(models, { episodeId, assetId, defaults =
   });
 }
 
+/**
+ * Auto-place every overlay listed in event.required_ui_overlays at episode
+ * generation time. Each entry in `requiredKeys` is matched against
+ * ui_overlay_types by either type_key or name (matches the defaultValue
+ * shape on world_events.required_ui_overlays — string keys, not UUIDs).
+ *
+ * For each matched type we pick the best available asset:
+ *   1. Episode-specific asset (asset.episode_id = episodeId) if one exists,
+ *   2. otherwise the most recent show-wide asset.
+ * If no generated asset exists yet, that overlay is silently skipped — the
+ * creator can place it manually once the asset is generated, or re-run this
+ * helper after generation. Failures never throw; episode generation is the
+ * happy path and a missing overlay is an edit nudge, not an error.
+ *
+ * Returns an array of `{ type_key, name, category, placement_id }` for the
+ * overlays that successfully landed, so the generator can log a one-line
+ * summary.
+ */
+async function autoPlaceRequiredOverlays(models, { showId, episodeId, requiredKeys }) {
+  if (!models || !showId || !episodeId) return [];
+  if (!Array.isArray(requiredKeys) || requiredKeys.length === 0) return [];
+  const { sequelize } = models;
+  if (!sequelize) return [];
+
+  let types = [];
+  try {
+    const [rows] = await sequelize.query(
+      `SELECT id, type_key, name, category
+         FROM ui_overlay_types
+        WHERE show_id = :showId AND deleted_at IS NULL
+          AND (type_key = ANY(:keys) OR name = ANY(:keys))`,
+      { replacements: { showId, keys: requiredKeys } }
+    );
+    types = rows || [];
+  } catch (err) {
+    console.warn('[timelinePlacementService] required overlay type lookup failed:', err.message);
+    return [];
+  }
+
+  const placed = [];
+  for (const t of types) {
+    let assetId = null;
+    try {
+      // Prefer an episode-specific asset over a show-wide one — same
+      // precedence the read endpoint uses (uiOverlayRoutes.js merge logic).
+      const [assets] = await sequelize.query(
+        `SELECT id FROM assets
+          WHERE show_id = :showId AND deleted_at IS NULL
+            AND (episode_id = :episodeId OR episode_id IS NULL)
+            AND (metadata->>'overlay_type' = :typeId
+                 OR metadata->>'overlay_type' = :typeKey)
+          ORDER BY (episode_id IS NOT NULL) DESC, created_at DESC
+          LIMIT 1`,
+        { replacements: { showId, episodeId, typeId: t.id, typeKey: t.type_key } }
+      );
+      assetId = assets?.[0]?.id || null;
+    } catch (err) {
+      console.warn(`[timelinePlacementService] asset lookup for ${t.type_key} failed:`, err.message);
+      continue;
+    }
+    if (!assetId) continue;
+
+    const placement = await placeOverlayOnFirstScene(models, { episodeId, assetId });
+    if (placement) {
+      placed.push({
+        type_key: t.type_key,
+        name: t.name,
+        category: t.category || 'phone',
+        placement_id: placement.id,
+      });
+    }
+  }
+  return placed;
+}
+
 module.exports = {
   findFirstSceneId,
   placeOverlayOnFirstScene,
+  autoPlaceRequiredOverlays,
 };

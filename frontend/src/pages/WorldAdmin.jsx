@@ -66,13 +66,23 @@ const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', 
 const EMPTY_EVENT = {
   name: '', event_type: 'invite', host: '', host_brand: '', description: '',
   prestige: 5, cost_coins: 100, strictness: 5,
-  deadline_type: 'medium', dress_code: '', dress_code_keywords: [], location_hint: '',
+  deadline_type: 'medium', deadline_minutes: null,
+  dress_code: '', dress_code_keywords: [], location_hint: '',
   narrative_stakes: '', browse_pool_bias: 'balanced', browse_pool_size: 8,
   is_paid: 'no', payment_amount: 0, career_tier: 1,
   career_milestone: '', fail_consequence: '', success_unlock: '',
   requirements: {}, scene_set_id: null,
   venue_name: '', venue_address: '', event_date: '', event_time: '',
   theme: '', color_palette: [], mood: '', floral_style: '', border_style: '',
+  // Narrative chain — links this event to the one before it and what
+  // future events it plants. Used by the next-event suggester (chain
+  // continuation +30, seed-match +18) and the brief snapshot.
+  parent_event_id: null, chain_position: null, chain_reason: '',
+  seeds_future_events: [],
+  // Production overlays — array of overlay names (or type_keys) that the
+  // episode generator auto-places on the timeline. Defaults to the four
+  // canonical screens; per-event customization is what this form enables.
+  required_ui_overlays: ['MailPanel', 'InviteLetterOverlay', 'WardrobeList', 'CareerList'],
 };
 
 // ─── DIFFICULTY SCORING ───
@@ -2350,10 +2360,14 @@ The revised event should feel like a completely different experience from the si
                       setEpisodeBlueprint(res.data.data);
                       const ep = res.data.data.episode;
                       const skipped = res.data.skipped_extras?.length || 0;
-                      setToast(`✅ Episode "${ep?.title}" created from ${1 + (res.data.linked_extras?.length || 0)} event${(res.data.linked_extras?.length || 0) === 0 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}${res.data.script_drafted ? ' + script' : ''}`);
+                      setToast(`✅ Episode "${ep?.title}" created from ${1 + (res.data.linked_extras?.length || 0)} event${(res.data.linked_extras?.length || 0) === 0 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}${res.data.script_drafted ? ' + script' : ''} — opening…`);
                       setSelectedEvents(new Set());
                       setBulkMode(false);
                       loadData();
+                      // Auto-navigate to the new episode so the creator lands
+                      // on its Overview tab and sees the brief, readiness,
+                      // and end-of-show suggestions overlay if applicable.
+                      if (ep?.id) setTimeout(() => navigate(`/episodes/${ep.id}`), 800);
                     } else {
                       setToast(res.data.error || 'Failed');
                     }
@@ -2406,7 +2420,22 @@ The revised event should feel like a completely different experience from the si
           {/* Event editor */}
           {editingEvent && (
             <div style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>{editingEvent === 'new' ? '✨ New Event' : '✏️ Edit Event'}</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 16px' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{editingEvent === 'new' ? '✨ New Event' : '✏️ Edit Event'}</h3>
+                {/* Read-only badge when this event was spawned from a feed
+                    profile (worldEvents.js POST /from-profile sets the FK).
+                    Lets creators see the lineage without diving into the
+                    canon_consequences JSON, and hints to edit the source
+                    profile rather than this event for new traits. */}
+                {eventForm.source_profile_id && (
+                  <span
+                    title="Created from a feed profile — edit the profile to change brand, lifestyle, or persona traits."
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: '#fdf2f8', color: '#be185d', border: '1px solid #fbcfe8', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4 }}
+                  >
+                    🌐 FROM FEED · profile #{eventForm.source_profile_id}
+                  </span>
+                )}
+              </div>
               {/* Duplicate detection warning + AI Revise */}
               {eventForm.name && findSimilarEvents(eventForm.name).length > 0 && (
                 <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2529,6 +2558,17 @@ The revised event should feel like a completely different experience from the si
                     {['none', 'low', 'medium', 'high', 'tonight', 'urgent'].map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
+                {/* Optional minute count — overrides whatever the type implies
+                    when set. Used by the brief snapshot's event_difficulty
+                    block. Leave blank for "use the default for this type". */}
+                <FG
+                  label="Deadline minutes (optional)"
+                  value={eventForm.deadline_minutes ?? ''}
+                  onChange={v => setEventForm(p => ({ ...p, deadline_minutes: v === '' ? null : parseInt(v, 10) || null }))}
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 90"
+                />
                 <FG label="Dress Code" value={eventForm.dress_code} onChange={v => setEventForm(p => ({ ...p, dress_code: v }))} placeholder="romantic couture" />
                 <div>
                   <label style={S.fLabel}>Dress Code Keywords</label>
@@ -2559,6 +2599,17 @@ The revised event should feel like a completely different experience from the si
                     {BIAS_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>
+                {/* Pool size pairs with bias — bias is the lean (luxury / mid /
+                    balanced), size is how many candidates to surface. Default
+                    is 8; bump for big browse moments, drop for tight choices. */}
+                <FG
+                  label="Browse Pool Size"
+                  value={eventForm.browse_pool_size ?? 8}
+                  onChange={v => setEventForm(p => ({ ...p, browse_pool_size: parseInt(v, 10) || 8 }))}
+                  type="number"
+                  min={1}
+                  max={50}
+                />
               </div>
 
               {/* Invitation Style */}
@@ -2594,6 +2645,113 @@ The revised event should feel like a completely different experience from the si
               <FG label="Career Milestone" value={eventForm.career_milestone} onChange={v => setEventForm(p => ({ ...p, career_milestone: v }))} placeholder="First brand collaboration, first paid gig, etc." full />
               <FG label="On Fail" value={eventForm.fail_consequence} onChange={v => setEventForm(p => ({ ...p, fail_consequence: v }))} placeholder="What happens narratively if she fails..." full />
               <FG label="On Success → Unlocks" value={eventForm.success_unlock} onChange={v => setEventForm(p => ({ ...p, success_unlock: v }))} placeholder="What this opens up (future events, brand deals, etc.)" full />
+
+              {/* ── Narrative Chain ───────────────────────────────────────────
+                  Sequences this event after another and lists threads it
+                  plants for future episodes. The next-event suggester reads
+                  these (chain continuation +30, seed match +18) and the
+                  brief snapshot captures them. Optional — leave parent
+                  empty for standalone events. */}
+              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
+                <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>🔗 Narrative Chain (optional)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <div>
+                    <label style={S.fLabel}>Parent event (the one this follows)</label>
+                    <select
+                      value={eventForm.parent_event_id || ''}
+                      onChange={e => setEventForm(p => ({ ...p, parent_event_id: e.target.value || null }))}
+                      style={S.sel}
+                    >
+                      <option value="">— none (standalone) —</option>
+                      {worldEvents
+                        .filter(e => e.id !== editingEvent)
+                        .map(e => (
+                          <option key={e.id} value={e.id}>{e.name}{e.event_type ? ` (${e.event_type})` : ''}</option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>Chain position</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={eventForm.chain_position ?? ''}
+                      onChange={e => setEventForm(p => ({ ...p, chain_position: e.target.value === '' ? null : parseInt(e.target.value, 10) }))}
+                      placeholder="2"
+                      style={{ ...S.sel, width: '100%' }}
+                    />
+                  </div>
+                </div>
+                <FG
+                  label="Chain reason (why this follows the parent)"
+                  value={eventForm.chain_reason || ''}
+                  onChange={v => setEventForm(p => ({ ...p, chain_reason: v }))}
+                  placeholder="The brand from the gala invited her back, this time for press."
+                  textarea
+                  full
+                />
+                <label style={S.fLabel}>Seeds for future events</label>
+                <textarea
+                  value={Array.isArray(eventForm.seeds_future_events) ? eventForm.seeds_future_events.join('\n') : ''}
+                  onChange={e => setEventForm(p => ({
+                    ...p,
+                    seeds_future_events: e.target.value.split('\n').map(s => s.trim()).filter(Boolean),
+                  }))}
+                  placeholder={'One per line — threads this event plants for later.\nExample:\nMaison Belle press meeting\nLala\'s number with Ari\nUnpaid invoice from Static Frequency'}
+                  rows={3}
+                  style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                />
+              </div>
+
+              {/* ── Production Overlays ───────────────────────────────────────
+                  Names of UI overlay types that auto-place on the episode's
+                  timeline at generation time (matches by ui_overlay_types
+                  type_key OR name). Defaults are the four canonical screens;
+                  add show-specific ones (CountdownTimer, SponsorBug, etc.)
+                  per event when needed. */}
+              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
+                <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>📱 Required UI Overlays</label>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+                  Auto-placed on the timeline when an episode is generated. Phone screens (Lala-side) and on-screen production overlays are both supported — add by name; the generator resolves to whichever asset has been built.
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8, minHeight: 28 }}>
+                  {(eventForm.required_ui_overlays || []).map((name, i) => (
+                    <span key={`${name}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: '#fff', border: '1px solid #e8d8b8', borderRadius: 4, fontSize: 11, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>
+                      {name}
+                      <button
+                        type="button"
+                        onClick={() => setEventForm(p => ({
+                          ...p,
+                          required_ui_overlays: (p.required_ui_overlays || []).filter((_, idx) => idx !== i),
+                        }))}
+                        style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}
+                        title="Remove"
+                      >×</button>
+                    </span>
+                  ))}
+                  {(eventForm.required_ui_overlays || []).length === 0 && (
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No overlays — episode timeline starts empty.</span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Add overlay name (Enter or comma to add) — e.g. CountdownTimer, SponsorBug"
+                  onKeyDown={e => {
+                    if (e.key !== 'Enter' && e.key !== ',') return;
+                    e.preventDefault();
+                    const v = e.currentTarget.value.trim().replace(/,$/, '');
+                    if (!v) return;
+                    setEventForm(p => {
+                      const existing = p.required_ui_overlays || [];
+                      if (existing.includes(v)) return p;
+                      return { ...p, required_ui_overlays: [...existing, v] };
+                    });
+                    e.currentTarget.value = '';
+                  }}
+                  style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                />
+              </div>
+
               <FG label="Description" value={eventForm.description} onChange={v => setEventForm(p => ({ ...p, description: v }))} placeholder="Full event description..." textarea full />
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
                 <button onClick={() => setEditingEvent(null)} style={S.secBtn}>Cancel</button>
@@ -2755,6 +2913,46 @@ The revised event should feel like a completely different experience from the si
                     )}
                   </div>
                 )}
+                {/* Pre-flight readiness — what's set vs missing before
+                    Generate Episode is clicked. Doesn't block, but tells
+                    the creator at a glance what the AI will have to work
+                    with. Each chip is green when set, yellow when missing. */}
+                {(() => {
+                  const hasOutfit = !!ev.outfit_set_id || (Array.isArray(ev.outfit_pieces) && ev.outfit_pieces.length > 0);
+                  const hasVenue = !!ev.venue_location_id || !!ev.venue_name;
+                  const hasScene = !!ev.scene_set_id;
+                  const hasInvite = !!ev.invitation_asset_id;
+                  const checks = [
+                    { key: 'outfit', icon: '👗', label: 'Outfit', ok: hasOutfit },
+                    { key: 'venue', icon: '📍', label: 'Venue', ok: hasVenue },
+                    { key: 'scene', icon: '🎬', label: 'Scene', ok: hasScene },
+                    { key: 'invite', icon: '💌', label: 'Invite', ok: hasInvite },
+                  ];
+                  const allReady = checks.every(c => c.ok);
+                  return (
+                    <div style={{ display: 'flex', gap: 4, marginTop: 4, paddingTop: 6, borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: allReady ? '#16a34a' : '#94a3b8', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, marginRight: 4 }}>
+                        {allReady ? 'READY' : 'PRE-FLIGHT'}
+                      </span>
+                      {checks.map(c => (
+                        <span
+                          key={c.key}
+                          title={c.ok ? `${c.label} is set` : `${c.label} not set yet — episode will generate without it`}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                            padding: '1px 6px', borderRadius: 3,
+                            fontSize: 10, fontWeight: 600,
+                            background: c.ok ? '#f0fdf4' : '#fefce8',
+                            color: c.ok ? '#16a34a' : '#a16207',
+                            border: `1px solid ${c.ok ? '#bbf7d0' : '#fde68a'}`,
+                          }}
+                        >
+                          {c.icon} {c.label} {c.ok ? '✓' : '⚠'}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
                 <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 4, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                   <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>Edit</button>
                   <button onClick={() => copyEvent(ev)} style={S.smBtn}>Copy</button>
@@ -2788,8 +2986,12 @@ The revised event should feel like a completely different experience from the si
                         if (res.data.success) {
                           setEpisodeBlueprint(res.data.data);
                           const ep = res.data.data.episode;
-                          setToast(`✅ Episode ${ep?.episode_number || ''} "${ep?.title}" created — ${res.data.data.scenePlan?.length || 14} beats, ${res.data.data.socialTasks?.length || 0} social tasks${res.data.script_drafted ? ' + draft script' : ''}`);
+                          setToast(`✅ Episode ${ep?.episode_number || ''} "${ep?.title}" created — ${res.data.data.scenePlan?.length || 14} beats, ${res.data.data.socialTasks?.length || 0} social tasks${res.data.script_drafted ? ' + draft script' : ''} — opening…`);
                           loadData();
+                          // Auto-navigate to the new episode (matches the
+                          // multi-event generator's behavior). Short delay
+                          // so the creator sees the success toast first.
+                          if (ep?.id) setTimeout(() => navigate(`/episodes/${ep.id}`), 800);
                         } else {
                           setToast(res.data.error || 'Failed');
                         }

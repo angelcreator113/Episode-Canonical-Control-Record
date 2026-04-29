@@ -153,6 +153,8 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
       // New venue fields (stored in event even pre-migration)
       venue_location_id, venue_name, venue_address, event_date: _event_date, event_time: _event_time,
       guest_list: _guest_list, invitation_details: _invitation_details, scene_set_id,
+      // Narrative chain — see PUT allowlist for details. Optional on create.
+      parent_event_id = null, chain_position = null, chain_reason = null,
     } = req.body;
 
     if (!name) return res.status(400).json({ success: false, error: 'Event name is required' });
@@ -210,6 +212,9 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
         fail_consequence: fail_consequence || null,
         success_unlock: success_unlock || null,
         scene_set_id: resolvedSceneSetId,
+        parent_event_id: parent_event_id || null,
+        chain_position: chain_position || null,
+        chain_reason: chain_reason || null,
         status: 'draft',
       });
 
@@ -227,7 +232,8 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
         overlay_template, required_ui_overlays, browse_pool_bias, browse_pool_size,
         rewards, is_paid, payment_amount, requirements, career_tier,
         career_milestone, fail_consequence, success_unlock,
-        scene_set_id, status, created_at, updated_at)
+        scene_set_id, parent_event_id, chain_position, chain_reason,
+        status, created_at, updated_at)
        VALUES
       (:id, :showId, :season_id, :arc_id, :name, :event_type, :host, :host_brand, :description,
         :prestige, :cost_coins, :strictness, :deadline_type, :deadline_minutes,
@@ -236,7 +242,8 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
         :overlay_template, :required_ui_overlays, :browse_pool_bias, :browse_pool_size,
         :rewards, :is_paid, :payment_amount, :requirements, :career_tier,
         :career_milestone, :fail_consequence, :success_unlock,
-        :scene_set_id, 'draft', NOW(), NOW())`,
+        :scene_set_id, :parent_event_id, :chain_position, :chain_reason,
+        'draft', NOW(), NOW())`,
       {
         replacements: {
           id, showId,
@@ -265,6 +272,9 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
           fail_consequence: fail_consequence || null,
           success_unlock: success_unlock || null,
           scene_set_id: resolvedSceneSetId,
+          parent_event_id: parent_event_id || null,
+          chain_position: chain_position || null,
+          chain_reason: chain_reason || null,
         },
       }
     );
@@ -323,6 +333,13 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
       // Wardrobe — outfit picked at event creation flows through to any
       // episode the event is linked to.
       'outfit_set_id', 'outfit_pieces',
+      // Narrative chain — parent_event_id sequences this after another,
+      // chain_position numbers the spot in the chain, chain_reason
+      // explains why this follows. Read by the next-event suggester
+      // (chain_continuation +30, seed match +18) and snapshotted into
+      // the brief. Settable from the WorldAdmin event form's Narrative
+      // Chain section.
+      'parent_event_id', 'chain_position', 'chain_reason',
     ];
     const _requiredStringFields = new Set(['name', 'event_type', 'status']);
 
@@ -2091,6 +2108,11 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
       deadline_type: deadlineType,
       dress_code: dressCode,
       location_hint: venueAddress || null,
+      // Top-level FK to the WorldLocation. Without this, the venue only
+      // lives nested in canon_consequences.automation and Overview's
+      // Locations card (which reads venue_location_id directly off the
+      // event row) shows nothing for feed-profile-spawned events.
+      venue_location_id: venue?.id || null,
       venue_name: venue?.name || null,
       venue_address: venueAddress || null,
       event_date: eventDateStr,

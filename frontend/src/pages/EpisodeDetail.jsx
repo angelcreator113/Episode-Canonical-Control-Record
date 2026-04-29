@@ -1,22 +1,27 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
-import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
+// EpisodeOverviewTab is the default tab and the most-viewed surface — keep
+// it eager so the first paint doesn't flash a Suspense fallback. Same for
+// the always-mounted SceneLibraryPicker modal and the lightweight
+// NextEventSuggestionsOverlay (mounts conditionally on evaluated episodes).
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
 import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggestionsOverlay';
-import EpisodePhoneMissionsTab from '../components/Episodes/EpisodePhoneMissionsTab';
-import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
-import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
-import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
-import EpisodeWardrobeGameplay from '../components/EpisodeWardrobeGameplay';
-import EpisodeTodoList from '../components/Episodes/EpisodeTodoList';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
-import SceneLinking from '../components/SceneLinking';
-import EpisodeScenesTab from '../components/Episodes/EpisodeScenesTab';
-import PhonePreviewMode from '../components/PhonePreviewMode';
-import usePhonePlaythrough from '../hooks/usePhonePlaythrough';
+// Lazy-loaded tab bodies — each becomes its own JS chunk that's only
+// fetched when the user clicks into the tab. PhonePreviewMode is lazy
+// because the player overlay only mounts when "Play on Phone" is clicked.
+const EpisodeAssetsTab = lazy(() => import('../components/Episodes/EpisodeAssetsTab'));
+const EpisodePhoneMissionsTab = lazy(() => import('../components/Episodes/EpisodePhoneMissionsTab'));
+const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
+const EpisodeDistributionTab = lazy(() => import('../components/Episodes/EpisodeDistributionTab'));
+const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobeGameplay'));
+const EpisodeTodoList = lazy(() => import('../components/Episodes/EpisodeTodoList'));
+const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenesTab'));
+const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
+import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import './EpisodeDetail.css';
 
@@ -38,39 +43,10 @@ const EpisodeDetail = () => {
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [episodeScenes, setEpisodeScenes] = useState([]);
 
-  // ── Play on Phone state ──────────────────────────────────────────────────
-  // When true, the PhonePreviewMode overlay is mounted in player mode
-  // (state persists server-side via usePhonePlaythrough).
-  const [playingPhone, setPlayingPhone] = useState(false);
-  const [phoneOverlays, setPhoneOverlays] = useState([]);
-  const [phoneMissions, setPhoneMissions] = useState([]);
-  const [phoneSkin, setPhoneSkin] = useState('rosegold');
-  const [globalFit, setGlobalFit] = useState({});
-  const playthrough = usePhonePlaythrough(playingPhone ? episode?.id : null);
-
-  // Lazy-load overlays only when the user clicks Play — no need to pay the cost
-  // on every episode page view.
-  const startPlayingPhone = useCallback(async () => {
-    const showId = episode?.show_id || episode?.showId;
-    if (!showId) return;
-    try {
-      const res = await api.get(`/api/v1/ui-overlays/${showId}`);
-      const overlays = res.data?.data || [];
-      setPhoneOverlays(overlays.filter(o => o.generated && o.url));
-      // Pull the saved frame settings so the player sees the same skin creators set.
-      const frameRes = await api.get(`/api/v1/ui-overlays/${showId}/frame`).catch(() => ({ data: {} }));
-      if (frameRes.data?.global_fit) setGlobalFit(frameRes.data.global_fit);
-      if (frameRes.data?.phone_skin) setPhoneSkin(frameRes.data.phone_skin);
-      // Missions scoped to this episode OR show-wide — observers track progress
-      // live as the user plays. Fail-open: if the missions endpoint errors (e.g.
-      // table not deployed yet), we just skip the mission UI.
-      const missionsRes = await api.get(`/api/v1/ui-overlays/${showId}/missions?episode_id=${encodeURIComponent(episode.id)}`).catch(() => ({ data: {} }));
-      setPhoneMissions(missionsRes.data?.missions || []);
-      setPlayingPhone(true);
-    } catch (err) {
-      console.error('[EpisodeDetail] Failed to load phone overlays:', err);
-    }
-  }, [episode]);
+  // Play-on-Phone is its own self-contained feature; the hook owns all
+  // state (screens, missions, frame settings, server-backed playthrough)
+  // and exposes a single start() that fetches lazily on the first click.
+  const phone = usePhonePlayback(episode);
 
   // Tab structure: 4 main tabs with sub-tabs. Brief was merged into Overview
   // — the snapshot now flows inline under Identity / Source / Stakes /
@@ -109,6 +85,11 @@ const EpisodeDetail = () => {
     };
     return map[tab] || [tab, null];
   };
+
+  // Single tab identifier for the body switch — `'main'` for top-level tabs
+  // without sub-tabs (overview, scripts), `'main.sub'` otherwise. Lets each
+  // tab body render check one equality instead of two.
+  const tabKey = epSubTab ? `${activeTab}.${epSubTab}` : activeTab;
 
   // Tab management with URL persistence
   const setActiveTab = (tab) => {
@@ -172,15 +153,7 @@ const EpisodeDetail = () => {
     }
   }, [searchParams]);
 
-  const [loadingScenes, setLoadingScenes] = useState(false);
-  const [episodeWardrobes, setEpisodeWardrobes] = useState([]);
-  const [selectedSceneId, setSelectedSceneId] = useState(null);
-  const [editingTrim, setEditingTrim] = useState({});
-  const [savingScenes, setSavingScenes] = useState({});
   const [showMoreActions, setShowMoreActions] = useState(false);
-  const [showOtherSteps, setShowOtherSteps] = useState(false);
-  const [primaryScript, setPrimaryScript] = useState(null);
-  const [wardrobeMode, setWardrobeMode] = useState('inventory'); // inventory | gameplay
   const [episodeEvents, setEpisodeEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [characterState, setCharacterState] = useState({});
@@ -252,63 +225,22 @@ const EpisodeDetail = () => {
     }
   };
 
-  // Load primary script for scene linking
-  useEffect(() => {
-    const fetchPrimaryScript = async () => {
-      if (!episodeId) return;
-      
-      try {
-        const response = await fetch(`/api/v1/episodes/${episodeId}/scripts?includeAllVersions=false`);
-        const data = await response.json();
-        const scripts = data.data || data.scripts || [];
-        const primary = scripts.find(s => s.is_primary === true);
-        setPrimaryScript(primary || scripts[0]); // Use first script if no primary
-      } catch (err) {
-        console.error('Failed to load primary script:', err);
-      }
-    };
-
-    fetchPrimaryScript();
-  }, [episodeId]);
-
-  // Load episode scenes
+  // Load episode scenes — only fires when the user opens the Scenes sub-tab.
   useEffect(() => {
     const fetchEpisodeScenes = async () => {
       if (!episodeId || activeTab !== 'scenes') return;
-      
       try {
-        setLoadingScenes(true);
         const response = await fetch(`/api/v1/episodes/${episodeId}/library-scenes`);
         const data = await response.json();
         setEpisodeScenes(data.data || []);
       } catch (err) {
         console.error('Failed to load episode scenes:', err);
         toast.showError('Failed to load scenes');
-      } finally {
-        setLoadingScenes(false);
       }
     };
 
     fetchEpisodeScenes();
-  }, [episodeId, activeTab]);
-
-  // Load episode wardrobe
-  useEffect(() => {
-    const fetchEpisodeWardrobe = async () => {
-      if (!episodeId || activeTab !== 'wardrobe') return;
-      
-      try {
-        const response = await fetch(`/api/v1/episodes/${episodeId}/wardrobe`);
-        const data = await response.json();
-        setEpisodeWardrobes(data.data || data.items || []);
-      } catch (err) {
-        console.error('Failed to load episode wardrobe:', err);
-        toast.showError('Failed to load wardrobe');
-      }
-    };
-
-    fetchEpisodeWardrobe();
-  }, [episodeId, activeTab]);
+  }, [episodeId, activeTab, toast]);
 
   // Load events + character state for wardrobe gameplay
   useEffect(() => {
@@ -367,56 +299,6 @@ const EpisodeDetail = () => {
     } catch (err) {
       console.error('Failed to add scene to episode:', err);
       alert('Failed to add scene. Please try again.');
-    }
-  };
-
-  // Select scene for preview
-  const handleSelectSceneForPreview = (sceneId) => {
-    setSelectedSceneId(sceneId);
-  };
-
-  // Update trim times
-  const handleTrimChange = (sceneId, field, value) => {
-    setEditingTrim({
-      ...editingTrim,
-      [sceneId]: {
-        ...editingTrim[sceneId],
-        [field]: parseFloat(value) || 0,
-      },
-    });
-  };
-
-  // Save trim changes
-  const handleSaveTrim = async (sceneId) => {
-    const trimData = editingTrim[sceneId];
-    if (!trimData) return;
-
-    try {
-      setSavingScenes({ ...savingScenes, [sceneId]: true });
-
-      const response = await fetch(`/api/v1/episodes/${episodeId}/library-scenes/${sceneId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trimStart: trimData.trimStart,
-          trimEnd: trimData.trimEnd,
-        }),
-      });
-
-      if (response.ok) {
-        // Reload scenes
-        const data = await fetch(`/api/v1/episodes/${episodeId}/library-scenes`);
-        const scenesData = await data.json();
-        setEpisodeScenes(scenesData.data || []);
-        setEditingTrim({ ...editingTrim, [sceneId]: undefined });
-      } else {
-        alert('Failed to save trim changes');
-      }
-    } catch (err) {
-      console.error('Failed to save trim:', err);
-      alert('Failed to save changes. Please try again.');
-    } finally {
-      setSavingScenes({ ...savingScenes, [sceneId]: false });
     }
   };
 
@@ -639,7 +521,7 @@ const EpisodeDetail = () => {
         </div>
         <div className="ed-header-actions">
           <button
-            onClick={startPlayingPhone}
+            onClick={phone.start}
             style={{padding:'5px 12px', background:'linear-gradient(135deg,#B8962E,#8a6c1d)', border:'none', borderRadius:6, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontFamily:"'DM Mono', monospace", letterSpacing:0.3}}
           >
             ▶ Play on Phone
@@ -769,11 +651,14 @@ const EpisodeDetail = () => {
           );
         })()}
 
-        {/* Content Area */}
+        {/* Content Area — Suspense catches any lazy-loaded tab body that
+            hasn't been fetched yet. Fallback matches the existing tab
+            transition spinner so the swap feels intentional, not janky. */}
         <div className="ed-content">
+        <Suspense fallback={<div className="ed-loading"><div className="ed-spinner" /></div>}>
         {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <EpisodeOverviewTab 
+        {tabKey === 'overview' && (
+          <EpisodeOverviewTab
             episode={episode} 
             show={episode.show}
             onUpdate={handleUpdateEpisode}
@@ -784,7 +669,7 @@ const EpisodeDetail = () => {
             ?tab=brief URLs fall through to overview via resolveEpTab. */}
 
         {/* Scripts Tab */}
-        {activeTab === 'scripts' && (
+        {tabKey === 'scripts' && (
           <EpisodeScriptTab
             key={episode.id}
             episode={episode}
@@ -793,7 +678,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Assets Tab */}
-        {activeTab === 'production' && epSubTab === 'assets' && (
+        {tabKey === 'production.assets' && (
           episode.show ? (
             <EpisodeAssetsTab episode={episode} show={episode.show} />
           ) : (
@@ -817,7 +702,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Scenes Tab */}
-        {activeTab === 'production' && epSubTab === 'scenes' && (
+        {tabKey === 'production.scenes' && (
           <EpisodeScenesTab
             episode={episode}
             onToast={(msg, type) => toast && toast[type] ? toast[type](msg) : console.log(msg)}
@@ -825,7 +710,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Wardrobe Tab */}
-        {activeTab === 'production' && epSubTab === 'wardrobe' && (
+        {tabKey === 'production.wardrobe' && (
           <div>
             {/* Unified wardrobe — event picker + outfit builder */}
             {episodeEvents.length > 0 ? (
@@ -879,7 +764,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Story Tab — links to Stories page */}
-        {activeTab === 'results' && epSubTab === 'story' && (
+        {tabKey === 'results.story' && (
           <div style={{ maxWidth: 800, margin: '0 auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Episode Stories</h2>
@@ -932,19 +817,19 @@ const EpisodeDetail = () => {
         )}
 
         {/* Distribution Tab */}
-        {activeTab === 'results' && epSubTab === 'distribution' && (
+        {tabKey === 'results.distribution' && (
           <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
         )}
 
         {/* Phone missions sub-tab — episode-scoped view of show-wide +
             episode-specific missions, with inline active toggle and a jump
             into the existing MissionEditor for full CRUD. */}
-        {activeTab === 'production' && epSubTab === 'phone' && (
+        {tabKey === 'production.phone' && (
           <EpisodePhoneMissionsTab episode={episode} />
         )}
 
-        {/* Production Tab */}
-        {activeTab === 'production' && epSubTab === 'checklist' && (
+        {/* Checklist Tab */}
+        {tabKey === 'production.checklist' && (
           <EpisodeTodoList
             episodeId={episode.id}
             showId={episode?.show_id || episode?.showId}
@@ -953,7 +838,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Evaluation Tab */}
-        {activeTab === 'results' && epSubTab === 'evaluation' && (() => {
+        {tabKey === 'results.evaluation' && (() => {
           const evalJson = episode.evaluation_json
             ? (typeof episode.evaluation_json === 'string' ? JSON.parse(episode.evaluation_json) : episode.evaluation_json)
             : null;
@@ -1084,6 +969,7 @@ const EpisodeDetail = () => {
             </div>
           );
         })()}
+        </Suspense>
       </div>
 
       {/* Scene Library Picker Modal */}
@@ -1095,21 +981,26 @@ const EpisodeDetail = () => {
         episodeId={episodeId}
       />
 
-      {/* ── Play on Phone overlay ───────────────────────────────────────────── */}
-      {playingPhone && phoneOverlays.length > 0 && (
-        <PhonePreviewMode
-          screens={phoneOverlays}
-          initialScreen={
-            playthrough.state?.last_screen_id
-              ? phoneOverlays.find(s => s.id === playthrough.state.last_screen_id)
-              : phoneOverlays.find(s => s.is_home) || phoneOverlays[0]
-          }
-          globalFit={globalFit}
-          phoneSkin={phoneSkin}
-          playthrough={playthrough}
-          missions={phoneMissions}
-          onClose={() => setPlayingPhone(false)}
-        />
+      {/* ── Play on Phone overlay — state owned by usePhonePlayback. The
+            preview component is lazy-loaded; Suspense renders nothing while
+            the chunk arrives so the modal just appears (no janky fallback
+            since it's already an overlay on top of the page). ─────────── */}
+      {phone.isPlaying && phone.overlays.length > 0 && (
+        <Suspense fallback={null}>
+          <PhonePreviewMode
+            screens={phone.overlays}
+            initialScreen={
+              phone.playthrough.state?.last_screen_id
+                ? phone.overlays.find(s => s.id === phone.playthrough.state.last_screen_id)
+                : phone.overlays.find(s => s.is_home) || phone.overlays[0]
+            }
+            globalFit={phone.globalFit}
+            phoneSkin={phone.skin}
+            playthrough={phone.playthrough}
+            missions={phone.missions}
+            onClose={phone.stop}
+          />
+        </Suspense>
       )}
 
       {/* End-of-show next-event suggestions overlay. Auto-opens once per
