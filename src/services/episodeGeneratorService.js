@@ -399,6 +399,11 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   let episodeDescription = eventData.description || `Based on: ${eventData.name}`;
   let episodeTags = [];
   let aiBeatOutline = [];
+  // AI-drafted forward hook — the one-line tease that pulls viewers into
+  // the next episode. Filled from the same Claude call as the title/beats
+  // so creators land on Overview with the brief's "Forward Hook" field
+  // pre-populated instead of staring at a blank textarea.
+  let aiForwardHook = null;
 
   try {
     if (process.env.ANTHROPIC_API_KEY) {
@@ -452,7 +457,8 @@ Return JSON:
   "beats": [
     { "beat_number": 1, "summary": "GRWM — Lala picks the outfit", "dramatic_function": "setup" },
     { "beat_number": 2, "summary": "...", "dramatic_function": "rising_action" }
-  ]
+  ],
+  "forward_hook": "One sentence (max 140 chars) that teases the NEXT episode — what unresolved beat or stakes will pull the viewer back. Should reference a thread this episode opens but doesn't close (a relationship beat, a decision made, a brand opportunity dangled, a reputation shift). Examples: 'After tonight's chaos, the brand's calling — but is it the offer Lala thinks it is?', 'She left her number. Now what?'"
 }
 
 Beat outline rules:
@@ -480,6 +486,12 @@ Return ONLY JSON.` }],
             summary: String(b.summary || '').trim(),
             dramatic_function: b.dramatic_function || null,
           })).filter(b => b.summary);
+        }
+        // Trim the hook so legacy briefs that read it into chyrons or
+        // metadata don't choke on a runaway paragraph if the model goes
+        // long. 280 is generous; the prompt asks for ~140.
+        if (typeof parsed.forward_hook === 'string' && parsed.forward_hook.trim()) {
+          aiForwardHook = parsed.forward_hook.trim().slice(0, 280);
         }
       }
     }
@@ -569,6 +581,7 @@ Return ONLY JSON.` }],
       episode_archetype: inferArchetype(event),
       designed_intent: inferIntent(event),
       narrative_purpose: `${event.name} — ${event.description || 'Event-driven episode'}`,
+      forward_hook: aiForwardHook,
       status: 'draft',
     });
   }
