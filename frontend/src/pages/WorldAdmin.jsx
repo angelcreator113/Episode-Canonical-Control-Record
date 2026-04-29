@@ -3757,7 +3757,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             ) : null}
                           </div>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}` }}>
-                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626' }}>Net P&L</div>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626' }}>Net P&L (baseline)</div>
                             <div style={{ fontSize: 15, fontWeight: 800, color: net >= 0 ? '#16a34a' : '#dc2626' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
                             <div style={{ fontSize: 9, color: '#94a3b8' }}>
                               {aff.balance_before != null
@@ -3766,6 +3766,37 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             </div>
                           </div>
                         </div>
+                        {/* Tier-dependent income — what the episode actually
+                            pays out if it lands SLAY or PASS. Mirrors the
+                            tier_reward + paid_bonus + event_reward transactions
+                            episodeCompletionService writes. Without this row
+                            the Net P&L undercounts and creators get a
+                            "where did the extra coins come from?" surprise
+                            on Complete. */}
+                        {fc?.tier_bonuses && (fc.tier_bonuses.slay.total !== 0 || fc.tier_bonuses.pass.total !== 0) && (
+                          <div style={{ marginTop: 8, padding: '8px 10px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: 8 }}>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#854d0e', marginBottom: 4 }}>
+                              On Complete (tier-dependent)
+                            </div>
+                            {[
+                              { tier: 'slay', label: '👑 If SLAY', bonus: fc.tier_bonuses.slay, projected: fc.projected_balance?.if_slay },
+                              { tier: 'pass', label: '✨ If PASS', bonus: fc.tier_bonuses.pass, projected: fc.projected_balance?.if_pass },
+                            ].map(row => {
+                              const parts = [];
+                              if (row.bonus.tier_reward !== 0) parts.push(`tier ${row.bonus.tier_reward > 0 ? '+' : ''}${row.bonus.tier_reward}`);
+                              if (row.bonus.paid_bonus > 0) parts.push(`paid +${row.bonus.paid_bonus}`);
+                              if (row.bonus.event_reward > 0) parts.push(`reward +${row.bonus.event_reward}`);
+                              return (
+                                <div key={row.tier} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11, color: '#854d0e', marginBottom: 2 }}>
+                                  <span>{row.label} <span style={{ fontSize: 9, color: '#a16207' }}>· {parts.join(', ')}</span></span>
+                                  <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
+                                    +{row.bonus.total} → balance {row.projected != null ? row.projected.toLocaleString() : '—'}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                         {/* Milestones progress — "next goal" bar + reward preview. */}
                         {nextGoal && (
                           <div style={{ marginTop: 10, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8 }}>

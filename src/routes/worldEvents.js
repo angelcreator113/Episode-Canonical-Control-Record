@@ -2374,7 +2374,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
     try {
       const [eventRows] = await models.sequelize.query(
         `SELECT id, name, prestige, event_type, cost_coins, is_paid, is_free, payment_amount,
-                outfit_pieces, canon_consequences, dress_code
+                outfit_pieces, canon_consequences, dress_code, rewards
          FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
         { replacements: { eventId, showId } }
       );
@@ -2383,7 +2383,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
       if (err?.original?.code !== '42703' && !String(err?.message || '').includes('is_free')) throw err;
       const [fallbackRows] = await models.sequelize.query(
         `SELECT id, name, prestige, event_type, cost_coins, is_paid, payment_amount,
-                outfit_pieces, canon_consequences, dress_code
+                outfit_pieces, canon_consequences, dress_code, rewards
          FROM world_events WHERE id = :eventId AND show_id = :showId LIMIT 1`,
         { replacements: { eventId, showId } }
       );
@@ -2468,6 +2468,41 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
       content_revenue_est: contentRevenueEst,
       total: eventPayment + socialTaskRewards + contentRevenueEst,
     };
+
+    // ── Tier-dependent bonuses (forecast only) ──────────────────────────
+    // Mirrors the income episodeCompletionService writes when the tier is
+    // finalized. Splits into per-tier so the UI can show "if SLAY/PASS"
+    // qualifiers alongside the always-pays income above. Without this,
+    // the preview undercounts by the tier_reward + paid_bonus + event_reward
+    // amounts and creators get a "where did the extra coins come from"
+    // surprise on Complete.
+    //
+    //   tier_reward    {slay:+150, pass:+75, safe:+25, fail:-25}  every tier
+    //   paid_bonus     {slay:+50,  pass:+25}                       only when event.cost_coins > 0
+    //   event_reward   event.rewards.coins                         only on slay/pass
+    const eventRewards = (() => {
+      const r = event.rewards;
+      if (!r) return {};
+      if (typeof r === 'object') return r;
+      try { return JSON.parse(r); } catch { return {}; }
+    })();
+    const eventRewardCoins = parseInt(eventRewards.coins, 10) || 0;
+    const tierBonuses = {
+      slay: {
+        tier_reward: 150,
+        paid_bonus: eventCost > 0 ? 50 : 0,
+        event_reward: eventRewardCoins,
+        total: 150 + (eventCost > 0 ? 50 : 0) + eventRewardCoins,
+      },
+      pass: {
+        tier_reward: 75,
+        paid_bonus: eventCost > 0 ? 25 : 0,
+        event_reward: eventRewardCoins,
+        total: 75 + (eventCost > 0 ? 25 : 0) + eventRewardCoins,
+      },
+      safe: { tier_reward: 25, paid_bonus: 0, event_reward: 0, total: 25 },
+      fail: { tier_reward: -25, paid_bonus: 0, event_reward: 0, total: -25 },
+    };
     const expenses = {
       event_cost: eventCost,
       outfit_retail: outfitRetail,
@@ -2500,6 +2535,13 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
         : 'low',
     };
 
+    // Optimistic / realistic balance projections — adds the tier-bonus
+    // total on top of the always-pays net so the preview shows what
+    // SLAY or PASS would actually deposit. Frontend renders SLAY as the
+    // optimistic ceiling, PASS as the realistic.
+    const balanceAfterIfSlay = balanceAfter + tierBonuses.slay.total;
+    const balanceAfterIfPass = balanceAfter + tierBonuses.pass.total;
+
     return res.json({
       success: true,
       currency: 'coins',
@@ -2507,6 +2549,12 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
       income,
       expenses,
       net,
+      tier_bonuses: tierBonuses,
+      projected_balance: {
+        baseline: balanceAfter,                 // always-pays only (current behavior)
+        if_pass: balanceAfterIfPass,            // realistic: PASS lands all bonuses
+        if_slay: balanceAfterIfSlay,            // optimistic: SLAY ceiling
+      },
       affordability,
       next_goal: nextGoal,
       outfit_source: outfitSource,
