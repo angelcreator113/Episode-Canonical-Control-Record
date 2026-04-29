@@ -66,13 +66,23 @@ const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', 
 const EMPTY_EVENT = {
   name: '', event_type: 'invite', host: '', host_brand: '', description: '',
   prestige: 5, cost_coins: 100, strictness: 5,
-  deadline_type: 'medium', dress_code: '', dress_code_keywords: [], location_hint: '',
+  deadline_type: 'medium', deadline_minutes: null,
+  dress_code: '', dress_code_keywords: [], location_hint: '',
   narrative_stakes: '', browse_pool_bias: 'balanced', browse_pool_size: 8,
   is_paid: 'no', payment_amount: 0, career_tier: 1,
   career_milestone: '', fail_consequence: '', success_unlock: '',
   requirements: {}, scene_set_id: null,
   venue_name: '', venue_address: '', event_date: '', event_time: '',
   theme: '', color_palette: [], mood: '', floral_style: '', border_style: '',
+  // Narrative chain — links this event to the one before it and what
+  // future events it plants. Used by the next-event suggester (chain
+  // continuation +30, seed-match +18) and the brief snapshot.
+  parent_event_id: null, chain_position: null, chain_reason: '',
+  seeds_future_events: [],
+  // Production overlays — array of overlay names (or type_keys) that the
+  // episode generator auto-places on the timeline. Defaults to the four
+  // canonical screens; per-event customization is what this form enables.
+  required_ui_overlays: ['MailPanel', 'InviteLetterOverlay', 'WardrobeList', 'CareerList'],
 };
 
 // ─── DIFFICULTY SCORING ───
@@ -2594,6 +2604,64 @@ The revised event should feel like a completely different experience from the si
               <FG label="Career Milestone" value={eventForm.career_milestone} onChange={v => setEventForm(p => ({ ...p, career_milestone: v }))} placeholder="First brand collaboration, first paid gig, etc." full />
               <FG label="On Fail" value={eventForm.fail_consequence} onChange={v => setEventForm(p => ({ ...p, fail_consequence: v }))} placeholder="What happens narratively if she fails..." full />
               <FG label="On Success → Unlocks" value={eventForm.success_unlock} onChange={v => setEventForm(p => ({ ...p, success_unlock: v }))} placeholder="What this opens up (future events, brand deals, etc.)" full />
+
+              {/* ── Narrative Chain ───────────────────────────────────────────
+                  Sequences this event after another and lists threads it
+                  plants for future episodes. The next-event suggester reads
+                  these (chain continuation +30, seed match +18) and the
+                  brief snapshot captures them. Optional — leave parent
+                  empty for standalone events. */}
+              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
+                <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>🔗 Narrative Chain (optional)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <div>
+                    <label style={S.fLabel}>Parent event (the one this follows)</label>
+                    <select
+                      value={eventForm.parent_event_id || ''}
+                      onChange={e => setEventForm(p => ({ ...p, parent_event_id: e.target.value || null }))}
+                      style={S.sel}
+                    >
+                      <option value="">— none (standalone) —</option>
+                      {worldEvents
+                        .filter(e => e.id !== editingEvent)
+                        .map(e => (
+                          <option key={e.id} value={e.id}>{e.name}{e.event_type ? ` (${e.event_type})` : ''}</option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>Chain position</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={eventForm.chain_position ?? ''}
+                      onChange={e => setEventForm(p => ({ ...p, chain_position: e.target.value === '' ? null : parseInt(e.target.value, 10) }))}
+                      placeholder="2"
+                      style={{ ...S.sel, width: '100%' }}
+                    />
+                  </div>
+                </div>
+                <FG
+                  label="Chain reason (why this follows the parent)"
+                  value={eventForm.chain_reason || ''}
+                  onChange={v => setEventForm(p => ({ ...p, chain_reason: v }))}
+                  placeholder="The brand from the gala invited her back, this time for press."
+                  textarea
+                  full
+                />
+                <label style={S.fLabel}>Seeds for future events</label>
+                <textarea
+                  value={Array.isArray(eventForm.seeds_future_events) ? eventForm.seeds_future_events.join('\n') : ''}
+                  onChange={e => setEventForm(p => ({
+                    ...p,
+                    seeds_future_events: e.target.value.split('\n').map(s => s.trim()).filter(Boolean),
+                  }))}
+                  placeholder={'One per line — threads this event plants for later.\nExample:\nMaison Belle press meeting\nLala\'s number with Ari\nUnpaid invoice from Static Frequency'}
+                  rows={3}
+                  style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                />
+              </div>
+
               <FG label="Description" value={eventForm.description} onChange={v => setEventForm(p => ({ ...p, description: v }))} placeholder="Full event description..." textarea full />
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
                 <button onClick={() => setEditingEvent(null)} style={S.secBtn}>Cancel</button>
