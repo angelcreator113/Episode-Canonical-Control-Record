@@ -199,8 +199,13 @@ async function completeEpisode(episodeId, showId, sequelize) {
       const eventContext = event ? {
         dress_code: event.dress_code, prestige: event.prestige,
         strictness: event.strictness, event_type: event.event_type,
+        host_brand: event.host_brand, dress_code_keywords: event.dress_code_keywords,
+        season: event.season,
       } : {};
-      const outfitResult = await getOutfitScore(models, episodeId, eventContext);
+      // Pass characterState so the scorer can run evaluateCharacterMoodFit
+      // (stress + reputation modulate the outfit signal). Without this,
+      // wardrobe scoring is context-blind to Lala's actual headspace.
+      const outfitResult = await getOutfitScore(models, episodeId, eventContext, characterState);
       // Outfit match scaled to the 0-35 cap (formerly 0-25). Score is 0-100
       // from scoreOutfitForEvent; multiply by 0.35 to use the full new range.
       outfitMatch = Math.round((outfitResult?.score || 0) * 0.35);

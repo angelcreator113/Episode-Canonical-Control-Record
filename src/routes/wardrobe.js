@@ -1484,7 +1484,7 @@ const CONFIDENCE_LEVELS = [
  * working without changes. Adds `signals`, `narrative_mood`, `slots`
  * for richer UIs that opt in.
  */
-async function getOutfitScore(models, episodeId, event = {}) {
+async function getOutfitScore(models, episodeId, event = {}, characterState = null) {
   try {
     const [rows] = await models.sequelize.query(
       `SELECT w.*
@@ -1515,7 +1515,7 @@ async function getOutfitScore(models, episodeId, event = {}) {
 
     // ── Canonical scorer ──
     const { scoreOutfitForEvent } = require('../services/wardrobeIntelligenceService');
-    const result = scoreOutfitForEvent(items, event);
+    const result = scoreOutfitForEvent(items, event, characterState);
     if (!result) {
       return {
         hasOutfit: false, score: 0, items: [], breakdown: {},
