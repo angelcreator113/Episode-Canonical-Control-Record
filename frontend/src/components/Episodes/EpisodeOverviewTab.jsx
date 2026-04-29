@@ -24,6 +24,39 @@ const TIER_CONFIG = {
   fail: { emoji: '💔', label: 'FAIL', color: '#dc2626', bg: '#fef2f2' },
 };
 
+/**
+ * SectionBand — visual grouping for the Overview page.
+ *
+ * Renders a small monospace gold header above a hairline rule, then the
+ * children. Used to separate IDENTITY / PRODUCTION / SOURCE / STAKES /
+ * REFERENCE without competing with the cards below — the band is a quiet
+ * organizational cue, not a heading element.
+ */
+function SectionBand({ title, children }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 10,
+        paddingBottom: 6,
+        borderBottom: '1px solid #e8d8b8',
+      }}>
+        <span style={{
+          fontSize: 10,
+          fontWeight: 700,
+          color: '#B8962E',
+          textTransform: 'uppercase',
+          letterSpacing: 1.2,
+          fontFamily: "'DM Mono', monospace",
+        }}>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
@@ -284,8 +317,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Net P&L</div><div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? '#16a34a' : net < 0 ? '#dc2626' : '#94a3b8' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div></div>
       </div>
 
-      {/* Two-column: Event + Season Position */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+      {/* IDENTITY band — what is this episode? Events that drive it +
+          where it sits in the season. */}
+      <SectionBand title="Identity">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 0 }}>
         {/* Events — multi-link. Each linked event is a chip with × to
             unlink. The dropdown below lists every show event not yet
             linked anywhere; picking one stamps it with this episode's
@@ -350,7 +385,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           <div style={{ fontSize: 10, color: '#B8962E', fontWeight: 600, marginTop: 4 }}>Episode {episode.episode_number || '?'} of {totalEpisodes || '?'}</div>
         </div>
       </div>
+      </SectionBand>
 
+      {/* PRODUCTION band — what's been built? Locations, script status,
+          narrative read-through from the linked events, and the timeline
+          overlay placements. */}
+      <SectionBand title="Production">
       {/* Locations + Script */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
         {/* Locations — derived from the linked events' venue_location_id
@@ -435,6 +475,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           video frame. Auto-populated when an invite is approved or the
           wardrobe checklist is locked, manually editable here. */}
       <TimelinePlacementsSection episodeId={episode.id} />
+      </SectionBand>
 
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
