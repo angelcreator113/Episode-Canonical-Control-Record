@@ -399,6 +399,12 @@ function WorldAdmin() {
   // when the show's starting balance is edited (Finance editor → save
   // re-seeds the ledger and updates financeConfig.current_balance, which
   // the forecast's balance_before/balance_after read from the server).
+  // Forecast refresh nonce — bumped after the outfit picker saves or
+  // closes so the preview refetches with the latest server-side state.
+  // Without this, opening the picker, swapping pieces, then closing
+  // without saving leaves the preview stuck on the old outfit_pieces
+  // snapshot baked into eventDetailModal at modal-open time.
+  const [forecastNonce, setForecastNonce] = useState(0);
   useEffect(() => {
     if (!eventDetailModal?.id || !showId) { setEventFinancials(null); return; }
     let cancelled = false;
@@ -411,7 +417,7 @@ function WorldAdmin() {
       if (!cancelled) setEventFinancialsLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [eventDetailModal?.id, eventDetailModal?.outfit_pieces, showId, financeConfig?.current_balance]);
+  }, [eventDetailModal?.id, eventDetailModal?.outfit_pieces, showId, financeConfig?.current_balance, forecastNonce]);
 
   // Escape key closes modals
   useEffect(() => {
@@ -3757,7 +3763,16 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             ) : null}
                           </div>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}` }}>
-                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626' }}>Net P&L (baseline)</div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626' }}>Net P&L (baseline)</span>
+                              {/* EST pill — shown when outfit cost is a
+                                  prestige-tier fallback (no outfit picked) so
+                                  the bottom-line balance reads as projection,
+                                  not fact. Hides once an outfit is saved. */}
+                              {fc?.outfit_source === 'estimate' && (
+                                <span title="Outfit cost is a prestige-based estimate. Pick an outfit to lock the real number." style={{ padding: '0 4px', borderRadius: 3, fontSize: 7, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: '#fefce8', color: '#a16207', border: '1px solid #fde68a' }}>EST</span>
+                              )}
+                            </div>
                             <div style={{ fontSize: 15, fontWeight: 800, color: net >= 0 ? '#16a34a' : '#dc2626' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
                             <div style={{ fontSize: 9, color: '#94a3b8' }}>
                               {aff.balance_before != null
@@ -4461,14 +4476,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
       {/* ════════════════════════ OUTFIT PICKER MODAL ════════════════════════ */}
       {outfitPickerEvent && createPortal(
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setOutfitPickerEvent(null)}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setOutfitPickerEvent(null); setForecastNonce(n => n + 1); }}>
           <div style={{ background: '#fff', borderRadius: 16, maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>👗 Pick Outfit</h2>
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: '#888' }}>{outfitPickerEvent.name} · Prestige {outfitPickerEvent.prestige}/10</p>
               </div>
-              <button onClick={() => setOutfitPickerEvent(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
+              <button onClick={() => { setOutfitPickerEvent(null); setForecastNonce(n => n + 1); }} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
             </div>
 
             {/* Score banner */}
@@ -4694,6 +4709,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     setOutfitScore(res.data.score);
                     setToast(`Outfit saved — match ${res.data.score?.match_score}/100 (${res.data.score?.narrative_mood})`);
                     loadData();
+                    // Force the Financial Preview useEffect to refetch — the
+                    // server now has the new outfit_pieces but eventDetailModal
+                    // is still pointing at its open-time snapshot.
+                    setForecastNonce(n => n + 1);
                   } catch (err) { setToast('Save failed: ' + err.message); }
                   setOutfitSaving(false);
                 }} style={{ width: '100%', padding: '10px', border: 'none', borderRadius: 8, background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: outfitSaving ? 0.5 : 1 }}>
