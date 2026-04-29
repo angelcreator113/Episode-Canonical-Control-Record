@@ -79,6 +79,11 @@ const EpisodeDetail = () => {
     return map[tab] || [tab, null];
   };
 
+  // Single tab identifier for the body switch — `'main'` for top-level tabs
+  // without sub-tabs (overview, scripts), `'main.sub'` otherwise. Lets each
+  // tab body render check one equality instead of two.
+  const tabKey = epSubTab ? `${activeTab}.${epSubTab}` : activeTab;
+
   // Tab management with URL persistence
   const setActiveTab = (tab) => {
     setTabLoading(true);
@@ -642,8 +647,8 @@ const EpisodeDetail = () => {
         {/* Content Area */}
         <div className="ed-content">
         {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <EpisodeOverviewTab 
+        {tabKey === 'overview' && (
+          <EpisodeOverviewTab
             episode={episode} 
             show={episode.show}
             onUpdate={handleUpdateEpisode}
@@ -654,7 +659,7 @@ const EpisodeDetail = () => {
             ?tab=brief URLs fall through to overview via resolveEpTab. */}
 
         {/* Scripts Tab */}
-        {activeTab === 'scripts' && (
+        {tabKey === 'scripts' && (
           <EpisodeScriptTab
             key={episode.id}
             episode={episode}
@@ -663,7 +668,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Assets Tab */}
-        {activeTab === 'production' && epSubTab === 'assets' && (
+        {tabKey === 'production.assets' && (
           episode.show ? (
             <EpisodeAssetsTab episode={episode} show={episode.show} />
           ) : (
@@ -687,7 +692,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Scenes Tab */}
-        {activeTab === 'production' && epSubTab === 'scenes' && (
+        {tabKey === 'production.scenes' && (
           <EpisodeScenesTab
             episode={episode}
             onToast={(msg, type) => toast && toast[type] ? toast[type](msg) : console.log(msg)}
@@ -695,7 +700,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Wardrobe Tab */}
-        {activeTab === 'production' && epSubTab === 'wardrobe' && (
+        {tabKey === 'production.wardrobe' && (
           <div>
             {/* Unified wardrobe — event picker + outfit builder */}
             {episodeEvents.length > 0 ? (
@@ -749,7 +754,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Story Tab — links to Stories page */}
-        {activeTab === 'results' && epSubTab === 'story' && (
+        {tabKey === 'results.story' && (
           <div style={{ maxWidth: 800, margin: '0 auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>Episode Stories</h2>
@@ -802,19 +807,19 @@ const EpisodeDetail = () => {
         )}
 
         {/* Distribution Tab */}
-        {activeTab === 'results' && epSubTab === 'distribution' && (
+        {tabKey === 'results.distribution' && (
           <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
         )}
 
         {/* Phone missions sub-tab — episode-scoped view of show-wide +
             episode-specific missions, with inline active toggle and a jump
             into the existing MissionEditor for full CRUD. */}
-        {activeTab === 'production' && epSubTab === 'phone' && (
+        {tabKey === 'production.phone' && (
           <EpisodePhoneMissionsTab episode={episode} />
         )}
 
-        {/* Production Tab */}
-        {activeTab === 'production' && epSubTab === 'checklist' && (
+        {/* Checklist Tab */}
+        {tabKey === 'production.checklist' && (
           <EpisodeTodoList
             episodeId={episode.id}
             showId={episode?.show_id || episode?.showId}
@@ -823,7 +828,7 @@ const EpisodeDetail = () => {
         )}
 
         {/* Evaluation Tab */}
-        {activeTab === 'results' && epSubTab === 'evaluation' && (() => {
+        {tabKey === 'results.evaluation' && (() => {
           const evalJson = episode.evaluation_json
             ? (typeof episode.evaluation_json === 'string' ? JSON.parse(episode.evaluation_json) : episode.evaluation_json)
             : null;
