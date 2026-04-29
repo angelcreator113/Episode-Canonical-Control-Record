@@ -483,6 +483,55 @@ const ARC_TIER_CAPS = {
  * Returns null when no dominant family or no clear context — color
  * harmony already covers the "do pieces match" angle.
  */
+/**
+ * evaluateSocialProfileExpectation — when an event was created from a feed
+ * profile (source_profile_id set, or canon_consequences.automation.host_
+ * profile_id set), wearing the host's brand isn't just "smart" — it's
+ * receipt of the relationship. The profile DM'd / invited her; the outfit
+ * acknowledges the bond. Wearing nothing aligned reads as a missed beat.
+ *
+ *   profile-spawned + host_brand match  → +8  (on top of the +16 brand
+ *                                              match — total +24)
+ *   profile-spawned, no brand alignment → -3  missed relationship beat
+ *   not profile-spawned                 → null (silent — generic brand
+ *                                              match handles those)
+ */
+function evaluateSocialProfileExpectation(items, event) {
+  if (!event) return null;
+  // Pull the source profile id from either the FK column or the legacy
+  // automation JSONB. from-profile-route writes both going forward but
+  // older rows only have the JSONB.
+  const automation = (() => {
+    if (!event.canon_consequences) return {};
+    if (typeof event.canon_consequences === 'object') return event.canon_consequences.automation || {};
+    try { return JSON.parse(event.canon_consequences)?.automation || {}; } catch { return {}; }
+  })();
+  const profileId = event.source_profile_id || automation.host_profile_id;
+  if (!profileId) return null;
+  const handle = automation.host_handle || automation.host_display_name || 'the host';
+
+  const hostBrand = event.host_brand || automation.host_brand;
+  const itemBrands = items.map(i => i.brand).filter(Boolean);
+  if (hostBrand && itemBrands.includes(hostBrand)) {
+    return {
+      type: 'profile_brand_receipt',
+      text: `Wearing ${hostBrand} to ${handle}'s event — reads as relationship receipt`,
+      narrative: 'relationship_receipt',
+      delta: 8,
+    };
+  }
+  // No brand alignment with a profile-spawned event — soft penalty for
+  // the missed relationship beat. Caps at -3 since the rest of the
+  // outfit can still rescue the score (good outfit, just not THIS
+  // profile's brand vibe).
+  return {
+    type: 'profile_brand_missed',
+    text: `${handle}'s event but no brand alignment — the relationship beat goes unanswered`,
+    narrative: 'missed_beat',
+    delta: -3,
+  };
+}
+
 function evaluateColorPsychology(items, event) {
   if (!items?.length || !event) return null;
   const families = items.map(i => classifyColor(i.color)).filter(f => f !== 'unknown');
@@ -665,6 +714,7 @@ function scoreOutfitForEvent(wardrobeItems, event, ctx = {}) {
     evaluateAuthenticityFit(avgTier, arcStage),
     evaluateRarityBonus(wardrobeItems),
     evaluateColorPsychology(wardrobeItems, event),
+    evaluateSocialProfileExpectation(wardrobeItems, event),
   ]) {
     if (sig) {
       secondaryDelta += sig.delta || 0;
