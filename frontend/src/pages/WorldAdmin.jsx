@@ -2360,10 +2360,14 @@ The revised event should feel like a completely different experience from the si
                       setEpisodeBlueprint(res.data.data);
                       const ep = res.data.data.episode;
                       const skipped = res.data.skipped_extras?.length || 0;
-                      setToast(`✅ Episode "${ep?.title}" created from ${1 + (res.data.linked_extras?.length || 0)} event${(res.data.linked_extras?.length || 0) === 0 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}${res.data.script_drafted ? ' + script' : ''}`);
+                      setToast(`✅ Episode "${ep?.title}" created from ${1 + (res.data.linked_extras?.length || 0)} event${(res.data.linked_extras?.length || 0) === 0 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}${res.data.script_drafted ? ' + script' : ''} — opening…`);
                       setSelectedEvents(new Set());
                       setBulkMode(false);
                       loadData();
+                      // Auto-navigate to the new episode so the creator lands
+                      // on its Overview tab and sees the brief, readiness,
+                      // and end-of-show suggestions overlay if applicable.
+                      if (ep?.id) setTimeout(() => navigate(`/episodes/${ep.id}`), 800);
                     } else {
                       setToast(res.data.error || 'Failed');
                     }
@@ -2909,6 +2913,46 @@ The revised event should feel like a completely different experience from the si
                     )}
                   </div>
                 )}
+                {/* Pre-flight readiness — what's set vs missing before
+                    Generate Episode is clicked. Doesn't block, but tells
+                    the creator at a glance what the AI will have to work
+                    with. Each chip is green when set, yellow when missing. */}
+                {(() => {
+                  const hasOutfit = !!ev.outfit_set_id || (Array.isArray(ev.outfit_pieces) && ev.outfit_pieces.length > 0);
+                  const hasVenue = !!ev.venue_location_id || !!ev.venue_name;
+                  const hasScene = !!ev.scene_set_id;
+                  const hasInvite = !!ev.invitation_asset_id;
+                  const checks = [
+                    { key: 'outfit', icon: '👗', label: 'Outfit', ok: hasOutfit },
+                    { key: 'venue', icon: '📍', label: 'Venue', ok: hasVenue },
+                    { key: 'scene', icon: '🎬', label: 'Scene', ok: hasScene },
+                    { key: 'invite', icon: '💌', label: 'Invite', ok: hasInvite },
+                  ];
+                  const allReady = checks.every(c => c.ok);
+                  return (
+                    <div style={{ display: 'flex', gap: 4, marginTop: 4, paddingTop: 6, borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: allReady ? '#16a34a' : '#94a3b8', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, marginRight: 4 }}>
+                        {allReady ? 'READY' : 'PRE-FLIGHT'}
+                      </span>
+                      {checks.map(c => (
+                        <span
+                          key={c.key}
+                          title={c.ok ? `${c.label} is set` : `${c.label} not set yet — episode will generate without it`}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                            padding: '1px 6px', borderRadius: 3,
+                            fontSize: 10, fontWeight: 600,
+                            background: c.ok ? '#f0fdf4' : '#fefce8',
+                            color: c.ok ? '#16a34a' : '#a16207',
+                            border: `1px solid ${c.ok ? '#bbf7d0' : '#fde68a'}`,
+                          }}
+                        >
+                          {c.icon} {c.label} {c.ok ? '✓' : '⚠'}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
                 <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 4, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                   <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>Edit</button>
                   <button onClick={() => copyEvent(ev)} style={S.smBtn}>Copy</button>
@@ -2942,8 +2986,12 @@ The revised event should feel like a completely different experience from the si
                         if (res.data.success) {
                           setEpisodeBlueprint(res.data.data);
                           const ep = res.data.data.episode;
-                          setToast(`✅ Episode ${ep?.episode_number || ''} "${ep?.title}" created — ${res.data.data.scenePlan?.length || 14} beats, ${res.data.data.socialTasks?.length || 0} social tasks${res.data.script_drafted ? ' + draft script' : ''}`);
+                          setToast(`✅ Episode ${ep?.episode_number || ''} "${ep?.title}" created — ${res.data.data.scenePlan?.length || 14} beats, ${res.data.data.socialTasks?.length || 0} social tasks${res.data.script_drafted ? ' + draft script' : ''} — opening…`);
                           loadData();
+                          // Auto-navigate to the new episode (matches the
+                          // multi-event generator's behavior). Short delay
+                          // so the creator sees the success toast first.
+                          if (ep?.id) setTimeout(() => navigate(`/episodes/${ep.id}`), 800);
                         } else {
                           setToast(res.data.error || 'Failed');
                         }
