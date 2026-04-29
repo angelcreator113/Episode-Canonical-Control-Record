@@ -254,6 +254,26 @@ async function completeEpisode(episodeId, showId, sequelize) {
     }
   }
 
+  // ── 10b. Apply event.rewards on success ───────────────────────────────
+  // Creator-authored rewards from the event form (rewards.coins,
+  // .reputation, .brand_trust, .influence). Only granted on slay/pass
+  // tiers — failing the event shouldn't pay out the prize. Stat deltas
+  // (reputation/brand_trust/influence) flow into mergedDeltas alongside
+  // base/social/wardrobe; coins go through the financial pipeline as a
+  // separate transaction row, matching the tier_reward pattern below.
+  // Outcomes (narrative beats) are recorded in the history note further
+  // down, not as state changes.
+  const eventRewards = (event && event.rewards && typeof event.rewards === 'object')
+    ? (typeof event.rewards === 'string' ? (() => { try { return JSON.parse(event.rewards); } catch { return {}; } })() : event.rewards)
+    : {};
+  const isSuccess = ['slay', 'pass'].includes(evalResult.tier_final);
+  if (isSuccess) {
+    for (const key of ['reputation', 'brand_trust', 'influence']) {
+      const v = parseInt(eventRewards[key], 10) || 0;
+      if (v !== 0) mergedDeltas[key] = (mergedDeltas[key] || 0) + v;
+    }
+  }
+
   // ── 11. Finalize financials (coins come from here, not evaluation) ──
   const { finalizeEpisodeFinancials } = require('./financialTransactionService');
   const financialResult = await finalizeEpisodeFinancials(episodeId, showId, sequelize);
@@ -291,6 +311,25 @@ async function completeEpisode(episodeId, showId, sequelize) {
           id: uuidv4(), showId, episodeId, eventId: event?.id || null,
           amount: paidBonus,
           desc: `Paid event ${evalResult.tier_final.toUpperCase()} bonus: +${paidBonus} coins`,
+        }}
+      );
+    } catch { /* non-blocking */ }
+  }
+
+  // Creator-authored coin reward from event.rewards.coins. Same shape as
+  // tier_reward — separate row so the financial ledger shows where every
+  // coin came from. Only fires on slay/pass to match stat-delta gating.
+  const eventRewardCoins = isSuccess ? (parseInt(eventRewards.coins, 10) || 0) : 0;
+  if (eventRewardCoins > 0) {
+    try {
+      await sequelize.query(
+        `INSERT INTO financial_transactions
+         (id, show_id, episode_id, event_id, type, category, amount, description, source_type, status, created_at, updated_at)
+         VALUES (:id, :showId, :episodeId, :eventId, 'income', 'event_reward', :amount, :desc, 'evaluation', 'executed', NOW(), NOW())`,
+        { replacements: {
+          id: uuidv4(), showId, episodeId, eventId: event?.id || null,
+          amount: eventRewardCoins,
+          desc: `Event reward (${evalResult.tier_final.toUpperCase()}): +${eventRewardCoins} coins`,
         }}
       );
     } catch { /* non-blocking */ }
