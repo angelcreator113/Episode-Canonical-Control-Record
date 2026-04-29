@@ -2091,6 +2091,11 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
       deadline_type: deadlineType,
       dress_code: dressCode,
       location_hint: venueAddress || null,
+      // Top-level FK to the WorldLocation. Without this, the venue only
+      // lives nested in canon_consequences.automation and Overview's
+      // Locations card (which reads venue_location_id directly off the
+      // event row) shows nothing for feed-profile-spawned events.
+      venue_location_id: venue?.id || null,
       venue_name: venue?.name || null,
       venue_address: venueAddress || null,
       event_date: eventDateStr,
