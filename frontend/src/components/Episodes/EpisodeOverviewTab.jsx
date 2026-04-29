@@ -404,9 +404,108 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Net P&L</div><div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? '#16a34a' : net < 0 ? '#dc2626' : '#94a3b8' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div></div>
       </div>
 
-      {/* IDENTITY band — what is this episode? Events that drive it +
+      {/* IDENTITY band — what is this episode? Creative intent + allowed
+          outcomes (editable on the brief), then the events driving it +
           where it sits in the season. */}
       <SectionBand title="Identity">
+      {/* CREATIVE INTENT — editable creative fields on the brief. Hidden
+          while the brief loads (or fails to load) so the page doesn't show
+          empty inputs. */}
+      {brief && (
+        <div style={S.card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={S.label}>🎯 Creative Intent</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {savingBrief && <span style={{ fontSize: 10, color: '#94a3b8' }}>Saving…</span>}
+              {isLocked && <span style={{ padding: '1px 6px', background: '#fef2f2', color: '#dc2626', borderRadius: 3, fontSize: 9, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>🔒 LOCKED</span>}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div>
+              <label style={{ ...S.label, marginBottom: 4 }}>Archetype</label>
+              <select
+                value={draft.episode_archetype || ''}
+                disabled={isLocked}
+                onChange={(e) => { setDraft(d => ({ ...d, episode_archetype: e.target.value })); saveBriefField('episode_archetype', e.target.value || null); }}
+                style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, background: isLocked ? '#f8fafc' : '#fff' }}
+              >
+                <option value="">— none —</option>
+                {ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ ...S.label, marginBottom: 4 }}>Designed Intent</label>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {INTENTS.map(i => {
+                  const cfg = TIER_CONFIG[i];
+                  const active = draft.designed_intent === i;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      disabled={isLocked}
+                      onClick={() => {
+                        const next = active ? '' : i;
+                        setDraft(d => ({ ...d, designed_intent: next }));
+                        saveBriefField('designed_intent', next || null);
+                      }}
+                      style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: isLocked ? 'not-allowed' : 'pointer', border: `1px solid ${active ? cfg.color : '#e2e8f0'}`, background: active ? cfg.bg : '#fff', color: active ? cfg.color : '#64748b', opacity: isLocked ? 0.6 : 1 }}
+                    >{cfg.emoji} {i}</button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ ...S.label, marginBottom: 4 }}>Narrative Purpose</label>
+            <textarea
+              value={draft.narrative_purpose}
+              disabled={isLocked}
+              onChange={(e) => setDraft(d => ({ ...d, narrative_purpose: e.target.value }))}
+              onBlur={() => brief.narrative_purpose !== draft.narrative_purpose && saveBriefField('narrative_purpose', draft.narrative_purpose)}
+              placeholder="Why does this episode exist? What story job is it doing?"
+              rows={2}
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', background: isLocked ? '#f8fafc' : '#fff' }}
+            />
+          </div>
+          <div>
+            <label style={{ ...S.label, marginBottom: 4 }}>Forward Hook</label>
+            <textarea
+              value={draft.forward_hook}
+              disabled={isLocked}
+              onChange={(e) => setDraft(d => ({ ...d, forward_hook: e.target.value }))}
+              onBlur={() => brief.forward_hook !== draft.forward_hook && saveBriefField('forward_hook', draft.forward_hook)}
+              placeholder="What pulls the viewer into the next episode?"
+              rows={2}
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', background: isLocked ? '#f8fafc' : '#fff' }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ALLOWED OUTCOMES — toggleable. Disabling tiers narrows what the
+          script generator and evaluator are allowed to produce. */}
+      {brief && (
+        <div style={S.card}>
+          <span style={S.label}>🎲 Allowed Outcomes</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            {INTENTS.map(o => {
+              const cfg = TIER_CONFIG[o];
+              const active = draft.allowed_outcomes.includes(o);
+              return (
+                <button
+                  key={o}
+                  type="button"
+                  disabled={isLocked}
+                  onClick={() => toggleOutcome(o)}
+                  style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: isLocked ? 'not-allowed' : 'pointer', border: `1px solid ${active ? cfg.color : '#e2e8f0'}`, background: active ? cfg.bg : '#fff', color: active ? cfg.color : '#94a3b8', opacity: isLocked ? 0.6 : 1 }}
+                >{active ? '✓' : '✗'} {cfg.emoji} {o}</button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 0 }}>
         {/* Events — multi-link. Each linked event is a chip with × to
             unlink. The dropdown below lists every show event not yet
