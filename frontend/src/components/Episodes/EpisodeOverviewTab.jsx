@@ -1,9 +1,14 @@
 // frontend/src/components/Episodes/EpisodeOverviewTab.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import TimelinePlacementsSection from '../episode/TimelinePlacementsSection';
+
+// EpisodeBrief enums — kept module-level so the chip rows don't re-create
+// the array on every render. Order = display order.
+const ARCHETYPES = ['Trial', 'Temptation', 'Breakdown', 'Redemption', 'Showcase', 'Rising', 'Pressure', 'Cliffhanger'];
+const INTENTS = ['slay', 'pass', 'safe', 'fail'];
 
 /**
  * EpisodeOverviewTab — Episode Dashboard
@@ -71,6 +76,13 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   // to the episode directly; the Locations card reads them through the
   // linked events. One source of truth.
   const [worldLocations, setWorldLocations] = useState([]);
+  // EpisodeBrief snapshot + editable creative fields. Loaded alongside the
+  // rest of the context. The `draft` mirror lets us debounce edits to
+  // textareas without firing a PUT on every keystroke (saved on blur).
+  const [brief, setBrief] = useState(null);
+  const [draft, setDraft] = useState({});
+  const [savingBrief, setSavingBrief] = useState(false);
+  const [parentEvent, setParentEvent] = useState(null);
   // AI scene-set suggester state — fetch is one-shot, the modal is the
   // creator's review surface, and apply links the chosen sets via the
   // existing /scene-sets endpoint.
@@ -109,6 +121,55 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       const scripts = data?.data || data?.scripts || [];
       if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
     }).catch(() => {});
+    // EpisodeBrief — drives the merged Identity/Source/Stakes/Reference
+    // sections. Auto-creates if missing (the GET handler does that).
+    api.get(`/api/v1/episode-brief/${episode.id}`).then(({ data }) => {
+      const b = data?.data || null;
+      setBrief(b);
+      setDraft({
+        narrative_purpose: b?.narrative_purpose || '',
+        forward_hook: b?.forward_hook || '',
+        episode_archetype: b?.episode_archetype || '',
+        designed_intent: b?.designed_intent || '',
+        allowed_outcomes: Array.isArray(b?.allowed_outcomes) ? b.allowed_outcomes : [],
+        arc_number: b?.arc_number ?? '',
+        position_in_arc: b?.position_in_arc ?? '',
+      });
+      // Resolve narrative_chain.parent_event_id → event name for the Source band.
+      const parentId = b?.narrative_chain?.parent_event_id;
+      if (parentId && showId) {
+        api.get(`/api/v1/world/${showId}/events`).then(({ data: ev }) => {
+          const events = ev?.events || [];
+          setParentEvent(events.find(e => e.id === parentId) || null);
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+  };
+
+  // ── Brief edit helpers ─────────────────────────────────────────────────
+  // Save a single field via PUT. The brief route's whitelist limits which
+  // keys are accepted; passing a snapshot field would be a no-op on the
+  // server, so we only call this from editable controls.
+  const isLocked = brief?.status === 'locked';
+  const saveBriefField = async (field, value) => {
+    if (!brief || isLocked) return;
+    setSavingBrief(true);
+    try {
+      const { data } = await api.put(`/api/v1/episode-brief/${episode.id}`, { [field]: value });
+      setBrief(data?.data || brief);
+    } catch (err) {
+      alert('Save failed: ' + (err?.response?.data?.error || err.message));
+    } finally {
+      setSavingBrief(false);
+    }
+  };
+  const toggleOutcome = (outcome) => {
+    if (isLocked) return;
+    const next = draft.allowed_outcomes.includes(outcome)
+      ? draft.allowed_outcomes.filter(o => o !== outcome)
+      : [...draft.allowed_outcomes, outcome];
+    setDraft(d => ({ ...d, allowed_outcomes: next }));
+    saveBriefField('allowed_outcomes', next);
   };
 
   // Parse evaluation
@@ -231,6 +292,32 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const income = parseFloat(episode.total_income) || 0;
   const expenses = parseFloat(episode.total_expenses) || 0;
   const net = income - expenses;
+
+  // ── Brief snapshot derivations ────────────────────────────────────────
+  // Read-only objects come from the source event at generation time.
+  // Sections render only when their underlying object has data, so most
+  // episodes will only show the bands that apply.
+  const careerCtx = brief?.career_context || {};
+  const eventDiff = brief?.event_difficulty || {};
+  const canonCons = brief?.canon_consequences || {};
+  const narChain = brief?.narrative_chain || {};
+  const eventMeta = brief?.event_metadata || {};
+  const beatOutline = Array.isArray(brief?.beat_outline) ? brief.beat_outline : [];
+  const seeds = Array.isArray(narChain.seeds_future_events) ? narChain.seeds_future_events : [];
+  // Feed origin lives nested in canon_consequences.automation when an event
+  // was created from a SocialProfile. Strip it from the canon JSON view to
+  // avoid duplicating the Source section.
+  const automation = canonCons.automation || {};
+  const hasFeedOrigin = !!(automation.host_profile_id || automation.host_handle || automation.host_display_name);
+  const canonConsCleaned = (() => { const { automation: _a, ...rest } = canonCons; return rest; })();
+  const hasCanonCons = Object.keys(canonConsCleaned).length > 0;
+  const hasCareerCtx = Object.keys(careerCtx).length > 0;
+  const hasEventDiff = Object.keys(eventDiff).length > 0;
+  const hasEventMeta = Object.keys(eventMeta).length > 0;
+  const hasNarChain = Object.keys(narChain).length > 0;
+  const hasSourceBand = hasFeedOrigin || hasNarChain;
+  const hasStakesBand = hasCareerCtx || hasEventDiff;
+  const hasReferenceBand = hasCanonCons || beatOutline.length > 0 || hasEventMeta;
 
   const handleSave = async () => {
     try { await onUpdate(formData); setIsEditing(false); } catch { alert('Failed to save'); }
