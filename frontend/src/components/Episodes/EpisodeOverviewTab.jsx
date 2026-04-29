@@ -769,6 +769,49 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         </SectionBand>
       )}
 
+      {/* REFERENCE band — heavy snapshot data that creators rarely need
+          but should be able to inspect. All collapsed by default; clicking
+          a summary expands the JSON / list. */}
+      {hasReferenceBand && (
+        <SectionBand title="Reference">
+          {hasCanonCons && (
+            <div style={S.card}>
+              <details>
+                <summary style={{ cursor: 'pointer', fontSize: 11, color: '#64748b', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>🌐 Canon consequences</summary>
+                <pre style={{ background: '#f8fafc', padding: 10, borderRadius: 6, marginTop: 10, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 240, color: '#475569', fontFamily: "'DM Mono', monospace", border: '1px solid #e2e8f0' }}>
+                  {JSON.stringify(canonConsCleaned, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
+          {beatOutline.length > 0 && (
+            <div style={S.card}>
+              <details>
+                <summary style={{ cursor: 'pointer', fontSize: 11, color: '#64748b', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>📋 AI beat outline ({beatOutline.length})</summary>
+                <ol style={{ margin: '10px 0 0', padding: '0 0 0 22px' }}>
+                  {beatOutline.map((beat, i) => (
+                    <li key={i} style={{ marginBottom: 6, fontSize: 12, color: '#1a1a2e', lineHeight: 1.5 }}>
+                      <div style={{ fontWeight: 600 }}>{beat.summary || beat.name || `Beat ${beat.beat_number || i + 1}`}</div>
+                      {beat.dramatic_function && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, fontStyle: 'italic' }}>{beat.dramatic_function}</div>}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            </div>
+          )}
+          {hasEventMeta && (
+            <div style={S.card}>
+              <details>
+                <summary style={{ cursor: 'pointer', fontSize: 11, color: '#64748b', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>📦 Event metadata</summary>
+                <pre style={{ background: '#f8fafc', padding: 10, borderRadius: 6, marginTop: 10, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 240, color: '#475569', fontFamily: "'DM Mono', monospace", border: '1px solid #e2e8f0' }}>
+                  {JSON.stringify(eventMeta, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
+        </SectionBand>
+      )}
+
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={() => navigate(`/episodes/${episode.id}/script-writer`)} style={{ padding: '6px 14px', borderRadius: 6, background: '#B8962E', border: 'none', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✦ Script Writer</button>
