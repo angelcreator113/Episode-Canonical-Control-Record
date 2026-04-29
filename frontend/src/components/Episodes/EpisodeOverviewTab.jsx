@@ -255,20 +255,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
     }
   };
 
-  // Read-through summary: aggregate the linked events' narrative fields so
-  // the episode page can display them without copying onto the episode
-  // itself. Single source of truth — when the event changes, the episode
-  // view reflects it. dress_code and narrative_stakes show as chips; the
-  // first non-empty canon_consequences object surfaces beneath.
-  const eventNarrative = (() => {
-    const dressCodes = Array.from(new Set(linkedEvents.map(e => e.dress_code).filter(Boolean)));
-    const stakes = linkedEvents.map(e => e.narrative_stakes).filter(Boolean);
-    const consequences = linkedEvents
-      .map(e => e.canon_consequences)
-      .filter(c => c && (typeof c === 'object' ? Object.keys(c).length : true));
-    return { dressCodes, stakes, consequences };
-  })();
-
   // Locations derived from the linked events. Each event can point at a
   // WorldLocation via venue_location_id; we resolve those to full
   // location objects (name, district, image) for display. Deduped by id
@@ -622,40 +608,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         </div>
       </div>
 
-      {/* Narrative read-through — pulls dress_code, narrative_stakes, and
-          canon_consequences from the linked events. None of this lives on
-          the episode itself; we read it through so updates to the event
-          flow into the episode without copies that go stale. Hidden when
-          no events are linked or every linked event lacks these fields. */}
-      {linkedEvents.length > 0 && (eventNarrative.dressCodes.length > 0 || eventNarrative.stakes.length > 0 || eventNarrative.consequences.length > 0) && (
-        <div style={S.card}>
-          <span style={S.label}>🎭 Narrative (from event{linkedEvents.length > 1 ? 's' : ''})</span>
-          {eventNarrative.dressCodes.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: eventNarrative.stakes.length || eventNarrative.consequences.length ? 8 : 0 }}>
-              {eventNarrative.dressCodes.map((dc, i) => (
-                <span key={i} style={{ padding: '2px 8px', background: '#faf5ea', borderRadius: 4, fontSize: 10, color: '#B8962E', fontWeight: 600 }}>{dc}</span>
-              ))}
-            </div>
-          )}
-          {eventNarrative.stakes.length > 0 && (
-            <div style={{ marginBottom: eventNarrative.consequences.length ? 8 : 0 }}>
-              {eventNarrative.stakes.map((s, i) => (
-                <div key={i} style={{ fontSize: 12, color: '#1a1a2e', fontStyle: 'italic', marginBottom: i < eventNarrative.stakes.length - 1 ? 4 : 0, lineHeight: 1.4 }}>
-                  {s}
-                </div>
-              ))}
-            </div>
-          )}
-          {eventNarrative.consequences.length > 0 && (
-            <details style={{ fontSize: 11, color: '#64748b' }}>
-              <summary style={{ cursor: 'pointer', color: '#94a3b8', fontWeight: 600, fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>Canon consequences</summary>
-              <pre style={{ background: '#f8fafc', padding: 8, borderRadius: 4, marginTop: 6, fontSize: 10, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
-                {eventNarrative.consequences.map(c => typeof c === 'string' ? c : JSON.stringify(c, null, 2)).join('\n\n')}
-              </pre>
-            </details>
-          )}
-        </div>
-      )}
+
 
       {/* Video UI overlays — invites, checklists, etc. on the rendered
           video frame. Auto-populated when an invite is approved or the
