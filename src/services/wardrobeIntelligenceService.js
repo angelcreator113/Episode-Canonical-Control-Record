@@ -461,6 +461,95 @@ const ARC_TIER_CAPS = {
  * Caps at +8. Returns null when nothing qualifies so the signal stays
  * out of the breakdown for ordinary outfits.
  */
+/**
+ * evaluateColorPsychology — color carries emotional valence the outfit
+ * scorer used to ignore. Wearing red/burgundy reads as power; pastels
+ * read as soft / vulnerable; metallics read as celebration. The
+ * existing color_harmony signal only checks family cohesion (do
+ * pieces match?), not whether the dominant family fits the event's
+ * emotional pitch.
+ *
+ * Determines the dominant family across the outfit and compares it
+ * to a context bucket derived from event_type + prestige + dress_code:
+ *
+ *   high_stakes  prestige ≥7, gala/premiere/brand_deal      →  warm/metallic/jewel  +4
+ *   intimate     prestige ≤4 OR event_type=date/dinner/coffee →  pastel/neutral     +3
+ *   celebratory  launch/after_party/opening + dress mentions sparkle →  metallic/jewel +5
+ *   professional press/fitting/meeting + business in dress code  →  cool/neutral     +3
+ *
+ * Mismatches are softer penalties (-2) so creators don't feel
+ * boxed in — color is one signal among many.
+ *
+ * Returns null when no dominant family or no clear context — color
+ * harmony already covers the "do pieces match" angle.
+ */
+function evaluateColorPsychology(items, event) {
+  if (!items?.length || !event) return null;
+  const families = items.map(i => classifyColor(i.color)).filter(f => f !== 'unknown');
+  if (families.length === 0) return null;
+  // Dominant family — most-common, requires ≥half the pieces to qualify.
+  const counts = {};
+  for (const f of families) counts[f] = (counts[f] || 0) + 1;
+  const [dominant, count] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  if (count < Math.ceil(families.length / 2)) return null;
+
+  const eventType = String(event.event_type || '').toLowerCase();
+  const dressCode = String(event.dress_code || '').toLowerCase();
+  const prestige = parseInt(event.prestige, 10) || 5;
+  const HIGH_STAKES = ['gala', 'premiere', 'brand_deal'].includes(eventType) || prestige >= 7;
+  const INTIMATE = ['date', 'dinner', 'coffee'].includes(eventType) || prestige <= 4;
+  const CELEBRATORY = ['launch', 'after_party', 'opening'].includes(eventType)
+    || /sparkle|disco|metallic|dazzle|festive/.test(dressCode);
+  const PROFESSIONAL = ['press', 'fitting', 'meeting', 'interview'].includes(eventType)
+    || /business|professional|corporate|chic professional/.test(dressCode);
+
+  // Match table — best-fit family per context. The order here is the
+  // priority when an event hits multiple buckets (celebratory beats
+  // high_stakes, professional beats intimate).
+  let context, bestFamilies, narrativeMatch, narrativeMiss;
+  if (CELEBRATORY) {
+    context = 'celebratory'; bestFamilies = ['metallic', 'jewel']; narrativeMatch = 'occasion_match'; narrativeMiss = 'occasion_drag';
+  } else if (PROFESSIONAL) {
+    context = 'professional'; bestFamilies = ['cool', 'neutral']; narrativeMatch = 'composed'; narrativeMiss = 'too_loud';
+  } else if (HIGH_STAKES) {
+    context = 'high_stakes'; bestFamilies = ['warm', 'metallic', 'jewel']; narrativeMatch = 'power_signal'; narrativeMiss = 'underwhelming';
+  } else if (INTIMATE) {
+    context = 'intimate'; bestFamilies = ['pastel', 'neutral']; narrativeMatch = 'authentic_softness'; narrativeMiss = 'overdialed';
+  } else {
+    return null;
+  }
+
+  if (bestFamilies.includes(dominant)) {
+    const text = {
+      celebratory: `Mostly ${dominant} — reads festive, matches the room`,
+      professional: `Mostly ${dominant} — reads composed`,
+      high_stakes: `Mostly ${dominant} — color carries the room's weight`,
+      intimate: `Mostly ${dominant} — soft tones read as authentic, not performative`,
+    }[context];
+    const delta = context === 'celebratory' ? 5 : context === 'high_stakes' ? 4 : 3;
+    return { type: `color_${context}_match`, text, narrative: narrativeMatch, delta };
+  }
+  // Color directly conflicts with the context. Pastel at a power gala or
+  // jewel tones at a brunch — soft penalty since the rest of the outfit
+  // can still rescue it.
+  const conflict = {
+    celebratory: ['neutral', 'pastel'],
+    professional: ['warm', 'jewel', 'metallic'],
+    high_stakes: ['pastel'],
+    intimate: ['warm', 'jewel'],
+  }[context];
+  if (conflict?.includes(dominant)) {
+    const text = {
+      celebratory: `Dominant ${dominant} reads quiet for a celebration`,
+      professional: `Dominant ${dominant} reads loud for a professional context`,
+      high_stakes: `Dominant ${dominant} feels gentle for the room's stakes`,
+      intimate: `Dominant ${dominant} reads performative for an intimate moment`,
+    }[context];
+    return { type: `color_${context}_miss`, text, narrative: narrativeMiss, delta: -2 };
+  }
+  return null;
+}
+
 function evaluateRarityBonus(items) {
   if (!items?.length) return null;
   const elite = items.filter(i => ['brand_exclusive', 'season_drop'].includes(i.lock_type));
@@ -575,6 +664,7 @@ function scoreOutfitForEvent(wardrobeItems, event, ctx = {}) {
     evaluateCharacterMoodFit(tierGap, provisionalMood, characterState),
     evaluateAuthenticityFit(avgTier, arcStage),
     evaluateRarityBonus(wardrobeItems),
+    evaluateColorPsychology(wardrobeItems, event),
   ]) {
     if (sig) {
       secondaryDelta += sig.delta || 0;
