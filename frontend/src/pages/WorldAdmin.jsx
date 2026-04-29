@@ -3008,8 +3008,16 @@ The revised event should feel like a completely different experience from the si
                     the creator at a glance what the AI will have to work
                     with. Each chip is green when set, yellow when missing. */}
                 {(() => {
+                  // Mirror the display logic above (line ~2933) which falls back
+                  // to canon_consequences.automation.venue_* when the top-level
+                  // venue columns are empty. Feed-profile events created before
+                  // the worldEvents.js from-profile route was patched to set
+                  // top-level venue_location_id (commit 3d4d1d26) only have
+                  // venue data in JSONB, so a column-only check would say
+                  // "Venue ⚠" while the card right above it shows the venue.
+                  const auto = ev.canon_consequences?.automation || {};
                   const hasOutfit = !!ev.outfit_set_id || (Array.isArray(ev.outfit_pieces) && ev.outfit_pieces.length > 0);
-                  const hasVenue = !!ev.venue_location_id || !!ev.venue_name;
+                  const hasVenue = !!ev.venue_location_id || !!ev.venue_name || !!auto.venue_location_id || !!auto.venue_name;
                   const hasScene = !!ev.scene_set_id;
                   const hasInvite = !!ev.invitation_asset_id;
                   const checks = [
