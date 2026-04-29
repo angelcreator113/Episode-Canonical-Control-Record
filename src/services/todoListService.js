@@ -206,6 +206,18 @@ function wrapTextWithEllipsis(ctx, text, maxWidth, maxLines) {
   return lines.slice(0, maxLines);
 }
 
+function fitTextToWidth(ctx, text, maxWidth) {
+  const raw = String(text || '').trim();
+  if (!raw) return '';
+  if (ctx.measureText(raw).width <= maxWidth) return raw;
+
+  let fitted = raw;
+  while (ctx.measureText(`${fitted}...`).width > maxWidth && fitted.length > 1) {
+    fitted = fitted.slice(0, -1).trimEnd();
+  }
+  return `${fitted}...`;
+}
+
 // ─── CANVAS RENDERER ──────────────────────────────────────────────────────────
 
 /**
@@ -302,6 +314,7 @@ function renderTodoAsset(tasks, event, options = {}) {
     const checkSize = 18;
     const checkX = PADDING;
     const checkY = taskY + (TASK_H / 2) - (checkSize / 2);
+    const badgeReservedWidth = task.required ? 0 : 52;
 
     // Checkbox — plain rect
     ctx.beginPath();
@@ -321,22 +334,20 @@ function renderTodoAsset(tasks, event, options = {}) {
 
     // Task label
     const labelX = checkX + checkSize + 12;
-    const labelW = W - labelX - PADDING;
+    const labelW = W - labelX - PADDING - badgeReservedWidth;
+    const labelFontSize = Math.round(W * 0.029);
+    const descriptionFontSize = Math.round(W * 0.022);
 
     ctx.textAlign = 'left';
-    ctx.font = `bold ${Math.round(W * 0.032)}px LibreBaskerville, serif`;
+    ctx.font = `bold ${labelFontSize}px LibreBaskerville, serif`;
     ctx.fillStyle = task.completed ? '#AAA' : '#1A1A1A';
-    ctx.fillText(task.label, labelX, taskY + 22);
+    ctx.fillText(fitTextToWidth(ctx, task.label, labelW), labelX, taskY + 22);
 
     // Task description
     if (task.description) {
-      ctx.font = `italic ${Math.round(W * 0.026)}px LibreBaskerville, serif`;
+      ctx.font = `italic ${descriptionFontSize}px LibreBaskerville, serif`;
       ctx.fillStyle = task.completed ? '#CCC' : '#666';
-      let desc = task.description;
-      while (ctx.measureText(desc).width > labelW && desc.length > 20) {
-        desc = desc.slice(0, -4) + '...';
-      }
-      ctx.fillText(desc, labelX, taskY + 42);
+      ctx.fillText(fitTextToWidth(ctx, task.description, labelW), labelX, taskY + 42);
     }
 
     // Optional badge
