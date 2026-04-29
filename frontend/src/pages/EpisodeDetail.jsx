@@ -9,11 +9,9 @@ import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggest
 import EpisodePhoneMissionsTab from '../components/Episodes/EpisodePhoneMissionsTab';
 import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
 import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
-import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
 import EpisodeWardrobeGameplay from '../components/EpisodeWardrobeGameplay';
 import EpisodeTodoList from '../components/Episodes/EpisodeTodoList';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
-import SceneLinking from '../components/SceneLinking';
 import EpisodeScenesTab from '../components/Episodes/EpisodeScenesTab';
 import PhonePreviewMode from '../components/PhonePreviewMode';
 import usePhonePlaythrough from '../hooks/usePhonePlaythrough';
@@ -172,15 +170,7 @@ const EpisodeDetail = () => {
     }
   }, [searchParams]);
 
-  const [loadingScenes, setLoadingScenes] = useState(false);
-  const [episodeWardrobes, setEpisodeWardrobes] = useState([]);
-  const [selectedSceneId, setSelectedSceneId] = useState(null);
-  const [editingTrim, setEditingTrim] = useState({});
-  const [savingScenes, setSavingScenes] = useState({});
   const [showMoreActions, setShowMoreActions] = useState(false);
-  const [showOtherSteps, setShowOtherSteps] = useState(false);
-  const [primaryScript, setPrimaryScript] = useState(null);
-  const [wardrobeMode, setWardrobeMode] = useState('inventory'); // inventory | gameplay
   const [episodeEvents, setEpisodeEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [characterState, setCharacterState] = useState({});
@@ -252,63 +242,22 @@ const EpisodeDetail = () => {
     }
   };
 
-  // Load primary script for scene linking
-  useEffect(() => {
-    const fetchPrimaryScript = async () => {
-      if (!episodeId) return;
-      
-      try {
-        const response = await fetch(`/api/v1/episodes/${episodeId}/scripts?includeAllVersions=false`);
-        const data = await response.json();
-        const scripts = data.data || data.scripts || [];
-        const primary = scripts.find(s => s.is_primary === true);
-        setPrimaryScript(primary || scripts[0]); // Use first script if no primary
-      } catch (err) {
-        console.error('Failed to load primary script:', err);
-      }
-    };
-
-    fetchPrimaryScript();
-  }, [episodeId]);
-
-  // Load episode scenes
+  // Load episode scenes — only fires when the user opens the Scenes sub-tab.
   useEffect(() => {
     const fetchEpisodeScenes = async () => {
       if (!episodeId || activeTab !== 'scenes') return;
-      
       try {
-        setLoadingScenes(true);
         const response = await fetch(`/api/v1/episodes/${episodeId}/library-scenes`);
         const data = await response.json();
         setEpisodeScenes(data.data || []);
       } catch (err) {
         console.error('Failed to load episode scenes:', err);
         toast.showError('Failed to load scenes');
-      } finally {
-        setLoadingScenes(false);
       }
     };
 
     fetchEpisodeScenes();
-  }, [episodeId, activeTab]);
-
-  // Load episode wardrobe
-  useEffect(() => {
-    const fetchEpisodeWardrobe = async () => {
-      if (!episodeId || activeTab !== 'wardrobe') return;
-      
-      try {
-        const response = await fetch(`/api/v1/episodes/${episodeId}/wardrobe`);
-        const data = await response.json();
-        setEpisodeWardrobes(data.data || data.items || []);
-      } catch (err) {
-        console.error('Failed to load episode wardrobe:', err);
-        toast.showError('Failed to load wardrobe');
-      }
-    };
-
-    fetchEpisodeWardrobe();
-  }, [episodeId, activeTab]);
+  }, [episodeId, activeTab, toast]);
 
   // Load events + character state for wardrobe gameplay
   useEffect(() => {
@@ -367,56 +316,6 @@ const EpisodeDetail = () => {
     } catch (err) {
       console.error('Failed to add scene to episode:', err);
       alert('Failed to add scene. Please try again.');
-    }
-  };
-
-  // Select scene for preview
-  const handleSelectSceneForPreview = (sceneId) => {
-    setSelectedSceneId(sceneId);
-  };
-
-  // Update trim times
-  const handleTrimChange = (sceneId, field, value) => {
-    setEditingTrim({
-      ...editingTrim,
-      [sceneId]: {
-        ...editingTrim[sceneId],
-        [field]: parseFloat(value) || 0,
-      },
-    });
-  };
-
-  // Save trim changes
-  const handleSaveTrim = async (sceneId) => {
-    const trimData = editingTrim[sceneId];
-    if (!trimData) return;
-
-    try {
-      setSavingScenes({ ...savingScenes, [sceneId]: true });
-
-      const response = await fetch(`/api/v1/episodes/${episodeId}/library-scenes/${sceneId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trimStart: trimData.trimStart,
-          trimEnd: trimData.trimEnd,
-        }),
-      });
-
-      if (response.ok) {
-        // Reload scenes
-        const data = await fetch(`/api/v1/episodes/${episodeId}/library-scenes`);
-        const scenesData = await data.json();
-        setEpisodeScenes(scenesData.data || []);
-        setEditingTrim({ ...editingTrim, [sceneId]: undefined });
-      } else {
-        alert('Failed to save trim changes');
-      }
-    } catch (err) {
-      console.error('Failed to save trim:', err);
-      alert('Failed to save changes. Please try again.');
-    } finally {
-      setSavingScenes({ ...savingScenes, [sceneId]: false });
     }
   };
 
