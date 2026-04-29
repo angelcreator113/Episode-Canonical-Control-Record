@@ -76,6 +76,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   // to the episode directly; the Locations card reads them through the
   // linked events. One source of truth.
   const [worldLocations, setWorldLocations] = useState([]);
+  // Episode-scoped financial ledger — every transaction (event_payment,
+  // wardrobe_purchase, tier_reward, event_reward, etc.) tagged with this
+  // episode_id. Surfaced as a breakdown card in the Stakes band so the
+  // Net P&L number on the stat strip has a "where did it come from" view
+  // right next to it.
+  const [ledger, setLedger] = useState({ transactions: [], loading: true });
   // EpisodeBrief snapshot + editable creative fields. Loaded alongside the
   // rest of the context. The `draft` mirror lets us debounce edits to
   // textareas without firing a PUT on every keystroke (saved on blur).
@@ -114,6 +120,17 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(({ data }) => {
         setTotalEpisodes((data?.data || data || []).length);
       }).catch(() => {});
+      // Episode-scoped ledger. Skipping when no showId — the endpoint
+      // requires it, and a draft episode without a show wouldn't have
+      // transactions anyway.
+      api.get(`/api/v1/world/${showId}/financial-ledger?episode_id=${episode.id}&limit=50`)
+        .then(({ data }) => {
+          const txs = data?.data?.transactions || [];
+          setLedger({ transactions: txs, loading: false });
+        })
+        .catch(() => setLedger({ transactions: [], loading: false }));
+    } else {
+      setLedger({ transactions: [], loading: false });
     }
     api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => setSceneSets(data?.data || [])).catch(() => {});
     api.get(`/api/v1/world/locations`).then(({ data }) => setWorldLocations(data?.locations || [])).catch(() => {});
@@ -312,9 +329,18 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const rewardStats = ['coins', 'reputation', 'brand_trust', 'influence']
     .filter(k => (parseInt(rewards[k], 10) || 0) > 0);
   const hasRewards = rewardStats.length > 0 || rewardOutcomes.length > 0;
+  // Financial breakdown derivations — group ledger rows by income vs
+  // expense, sum each side, and total. The card hides while loading or
+  // when an episode has no transactions yet (draft episodes never finalized).
+  const ledgerIncome = ledger.transactions.filter(t => ['income', 'reward'].includes(t.type));
+  const ledgerExpense = ledger.transactions.filter(t => ['expense', 'deduction'].includes(t.type));
+  const ledgerIncomeTotal = ledgerIncome.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+  const ledgerExpenseTotal = ledgerExpense.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+  const ledgerNet = ledgerIncomeTotal - ledgerExpenseTotal;
+  const hasFinancials = ledger.transactions.length > 0;
   const hasNarChain = Object.keys(narChain).length > 0;
   const hasSourceBand = hasFeedOrigin || hasNarChain;
-  const hasStakesBand = hasCareerCtx || hasEventDiff || hasRewards;
+  const hasStakesBand = hasCareerCtx || hasEventDiff || hasRewards || hasFinancials;
   const hasReferenceBand = hasCanonCons || beatOutline.length > 0 || hasEventMeta;
 
   const handleSave = async () => {
@@ -781,6 +807,65 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                 </div>
               )}
             </div>
+            {hasFinancials && (() => {
+              // Episode financial ledger — every transaction tagged with
+              // this episode_id, grouped income vs expense, with the net
+              // P&L for the episode. Sits below the 3-up Stakes cards so
+              // the totals on the stat strip up top have a "where did
+              // this come from" companion view. Categories that ship
+              // today: event_payment, brand_deal_bonus, social_task_reward,
+              // tier_reward, tier_paid_bonus, event_reward, event_entry,
+              // wardrobe_purchase, wardrobe_rental, styling_extras,
+              // milestone, manual_adjustment.
+              const categoryIcons = {
+                event_payment: '💼', brand_deal_bonus: '🤝', social_task_reward: '📱',
+                tier_reward: '👑', tier_paid_bonus: '✨', event_reward: '🏆',
+                milestone: '🎯', event_entry: '🎟️', wardrobe_purchase: '👗',
+                wardrobe_rental: '👗', styling_extras: '🥂', manual_adjustment: '✏️',
+                seed: '🌱',
+              };
+              const fmt = (n) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toLocaleString()}`;
+              const labelFor = (cat) => (cat || 'other').replace(/_/g, ' ');
+              const Row = ({ tx }) => {
+                const isIncome = ['income', 'reward'].includes(tx.type);
+                const sign = isIncome ? '+' : '−';
+                const color = isIncome ? '#16a34a' : '#dc2626';
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid #f1f5f9', fontSize: 11 }}>
+                    <span style={{ fontSize: 13 }}>{categoryIcons[tx.category] || '◦'}</span>
+                    <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 500 }}>{tx.description || labelFor(tx.category)}</span>
+                    <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4 }}>{labelFor(tx.category)}</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, color, minWidth: 70, textAlign: 'right' }}>{sign}{Math.abs(parseFloat(tx.amount) || 0).toLocaleString()} 🪙</span>
+                  </div>
+                );
+              };
+              return (
+                <div style={{ ...S.card, marginTop: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={S.label}>💰 Episode Financials</span>
+                    <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: 700, color: ledgerNet >= 0 ? '#16a34a' : '#dc2626' }}>
+                      Net {fmt(ledgerNet)} 🪙
+                    </span>
+                  </div>
+                  {ledgerIncome.length > 0 && (
+                    <div style={{ marginBottom: ledgerExpense.length ? 10 : 0 }}>
+                      <div style={{ fontSize: 9, color: '#16a34a', textTransform: 'uppercase', fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, marginBottom: 4 }}>
+                        Income · {fmt(ledgerIncomeTotal)} 🪙
+                      </div>
+                      {ledgerIncome.map(tx => <Row key={tx.id} tx={tx} />)}
+                    </div>
+                  )}
+                  {ledgerExpense.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 9, color: '#dc2626', textTransform: 'uppercase', fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, marginBottom: 4 }}>
+                        Expenses · −{ledgerExpenseTotal.toLocaleString()} 🪙
+                      </div>
+                      {ledgerExpense.map(tx => <Row key={tx.id} tx={tx} />)}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </SectionBand>
         );
       })()}
