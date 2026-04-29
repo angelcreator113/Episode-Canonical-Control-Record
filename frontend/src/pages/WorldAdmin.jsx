@@ -2539,6 +2539,17 @@ The revised event should feel like a completely different experience from the si
                     {['none', 'low', 'medium', 'high', 'tonight', 'urgent'].map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
+                {/* Optional minute count — overrides whatever the type implies
+                    when set. Used by the brief snapshot's event_difficulty
+                    block. Leave blank for "use the default for this type". */}
+                <FG
+                  label="Deadline minutes (optional)"
+                  value={eventForm.deadline_minutes ?? ''}
+                  onChange={v => setEventForm(p => ({ ...p, deadline_minutes: v === '' ? null : parseInt(v, 10) || null }))}
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 90"
+                />
                 <FG label="Dress Code" value={eventForm.dress_code} onChange={v => setEventForm(p => ({ ...p, dress_code: v }))} placeholder="romantic couture" />
                 <div>
                   <label style={S.fLabel}>Dress Code Keywords</label>
@@ -2569,6 +2580,17 @@ The revised event should feel like a completely different experience from the si
                     {BIAS_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>
+                {/* Pool size pairs with bias — bias is the lean (luxury / mid /
+                    balanced), size is how many candidates to surface. Default
+                    is 8; bump for big browse moments, drop for tight choices. */}
+                <FG
+                  label="Browse Pool Size"
+                  value={eventForm.browse_pool_size ?? 8}
+                  onChange={v => setEventForm(p => ({ ...p, browse_pool_size: parseInt(v, 10) || 8 }))}
+                  type="number"
+                  min={1}
+                  max={50}
+                />
               </div>
 
               {/* Invitation Style */}
