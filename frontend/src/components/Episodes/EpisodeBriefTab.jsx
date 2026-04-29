@@ -136,7 +136,16 @@ function EpisodeBriefTab({ episode }) {
   const eventMeta = brief.event_metadata || {};
   const beatOutline = Array.isArray(brief.beat_outline) ? brief.beat_outline : [];
   const seeds = Array.isArray(narChain.seeds_future_events) ? narChain.seeds_future_events : [];
-  const hasCanonCons = Object.keys(canonCons).length > 0;
+  // Feed origin lives nested in canon_consequences.automation when the event
+  // was created from a SocialProfile (worldEvents.js:2105). Surface it as its
+  // own card and strip it from the raw canon JSON below to avoid duplication.
+  const automation = canonCons.automation || {};
+  const hasFeedOrigin = !!(automation.host_profile_id || automation.host_handle || automation.host_display_name);
+  const canonConsCleaned = (() => {
+    const { automation: _a, ...rest } = canonCons;
+    return rest;
+  })();
+  const hasCanonCons = Object.keys(canonConsCleaned).length > 0;
   const hasCareerCtx = Object.keys(careerCtx).length > 0;
   const hasEventDiff = Object.keys(eventDiff).length > 0;
   const hasEventMeta = Object.keys(eventMeta).length > 0;
@@ -291,6 +300,84 @@ function EpisodeBriefTab({ episode }) {
         </div>
       </div>
 
+      {/* FEED ORIGIN — surfaces the SocialProfile that spawned the source
+          event (stored nested in canon_consequences.automation.* by the
+          create-event-from-profile route). Without this card, the only way
+          a creator can find "this episode came from @handle" is by expanding
+          the raw canon JSON. */}
+      {hasFeedOrigin && (
+        <div style={S.card}>
+          <div style={S.sectionTitle}>🌐 Feed Origin<span style={S.snapshotBadge}>SNAPSHOT</span></div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{automation.host_display_name || automation.host_handle || 'Unknown profile'}</div>
+              {automation.host_handle && <div style={{ fontSize: 11, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>@{automation.host_handle.replace(/^@/, '')}</div>}
+              {automation.content_category && <div style={{ marginTop: 4, display: 'inline-block', padding: '1px 6px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{automation.content_category}</div>}
+            </div>
+            <Link to="/feed" style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>View feed →</Link>
+          </div>
+
+          {/* Why-Lala-cares signals — the three follow_* fields plus event_excitement
+              are the SocialProfile's "hook" for getting onto Lala's calendar. */}
+          {(automation.follow_motivation || automation.follow_emotion || automation.follow_trigger || automation.event_excitement != null) && (
+            <div style={{ marginBottom: 10 }}>
+              <label style={S.label}>Why this hooked Lala</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, fontSize: 12 }}>
+                {automation.follow_motivation && (
+                  <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Motivation</span><div style={{ color: '#1a1a2e' }}>{automation.follow_motivation}</div></div>
+                )}
+                {automation.follow_emotion && (
+                  <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Emotion</span><div style={{ color: '#1a1a2e' }}>{automation.follow_emotion}</div></div>
+                )}
+                {automation.follow_trigger && (
+                  <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Trigger</span><div style={{ color: '#1a1a2e' }}>{automation.follow_trigger}</div></div>
+                )}
+                {automation.event_excitement != null && (
+                  <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Excitement</span><div style={{ color: '#B8962E', fontWeight: 700 }}>{automation.event_excitement}/10</div></div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Lifestyle gap — the gap between what the host claims publicly vs
+              their actual reality. This is the dramatic engine the show mines
+              when Lala interacts with them. Three-row layout reads top-to-bottom. */}
+          {(automation.lifestyle_claim || automation.lifestyle_reality || automation.lifestyle_gap) && (
+            <div style={{ marginBottom: 10 }}>
+              <label style={S.label}>Lifestyle gap</label>
+              {automation.lifestyle_claim && (
+                <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>
+                  <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Claim</span>{automation.lifestyle_claim}
+                </div>
+              )}
+              {automation.lifestyle_reality && (
+                <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>
+                  <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Reality</span>{automation.lifestyle_reality}
+                </div>
+              )}
+              {automation.lifestyle_gap && (
+                <div style={{ fontSize: 12, color: '#dc2626', fontStyle: 'italic' }}>
+                  <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6, fontStyle: 'normal' }}>Gap</span>{automation.lifestyle_gap}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Brand + beauty hooks — these route into wardrobe/styling decisions
+              downstream so creators should see them at a glance. */}
+          {(automation.host_brand || automation.beauty_factor || automation.beauty_description) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12 }}>
+              {automation.host_brand && (
+                <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Brand</span><div style={{ color: '#1a1a2e', fontWeight: 600 }}>{automation.host_brand}</div></div>
+              )}
+              {automation.beauty_factor && (
+                <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Beauty hook</span><div style={{ color: '#1a1a2e' }}>{automation.beauty_factor}{automation.beauty_description ? ` — ${automation.beauty_description}` : ''}</div></div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* DIFFICULTY — snapshot */}
       {hasEventDiff && (
         <div style={S.card}>
@@ -330,11 +417,13 @@ function EpisodeBriefTab({ episode }) {
         </div>
       )}
 
-      {/* CANON CONSEQUENCES — snapshot */}
+      {/* CANON CONSEQUENCES — snapshot. Renders canon minus automation since
+          the Feed Origin card already presents the automation sub-object in a
+          readable form. */}
       {hasCanonCons && (
         <div style={S.card}>
           <div style={S.sectionTitle}>🌐 Canon Consequences<span style={S.snapshotBadge}>SNAPSHOT</span></div>
-          <pre style={S.pre}>{JSON.stringify(canonCons, null, 2)}</pre>
+          <pre style={S.pre}>{JSON.stringify(canonConsCleaned, null, 2)}</pre>
         </div>
       )}
 
