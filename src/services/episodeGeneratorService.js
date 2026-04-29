@@ -586,6 +586,31 @@ Return ONLY JSON.` }],
     });
   }
 
+  // ── 2b. Auto-place required UI overlays on the timeline ──
+  // The event's required_ui_overlays array (default
+  // ['MailPanel', 'InviteLetterOverlay', 'WardrobeList', 'CareerList'])
+  // names the overlays the show expects to render on this episode. Match
+  // each name against ui_overlay_types and place the best available asset
+  // on the timeline so creators land on Overview with the Timeline
+  // Placements card pre-populated. Silent skip when no asset has been
+  // generated yet — re-running this is safe (placement helper is
+  // idempotent on (episode_id, asset_id)).
+  try {
+    const { autoPlaceRequiredOverlays } = require('./timelinePlacementService');
+    const placed = await autoPlaceRequiredOverlays(models, {
+      showId,
+      episodeId: episode.id,
+      requiredKeys: Array.isArray(event.required_ui_overlays) ? event.required_ui_overlays : [],
+    });
+    if (placed.length > 0) {
+      console.log(`[EpisodeGenerator] Auto-placed ${placed.length} required overlay(s):`,
+        placed.map(p => `${p.name} (${p.category})`).join(', '));
+    }
+  } catch (placeErr) {
+    // Auto-placement is a nice-to-have; never block episode creation on it.
+    console.warn('[EpisodeGenerator] Auto-place required overlays failed:', placeErr.message);
+  }
+
   // ── 3. Create Scene Plan (14 beats) ──
   const scenePlanRows = [];
   // Use a container object instead of bare identifiers so downstream
