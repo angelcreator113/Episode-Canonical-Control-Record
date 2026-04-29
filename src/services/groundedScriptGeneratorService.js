@@ -182,6 +182,19 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
     if (eventData.invitation_asset_id) {
       eventContext += '\nInvitation: GENERATED — use in Beat 5 (Reveal). JAWIHP opens the mail and reads the invitation aloud. The InviteLetterOverlay should float up on screen.';
     }
+    // Outcomes — creator-authored narrative threads this event opens. The
+    // Rewards editor in WorldAdmin populates rewards.outcomes (one per line).
+    // Surfacing them here gives the writer concrete success-state hooks to
+    // weave into the back half of the episode (Beats 9-13: Result/Aftermath)
+    // without inventing them on its own. Lenient parse handles JSON-string
+    // legacy rows.
+    const rewardsObj = (typeof eventData.rewards === 'string'
+      ? (() => { try { return JSON.parse(eventData.rewards || '{}'); } catch { return {}; } })()
+      : (eventData.rewards || {}));
+    const outcomes = Array.isArray(rewardsObj.outcomes) ? rewardsObj.outcomes.filter(Boolean) : [];
+    if (outcomes.length > 0) {
+      eventContext += `\nIf this episode lands SLAY or PASS, these threads should be visibly opened in the back half (Beats 9-13). Reference them through dialogue, reactions, or a closing tag — not exposition:\n${outcomes.map(o => `  • ${o}`).join('\n')}`;
+    }
   } else {
     eventContext = 'No event assigned';
   }
