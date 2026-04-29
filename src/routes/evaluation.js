@@ -619,67 +619,75 @@ router.post('/characters/:key/state/update', optionalAuth, async (req, res) => {
       if (newState[k] !== oldState[k]) deltas[k] = newState[k] - oldState[k];
     }
 
-    // Update state
-    await models.sequelize.query(
-      `UPDATE character_state
-       SET coins = :coins, reputation = :reputation, brand_trust = :brand_trust,
-           influence = :influence, stress = :stress, updated_at = NOW()
-       WHERE id = :stateId`,
-      { replacements: { ...newState, stateId: state.id } }
-    );
+    // Atomic write: state UPDATE + history row + (when coins changed) the
+    // financial-ledger mirror all commit together or roll back together.
+    // Previously the state UPDATE and history INSERT had no transaction
+    // wrapper, and the ledger mirror was non-fatal — a failing ledger
+    // insert left character_state.coins out of sync with getCurrentBalance.
+    // Now any failure rolls back every write so the two sources of truth
+    // can never drift out of admin edits. The 'key === lala' gate was also
+    // dropped: 'justawoman' is the canonical key writers actually use, so
+    // the old check meant no ledger mirror ever fired for the real
+    // character. Mirror now runs whenever coins changed, regardless of key.
+    const {
+      seedStartingBalance, getCurrentBalance, logTransaction,
+    } = require('../services/financialTransactionService');
 
-    // Write to history ledger
-    if (Object.keys(deltas).length > 0) {
+    let ledgerBefore = 0;
+    let adjustment = 0;
+    if (deltas.coins !== undefined) {
+      // seedStartingBalance is idempotent. Without a seed row the SUM is 0
+      // even though getCurrentBalance reports starting_balance via a
+      // fallback, so an adjustment computed against that fallback would
+      // land off-target. Run before the transaction so the seed is its
+      // own commit (it doesn't need to roll back if the edit fails).
+      await seedStartingBalance(models.sequelize, show_id);
+      ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+      adjustment = newState.coins - ledgerBefore;
+    }
+
+    await models.sequelize.transaction(async (t) => {
       await models.sequelize.query(
-        `INSERT INTO character_state_history
-         (id, show_id, season_id, character_key, episode_id, source, deltas_json, state_after_json, notes, created_at)
-         VALUES (:id, :showId, NULL, :characterKey, NULL, :source, :deltas, :stateAfter, :notes, NOW())`,
-        {
-          replacements: {
-            id: uuidv4(),
-            showId: show_id,
-            characterKey: key,
-            source: 'manual',
-            deltas: JSON.stringify(deltas),
-            stateAfter: JSON.stringify(newState),
-            notes: notes || 'Manual edit from World Admin',
-          },
-        }
+        `UPDATE character_state
+         SET coins = :coins, reputation = :reputation, brand_trust = :brand_trust,
+             influence = :influence, stress = :stress, updated_at = NOW()
+         WHERE id = :stateId`,
+        { replacements: { ...newState, stateId: state.id }, transaction: t }
       );
-    }
 
-    // Mirror coin changes into the financial transaction ledger so the
-    // event-modal Financial Preview, episode finalize, and goal milestones
-    // all see the same balance the Characters tab is showing. Without this
-    // mirror, character_state.coins and the ledger drift — editing coins
-    // here used to leave events still planning against the old budget.
-    if (deltas.coins !== undefined && key === 'lala') {
-      try {
-        const {
-          seedStartingBalance, getCurrentBalance, logTransaction,
-        } = require('../services/financialTransactionService');
-        // Force the seed row first. getCurrentBalance has a fallback that
-        // returns starting_balance when tx_count is 0; without a real seed
-        // transaction the ledger SUM stays at 0 and our adjustment lands
-        // off-target. seedStartingBalance is idempotent — safe to call.
-        await seedStartingBalance(models.sequelize, show_id);
-        const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
-        const adjustment = newState.coins - ledgerBefore;
-        if (adjustment !== 0) {
-          await logTransaction(models.sequelize, show_id, {
-            type: adjustment > 0 ? 'income' : 'expense',
-            category: 'manual_adjustment',
-            amount: Math.abs(adjustment),
-            description: 'Manual coin adjustment from Characters tab',
-            balance_before: ledgerBefore,
-            balance_after: ledgerBefore + adjustment,
-            metadata: { source: 'character_state_update', delta: adjustment },
-          });
-        }
-      } catch (e) {
-        console.warn('[CharState] Ledger mirror failed:', e.message);
+      if (Object.keys(deltas).length > 0) {
+        await models.sequelize.query(
+          `INSERT INTO character_state_history
+           (id, show_id, season_id, character_key, episode_id, source, deltas_json, state_after_json, notes, created_at)
+           VALUES (:id, :showId, NULL, :characterKey, NULL, :source, :deltas, :stateAfter, :notes, NOW())`,
+          {
+            replacements: {
+              id: uuidv4(),
+              showId: show_id,
+              characterKey: key,
+              source: 'manual',
+              deltas: JSON.stringify(deltas),
+              stateAfter: JSON.stringify(newState),
+              notes: notes || 'Manual edit from World Admin',
+            },
+            transaction: t,
+          }
+        );
       }
-    }
+
+      if (deltas.coins !== undefined && adjustment !== 0) {
+        await logTransaction(models.sequelize, show_id, {
+          type: adjustment > 0 ? 'income' : 'expense',
+          category: 'manual_adjustment',
+          amount: Math.abs(adjustment),
+          description: 'Manual coin adjustment from Characters tab',
+          balance_before: ledgerBefore,
+          balance_after: ledgerBefore + adjustment,
+          metadata: { source: 'character_state_update', delta: adjustment, character_key: key },
+          transaction: t,
+        });
+      }
+    });
 
     return res.json({
       success: true,

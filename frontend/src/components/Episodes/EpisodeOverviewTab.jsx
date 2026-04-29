@@ -76,6 +76,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   // to the episode directly; the Locations card reads them through the
   // linked events. One source of truth.
   const [worldLocations, setWorldLocations] = useState([]);
+  // Episode-scoped financial ledger — every transaction (event_payment,
+  // wardrobe_purchase, tier_reward, event_reward, etc.) tagged with this
+  // episode_id. Surfaced as a breakdown card in the Stakes band so the
+  // Net P&L number on the stat strip has a "where did it come from" view
+  // right next to it.
+  const [ledger, setLedger] = useState({ transactions: [], loading: true });
   // EpisodeBrief snapshot + editable creative fields. Loaded alongside the
   // rest of the context. The `draft` mirror lets us debounce edits to
   // textareas without firing a PUT on every keystroke (saved on blur).
@@ -114,6 +120,17 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(({ data }) => {
         setTotalEpisodes((data?.data || data || []).length);
       }).catch(() => {});
+      // Episode-scoped ledger. Skipping when no showId — the endpoint
+      // requires it, and a draft episode without a show wouldn't have
+      // transactions anyway.
+      api.get(`/api/v1/world/${showId}/financial-ledger?episode_id=${episode.id}&limit=50`)
+        .then(({ data }) => {
+          const txs = data?.data?.transactions || [];
+          setLedger({ transactions: txs, loading: false });
+        })
+        .catch(() => setLedger({ transactions: [], loading: false }));
+    } else {
+      setLedger({ transactions: [], loading: false });
     }
     api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => setSceneSets(data?.data || [])).catch(() => {});
     api.get(`/api/v1/world/locations`).then(({ data }) => setWorldLocations(data?.locations || [])).catch(() => {});
@@ -275,9 +292,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   })();
 
   // Financials
-  const income = parseFloat(episode.total_income) || 0;
-  const expenses = parseFloat(episode.total_expenses) || 0;
-  const net = income - expenses;
+  // P&L derivation moved below the ledger derivations so it can prefer
+  // the live ledger sums over the cached columns. See block after
+  // hasFinancials.
 
   // ── Brief snapshot derivations ────────────────────────────────────────
   // Read-only objects come from the source event at generation time.
@@ -300,9 +317,46 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const hasCareerCtx = Object.keys(careerCtx).length > 0;
   const hasEventDiff = Object.keys(eventDiff).length > 0;
   const hasEventMeta = Object.keys(eventMeta).length > 0;
+  // Rewards: prefer the live event (creator may have edited after generation)
+  // and fall back to the brief's snapshot. Either source has the same shape:
+  // { coins, reputation, brand_trust, influence, outcomes }.
+  const liveRewards = (linkedEvents[0] && linkedEvents[0].rewards) || null;
+  const rewardsRaw = liveRewards || eventMeta.rewards || {};
+  const rewards = (typeof rewardsRaw === 'string'
+    ? (() => { try { return JSON.parse(rewardsRaw); } catch { return {}; } })()
+    : rewardsRaw) || {};
+  const rewardOutcomes = Array.isArray(rewards.outcomes) ? rewards.outcomes : [];
+  const rewardStats = ['coins', 'reputation', 'brand_trust', 'influence']
+    .filter(k => (parseInt(rewards[k], 10) || 0) > 0);
+  const hasRewards = rewardStats.length > 0 || rewardOutcomes.length > 0;
+  // Financial breakdown derivations — group ledger rows by income vs
+  // expense, sum each side, and total. The card hides while loading or
+  // when an episode has no transactions yet (draft episodes never finalized).
+  const ledgerIncome = ledger.transactions.filter(t => ['income', 'reward'].includes(t.type));
+  const ledgerExpense = ledger.transactions.filter(t => ['expense', 'deduction'].includes(t.type));
+  const ledgerIncomeTotal = ledgerIncome.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+  const ledgerExpenseTotal = ledgerExpense.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+  const ledgerNet = ledgerIncomeTotal - ledgerExpenseTotal;
+  const hasFinancials = ledger.transactions.length > 0;
+  // Episode P&L — when the episode has real ledger transactions, prefer
+  // those (post-completion truth). Otherwise fall back to the columns
+  // populated at generation time, which are predictions until the
+  // creator hits Complete and finalizeEpisodeFinancials runs. The
+  // distinction matters: the columns can show +500 from a paid event
+  // that hasn't actually been credited yet.
+  const isAccepted = episode.evaluation_status === 'accepted';
+  const colIncome = parseFloat(episode.total_income) || 0;
+  const colExpenses = parseFloat(episode.total_expenses) || 0;
+  const income = hasFinancials ? ledgerIncomeTotal : colIncome;
+  const expenses = hasFinancials ? ledgerExpenseTotal : colExpenses;
+  const net = income - expenses;
+  // Show an EST pill when displaying predictions (no ledger rows yet
+  // AND not accepted). When accepted but no ledger rows (rare edge),
+  // the columns ARE the truth from the prior finalize, so no badge.
+  const netIsPrediction = !hasFinancials && !isAccepted && (income !== 0 || expenses !== 0);
   const hasNarChain = Object.keys(narChain).length > 0;
   const hasSourceBand = hasFeedOrigin || hasNarChain;
-  const hasStakesBand = hasCareerCtx || hasEventDiff;
+  const hasStakesBand = hasCareerCtx || hasEventDiff || hasRewards || hasFinancials;
   const hasReferenceBand = hasCanonCons || beatOutline.length > 0 || hasEventMeta;
 
   const handleSave = async () => {
@@ -387,7 +441,19 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Episode</div><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>#{episode.episode_number || '?'}</div></div>
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Prestige</div><div style={{ fontSize: 14, fontWeight: 700, color: '#B8962E' }}>{primaryEvent?.prestige || '—'}/10</div></div>
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Outfit</div><div style={{ fontSize: 14, fontWeight: 700, color: '#ec4899' }}>{outfitPieces.length || '—'} pcs</div></div>
-        <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Net P&L</div><div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? '#16a34a' : net < 0 ? '#dc2626' : '#94a3b8' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div></div>
+        <div style={S.card}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>Net P&L</span>
+            {/* EST pill: predictions from generator-time columns, not yet
+                committed to the ledger. Disappears once the episode is
+                completed and finalizeEpisodeFinancials writes real
+                transactions. Tooltip nudges creators toward Complete. */}
+            {netIsPrediction && (
+              <span title="Estimate from event metadata — values become real after Complete Episode runs the financial pipeline." style={{ padding: '0 4px', borderRadius: 3, fontSize: 8, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: '#fefce8', color: '#a16207', border: '1px solid #fde68a' }}>EST</span>
+            )}
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? '#16a34a' : net < 0 ? '#dc2626' : '#94a3b8' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div>
+        </div>
       </div>
 
       {/* IDENTITY band — what is this episode? Creative intent + allowed
@@ -694,33 +760,143 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           milestone, success unlock, fail consequence) + difficulty knobs
           (strictness, deadline). Snapshot from the source event — not
           editable here; change them on the event itself. */}
-      {hasStakesBand && (
-        <SectionBand title="Stakes">
-          <div style={{ display: 'grid', gridTemplateColumns: hasCareerCtx && hasEventDiff ? '1fr 1fr' : '1fr', gap: 12 }}>
-            {hasCareerCtx && (
-              <div style={S.card}>
-                <span style={S.label}>💼 Career Context</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
-                  {careerCtx.career_tier && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Tier</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_tier}</div></div>}
-                  {careerCtx.career_milestone && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Milestone</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_milestone}</div></div>}
-                  {careerCtx.success_unlock && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Success unlock</span><div style={{ fontSize: 11, color: '#16a34a', lineHeight: 1.5 }}>{careerCtx.success_unlock}</div></div>}
-                  {careerCtx.fail_consequence && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Fail consequence</span><div style={{ fontSize: 11, color: '#dc2626', lineHeight: 1.5 }}>{careerCtx.fail_consequence}</div></div>}
+      {hasStakesBand && (() => {
+        // Layout: span the available columns evenly. 3 cards → three columns,
+        // 2 → two, 1 → full width. Keeps the band tidy regardless of which
+        // pieces of brief data exist on this episode.
+        const cardCount = (hasCareerCtx ? 1 : 0) + (hasEventDiff ? 1 : 0) + (hasRewards ? 1 : 0);
+        const gridCols = cardCount >= 3 ? 'repeat(3, 1fr)' : cardCount === 2 ? '1fr 1fr' : '1fr';
+        // Pending vs earned: read evaluation_json.tier_final to badge each
+        // reward. slay/pass = earned (matches episodeCompletionService gate),
+        // safe/fail = missed (rewards don't fire), undefined = pending.
+        const tier = evalData?.tier_final || null;
+        const rewardStatus = !tier ? 'pending' : (['slay', 'pass'].includes(tier) ? 'earned' : 'missed');
+        const statusCfg = {
+          pending: { label: 'PENDING', bg: '#fefce8', color: '#a16207', border: '#fde68a' },
+          earned: { label: 'EARNED', bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+          missed: { label: 'MISSED', bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+        }[rewardStatus];
+        const statIcons = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣' };
+        return (
+          <SectionBand title="Stakes">
+            <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 12 }}>
+              {hasCareerCtx && (
+                <div style={S.card}>
+                  <span style={S.label}>💼 Career Context</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
+                    {careerCtx.career_tier && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Tier</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_tier}</div></div>}
+                    {careerCtx.career_milestone && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Milestone</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_milestone}</div></div>}
+                    {careerCtx.success_unlock && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Success unlock</span><div style={{ fontSize: 11, color: '#16a34a', lineHeight: 1.5 }}>{careerCtx.success_unlock}</div></div>}
+                    {careerCtx.fail_consequence && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Fail consequence</span><div style={{ fontSize: 11, color: '#dc2626', lineHeight: 1.5 }}>{careerCtx.fail_consequence}</div></div>}
+                  </div>
                 </div>
-              </div>
-            )}
-            {hasEventDiff && (
-              <div style={S.card}>
-                <span style={S.label}>⚡ Event Difficulty</span>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 4 }}>
-                  {eventDiff.strictness != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Strictness</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.strictness}/10</div></div>}
-                  {eventDiff.deadline_type && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Deadline</span><div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{eventDiff.deadline_type}</div></div>}
-                  {eventDiff.deadline_minutes != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Minutes</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.deadline_minutes}</div></div>}
+              )}
+              {hasEventDiff && (
+                <div style={S.card}>
+                  <span style={S.label}>⚡ Event Difficulty</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 4 }}>
+                    {eventDiff.strictness != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Strictness</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.strictness}/10</div></div>}
+                    {eventDiff.deadline_type && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Deadline</span><div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{eventDiff.deadline_type}</div></div>}
+                    {eventDiff.deadline_minutes != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Minutes</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.deadline_minutes}</div></div>}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </SectionBand>
-      )}
+              )}
+              {hasRewards && (
+                <div style={S.card}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={S.label}>🏆 Rewards</span>
+                    <span
+                      title={
+                        rewardStatus === 'pending' ? 'Episode not evaluated yet — rewards will fire on slay/pass.' :
+                        rewardStatus === 'earned' ? 'Episode landed slay or pass — rewards applied.' :
+                        'Episode landed safe or fail — rewards did not fire.'
+                      }
+                      style={{ padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: statusCfg.bg, color: statusCfg.color, border: `1px solid ${statusCfg.border}` }}
+                    >{statusCfg.label}</span>
+                  </div>
+                  {rewardStats.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(rewardStats.length, 4)}, 1fr)`, gap: 8, marginTop: 4 }}>
+                      {rewardStats.map(k => (
+                        <div key={k}>
+                          <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>{statIcons[k]} {k.replace('_', ' ')}</span>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: rewardStatus === 'earned' ? '#16a34a' : rewardStatus === 'missed' ? '#94a3b8' : '#1a1a2e' }}>+{rewards[k]}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {rewardOutcomes.length > 0 && (
+                    <div style={{ marginTop: rewardStats.length ? 8 : 4 }}>
+                      <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Outcomes</span>
+                      <ul style={{ margin: '2px 0 0', padding: '0 0 0 16px', fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
+                        {rewardOutcomes.map((o, i) => <li key={i}>{o}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {hasFinancials && (() => {
+              // Episode financial ledger — every transaction tagged with
+              // this episode_id, grouped income vs expense, with the net
+              // P&L for the episode. Sits below the 3-up Stakes cards so
+              // the totals on the stat strip up top have a "where did
+              // this come from" companion view. Categories that ship
+              // today: event_payment, brand_deal_bonus, social_task_reward,
+              // tier_reward, tier_paid_bonus, event_reward, event_entry,
+              // wardrobe_purchase, wardrobe_rental, styling_extras,
+              // milestone, manual_adjustment.
+              const categoryIcons = {
+                event_payment: '💼', brand_deal_bonus: '🤝', social_task_reward: '📱',
+                tier_reward: '👑', tier_paid_bonus: '✨', event_reward: '🏆',
+                milestone: '🎯', event_entry: '🎟️', wardrobe_purchase: '👗',
+                wardrobe_rental: '👗', styling_extras: '🥂', manual_adjustment: '✏️',
+                seed: '🌱',
+              };
+              const fmt = (n) => `${n >= 0 ? '+' : '−'}${Math.abs(n).toLocaleString()}`;
+              const labelFor = (cat) => (cat || 'other').replace(/_/g, ' ');
+              const Row = ({ tx }) => {
+                const isIncome = ['income', 'reward'].includes(tx.type);
+                const sign = isIncome ? '+' : '−';
+                const color = isIncome ? '#16a34a' : '#dc2626';
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid #f1f5f9', fontSize: 11 }}>
+                    <span style={{ fontSize: 13 }}>{categoryIcons[tx.category] || '◦'}</span>
+                    <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 500 }}>{tx.description || labelFor(tx.category)}</span>
+                    <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4 }}>{labelFor(tx.category)}</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700, color, minWidth: 70, textAlign: 'right' }}>{sign}{Math.abs(parseFloat(tx.amount) || 0).toLocaleString()} 🪙</span>
+                  </div>
+                );
+              };
+              return (
+                <div style={{ ...S.card, marginTop: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={S.label}>💰 Episode Financials</span>
+                    <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: 700, color: ledgerNet >= 0 ? '#16a34a' : '#dc2626' }}>
+                      Net {fmt(ledgerNet)} 🪙
+                    </span>
+                  </div>
+                  {ledgerIncome.length > 0 && (
+                    <div style={{ marginBottom: ledgerExpense.length ? 10 : 0 }}>
+                      <div style={{ fontSize: 9, color: '#16a34a', textTransform: 'uppercase', fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, marginBottom: 4 }}>
+                        Income · {fmt(ledgerIncomeTotal)} 🪙
+                      </div>
+                      {ledgerIncome.map(tx => <Row key={tx.id} tx={tx} />)}
+                    </div>
+                  )}
+                  {ledgerExpense.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 9, color: '#dc2626', textTransform: 'uppercase', fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, marginBottom: 4 }}>
+                        Expenses · −{ledgerExpenseTotal.toLocaleString()} 🪙
+                      </div>
+                      {ledgerExpense.map(tx => <Row key={tx.id} tx={tx} />)}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </SectionBand>
+        );
+      })()}
 
       {/* REFERENCE band — heavy snapshot data that creators rarely need
           but should be able to inspect. All collapsed by default; clicking

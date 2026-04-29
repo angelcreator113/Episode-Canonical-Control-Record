@@ -179,6 +179,54 @@ function evaluateEraConsistency(items) {
 }
 
 /**
+ * evaluateCharacterMoodFit — same outfit, different headspace, different
+ * score. Reads character_state.stress and character_state.reputation and
+ * modulates the outfit signal:
+ *
+ *   - High stress wearing a confidence outfit → relief delta (+4)
+ *   - High stress wearing a tense/anxious outfit → compounded penalty (-3)
+ *   - Low rep wearing a strongly overdressed outfit → "trying too hard"
+ *     overcompensation penalty (-3)
+ *   - Low rep wearing tier-matched outfit → authenticity boost (+2)
+ *   - High rep wearing underdressed outfit → reputation expects more (-4)
+ *
+ * Returns null when characterState isn't available (UI calls without it
+ * to avoid extra DB hops). Without this, the same dress at the same gala
+ * always scored the same regardless of Lala's headspace — the wardrobe
+ * was context-blind to her actual state.
+ *
+ * tier_gap is the same metric scoreOutfitForEvent already computes (avg
+ * outfit tier minus expected event tier).
+ */
+function evaluateCharacterMoodFit(tierGap, narrativeMood, characterState) {
+  if (!characterState) return null;
+  const stress = parseInt(characterState.stress, 10) || 0;
+  const reputation = parseInt(characterState.reputation, 10) || 0;
+
+  // Stress relief from a confident outfit
+  if (stress >= 7 && narrativeMood === 'confidence') {
+    return { type: 'mood_relief', text: 'Stressed Lala in a confidence look — the outfit is doing the work', narrative: 'stress_relief', delta: 4 };
+  }
+  // Stress compounded by an anxious outfit
+  if (stress >= 7 && (narrativeMood === 'anxiety' || narrativeMood === 'tension')) {
+    return { type: 'mood_compound', text: 'Already stressed and the outfit reads anxious — the room will feel it', narrative: 'compound_stress', delta: -3 };
+  }
+  // Low-rep character overdressed = trying too hard
+  if (reputation <= 2 && tierGap > 1) {
+    return { type: 'overcompensation', text: 'Reaching for a tier she hasn\'t earned yet — reads as trying too hard', narrative: 'overcompensation', delta: -3 };
+  }
+  // Low-rep character tier-matched = knowing your place, authentic
+  if (reputation <= 2 && Math.abs(tierGap) <= 0.5) {
+    return { type: 'authentic_fit', text: 'Dressing for her current tier, not chasing — reads authentic', narrative: 'authenticity', delta: 2 };
+  }
+  // High-rep character underdressed = reputation expects more
+  if (reputation >= 7 && tierGap < -1) {
+    return { type: 'rep_underdressed', text: 'Her reputation precedes her — this look feels beneath her now', narrative: 'rep_drag', delta: -4 };
+  }
+  return null;
+}
+
+/**
  * Score a single slot against an event. Returns { match, status, reason } where
  * match is 0–100 and status is one of: 'empty' (nothing in the slot), 'low'
  * (<45), 'ok' (45–74), 'good' (75+). The reason is a short string the UI can
@@ -370,8 +418,229 @@ function scorePieceForEvent(item, event) {
   };
 }
 
-function scoreOutfitForEvent(wardrobeItems, event) {
+/**
+ * Tier value lookup used by both the outfit scorer and the authenticity
+ * gate (kept here so the gate can use the same scale without re-deriving).
+ * Defined inline as a const since TIER_VALUES is already exported.
+ */
+const ARC_TIER_CAPS = {
+  // Average outfit tier the arc stage can authentically pull off without
+  // reading as overreach. Above the cap → "trying too hard" penalty.
+  foundation: 1.5,  // basic + occasional mid
+  building: 2.2,    // mid solid, occasional luxury
+  glow_up: 2.8,     // luxury comfortable, occasional elite
+  prime: 4.0,       // no ceiling
+};
+
+/**
+ * evaluateAuthenticityFit — penalize outfits that exceed what the
+ * character's wardrobe arc stage can support. Foundation Lala in an
+ * all-elite gala outfit reads as overreach; prime Lala in the same
+ * outfit reads as her standard. Without this, low-arc characters could
+ * borrow/rent their way to perfect scores and never feel like they
+ * earned the tier.
+ *
+ * Returns null when arcStage isn't provided (UI calls without it to
+ * avoid a separate DB lookup).
+ */
+/**
+ * evaluateRarityBonus — outfit pieces with non-trivial unlock gates
+ * (brand_exclusive, season_drop, reputation, coin) feel rarer than
+ * generic ownable pieces. The lock_type field exists on every wardrobe
+ * row but no scorer ever read it. Now hitting the runway in a
+ * brand-exclusive piece adds narrative weight ('she got the invite-only
+ * version'); pulling out a season_drop reads as cultural currency.
+ *
+ * Counts pieces with lock_type ∈ {brand_exclusive, season_drop,
+ * reputation, coin}. Trivial 'none' / null pieces don't count.
+ *
+ *   ≥1 brand_exclusive or season_drop → +5 (rarity surfaces)
+ *   ≥2 of these                       → +8 (curated, intentional)
+ *   ≥1 reputation/coin gate           → +2 (earned)
+ *
+ * Caps at +8. Returns null when nothing qualifies so the signal stays
+ * out of the breakdown for ordinary outfits.
+ */
+/**
+ * evaluateColorPsychology — color carries emotional valence the outfit
+ * scorer used to ignore. Wearing red/burgundy reads as power; pastels
+ * read as soft / vulnerable; metallics read as celebration. The
+ * existing color_harmony signal only checks family cohesion (do
+ * pieces match?), not whether the dominant family fits the event's
+ * emotional pitch.
+ *
+ * Determines the dominant family across the outfit and compares it
+ * to a context bucket derived from event_type + prestige + dress_code:
+ *
+ *   high_stakes  prestige ≥7, gala/premiere/brand_deal      →  warm/metallic/jewel  +4
+ *   intimate     prestige ≤4 OR event_type=date/dinner/coffee →  pastel/neutral     +3
+ *   celebratory  launch/after_party/opening + dress mentions sparkle →  metallic/jewel +5
+ *   professional press/fitting/meeting + business in dress code  →  cool/neutral     +3
+ *
+ * Mismatches are softer penalties (-2) so creators don't feel
+ * boxed in — color is one signal among many.
+ *
+ * Returns null when no dominant family or no clear context — color
+ * harmony already covers the "do pieces match" angle.
+ */
+/**
+ * evaluateSocialProfileExpectation — when an event was created from a feed
+ * profile (source_profile_id set, or canon_consequences.automation.host_
+ * profile_id set), wearing the host's brand isn't just "smart" — it's
+ * receipt of the relationship. The profile DM'd / invited her; the outfit
+ * acknowledges the bond. Wearing nothing aligned reads as a missed beat.
+ *
+ *   profile-spawned + host_brand match  → +8  (on top of the +16 brand
+ *                                              match — total +24)
+ *   profile-spawned, no brand alignment → -3  missed relationship beat
+ *   not profile-spawned                 → null (silent — generic brand
+ *                                              match handles those)
+ */
+function evaluateSocialProfileExpectation(items, event) {
+  if (!event) return null;
+  // Pull the source profile id from either the FK column or the legacy
+  // automation JSONB. from-profile-route writes both going forward but
+  // older rows only have the JSONB.
+  const automation = (() => {
+    if (!event.canon_consequences) return {};
+    if (typeof event.canon_consequences === 'object') return event.canon_consequences.automation || {};
+    try { return JSON.parse(event.canon_consequences)?.automation || {}; } catch { return {}; }
+  })();
+  const profileId = event.source_profile_id || automation.host_profile_id;
+  if (!profileId) return null;
+  const handle = automation.host_handle || automation.host_display_name || 'the host';
+
+  const hostBrand = event.host_brand || automation.host_brand;
+  const itemBrands = items.map(i => i.brand).filter(Boolean);
+  if (hostBrand && itemBrands.includes(hostBrand)) {
+    return {
+      type: 'profile_brand_receipt',
+      text: `Wearing ${hostBrand} to ${handle}'s event — reads as relationship receipt`,
+      narrative: 'relationship_receipt',
+      delta: 8,
+    };
+  }
+  // No brand alignment with a profile-spawned event — soft penalty for
+  // the missed relationship beat. Caps at -3 since the rest of the
+  // outfit can still rescue the score (good outfit, just not THIS
+  // profile's brand vibe).
+  return {
+    type: 'profile_brand_missed',
+    text: `${handle}'s event but no brand alignment — the relationship beat goes unanswered`,
+    narrative: 'missed_beat',
+    delta: -3,
+  };
+}
+
+function evaluateColorPsychology(items, event) {
+  if (!items?.length || !event) return null;
+  const families = items.map(i => classifyColor(i.color)).filter(f => f !== 'unknown');
+  if (families.length === 0) return null;
+  // Dominant family — most-common, requires ≥half the pieces to qualify.
+  const counts = {};
+  for (const f of families) counts[f] = (counts[f] || 0) + 1;
+  const [dominant, count] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  if (count < Math.ceil(families.length / 2)) return null;
+
+  const eventType = String(event.event_type || '').toLowerCase();
+  const dressCode = String(event.dress_code || '').toLowerCase();
+  const prestige = parseInt(event.prestige, 10) || 5;
+  const HIGH_STAKES = ['gala', 'premiere', 'brand_deal'].includes(eventType) || prestige >= 7;
+  const INTIMATE = ['date', 'dinner', 'coffee'].includes(eventType) || prestige <= 4;
+  const CELEBRATORY = ['launch', 'after_party', 'opening'].includes(eventType)
+    || /sparkle|disco|metallic|dazzle|festive/.test(dressCode);
+  const PROFESSIONAL = ['press', 'fitting', 'meeting', 'interview'].includes(eventType)
+    || /business|professional|corporate|chic professional/.test(dressCode);
+
+  // Match table — best-fit family per context. The order here is the
+  // priority when an event hits multiple buckets (celebratory beats
+  // high_stakes, professional beats intimate).
+  let context, bestFamilies, narrativeMatch, narrativeMiss;
+  if (CELEBRATORY) {
+    context = 'celebratory'; bestFamilies = ['metallic', 'jewel']; narrativeMatch = 'occasion_match'; narrativeMiss = 'occasion_drag';
+  } else if (PROFESSIONAL) {
+    context = 'professional'; bestFamilies = ['cool', 'neutral']; narrativeMatch = 'composed'; narrativeMiss = 'too_loud';
+  } else if (HIGH_STAKES) {
+    context = 'high_stakes'; bestFamilies = ['warm', 'metallic', 'jewel']; narrativeMatch = 'power_signal'; narrativeMiss = 'underwhelming';
+  } else if (INTIMATE) {
+    context = 'intimate'; bestFamilies = ['pastel', 'neutral']; narrativeMatch = 'authentic_softness'; narrativeMiss = 'overdialed';
+  } else {
+    return null;
+  }
+
+  if (bestFamilies.includes(dominant)) {
+    const text = {
+      celebratory: `Mostly ${dominant} — reads festive, matches the room`,
+      professional: `Mostly ${dominant} — reads composed`,
+      high_stakes: `Mostly ${dominant} — color carries the room's weight`,
+      intimate: `Mostly ${dominant} — soft tones read as authentic, not performative`,
+    }[context];
+    const delta = context === 'celebratory' ? 5 : context === 'high_stakes' ? 4 : 3;
+    return { type: `color_${context}_match`, text, narrative: narrativeMatch, delta };
+  }
+  // Color directly conflicts with the context. Pastel at a power gala or
+  // jewel tones at a brunch — soft penalty since the rest of the outfit
+  // can still rescue it.
+  const conflict = {
+    celebratory: ['neutral', 'pastel'],
+    professional: ['warm', 'jewel', 'metallic'],
+    high_stakes: ['pastel'],
+    intimate: ['warm', 'jewel'],
+  }[context];
+  if (conflict?.includes(dominant)) {
+    const text = {
+      celebratory: `Dominant ${dominant} reads quiet for a celebration`,
+      professional: `Dominant ${dominant} reads loud for a professional context`,
+      high_stakes: `Dominant ${dominant} feels gentle for the room's stakes`,
+      intimate: `Dominant ${dominant} reads performative for an intimate moment`,
+    }[context];
+    return { type: `color_${context}_miss`, text, narrative: narrativeMiss, delta: -2 };
+  }
+  return null;
+}
+
+function evaluateRarityBonus(items) {
+  if (!items?.length) return null;
+  const elite = items.filter(i => ['brand_exclusive', 'season_drop'].includes(i.lock_type));
+  const earned = items.filter(i => ['reputation', 'coin'].includes(i.lock_type));
+  if (elite.length === 0 && earned.length === 0) return null;
+  if (elite.length >= 2) {
+    const tags = [...new Set(elite.map(i => i.lock_type))].join('+');
+    return { type: 'rarity_curated', text: `Multiple ${tags} pieces — outfit reads as curated, not borrowed`, narrative: 'cultural_currency', delta: 8 };
+  }
+  if (elite.length >= 1) {
+    return { type: 'rarity_signature', text: `Wearing ${elite[0].lock_type.replace('_', ' ')} — rarity reads`, narrative: 'cultural_currency', delta: 5 };
+  }
+  if (earned.length >= 1) {
+    return { type: 'rarity_earned', text: `${earned.length} earned-unlock piece${earned.length > 1 ? 's' : ''} — feels worked-for`, narrative: 'authenticity', delta: 2 };
+  }
+  return null;
+}
+
+function evaluateAuthenticityFit(avgTier, arcStage) {
+  if (!arcStage) return null;
+  const cap = ARC_TIER_CAPS[arcStage];
+  if (cap == null) return null;
+  const overreach = avgTier - cap;
+  if (overreach <= 0) return null;
+  if (overreach >= 1.5) {
+    return { type: 'arc_overreach_strong', text: `Wearing ${arcStage}+two-tiers above her arc — reads loud / borrowed / unearned`, narrative: 'overreach', delta: -6 };
+  }
+  if (overreach >= 0.8) {
+    return { type: 'arc_overreach', text: `One tier above what her ${arcStage} arc has earned — reads as stretching`, narrative: 'overreach', delta: -4 };
+  }
+  return { type: 'arc_stretch', text: `Slightly above her ${arcStage} arc — borderline authentic`, narrative: 'mild_stretch', delta: -2 };
+}
+
+function scoreOutfitForEvent(wardrobeItems, event, ctx = {}) {
   if (!wardrobeItems?.length || !event) return null;
+  // Backwards compat: previous signature accepted characterState as the
+  // 3rd positional arg. If a non-null non-object is passed, or an object
+  // with state-shaped keys but no `characterState` wrapper, treat it as
+  // the legacy characterState.
+  const characterState = ctx?.characterState
+    ?? (ctx && ('coins' in ctx || 'stress' in ctx || 'reputation' in ctx) ? ctx : null);
+  const arcStage = ctx?.arcStage || null;
 
   const eventPrestige = event.prestige || 5;
   const _eventType = event.event_type || 'invite';
@@ -432,15 +701,24 @@ function scoreOutfitForEvent(wardrobeItems, event) {
   // Layer color/occasion/season/era checks on top of the tier-gap score.
   // Each helper returns either null or { type, text, narrative, delta }; we
   // push the signal onto the stack and apply its delta to matchScore.
+  // Compute provisional narrative_mood from tier gap so the mood-fit
+  // helper can compare against character headspace. Mood is finalized
+  // below after all secondary signals are in.
+  const provisionalMood = tierGap < -1 ? 'anxiety' : tierGap > 1 ? 'overcompensation' : Math.abs(tierGap) <= 0.5 ? 'confidence' : 'tension';
   for (const sig of [
     evaluateColorHarmony(wardrobeItems),
     evaluateOccasionPrecision(wardrobeItems, event),
     evaluateSeasonMatch(wardrobeItems, event),
     evaluateEraConsistency(wardrobeItems),
+    evaluateCharacterMoodFit(tierGap, provisionalMood, characterState),
+    evaluateAuthenticityFit(avgTier, arcStage),
+    evaluateRarityBonus(wardrobeItems),
+    evaluateColorPsychology(wardrobeItems, event),
+    evaluateSocialProfileExpectation(wardrobeItems, event),
   ]) {
     if (sig) {
       secondaryDelta += sig.delta || 0;
-      signals.push({ type: sig.type, text: sig.text, narrative: sig.narrative });
+      signals.push({ type: sig.type, text: sig.text, narrative: sig.narrative, delta: sig.delta });
     }
   }
 

@@ -71,7 +71,16 @@ const EMPTY_EVENT = {
   narrative_stakes: '', browse_pool_bias: 'balanced', browse_pool_size: 8,
   is_paid: 'no', payment_amount: 0, career_tier: 1,
   career_milestone: '', fail_consequence: '', success_unlock: '',
-  requirements: {}, scene_set_id: null,
+  // Rewards: what Lala wins for completing this event. Stat deltas
+  // (coins/reputation/brand_trust/influence) feed the future
+  // episode-completion delta logic; outcomes is a free-text list
+  // surfaced to the writer for narrative beats.
+  rewards: { coins: 0, reputation: 0, brand_trust: 0, influence: 0, outcomes: [] },
+  // Requirements: pre-flight gates the next-event suggester reads
+  // (careerGoals.js:655-656). reputation_min and brand_trust_min
+  // dock the event's score by -5 when unmet, so creators see why.
+  requirements: { reputation_min: 0, brand_trust_min: 0, coins_min: 0 },
+  scene_set_id: null,
   venue_name: '', venue_address: '', event_date: '', event_time: '',
   theme: '', color_palette: [], mood: '', floral_style: '', border_style: '',
   // Narrative chain — links this event to the one before it and what
@@ -390,6 +399,12 @@ function WorldAdmin() {
   // when the show's starting balance is edited (Finance editor → save
   // re-seeds the ledger and updates financeConfig.current_balance, which
   // the forecast's balance_before/balance_after read from the server).
+  // Forecast refresh nonce — bumped after the outfit picker saves or
+  // closes so the preview refetches with the latest server-side state.
+  // Without this, opening the picker, swapping pieces, then closing
+  // without saving leaves the preview stuck on the old outfit_pieces
+  // snapshot baked into eventDetailModal at modal-open time.
+  const [forecastNonce, setForecastNonce] = useState(0);
   useEffect(() => {
     if (!eventDetailModal?.id || !showId) { setEventFinancials(null); return; }
     let cancelled = false;
@@ -402,7 +417,7 @@ function WorldAdmin() {
       if (!cancelled) setEventFinancialsLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [eventDetailModal?.id, eventDetailModal?.outfit_pieces, showId, financeConfig?.current_balance]);
+  }, [eventDetailModal?.id, eventDetailModal?.outfit_pieces, showId, financeConfig?.current_balance, forecastNonce]);
 
   // Escape key closes modals
   useEffect(() => {
@@ -2752,6 +2767,87 @@ The revised event should feel like a completely different experience from the si
                 />
               </div>
 
+              {/* ── Rewards & Requirements ────────────────────────────────────
+                  Stat-delta rewards (coins/reputation/brand_trust/influence)
+                  fund Lala's progression after success; the outcomes list
+                  feeds the writer's narrative beats. Requirements are pre-
+                  flight gates the next-event suggester reads (careerGoals.js
+                  applies a -5 score penalty when reputation_min or
+                  brand_trust_min isn't met). All numeric — leave at 0 to
+                  skip that gate or reward. */}
+              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
+                <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>🏆 Rewards & Requirements</label>
+
+                {/* Rewards row */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ ...S.fLabel, fontSize: 10, color: '#16a34a', marginBottom: 6 }}>REWARDS — granted on success</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
+                    {[
+                      { key: 'coins', label: '🪙 Coins', placeholder: '500' },
+                      { key: 'reputation', label: '⭐ Reputation', placeholder: '1' },
+                      { key: 'brand_trust', label: '🤝 Brand Trust', placeholder: '1' },
+                      { key: 'influence', label: '📣 Influence', placeholder: '1' },
+                    ].map(f => (
+                      <div key={f.key}>
+                        <label style={{ ...S.fLabel, fontSize: 10 }}>{f.label}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={eventForm.rewards?.[f.key] ?? 0}
+                          onChange={e => setEventForm(p => ({
+                            ...p,
+                            rewards: { ...(p.rewards || {}), [f.key]: parseInt(e.target.value, 10) || 0 },
+                          }))}
+                          placeholder={f.placeholder}
+                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <label style={{ ...S.fLabel, fontSize: 10 }}>Narrative outcomes (one per line)</label>
+                  <textarea
+                    value={Array.isArray(eventForm.rewards?.outcomes) ? eventForm.rewards.outcomes.join('\n') : ''}
+                    onChange={e => setEventForm(p => ({
+                      ...p,
+                      rewards: {
+                        ...(p.rewards || {}),
+                        outcomes: e.target.value.split('\n').map(s => s.trim()).filter(Boolean),
+                      },
+                    }))}
+                    placeholder={'One per line — what unlocks narratively.\nExample:\nLala lands on the Maison Belle radar\nFirst paid styling gig confirmed'}
+                    rows={2}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  />
+                </div>
+
+                {/* Requirements row */}
+                <div>
+                  <div style={{ ...S.fLabel, fontSize: 10, color: '#dc2626', marginBottom: 6 }}>REQUIREMENTS — gates that dock score when unmet</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    {[
+                      { key: 'reputation_min', label: '⭐ Reputation min', placeholder: '3' },
+                      { key: 'brand_trust_min', label: '🤝 Brand Trust min', placeholder: '2' },
+                      { key: 'coins_min', label: '🪙 Coins min', placeholder: '100' },
+                    ].map(f => (
+                      <div key={f.key}>
+                        <label style={{ ...S.fLabel, fontSize: 10 }}>{f.label}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={eventForm.requirements?.[f.key] ?? 0}
+                          onChange={e => setEventForm(p => ({
+                            ...p,
+                            requirements: { ...(p.requirements || {}), [f.key]: parseInt(e.target.value, 10) || 0 },
+                          }))}
+                          placeholder={f.placeholder}
+                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <FG label="Description" value={eventForm.description} onChange={v => setEventForm(p => ({ ...p, description: v }))} placeholder="Full event description..." textarea full />
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
                 <button onClick={() => setEditingEvent(null)} style={S.secBtn}>Cancel</button>
@@ -2918,8 +3014,16 @@ The revised event should feel like a completely different experience from the si
                     the creator at a glance what the AI will have to work
                     with. Each chip is green when set, yellow when missing. */}
                 {(() => {
+                  // Mirror the display logic above (line ~2933) which falls back
+                  // to canon_consequences.automation.venue_* when the top-level
+                  // venue columns are empty. Feed-profile events created before
+                  // the worldEvents.js from-profile route was patched to set
+                  // top-level venue_location_id (commit 3d4d1d26) only have
+                  // venue data in JSONB, so a column-only check would say
+                  // "Venue ⚠" while the card right above it shows the venue.
+                  const auto = ev.canon_consequences?.automation || {};
                   const hasOutfit = !!ev.outfit_set_id || (Array.isArray(ev.outfit_pieces) && ev.outfit_pieces.length > 0);
-                  const hasVenue = !!ev.venue_location_id || !!ev.venue_name;
+                  const hasVenue = !!ev.venue_location_id || !!ev.venue_name || !!auto.venue_location_id || !!auto.venue_name;
                   const hasScene = !!ev.scene_set_id;
                   const hasInvite = !!ev.invitation_asset_id;
                   const checks = [
@@ -3659,7 +3763,16 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             ) : null}
                           </div>
                           <div style={{ flex: 1, minWidth: 90, padding: '8px 10px', background: net >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, border: `1px solid ${net >= 0 ? '#bbf7d0' : '#fecaca'}` }}>
-                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626' }}>Net P&L</div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: net >= 0 ? '#16a34a' : '#dc2626' }}>Net P&L (baseline)</span>
+                              {/* EST pill — shown when outfit cost is a
+                                  prestige-tier fallback (no outfit picked) so
+                                  the bottom-line balance reads as projection,
+                                  not fact. Hides once an outfit is saved. */}
+                              {fc?.outfit_source === 'estimate' && (
+                                <span title="Outfit cost is a prestige-based estimate. Pick an outfit to lock the real number." style={{ padding: '0 4px', borderRadius: 3, fontSize: 7, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, background: '#fefce8', color: '#a16207', border: '1px solid #fde68a' }}>EST</span>
+                              )}
+                            </div>
                             <div style={{ fontSize: 15, fontWeight: 800, color: net >= 0 ? '#16a34a' : '#dc2626' }}>{net >= 0 ? '+' : ''}{net.toLocaleString()}</div>
                             <div style={{ fontSize: 9, color: '#94a3b8' }}>
                               {aff.balance_before != null
@@ -3668,6 +3781,37 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             </div>
                           </div>
                         </div>
+                        {/* Tier-dependent income — what the episode actually
+                            pays out if it lands SLAY or PASS. Mirrors the
+                            tier_reward + paid_bonus + event_reward transactions
+                            episodeCompletionService writes. Without this row
+                            the Net P&L undercounts and creators get a
+                            "where did the extra coins come from?" surprise
+                            on Complete. */}
+                        {fc?.tier_bonuses && (fc.tier_bonuses.slay.total !== 0 || fc.tier_bonuses.pass.total !== 0) && (
+                          <div style={{ marginTop: 8, padding: '8px 10px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: 8 }}>
+                            <div style={{ fontSize: 8, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', color: '#854d0e', marginBottom: 4 }}>
+                              On Complete (tier-dependent)
+                            </div>
+                            {[
+                              { tier: 'slay', label: '👑 If SLAY', bonus: fc.tier_bonuses.slay, projected: fc.projected_balance?.if_slay },
+                              { tier: 'pass', label: '✨ If PASS', bonus: fc.tier_bonuses.pass, projected: fc.projected_balance?.if_pass },
+                            ].map(row => {
+                              const parts = [];
+                              if (row.bonus.tier_reward !== 0) parts.push(`tier ${row.bonus.tier_reward > 0 ? '+' : ''}${row.bonus.tier_reward}`);
+                              if (row.bonus.paid_bonus > 0) parts.push(`paid +${row.bonus.paid_bonus}`);
+                              if (row.bonus.event_reward > 0) parts.push(`reward +${row.bonus.event_reward}`);
+                              return (
+                                <div key={row.tier} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11, color: '#854d0e', marginBottom: 2 }}>
+                                  <span>{row.label} <span style={{ fontSize: 9, color: '#a16207' }}>· {parts.join(', ')}</span></span>
+                                  <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
+                                    +{row.bonus.total} → balance {row.projected != null ? row.projected.toLocaleString() : '—'}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                         {/* Milestones progress — "next goal" bar + reward preview. */}
                         {nextGoal && (
                           <div style={{ marginTop: 10, padding: '8px 12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8 }}>
@@ -4332,14 +4476,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
       {/* ════════════════════════ OUTFIT PICKER MODAL ════════════════════════ */}
       {outfitPickerEvent && createPortal(
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setOutfitPickerEvent(null)}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setOutfitPickerEvent(null); setForecastNonce(n => n + 1); }}>
           <div style={{ background: '#fff', borderRadius: 16, maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto', padding: 24 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>👗 Pick Outfit</h2>
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: '#888' }}>{outfitPickerEvent.name} · Prestige {outfitPickerEvent.prestige}/10</p>
               </div>
-              <button onClick={() => setOutfitPickerEvent(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
+              <button onClick={() => { setOutfitPickerEvent(null); setForecastNonce(n => n + 1); }} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>✕</button>
             </div>
 
             {/* Score banner */}
@@ -4565,6 +4709,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     setOutfitScore(res.data.score);
                     setToast(`Outfit saved — match ${res.data.score?.match_score}/100 (${res.data.score?.narrative_mood})`);
                     loadData();
+                    // Force the Financial Preview useEffect to refetch — the
+                    // server now has the new outfit_pieces but eventDetailModal
+                    // is still pointing at its open-time snapshot.
+                    setForecastNonce(n => n + 1);
                   } catch (err) { setToast('Save failed: ' + err.message); }
                   setOutfitSaving(false);
                 }} style={{ width: '100%', padding: '10px', border: 'none', borderRadius: 8, background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: outfitSaving ? 0.5 : 1 }}>

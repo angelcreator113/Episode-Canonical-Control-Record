@@ -1243,20 +1243,19 @@ router.post('/select', optionalAuth, async (req, res) => {
       );
       const currentCoins = states?.[0]?.coins ?? 0;
       if (currentCoins >= cost) {
-        // Deduct coins
-        await models.sequelize.query(
-          `UPDATE character_state SET coins = coins - :cost, updated_at = NOW() WHERE id = :id`,
-          { replacements: { cost, id: states[0].id } }
-        );
-        // Mirror the spend into the financial ledger so the budget shown
-        // in event modals (and goal-progress, finalize-financials, etc.)
-        // tracks the same balance as the Characters tab. Without this,
-        // wardrobe purchases drop character_state.coins but the ledger
-        // never sees the spend, so getCurrentBalance keeps returning the
-        // pre-purchase number.
-        try {
-          const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
-          const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+        // Atomic dual-write: deduct from character_state AND log the ledger
+        // row inside one Sequelize transaction. Either both happen or
+        // neither — fixes the prior bug where a failing ledger insert left
+        // coins decremented in character_state with no audit trail (silent
+        // money loss). logTransaction rethrows when given a transaction
+        // option so the rollback cascades up.
+        const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
+        const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+        await models.sequelize.transaction(async (t) => {
+          await models.sequelize.query(
+            `UPDATE character_state SET coins = coins - :cost, updated_at = NOW() WHERE id = :id`,
+            { replacements: { cost, id: states[0].id }, transaction: t }
+          );
           await logTransaction(models.sequelize, show_id, {
             type: 'expense',
             category: 'wardrobe_purchase',
@@ -1268,10 +1267,9 @@ router.post('/select', optionalAuth, async (req, res) => {
             balance_before: ledgerBefore,
             balance_after: ledgerBefore - cost,
             metadata: { wardrobe_id, item_name: item.name, flow: 'select' },
+            transaction: t,
           });
-        } catch (e) {
-          console.warn('[Wardrobe /select] ledger mirror failed:', e.message);
-        }
+        });
         // Mark item as owned
         await models.sequelize.query(
           `UPDATE wardrobe SET is_owned = true, updated_at = NOW() WHERE id = :wardrobe_id`,
@@ -1361,19 +1359,19 @@ router.post('/purchase', optionalAuth, async (req, res) => {
       });
     }
 
-    // 3. Deduct coins
+    // 3. Deduct coins + log ledger row atomically — same pattern as the
+    // /select route. Either both writes succeed or both roll back, so a
+    // failing ledger insert can no longer leave coins missing without an
+    // audit trail.
     const newCoins = currentCoins - cost;
-    await models.sequelize.query(
-      `UPDATE character_state SET coins = :newCoins, updated_at = NOW()
-       WHERE show_id = :show_id AND character_key = 'lala'`,
-      { replacements: { newCoins, show_id } }
-    );
-
-    // 3b. Mirror the spend into the financial ledger (see /select for
-    // rationale). Non-fatal — purchase already succeeded.
-    try {
-      const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
-      const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+    const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
+    const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
+    await models.sequelize.transaction(async (t) => {
+      await models.sequelize.query(
+        `UPDATE character_state SET coins = :newCoins, updated_at = NOW()
+         WHERE show_id = :show_id AND character_key = 'lala'`,
+        { replacements: { newCoins, show_id }, transaction: t }
+      );
       await logTransaction(models.sequelize, show_id, {
         type: 'expense',
         category: 'wardrobe_purchase',
@@ -1385,10 +1383,9 @@ router.post('/purchase', optionalAuth, async (req, res) => {
         balance_before: ledgerBefore,
         balance_after: ledgerBefore - cost,
         metadata: { wardrobe_id, item_name: item.name, flow: 'purchase' },
+        transaction: t,
       });
-    } catch (e) {
-      console.warn('[Wardrobe /purchase] ledger mirror failed:', e.message);
-    }
+    });
 
     // 4. Mark item as owned
     await models.sequelize.query(
@@ -1464,10 +1461,31 @@ function _parseJSON(val, fallback) {
  * @param {object} event - Event object with dress_code, prestige, event_type, etc.
  * @returns {object} { score, items, breakdown, confidence, hasOutfit }
  */
-async function getOutfitScore(models, episodeId, event = {}) {
+// Confidence levels — match_score → human label/emoji/color. Used by both
+// the UI shell and downstream consumers that key on the label.
+const CONFIDENCE_LEVELS = [
+  { min: 0, label: 'Nervous', emoji: '😰', color: '#dc2626' },
+  { min: 30, label: 'Unsure', emoji: '😕', color: '#eab308' },
+  { min: 50, label: 'Okay', emoji: '🙂', color: '#22c55e' },
+  { min: 70, label: 'Confident', emoji: '😊', color: '#6366f1' },
+  { min: 85, label: 'Slaying', emoji: '👑', color: '#8b5cf6' },
+];
+
+/**
+ * getOutfitScore — fetches an episode's wardrobe and scores it for the
+ * given event. Now a thin adapter over wardrobeIntelligenceService's
+ * canonical scoreOutfitForEvent (the same scorer episode completion uses
+ * during evaluation), so creators see the same number that determines
+ * their tier outcome — no more two-engines divergence.
+ *
+ * Maps the canonical scorer's response onto the legacy UI shape:
+ *   { hasOutfit, score, items, breakdown, confidence, item_count }
+ * so existing consumers (EpisodeWardrobeTab, completion service) keep
+ * working without changes. Adds `signals`, `narrative_mood`, `slots`
+ * for richer UIs that opt in.
+ */
+async function getOutfitScore(models, episodeId, event = {}, characterState = null, arcStage = null) {
   try {
-    // 1. Fetch all wardrobe items linked to this episode
-    //    NOTE: episode_wardrobe on RDS only has: id, episode_id, wardrobe_id, scene, worn_at, notes, created_at, updated_at
     const [rows] = await models.sequelize.query(
       `SELECT w.*
        FROM episode_wardrobe ew
@@ -1489,135 +1507,63 @@ async function getOutfitScore(models, episodeId, event = {}) {
       };
     }
 
-    // 2. Parse JSON fields
     const items = rows.map(item => ({
       ...item,
       aesthetic_tags: _parseJSON(item.aesthetic_tags, []),
       event_types: _parseJSON(item.event_types, []),
     }));
 
-    // 3. Calculate synergy
-    const TIER_VALS = { basic: 1, mid: 2, luxury: 3, elite: 4 };
-
-    const dressCodeWords = [
-      ...(event.dress_code || '').toLowerCase().split(/[\s,]+/).filter(Boolean),
-      ...(event.dress_code_keywords || []).map(k => k.toLowerCase()),
-    ];
-    const eventTypeLower = (event.event_type || '').toLowerCase();
-    const prestige = event.prestige || 5;
-
-    let totalItemScore = 0;
-    const scoredItems = items.map(item => {
-      const aestheticLower = (item.aesthetic_tags || []).map(a => a.toLowerCase());
-      const eventTypesLower = (item.event_types || []).map(e => e.toLowerCase());
-      let itemScore = 0;
-
-      // Dress code match
-      let dressCodeHits = 0;
-      for (const kw of dressCodeWords) {
-        if (aestheticLower.some(a => a.includes(kw) || kw.includes(a))) dressCodeHits++;
-      }
-      if (dressCodeHits > 0) itemScore += Math.min(30, dressCodeHits * 10);
-
-      // Event type match
-      if (eventTypesLower.some(e => e.includes(eventTypeLower) || eventTypeLower.includes(e))) {
-        itemScore += 20;
-      }
-
-      // Tier alignment
-      const itemTierVal = TIER_VALS[item.tier] || 1;
-      const eventTierVal = prestige <= 3 ? 1 : prestige <= 5 ? 2 : prestige <= 8 ? 3 : 4;
-      const tierDiff = Math.abs(itemTierVal - eventTierVal);
-      if (tierDiff === 0) itemScore += 15;
-      else if (tierDiff === 1) itemScore += 8;
-
-      // Match weight
-      itemScore += (item.outfit_match_weight || 5);
-
-      totalItemScore += itemScore;
-      return { ...item, individual_score: itemScore };
-    });
-
-    const baseAvg = totalItemScore / items.length;
-    const baseScore = Math.min(35, baseAvg * 0.6);
-
-    // Aesthetic synergy — shared tags between items
-    let aestheticBonus = 0;
-    if (items.length >= 2) {
-      const tagSets = items.map(i => new Set((i.aesthetic_tags || []).map(t => t.toLowerCase())));
-      let sharedCount = 0;
-      let pairs = 0;
-      for (let a = 0; a < tagSets.length; a++) {
-        for (let b = a + 1; b < tagSets.length; b++) {
-          pairs++;
-          for (const tag of tagSets[a]) {
-            if (tagSets[b].has(tag)) sharedCount++;
-          }
-        }
-      }
-      aestheticBonus = Math.min(25, (sharedCount / Math.max(1, pairs)) * 15);
+    // ── Canonical scorer ──
+    const { scoreOutfitForEvent } = require('../services/wardrobeIntelligenceService');
+    const result = scoreOutfitForEvent(items, event, { characterState, arcStage });
+    if (!result) {
+      return {
+        hasOutfit: false, score: 0, items: [], breakdown: {},
+        confidence: { label: 'Score unavailable', emoji: '❓', color: '#94a3b8' },
+      };
     }
 
-    // Tier harmony
-    const tiers = items.map(i => TIER_VALS[i.tier] || 1);
-    const avgTier = tiers.reduce((a, b) => a + b, 0) / tiers.length;
-    const tierVariance = tiers.reduce((s, t) => s + Math.abs(t - avgTier), 0) / tiers.length;
-    const tierBonus = Math.max(0, 15 - tierVariance * 8);
-
-    // Event alignment
-    let eventHits = 0;
-    items.forEach(i => {
-      const et = (i.event_types || []).map(e => e.toLowerCase());
-      if (et.some(e => e.includes(eventTypeLower) || eventTypeLower.includes(e))) eventHits++;
-    });
-    const eventBonus = items.length > 0 ? Math.min(15, (eventHits / items.length) * 15) : 0;
-
-    // Slot coverage
-    const slotBonus = Math.min(10, items.length * 1.5);
-
-    const total = Math.round(Math.min(100, baseScore + aestheticBonus + tierBonus + eventBonus + slotBonus));
-
-    // Confidence level
-    const CONFIDENCE_LEVELS = [
-      { min: 0, label: 'Nervous', emoji: '😰', color: '#dc2626' },
-      { min: 30, label: 'Unsure', emoji: '😕', color: '#eab308' },
-      { min: 50, label: 'Okay', emoji: '🙂', color: '#22c55e' },
-      { min: 70, label: 'Confident', emoji: '😊', color: '#6366f1' },
-      { min: 85, label: 'Slaying', emoji: '👑', color: '#8b5cf6' },
-    ];
+    const total = Math.round(result.match_score || 0);
     let confidence = CONFIDENCE_LEVELS[0];
     for (let i = CONFIDENCE_LEVELS.length - 1; i >= 0; i--) {
       if (total >= CONFIDENCE_LEVELS[i].min) { confidence = CONFIDENCE_LEVELS[i]; break; }
     }
 
+    // Synthesize the legacy `breakdown` from the canonical signals so the
+    // existing UI bars + completion service's accessory_match calc keep
+    // working. tier_harmony is derived from tier_gap (closer = higher).
+    const tierGapAbs = Math.abs(result.tier_gap || 0);
+    const tier_harmony = Math.max(0, Math.round(15 - tierGapAbs * 8));
+    const sigDelta = (type) => (result.signals || [])
+      .filter(s => s.type === type)
+      .reduce((sum, s) => sum + (s.delta || 0), 0);
+    const aesthetic = Math.max(0, Math.round((sigDelta('color_harmony') || 0) + 6));
+    const event_alignment = Math.max(0, Math.round((sigDelta('occasion_precision') || 0) + 6));
+    const coverage = Math.min(10, Math.round(((result.slots || []).filter(s => s.items?.length).length) * 2));
+    const base = Math.max(0, total - aesthetic - tier_harmony - event_alignment - coverage);
+
     return {
       hasOutfit: true,
       score: total,
-      items: scoredItems.map(i => ({
-        id: i.id,
-        name: i.name,
-        category: i.clothing_category,
-        tier: i.tier,
-        individual_score: i.individual_score,
+      items: items.map(i => ({
+        id: i.id, name: i.name, category: i.clothing_category, tier: i.tier,
         aesthetic_tags: i.aesthetic_tags,
       })),
-      breakdown: {
-        base: Math.round(baseScore),
-        aesthetic: Math.round(aestheticBonus),
-        tier_harmony: Math.round(tierBonus),
-        event_alignment: Math.round(eventBonus),
-        coverage: Math.round(slotBonus),
-      },
+      breakdown: { base, aesthetic, tier_harmony, event_alignment, coverage },
       confidence,
       item_count: items.length,
+      // New canonical fields opt-in clients can render directly:
+      signals: result.signals,
+      narrative_mood: result.narrative_mood,
+      tier_gap: result.tier_gap,
+      outfit_cost: result.outfit_cost,
+      brands: result.brands,
+      slots: result.slots,
     };
   } catch (err) {
     console.error('getOutfitScore error:', err);
     return {
-      hasOutfit: false,
-      score: 0,
-      items: [],
-      breakdown: {},
+      hasOutfit: false, score: 0, items: [], breakdown: {},
       confidence: { label: 'Error', emoji: '⚠️', color: '#dc2626' },
       message: err.message,
     };

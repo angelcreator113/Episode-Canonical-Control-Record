@@ -199,10 +199,25 @@ async function completeEpisode(episodeId, showId, sequelize) {
       const eventContext = event ? {
         dress_code: event.dress_code, prestige: event.prestige,
         strictness: event.strictness, event_type: event.event_type,
+        host_brand: event.host_brand, dress_code_keywords: event.dress_code_keywords,
+        season: event.season,
       } : {};
-      const outfitResult = await getOutfitScore(models, episodeId, eventContext);
-      outfitMatch = Math.round((outfitResult?.score || 0) * 0.25);
-      accessoryMatch = Math.round(((outfitResult?.aesthetic_synergy || 0) + (outfitResult?.coverage || 0)) * 0.5);
+      // Pass characterState so the scorer can run evaluateCharacterMoodFit
+      // (stress + reputation modulate the outfit signal). Also pass the
+      // wardrobe arc stage so evaluateAuthenticityFit can penalize tier
+      // overreach (foundation Lala in elite outfit reads as unearned).
+      // Both lookups fail-open (null) so a missing arc/state doesn't block.
+      let arcStage = null;
+      try {
+        const { getWardrobeGrowthArc } = require('./wardrobeIntelligenceService');
+        const arc = await getWardrobeGrowthArc(showId, models);
+        arcStage = arc?.arc_stage || null;
+      } catch { /* no-op — authenticity signal just doesn't fire */ }
+      const outfitResult = await getOutfitScore(models, episodeId, eventContext, characterState, arcStage);
+      // Outfit match scaled to the 0-35 cap (formerly 0-25). Score is 0-100
+      // from scoreOutfitForEvent; multiply by 0.35 to use the full new range.
+      outfitMatch = Math.round((outfitResult?.score || 0) * 0.35);
+      accessoryMatch = Math.round(((outfitResult?.breakdown?.aesthetic || 0) + (outfitResult?.breakdown?.coverage || 0)) * 0.5);
     }
   } catch { /* wardrobe scoring not available */ }
 
@@ -254,6 +269,26 @@ async function completeEpisode(episodeId, showId, sequelize) {
     }
   }
 
+  // ── 10b. Apply event.rewards on success ───────────────────────────────
+  // Creator-authored rewards from the event form (rewards.coins,
+  // .reputation, .brand_trust, .influence). Only granted on slay/pass
+  // tiers — failing the event shouldn't pay out the prize. Stat deltas
+  // (reputation/brand_trust/influence) flow into mergedDeltas alongside
+  // base/social/wardrobe; coins go through the financial pipeline as a
+  // separate transaction row, matching the tier_reward pattern below.
+  // Outcomes (narrative beats) are recorded in the history note further
+  // down, not as state changes.
+  const eventRewards = (event && event.rewards && typeof event.rewards === 'object')
+    ? (typeof event.rewards === 'string' ? (() => { try { return JSON.parse(event.rewards); } catch { return {}; } })() : event.rewards)
+    : {};
+  const isSuccess = ['slay', 'pass'].includes(evalResult.tier_final);
+  if (isSuccess) {
+    for (const key of ['reputation', 'brand_trust', 'influence']) {
+      const v = parseInt(eventRewards[key], 10) || 0;
+      if (v !== 0) mergedDeltas[key] = (mergedDeltas[key] || 0) + v;
+    }
+  }
+
   // ── 11. Finalize financials (coins come from here, not evaluation) ──
   const { finalizeEpisodeFinancials } = require('./financialTransactionService');
   const financialResult = await finalizeEpisodeFinancials(episodeId, showId, sequelize);
@@ -291,6 +326,25 @@ async function completeEpisode(episodeId, showId, sequelize) {
           id: uuidv4(), showId, episodeId, eventId: event?.id || null,
           amount: paidBonus,
           desc: `Paid event ${evalResult.tier_final.toUpperCase()} bonus: +${paidBonus} coins`,
+        }}
+      );
+    } catch { /* non-blocking */ }
+  }
+
+  // Creator-authored coin reward from event.rewards.coins. Same shape as
+  // tier_reward — separate row so the financial ledger shows where every
+  // coin came from. Only fires on slay/pass to match stat-delta gating.
+  const eventRewardCoins = isSuccess ? (parseInt(eventRewards.coins, 10) || 0) : 0;
+  if (eventRewardCoins > 0) {
+    try {
+      await sequelize.query(
+        `INSERT INTO financial_transactions
+         (id, show_id, episode_id, event_id, type, category, amount, description, source_type, status, created_at, updated_at)
+         VALUES (:id, :showId, :episodeId, :eventId, 'income', 'event_reward', :amount, :desc, 'evaluation', 'executed', NOW(), NOW())`,
+        { replacements: {
+          id: uuidv4(), showId, episodeId, eventId: event?.id || null,
+          amount: eventRewardCoins,
+          desc: `Event reward (${evalResult.tier_final.toUpperCase()}): +${eventRewardCoins} coins`,
         }}
       );
     } catch { /* non-blocking */ }
