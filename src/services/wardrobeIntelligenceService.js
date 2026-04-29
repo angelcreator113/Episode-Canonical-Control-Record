@@ -1,6 +1,6 @@
 'use strict';
 
-const { SLOT_KEYS, SLOT_DEFS, groupItemsBySlot } = require('../utils/wardrobeSlots');
+const { SLOT_KEYS, SLOT_DEFS, groupItemsBySlot, getSlotForCategory } = require('../utils/wardrobeSlots');
 
 /**
  * Wardrobe Intelligence Service
@@ -47,6 +47,55 @@ function classifyColor(name) {
   return 'unknown';
 }
 
+function normalizeTagList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map(v => String(v || '').toLowerCase().trim()).filter(Boolean);
+  }
+  if (typeof value === 'object') {
+    return Object.values(value).map(v => String(v || '').toLowerCase().trim()).filter(Boolean);
+  }
+  if (typeof value !== 'string') return [];
+
+  const raw = value.trim();
+  if (!raw) return [];
+
+  // Handles JSON arrays serialized as text in older rows.
+  if (raw.startsWith('[') && raw.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map(v => String(v || '').toLowerCase().trim()).filter(Boolean);
+      }
+    } catch {
+      // Fall through to delimiter split.
+    }
+  }
+
+  return raw
+    .split(/[|,;/]/)
+    .map(v => v.toLowerCase().trim())
+    .filter(Boolean);
+}
+
+function getEventMatchTargets(event) {
+  return [event?.event_type, event?.dress_code]
+    .map(v => String(v || '').toLowerCase().trim())
+    .filter(Boolean);
+}
+
+function itemMatchesEventContext(item, event) {
+  const targets = getEventMatchTargets(event);
+  if (targets.length === 0) return false;
+
+  const occasion = String(item?.occasion || '').toLowerCase().trim();
+  const eventTypes = normalizeTagList(item?.event_types);
+  const tokens = [occasion, ...eventTypes].filter(Boolean);
+  if (tokens.length === 0) return false;
+
+  return targets.some(target => tokens.some(tok => tok.includes(target) || target.includes(tok)));
+}
+
 /**
  * Color harmony — rewards outfits whose pieces sit in the same family (or all
  * neutrals + one accent), flags chaotic palettes. Neutrals + metallics are
@@ -77,19 +126,19 @@ function evaluateColorHarmony(items) {
  * this occasion) bumps the score; 0% hits gets flagged.
  */
 function evaluateOccasionPrecision(items, event) {
-  const target = (event?.event_type || '').toLowerCase();
-  const dressCode = (event?.dress_code || '').toLowerCase();
-  if (!target && !dressCode) return null;
-  const hits = items.filter(i => {
+  if (getEventMatchTargets(event).length === 0) return null;
+
+  const taggedItems = items.filter(i => {
     const occ = (i.occasion || '').toLowerCase();
-    if (!occ) return false;
-    if (target && occ.includes(target)) return true;
-    if (dressCode && (occ.includes(dressCode) || dressCode.includes(occ))) return true;
-    return false;
-  }).length;
-  const ratio = items.length ? hits / items.length : 0;
-  if (ratio >= 0.6) return { type: 'occasion_precise', text: 'Pieces are tagged for this occasion', narrative: 'strategic', delta: 6 };
-  if (ratio === 0 && items.length >= 3) return { type: 'occasion_miss', text: 'None of the pieces are tagged for this kind of event', narrative: 'mild_anxiety', delta: -6 };
+    const eventTypes = normalizeTagList(i.event_types);
+    return Boolean(occ) || eventTypes.length > 0;
+  });
+  if (taggedItems.length === 0) return null;
+
+  const hits = taggedItems.filter(i => itemMatchesEventContext(i, event)).length;
+  const ratio = taggedItems.length ? hits / taggedItems.length : 0;
+  if (ratio >= 0.6) return { type: 'occasion_precise', text: 'Tagged pieces align with this event context', narrative: 'strategic', delta: 6 };
+  if (ratio === 0 && taggedItems.length >= 2) return { type: 'occasion_miss', text: 'Tagged pieces do not align with this event context', narrative: 'mild_anxiety', delta: -6 };
   return null;
 }
 
@@ -260,16 +309,24 @@ function scorePieceForEvent(item, event) {
     signals.push({ type: 'brand_match', text: `Host-brand alignment: ${event.host_brand}`, narrative: 'strategic' });
   }
 
-  const target = (event.event_type || '').toLowerCase();
-  const dressCode = (event.dress_code || '').toLowerCase();
   const occasion = (item.occasion || '').toLowerCase();
-  if (occasion && (target || dressCode)) {
-    if ((target && occasion.includes(target)) || (dressCode && (occasion.includes(dressCode) || dressCode.includes(occasion)))) {
+  const eventTypes = normalizeTagList(item.event_types);
+  const hasEventContextTags = Boolean(occasion) || eventTypes.length > 0;
+  if (hasEventContextTags && getEventMatchTargets(event).length > 0) {
+    if (itemMatchesEventContext(item, event)) {
       attributeScore += 12;
-      signals.push({ type: 'occasion_precise', text: 'Occasion tag aligns to this event', narrative: 'strategic' });
+      signals.push({ type: 'occasion_precise', text: 'Occasion/event-type tags align to this event', narrative: 'strategic' });
     } else {
       attributeScore -= 5;
-      signals.push({ type: 'occasion_miss', text: 'Occasion tag does not align cleanly', narrative: 'mild_anxiety' });
+      signals.push({ type: 'occasion_miss', text: 'Occasion/event-type tags do not align cleanly', narrative: 'mild_anxiety' });
+    }
+  }
+
+  if (Array.isArray(event.required_slots) && event.required_slots.length > 0) {
+    const slot = getSlotForCategory(item.clothing_category);
+    if (slot && event.required_slots.includes(slot)) {
+      attributeScore += 4;
+      signals.push({ type: 'required_slot', text: `${slot} is a required slot for this event`, narrative: 'strategic' });
     }
   }
 
@@ -427,21 +484,24 @@ function scoreOutfitForEvent(wardrobeItems, event) {
 
 // ── 2. REPEAT OUTFIT DETECTION ──────────────────────────────────────────────
 
-async function detectRepeats(wardrobeItems, showId, models) {
+async function detectRepeats(wardrobeItems, showId, models, context = {}) {
   const { sequelize } = models;
   const repeats = [];
+  const currentEventId = context?.currentEventId || null;
 
   for (const item of wardrobeItems) {
     try {
       const [rows] = await sequelize.query(
         `SELECT ew.episode_id, e.title, e.episode_number, e.air_date,
+                we.id as world_event_id,
                 we.name as event_name, we.prestige as event_prestige
          FROM episode_wardrobe ew
          JOIN episodes e ON e.id = ew.episode_id AND e.deleted_at IS NULL
          LEFT JOIN world_events we ON we.used_in_episode_id = e.id
          WHERE ew.wardrobe_id = :wardrobeId AND e.show_id = :showId
+           AND (:currentEventId IS NULL OR we.id IS DISTINCT FROM :currentEventId)
          ORDER BY e.episode_number DESC`,
-        { replacements: { wardrobeId: item.id, showId } }
+        { replacements: { wardrobeId: item.id, showId, currentEventId } }
       );
 
       if (rows.length > 0) {
@@ -595,7 +655,7 @@ function generateOutfitReactionTriggers(outfitScore, repeats, brandRelationships
 
 async function getWardrobeIntelligence(wardrobeItems, event, showId, models) {
   const outfitScore = scoreOutfitForEvent(wardrobeItems, event);
-  const repeats = await detectRepeats(wardrobeItems, showId, models);
+  const repeats = await detectRepeats(wardrobeItems, showId, models, { currentEventId: event?.id || null });
   const brandRelationships = await getBrandRelationships(showId, models);
   const growthArc = await getWardrobeGrowthArc(showId, models);
   const feedTriggers = generateOutfitReactionTriggers(outfitScore, repeats, brandRelationships);

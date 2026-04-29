@@ -1,9 +1,14 @@
 // frontend/src/components/Episodes/EpisodeOverviewTab.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import TimelinePlacementsSection from '../episode/TimelinePlacementsSection';
+
+// EpisodeBrief enums — kept module-level so the chip rows don't re-create
+// the array on every render. Order = display order.
+const ARCHETYPES = ['Trial', 'Temptation', 'Breakdown', 'Redemption', 'Showcase', 'Rising', 'Pressure', 'Cliffhanger'];
+const INTENTS = ['slay', 'pass', 'safe', 'fail'];
 
 /**
  * EpisodeOverviewTab — Episode Dashboard
@@ -24,6 +29,39 @@ const TIER_CONFIG = {
   fail: { emoji: '💔', label: 'FAIL', color: '#dc2626', bg: '#fef2f2' },
 };
 
+/**
+ * SectionBand — visual grouping for the Overview page.
+ *
+ * Renders a small monospace gold header above a hairline rule, then the
+ * children. Used to separate IDENTITY / PRODUCTION / SOURCE / STAKES /
+ * REFERENCE without competing with the cards below — the band is a quiet
+ * organizational cue, not a heading element.
+ */
+function SectionBand({ title, children }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 10,
+        paddingBottom: 6,
+        borderBottom: '1px solid #e8d8b8',
+      }}>
+        <span style={{
+          fontSize: 10,
+          fontWeight: 700,
+          color: '#B8962E',
+          textTransform: 'uppercase',
+          letterSpacing: 1.2,
+          fontFamily: "'DM Mono', monospace",
+        }}>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
@@ -38,6 +76,13 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   // to the episode directly; the Locations card reads them through the
   // linked events. One source of truth.
   const [worldLocations, setWorldLocations] = useState([]);
+  // EpisodeBrief snapshot + editable creative fields. Loaded alongside the
+  // rest of the context. The `draft` mirror lets us debounce edits to
+  // textareas without firing a PUT on every keystroke (saved on blur).
+  const [brief, setBrief] = useState(null);
+  const [draft, setDraft] = useState({});
+  const [savingBrief, setSavingBrief] = useState(false);
+  const [parentEvent, setParentEvent] = useState(null);
   // AI scene-set suggester state — fetch is one-shot, the modal is the
   // creator's review surface, and apply links the chosen sets via the
   // existing /scene-sets endpoint.
@@ -76,6 +121,55 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
       const scripts = data?.data || data?.scripts || [];
       if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
     }).catch(() => {});
+    // EpisodeBrief — drives the merged Identity/Source/Stakes/Reference
+    // sections. Auto-creates if missing (the GET handler does that).
+    api.get(`/api/v1/episode-brief/${episode.id}`).then(({ data }) => {
+      const b = data?.data || null;
+      setBrief(b);
+      setDraft({
+        narrative_purpose: b?.narrative_purpose || '',
+        forward_hook: b?.forward_hook || '',
+        episode_archetype: b?.episode_archetype || '',
+        designed_intent: b?.designed_intent || '',
+        allowed_outcomes: Array.isArray(b?.allowed_outcomes) ? b.allowed_outcomes : [],
+        arc_number: b?.arc_number ?? '',
+        position_in_arc: b?.position_in_arc ?? '',
+      });
+      // Resolve narrative_chain.parent_event_id → event name for the Source band.
+      const parentId = b?.narrative_chain?.parent_event_id;
+      if (parentId && showId) {
+        api.get(`/api/v1/world/${showId}/events`).then(({ data: ev }) => {
+          const events = ev?.events || [];
+          setParentEvent(events.find(e => e.id === parentId) || null);
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+  };
+
+  // ── Brief edit helpers ─────────────────────────────────────────────────
+  // Save a single field via PUT. The brief route's whitelist limits which
+  // keys are accepted; passing a snapshot field would be a no-op on the
+  // server, so we only call this from editable controls.
+  const isLocked = brief?.status === 'locked';
+  const saveBriefField = async (field, value) => {
+    if (!brief || isLocked) return;
+    setSavingBrief(true);
+    try {
+      const { data } = await api.put(`/api/v1/episode-brief/${episode.id}`, { [field]: value });
+      setBrief(data?.data || brief);
+    } catch (err) {
+      alert('Save failed: ' + (err?.response?.data?.error || err.message));
+    } finally {
+      setSavingBrief(false);
+    }
+  };
+  const toggleOutcome = (outcome) => {
+    if (isLocked) return;
+    const next = draft.allowed_outcomes.includes(outcome)
+      ? draft.allowed_outcomes.filter(o => o !== outcome)
+      : [...draft.allowed_outcomes, outcome];
+    setDraft(d => ({ ...d, allowed_outcomes: next }));
+    saveBriefField('allowed_outcomes', next);
   };
 
   // Parse evaluation
@@ -161,20 +255,6 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
     }
   };
 
-  // Read-through summary: aggregate the linked events' narrative fields so
-  // the episode page can display them without copying onto the episode
-  // itself. Single source of truth — when the event changes, the episode
-  // view reflects it. dress_code and narrative_stakes show as chips; the
-  // first non-empty canon_consequences object surfaces beneath.
-  const eventNarrative = (() => {
-    const dressCodes = Array.from(new Set(linkedEvents.map(e => e.dress_code).filter(Boolean)));
-    const stakes = linkedEvents.map(e => e.narrative_stakes).filter(Boolean);
-    const consequences = linkedEvents
-      .map(e => e.canon_consequences)
-      .filter(c => c && (typeof c === 'object' ? Object.keys(c).length : true));
-    return { dressCodes, stakes, consequences };
-  })();
-
   // Locations derived from the linked events. Each event can point at a
   // WorldLocation via venue_location_id; we resolve those to full
   // location objects (name, district, image) for display. Deduped by id
@@ -198,6 +278,32 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const income = parseFloat(episode.total_income) || 0;
   const expenses = parseFloat(episode.total_expenses) || 0;
   const net = income - expenses;
+
+  // ── Brief snapshot derivations ────────────────────────────────────────
+  // Read-only objects come from the source event at generation time.
+  // Sections render only when their underlying object has data, so most
+  // episodes will only show the bands that apply.
+  const careerCtx = brief?.career_context || {};
+  const eventDiff = brief?.event_difficulty || {};
+  const canonCons = brief?.canon_consequences || {};
+  const narChain = brief?.narrative_chain || {};
+  const eventMeta = brief?.event_metadata || {};
+  const beatOutline = Array.isArray(brief?.beat_outline) ? brief.beat_outline : [];
+  const seeds = Array.isArray(narChain.seeds_future_events) ? narChain.seeds_future_events : [];
+  // Feed origin lives nested in canon_consequences.automation when an event
+  // was created from a SocialProfile. Strip it from the canon JSON view to
+  // avoid duplicating the Source section.
+  const automation = canonCons.automation || {};
+  const hasFeedOrigin = !!(automation.host_profile_id || automation.host_handle || automation.host_display_name);
+  const canonConsCleaned = (() => { const { automation: _a, ...rest } = canonCons; return rest; })();
+  const hasCanonCons = Object.keys(canonConsCleaned).length > 0;
+  const hasCareerCtx = Object.keys(careerCtx).length > 0;
+  const hasEventDiff = Object.keys(eventDiff).length > 0;
+  const hasEventMeta = Object.keys(eventMeta).length > 0;
+  const hasNarChain = Object.keys(narChain).length > 0;
+  const hasSourceBand = hasFeedOrigin || hasNarChain;
+  const hasStakesBand = hasCareerCtx || hasEventDiff;
+  const hasReferenceBand = hasCanonCons || beatOutline.length > 0 || hasEventMeta;
 
   const handleSave = async () => {
     try { await onUpdate(formData); setIsEditing(false); } catch { alert('Failed to save'); }
@@ -284,8 +390,109 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         <div style={S.card}><div style={{ fontSize: 10, color: '#94a3b8' }}>Net P&L</div><div style={{ fontSize: 14, fontWeight: 700, color: net > 0 ? '#16a34a' : net < 0 ? '#dc2626' : '#94a3b8' }}>{net !== 0 ? `${net > 0 ? '+' : ''}${net.toLocaleString()}` : '—'}</div></div>
       </div>
 
-      {/* Two-column: Event + Season Position */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+      {/* IDENTITY band — what is this episode? Creative intent + allowed
+          outcomes (editable on the brief), then the events driving it +
+          where it sits in the season. */}
+      <SectionBand title="Identity">
+      {/* CREATIVE INTENT — editable creative fields on the brief. Hidden
+          while the brief loads (or fails to load) so the page doesn't show
+          empty inputs. */}
+      {brief && (
+        <div style={S.card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={S.label}>🎯 Creative Intent</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {savingBrief && <span style={{ fontSize: 10, color: '#94a3b8' }}>Saving…</span>}
+              {isLocked && <span style={{ padding: '1px 6px', background: '#fef2f2', color: '#dc2626', borderRadius: 3, fontSize: 9, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>🔒 LOCKED</span>}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div>
+              <label style={{ ...S.label, marginBottom: 4 }}>Archetype</label>
+              <select
+                value={draft.episode_archetype || ''}
+                disabled={isLocked}
+                onChange={(e) => { setDraft(d => ({ ...d, episode_archetype: e.target.value })); saveBriefField('episode_archetype', e.target.value || null); }}
+                style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, background: isLocked ? '#f8fafc' : '#fff' }}
+              >
+                <option value="">— none —</option>
+                {ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ ...S.label, marginBottom: 4 }}>Designed Intent</label>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {INTENTS.map(i => {
+                  const cfg = TIER_CONFIG[i];
+                  const active = draft.designed_intent === i;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      disabled={isLocked}
+                      onClick={() => {
+                        const next = active ? '' : i;
+                        setDraft(d => ({ ...d, designed_intent: next }));
+                        saveBriefField('designed_intent', next || null);
+                      }}
+                      style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: isLocked ? 'not-allowed' : 'pointer', border: `1px solid ${active ? cfg.color : '#e2e8f0'}`, background: active ? cfg.bg : '#fff', color: active ? cfg.color : '#64748b', opacity: isLocked ? 0.6 : 1 }}
+                    >{cfg.emoji} {i}</button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ ...S.label, marginBottom: 4 }}>Narrative Purpose</label>
+            <textarea
+              value={draft.narrative_purpose}
+              disabled={isLocked}
+              onChange={(e) => setDraft(d => ({ ...d, narrative_purpose: e.target.value }))}
+              onBlur={() => brief.narrative_purpose !== draft.narrative_purpose && saveBriefField('narrative_purpose', draft.narrative_purpose)}
+              placeholder="Why does this episode exist? What story job is it doing?"
+              rows={2}
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', background: isLocked ? '#f8fafc' : '#fff' }}
+            />
+          </div>
+          <div>
+            <label style={{ ...S.label, marginBottom: 4 }}>Forward Hook</label>
+            <textarea
+              value={draft.forward_hook}
+              disabled={isLocked}
+              onChange={(e) => setDraft(d => ({ ...d, forward_hook: e.target.value }))}
+              onBlur={() => brief.forward_hook !== draft.forward_hook && saveBriefField('forward_hook', draft.forward_hook)}
+              placeholder="What pulls the viewer into the next episode?"
+              rows={2}
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', background: isLocked ? '#f8fafc' : '#fff' }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ALLOWED OUTCOMES — toggleable. Disabling tiers narrows what the
+          script generator and evaluator are allowed to produce. */}
+      {brief && (
+        <div style={S.card}>
+          <span style={S.label}>🎲 Allowed Outcomes</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            {INTENTS.map(o => {
+              const cfg = TIER_CONFIG[o];
+              const active = draft.allowed_outcomes.includes(o);
+              return (
+                <button
+                  key={o}
+                  type="button"
+                  disabled={isLocked}
+                  onClick={() => toggleOutcome(o)}
+                  style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: isLocked ? 'not-allowed' : 'pointer', border: `1px solid ${active ? cfg.color : '#e2e8f0'}`, background: active ? cfg.bg : '#fff', color: active ? cfg.color : '#94a3b8', opacity: isLocked ? 0.6 : 1 }}
+                >{active ? '✓' : '✗'} {cfg.emoji} {o}</button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 0 }}>
         {/* Events — multi-link. Each linked event is a chip with × to
             unlink. The dropdown below lists every show event not yet
             linked anywhere; picking one stamps it with this episode's
@@ -350,7 +557,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
           <div style={{ fontSize: 10, color: '#B8962E', fontWeight: 600, marginTop: 4 }}>Episode {episode.episode_number || '?'} of {totalEpisodes || '?'}</div>
         </div>
       </div>
+      </SectionBand>
 
+      {/* PRODUCTION band — what's been built? Locations, script status,
+          narrative read-through from the linked events, and the timeline
+          overlay placements. */}
+      <SectionBand title="Production">
       {/* Locations + Script */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
         {/* Locations — derived from the linked events' venue_location_id
@@ -396,45 +608,162 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
         </div>
       </div>
 
-      {/* Narrative read-through — pulls dress_code, narrative_stakes, and
-          canon_consequences from the linked events. None of this lives on
-          the episode itself; we read it through so updates to the event
-          flow into the episode without copies that go stale. Hidden when
-          no events are linked or every linked event lacks these fields. */}
-      {linkedEvents.length > 0 && (eventNarrative.dressCodes.length > 0 || eventNarrative.stakes.length > 0 || eventNarrative.consequences.length > 0) && (
-        <div style={S.card}>
-          <span style={S.label}>🎭 Narrative (from event{linkedEvents.length > 1 ? 's' : ''})</span>
-          {eventNarrative.dressCodes.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: eventNarrative.stakes.length || eventNarrative.consequences.length ? 8 : 0 }}>
-              {eventNarrative.dressCodes.map((dc, i) => (
-                <span key={i} style={{ padding: '2px 8px', background: '#faf5ea', borderRadius: 4, fontSize: 10, color: '#B8962E', fontWeight: 600 }}>{dc}</span>
-              ))}
-            </div>
-          )}
-          {eventNarrative.stakes.length > 0 && (
-            <div style={{ marginBottom: eventNarrative.consequences.length ? 8 : 0 }}>
-              {eventNarrative.stakes.map((s, i) => (
-                <div key={i} style={{ fontSize: 12, color: '#1a1a2e', fontStyle: 'italic', marginBottom: i < eventNarrative.stakes.length - 1 ? 4 : 0, lineHeight: 1.4 }}>
-                  {s}
-                </div>
-              ))}
-            </div>
-          )}
-          {eventNarrative.consequences.length > 0 && (
-            <details style={{ fontSize: 11, color: '#64748b' }}>
-              <summary style={{ cursor: 'pointer', color: '#94a3b8', fontWeight: 600, fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>Canon consequences</summary>
-              <pre style={{ background: '#f8fafc', padding: 8, borderRadius: 4, marginTop: 6, fontSize: 10, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
-                {eventNarrative.consequences.map(c => typeof c === 'string' ? c : JSON.stringify(c, null, 2)).join('\n\n')}
-              </pre>
-            </details>
-          )}
-        </div>
-      )}
+
 
       {/* Video UI overlays — invites, checklists, etc. on the rendered
           video frame. Auto-populated when an invite is approved or the
           wardrobe checklist is locked, manually editable here. */}
       <TimelinePlacementsSection episodeId={episode.id} />
+      </SectionBand>
+
+      {/* SOURCE band — where this episode came from. Feed Origin (when the
+          source event was created from a SocialProfile) + Narrative Chain
+          (parent event, seeds for future events). Both render only when
+          their data exists, and the band itself only renders when at
+          least one is present. */}
+      {hasSourceBand && (
+        <SectionBand title="Source">
+          {hasFeedOrigin && (
+            <div style={S.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #f1f5f9' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>🌐 {automation.host_display_name || automation.host_handle || 'Unknown profile'}</div>
+                  {automation.host_handle && <div style={{ fontSize: 10, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>@{String(automation.host_handle).replace(/^@/, '')}</div>}
+                  {automation.content_category && <div style={{ marginTop: 3, display: 'inline-block', padding: '1px 6px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{automation.content_category}</div>}
+                </div>
+                <Link to="/feed" style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 10, fontWeight: 600, textDecoration: 'none' }}>Feed →</Link>
+              </div>
+              {(automation.follow_motivation || automation.follow_emotion || automation.follow_trigger || automation.event_excitement != null) && (
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ ...S.label, marginBottom: 4 }}>Why this hooked Lala</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, fontSize: 11 }}>
+                    {automation.follow_motivation && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Motivation</span><div style={{ color: '#1a1a2e' }}>{automation.follow_motivation}</div></div>}
+                    {automation.follow_emotion && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Emotion</span><div style={{ color: '#1a1a2e' }}>{automation.follow_emotion}</div></div>}
+                    {automation.follow_trigger && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Trigger</span><div style={{ color: '#1a1a2e' }}>{automation.follow_trigger}</div></div>}
+                    {automation.event_excitement != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Excitement</span><div style={{ color: '#B8962E', fontWeight: 700 }}>{automation.event_excitement}/10</div></div>}
+                  </div>
+                </div>
+              )}
+              {(automation.lifestyle_claim || automation.lifestyle_reality || automation.lifestyle_gap) && (
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ ...S.label, marginBottom: 4 }}>Lifestyle gap</label>
+                  {automation.lifestyle_claim && <div style={{ fontSize: 11, color: '#475569', marginBottom: 3 }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Claim</span>{automation.lifestyle_claim}</div>}
+                  {automation.lifestyle_reality && <div style={{ fontSize: 11, color: '#475569', marginBottom: 3 }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>Reality</span>{automation.lifestyle_reality}</div>}
+                  {automation.lifestyle_gap && <div style={{ fontSize: 11, color: '#dc2626', fontStyle: 'italic' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600, marginRight: 6, fontStyle: 'normal' }}>Gap</span>{automation.lifestyle_gap}</div>}
+                </div>
+              )}
+              {(automation.host_brand || automation.beauty_factor) && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 11 }}>
+                  {automation.host_brand && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Brand</span><div style={{ color: '#1a1a2e', fontWeight: 600 }}>{automation.host_brand}</div></div>}
+                  {automation.beauty_factor && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Beauty hook</span><div style={{ color: '#1a1a2e' }}>{automation.beauty_factor}{automation.beauty_description ? ` — ${automation.beauty_description}` : ''}</div></div>}
+                </div>
+              )}
+            </div>
+          )}
+          {hasNarChain && (
+            <div style={S.card}>
+              <span style={S.label}>🔗 Narrative Chain</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: seeds.length || narChain.chain_reason ? 10 : 0, marginTop: 4 }}>
+                {narChain.chain_position != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Chain position</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{narChain.chain_position}</div></div>}
+                {narChain.parent_event_id && (
+                  <div>
+                    <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Parent event</span>
+                    {parentEvent ? (
+                      parentEvent.used_in_episode_id
+                        ? <Link to={`/episodes/${parentEvent.used_in_episode_id}`} style={{ display: 'block', fontSize: 12, color: '#B8962E', fontWeight: 600 }}>{parentEvent.name} →</Link>
+                        : <div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{parentEvent.name} <span style={{ fontSize: 9, color: '#94a3b8' }}>(no episode yet)</span></div>
+                    ) : <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>{String(narChain.parent_event_id).slice(0, 8)}…</div>}
+                  </div>
+                )}
+              </div>
+              {narChain.chain_reason && <div style={{ marginBottom: seeds.length ? 10 : 0 }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Chain reason</span><div style={{ fontSize: 11, color: '#475569', lineHeight: 1.5, fontStyle: 'italic' }}>{narChain.chain_reason}</div></div>}
+              {seeds.length > 0 && (
+                <div>
+                  <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Seeds for future events</span>
+                  <ul style={{ margin: '4px 0 0', padding: '0 0 0 18px', fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
+                    {seeds.map((seed, i) => <li key={i}>{typeof seed === 'string' ? seed : JSON.stringify(seed)}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </SectionBand>
+      )}
+
+      {/* STAKES band — what's at risk this episode? Career context (tier,
+          milestone, success unlock, fail consequence) + difficulty knobs
+          (strictness, deadline). Snapshot from the source event — not
+          editable here; change them on the event itself. */}
+      {hasStakesBand && (
+        <SectionBand title="Stakes">
+          <div style={{ display: 'grid', gridTemplateColumns: hasCareerCtx && hasEventDiff ? '1fr 1fr' : '1fr', gap: 12 }}>
+            {hasCareerCtx && (
+              <div style={S.card}>
+                <span style={S.label}>💼 Career Context</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
+                  {careerCtx.career_tier && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Tier</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_tier}</div></div>}
+                  {careerCtx.career_milestone && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Milestone</span><div style={{ fontSize: 12, color: '#1a1a2e', fontWeight: 600 }}>{careerCtx.career_milestone}</div></div>}
+                  {careerCtx.success_unlock && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Success unlock</span><div style={{ fontSize: 11, color: '#16a34a', lineHeight: 1.5 }}>{careerCtx.success_unlock}</div></div>}
+                  {careerCtx.fail_consequence && <div style={{ gridColumn: '1 / -1' }}><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Fail consequence</span><div style={{ fontSize: 11, color: '#dc2626', lineHeight: 1.5 }}>{careerCtx.fail_consequence}</div></div>}
+                </div>
+              </div>
+            )}
+            {hasEventDiff && (
+              <div style={S.card}>
+                <span style={S.label}>⚡ Event Difficulty</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 4 }}>
+                  {eventDiff.strictness != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Strictness</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.strictness}/10</div></div>}
+                  {eventDiff.deadline_type && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Deadline</span><div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>{eventDiff.deadline_type}</div></div>}
+                  {eventDiff.deadline_minutes != null && <div><span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Minutes</span><div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{eventDiff.deadline_minutes}</div></div>}
+                </div>
+              </div>
+            )}
+          </div>
+        </SectionBand>
+      )}
+
+      {/* REFERENCE band — heavy snapshot data that creators rarely need
+          but should be able to inspect. All collapsed by default; clicking
+          a summary expands the JSON / list. */}
+      {hasReferenceBand && (
+        <SectionBand title="Reference">
+          {hasCanonCons && (
+            <div style={S.card}>
+              <details>
+                <summary style={{ cursor: 'pointer', fontSize: 11, color: '#64748b', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>🌐 Canon consequences</summary>
+                <pre style={{ background: '#f8fafc', padding: 10, borderRadius: 6, marginTop: 10, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 240, color: '#475569', fontFamily: "'DM Mono', monospace", border: '1px solid #e2e8f0' }}>
+                  {JSON.stringify(canonConsCleaned, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
+          {beatOutline.length > 0 && (
+            <div style={S.card}>
+              <details>
+                <summary style={{ cursor: 'pointer', fontSize: 11, color: '#64748b', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>📋 AI beat outline ({beatOutline.length})</summary>
+                <ol style={{ margin: '10px 0 0', padding: '0 0 0 22px' }}>
+                  {beatOutline.map((beat, i) => (
+                    <li key={i} style={{ marginBottom: 6, fontSize: 12, color: '#1a1a2e', lineHeight: 1.5 }}>
+                      <div style={{ fontWeight: 600 }}>{beat.summary || beat.name || `Beat ${beat.beat_number || i + 1}`}</div>
+                      {beat.dramatic_function && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, fontStyle: 'italic' }}>{beat.dramatic_function}</div>}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            </div>
+          )}
+          {hasEventMeta && (
+            <div style={S.card}>
+              <details>
+                <summary style={{ cursor: 'pointer', fontSize: 11, color: '#64748b', fontWeight: 600, fontFamily: "'DM Mono', monospace", textTransform: 'uppercase', letterSpacing: 0.5 }}>📦 Event metadata</summary>
+                <pre style={{ background: '#f8fafc', padding: 10, borderRadius: 6, marginTop: 10, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 240, color: '#475569', fontFamily: "'DM Mono', monospace", border: '1px solid #e2e8f0' }}>
+                  {JSON.stringify(eventMeta, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
+        </SectionBand>
+      )}
 
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

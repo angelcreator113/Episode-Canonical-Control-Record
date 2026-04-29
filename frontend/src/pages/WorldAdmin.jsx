@@ -1361,7 +1361,7 @@ The revised event should feel like a completely different experience from the si
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{h.episode_title || h.episode_id?.substring(0, 8)}</div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                        {Object.entries(deltas || {}).filter(([, v]) => v !== 0).map(([k, v]) => (
+                        {Object.entries(deltas || {}).filter(([, v]) => typeof v === 'number' && v !== 0).map(([k, v]) => (
                           <span key={k} style={S.deltaBadge(v)}>{STAT_ICONS[k]} {v > 0 ? '+' : ''}{v}</span>
                         ))}
                       </div>
@@ -1443,7 +1443,7 @@ The revised event should feel like a completely different experience from the si
                   <span style={S.statusPill(ep.evaluation_status)}>{ep.evaluation_status || 'draft'}</span>
                   {deltas && (
                     <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
-                      {Object.entries(deltas).filter(([, v]) => v !== 0).slice(0, 3).map(([k, v]) => (
+                      {Object.entries(deltas).filter(([, v]) => typeof v === 'number' && v !== 0).slice(0, 3).map(([k, v]) => (
                         <span key={k} style={{ ...S.deltaBadge(v), fontSize: 10 }}>{STAT_ICONS[k]}{v > 0 ? '+' : ''}{v}</span>
                       ))}
                     </div>
@@ -1461,6 +1461,7 @@ The revised event should feel like a completely different experience from the si
                         <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Stat Impact</div>
                         <div className="wa-grid wa-grid-5col" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
                           {Object.entries(deltas).map(([k, v]) => {
+                            if (typeof v !== 'number') return null;
                             const afterVal = stateAfter ? stateAfter[k] : null;
                             const beforeVal = afterVal !== null ? afterVal - v : null;
                             return (
@@ -3692,6 +3693,39 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   />
 
                   {/* Social Tasks Overlay */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+                    <button
+                      onClick={async () => {
+                        try {
+                          setToast('Regenerating social tasks...');
+                          const regen = await api.post(`/api/v1/world/${showId}/events/${md.id}/generate-social-checklist`, { force: true });
+                          if (regen.data?.success) {
+                            const tasks = regen.data?.data?.tasks || [];
+                            const assetUrl = regen.data?.data?.assetUrl || auto.social_checklist_url || null;
+                            const assetId = regen.data?.data?.assetId || auto.social_checklist_asset_id || null;
+                            const newAuto = {
+                              ...auto,
+                              social_tasks: tasks,
+                              social_checklist_url: assetUrl,
+                              social_checklist_asset_id: assetId,
+                            };
+                            const updated = {
+                              ...eventDetailModal,
+                              canon_consequences: { ...eventDetailModal.canon_consequences, automation: newAuto },
+                            };
+                            setEventDetailModal(updated);
+                            setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, canon_consequences: updated.canon_consequences } : ev));
+                            setToast(`Regenerated ${tasks.length} social tasks for this invite`);
+                          }
+                        } catch (err) {
+                          setToast('Failed: ' + (err.response?.data?.error || err.message));
+                        }
+                      }}
+                      style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e8d9b8', background: '#faf5ea', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}
+                    >
+                      Regenerate Social Tasks
+                    </button>
+                  </div>
                   <OverlayApprovalPanel
                     event={md}
                     showId={showId}
@@ -6913,7 +6947,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <span style={S.tCol}>{h.episode_title || h.episode_id?.substring(0, 8) || 'manual'}</span>
                     <span style={S.tCol}><span style={S.sourceBadge(h.source)}>{h.source}</span></span>
                     <span style={{ ...S.tCol, flex: 2, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {Object.entries(deltas || {}).filter(([, v]) => v !== 0).map(([k, v]) => (
+                      {Object.entries(deltas || {}).filter(([, v]) => typeof v === 'number' && v !== 0).map(([k, v]) => (
                         <span key={k} style={S.deltaBadge(v)}>{STAT_ICONS[k]} {v > 0 ? '+' : ''}{v}</span>
                       ))}
                     </span>

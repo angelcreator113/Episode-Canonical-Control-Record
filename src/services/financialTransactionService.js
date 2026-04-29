@@ -1,6 +1,6 @@
 'use strict';
 
-const { DEFAULT_STARTING_BALANCE, DEFAULT_GOALS } = require('../utils/financialRates');
+const { DEFAULT_STARTING_BALANCE, DEFAULT_GOALS, EVENT_EXTRAS } = require('../utils/financialRates');
 
 /**
  * Financial Transaction Service
@@ -296,6 +296,15 @@ function calculateSocialTaskRewards(socialTasks) {
     });
 }
 
+function normalizePaidFreeFlags(event) {
+  const truthy = new Set([true, 1, '1', 'true', 'yes', 'y']);
+  const isPaid = truthy.has(event?.is_paid);
+  const isFree = truthy.has(event?.is_free);
+  const eventCost = isFree ? 0 : (isPaid ? 0 : (Number(event?.cost_coins) || 0));
+  const eventPayment = isPaid ? (parseFloat(event?.payment_amount) || 0) : 0;
+  return { isPaid, isFree, eventCost, eventPayment };
+}
+
 // ─── FINALIZE EPISODE FINANCIALS ─────────────────────────────────────────────
 
 /**
@@ -387,11 +396,12 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
   };
 
   if (event) {
+    const { isPaid, eventCost, eventPayment } = normalizePaidFreeFlags(event);
+
     // 6. Event entry cost (expense)
-    const entryCost = parseFloat(event.cost_coins) || 0;
-    if (entryCost > 0) {
+    if (eventCost > 0) {
       await addTx({
-        type: 'expense', category: 'event_entry', amount: entryCost,
+        type: 'expense', category: 'event_entry', amount: eventCost,
         description: `Entry cost for "${event.name}"`,
         source_type: 'event', source_id: event.id, source_name: event.name,
       });
@@ -422,28 +432,35 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
       }
     }
 
-    // 8. Styling extras (estimated from prestige)
+    // 8. Styling extras (same extra model as financial preview)
     const prestige = event.prestige || 5;
-    const extras = prestige >= 7 ? 100 : prestige >= 4 ? 50 : 20;
-    await addTx({
-      type: 'expense', category: 'styling_extras', amount: extras,
-      description: `Styling, transport & extras (prestige ${prestige})`,
-      source_type: 'event', source_id: event.id, source_name: event.name,
-    });
+    const drinks = EVENT_EXTRAS.drinks(prestige);
+    const valet = EVENT_EXTRAS.valet(prestige);
+    const photoBoothPrompt = (event.dress_code || '').toLowerCase();
+    const wantsPhotoBooth = ['gala', 'premiere', 'launch', 'brand_deal'].includes(event.event_type)
+      || photoBoothPrompt.includes('red carpet') || photoBoothPrompt.includes('photo');
+    const photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
+    const extras = drinks + valet + photoBooth;
+    if (extras > 0) {
+      await addTx({
+        type: 'expense', category: 'styling_extras', amount: extras,
+        description: `Styling, transport & extras (drinks ${drinks}, valet ${valet}${photoBooth > 0 ? `, photo ${photoBooth}` : ''})`,
+        source_type: 'event', source_id: event.id, source_name: event.name,
+      });
+    }
 
     // 9. Event payment (income — if is_paid)
-    const payment = parseFloat(event.payment_amount) || 0;
-    if (event.is_paid && payment > 0) {
+    if (isPaid && eventPayment > 0) {
       await addTx({
-        type: 'income', category: 'event_payment', amount: payment,
+        type: 'income', category: 'event_payment', amount: eventPayment,
         description: `Payment for "${event.name}"`,
         source_type: 'event', source_id: event.id, source_name: event.name,
       });
     }
 
     // 10. Brand deal content revenue bonus
-    if (event.event_type === 'brand_deal' && payment > 0) {
-      const contentBonus = Math.round(payment * 0.1);
+    if (event.event_type === 'brand_deal' && eventPayment > 0) {
+      const contentBonus = Math.round(eventPayment * 0.1);
       if (contentBonus > 0) {
         await addTx({
           type: 'income', category: 'content_revenue', amount: contentBonus,
@@ -509,8 +526,8 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
       net_profit: netProfit,
       social_task_rewards: taskRewards.reduce((s, r) => s + r.reward, 0),
       wardrobe_cost: transactions.filter(t => t.category === 'wardrobe_purchase' || t.category === 'wardrobe_rental').reduce((s, t) => s + parseFloat(t.amount), 0),
-      event_cost: parseFloat(event?.cost_coins) || 0,
-      event_payment: parseFloat(event?.payment_amount) || 0,
+      event_cost: normalizePaidFreeFlags(event).eventCost,
+      event_payment: normalizePaidFreeFlags(event).eventPayment,
     },
     balance_before: balanceBefore,
     balance_after: balance,

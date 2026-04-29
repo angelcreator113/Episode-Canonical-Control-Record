@@ -5,7 +5,6 @@ import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
 import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
-import EpisodeBriefTab from '../components/Episodes/EpisodeBriefTab';
 import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggestionsOverlay';
 import EpisodePhoneMissionsTab from '../components/Episodes/EpisodePhoneMissionsTab';
 import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
@@ -73,10 +72,11 @@ const EpisodeDetail = () => {
     }
   }, [episode]);
 
-  // Tab structure: 5 main tabs with sub-tabs
+  // Tab structure: 4 main tabs with sub-tabs. Brief was merged into Overview
+  // — the snapshot now flows inline under Identity / Source / Stakes /
+  // Reference bands instead of living on its own tab.
   const EP_TABS = [
     { key: 'overview', icon: '📋', label: 'Overview' },
-    { key: 'brief', icon: '✨', label: 'Brief' },
     { key: 'scripts', icon: '📝', label: 'Script' },
     { key: 'production', icon: '🎬', label: 'Production', subs: [
       { key: 'assets', label: 'Assets' },
@@ -104,6 +104,8 @@ const EpisodeDetail = () => {
       'evaluation': ['results', 'evaluation'],
       'story': ['results', 'story'],
       'distribution': ['results', 'distribution'],
+      // Brief was merged into Overview — old links land back on Overview.
+      'brief': ['overview', null],
     };
     return map[tab] || [tab, null];
   };
@@ -778,11 +780,8 @@ const EpisodeDetail = () => {
           />
         )}
 
-        {/* Brief Tab — surfaces the EpisodeBrief snapshot (creative intent
-            + frozen event context that EpisodeOverviewTab doesn't show). */}
-        {activeTab === 'brief' && (
-          <EpisodeBriefTab episode={episode} />
-        )}
+        {/* Brief tab merged into Overview as inline section bands. Old
+            ?tab=brief URLs fall through to overview via resolveEpTab. */}
 
         {/* Scripts Tab */}
         {activeTab === 'scripts' && (

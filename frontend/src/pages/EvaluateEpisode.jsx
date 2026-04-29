@@ -471,7 +471,7 @@ function EvaluateEpisode() {
                   <div style={S.deltasBox}>
                     <div style={S.deltasTitle}>Stat Changes (on Accept)</div>
                     <div style={S.deltasGrid}>
-                      {Object.entries(evaluation.stat_deltas).filter(([, v]) => v !== 0).map(([key, val]) => (
+                      {Object.entries(evaluation.stat_deltas).filter(([, v]) => typeof v === 'number' && v !== 0).map(([key, val]) => (
                         <div key={key} style={S.deltaItem}>
                           <span>{STAT_ICONS[key] || '📊'} {key.replace(/_/g, ' ')}</span>
                           <span style={{ color: val > 0 ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
