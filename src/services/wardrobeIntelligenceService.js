@@ -376,6 +376,19 @@ function scorePieceForEvent(item, event) {
     }
   }
 
+  // Creator-set outfit_match_weight (1-10) — explicit "this piece fits this
+  // kind of event" signal the creator left when authoring the wardrobe row.
+  // Neutral at 5; weight 8-10 nudges positive (+2 to +4), weight 1-3 nudges
+  // negative (-1.6 to -3.2). Was previously only used for picker sort,
+  // ignored at score time. Small range so it's a tiebreaker, not a
+  // dominant force.
+  const matchWeight = Math.max(1, Math.min(10, parseInt(item.outfit_match_weight, 10) || 5));
+  if (matchWeight !== 5) {
+    attributeScore += (matchWeight - 5) * 0.8;
+    if (matchWeight >= 8) signals.push({ type: 'creator_strong_match', text: `Creator tagged this piece as a strong match (${matchWeight}/10)`, narrative: 'strategic' });
+    else if (matchWeight <= 3) signals.push({ type: 'creator_weak_match', text: `Creator tagged this piece as a weak match (${matchWeight}/10)`, narrative: 'mild_anxiety' });
+  }
+
   if (Array.isArray(event.required_slots) && event.required_slots.length > 0) {
     const slot = getSlotForCategory(item.clothing_category);
     if (slot && event.required_slots.includes(slot)) {
@@ -449,6 +462,30 @@ const ARC_TIER_CAPS = {
  * Returns null when arcStage isn't provided (UI calls without it to
  * avoid a separate DB lookup).
  */
+/**
+ * evaluateCreatorIntent — averages outfit_match_weight (1-10, creator-set
+ * "how good is this piece for this kind of event") across the selected
+ * pieces and surfaces a small confirmation/penalty signal. Weights default
+ * to 5 (neutral); strong outfits with avg ≥ 7.5 get +3, weak outfits with
+ * avg ≤ 3 get -2. Without this, the per-piece weight only affected the
+ * picker's sort order and never reached the outfit score.
+ */
+function evaluateCreatorIntent(items) {
+  if (!items?.length) return null;
+  const weights = items.map(i => Math.max(1, Math.min(10, parseInt(i.outfit_match_weight, 10) || 5)));
+  // Skip the signal when every piece is at default 5 — nothing to surface.
+  const allDefault = weights.every(w => w === 5);
+  if (allDefault) return null;
+  const avg = weights.reduce((a, b) => a + b, 0) / weights.length;
+  if (avg >= 7.5) {
+    return { type: 'creator_intent_strong', text: `Pieces creator-tagged as strong matches (avg ${avg.toFixed(1)}/10)`, narrative: 'strategic', delta: 3 };
+  }
+  if (avg <= 3) {
+    return { type: 'creator_intent_weak', text: `Pieces creator-tagged as weak matches (avg ${avg.toFixed(1)}/10)`, narrative: 'mild_anxiety', delta: -2 };
+  }
+  return null;
+}
+
 /**
  * evaluateRarityBonus — outfit pieces with non-trivial unlock gates
  * (brand_exclusive, season_drop, reputation, coin) feel rarer than
@@ -725,6 +762,7 @@ function scoreOutfitForEvent(wardrobeItems, event, ctx = {}) {
     evaluateRarityBonus(wardrobeItems),
     evaluateColorPsychology(wardrobeItems, event),
     evaluateSocialProfileExpectation(wardrobeItems, event),
+    evaluateCreatorIntent(wardrobeItems),
   ]) {
     if (sig) {
       secondaryDelta += sig.delta || 0;
