@@ -180,6 +180,12 @@ function WorldAdmin() {
   const [savingWardrobe, setSavingWardrobe] = useState(false);
   const [showWardrobeUpload, setShowWardrobeUpload] = useState(false);
   const [outfitPickerEvent, setOutfitPickerEvent] = useState(null);
+  // Overlay types for the show — fetched once on showId set, refetched
+  // when the modal-side picker triggers a regenerate so creators see
+  // newly-generated assets reflect in the readiness badges. Each entry
+  // is { id, type_key, name, category, generated, ... }; the picker
+  // splits them into Phone vs UI buckets via category.
+  const [overlayTypes, setOverlayTypes] = useState([]);
   const [outfitOptions, setOutfitOptions] = useState([]);
   const [outfitSelected, setOutfitSelected] = useState(new Set());
   const [outfitSaving, setOutfitSaving] = useState(false);
@@ -376,6 +382,22 @@ function WorldAdmin() {
   const [successMsg, setSuccessMsg] = useState(null);
 
   useEffect(() => { loadData(); }, [showId]);
+
+  // Fetch the show's overlay types so the event modal can render the
+  // Phone-vs-UI picker with real options (vs the prior free-text input).
+  // generated:bool comes back from the same endpoint, drives the asset-
+  // readiness badge on each toggle chip.
+  useEffect(() => {
+    if (!showId) { setOverlayTypes([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/api/v1/ui-overlays/${showId}`);
+        if (!cancelled) setOverlayTypes(res.data?.data || []);
+      } catch { if (!cancelled) setOverlayTypes([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [showId]);
 
   // Load the show's finance config (balance + goal ladder) whenever the show
   // changes. Kick off a seed-balance POST first — it's idempotent, so if the
@@ -2718,53 +2740,243 @@ The revised event should feel like a completely different experience from the si
                 />
               </div>
 
-              {/* ── Production Overlays ───────────────────────────────────────
-                  Names of UI overlay types that auto-place on the episode's
-                  timeline at generation time (matches by ui_overlay_types
-                  type_key OR name). Defaults are the four canonical screens;
-                  add show-specific ones (CountdownTimer, SponsorBug, etc.)
-                  per event when needed. */}
-              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
-                <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>📱 Required UI Overlays</label>
-                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-                  Auto-placed on the timeline when an episode is generated. Phone screens (Lala-side) and on-screen production overlays are both supported — add by name; the generator resolves to whichever asset has been built.
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8, minHeight: 28 }}>
-                  {(eventForm.required_ui_overlays || []).map((name, i) => (
-                    <span key={`${name}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: '#fff', border: '1px solid #e8d8b8', borderRadius: 4, fontSize: 11, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>
-                      {name}
+              {/* ── Required UI Overlays — split by category ──────────────────
+                  Lala-phone overlays (phone, phone_icon) and on-screen
+                  production overlays (production, frame) read from the same
+                  required_ui_overlays array but render in two named buckets
+                  driven by ui_overlay_types.category. Toggle-chip picker shows
+                  every type the show has defined with a generated/pending
+                  badge so creators can see asset readiness at a glance.
+                  Custom names still work via the inline input — generator
+                  matches by type_key OR name so a typed name is fine when
+                  the asset gets generated later. */}
+              {(() => {
+                const selected = new Set(eventForm.required_ui_overlays || []);
+                const isSelected = (t) => selected.has(t.type_key) || selected.has(t.name);
+                const toggle = (t) => {
+                  setEventForm(p => {
+                    const cur = p.required_ui_overlays || [];
+                    // Remove either form (type_key or name) so toggling off
+                    // works regardless of which one was saved.
+                    if (isSelected(t)) {
+                      return { ...p, required_ui_overlays: cur.filter(n => n !== t.type_key && n !== t.name) };
+                    }
+                    // Prefer type_key when adding (stable across name renames).
+                    return { ...p, required_ui_overlays: [...cur, t.type_key || t.name] };
+                  });
+                };
+                const PHONE_CATS = new Set(['phone', 'phone_icon', 'icon']);
+                const phoneTypes = overlayTypes.filter(t => PHONE_CATS.has(t.category || 'phone'));
+                const uiTypes = overlayTypes.filter(t => !PHONE_CATS.has(t.category || 'phone'));
+                // Custom entries — names in required_ui_overlays that don't
+                // match any type the show has defined. Surfaced as plain
+                // chips below the toggle grids so creators can still see
+                // and remove them.
+                const knownNames = new Set([
+                  ...overlayTypes.map(t => t.type_key).filter(Boolean),
+                  ...overlayTypes.map(t => t.name).filter(Boolean),
+                ]);
+                const customs = (eventForm.required_ui_overlays || []).filter(n => !knownNames.has(n));
+
+                // Auto-suggest defaults based on event_type / prestige —
+                // mirrors the generator's expectations so creators aren't
+                // staring at a blank picker. Replaces (doesn't merge) since
+                // creators usually want a clean slate when they click it.
+                const autoSuggest = () => {
+                  const suggestions = ['MailPanel', 'InviteLetterOverlay'];
+                  if ((eventForm.prestige || 0) >= 4) suggestions.push('WardrobeList');
+                  if (eventForm.career_milestone) suggestions.push('CareerList');
+                  if (eventForm.event_type === 'brand_deal') suggestions.push('StatsPanel');
+                  // Filter to types the show actually has defined; fall back to
+                  // raw names for ones the show might still define later.
+                  setEventForm(p => ({ ...p, required_ui_overlays: suggestions }));
+                };
+
+                const ToggleChip = ({ t }) => {
+                  const sel = isSelected(t);
+                  const ready = !!t.generated;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => toggle(t)}
+                      title={ready ? `${t.name} — asset generated` : `${t.name} — type defined, no asset yet`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '4px 8px', borderRadius: 6, fontSize: 11,
+                        fontFamily: "'DM Mono', monospace", cursor: 'pointer',
+                        border: `1px solid ${sel ? '#B8962E' : '#e2e8f0'}`,
+                        background: sel ? '#fdf8ee' : '#fff',
+                        color: sel ? '#1a1a2e' : '#64748b',
+                        fontWeight: sel ? 700 : 500,
+                      }}
+                    >
+                      <span style={{ fontSize: 9, color: ready ? '#16a34a' : '#a16207' }}>{ready ? '●' : '○'}</span>
+                      {t.name || t.type_key}
+                    </button>
+                  );
+                };
+
+                const sectionStyle = { gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 };
+                const renderSection = (label, types, helperText, customInputId) => (
+                  <div style={sectionStyle}>
+                    <label style={{ ...S.fLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>{label}</label>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>{helperText}</div>
+                    {types.length === 0 ? (
+                      <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', padding: '4px 0' }}>
+                        No types defined for this category yet — generate them in the UI Overlays tab, or add a custom name below.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                        {types.map(t => <ToggleChip key={t.id || t.type_key || t.name} t={t} />)}
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      id={customInputId}
+                      placeholder="Add custom name (Enter or comma) — e.g. CountdownTimer, SponsorBug"
+                      onKeyDown={e => {
+                        if (e.key !== 'Enter' && e.key !== ',') return;
+                        e.preventDefault();
+                        const v = e.currentTarget.value.trim().replace(/,$/, '');
+                        if (!v) return;
+                        setEventForm(p => {
+                          const existing = p.required_ui_overlays || [];
+                          if (existing.includes(v)) return p;
+                          return { ...p, required_ui_overlays: [...existing, v] };
+                        });
+                        e.currentTarget.value = '';
+                      }}
+                      style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                );
+
+                return (
+                  <>
+                    <div style={{ gridColumn: '1 / -1', marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>📺 Required UI Overlays</div>
                       <button
                         type="button"
-                        onClick={() => setEventForm(p => ({
-                          ...p,
-                          required_ui_overlays: (p.required_ui_overlays || []).filter((_, idx) => idx !== i),
-                        }))}
-                        style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}
-                        title="Remove"
-                      >×</button>
-                    </span>
-                  ))}
-                  {(eventForm.required_ui_overlays || []).length === 0 && (
-                    <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No overlays — episode timeline starts empty.</span>
-                  )}
+                        onClick={autoSuggest}
+                        title="Replace selection with sensible defaults based on this event's type + prestige"
+                        style={{ padding: '4px 10px', fontSize: 10, fontWeight: 700, borderRadius: 6, border: '1px solid #e8d8b8', background: '#fdf8ee', color: '#B8962E', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}
+                      >
+                        ✦ Auto-suggest
+                      </button>
+                    </div>
+                    {renderSection(
+                      '📱 Lala Phone Overlays',
+                      phoneTypes,
+                      'What Lala sees on her phone in-show. Auto-placed on the episode timeline at generation; ● = asset generated, ○ = type defined, no asset yet.',
+                      'phone-overlay-custom'
+                    )}
+                    {renderSection(
+                      '🎬 On-Screen UI Overlays',
+                      uiTypes,
+                      'On-screen production graphics — invitation cards, wardrobe checklists, stat panels. Same generator path; ● / ○ same as above.',
+                      'ui-overlay-custom'
+                    )}
+                    {customs.length > 0 && (
+                      <div style={{ gridColumn: '1 / -1', marginTop: 4, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
+                        <div style={{ fontSize: 10, color: '#a16207', fontFamily: "'DM Mono', monospace", marginBottom: 4, fontWeight: 700, letterSpacing: 0.4 }}>CUSTOM NAMES (no type defined yet)</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {customs.map((name, i) => (
+                            <span key={`custom-${name}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 11, color: '#1a1a2e', fontFamily: "'DM Mono', monospace" }}>
+                              {name}
+                              <button
+                                type="button"
+                                onClick={() => setEventForm(p => ({ ...p, required_ui_overlays: (p.required_ui_overlays || []).filter(n => n !== name) }))}
+                                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}
+                                title="Remove"
+                              >×</button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* ── Rewards & Requirements ────────────────────────────────────
+                  Stat-delta rewards (coins/reputation/brand_trust/influence)
+                  fund Lala's progression after success; the outcomes list
+                  feeds the writer's narrative beats. Requirements are pre-
+                  flight gates the next-event suggester reads (careerGoals.js
+                  applies a -5 score penalty when reputation_min or
+                  brand_trust_min isn't met). All numeric — leave at 0 to
+                  skip that gate or reward. */}
+              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
+                <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>🏆 Rewards & Requirements</label>
+
+                {/* Rewards row */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ ...S.fLabel, fontSize: 10, color: '#16a34a', marginBottom: 6 }}>REWARDS — granted on success</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
+                    {[
+                      { key: 'coins', label: '🪙 Coins', placeholder: '500' },
+                      { key: 'reputation', label: '⭐ Reputation', placeholder: '1' },
+                      { key: 'brand_trust', label: '🤝 Brand Trust', placeholder: '1' },
+                      { key: 'influence', label: '📣 Influence', placeholder: '1' },
+                    ].map(f => (
+                      <div key={f.key}>
+                        <label style={{ ...S.fLabel, fontSize: 10 }}>{f.label}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={eventForm.rewards?.[f.key] ?? 0}
+                          onChange={e => setEventForm(p => ({
+                            ...p,
+                            rewards: { ...(p.rewards || {}), [f.key]: parseInt(e.target.value, 10) || 0 },
+                          }))}
+                          placeholder={f.placeholder}
+                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <label style={{ ...S.fLabel, fontSize: 10 }}>Narrative outcomes (one per line)</label>
+                  <textarea
+                    value={Array.isArray(eventForm.rewards?.outcomes) ? eventForm.rewards.outcomes.join('\n') : ''}
+                    onChange={e => setEventForm(p => ({
+                      ...p,
+                      rewards: {
+                        ...(p.rewards || {}),
+                        outcomes: e.target.value.split('\n').map(s => s.trim()).filter(Boolean),
+                      },
+                    }))}
+                    placeholder={'One per line — what unlocks narratively.\nExample:\nLala lands on the Maison Belle radar\nFirst paid styling gig confirmed'}
+                    rows={2}
+                    style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  />
                 </div>
-                <input
-                  type="text"
-                  placeholder="Add overlay name (Enter or comma to add) — e.g. CountdownTimer, SponsorBug"
-                  onKeyDown={e => {
-                    if (e.key !== 'Enter' && e.key !== ',') return;
-                    e.preventDefault();
-                    const v = e.currentTarget.value.trim().replace(/,$/, '');
-                    if (!v) return;
-                    setEventForm(p => {
-                      const existing = p.required_ui_overlays || [];
-                      if (existing.includes(v)) return p;
-                      return { ...p, required_ui_overlays: [...existing, v] };
-                    });
-                    e.currentTarget.value = '';
-                  }}
-                  style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
-                />
+
+                {/* Requirements row */}
+                <div>
+                  <div style={{ ...S.fLabel, fontSize: 10, color: '#dc2626', marginBottom: 6 }}>REQUIREMENTS — gates that dock score when unmet</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    {[
+                      { key: 'reputation_min', label: '⭐ Reputation min', placeholder: '3' },
+                      { key: 'brand_trust_min', label: '🤝 Brand Trust min', placeholder: '2' },
+                      { key: 'coins_min', label: '🪙 Coins min', placeholder: '100' },
+                    ].map(f => (
+                      <div key={f.key}>
+                        <label style={{ ...S.fLabel, fontSize: 10 }}>{f.label}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={eventForm.requirements?.[f.key] ?? 0}
+                          onChange={e => setEventForm(p => ({
+                            ...p,
+                            requirements: { ...(p.requirements || {}), [f.key]: parseInt(e.target.value, 10) || 0 },
+                          }))}
+                          placeholder={f.placeholder}
+                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* ── Rewards & Requirements ────────────────────────────────────
