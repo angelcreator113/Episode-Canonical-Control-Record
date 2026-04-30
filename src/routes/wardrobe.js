@@ -1754,5 +1754,140 @@ router.put('/:id/set', optionalAuth, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════
+// POST /api/v1/wardrobe/:showId/auto-tag-event-types
+// Heuristic: derive event_types tags for every wardrobe item from its
+// existing signals (name, aesthetic_tags, occasion, brand, tier). The
+// occasion_precision signal in scoreOutfitForEvent reads event_types
+// and dings the outfit -6 when none of the tagged pieces match the
+// event context — so untagged inventory drags every score down. This
+// endpoint backfills sensible event_types for the whole show without
+// blowing the AI budget.
+//
+// dry_run=true (default) → returns proposed changes only, doesn't write
+// dry_run=false           → applies the suggestions
+//
+// Response shape (both modes):
+//   { items: [{ id, name, current: [...], suggested: [...], added: [...] }],
+//     changed_count, total }
+// ═══════════════════════════════════════════
+router.post('/:showId/auto-tag-event-types', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const dryRun = req.body.dry_run !== false;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    // Tag synthesis rules — keyword in name/aesthetic/occasion → event_types
+    // additions. Curated to map the show's existing taxonomy onto the
+    // event_types the scorer compares against. Order matters for tie-breaks
+    // but each item gets all matching rules merged uniquely.
+    const RULES = [
+      { match: /gala|gown|formal|ballroom|red carpet|black tie|couture/i, types: ['gala', 'premiere', 'invite'] },
+      { match: /cocktail|cocktail dress|chic|elegant|sophisticated/i, types: ['cocktail', 'invite', 'launch'] },
+      { match: /press|professional|business|tailored|blazer|suit/i, types: ['press', 'meeting', 'fitting', 'interview'] },
+      { match: /casual|relaxed|everyday|tee|jeans|sneakers/i, types: ['date', 'coffee', 'casual'] },
+      { match: /romantic|garden|floral|soft|feminine|whimsical/i, types: ['date', 'dinner', 'garden_party'] },
+      { match: /edgy|bold|punk|rock|leather|grunge|underground|club|alt/i, types: ['music_event', 'after_party', 'club', 'concert'] },
+      { match: /listening|studio|intimate|underground|indie/i, types: ['music_event', 'intimate_event', 'listening_session'] },
+      { match: /brand deal|brand|sponsor|campaign/i, types: ['brand_deal', 'press'] },
+      { match: /beach|resort|vacation|tropical|swim/i, types: ['vacation', 'beach', 'travel'] },
+      { match: /winter|coat|cozy|wool|knit|cashmere/i, types: ['winter_event', 'dinner'] },
+      { match: /summer|sundress|linen|breezy|light/i, types: ['summer_event', 'garden_party', 'date'] },
+    ];
+
+    // Tier-driven defaults — high-tier pieces lean toward formal events,
+    // basics lean casual. Only fires when nothing else matches so manual
+    // tagging takes precedence.
+    const TIER_DEFAULTS = {
+      basic: ['casual', 'date'],
+      mid: ['cocktail', 'invite'],
+      luxury: ['gala', 'premiere', 'launch'],
+      elite: ['gala', 'premiere', 'brand_deal'],
+    };
+
+    const [rows] = await models.sequelize.query(
+      `SELECT id, name, aesthetic_tags, event_types, occasion, brand, tier, color
+       FROM wardrobe
+       WHERE show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { showId } }
+    );
+
+    const items = (rows || []).map(item => {
+      const current = (() => {
+        if (Array.isArray(item.event_types)) return item.event_types;
+        if (typeof item.event_types === 'string') {
+          try { const p = JSON.parse(item.event_types); return Array.isArray(p) ? p : []; } catch { return []; }
+        }
+        return [];
+      })();
+
+      const aesthetic = (() => {
+        if (Array.isArray(item.aesthetic_tags)) return item.aesthetic_tags.join(' ');
+        if (typeof item.aesthetic_tags === 'string') {
+          try { const p = JSON.parse(item.aesthetic_tags); return Array.isArray(p) ? p.join(' ') : item.aesthetic_tags; }
+          catch { return item.aesthetic_tags; }
+        }
+        return '';
+      })();
+      // Combine signals into one searchable haystack. Brand counts because
+      // 'Maison Belle Couture' nudges toward formal, 'Frankie Hsu' nudges
+      // toward streetwear, etc.
+      const haystack = `${item.name || ''} ${aesthetic} ${item.occasion || ''} ${item.brand || ''} ${item.color || ''}`.toLowerCase();
+
+      const matched = new Set(current);
+      let anyRuleHit = false;
+      for (const rule of RULES) {
+        if (rule.match.test(haystack)) {
+          anyRuleHit = true;
+          for (const t of rule.types) matched.add(t);
+        }
+      }
+      // Tier fallback — only kicks in when no keyword rule matched.
+      if (!anyRuleHit && TIER_DEFAULTS[item.tier]) {
+        for (const t of TIER_DEFAULTS[item.tier]) matched.add(t);
+      }
+
+      const suggested = Array.from(matched);
+      const added = suggested.filter(t => !current.includes(t));
+      return {
+        id: item.id,
+        name: item.name,
+        current,
+        suggested,
+        added,
+      };
+    });
+
+    const changed = items.filter(i => i.added.length > 0);
+
+    if (!dryRun && changed.length > 0) {
+      // Apply via per-row UPDATE — small enough volume that a single
+      // transaction with N updates beats fancier batch SQL gymnastics.
+      // Stringifies the array since Sequelize raw queries don't always
+      // serialize JSONB the way the migration expects.
+      await models.sequelize.transaction(async (t) => {
+        for (const i of changed) {
+          await models.sequelize.query(
+            `UPDATE wardrobe SET event_types = CAST(:types AS jsonb), updated_at = NOW() WHERE id = :id`,
+            { replacements: { types: JSON.stringify(i.suggested), id: i.id }, transaction: t }
+          );
+        }
+      });
+    }
+
+    return res.json({
+      success: true,
+      dry_run: dryRun,
+      changed_count: changed.length,
+      total: items.length,
+      items: changed,  // only return rows that actually changed — keeps payload small
+    });
+  } catch (err) {
+    console.error('[wardrobe auto-tag] error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
 module.exports.getOutfitScore = getOutfitScore;
