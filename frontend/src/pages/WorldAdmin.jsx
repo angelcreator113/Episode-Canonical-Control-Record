@@ -4626,9 +4626,31 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {outfitScore.narrative_mood}
                   </span>
                 </div>
-                {outfitScore.signals?.map((s, i) => (
-                  <div key={i} style={{ fontSize: 11, color: '#666', marginTop: 3 }}>{s.text}</div>
-                ))}
+                {/* Signal breakdown — each delta inline so creators can
+                    see exactly which dimension lifted vs dropped the score.
+                    Without this, three text lines from the scorer all read
+                    the same weight even when one is +6 and another -6 (a
+                    12-pt swing in secondary that's invisible without the
+                    numeric tag). */}
+                {outfitScore.signals?.map((s, i) => {
+                  const d = typeof s.delta === 'number' ? s.delta : null;
+                  const positive = d != null && d > 0;
+                  const negative = d != null && d < 0;
+                  return (
+                    <div key={i} style={{ fontSize: 11, color: '#666', marginTop: 3, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      {d != null && (
+                        <span style={{
+                          display: 'inline-block', minWidth: 26, textAlign: 'right',
+                          fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 10,
+                          color: positive ? '#16a34a' : negative ? '#dc2626' : '#94a3b8',
+                        }}>
+                          {positive ? '+' : ''}{d}
+                        </span>
+                      )}
+                      <span>{s.text}</span>
+                    </div>
+                  );
+                })}
                 {outfitScore.repeats?.length > 0 && (
                   <div style={{ marginTop: 4 }}>
                     {(outfitShowAllRepeats ? outfitScore.repeats : outfitScore.repeats.slice(0, 2)).map((r, i) => (
@@ -4737,7 +4759,42 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               return (
                 <>
                   <div style={{ marginBottom: 10, padding: '8px 10px', border: '1px solid #e8e0d0', borderRadius: 8, background: '#faf7f0' }}>
-                    <div style={{ fontSize: 10, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>FILTERS</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontSize: 10, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>FILTERS</div>
+                      {/* Auto-tag — heuristic backfill of event_types tags
+                          across the entire wardrobe. Reads name + aesthetic
+                          + brand + occasion to derive sensible tags so the
+                          occasion_precision signal stops flipping negative
+                          on untagged inventory. Wrapped in window.confirm
+                          since it's a bulk write — preview opens in toast. */}
+                      <button
+                        type="button"
+                        title="Heuristic event_types tag suggester for the whole wardrobe — fixes the 'tagged pieces don't align' signal that was dropping outfit scores"
+                        onClick={async () => {
+                          try {
+                            // Dry-run first to show the diff before writing.
+                            const dry = await api.post(`/api/v1/wardrobe/${showId}/auto-tag-event-types`, { dry_run: true });
+                            const changed = dry.data?.changed_count || 0;
+                            const total = dry.data?.total || 0;
+                            if (changed === 0) {
+                              setToast(`✓ All ${total} wardrobe items already tagged — nothing to add.`);
+                              setTimeout(() => setToast(null), 4000);
+                              return;
+                            }
+                            if (!window.confirm(`Auto-tag ${changed} of ${total} wardrobe items with derived event_types?\n\nExamples: ${dry.data.items.slice(0, 3).map(i => `${i.name} → +${i.added.join(', +')}`).join('; ')}${dry.data.items.length > 3 ? '...' : ''}`)) return;
+                            const apply = await api.post(`/api/v1/wardrobe/${showId}/auto-tag-event-types`, { dry_run: false });
+                            setToast(`✦ Auto-tagged ${apply.data.changed_count} wardrobe items. Reopen the picker to see updated scores.`);
+                            setTimeout(() => setToast(null), 6000);
+                          } catch (err) {
+                            setToast('Auto-tag failed: ' + (err?.response?.data?.error || err.message));
+                            setTimeout(() => setToast(null), 5000);
+                          }
+                        }}
+                        style={{ padding: '3px 9px', fontSize: 10, fontWeight: 700, borderRadius: 6, border: '1px solid #e8d8b8', background: '#fff', color: '#B8962E', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}
+                      >
+                        ✦ Auto-tag wardrobe
+                      </button>
+                    </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                       <button onClick={() => setOutfitSlotFilter('all')} style={{ ...S.smBtn, background: outfitSlotFilter === 'all' ? '#B8962E' : '#fff', color: outfitSlotFilter === 'all' ? '#fff' : '#555', borderColor: '#e8d9b8' }}>All Slots</button>
                       {SLOT_KEYS.map(slot => (
