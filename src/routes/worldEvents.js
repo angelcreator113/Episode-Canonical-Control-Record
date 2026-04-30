@@ -3338,7 +3338,24 @@ router.post('/world/:showId/episodes/:episodeId/generate-title-overlay', optiona
       `SELECT id, title, episode_number FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1`,
       { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
     );
-    if (!episode) return res.status(404).json({ success: false, error: 'Episode not found' });
+    if (!episode) {
+      // Stale link: an event has used_in_episode_id pointing to an episode
+      // that's been soft- or hard-deleted. Clear the FK so the next page
+      // refresh stops showing the orphan button. Best-effort — never let
+      // the cleanup throw mask the underlying 404.
+      try {
+        await sequelize.query(
+          `UPDATE world_events SET used_in_episode_id = NULL
+           WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL`,
+          { replacements: { episodeId } }
+        );
+      } catch { /* non-fatal */ }
+      return res.status(404).json({
+        success: false,
+        error: 'Episode not found — it may have been deleted. Stale link cleared; refresh to update the panel.',
+        stale_link_cleared: true,
+      });
+    }
 
     // Load event for context
     const [event] = await sequelize.query(
