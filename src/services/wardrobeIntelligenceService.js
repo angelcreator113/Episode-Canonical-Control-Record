@@ -322,12 +322,18 @@ function getExpectedTier(eventPrestige) {
 }
 
 function getTierAlignmentScore(tierGap) {
+  // Tier alignment curve. Perfect ±0.5 = 94. The downside cliff used to
+  // drop to 66 at -1 (a 28-pt swing for "slightly underdressed") which
+  // punished tasteful one-tier-down outfits harder than the narrative
+  // signal "she knows it" implied. Softened to 78 at slight under and
+  // 58 at moderate under so the curve degrades smoothly. Overdressed
+  // side already had a softer drop (94 → 80 → 72) so it stays.
   if (tierGap >= 1.5) return 72;
   if (tierGap > 1) return 80;
   if (Math.abs(tierGap) <= 0.5) return 94;
-  if (tierGap >= -1) return 66;
-  if (tierGap >= -1.5) return 48;
-  return 28;
+  if (tierGap >= -1) return 78;     // slight under (was 66 — softened)
+  if (tierGap >= -1.5) return 58;   // moderate under (was 48 — softened)
+  return 32;                         // very under (was 28)
 }
 
 function scorePieceForEvent(item, event) {
@@ -545,7 +551,11 @@ function evaluateColorPsychology(items, event) {
   const eventType = String(event.event_type || '').toLowerCase();
   const dressCode = String(event.dress_code || '').toLowerCase();
   const prestige = parseInt(event.prestige, 10) || 5;
-  const HIGH_STAKES = ['gala', 'premiere', 'brand_deal'].includes(eventType) || prestige >= 7;
+  // Prestige threshold lowered 7→6 so listening sessions, brand cocktails,
+  // and other prestige-6 events catch the high-stakes color bonus too.
+  // 7 was missing the entire "borderline elevated" band that creators
+  // most often work in.
+  const HIGH_STAKES = ['gala', 'premiere', 'brand_deal'].includes(eventType) || prestige >= 6;
   const INTIMATE = ['date', 'dinner', 'coffee'].includes(eventType) || prestige <= 4;
   const CELEBRATORY = ['launch', 'after_party', 'opening'].includes(eventType)
     || /sparkle|disco|metallic|dazzle|festive/.test(dressCode);
