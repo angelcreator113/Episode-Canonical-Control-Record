@@ -4126,7 +4126,16 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           try {
                             const res = await api.post(`/api/v1/world/${showId}/episodes/${md.used_in_episode_id}/generate-title-overlay`);
                             if (res.data.success) setToast(`Title overlay: "${res.data.data.title}"`);
-                          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                          } catch (err) {
+                            const status = err.response?.status;
+                            const data = err.response?.data || {};
+                            setToast('Failed: ' + (data.error || err.message));
+                            // Stale link recovery — backend cleared the
+                            // orphan used_in_episode_id; reload events so
+                            // the now-detached row no longer shows this
+                            // button on next render.
+                            if (status === 404 && data.stale_link_cleared) loadData();
+                          }
                           btn.disabled = false; btn.textContent = '🎬 Generate Episode Title';
                         }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
                           🎬 Generate Episode Title
