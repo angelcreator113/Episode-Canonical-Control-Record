@@ -322,12 +322,18 @@ function getExpectedTier(eventPrestige) {
 }
 
 function getTierAlignmentScore(tierGap) {
+  // Tier alignment curve. Perfect ±0.5 = 94. The downside cliff used to
+  // drop to 66 at -1 (a 28-pt swing for "slightly underdressed") which
+  // punished tasteful one-tier-down outfits harder than the narrative
+  // signal "she knows it" implied. Softened to 78 at slight under and
+  // 58 at moderate under so the curve degrades smoothly. Overdressed
+  // side already had a softer drop (94 → 80 → 72) so it stays.
   if (tierGap >= 1.5) return 72;
   if (tierGap > 1) return 80;
   if (Math.abs(tierGap) <= 0.5) return 94;
-  if (tierGap >= -1) return 66;
-  if (tierGap >= -1.5) return 48;
-  return 28;
+  if (tierGap >= -1) return 78;     // slight under (was 66 — softened)
+  if (tierGap >= -1.5) return 58;   // moderate under (was 48 — softened)
+  return 32;                         // very under (was 28)
 }
 
 function scorePieceForEvent(item, event) {
@@ -368,6 +374,19 @@ function scorePieceForEvent(item, event) {
       attributeScore -= 5;
       signals.push({ type: 'occasion_miss', text: 'Occasion/event-type tags do not align cleanly', narrative: 'mild_anxiety' });
     }
+  }
+
+  // Creator-set outfit_match_weight (1-10) — explicit "this piece fits this
+  // kind of event" signal the creator left when authoring the wardrobe row.
+  // Neutral at 5; weight 8-10 nudges positive (+2 to +4), weight 1-3 nudges
+  // negative (-1.6 to -3.2). Was previously only used for picker sort,
+  // ignored at score time. Small range so it's a tiebreaker, not a
+  // dominant force.
+  const matchWeight = Math.max(1, Math.min(10, parseInt(item.outfit_match_weight, 10) || 5));
+  if (matchWeight !== 5) {
+    attributeScore += (matchWeight - 5) * 0.8;
+    if (matchWeight >= 8) signals.push({ type: 'creator_strong_match', text: `Creator tagged this piece as a strong match (${matchWeight}/10)`, narrative: 'strategic' });
+    else if (matchWeight <= 3) signals.push({ type: 'creator_weak_match', text: `Creator tagged this piece as a weak match (${matchWeight}/10)`, narrative: 'mild_anxiety' });
   }
 
   if (Array.isArray(event.required_slots) && event.required_slots.length > 0) {
@@ -443,6 +462,30 @@ const ARC_TIER_CAPS = {
  * Returns null when arcStage isn't provided (UI calls without it to
  * avoid a separate DB lookup).
  */
+/**
+ * evaluateCreatorIntent — averages outfit_match_weight (1-10, creator-set
+ * "how good is this piece for this kind of event") across the selected
+ * pieces and surfaces a small confirmation/penalty signal. Weights default
+ * to 5 (neutral); strong outfits with avg ≥ 7.5 get +3, weak outfits with
+ * avg ≤ 3 get -2. Without this, the per-piece weight only affected the
+ * picker's sort order and never reached the outfit score.
+ */
+function evaluateCreatorIntent(items) {
+  if (!items?.length) return null;
+  const weights = items.map(i => Math.max(1, Math.min(10, parseInt(i.outfit_match_weight, 10) || 5)));
+  // Skip the signal when every piece is at default 5 — nothing to surface.
+  const allDefault = weights.every(w => w === 5);
+  if (allDefault) return null;
+  const avg = weights.reduce((a, b) => a + b, 0) / weights.length;
+  if (avg >= 7.5) {
+    return { type: 'creator_intent_strong', text: `Pieces creator-tagged as strong matches (avg ${avg.toFixed(1)}/10)`, narrative: 'strategic', delta: 3 };
+  }
+  if (avg <= 3) {
+    return { type: 'creator_intent_weak', text: `Pieces creator-tagged as weak matches (avg ${avg.toFixed(1)}/10)`, narrative: 'mild_anxiety', delta: -2 };
+  }
+  return null;
+}
+
 /**
  * evaluateRarityBonus — outfit pieces with non-trivial unlock gates
  * (brand_exclusive, season_drop, reputation, coin) feel rarer than
@@ -545,7 +588,11 @@ function evaluateColorPsychology(items, event) {
   const eventType = String(event.event_type || '').toLowerCase();
   const dressCode = String(event.dress_code || '').toLowerCase();
   const prestige = parseInt(event.prestige, 10) || 5;
-  const HIGH_STAKES = ['gala', 'premiere', 'brand_deal'].includes(eventType) || prestige >= 7;
+  // Prestige threshold lowered 7→6 so listening sessions, brand cocktails,
+  // and other prestige-6 events catch the high-stakes color bonus too.
+  // 7 was missing the entire "borderline elevated" band that creators
+  // most often work in.
+  const HIGH_STAKES = ['gala', 'premiere', 'brand_deal'].includes(eventType) || prestige >= 6;
   const INTIMATE = ['date', 'dinner', 'coffee'].includes(eventType) || prestige <= 4;
   const CELEBRATORY = ['launch', 'after_party', 'opening'].includes(eventType)
     || /sparkle|disco|metallic|dazzle|festive/.test(dressCode);
@@ -715,6 +762,7 @@ function scoreOutfitForEvent(wardrobeItems, event, ctx = {}) {
     evaluateRarityBonus(wardrobeItems),
     evaluateColorPsychology(wardrobeItems, event),
     evaluateSocialProfileExpectation(wardrobeItems, event),
+    evaluateCreatorIntent(wardrobeItems),
   ]) {
     if (sig) {
       secondaryDelta += sig.delta || 0;

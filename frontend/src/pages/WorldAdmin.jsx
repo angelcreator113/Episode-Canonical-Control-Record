@@ -2979,87 +2979,6 @@ The revised event should feel like a completely different experience from the si
                 </div>
               </div>
 
-              {/* ── Rewards & Requirements ────────────────────────────────────
-                  Stat-delta rewards (coins/reputation/brand_trust/influence)
-                  fund Lala's progression after success; the outcomes list
-                  feeds the writer's narrative beats. Requirements are pre-
-                  flight gates the next-event suggester reads (careerGoals.js
-                  applies a -5 score penalty when reputation_min or
-                  brand_trust_min isn't met). All numeric — leave at 0 to
-                  skip that gate or reward. */}
-              <div style={{ gridColumn: '1 / -1', marginTop: 8, padding: 12, background: '#fafaf6', border: '1px solid #ece4cf', borderRadius: 8 }}>
-                <label style={{ ...S.fLabel, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>🏆 Rewards & Requirements</label>
-
-                {/* Rewards row */}
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ ...S.fLabel, fontSize: 10, color: '#16a34a', marginBottom: 6 }}>REWARDS — granted on success</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
-                    {[
-                      { key: 'coins', label: '🪙 Coins', placeholder: '500' },
-                      { key: 'reputation', label: '⭐ Reputation', placeholder: '1' },
-                      { key: 'brand_trust', label: '🤝 Brand Trust', placeholder: '1' },
-                      { key: 'influence', label: '📣 Influence', placeholder: '1' },
-                    ].map(f => (
-                      <div key={f.key}>
-                        <label style={{ ...S.fLabel, fontSize: 10 }}>{f.label}</label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={eventForm.rewards?.[f.key] ?? 0}
-                          onChange={e => setEventForm(p => ({
-                            ...p,
-                            rewards: { ...(p.rewards || {}), [f.key]: parseInt(e.target.value, 10) || 0 },
-                          }))}
-                          placeholder={f.placeholder}
-                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <label style={{ ...S.fLabel, fontSize: 10 }}>Narrative outcomes (one per line)</label>
-                  <textarea
-                    value={Array.isArray(eventForm.rewards?.outcomes) ? eventForm.rewards.outcomes.join('\n') : ''}
-                    onChange={e => setEventForm(p => ({
-                      ...p,
-                      rewards: {
-                        ...(p.rewards || {}),
-                        outcomes: e.target.value.split('\n').map(s => s.trim()).filter(Boolean),
-                      },
-                    }))}
-                    placeholder={'One per line — what unlocks narratively.\nExample:\nLala lands on the Maison Belle radar\nFirst paid styling gig confirmed'}
-                    rows={2}
-                    style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
-                  />
-                </div>
-
-                {/* Requirements row */}
-                <div>
-                  <div style={{ ...S.fLabel, fontSize: 10, color: '#dc2626', marginBottom: 6 }}>REQUIREMENTS — gates that dock score when unmet</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                    {[
-                      { key: 'reputation_min', label: '⭐ Reputation min', placeholder: '3' },
-                      { key: 'brand_trust_min', label: '🤝 Brand Trust min', placeholder: '2' },
-                      { key: 'coins_min', label: '🪙 Coins min', placeholder: '100' },
-                    ].map(f => (
-                      <div key={f.key}>
-                        <label style={{ ...S.fLabel, fontSize: 10 }}>{f.label}</label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={eventForm.requirements?.[f.key] ?? 0}
-                          onChange={e => setEventForm(p => ({
-                            ...p,
-                            requirements: { ...(p.requirements || {}), [f.key]: parseInt(e.target.value, 10) || 0 },
-                          }))}
-                          placeholder={f.placeholder}
-                          style={{ width: '100%', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
               <FG label="Description" value={eventForm.description} onChange={v => setEventForm(p => ({ ...p, description: v }))} placeholder="Full event description..." textarea full />
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
                 <button onClick={() => setEditingEvent(null)} style={S.secBtn}>Cancel</button>
@@ -4207,7 +4126,16 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           try {
                             const res = await api.post(`/api/v1/world/${showId}/episodes/${md.used_in_episode_id}/generate-title-overlay`);
                             if (res.data.success) setToast(`Title overlay: "${res.data.data.title}"`);
-                          } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                          } catch (err) {
+                            const status = err.response?.status;
+                            const data = err.response?.data || {};
+                            setToast('Failed: ' + (data.error || err.message));
+                            // Stale link recovery — backend cleared the
+                            // orphan used_in_episode_id; reload events so
+                            // the now-detached row no longer shows this
+                            // button on next render.
+                            if (status === 404 && data.stale_link_cleared) loadData();
+                          }
                           btn.disabled = false; btn.textContent = '🎬 Generate Episode Title';
                         }} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #B8962E', background: '#FAF7F0', color: '#B8962E', fontWeight: 600, fontSize: 10, cursor: 'pointer' }}>
                           🎬 Generate Episode Title
@@ -4707,9 +4635,31 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     {outfitScore.narrative_mood}
                   </span>
                 </div>
-                {outfitScore.signals?.map((s, i) => (
-                  <div key={i} style={{ fontSize: 11, color: '#666', marginTop: 3 }}>{s.text}</div>
-                ))}
+                {/* Signal breakdown — each delta inline so creators can
+                    see exactly which dimension lifted vs dropped the score.
+                    Without this, three text lines from the scorer all read
+                    the same weight even when one is +6 and another -6 (a
+                    12-pt swing in secondary that's invisible without the
+                    numeric tag). */}
+                {outfitScore.signals?.map((s, i) => {
+                  const d = typeof s.delta === 'number' ? s.delta : null;
+                  const positive = d != null && d > 0;
+                  const negative = d != null && d < 0;
+                  return (
+                    <div key={i} style={{ fontSize: 11, color: '#666', marginTop: 3, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      {d != null && (
+                        <span style={{
+                          display: 'inline-block', minWidth: 26, textAlign: 'right',
+                          fontFamily: "'DM Mono', monospace", fontWeight: 700, fontSize: 10,
+                          color: positive ? '#16a34a' : negative ? '#dc2626' : '#94a3b8',
+                        }}>
+                          {positive ? '+' : ''}{d}
+                        </span>
+                      )}
+                      <span>{s.text}</span>
+                    </div>
+                  );
+                })}
                 {outfitScore.repeats?.length > 0 && (
                   <div style={{ marginTop: 4 }}>
                     {(outfitShowAllRepeats ? outfitScore.repeats : outfitScore.repeats.slice(0, 2)).map((r, i) => (
@@ -4818,7 +4768,42 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
               return (
                 <>
                   <div style={{ marginBottom: 10, padding: '8px 10px', border: '1px solid #e8e0d0', borderRadius: 8, background: '#faf7f0' }}>
-                    <div style={{ fontSize: 10, color: '#B8962E', fontFamily: "'DM Mono', monospace", marginBottom: 6 }}>FILTERS</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ fontSize: 10, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>FILTERS</div>
+                      {/* Auto-tag — heuristic backfill of event_types tags
+                          across the entire wardrobe. Reads name + aesthetic
+                          + brand + occasion to derive sensible tags so the
+                          occasion_precision signal stops flipping negative
+                          on untagged inventory. Wrapped in window.confirm
+                          since it's a bulk write — preview opens in toast. */}
+                      <button
+                        type="button"
+                        title="Heuristic event_types tag suggester for the whole wardrobe — fixes the 'tagged pieces don't align' signal that was dropping outfit scores"
+                        onClick={async () => {
+                          try {
+                            // Dry-run first to show the diff before writing.
+                            const dry = await api.post(`/api/v1/wardrobe/${showId}/auto-tag-event-types`, { dry_run: true });
+                            const changed = dry.data?.changed_count || 0;
+                            const total = dry.data?.total || 0;
+                            if (changed === 0) {
+                              setToast(`✓ All ${total} wardrobe items already tagged — nothing to add.`);
+                              setTimeout(() => setToast(null), 4000);
+                              return;
+                            }
+                            if (!window.confirm(`Auto-tag ${changed} of ${total} wardrobe items with derived event_types?\n\nExamples: ${dry.data.items.slice(0, 3).map(i => `${i.name} → +${i.added.join(', +')}`).join('; ')}${dry.data.items.length > 3 ? '...' : ''}`)) return;
+                            const apply = await api.post(`/api/v1/wardrobe/${showId}/auto-tag-event-types`, { dry_run: false });
+                            setToast(`✦ Auto-tagged ${apply.data.changed_count} wardrobe items. Reopen the picker to see updated scores.`);
+                            setTimeout(() => setToast(null), 6000);
+                          } catch (err) {
+                            setToast('Auto-tag failed: ' + (err?.response?.data?.error || err.message));
+                            setTimeout(() => setToast(null), 5000);
+                          }
+                        }}
+                        style={{ padding: '3px 9px', fontSize: 10, fontWeight: 700, borderRadius: 6, border: '1px solid #e8d8b8', background: '#fff', color: '#B8962E', cursor: 'pointer', fontFamily: "'DM Mono', monospace" }}
+                      >
+                        ✦ Auto-tag wardrobe
+                      </button>
+                    </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                       <button onClick={() => setOutfitSlotFilter('all')} style={{ ...S.smBtn, background: outfitSlotFilter === 'all' ? '#B8962E' : '#fff', color: outfitSlotFilter === 'all' ? '#fff' : '#555', borderColor: '#e8d9b8' }}>All Slots</button>
                       {SLOT_KEYS.map(slot => (
