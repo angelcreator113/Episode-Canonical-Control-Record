@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v1.4 — Single-PR plan, derived from Prime Studios Audit Handoff v8 §4.1. Pre-flight complete (G1 closed). All locks recorded.
+**Document version:** v1.5 — Single-PR plan. G1 closed. Two-environment infra (dev + prod). All G2 prereqs verified.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G1 CLOSED — pre-flight complete. Ready for G2 (implementation as commit 1 of F-AUTH-1 PR).
+**Status:** G1 CLOSED — pre-flight complete. G2 prereqs verified. Ready to begin Step 6a as commit 1 of F-AUTH-1 PR.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -93,7 +93,7 @@ All six steps land in a single PR. Each step has its own §4.x detail section be
 
 #### Risk
 
-- A staging or dev environment that was running on placeholder values breaks immediately on first deploy of this PR. Mitigation: confirm env vars are set in every environment in pre-flight (§5.1).
+- A dev or prod environment that was running on placeholder values breaks immediately on first deploy of this PR. Mitigation: env vars confirmed in pre-flight (§5.1) — dev and prod both verified at G1.
 
 ---
 
@@ -340,7 +340,7 @@ Pre-flight produces a complete, current inventory. v8 closed May 1, 2026 — any
    grep -rnE "router\.(post|put|patch|delete).*optionalAuth" src/routes/
    ```
 
-5. Confirm Cognito env vars are set in dev, staging, and prod environments. Step 1 (F-Auth-2) WILL boot-fail any environment missing them.
+5. Confirm Cognito env vars are set in dev and prod environments via PM2 runtime env (not interactive shell). Step 1 (F-Auth-2) WILL boot-fail any environment missing them. **CONFIRMED at G1: dev and prod both have real Cognito identifiers; see Decision §9.10 re: pool unification.**
 
 6. Identify the frontend interceptor file. Confirm the strings it differentiates on. Save this as the contract Step 6 reconciles against.
 
@@ -389,21 +389,20 @@ primepisodes.com has no real-user traffic at the time this plan locks. The deplo
 >
 > A calendar deploy window is a tool for minimizing user impact during a risky change. With no real users, there is no user impact to minimize — the calendar window solves a problem you don't have. What you DO have: a codebase that has accumulated months of untested assumptions (the audit found 269 P0 bugs) and a fix that touches authentication on every write route. The gates exist to prevent the temptation to skip discipline because "no one will see it." The gates are not theater. F-AUTH-1 is the first fix; how it ships sets the precedent for every fix that follows.
 
-### 6.1 Six Active Gates (G5 absorbed into G4)
+### 6.1 The Seven Gates
 
 | Gate | Name | What must be true before proceeding |
 |---|---|---|
-| **G1** | **Pre-flight complete** | All §5.1 inventory deliverables produced and reviewed: optionalAuth surface inventory, sub-form (b) file list, sub-form (c) file:line list, exemption list with reasoning, frontend interceptor contract reference, env-var confirmation, `req.user.sub` grep results (F-Auth-5). Drift from v8 file:line references documented or absent. Branch coordination with second developer confirmed. |
-| **G2** | **Implementation complete** | **PREREQUISITE: Cognito runtime env vars confirmed by Evoni** (out-of-band, manual check in AWS console or environment config) for dev AND prod. Step 1 (F-Auth-2) boot-fails any environment running on placeholder strings. Confirmation date logged in pre-flight report. Then: all six steps coded per §5.2 order. Each commit corresponds to one step or substep (bisectability). CI passing. PR opened. PR description references audit handoff v8 §4.1 + this fix plan and includes the pre-flight inventory in collapsed sections. |
+| **G1** | **Pre-flight complete** | All §5.1 inventory deliverables produced and reviewed: optionalAuth surface inventory, sub-form (b) file list, sub-form (c) file:line list, exemption list with reasoning, frontend interceptor contract reference, env-var confirmation, `req.user.sub` grep results (F-Auth-5). Drift from v8 file:line references documented or absent. **CLOSED at v1.5.** |
+| **G2** | **Implementation complete** | **PREREQUISITE (G1 verified):** Cognito runtime env vars confirmed by Evoni via PM2 runtime env on dev and prod EC2 boxes. Both `COGNITO_USER_POOL_ID` and `COGNITO_CLIENT_ID` set to real (non-placeholder) values, in PM2 process env (not interactive shell). Note: dev and prod currently share one Cognito pool — see Decision §9.10. Then: all six steps coded per §5.2 order. Each commit corresponds to one step or substep (bisectability). CI passing. PR opened. PR description references audit handoff v8 §4.1 + this fix plan and includes the pre-flight inventory in collapsed sections. |
 | **G3** | **Self-review passed** | Every commit in the PR read end-to-end. Test coverage minimum: one authenticated + one unauthenticated test per sub-form. F-Auth-5 has its specific test (decisionLogs write persists matching user_id). Frontend interceptor handles `AUTH_REQUIRED` and `AUTH_INVALID_TOKEN` as distinct paths. |
-| **G4** | **Dev verified (expanded; absorbs former G5 scope)** | Backend deployed to dev. Boot tested with valid env vars (succeeds), missing env var (boot-fails with named error), placeholder env var values (boot-fails). §7 verification checklist run end-to-end on dev. Boot/restart cycle exercised (kill process, confirm clean restart, confirm auth still works). 2-hour soak on dev — server stays up, no error log spam, no unexpected restarts. |
-| **G5** | **ABSORBED INTO G4 (N/A)** | No staging gate in the active Prime Studios topology (intentional dev + prod infra). Former staging checks are mandatory inside G4 before G6 can open. |
-| **G6** | **Prod cutover** | Frontend deployed to prod, then backend. You spend 30 focused minutes exercising the app: log in, write to a Stats route, write to a wardrobe route, write to a franchise-brain route (this is where F34 closes), write something in BookEditor and navigate away (CZ-5 path), write to a `/decision-logs` route (F-Auth-5 path). Confirm boot logs are clean. No errors visible in app or server logs. |
-| **G7** | **Post-deploy soak** | Server stays up overnight. Next morning, exercise the app again — same surfaces as G6. If clean, declare F-AUTH-1 closed. Tier 1 fix queue (F-App-1, F-Stats-1, F-Ward-1, F-Reg-2, F-Ward-3, F-Sec-3, F-Franchise-1) is now unblocked. |
+| **G4** | **Dev verified + soak** | Backend deployed to dev. Boot tested with valid env vars (succeeds), missing env var (boot-fails with named error), placeholder env var values (boot-fails). Frontend deployed to dev (interceptor contract update). Full §7 verification checklist run end-to-end on dev. Every checkbox confirmed. Boot/restart cycle exercised (kill the process, confirm clean restart, confirm auth still works). **2-hour soak on dev** — server stays up, no error log spam, no unexpected restarts. You are reachable for alerts during the soak window. *Note: G4 absorbs the staging-soak responsibility from the original three-environment plan; Prime Studios infra is intentionally dev + prod only (Decision §9.9).* |
+| **G5** | **Prod cutover** | Frontend deployed to prod, then backend. You spend 30 focused minutes exercising the app: log in, write to a Stats route, write to a wardrobe route, write to a franchise-brain route (this is where F34 closes), write something in BookEditor and navigate away (CZ-5 path), write to a `/decision-logs` route (F-Auth-5 path). Confirm boot logs are clean. No errors visible in app or server logs. |
+| **G6** | **Post-deploy soak** | Server stays up overnight. Next morning, exercise the app again — same surfaces as G5. If clean, declare F-AUTH-1 closed. Tier 1 fix queue (F-App-1, F-Stats-1, F-Ward-1, F-Reg-2, F-Ward-3, F-Sec-3, F-Franchise-1) is now unblocked. |
 
-### 6.2 Pre-G6 readiness check
+### 6.2 Pre-G5 readiness check
 
-Before opening the prod cutover at G6, run this short list. If any item fails, do not proceed to G6. Return to the appropriate earlier gate.
+Before opening the prod cutover at G5, run this short list. If any item fails, do not proceed to G5. Return to the appropriate earlier gate.
 
 1. Cognito env vars confirmed set in prod (verified once during pre-flight; re-confirmed here because Step 1 / F-Auth-2 boot-fails any env without them).
 2. Second developer confirmed not mid-deploy. No conflicting branch in flight.
@@ -416,11 +415,11 @@ Before opening the prod cutover at G6, run this short list. If any item fails, d
 Without real-user traffic, the standard "watch the metrics" framing does not apply. There is no 401-rate-spike to investigate. There is no user-write-success-rate dashboard. What you watch instead:
 
 - **Boot logs** — server starts cleanly. No exceptions during module load. F-Auth-2 emits no warnings (because env vars are set). No "Token verification failed" loops in the first minute.
-- **App exercise** — every surface listed in G6 returns 200 under your own authenticated session. Every unauthenticated test (open an incognito window, attempt a write) returns 401 with `AUTH_REQUIRED`.
+- **App exercise** — every surface listed in G5 returns 200 under your own authenticated session. Every unauthenticated test (open an incognito window, attempt a write) returns 401 with `AUTH_REQUIRED`.
 - **BookEditor exercise** — write content, navigate away, return. Edits persist. Network log shows fetch with `keepalive: true` (not sendBeacon) carrying the Authorization header.
 - **Frontend interceptor exercise** — manually delete the auth token from browser storage, attempt a write. Interceptor sees `AUTH_REQUIRED`, redirects to login. Manually corrupt the token, attempt a write. Interceptor sees `AUTH_INVALID_TOKEN`, attempts refresh.
 - **Server logs during exercise** — no error-level entries from `middleware/auth.js`. F-Auth-3 503 path is not firing (Cognito is reachable). No `console.warn` floods.
-- **Overnight (G7)** — server uptime metric matches deploy time the next morning. No unexpected restarts. No memory growth visible in process metrics.
+- **Overnight (G6)** — server uptime metric matches deploy time the next morning. No unexpected restarts. No memory growth visible in process metrics.
 
 > **What you are NOT watching for**
 >
@@ -430,19 +429,18 @@ Without real-user traffic, the standard "watch the metrics" framing does not app
 
 ### 6.4 If a gate fails
 
-- **G1 fails** — pre-flight surfaced drift, missing env vars, or branch conflict. Resolve before G2. Drift may require updating this fix plan to v1.4+.
-- **G2 fails** — implementation incomplete or CI red. Stay at G2. Do not let "I can fix this in staging" pressure push you forward.
+- **G1 fails** — pre-flight surfaced drift, missing env vars, or branch conflict. Resolve before G2. Drift may require updating this fix plan to v1.6+.
+- **G2 fails** — implementation incomplete or CI red. Stay at G2. Do not let "I can fix this in dev soak" pressure push you forward.
 - **G3 fails** — self-review found a bug or a missing test. Return to G2. Add the test, fix the bug, re-run CI.
-- **G4 fails** — boot-fail when it should succeed, or unexpected behavior in §7 checklist. Diagnose. Likely a code bug, not a deploy issue. Return to G2 if a code change is needed.
-- **G5 fails** — N/A (gate absorbed into G4).
-- **G6 fails** — prod cutover surfaces an issue. Roll back per §8. Do not try to fix forward in prod. Return to G2 or G4 depending on cause.
-- **G7 fails** — overnight soak revealed instability. Roll back. Same rule: do not fix forward in prod.
+- **G4 fails** — boot-fail when it should succeed, unexpected §7 checklist behavior, server unstable during 2-hour soak, or memory growth during soak. Diagnose. If code, return to G2. If env-specific, fix in place. **Re-run all of G4 (including a fresh 2-hour soak)** before proceeding to G5 — do not partial-credit a soak that was interrupted by a code change.
+- **G5 fails** — prod cutover surfaces an issue. Roll back per §8. Do not try to fix forward in prod. Return to G2 or G4 depending on cause.
+- **G6 fails** — overnight soak revealed instability. Roll back. Same rule: do not fix forward in prod.
 
 ---
 
 ## 7. Post-Deploy Verification Checklist
 
-Run this checklist in dev (expanded G4) before prod, and again in prod after deploy.
+Run this checklist on dev (during G4) and again on prod after G5 cutover.
 
 ### 7.1 Auth module integrity
 
@@ -542,7 +540,7 @@ F-Auth-5 — **LOCKED to fold in.** Implementation as Step 6c (see §4.6). F-Aut
 
 ### 9.4 Deploy window — LOCKED (gate-driven, no calendar)
 
-Locked: **no calendar deploy window.** Gate-driven sequence per §6. Reasoning: primepisodes.com has no real-user traffic at the time of this fix. The standard deploy-window framing (low-traffic prod window, 24-hour staging soak) optimizes for user-impact minimization, which does not apply here. Discipline comes from the gates, not the clock. Quality-over-speed locked as the binding constraint.
+Locked: **no calendar deploy window.** Gate-driven sequence per §6. Reasoning: primepisodes.com has no real-user traffic at the time of this fix. The standard deploy-window framing (low-traffic prod window, 24-hour soak) optimizes for user-impact minimization, which does not apply here. Discipline comes from the gates, not the clock. Quality-over-speed locked as the binding constraint. Note: Prime Studios infra is dev + prod only — see Decision §9.9.
 
 ### 9.5 Branch coordination — LOCKED (solo PR)
 
@@ -576,6 +574,25 @@ Items surfaced during pre-flight but explicitly out of F-AUTH-1 scope. Filed for
 - **`|| 'system'` fallback audit.** 8 sites beyond `thumbnails.js:80` use the pattern (`scriptsController.js` × 6, `sceneController.js:218`, `compositions.js:1126`). Reachability audit needed — same dead-code-vs-real-fallback question.
 - **`arcTrackingRoutes.js`** references `optionalAuth` without importing it. Likely runtime error on first request. P1 follow-up: add the import and apply requireAuth.
 - **`episodes.js:101/109/117` discrepancy** — v8 cataloged unauth; current code has `authenticateToken` on POST `:108` and DELETE `:116`. Was this fixed post-v8 or did v8 catalog wrong? No code action; surface for awareness.
+
+### 9.9 Deploy infrastructure — LOCKED (dev + prod, no staging)
+
+Locked at G1: **Prime Studios infrastructure is intentionally dev + prod only.** No staging environment exists or is planned for this audit cycle. The fix plan was originally written assuming dev/staging/prod three-environment topology; gates G4–G7 in v1.4 reflected that assumption. v1.5 collapses to two environments:
+
+- **G4 (Dev verified + soak)** absorbs the staging-soak responsibility from former G5. The 2-hour soak now happens on dev before G5 prod cutover.
+- **Former G5** (staging verified) is removed entirely.
+- **Former G6** (prod cutover) is renumbered to G5.
+- **Former G7** (post-deploy soak) is renumbered to G6.
+
+Discipline implication: **dev does double duty.** G4 is a longer-running gate than the original plan implied because it now carries both verification and soak responsibilities. Do not partial-credit a soak that was interrupted by a code change — re-run the full 2-hour soak on the corrected build before proceeding to G5.
+
+### 9.10 Cognito pool unification — discovered at G1, deferred
+
+Pre-flight env-var verification surfaced an unintentional finding: dev and prod share the same Cognito User Pool and Client ID (`us-east-1_mFVU52978` / `lgtf3odnar8c456iehqfck1au`). This was not a deliberate single-tenant choice — discovered during PM2 runtime env check, intent confirmed as "did not realize they were the same."
+
+- Implication: any user signed up via dev exists in prod. Any auth state created in dev affects prod. Token issued by dev validates against prod (same User Pool).
+- F-AUTH-1 impact: **zero.** Both environments authenticate against real (non-placeholder) Cognito identifiers. F-Auth-2 boot-fail logic passes for both. Step 6b interceptor logic is pool-agnostic.
+- **Out of F-AUTH-1 scope.** Filed as P1 architectural follow-up: split Cognito pools — separate dev pool with separate Client ID, prod pool retained as canonical user store, env config updated per environment. **Trigger condition: schedule before any beta tester or external user signs up.** Once a non-Evoni user exists in the shared pool, the split becomes a data-migration problem rather than a config change.
 
 ---
 
@@ -695,6 +712,8 @@ All references derived from Prime Studios Audit Handoff v8. Pre-flight (§5.1) c
 - **D19** — `episodes.js` PUT `/:id` at `:313` tolerates missing token. Same root cause as D17; one fix closes both.
 - **D20** — `jwtAuth.js` disposition. LOCKED out of F-AUTH-1 scope. Architectural follow-up filed.
 - **D21** — `middleware/auth.js:237` exports an unused `authenticate` alias. LOCKED to drop in Step 6b cleanup.
+- **§9.9** — Deploy infrastructure: dev + prod only, no staging. G4 absorbs former G5 soak responsibility. Locked at G1.
+- **§9.10** — Cognito pool unification: dev and prod share one Cognito User Pool/Client ID. Discovered at G1, deferred to post-F-AUTH-1. Trigger: split before any beta tester signs up.
 
 ---
 
