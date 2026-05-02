@@ -527,17 +527,23 @@ value with no test failure.
 
 **F-Auth-5 --- fix**
 
--   At decisionLogs.js:22, replace req.user.sub with req.user.id.
+-   At decisionLogs.js:22, replace req.user?.sub with req.user?.id.
 
 -   Pre-flight (§5.1) requires a fresh grep for any other call site
-    reading req.user.sub directly. v8 named only decisionLogs.js:22, but
-    a comprehensive sweep was not part of the audit.
+    reading req.user.sub (with or without optional chaining) directly.
+    v8 named only decisionLogs.js:22, but a comprehensive sweep was not
+    part of the audit. The codebase uses optional chaining
+    (req.user?.sub), so the grep must be a regex that matches both
+    forms.
 
-grep -rn \"req\\.user\\.sub\" src/
+grep -rnE \"req\\.user\\??\\.sub\" src/
 
--   For each match outside test files: replace with req.user.id.
-    Document any intentional req.user.sub use with a // PUBLIC:
-    justifying comment if one exists (none expected).
+-   For each match outside test files: replace with req.user?.id
+    (preserve optional chaining --- the .id mapping is set by
+    middleware/auth.js so req.user is non-null on auth-gated routes,
+    but the chain is preserved for consistency with the rest of the
+    codebase). Document any intentional req.user.sub use with a //
+    PUBLIC: justifying comment if one exists (none expected).
 
 **F-Auth-5 --- verification**
 
@@ -545,8 +551,10 @@ grep -rn \"req\\.user\\.sub\" src/
     persisted user_id field matches the value other authenticated routes
     write for the same user.
 
-16. grep returns zero matches for req.user.sub outside test fixtures and
-    middleware/auth.js itself.
+16. Regex grep returns zero matches for req.user(?.).sub outside test
+    fixtures and middleware/auth.js itself:
+
+grep -rnE \"req\\.user\\??\\.sub\" src/
 
 **Verification**
 

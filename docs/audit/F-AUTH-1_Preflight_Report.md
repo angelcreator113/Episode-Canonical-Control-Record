@@ -3,8 +3,10 @@
 **Status:** Pre-flight executed and re-validated against canon
 (`docs/audit/Prime_Studios_Audit_Handoff_v8.md` + `F-AUTH-1_Fix_Plan_v1.3.md`,
 both pandoc-converted from the committed `.docx` canon at HEAD).
-**GATE G1 — NOT YET PASSED.** Awaiting user sign-off on the open items in
-§11 (now reduced — fix plan locks several v1 open questions).
+**GATE G1 — PASSED for Step 6a.** Four blocking items locked by user this
+round (see §11.1–§11.4). Four non-blocking items remain open (§11.5);
+none gate Step 6a (CZ-5 sendBeacon migration). Two items are needed
+before Step 6b. Step 6a is ready on user go-ahead.
 
 **Date:** 2026-05-02
 **Branch:** `dev` (per user direction in this round)
@@ -304,7 +306,7 @@ reading of v8 was correct (v8 named only one site); v1 missed that the
 | `src/controllers/productionPackageController.js:22` | `userId: req.user?.sub,` | **swap → `req.user?.id`** |
 | `src/controllers/iconCueController.js:22` | `userId: req.user?.sub,` | **swap → `req.user?.id`** |
 | `src/controllers/musicCueController.js:20` | `userId: req.user?.sub,` | **swap → `req.user?.id`** |
-| `src/routes/thumbnails.js:80` | `const userId = req.user?.sub \|\| req.user?.id \|\| 'system';` | **swap.** The `\|\| req.user?.id` clause becomes redundant; the `\|\| 'system'` fallback semantics need a behavior decision (see §11.2). |
+| `src/routes/thumbnails.js:80` | `const userId = req.user?.sub \|\| req.user?.id \|\| 'system';` | **drop the entire fallback chain.** Becomes `const userId = req.user.id;`. Route is gated by `authenticateToken` at `:76`, so `req.user` is guaranteed non-null and the `\|\| 'system'` branch was unreachable dead code. **LOCKED — see §11.** |
 
 **v1's 5 NEW sites — CONFIRMED as in-scope per the locked policy.**
 Total swap surface: 6 sites.
@@ -362,39 +364,92 @@ Same as v1 §10. Re-run after user's sync confirmed:
 
 ---
 
-## §11. Open scope decisions for user — REDUCED LIST
+## §11. Decisions — LOCKED this round
 
-Many v1 open questions are now closed by canon. Remaining items needing
-your lock before Step 6a:
+User locked the following on 2026-05-02:
 
-1. **§7 exemption list lock.** Per fix plan §9.2, you confirm yes/no on
-   each candidate (`manuscript-export.js`, `decisionAnalytics.js`,
-   `press.js` GETs, plus any of the 95 mixed-verb files you want to
-   pre-tag). Default per §9.2 is `requireAuth`. Each exempt route gets
-   a `// PUBLIC:` comment in code per §4.3 line 338–341.
-2. **`thumbnails.js:80` `\|\| 'system'` fallback (D16-adjacent).** When
-   F-Auth-5 swaps `req.user?.sub` → `req.user?.id`, the line becomes:
-   `const userId = req.user?.id || 'system';`. Question: should the
-   `'system'` fallback survive (allowing unauth requests with
-   `userId='system'`), or should the route now require auth (no
-   fallback)? Surfaced because it's behavior-changing.
-3. **`episodes.js:101/109/117` sub-form (b) discrepancy (D11).** v8
-   cataloged these as unauth; current code has `authenticateToken` on
-   the mutations. Was someone in there post-v8, or did v8 catalog
-   wrong? Either way, no sweep needed at this file. Confirm.
-4. **Frontend interceptor codes (D10 / §6.1).** Step 6b (F-Auth-4 Path 1)
-   rewrites the interceptor. Should `AUTH_INVALID_FORMAT` and
-   `AUTH_GROUP_REQUIRED` (currently soft-fail per v1 §6) be preserved
-   as soft-fails, or folded into the unified hard-fail rewrite?
-5. **`arcTrackingRoutes.js` (D8).** Out-of-scope undefined-symbol bug —
-   investigate now (read-only) or defer?
-6. **F-Auth-5 grep regex (D16).** Patch the fix plan's literal grep to
-   the regex form for the §4.6 verification step? Or leave the plan
-   as-is with this report as the addendum?
-7. **Cognito runtime env confirmation.** v1 §5 / fix plan §6.1 G4 (line
-   753–758) requires this for G4. You verify out-of-band before G2.
+### §11.1 Exemption list — LOCKED
 
-**Items LOCKED by canon (no longer open):**
+**Rule:** per-route classification driven by the **published-only data**
+test:
+
+- If the route returns **published-only data** → exempt; mark with
+  `// PUBLIC: published-only data, see audit §X` comment in code.
+- If the route returns **mixed (published + draft) or all data** → apply
+  `requireAuth`.
+- **Default to `requireAuth` when in doubt** (consistent with fix plan §9.2).
+
+**`decisionAnalytics.js` GETs — NOT exempt regardless** of the
+published-only test. The caller-supplied `req.query.user_id` filter is a
+leak vector (anyone can query anyone's analytics). All 7 GETs swap to
+`requireAuth`. Future hardening (ownership enforcement) is a separate
+follow-up.
+
+**Implementation note for sweep:** every candidate from §7 (and the 95
+mixed-verb files where pre-flight defaulted to `requireAuth`) needs a
+per-route check during Step 3 of the sweep. The author of Step 3 (the
+sweep step) reads each route's downstream data layer to determine
+"published-only?" and applies the comment or requireAuth accordingly. No
+blanket exemptions — each `// PUBLIC:` comment is justified per route.
+
+### §11.2 `'system'` fallback — LOCKED (drop)
+
+`thumbnails.js:80` becomes `const userId = req.user.id;` as part of
+**Step 6c** (F-Auth-5 swap). The `\|\| req.user?.id \|\| 'system'`
+fallback chain is dropped entirely:
+
+- Route is gated by `authenticateToken` at `:76` — `req.user` is
+  guaranteed non-null in the handler.
+- `'system'` branch was unreachable dead code (confirmed during
+  pre-flight investigation this round).
+
+**Out of F-AUTH-1 scope:** the same `\|\| 'system'` pattern appears in 8
+other places (`scriptsController.js:70/125/148/170/193/211`,
+`sceneController.js:218`, `compositions.js:1126`). **Filed as P1
+follow-up:** "audit all `\|\| 'system'` fallbacks for reachability."
+Not part of this PR.
+
+### §11.3 `arcTrackingRoutes.js` undefined-symbol bug — LOCKED (defer)
+
+Defer. File as separate P1 follow-up. Reasoning: adding scope to
+F-AUTH-1 fights the single-coordinated-change framing in fix plan §1
+and §5.3.
+
+### §11.4 F-Auth-5 grep regex — LOCKED (amend fix plan)
+
+Fix plan §4.6 amended in this round (commit follows this report
+update). Changes:
+
+- Pre-flight grep: `grep -rnE "req\.user\??\.sub" src/`
+- Replacement target: `req.user?.id` (preserve optional chaining for
+  consistency with codebase)
+- Verification grep at §4.6 line 548: same regex form, not literal
+
+**`.docx` canon is now out of sync with `.md`.** The `.md` is the
+tooling source of truth; the next docx revision picks up the
+amendment.
+
+### §11.5 Items still open (non-blocking for Step 6a)
+
+These don't gate Step 6a (CZ-5 sendBeacon migration is independent of
+all of them) but need locks before later steps:
+
+1. **`episodes.js:101/109/117` sub-form (b) discrepancy (D11).** No
+   code action either way. Surface for awareness — was this fixed
+   post-v8, or did v8 catalog wrong? **Non-blocking.**
+2. **Frontend interceptor codes — `AUTH_INVALID_FORMAT` /
+   `AUTH_GROUP_REQUIRED` (D10).** Needed before **Step 6b** (F-Auth-4
+   Path 1 interceptor rewrite). My recommendation last round: preserve
+   current soft-fail behaviour for both. Awaiting explicit lock.
+3. **`src/middleware/jwtAuth.js` — second auth module emitting the
+   same codes.** Surfaced last round. Is `jwtAuth.js` in scope for the
+   Step 6b duplicate-cleanup, or is it a separate parallel module that
+   stays? Needed before Step 6b.
+4. **Cognito runtime env confirmation (Gate G4 prerequisite).** User
+   verifies out-of-band before backend deploy to dev. Not pre-flight's
+   job.
+
+### §11.6 Items LOCKED by canon (no longer open)
 
 - ~~F-Auth-5 fold-in scope~~ → §9.3 LOCKED + §4.6 directs swap-all (§8 above)
 - ~~F-Auth-4 path~~ → §9.1 LOCKED to Path 1
@@ -418,11 +473,13 @@ the .md additions).
 
 ## §13. What's next
 
-1. You review v2.
-2. Lock the §11 items (now 7, down from v1's 7 — but several different
-   items; #1, #2, #3, #5, #6 are new clarifications).
+1. ~~You review v2.~~ ✓
+2. ~~Lock the §11 items.~~ ✓ (4 of 8 locked this round; 4 non-blocking
+   open; see §11.5.)
 3. On your go, I begin **Step 6a (CZ-5 sendBeacon → fetch+keepalive in
    `BookEditor.jsx:173–186`)** per fix plan §5.2 line 631–634. Step 6a
-   is independent and lands first.
+   is independent of every open item in §11.5.
+4. Before I start **Step 6b** I'll need locks on §11.5 #2 (interceptor
+   codes) and §11.5 #3 (`jwtAuth.js` scope).
 
 — end of pre-flight v2 —
