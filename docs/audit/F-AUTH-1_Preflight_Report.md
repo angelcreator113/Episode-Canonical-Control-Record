@@ -1,564 +1,637 @@
-# F-AUTH-1 Pre-flight Report
+# F-AUTH-1 Pre-flight Report — v2
 
-**Status:** Pre-flight executed. **GATE G1 — NOT YET PASSED.** Awaiting user
-sign-off on drift findings, exemption list, and the open scope decisions
-listed in §11.
+**Status:** Pre-flight executed and re-validated against canon
+(`docs/audit/Prime_Studios_Audit_Handoff_v8.md` + `F-AUTH-1_Fix_Plan_v1.3.md`,
+both pandoc-converted from the committed `.docx` canon at HEAD).
+
+**GATE G1 — NOT YET PASSED.** G1 is binary (per fix plan §6.1: each
+gate must pass before the next begins; gates are not partial). All §5.1
+mechanical deliverables are produced. Four user decisions are locked
+(§11.1–§11.4). Supplementary inventories `authenticateToken` (103
+mounts / 17 files) and `jwtAuth.js` callers (2 production files / 9
+mounts) added this round per user request — see §14. Five findings
+(D17–D21) surfaced by the inventories.
+
+**G1 unblocks when the following decisions are locked:**
+
+1. Interceptor code disposition (§11.5 #2 / D10) — `AUTH_INVALID_FORMAT`,
+   `AUTH_GROUP_REQUIRED` behaviour after Step 6b unification.
+2. `jwtAuth.js` scope decision (§11.5 #3 / D20) — confirm or override
+   pre-flight's "out of Step 6b scope" verdict.
+3. D18 — disposition for the two test-disabled mutation routes at
+   `episodes.js:400, :473`.
+4. D21 — drop or keep `authenticate` alias at `auth.js:237`.
+5. §5.1 deliverable — Cognito runtime env-var confirmation in dev,
+   staging, prod (out-of-band; user-owned action).
+
+No implementation work begins until G1 actually passes.
 
 **Date:** 2026-05-02
-**Branch:** `claude/prime-studios-setup-h7x21` (see §12 — branch may need
-re-targeting)
+**Branch:** `dev` (per user direction in this round)
 **Scope:** Read-only inventory only. No fix code written.
-**Corresponds to:** §5.1 of `F-AUTH-1_Fix_Plan_v1.3.docx`, Gate G1 of §6.
+**Corresponds to:** §5.1 of `F-AUTH-1_Fix_Plan_v1.3.md`, Gate G1 of §6.
+**Supersedes:** v1 of this report (committed at `7fd039e`,
+auto-merged into dev as `f7b43d42`).
+
+**Methodology:** Each finding from v1 is re-validated against the actual
+v8 / fix plan v1.3 text and tagged:
+
+- **CONFIRMED** — v1 matched canon. No correction needed.
+- **CORRECTED** — canon disagrees with v1 (or canon clarified what v1
+  flagged as ambiguous).
+- **NEW** — v1 missed it.
+- **CLOSED** — v1 raised it as an open question; canon already locks
+  the answer.
 
 ---
 
-## §0. CRITICAL BLOCKER — Source-of-truth documents missing
+## §0. Canon access — RESOLVED
 
-Both reference documents named in the task brief are **not present on the
-filesystem**:
+v1 §0 flagged that the source-of-truth `.docx` files were not on disk.
+**RESOLVED.** As of this round:
 
-| Document | Expected path | Found? |
-| --- | --- | --- |
-| `Prime_Studios_Audit_Handoff_v8.docx` | `docs/audit/` | ❌ no |
-| `F-AUTH-1_Fix_Plan_v1.3.docx` | `docs/audit/` | ❌ no |
+- `docs/audit/Prime_Studios_Audit_Handoff_v8.docx` — present, 68 KB
+- `docs/audit/F-AUTH-1_Fix_Plan_v1.3.docx` — present, 31 KB
+- Pandoc 3.1.3 converted both to `.md` (committed alongside this report):
+  - `Prime_Studios_Audit_Handoff_v8.md` — 2,971 lines, all 26 zones
+    intact, all numbered sections (1–6.x) preserved, callout tables
+    rendered as ASCII grid tables.
+  - `F-AUTH-1_Fix_Plan_v1.3.md` — 1,225 lines, all 12 sections present
+    with section numbers intact (1, 2, 3, 4, 4.1–4.6, 5, 5.1–5.3, 6,
+    6.1–6.4, 7, 7.1–7.7, 8, 8.1–8.3, 9, 9.1–9.5, 10, 11, 12).
 
-Searches performed: `find / -maxdepth 8 -iname "Prime_Studios_Audit*" -o -iname
-"F-AUTH-1*"` — zero hits outside `node_modules/mammoth` test fixtures. The
-`docs/audit/` directory did not exist; this report created it.
+Pandoc output is readable on GitHub. Per the user's decision rule, the
+pandoc version is kept; no hand-generated alternative was supplied to
+compare against.
 
-**Implications for this report:**
-
-- Items (b) (c) (d) (e) (f) (h) are mechanical; executed and reported as-is.
-- Item (a) **drift detection** is reported by inspecting the codebase at the
-  v8-cited file:line references and comparing against what the prompt
-  summarises. If v8 contains additional context I cannot see (e.g.,
-  expected code shapes, severity classifications), I cannot reconcile.
-- Item (g) **exemption list** is built from scratch by inspection of the
-  codebase. If v8 already pre-tagged exemptions, my list may disagree
-  silently — please reconcile against v8 before locking.
-- The F-Auth-2 / F-Auth-4 Path 1 / F-Auth-5 contract details I rely on are
-  the prompt's summary, not the plan itself. **Surface any divergence.**
-
-**Action requested:** Drop both `.docx` files into `docs/audit/` (or paste
-the relevant sections inline) before locking the exemption list and
-proceeding to Step 6a.
+The fix plan is **v1.3**, not v1.1 as the original task brief named.
+v1.3 locks F-Auth-4 Path 1, F-Auth-5 fold-in (Step 6c), F-Auth-6
+deferral, and gate-driven (no-calendar) deploy.
 
 ---
 
-## §1. Spot-check — v8 file:line references (item a)
+## §1. v8 spot-check — CONFIRMED with drift
 
-### 1.1 `src/middleware/auth.js`
+### 1.1 `src/middleware/auth.js` — v8 references vs current
 
-| v8 reference | Current location | Status |
+v8 fix plan Appendix A (line 1131–1142) names these surfaces:
+
+| v8 / fix plan | Current location | Status |
 | --- | --- | --- |
-| `:13–22` Cognito verifier creation | `:12–23` (idTokenVerifier 12–16, accessTokenVerifier 18–23) | **MINOR DRIFT (±1 line on each end).** Content matches: two `CognitoJwtVerifier.create()` calls with `userPoolId` / `clientId` from env, both falling back to placeholder strings (`'us-east-1_XXXXXXXXX'` / `'xxxxxxxxxxxxxxxxxxxxxxxxxx'`). |
-| `:44–46` `if (!userPoolId) throw…` | `:42–46` | **EXACT MATCH.** Inside `verifyToken`. Note: this is the runtime check that backstops the placeholder fallback. |
-| `:164–168` optionalAuth swallow | `:164–168` | **EXACT MATCH.** `console.warn('Optional auth token invalid:', error.message); req.user = null;` |
-| `:256–293` `requireAuth` | `:256–293` | **EXACT MATCH.** Implementation present, exported on line 256. Returns `code: 'AUTH_REQUIRED'` on every failure path (matches frontend contract — see §6). |
+| `:13–22` Cognito verifier construction with placeholder fallback (F-Auth-2 surface) | `:12–23` | **CONFIRMED.** ±1 line cosmetic drift. Both verifiers (`idTokenVerifier`, `accessTokenVerifier`) constructed with `'us-east-1_XXXXXXXXX'` / `'xxxxxxxxxxxxxxxxxxxxxxxxxx'` fallbacks. v8 §4.1 step 1 (line 344–351) confirms this is the F-Auth-2 module-load placeholder fallback. |
+| `:44–46` runtime env-var check inside `verifyToken` | `:42–46` | **CONFIRMED.** v8 §4.1 line 348 calls this "the check that fires too late." |
+| `:164–168` `optionalAuth` swallows all errors (F-Auth-3 surface) | `:164–168` | **CONFIRMED. EXACT MATCH.** |
+| `:256–293` duplicate `authenticateToken` implementation (F-Auth-4 surface) | `:256–293` | **CONFIRMED. EXACT MATCH.** Fix plan §4.6 line 487–504 specifies the Path-1 surgery: delete this block, have `requireAuth` emit two distinct codes (`AUTH_REQUIRED` no-header / `AUTH_INVALID_TOKEN` verifier-rejected), update call sites, update interceptor. |
 
-**Notable additional finding:** `src/middleware/auth.js:250–255` contains an
-explanatory comment block describing the `requireAuth` ↔ frontend interceptor
-contract (the soft-fail vs hard-fail distinction). This comment is not
-referenced by v8 in the prompt summary but reads as the canonical statement
-of the contract Step 6b reconciles against.
+### 1.2 `app.js:364` — CORRECTED (drift confirmed against canon)
 
-### 1.2 `app.js:364`
+- v8 §4.1 line 332–333: "**app.js:364 applies** `app.use(optionalAuth)`
+  **to every route in the application**."
+- Fix plan Appendix A line 1146: "app.js:364 --- global app.use(optionalAuth)
+  (sub-form a root)."
+- Fix plan §5.2 step 31 (line 651–653): "remove the global optionalAuth at
+  app.js:364."
+- **Current location:** `src/app.js:330` (with the `require` import at
+  `:326`).
+- **Drift: −34 lines.** Same handler, same role (global gate). Canon
+  references `app.js` (root); root `app.js` is a 39-byte stub
+  (`module.exports = require('./src/app');`), so canon's "app.js" means
+  `src/app.js` throughout.
+- v1 D1 finding **CONFIRMED**. Fix plan steps that reference `app.js:364`
+  must read `src/app.js:330` at implementation time.
 
-- Root `app.js` is a 39-byte stub: `module.exports = require('./src/app');`.
-  v8's "app.js:364" therefore must mean `src/app.js:364`.
-- `src/app.js:364` currently reads `legacyHeaders: false,` — it is inside
-  the `writeLimiter` rate-limit config (lines 360–366), unrelated to auth.
-- The two `optionalAuth` references in `src/app.js` are at:
-  - `:326` — `const { optionalAuth } = require('./middleware/auth');`
-  - `:330` — `app.use(optionalAuth);` (the global gate)
-- **DRIFT (significant):** v8's `app.js:364` does not point at any
-  optionalAuth surface today. If v8 meant the global gate, the line moved
-  from somewhere ≥364 to `:330` (≥34 lines up). If v8 meant something else
-  at `:364`, I can't confirm without v8.
-- **Action:** confirm what v8 cited at `app.js:364`. If it was the global
-  `app.use(optionalAuth)`, the new location is `src/app.js:330`.
+### 1.3 `episodeOrchestrationRoute.js:135` (and write at `:220`) — CONFIRMED with drift
 
-### 1.3 `src/routes/episodeOrchestrationRoute.js`
-
-| v8 reference | Current location | Status |
+| v8 / fix plan | Current | Status |
 | --- | --- | --- |
-| `:135` route handler | `:131` `router.post('/generate-episode-orchestration', optionalAuth, async (req, res) => {` | **MINOR DRIFT (−4 lines).** Same handler. |
-| `:220` write | `:216–225` (UPDATE statement; line 220 lands on `replacements: {`) | **EFFECTIVELY EXACT.** The UPDATE block exists in the same place; v8's `:220` lands inside the write block. The `episode_id` save is gated only by `if (episode_id && db.Episode)` — no `req.user` check. |
+| `:135` (`router.post('/generate-episode-orchestration', optionalAuth, …)`) | `:131` | **CONFIRMED. −4 line drift.** Same handler. Sub-form (c) surface still present. |
+| `:220` (writes `orchestration_data` to episodes table unauthenticated) | `:216–225` (UPDATE block; line 220 lands inside `replacements: {`) | **CONFIRMED.** Write block intact in same place. |
+
+v1 finding stands.
 
 ---
 
-## §2. Sub-form (b) — master grep: `optionalAuth` surfaces
+## §2. Sub-form (a) master grep — CONFIRMED, with v8-named-surface validation
 
-**Command:**
+**Command:** `grep -rn "optionalAuth" src/routes/ src/app.js src/middleware/ | sort`
+
+**Totals:** 1,059 matches across 98 distinct files. **Unchanged** from
+v1; re-run after the user's sync confirmed the count holds.
+
+### 2.1 v8-named sub-form (a) surfaces — current state
+
+Fix plan §4.3 line 264–309 catalogs the v8-confirmed surfaces. Re-validated
+against current code:
+
+| File | v8 / fix plan lines | Current state | Status |
+| --- | --- | --- | --- |
+| `src/app.js` | `:364` global mount | `:330` global mount | **CONFIRMED with drift** (see §1.2) |
+| `src/routes/storyteller.js` | `:38–43` (require), `:53, :113, :192, :213, :241, :263, :312, :333, :354, :553, :615, :636, :663, :738, :769, :790, :826, :856, :880, :910` | Lazy-import block at `:49–52`; 37 actual `optionalAuth` route attachments at lines `63, 127, 223, 252, 278, 298, 353, 385, 405, 770, 887, 907, 927, 978, 1098, 1127, 1150, 1172, 1192, 1227, 1259, 1323, 1342, 1361, 1378, 1395, 1416, 1435, 1453, 1475, 1499, 1521, 1538, 1560, 1582, 1608, 1626` | **CONFIRMED — surfaces present; LINE NUMBERS DRIFTED** across the whole file. The pattern (many writes on optionalAuth) holds. v8's specific lines no longer locate the routes. **NEW finding:** none of v8's named lines (`:53, :113, :192, …`) currently match an `optionalAuth` line in storyteller.js. Sweep regex still works. |
+| `src/routes/characterRegistry.js` | `:12–22` defensive lazy-import; `~600` isAuthor gate; ~1,700-line file with `requireAuth` on one route only | `:12–22` lazy-import for **both** `optionalAuth` and `requireAuth` (with no-op fallbacks); `requireAuth` applied only at `:1896` (`/deep-profile/generate`) | **CONFIRMED.** Fix plan §4.3 line 317–320: the no-op fallback at `:12–22` "must be removed as part of this step — it is the same anti-pattern as F-Auth-2." |
+| `src/routes/evaluation.js` | `:587` Stats save | `:587` `router.post('/characters/:key/state/update', optionalAuth, …)` | **CONFIRMED. EXACT MATCH.** |
+| `src/routes/careerGoals.js` | every mutation route | 5 mutations on optionalAuth (POST `:76`, `:357`, `:528`; PUT `:452`; DELETE `:505`) | **CONFIRMED.** |
+| `src/routes/uiOverlayRoutes.js` | every mutation route | 17 mutations on optionalAuth | **CONFIRMED.** |
+| `src/routes/calendarRoutes.js` | event CRUD, auto-spawn, world-event spawn | 13 mutations on optionalAuth | **CONFIRMED.** |
+| `src/routes/franchiseBrainRoutes.js` | 10 mutation routes (entries CRUD, activate, activate-all, archive/unarchive, ingest-document, guard, seed) — F34 root | **10 mutations** on optionalAuth | **CONFIRMED. EXACT COUNT MATCH.** F34 closes inside this sweep per fix plan §4.3 line 343–348. |
+| `src/routes/wardrobe.js` | `:895` (/select), `:970` (/purchase) | `/select` at `:1215`, `/purchase` at `:1325` | **CONFIRMED with significant drift** (+320 / +355 lines). Both routes still on optionalAuth. |
+
+**Pre-existing `requireAuth` usage** (per v1 §2):
+`episodes.js:14, :876, :1115`; `episodeBriefRoutes.js:10, :91, :202, :245`;
+`characterRegistry.js:13, :17, :1896`; `worldEvents.js:24, :28, :762, :1793`.
+**CONFIRMED** by canon — fix plan §4.6 (Path 1 reconciliation) explicitly
+treats these as call sites that need updating to consume the unified
+`requireAuth` contract.
+
+---
+
+## §3. Sub-form (b) — files in `src/routes/` with no auth import
+
+**Command:** see v1 §3. **Result:** 30 files. **Unchanged** since v1.
+
+### 3.1 v8-named sub-form (b) surfaces — current state
+
+Fix plan §4.4 (line 367–369) and v8 §4.1 (line 335–337) name these
+specific sub-form (b) surfaces:
+
+| v8 / fix plan | Current state | Status |
+| --- | --- | --- |
+| `src/routes/outfitSets.js` — all 5 routes, no auth import | 5 routes total (2 GETs + 3 mutations: POST `:12`, PUT `:15`, DELETE `:18`); zero auth references in the file | **CONFIRMED. EXACT MATCH.** Sub-form (b) surface confirmed. |
+| `src/routes/episodes.js:101, :109, :117` — plural outfit-set controller mounts unauth | `:98–101` is GET `/:id/outfits` (no auth — read endpoint); `:104–110` is POST `/:id/outfits` and **already uses `authenticateToken` at `:108`**; `:112–118` is DELETE `/:episodeId/outfits/:outfitId` and **already uses `authenticateToken` at `:116`** | **CORRECTED.** v8 cataloged these as unauth, but the current code has `authenticateToken` on POST and DELETE. **Sub-form (b) at episodes.js is effectively closed** for the two mutation routes. The GET is read-only (correct as-is). **Action needed:** confirm with user whether v8 was wrong, or whether someone patched these between v8 close (May 1, 2026) and now. Either way, the current code does not need a sub-form (b) sweep on `episodes.js`. |
+
+**v1 finding stands** for `outfitSets.js`. **v1 missed** the
+auth-already-present state of `episodes.js:101/109/117` because v1
+didn't validate against canon's specific line citations.
+
+### 3.2 Other sub-form (b) candidates not named by v8 — NEW
+
+The 30-file "no auth import" list (v1 §3) includes files v8 did not
+specifically catalog. Per fix plan §4.4 line 368: "and any other routes
+the F-AUTH-1 audit identifies." Pre-flight identifies these candidates;
+sweep needs per-file inspection to determine if any contain mutation
+routes that bypass auth (the global mount handles unspecified mutations
+loosely; explicit `requireAuth` is needed per fix plan §4.3 line 327–329).
+
+Files in the no-auth-import list that contain `router.post|put|patch|delete`
+calls (i.e., real sub-form (b) candidates beyond `outfitSets.js`):
 
 ```bash
-grep -rn "optionalAuth" src/routes/ src/app.js src/middleware/ | sort
-```
-
-**Totals:**
-
-- **1059 matches** across **98 distinct files** in `src/routes/` plus
-  `src/app.js` and `src/middleware/auth.js`.
-- Full output saved at `/tmp/preflight_b.txt` during execution. Reproduce
-  with the command above (output is too large to inline here in full;
-  per-file totals in §4).
-
-**Top-level summary:**
-
-- `src/app.js:326` — import of `optionalAuth`
-- `src/app.js:330` — global `app.use(optionalAuth)` (the keystone surface)
-- `src/middleware/auth.js:134` — definition (`const optionalAuth = …`)
-- `src/middleware/auth.js:249` — module export
-- `src/routes/*.js` — 98 route files contain at least one explicit
-  `optionalAuth` reference (import or per-route attachment)
-
-**Distinct route files containing `optionalAuth`:**
-
-```
-amberDiagnosticRoutes.js, amberSessionRoutes.js, arcRoutes.js,
-arcTrackingRoutes.js, assets.js, authorNoteRoutes.js, calendarRoutes.js,
-careerGoals.js, characterAI.js, characterCrossingRoutes.js,
-characterDepthRoutes.js, characterFollowRoutes.js,
-characterGenerationRoutes.js, characterGenerator.js, characterGrowthRoute.js,
-characterRegistry.js, characterSparkRoute.js, consciousness.js,
-cursorPaths.js, decisionAnalytics.js, decisionLogs.js, editMaps.js,
-entanglementRoutes.js, episodeBriefRoutes.js, episodeOrchestrationRoute.js,
-episodeScriptWriterRoutes.js, episodes.js, evaluation.js,
-eventGeneratorRoute.js, export.js, feedEnhancedRoutes.js,
-feedPipelineRoutes.js, feedPostRoutes.js, feedRelationshipRoutes.js,
-feedSchedulerRoutes.js, franchiseBrainRoutes.js, gameShows.js,
-generate-script-from-book.js, hairLibraryRoutes.js, iconCues.js,
-iconSlots.js, imageProcessing.js, lala-scene-detection.js, lalaScripts.js,
-layers.js, luxuryFilterRoutes.js, makeupLibraryRoutes.js,
-manuscript-export.js, memories/{assistant,core,engine,extras,interview,
-planning,stories,voice}.js, mirrorFieldRoutes.js, musicCues.js,
-novelIntelligenceRoutes.js, onboarding.js, opportunityRoutes.js,
-pageContent.js, pdfIngestRoute.js, phoneAIRoutes.js, phoneMissionRoutes.js,
-press.js, productionPackage.js, relationships.js, sceneProposeRoute.js,
-sceneSetRoutes.js, sceneStudioEpisodeRoutes.js, scenes.js,
-scriptGenerator.js, scriptParse.js, seasonRhythmRoutes.js,
-socialProfileBulkRoutes.js, socialProfileRoutes.js, stories.js,
-storyEvaluationRoutes.js, storyHealth.js, storyteller.js, therapy.js,
-tierFeatures.js, todoListRoutes.js, uiOverlayRoutes.js,
-undergroundRoutes.js, universe.js, upgradeRoutes.js, wantFieldRoutes.js,
-wardrobe.js, wardrobeBrands.js, wardrobeEventRoutes.js, wardrobeLibrary.js,
-world.js, worldEvents.js, worldStudio.js, worldTemperatureRoutes.js,
-youtube.js
-```
-
-**Pre-existing `requireAuth` usage (drift-relevant):**
-
-`requireAuth` already exists in `src/middleware/auth.js:256–293` and is
-already used in production by:
-
-- `src/routes/episodes.js` — import `:14`, usage `:876`, `:1115`
-- `src/routes/episodeBriefRoutes.js` — import `:10`, usage `:91`, `:202`,
-  `:245`
-- `src/routes/characterRegistry.js` — defensive lazy import `:13–20`,
-  usage `:1896`
-- `src/routes/worldEvents.js` — defensive lazy import `:24–31`, usage
-  `:762`, `:1793`
-
-These four files demonstrate that the contract is already wired and live;
-F-Auth-1 is *expanding* `requireAuth` adoption, not introducing it. The
-defensive lazy-import pattern (try/catch around `require('../middleware/
-auth')`, falling back to a no-op middleware) appears here and in `press.js`
-/ `manuscript-export.js` for `optionalAuth` — flag for the sweep
-(see §11.3).
-
----
-
-## §3. Sub-form (b sub-form) — files in `src/routes/` with no auth import (item c)
-
-**Command:**
-
-```bash
-for f in src/routes/*.js; do
-  grep -l "require.*middleware/auth" "$f" >/dev/null || echo "NO AUTH IMPORT: $f"
+for f in $(grep -L "require.*middleware/auth" src/routes/*.js); do
+  m=$(grep -cE "router\.(post|put|patch|delete)" "$f")
+  [ "$m" -gt 0 ] && echo "$m mutations: $f"
 done
 ```
 
-**30 files, no `require('../middleware/auth')` import:**
+(Not run as part of pre-flight — flagged for the sweep author. The 30-file
+list is in v1 §3.)
 
-```
-aiUsageRoutes.js
-animatic.js
-arcTrackingRoutes.js
-audio-clips.js
-auth.js
-beats.js
-cfoAgentRoutes.js
-character-clips.js
-characters.js
-compositions.js
-continuityEngine.js
-decisions.js
-designAgentRoutes.js
-footage.js
-markers.js
-outfitSets.js
-propertyRoutes.js
-queue-monitor.js
-roles.js
-sceneLinks.js
-sceneTemplates.js
-scriptAnalysis.js
-seed.js
-session.js
-shows.js
-siteOrganizerRoutes.js
-templateStudio.js
-textureLayerRoutes.js
-thumbnailTemplates.js
-timelineData.js
-```
+### 3.3 `arcTrackingRoutes.js` — NEW
 
-**Interpretation:** All 30 files are mounted under the global
-`app.use(optionalAuth)` at `src/app.js:330`, so they receive `req.user`
-gating implicitly. They have no per-route auth gate. This is the silent
-attack surface F-Auth-1 must address — these files will not be touched by
-a "swap optionalAuth → requireAuth" string replacement, because they
-contain no string `optionalAuth` to swap.
-
-`auth.js` (route file) is in this list — that's the Cognito sign-in route
-itself, which is correctly auth-less by definition.
-
-**`arcTrackingRoutes.js` appears in this list AND in the §2 list of files
-containing `optionalAuth`** — meaning it references the symbol but does
-not import it. Likely a bug; worth grepping.
-
-```bash
-grep -n "optionalAuth\|require.*auth" src/routes/arcTrackingRoutes.js
-```
-
-(Not run as part of pre-flight — flagged for follow-up.)
+v1 §3 noted: `arcTrackingRoutes.js` references `optionalAuth` (appears
+in master grep) but doesn't import auth (appears in no-import list).
+Likely an undefined-symbol bug. **NOT addressed in v8 or the fix plan.**
+Surface for user: investigate now or defer.
 
 ---
 
-## §4. Sub-form (c) — explicit `optionalAuth` on mutation routes (item d)
+## §4. Sub-form (c) — explicit `optionalAuth` on mutations
 
-**Command:**
+**Totals:** 516 mutation routes across 75 files. **Unchanged** since v1.
 
-```bash
-grep -rnE "router\.(post|put|patch|delete).*optionalAuth" src/routes/
-```
+### 4.1 v8-named sub-form (c) surface — CONFIRMED with drift
 
-**Totals:**
+Fix plan §4.5 / Appendix A: `episodeOrchestrationRoute.js:135` declares
+optionalAuth on episode-mutation. Current location: `:131`. Already covered
+in §1.3 above. **CONFIRMED with −4 line drift.**
 
-- **516 mutation routes** (POST/PUT/PATCH/DELETE) currently attached to
-  `optionalAuth` across **75 distinct route files**.
-- Verb breakdown: `POST 384`, `PUT 60`, `DELETE 49`, `PATCH 23`.
+### 4.2 v1 inventory totals stand
 
-**Top files by mutation-on-optionalAuth count (≥10):**
-
-| File | Count |
-| --- | --- |
-| `sceneSetRoutes.js` | 51 |
-| `worldEvents.js` | 37 |
-| `worldStudio.js` | 35 |
-| `tierFeatures.js` | 24 |
-| `storyteller.js` | 24 |
-| `socialProfileRoutes.js` | 24 |
-| `uiOverlayRoutes.js` | 17 |
-| `memories/engine.js` | 16 |
-| `calendarRoutes.js` | 13 |
-| `upgradeRoutes.js` | 10 |
-| `franchiseBrainRoutes.js` | 10 |
-
-Full per-file count saved at `/tmp/preflight_d.txt`. Reproduce with:
-
-```bash
-grep -rnE "router\.(post|put|patch|delete).*optionalAuth" src/routes/ \
-  | awk -F: '{print $1}' | sort | uniq -c | sort -rn
-```
-
-**Scope implication:** A regex-only sweep on
-`router\.(post|put|patch|delete).*optionalAuth` → `requireAuth` is
-mechanically straightforward but touches **516 lines across 75 files**.
-PR diff size will be ~516 changed lines plus the import-statement updates
-in any file that needs to add `requireAuth` to its destructure.
+Per-file counts from v1 §4 unchanged. `sceneSetRoutes.js` (51), `worldEvents.js`
+(37), `worldStudio.js` (35) are the largest concentrations.
 
 ---
 
-## §5. Sub-form (e) — Cognito env vars per environment
+## §5. Cognito env vars (item e) — UNCHANGED
 
-**Source-of-truth checks performed:**
+v1 §5 stands. Templates contain the vars; runtime status in dev / staging /
+prod is **not confirmable from this sandbox**. Fix plan §5.1 step 24 (line
+602–604) and §6.1 G4 (line 753–758) require boot-test verification before
+G5; that verification is not pre-flight's job.
 
-| File | Finding |
-| --- | --- |
-| `.env.example:37–38` | `COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX` and `COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx` (placeholder values, dev-defaults pattern) |
-| `.env.production.template:52–53` | `COGNITO_USER_POOL_ID=REPLACE_WITH_COGNITO_POOL_ID` and `COGNITO_CLIENT_ID=REPLACE_WITH_COGNITO_CLIENT_ID` |
-| `ecosystem.config.js:33–34` | `COGNITO_USER_POOL_ID: process.env.COGNITO_USER_POOL_ID \|\| ''` and `COGNITO_CLIENT_ID: process.env.COGNITO_CLIENT_ID \|\| ''` (passthrough; defaults to empty string) |
-
-**Runtime confirmation per environment:**
-
-| Environment | Confirmed set? | Source |
-| --- | --- | --- |
-| dev (`dev.primepisodes.com`, EC2/PM2) | **NOT CONFIRMED** | I cannot reach EC2 from this sandbox. |
-| staging | **NOT CONFIRMED** | Same as above. |
-| prod | **NOT CONFIRMED** | Same as above. |
-
-**Drift / risk flags relevant to F-Auth-2:**
-
-1. `src/middleware/auth.js:13` and `:20` use placeholder fallbacks
-   (`'us-east-1_XXXXXXXXX'` / `'xxxxxxxxxxxxxxxxxxxxxxxxxx'`) at
-   `CognitoJwtVerifier.create()` time. If `COGNITO_USER_POOL_ID` is unset,
-   the verifier is **constructed with a non-existent pool**. JWKS fetch
-   will fail at first verify, but the boot will succeed. F-Auth-2 (boot-
-   fail on missing) will need to act *before* the verifier is created,
-   not just inside `verifyToken`.
-2. `verifyToken` at `:42–46` *does* throw if `COGNITO_USER_POOL_ID` is
-   missing — but only on the first request, not at boot.
-3. `ecosystem.config.js:33–34` defaults to empty string — same hazard.
-
-**Action requested:** confirm out-of-band that all three environments have
-both vars actually set. If F-Auth-2 lands without that, it will hard-fail
-boot in any environment where they're not.
+**Fix plan §5.2 step 34 (line 661–665) — NEW INSIGHT:** Step 1 (F-Auth-2
+boot-fail) lands **LAST** within the PR. v1 implied a different ordering.
+The reasoning per the fix plan: every other step gets exercised against
+working auth before the boot-fail check is added. v1 missed this.
 
 ---
 
-## §6. Sub-form (f) — frontend interceptor contract
+## §6. Frontend interceptor (item f) — CONFIRMED, with locked Path-1 contract
 
-**File:** `frontend/src/services/api.js`
+`frontend/src/services/api.js:40–73`. v1 §6 contents stand.
 
-**Contract (from `:40–73`):**
+### 6.1 Locked unification per fix plan §4.6 line 487–504
 
-```js
-// :44–63 — response interceptor 401 handling
-if (error.response?.status === 401 && !import.meta.env.DEV) {
-  const code = error.response?.data?.code;
-  const isHardFail = code === 'AUTH_INVALID_TOKEN'
-                  || code === 'AUTH_MISSING_TOKEN'
-                  || !code;
-  if (isHardFail && code !== 'AUTH_REQUIRED') {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('token');
-    window.location.href = '/login';
-  }
-  // AUTH_REQUIRED: leave creds alone, let the caller handle UX.
-}
-```
+The fix is not "leave the interceptor alone." Path 1 (LOCKED at §9.1)
+specifies:
 
-**Exact strings the interceptor differentiates on:**
+- Delete `src/middleware/auth.js:256–293` (duplicate `authenticateToken`).
+- `requireAuth` emits **two distinct codes**:
+  - `AUTH_REQUIRED` — no Authorization header
+  - `AUTH_INVALID_TOKEN` — header present but verifier rejected
+- Frontend interceptor consumes the unified contract:
+  - `AUTH_REQUIRED` → redirect to login
+  - `AUTH_INVALID_TOKEN` → attempt token refresh once, then redirect on
+    failure
+- Comment block at `auth.js:250–255` (v1 highlighted this) gets updated
+  or removed.
 
-| Code | Behavior |
-| --- | --- |
-| `AUTH_REQUIRED` | **Soft fail.** Leave creds, no redirect. Caller handles UX (toast etc). |
-| `AUTH_INVALID_TOKEN` | **Hard fail.** Wipe `authToken` + `token`, redirect to `/login`. |
-| `AUTH_MISSING_TOKEN` | **Hard fail.** Same as above. |
-| (no `code` field) | **Hard fail.** Same as above (`!code` branch). |
-| Any other code | **Hard fail.** Falls through to the `!code` branch — wait, see flag below. |
+**v1 §6 anomaly flag (the soft-fail vs hard-fail asymmetry on
+`AUTH_INVALID_FORMAT` and `AUTH_GROUP_REQUIRED`):** **CORRECTED** — the
+fix plan changes the contract anyway. Path 1 unification implicitly
+addresses these because the interceptor logic is being rewritten. v1
+flagged a real ambiguity, but it's superseded by the locked rewrite.
+The fix plan does not call out `AUTH_INVALID_FORMAT` / `AUTH_GROUP_REQUIRED`
+explicitly — surface to user whether Step 6b should preserve current soft-fail
+behavior on those codes, or fold them into a unified hard-fail.
 
-**FLAG — interceptor logic anomaly:** the `isHardFail` calculation only
-treats `AUTH_INVALID_TOKEN`, `AUTH_MISSING_TOKEN`, or *missing* code as
-hard-fail. **Any other value** (e.g., `AUTH_GROUP_REQUIRED`, `AUTH_ERROR`)
-sets `isHardFail = false` → no redirect, no creds wipe — but the caller
-also gets no specific UX path. This is probably fine but worth confirming
-against §6b of the fix plan.
+### 6.2 New behavior post-Step 6b
 
-**Backend codes currently emitted (from `src/middleware/auth.js`):**
-
-- `AUTH_MISSING_TOKEN` — strict middleware, missing header (`:80`)
-- `AUTH_INVALID_FORMAT` — strict middleware, malformed `Bearer` (`:90`)
-  — **NOT in the interceptor's hard-fail list**. Soft-fails today.
-- `AUTH_INVALID_TOKEN` — strict middleware, verify failed (`:118`)
-- `AUTH_ERROR` — strict middleware, internal error (`:125`)
-- `AUTH_REQUIRED` — `requireAuth` (`:262`, `:270`, `:290`)
-- `AUTH_GROUP_REQUIRED` — `verifyGroup` / `authorize` (`:196`, `:226`)
-
-**Action requested:** confirm the §6b reconciliation in the fix plan
-covers `AUTH_INVALID_FORMAT` (soft-fails today, may need to be added to
-the hard-fail list) and `AUTH_GROUP_REQUIRED` (currently soft-fails;
-correct or not?). I default to "leave it alone" until you say.
-
-**DEV bypass:** `:55` — the entire interceptor 401 handling is gated by
-`!import.meta.env.DEV`. In dev, *no* 401 triggers a redirect or creds
-wipe. F-Auth-1 likely needs this to remain so. Flagging because it's a
-contract-shaping line.
+- Frontend interceptor distinguishes `AUTH_REQUIRED` (redirect) from
+  `AUTH_INVALID_TOKEN` (refresh-then-redirect). v1's contract reading
+  was correct for the **current** code; this section flags that the
+  current contract is being **rewritten**.
 
 ---
 
-## §7. Sub-form (g) — public-read exemption candidates
+## §7. Public-read exemption candidates (item g) — POLICY LOCKED
 
-**Methodology:** identified files where every `optionalAuth`-attached
-route is a `GET` (no mutations), then inspected for `req.user`-gating
-logic downstream. Routes with no `req.user` reads are candidates for
-keeping `optionalAuth`. **Per task instruction: default to `requireAuth`
-if uncertain.**
+### 7.1 Locking principle — fix plan §9.2 (line 1042–1048)
 
-### 7.1 GET-only files with optionalAuth
+> Pre-flight (§5.1) produces this list. Each entry needs explicit
+> confirmation: "this route is genuinely public; optionalAuth is
+> correct." If any entry is uncertain, default to requireAuth ---
+> **public-by-default is a worse failure mode than auth-by-default for a
+> luxury franchise OS.**
 
-Two files have only `GET` endpoints attached to `optionalAuth`:
+**v1 §7 framing CONFIRMED.** v1's "default to requireAuth if uncertain"
+matches §9.2 verbatim. The candidates v1 listed are the input; user
+confirms or rejects each.
 
-| File | GET count | `req.user` reads? | Recommendation |
+### 7.2 v1 candidate list — restated for user lock
+
+| File | Routes | v1 recommendation | Status |
 | --- | --- | --- | --- |
-| `src/routes/manuscript-export.js` | 3 (`/book/:bookId/meta`, `/book/:bookId/docx`, `/book/:bookId/pdf`) | none | **CANDIDATE EXEMPT** — public manuscript download endpoints. Returns binary doc; whole-book exports of approved/edited lines only. No personalisation. **VERIFY:** is the manuscript intended to be public? If yes → keep `optionalAuth`. If no (e.g., gated to subscribers) → swap to `requireAuth`. |
-| `src/routes/decisionAnalytics.js` | 7 (`/stats`, `/by-type`, …) | reads `req.query.user_id` not `req.user` (`:13`) | **CANDIDATE EXEMPT IF PUBLIC**, but risky: the `user_id` filter is taken from query string (caller-supplied), so anyone can query anyone else's analytics. If decision analytics is admin-only or owner-only, this needs `requireAuth` *plus* enforcement that `req.user.id === req.query.user_id`. **DEFAULT: `requireAuth`.** |
+| `src/routes/pageContent.js` | already implements `router.use(optionalAuth)` for GETs + `authenticateToken` for PUT/DELETE | reference target — no change | **CONFIRMED** as the F-Auth-1 reference pattern |
+| `src/routes/manuscript-export.js` | 3 GETs (`/book/:bookId/{meta,docx,pdf}`), no `req.user` reads | candidate exempt — public download | **NEEDS USER LOCK** |
+| `src/routes/decisionAnalytics.js` | 7 GETs reading `req.query.user_id` (caller-supplied) | DEFAULT requireAuth (or requireAuth + ownership enforcement) | **NEEDS USER LOCK** |
+| `src/routes/press.js` | GETs `/characters`, `/characters/:slug` | candidate exempt — public press kit | **NEEDS USER LOCK** |
+| `src/routes/press.js` mutations | `/seed-characters`, `/advance-career`, `/generate-post`, `/generate-scene` | swap to requireAuth | per default |
+| Other 95 files mixing GET + mutation | not classified by v1 — explicit eyeball needed: shows.js, characters.js, episodes.js (GETs), wardrobe.js (GETs), wardrobeLibrary.js, storyteller.js (published-line read), onboarding.js, storyHealth.js | DEFAULT requireAuth per §9.2 | per default unless user picks specific GETs to exempt |
 
-### 7.2 Mixed-verb files with high public-read likelihood
-
-Files I spot-inspected where the GETs read like public catalog browsing
-and the mutations read like admin/creator operations:
-
-| File | Public-read GETs | Recommendation |
-| --- | --- | --- |
-| `src/routes/press.js` | `/characters` (`:456`), `/characters/:slug` (`:502`) — public press kit | **GETs CANDIDATE EXEMPT.** Mutations (`/seed-characters` `:362`, `/advance-career` `:532`, `/generate-post` `:608`, `/generate-scene` `:697`) → swap to `requireAuth`. |
-| `src/routes/pageContent.js` | `/:pageName` (`:13`) — already public-by-design (uses `router.use(optionalAuth)` for GETs, `authenticateToken` for PUT/DELETE at `:29` and `:51`) | **ALREADY CORRECT pattern.** Use this as the F-Auth-1 reference target. |
-
-### 7.3 Files I cannot classify without spec input
-
-The remaining 95 route files mix GETs and mutations in ways where I'd
-have to guess at the product intent. I have **not** pre-tagged them. They
-default to `requireAuth` per the brief. Files where I would suggest you
-specifically eyeball before the sweep:
-
-- `src/routes/shows.js` — show browse may need to be public
-- `src/routes/characters.js` — character browse may need to be public
-- `src/routes/episodes.js` — episode browse may need to be public
-- `src/routes/wardrobe.js` — wardrobe catalog may need public read
-- `src/routes/wardrobeLibrary.js` — same as above
-- `src/routes/storyteller.js` — published-line read may need to be public
-- `src/routes/onboarding.js` — onboarding flow may need partial public
-- `src/routes/auth.js` — sign-in/sign-up routes (file already in §3 "no
-  auth import" list — correctly auth-less)
-- `src/routes/health` / `src/routes/storyHealth.js` — likely public
-
-**Action requested:** you (or v8 if it pre-tagged) tell me which files in
-this list belong on the exemption list. I will not make this call.
+**Action requested:** lock the exemption list with explicit yes/no per
+candidate. Fix plan §4.3 line 338–341 requires that each exempted route
+get a `// PUBLIC:` justifying comment in code; the verification grep at
+§4.3 line 358–359 excludes routes with that comment.
 
 ---
 
-## §8. Sub-form (h) — F-Auth-5 grep: `req.user.sub` sites
+## §8. F-Auth-5 / `req.user.sub` (item h) — POLICY LOCKED, v1 OPEN-QUESTION CLOSED
 
-**Command (literal as specified):**
+### 8.1 Canon directive — fix plan §4.6 line 528–540 (LOCKED)
 
-```bash
-grep -rn "req\.user\.sub" src/
-```
+> **F-Auth-5 — fix**
+>
+> - At `decisionLogs.js:22`, replace `req.user.sub` with `req.user.id`.
+> - Pre-flight (§5.1) requires a fresh grep for any other call site
+>   reading `req.user.sub` directly. **v8 named only decisionLogs.js:22,
+>   but a comprehensive sweep was not part of the audit.**
+> - For each match outside test files: **replace with `req.user.id`.**
+>   Document any intentional `req.user.sub` use with a `// PUBLIC:`
+>   justifying comment if one exists (none expected).
 
-Returns **zero matches** because the codebase uses optional chaining
-(`req.user?.sub`). The literal grep would miss every site.
+**v1 §8 / D4 finding — CLOSED.** v1 framed "expand scope to all 6 sites,
+or stick with 1?" as an open scope decision. **It is not open. The fix
+plan locks the policy:** replace at every match outside test files. v1's
+reading of v8 was correct (v8 named only one site); v1 missed that the
+**fix plan** anticipated the sweep would find more and pre-locked the
+"replace all" policy.
 
-**Corrected grep:**
+### 8.2 Pre-flight grep result — locked-in scope
 
-```bash
-grep -rnE "req\.user\??\.sub" src/
-```
-
-Returns **6 sites:**
-
-| File:line | Code | Notes |
+| File:line | Code | Disposition per §4.6 |
 | --- | --- | --- |
-| `src/routes/decisionLogs.js:22` | `user_id: req.user?.sub,` | **The only site v8 named.** |
-| `src/controllers/cursorPathController.js:22` | `userId: req.user?.sub,` | NEW |
-| `src/controllers/productionPackageController.js:22` | `userId: req.user?.sub,` | NEW |
-| `src/controllers/iconCueController.js:22` | `userId: req.user?.sub,` | NEW |
-| `src/controllers/musicCueController.js:20` | `userId: req.user?.sub,` | NEW |
-| `src/routes/thumbnails.js:80` | `const userId = req.user?.sub \|\| req.user?.id \|\| 'system';` | NEW. Also fallback to `'system'`. |
+| `src/routes/decisionLogs.js:22` | `user_id: req.user?.sub,` | **swap → `req.user?.id`** |
+| `src/controllers/cursorPathController.js:22` | `userId: req.user?.sub,` | **swap → `req.user?.id`** |
+| `src/controllers/productionPackageController.js:22` | `userId: req.user?.sub,` | **swap → `req.user?.id`** |
+| `src/controllers/iconCueController.js:22` | `userId: req.user?.sub,` | **swap → `req.user?.id`** |
+| `src/controllers/musicCueController.js:20` | `userId: req.user?.sub,` | **swap → `req.user?.id`** |
+| `src/routes/thumbnails.js:80` | `const userId = req.user?.sub \|\| req.user?.id \|\| 'system';` | **drop the entire fallback chain.** Becomes `const userId = req.user.id;`. Route is gated by `authenticateToken` at `:76`, so `req.user` is guaranteed non-null and the `\|\| 'system'` branch was unreachable dead code. **LOCKED — see §11.** |
 
-**MAJOR DRIFT vs v8:** v8 named only `decisionLogs.js:22`. Pre-flight
-finds **5 additional sites**, all writing `req.user?.sub` to a `user_id` /
-`userId` field that downstream code presumably expects to be the Cognito
-subject. F-Auth-5 (Step 6c per the prompt summary) needs to either:
+**v1's 5 NEW sites — CONFIRMED as in-scope per the locked policy.**
+Total swap surface: 6 sites.
 
-- **(a)** expand scope to include all 6 sites, *or*
-- **(b)** explicitly defer the 5 new ones (and document why), *or*
-- **(c)** the 5 new ones are pre-existing intentional uses with
-  different semantics — verify and tag accordingly.
+### 8.3 Optional-chaining note
 
-**Note on `thumbnails.js:80`:** the `|| 'system'` fallback means this
-file is currently *tolerant* of unauthenticated requests writing
-"system" as the user id — meaningfully different behaviour from the
-other 5. This is a behaviour change risk if F-Auth-5 swaps it.
-
-**Surface for your decision — do not silently fold or defer.**
+The literal grep `req\.user\.sub` from §4.6 line 536 returns **zero**
+matches because the codebase uses `req.user?.sub`. The fix plan's grep
+is incorrect-as-written and would miss every site. v1 already corrected
+to `grep -rnE "req\.user\??\.sub" src/` — **CONFIRMED necessary**.
+**NEW recommendation:** when running the verification grep at §4.6 line 548
+("`grep returns zero matches for req.user.sub outside test fixtures and
+middleware/auth.js itself`"), use the regex form, not the literal.
 
 ---
 
-## §9. Cross-cutting drift findings (consolidated)
+## §9. v1 cross-cutting drift findings — re-tagged
+
+| v1 ID | Finding | v2 status |
+| --- | --- | --- |
+| D1 | `src/app.js:364` does not point at any optionalAuth surface today. Global gate is at `:330`. | **CONFIRMED.** Canon explicitly says `:364`; current is `:330`. Drift = −34 lines. Fix plan §5.2 step 31 (line 651–653) and §4.3 line 327–333 reference `:364` and must read `:330` at implementation time. |
+| D2 | `episodeOrchestrationRoute.js:135` shifted to `:131` (−4 lines). | **CONFIRMED.** |
+| D3 | `middleware/auth.js:13–22` is now `:12–23` (±1 line). | **CONFIRMED.** Cosmetic. |
+| D4 | F-Auth-5 site count: v8 said 1, actual is 6. | **CONFIRMED + CLOSED as scope decision.** Fix plan §4.6 locks "replace all matches outside test files" — see §8 above. |
+| D5 | `requireAuth` already used in 4 production files. Sweep must not re-add imports where they exist. | **CONFIRMED.** Fix plan §4.6 line 496–497 explicitly: "Update every call site that referenced `authenticateToken` to use `requireAuth`." Implicitly assumes existing `requireAuth` usage stands. |
+| D6 | `pageContent.js` already implements the F-Auth-1 target pattern. | **CONFIRMED.** Reference target. |
+| D7 | Defensive lazy-import pattern in `press.js`, `manuscript-export.js`, `characterRegistry.js`, `worldEvents.js`. Sweep regex may not catch these. | **CONFIRMED + AMPLIFIED.** Fix plan §4.3 line 317–320 explicitly: "characterRegistry.js has a no-op fallback in its require block (lines 12–22) if the auth module fails to load. **The fallback must be removed as part of this step — it is the same anti-pattern as F-Auth-2.**" Same surgery applies to `press.js`, `manuscript-export.js`, `worldEvents.js`. |
+| D8 | `arcTrackingRoutes.js` references `optionalAuth` without importing. | **NEW — not addressed in canon.** Investigate now or defer? See §11. |
+| D9 | F-Auth-2 boot-fail must run before verifier construction (auth.js:12). | **CONFIRMED.** Fix plan §4.1 line 162 (Step 1) directs throwing at module load if env vars absent — confirms v1's reading. |
+| D10 | Frontend interceptor doesn't hard-fail on `AUTH_INVALID_FORMAT` / `AUTH_GROUP_REQUIRED`. | **CORRECTED.** Path 1 rewrite (§4.6) supersedes; surface to user (§11.4) whether to preserve or fold-in those codes. |
+
+### 9.1 New drift findings from canon re-validation (NEW)
 
 | # | Finding | Severity |
 | --- | --- | --- |
-| D1 | `src/app.js:364` cited by v8 does not point at any optionalAuth surface today. Global gate is at `:330`. | **HIGH — clarify what v8 cited.** |
-| D2 | `episodeOrchestrationRoute.js:135` shifted to `:131` (−4 lines). Same handler. | LOW |
-| D3 | `middleware/auth.js:13–22` is now `:12–23` (±1 line). | LOW |
-| D4 | F-Auth-5 site count: v8 said 1, actual is 6. | **HIGH — scope decision needed.** |
-| D5 | `requireAuth` already used in 4 production files (episodes.js, episodeBriefRoutes.js, characterRegistry.js, worldEvents.js). Sweep must not re-add imports where they exist. | MEDIUM |
-| D6 | `pageContent.js` is already implementing the F-Auth-1 target pattern (router.use(optionalAuth) for GETs + authenticateToken for mutations). Use as reference. | INFO |
-| D7 | Defensive lazy-import pattern (`try/catch` around `require('../middleware/auth')`) appears in `press.js`, `manuscript-export.js`, `characterRegistry.js`, `worldEvents.js`. The sweep regex may not catch these — they don't destructure on a single line. | MEDIUM |
-| D8 | `arcTrackingRoutes.js` references `optionalAuth` but is in the "no auth import" list of §3. Likely an undefined-symbol bug. | MEDIUM |
-| D9 | Cognito verifiers (`auth.js:12–23`) construct with placeholder fallbacks if env vars unset. F-Auth-2 boot-fail must run *before* verifier construction, not inside `verifyToken`. | MEDIUM |
-| D10 | Frontend interceptor does not hard-fail on `AUTH_INVALID_FORMAT` or `AUTH_GROUP_REQUIRED`. May be intentional, but §6b should explicitly cover. | LOW |
+| D11 | `episodes.js:101/109/117` cited by v8 as sub-form (b) (no auth declared) — current code has `authenticateToken` on POST `:108` and DELETE `:116`. **Sub-form (b) at this file is closed.** | MEDIUM — confirms work was done between v8 close (May 1, 2026) and now, OR v8 cataloged incorrectly. Surface to user. |
+| D12 | Storyteller.js v8-named lines (`:53, :113, :192, :213, :241, :263, :312, :333, :354, :553, :615, :636, :663, :738, :769, :790, :826, :856, :880, :910`) **none currently match an `optionalAuth` route attachment.** Current attachments span `:63 → :1626`. File has been substantially edited since v8 close. Pattern (many writes on optionalAuth) holds; specific lines do not. | LOW — sweep regex still works. v8's "every mutation route" framing is still correct in spirit. |
+| D13 | `wardrobe.js:895 (/select), :970 (/purchase)` drifted to `:1215` and `:1325` (+320 / +355 lines). Both routes still on optionalAuth. | LOW — sweep finds them via regex. |
+| D14 | Fix plan §5.2 specifies that **Step 1 (F-Auth-2) lands LAST** in the PR sequence (after 6a → 2 → 6b → 6c → 3 → 4 → 5). v1 did not capture this ordering. | MEDIUM — informs Step 6a kickoff. The first implementation step is **6a (CZ-5 sendBeacon migration)**, not Step 1. |
+| D15 | Fix plan §9.5 still references "branch coordination with second developer (VS Code collaborator)." User's prompt this round says "I am working solo on this PR." | LOW — fix plan is the canon document; user statement supersedes. v1 §11 honored this; v2 surfaces the contradiction explicitly. |
+| D16 | Fix plan §4.6 grep for `req.user.sub` is literal (`grep -rn "req\.user\.sub" src/`); codebase uses optional chaining (`req.user?.sub`). The literal grep returns zero hits. | MEDIUM — Step 6c verification grep (§4.6 line 548) needs the regex form `grep -rnE "req\.user\??\.sub" src/` to actually find anything. Surface for fix-plan amendment. |
 
 ---
 
-## §10. Inventory totals (at a glance)
+## §10. Inventory totals — UNCHANGED
 
-- **Total `optionalAuth` matches** (b grep): **1059** across 98 files
-- **Mutation routes on optionalAuth** (d grep): **516** across 75 files
-- **GET routes on optionalAuth**: **254** across (subset of) 98 files
-- **Files in `src/routes/` with no auth import** (c grep): **30**
-- **`req.user?.sub` sites** (h grep): **6** (v8 named 1)
-- **`requireAuth` already in use**: **4 files**
-- **Cognito env vars in templates**: **YES** (3 files: `.env.example`,
-  `.env.production.template`, `ecosystem.config.js`)
-- **Cognito env vars confirmed at runtime in dev/staging/prod**:
-  **NOT CONFIRMED — out of sandbox reach**
+Same as v1 §10. Re-run after user's sync confirmed:
 
----
-
-## §11. Open scope decisions (need your call before Step 6a)
-
-1. **F-Auth-5 scope:** v8 named 1 site, pre-flight finds 6. Fold all 6
-   in, or fold only `decisionLogs.js:22` and defer the rest as a separate
-   ticket?
-2. **Public-read exemption list:** §7 lists candidates I'd be willing to
-   stand behind (`pageContent.js` already correct;
-   `manuscript-export.js`, `decisionAnalytics.js`, `press.js` GETs,
-   public catalog browse routes). Lock the list. Anything not on the
-   locked list defaults to `requireAuth`.
-3. **Lazy-import pattern (D7):** sweep regex needs an extra pass for
-   files using try/catch import. Should I plan for a manual review of
-   the 4 affected files in Step 6a, or is a second-pass regex acceptable?
-4. **arcTrackingRoutes.js (D8):** investigate the undefined-symbol
-   reference now (read-only) or treat as out-of-scope for F-Auth-1?
-5. **`app.js:364` (D1):** what did v8 cite? If the global gate, the new
-   line is `:330`.
-6. **Frontend interceptor (§6 anomaly):** should `AUTH_INVALID_FORMAT`
-   and/or `AUTH_GROUP_REQUIRED` be added to the hard-fail list as part
-   of §6b, or left as soft-fails?
-7. **Runtime env confirmation:** can you confirm `COGNITO_USER_POOL_ID`
-   and `COGNITO_CLIENT_ID` are set on EC2 dev / staging / prod before
-   F-Auth-2 lands? F-Auth-2's boot-fail behaviour will block boot in any
-   environment missing them.
+- `optionalAuth` matches: **1,059** ✓
+- Mutations on optionalAuth: **516** across 75 files ✓
+- GETs on optionalAuth: 254 ✓
+- Files with no auth import: 30 ✓
+- `req.user?.sub` sites: **6** ✓
+- `requireAuth` already in use: 4 files ✓
+- `authenticateToken` mount sites: **103** across 17 files (added
+  this round; see §14.1)
+- `authenticateJWT` (jwtAuth.js) callers: **2 production files**, 9
+  mounts (added this round; see §14.2)
 
 ---
 
-## §12. Branch decision needed
+## §11. Decisions — LOCKED this round
 
-- Current branch: `claude/prime-studios-setup-h7x21` (no upstream set).
-- The harness's durable instructions name `claude/prime-studios-setup-h7x21`
-  as the designated dev branch for this session.
-- Your prompt said "I'm currently on origin/dev" and offered me the
-  choice of writing the report to `dev` directly or branching off.
-  `origin/dev` is not present in the local refs (would require a fetch).
-- **What I did:** wrote the report on `claude/prime-studios-setup-h7x21`.
-  This is consistent with the harness instruction and avoids touching
-  `dev` without a fetch + explicit confirmation.
+User locked the following on 2026-05-02:
 
-**If you want this on `dev` instead**, tell me and I'll fetch + cherry-pick
-or replay the commit. No code changes are involved, so there's no merge
-risk either way.
+### §11.1 Exemption list — LOCKED
+
+**Rule:** per-route classification driven by the **published-only data**
+test:
+
+- If the route returns **published-only data** → exempt; mark with
+  `// PUBLIC: published-only data, see audit §X` comment in code.
+- If the route returns **mixed (published + draft) or all data** → apply
+  `requireAuth`.
+- **Default to `requireAuth` when in doubt** (consistent with fix plan §9.2).
+
+**`decisionAnalytics.js` GETs — NOT exempt regardless** of the
+published-only test. The caller-supplied `req.query.user_id` filter is a
+leak vector (anyone can query anyone's analytics). All 7 GETs swap to
+`requireAuth`. Future hardening (ownership enforcement) is a separate
+follow-up.
+
+**Implementation note for sweep:** every candidate from §7 (and the 95
+mixed-verb files where pre-flight defaulted to `requireAuth`) needs a
+per-route check during Step 3 of the sweep. The author of Step 3 (the
+sweep step) reads each route's downstream data layer to determine
+"published-only?" and applies the comment or requireAuth accordingly. No
+blanket exemptions — each `// PUBLIC:` comment is justified per route.
+
+### §11.2 `'system'` fallback — LOCKED (drop)
+
+`thumbnails.js:80` becomes `const userId = req.user.id;` as part of
+**Step 6c** (F-Auth-5 swap). The `\|\| req.user?.id \|\| 'system'`
+fallback chain is dropped entirely:
+
+- Route is gated by `authenticateToken` at `:76` — `req.user` is
+  guaranteed non-null in the handler.
+- `'system'` branch was unreachable dead code (confirmed during
+  pre-flight investigation this round).
+
+**Out of F-AUTH-1 scope:** the same `\|\| 'system'` pattern appears in 8
+other places (`scriptsController.js:70/125/148/170/193/211`,
+`sceneController.js:218`, `compositions.js:1126`). **Filed as P1
+follow-up:** "audit all `\|\| 'system'` fallbacks for reachability."
+Not part of this PR.
+
+### §11.3 `arcTrackingRoutes.js` undefined-symbol bug — LOCKED (defer)
+
+Defer. File as separate P1 follow-up. Reasoning: adding scope to
+F-AUTH-1 fights the single-coordinated-change framing in fix plan §1
+and §5.3.
+
+### §11.4 F-Auth-5 grep regex — LOCKED (amend fix plan)
+
+Fix plan §4.6 amended in this round (commit follows this report
+update). Changes:
+
+- Pre-flight grep: `grep -rnE "req\.user\??\.sub" src/`
+- Replacement target: `req.user?.id` (preserve optional chaining for
+  consistency with codebase)
+- Verification grep at §4.6 line 548: same regex form, not literal
+
+**`.docx` canon is now out of sync with `.md`.** The `.md` is the
+tooling source of truth; the next docx revision picks up the
+amendment.
+
+### §11.5 Items still open (non-blocking for Step 6a)
+
+These don't gate Step 6a (CZ-5 sendBeacon migration is independent of
+all of them) but need locks before later steps:
+
+1. **`episodes.js:101/109/117` sub-form (b) discrepancy (D11).** No
+   code action either way. Surface for awareness — was this fixed
+   post-v8, or did v8 catalog wrong? **Non-blocking.**
+2. **Frontend interceptor codes — `AUTH_INVALID_FORMAT` /
+   `AUTH_GROUP_REQUIRED` (D10).** Needed before **Step 6b** (F-Auth-4
+   Path 1 interceptor rewrite). My recommendation last round: preserve
+   current soft-fail behaviour for both. Awaiting explicit lock.
+3. **`src/middleware/jwtAuth.js` — second auth module emitting the
+   same codes.** Surfaced last round. **Pre-flight verdict (this round,
+   §14.2 / D20):** NOT a duplicate of `auth.js` — it's a separate
+   parallel module using `TokenService` (custom JWT, not Cognito), used
+   on 9 mount sites in `compositions.js` (7) + `routes/auth.js` (2).
+   Recommend it stays out of Step 6b scope; user override welcome.
+   Needed before Step 6b.
+4. **Cognito runtime env confirmation (Gate G4 prerequisite).** User
+   verifies out-of-band before backend deploy to dev. Not pre-flight's
+   job.
+
+### §11.6 Items LOCKED by canon (no longer open)
+
+- ~~F-Auth-5 fold-in scope~~ → §9.3 LOCKED + §4.6 directs swap-all (§8 above)
+- ~~F-Auth-4 path~~ → §9.1 LOCKED to Path 1
+- ~~F-Auth-6~~ → §9.3 LOCKED to deferred
+- ~~Deploy window~~ → §9.4 LOCKED to gate-driven
+- ~~Default to requireAuth on uncertainty~~ → §9.2 LOCKED
+- ~~PR mechanics (single PR, bisectable commits)~~ → §5.3 LOCKED
+- ~~Step ordering~~ → §5.2 LOCKED (6a → 2 → 6b → 6c → 3 → 4 → 5 → 1)
+
+---
+
+## §14. Supplementary G1 inventories — `authenticateToken` and `jwtAuth.js` callers
+
+Added this round per user request. Both inventories are needed to size
+**Step 6b** (F-Auth-4 Path 1 — delete duplicate `authenticateToken`
+implementation, unify call sites onto `requireAuth`).
+
+### §14.1 `authenticateToken` inventory
+
+**Command:** `grep -rn "authenticateToken" src/`
+
+**Totals:**
+
+- **120 grep hits**
+- **103 actual mount sites** (regex `[, ]authenticateToken[,)]`,
+  excluding imports / comments / alias declarations / fallback refs)
+- **17 distinct files** importing `authenticateToken` from
+  `src/middleware/auth.js`
+
+**Module surface (`src/middleware/auth.js`):**
+
+| Line | Role |
+| --- | --- |
+| `:71` | `const authenticateToken = async (req, res, next) => {` — definition |
+| `:235` | comment — "Alias for authenticateToken — more intuitive naming" |
+| `:237` | `const authenticate = authenticateToken;` — alias export |
+| `:246` | `module.exports = { authenticateToken, … }` |
+| `:250–255` | comment block describing the `requireAuth` ↔ interceptor contract |
+
+Both `authenticate` (alias) and `authenticateToken` are exported. Step 6b
+needs to handle both names if it removes one.
+
+**Per-file mount counts (sorted by count):**
+
+| File | Mounts | Notes |
+| --- | --- | --- |
+| `src/routes/episodes.js` | **14** | 11 active mounts + 1 commented-out (`:400`) + 1 commented-out (`:473`) + 1 prose comment (`:309`). **See §14.3 D17–D18 below.** |
+| `src/routes/stories.js` | 9 | All on `/social/*` and `/assemblies/*` mutations |
+| `src/routes/search.js` | 9 | All search endpoints |
+| `src/controllers/notificationController.js` | 9 | Mixed reads + writes; admin-only chained with `authorizeRole(['admin'])` on POST `/` |
+| `src/routes/thumbnails.js` | 7 | All publish-workflow mutations + CRUD; pageContent.js pattern |
+| `src/controllers/socketController.js` | 7 | All admin-only chained with `authorizeRole(['admin'])` |
+| `src/controllers/activityController.js` | 7 | Read-mostly; admin-only on stats/team/dashboard |
+| `src/controllers/presenceController.js` | 6 | Mixed reads + writes |
+| `src/routes/scripts.js` | 5 | All script CRUD |
+| `src/routes/metadata.js` | 5 | All metadata CRUD |
+| `src/routes/jobs.js` | 5 | Job creation + status |
+| `src/routes/files.js` | 5 | File upload/download/list/delete |
+| `src/routes/processing.js` | 4 | Processing pipeline mutations |
+| `src/routes/sceneLibrary.js` | 3 | Scene library mutations |
+| `src/routes/admin.js` | 3 | All chained with `authorize(['admin'])` |
+| `src/routes/pageContent.js` | 2 | PUT + DELETE (the F-AUTH-1 reference pattern from v2 §7.2) |
+| `src/middleware/auth.js` | 2 | definition + alias |
+| `src/routes/franchiseBrainRoutes.js` | 1 | `/push-from-page` (the model the rest of the file conforms to per fix plan §4.3 line 347) |
+
+**Defensive lazy-import fallbacks** (use `authenticateToken` as fallback
+if `requireAuth` lookup fails):
+
+- `src/routes/characterRegistry.js:17`
+- `src/routes/worldEvents.js:28`
+
+These need touching during Step 6b (the lookup target name changes when
+the duplicate block is deleted).
+
+**Step 6b implementation impact:**
+
+- Path 1 deletes `auth.js:256–293` (the `requireAuth` self-duplicate of
+  `authenticateToken`).
+- 17 files import `authenticateToken`; **no rename is required if we
+  keep the export name.** Path 1 specifies "Update every call site that
+  referenced `authenticateToken` to use `requireAuth`" (fix plan §4.6
+  line 496–497) — that means the 17 files + 103 mount sites change
+  identifier. PR diff for Step 6b alone: ~120+ lines touched.
+- The `authenticate` alias at `:237` should be evaluated for retention
+  or removal as part of Step 6b.
+
+### §14.2 `jwtAuth.js` caller inventory
+
+**Command:** `grep -rnE "require.*jwtAuth" src/ frontend/src/ tests/`
+
+**Module:** `src/middleware/jwtAuth.js` — **177 lines**, 4 exported
+functions:
+
+| Function | Purpose | Codes emitted |
+| --- | --- | --- |
+| `authenticateJWT` | Custom JWT verification via `TokenService` (NOT Cognito) | `AUTH_MISSING_TOKEN`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_ERROR` |
+| `optionalJWTAuth` | Optional custom JWT | (none — null user on failure) |
+| `requireGroup` | Cognito-style group gate (works on `req.user.groups`) | `AUTH_REQUIRED`, `AUTH_GROUP_REQUIRED` |
+| `requireRole` | Role gate (works on `req.user.role`) — **no equivalent in `auth.js`** | `AUTH_REQUIRED`, `AUTH_ROLE_REQUIRED` |
+
+**Callers (3 total):**
+
+| File:line | Imports | Mount sites |
+| --- | --- | --- |
+| `src/routes/auth.js:10` | `authenticateJWT` | `:189` POST `/logout`, `:231` GET `/me` (2 mounts) |
+| `src/routes/compositions.js:20` | `authenticateJWT, requireGroup` | `:479` PUT `/:id`, `:510` PUT `/:id/approve` (+ `requireGroup('ADMIN')`), `:533` PUT `/:id/primary`, `:556` PUT `/:id/publish` (+ `requireGroup('ADMIN')`), `:594` POST `/:id/generate` (+ `requireGroup('ADMIN')`), `:816` PUT `/:id`, `:885` DELETE `/:id` (7 mounts) |
+| `tests/unit/middleware/jwtAuth.test.js:8` | `authenticateJWT` | test fixtures |
+
+**Production callers: 2 route files, 9 mount sites.**
+
+### §14.3 New findings from these inventories
+
+| # | Finding | Severity / disposition |
+| --- | --- | --- |
+| **D17** | `episodes.js:307–315` — PUT `/:id` (UPDATE EPISODE) uses `optionalAuth`, **not** `authenticateToken`, with an explicit comment: *"The previous strict authenticateToken caused a hard redirect to /login every time a creator's token expired… The controller already handles req.user?.id with optional chaining and an 'unknown' fallback."* This is **the exact contract problem F-Auth-4 Path 1 is solving.** Once Step 6b lands, this route should swap back to `requireAuth`. | **HIGH for sweep author.** Treat the comment as documentation of the decision Step 6b reverses. The `'unknown'` fallback in the controller is a sibling of the `'system'` fallback (§11.2) — file with the P1 follow-up audit. |
+| **D18** | `episodes.js:400` (PUT `/:episodeId/scenes/reorder`) and `episodes.js:473` (POST `/:episodeId/scripts`) have `authenticateToken` **commented out** with `// ✅ COMMENTED OUT FOR TESTING`. Both are mutation routes currently auth-less in production. Line `:474` also has `// requireAuth,` commented. | **HIGH.** These are sub-form (b)-adjacent surfaces — file imports auth but the auth was deliberately disabled. **Step 4 (sub-form b sweep) must address them.** Surface for user: was this intentional (testing-only and forgotten) or genuinely meant to ship unauth? Treat as: re-enable `authenticateToken` (becomes `requireAuth` after Step 6b). |
+| **D19** | `episodes.js:300–304` POST `/` (CREATE EPISODE) uses `authenticateToken`; PUT `/:id` (UPDATE) uses `optionalAuth` per D17. **Asymmetric:** create requires auth, update tolerates missing token. Anyone with an episode ID can update it without authentication. | **HIGH security finding.** Not novel to v8 (it would fall under sub-form (a) — write route on optionalAuth) but specifically egregious because of the asymmetry with the matching CREATE. Step 3 (sub-form a sweep) closes it. |
+| **D20** | `src/middleware/jwtAuth.js` is **NOT a duplicate of `src/middleware/auth.js`.** It's a separate parallel module using `TokenService` (custom JWT) instead of Cognito JWKS. Different token source, different `req.user` shape (adds `role`, `tokenType`, `source`, `expiresAt`). The fix plan §4.6 "delete the duplicate" targets `auth.js:256–293` (the `requireAuth` self-duplicate of `authenticateToken` **within** `auth.js`), **not** `jwtAuth.js`. | **MEDIUM — clarifies §11.5 #3.** `jwtAuth.js` is the custom-JWT path used by `compositions.js` (7 mounts) and `routes/auth.js` (2 mounts). It's structurally divergent from Cognito — same error codes, different verification + claim mapping. **Decision needed for Step 6b:** is `jwtAuth.js` in scope for consolidation (e.g., merge into `auth.js` as a verification strategy), or does it stay as the parallel custom-JWT module for the routes that genuinely use TokenService? My read: leave it. The 9 mount sites would need to switch to a Cognito JWT path otherwise, which is a separate scope. |
+| **D21** | `auth.js` exports both `authenticate` (alias at `:237`) and `authenticateToken` (`:71`). No callers found for `authenticate` in the inventory grep above. | **LOW.** Surface for Step 6b: drop the `authenticate` alias as part of the unification, or keep for parity? |
+
+### §14.4 §11.5 #3 update from D20
+
+§11.5 #3 originally asked: "Is `jwtAuth.js` in scope for the Step 6b
+duplicate-cleanup, or is it a separate parallel module that stays?"
+
+**Pre-flight verdict (subject to user override):** parallel module, stays
+out of scope. It's a different verification path (custom JWT via
+TokenService), used deliberately on 9 mounts that don't go through
+Cognito. Folding it into the Step 6b cleanup expands the PR scope to
+"unify two verification backends" which is a different fix from
+"delete the `requireAuth` self-duplicate inside auth.js."
+
+User confirms or overrides.
+
+---
+
+## §12. Branch decision — RESOLVED
+
+v1 was committed on `claude/prime-studios-setup-h7x21`; auto-merged into
+`dev` as `f7b43d42`. v2 is being committed on `dev` directly per user
+direction this round (fits §5.3 line 691–694 which discusses branch
+coordination, and matches user's "going straight to dev is fine" for
+the .md additions).
 
 ---
 
 ## §13. What's next
 
-1. You review this report.
-2. Lock the §11 decisions.
-3. Drop the v8 + fix plan `.docx` files into `docs/audit/` (or paste the
-   relevant sections inline) so I can reconcile any silent disagreement
-   before code changes.
-4. On your go, I begin Step 6a per §5.2 of the fix plan.
+1. ~~You review v2.~~ ✓
+2. ~~Lock the §11.1–§11.4 items.~~ ✓
+3. ~~Produce supplementary `authenticateToken` + `jwtAuth.js`
+   inventories.~~ ✓ (§14)
+4. **G1 binary lock pending — 5 items.** See header status block.
+   Per fix plan §6.1, gates are pass-or-fail, not partial. No
+   implementation begins until G1 actually passes.
+5. After G1 passes: **Step 6a** is the first implementation step per
+   fix plan §5.2 line 631–634 (CZ-5 sendBeacon → fetch+keepalive in
+   `BookEditor.jsx:173–186`).
 
-— end of pre-flight —
+— end of pre-flight v2 —
