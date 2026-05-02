@@ -3,12 +3,28 @@
 **Status:** Pre-flight executed and re-validated against canon
 (`docs/audit/Prime_Studios_Audit_Handoff_v8.md` + `F-AUTH-1_Fix_Plan_v1.3.md`,
 both pandoc-converted from the committed `.docx` canon at HEAD).
-**GATE G1 — PASSED for Step 6a.** Four blocking items locked by user
-(§11.1–§11.4). Two supplementary inventories added this round per user
-request: `authenticateToken` (103 mounts / 17 files) and `jwtAuth.js`
-callers (2 production files / 9 mounts) — see §14. Four findings (D17–D21)
-surfaced by the inventories. Three items remain non-blocking-open
-(§11.5); none gate Step 6a. Step 6a is ready on user go-ahead.
+
+**GATE G1 — NOT YET PASSED.** G1 is binary (per fix plan §6.1: each
+gate must pass before the next begins; gates are not partial). All §5.1
+mechanical deliverables are produced. Four user decisions are locked
+(§11.1–§11.4). Supplementary inventories `authenticateToken` (103
+mounts / 17 files) and `jwtAuth.js` callers (2 production files / 9
+mounts) added this round per user request — see §14. Five findings
+(D17–D21) surfaced by the inventories.
+
+**G1 unblocks when the following decisions are locked:**
+
+1. Interceptor code disposition (§11.5 #2 / D10) — `AUTH_INVALID_FORMAT`,
+   `AUTH_GROUP_REQUIRED` behaviour after Step 6b unification.
+2. `jwtAuth.js` scope decision (§11.5 #3 / D20) — confirm or override
+   pre-flight's "out of Step 6b scope" verdict.
+3. D18 — disposition for the two test-disabled mutation routes at
+   `episodes.js:400, :473`.
+4. D21 — drop or keep `authenticate` alias at `auth.js:237`.
+5. §5.1 deliverable — Cognito runtime env-var confirmation in dev,
+   staging, prod (out-of-band; user-owned action).
+
+No implementation work begins until G1 actually passes.
 
 **Date:** 2026-05-02
 **Branch:** `dev` (per user direction in this round)
@@ -608,12 +624,14 @@ the .md additions).
 ## §13. What's next
 
 1. ~~You review v2.~~ ✓
-2. ~~Lock the §11 items.~~ ✓ (4 of 8 locked this round; 4 non-blocking
-   open; see §11.5.)
-3. On your go, I begin **Step 6a (CZ-5 sendBeacon → fetch+keepalive in
-   `BookEditor.jsx:173–186`)** per fix plan §5.2 line 631–634. Step 6a
-   is independent of every open item in §11.5.
-4. Before I start **Step 6b** I'll need locks on §11.5 #2 (interceptor
-   codes) and §11.5 #3 (`jwtAuth.js` scope).
+2. ~~Lock the §11.1–§11.4 items.~~ ✓
+3. ~~Produce supplementary `authenticateToken` + `jwtAuth.js`
+   inventories.~~ ✓ (§14)
+4. **G1 binary lock pending — 5 items.** See header status block.
+   Per fix plan §6.1, gates are pass-or-fail, not partial. No
+   implementation begins until G1 actually passes.
+5. After G1 passes: **Step 6a** is the first implementation step per
+   fix plan §5.2 line 631–634 (CZ-5 sendBeacon → fetch+keepalive in
+   `BookEditor.jsx:173–186`).
 
 — end of pre-flight v2 —
