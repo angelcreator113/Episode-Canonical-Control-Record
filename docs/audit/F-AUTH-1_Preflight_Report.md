@@ -3,10 +3,12 @@
 **Status:** Pre-flight executed and re-validated against canon
 (`docs/audit/Prime_Studios_Audit_Handoff_v8.md` + `F-AUTH-1_Fix_Plan_v1.3.md`,
 both pandoc-converted from the committed `.docx` canon at HEAD).
-**GATE G1 — PASSED for Step 6a.** Four blocking items locked by user this
-round (see §11.1–§11.4). Four non-blocking items remain open (§11.5);
-none gate Step 6a (CZ-5 sendBeacon migration). Two items are needed
-before Step 6b. Step 6a is ready on user go-ahead.
+**GATE G1 — PASSED for Step 6a.** Four blocking items locked by user
+(§11.1–§11.4). Two supplementary inventories added this round per user
+request: `authenticateToken` (103 mounts / 17 files) and `jwtAuth.js`
+callers (2 production files / 9 mounts) — see §14. Four findings (D17–D21)
+surfaced by the inventories. Three items remain non-blocking-open
+(§11.5); none gate Step 6a. Step 6a is ready on user go-ahead.
 
 **Date:** 2026-05-02
 **Branch:** `dev` (per user direction in this round)
@@ -361,6 +363,10 @@ Same as v1 §10. Re-run after user's sync confirmed:
 - Files with no auth import: 30 ✓
 - `req.user?.sub` sites: **6** ✓
 - `requireAuth` already in use: 4 files ✓
+- `authenticateToken` mount sites: **103** across 17 files (added
+  this round; see §14.1)
+- `authenticateJWT` (jwtAuth.js) callers: **2 production files**, 9
+  mounts (added this round; see §14.2)
 
 ---
 
@@ -442,9 +448,12 @@ all of them) but need locks before later steps:
    Path 1 interceptor rewrite). My recommendation last round: preserve
    current soft-fail behaviour for both. Awaiting explicit lock.
 3. **`src/middleware/jwtAuth.js` — second auth module emitting the
-   same codes.** Surfaced last round. Is `jwtAuth.js` in scope for the
-   Step 6b duplicate-cleanup, or is it a separate parallel module that
-   stays? Needed before Step 6b.
+   same codes.** Surfaced last round. **Pre-flight verdict (this round,
+   §14.2 / D20):** NOT a duplicate of `auth.js` — it's a separate
+   parallel module using `TokenService` (custom JWT, not Cognito), used
+   on 9 mount sites in `compositions.js` (7) + `routes/auth.js` (2).
+   Recommend it stays out of Step 6b scope; user override welcome.
+   Needed before Step 6b.
 4. **Cognito runtime env confirmation (Gate G4 prerequisite).** User
    verifies out-of-band before backend deploy to dev. Not pre-flight's
    job.
@@ -458,6 +467,131 @@ all of them) but need locks before later steps:
 - ~~Default to requireAuth on uncertainty~~ → §9.2 LOCKED
 - ~~PR mechanics (single PR, bisectable commits)~~ → §5.3 LOCKED
 - ~~Step ordering~~ → §5.2 LOCKED (6a → 2 → 6b → 6c → 3 → 4 → 5 → 1)
+
+---
+
+## §14. Supplementary G1 inventories — `authenticateToken` and `jwtAuth.js` callers
+
+Added this round per user request. Both inventories are needed to size
+**Step 6b** (F-Auth-4 Path 1 — delete duplicate `authenticateToken`
+implementation, unify call sites onto `requireAuth`).
+
+### §14.1 `authenticateToken` inventory
+
+**Command:** `grep -rn "authenticateToken" src/`
+
+**Totals:**
+
+- **120 grep hits**
+- **103 actual mount sites** (regex `[, ]authenticateToken[,)]`,
+  excluding imports / comments / alias declarations / fallback refs)
+- **17 distinct files** importing `authenticateToken` from
+  `src/middleware/auth.js`
+
+**Module surface (`src/middleware/auth.js`):**
+
+| Line | Role |
+| --- | --- |
+| `:71` | `const authenticateToken = async (req, res, next) => {` — definition |
+| `:235` | comment — "Alias for authenticateToken — more intuitive naming" |
+| `:237` | `const authenticate = authenticateToken;` — alias export |
+| `:246` | `module.exports = { authenticateToken, … }` |
+| `:250–255` | comment block describing the `requireAuth` ↔ interceptor contract |
+
+Both `authenticate` (alias) and `authenticateToken` are exported. Step 6b
+needs to handle both names if it removes one.
+
+**Per-file mount counts (sorted by count):**
+
+| File | Mounts | Notes |
+| --- | --- | --- |
+| `src/routes/episodes.js` | **14** | 11 active mounts + 1 commented-out (`:400`) + 1 commented-out (`:473`) + 1 prose comment (`:309`). **See §14.3 D17–D18 below.** |
+| `src/routes/stories.js` | 9 | All on `/social/*` and `/assemblies/*` mutations |
+| `src/routes/search.js` | 9 | All search endpoints |
+| `src/controllers/notificationController.js` | 9 | Mixed reads + writes; admin-only chained with `authorizeRole(['admin'])` on POST `/` |
+| `src/routes/thumbnails.js` | 7 | All publish-workflow mutations + CRUD; pageContent.js pattern |
+| `src/controllers/socketController.js` | 7 | All admin-only chained with `authorizeRole(['admin'])` |
+| `src/controllers/activityController.js` | 7 | Read-mostly; admin-only on stats/team/dashboard |
+| `src/controllers/presenceController.js` | 6 | Mixed reads + writes |
+| `src/routes/scripts.js` | 5 | All script CRUD |
+| `src/routes/metadata.js` | 5 | All metadata CRUD |
+| `src/routes/jobs.js` | 5 | Job creation + status |
+| `src/routes/files.js` | 5 | File upload/download/list/delete |
+| `src/routes/processing.js` | 4 | Processing pipeline mutations |
+| `src/routes/sceneLibrary.js` | 3 | Scene library mutations |
+| `src/routes/admin.js` | 3 | All chained with `authorize(['admin'])` |
+| `src/routes/pageContent.js` | 2 | PUT + DELETE (the F-AUTH-1 reference pattern from v2 §7.2) |
+| `src/middleware/auth.js` | 2 | definition + alias |
+| `src/routes/franchiseBrainRoutes.js` | 1 | `/push-from-page` (the model the rest of the file conforms to per fix plan §4.3 line 347) |
+
+**Defensive lazy-import fallbacks** (use `authenticateToken` as fallback
+if `requireAuth` lookup fails):
+
+- `src/routes/characterRegistry.js:17`
+- `src/routes/worldEvents.js:28`
+
+These need touching during Step 6b (the lookup target name changes when
+the duplicate block is deleted).
+
+**Step 6b implementation impact:**
+
+- Path 1 deletes `auth.js:256–293` (the `requireAuth` self-duplicate of
+  `authenticateToken`).
+- 17 files import `authenticateToken`; **no rename is required if we
+  keep the export name.** Path 1 specifies "Update every call site that
+  referenced `authenticateToken` to use `requireAuth`" (fix plan §4.6
+  line 496–497) — that means the 17 files + 103 mount sites change
+  identifier. PR diff for Step 6b alone: ~120+ lines touched.
+- The `authenticate` alias at `:237` should be evaluated for retention
+  or removal as part of Step 6b.
+
+### §14.2 `jwtAuth.js` caller inventory
+
+**Command:** `grep -rnE "require.*jwtAuth" src/ frontend/src/ tests/`
+
+**Module:** `src/middleware/jwtAuth.js` — **177 lines**, 4 exported
+functions:
+
+| Function | Purpose | Codes emitted |
+| --- | --- | --- |
+| `authenticateJWT` | Custom JWT verification via `TokenService` (NOT Cognito) | `AUTH_MISSING_TOKEN`, `AUTH_INVALID_FORMAT`, `AUTH_INVALID_TOKEN`, `AUTH_ERROR` |
+| `optionalJWTAuth` | Optional custom JWT | (none — null user on failure) |
+| `requireGroup` | Cognito-style group gate (works on `req.user.groups`) | `AUTH_REQUIRED`, `AUTH_GROUP_REQUIRED` |
+| `requireRole` | Role gate (works on `req.user.role`) — **no equivalent in `auth.js`** | `AUTH_REQUIRED`, `AUTH_ROLE_REQUIRED` |
+
+**Callers (3 total):**
+
+| File:line | Imports | Mount sites |
+| --- | --- | --- |
+| `src/routes/auth.js:10` | `authenticateJWT` | `:189` POST `/logout`, `:231` GET `/me` (2 mounts) |
+| `src/routes/compositions.js:20` | `authenticateJWT, requireGroup` | `:479` PUT `/:id`, `:510` PUT `/:id/approve` (+ `requireGroup('ADMIN')`), `:533` PUT `/:id/primary`, `:556` PUT `/:id/publish` (+ `requireGroup('ADMIN')`), `:594` POST `/:id/generate` (+ `requireGroup('ADMIN')`), `:816` PUT `/:id`, `:885` DELETE `/:id` (7 mounts) |
+| `tests/unit/middleware/jwtAuth.test.js:8` | `authenticateJWT` | test fixtures |
+
+**Production callers: 2 route files, 9 mount sites.**
+
+### §14.3 New findings from these inventories
+
+| # | Finding | Severity / disposition |
+| --- | --- | --- |
+| **D17** | `episodes.js:307–315` — PUT `/:id` (UPDATE EPISODE) uses `optionalAuth`, **not** `authenticateToken`, with an explicit comment: *"The previous strict authenticateToken caused a hard redirect to /login every time a creator's token expired… The controller already handles req.user?.id with optional chaining and an 'unknown' fallback."* This is **the exact contract problem F-Auth-4 Path 1 is solving.** Once Step 6b lands, this route should swap back to `requireAuth`. | **HIGH for sweep author.** Treat the comment as documentation of the decision Step 6b reverses. The `'unknown'` fallback in the controller is a sibling of the `'system'` fallback (§11.2) — file with the P1 follow-up audit. |
+| **D18** | `episodes.js:400` (PUT `/:episodeId/scenes/reorder`) and `episodes.js:473` (POST `/:episodeId/scripts`) have `authenticateToken` **commented out** with `// ✅ COMMENTED OUT FOR TESTING`. Both are mutation routes currently auth-less in production. Line `:474` also has `// requireAuth,` commented. | **HIGH.** These are sub-form (b)-adjacent surfaces — file imports auth but the auth was deliberately disabled. **Step 4 (sub-form b sweep) must address them.** Surface for user: was this intentional (testing-only and forgotten) or genuinely meant to ship unauth? Treat as: re-enable `authenticateToken` (becomes `requireAuth` after Step 6b). |
+| **D19** | `episodes.js:300–304` POST `/` (CREATE EPISODE) uses `authenticateToken`; PUT `/:id` (UPDATE) uses `optionalAuth` per D17. **Asymmetric:** create requires auth, update tolerates missing token. Anyone with an episode ID can update it without authentication. | **HIGH security finding.** Not novel to v8 (it would fall under sub-form (a) — write route on optionalAuth) but specifically egregious because of the asymmetry with the matching CREATE. Step 3 (sub-form a sweep) closes it. |
+| **D20** | `src/middleware/jwtAuth.js` is **NOT a duplicate of `src/middleware/auth.js`.** It's a separate parallel module using `TokenService` (custom JWT) instead of Cognito JWKS. Different token source, different `req.user` shape (adds `role`, `tokenType`, `source`, `expiresAt`). The fix plan §4.6 "delete the duplicate" targets `auth.js:256–293` (the `requireAuth` self-duplicate of `authenticateToken` **within** `auth.js`), **not** `jwtAuth.js`. | **MEDIUM — clarifies §11.5 #3.** `jwtAuth.js` is the custom-JWT path used by `compositions.js` (7 mounts) and `routes/auth.js` (2 mounts). It's structurally divergent from Cognito — same error codes, different verification + claim mapping. **Decision needed for Step 6b:** is `jwtAuth.js` in scope for consolidation (e.g., merge into `auth.js` as a verification strategy), or does it stay as the parallel custom-JWT module for the routes that genuinely use TokenService? My read: leave it. The 9 mount sites would need to switch to a Cognito JWT path otherwise, which is a separate scope. |
+| **D21** | `auth.js` exports both `authenticate` (alias at `:237`) and `authenticateToken` (`:71`). No callers found for `authenticate` in the inventory grep above. | **LOW.** Surface for Step 6b: drop the `authenticate` alias as part of the unification, or keep for parity? |
+
+### §14.4 §11.5 #3 update from D20
+
+§11.5 #3 originally asked: "Is `jwtAuth.js` in scope for the Step 6b
+duplicate-cleanup, or is it a separate parallel module that stays?"
+
+**Pre-flight verdict (subject to user override):** parallel module, stays
+out of scope. It's a different verification path (custom JWT via
+TokenService), used deliberately on 9 mounts that don't go through
+Cognito. Folding it into the Step 6b cleanup expands the PR scope to
+"unify two verification backends" which is a different fix from
+"delete the `requireAuth` self-duplicate inside auth.js."
+
+User confirms or overrides.
 
 ---
 
