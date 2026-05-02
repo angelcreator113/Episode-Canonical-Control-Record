@@ -389,15 +389,15 @@ primepisodes.com has no real-user traffic at the time this plan locks. The deplo
 >
 > A calendar deploy window is a tool for minimizing user impact during a risky change. With no real users, there is no user impact to minimize — the calendar window solves a problem you don't have. What you DO have: a codebase that has accumulated months of untested assumptions (the audit found 269 P0 bugs) and a fix that touches authentication on every write route. The gates exist to prevent the temptation to skip discipline because "no one will see it." The gates are not theater. F-AUTH-1 is the first fix; how it ships sets the precedent for every fix that follows.
 
-### 6.1 The Seven Gates
+### 6.1 Six Active Gates (G5 absorbed into G4)
 
 | Gate | Name | What must be true before proceeding |
 |---|---|---|
 | **G1** | **Pre-flight complete** | All §5.1 inventory deliverables produced and reviewed: optionalAuth surface inventory, sub-form (b) file list, sub-form (c) file:line list, exemption list with reasoning, frontend interceptor contract reference, env-var confirmation, `req.user.sub` grep results (F-Auth-5). Drift from v8 file:line references documented or absent. Branch coordination with second developer confirmed. |
-| **G2** | **Implementation complete** | **PREREQUISITE: Cognito runtime env vars confirmed by Evoni** (out-of-band, manual check in AWS console or environment config) for dev, staging, AND prod. Step 1 (F-Auth-2) boot-fails any environment running on placeholder strings. Confirmation date logged in pre-flight report. Then: all six steps coded per §5.2 order. Each commit corresponds to one step or substep (bisectability). CI passing. PR opened. PR description references audit handoff v8 §4.1 + this fix plan and includes the pre-flight inventory in collapsed sections. |
+| **G2** | **Implementation complete** | **PREREQUISITE: Cognito runtime env vars confirmed by Evoni** (out-of-band, manual check in AWS console or environment config) for dev AND prod. Step 1 (F-Auth-2) boot-fails any environment running on placeholder strings. Confirmation date logged in pre-flight report. Then: all six steps coded per §5.2 order. Each commit corresponds to one step or substep (bisectability). CI passing. PR opened. PR description references audit handoff v8 §4.1 + this fix plan and includes the pre-flight inventory in collapsed sections. |
 | **G3** | **Self-review passed** | Every commit in the PR read end-to-end. Test coverage minimum: one authenticated + one unauthenticated test per sub-form. F-Auth-5 has its specific test (decisionLogs write persists matching user_id). Frontend interceptor handles `AUTH_REQUIRED` and `AUTH_INVALID_TOKEN` as distinct paths. |
-| **G4** | **Dev verified** | Backend deployed to dev. Boot tested with valid env vars (succeeds), missing env var (boot-fails with named error), placeholder env var values (boot-fails). §7 verification checklist run end-to-end on dev. Every checkbox confirmed. |
-| **G5** | **Staging verified** | Frontend deployed to staging first, then backend. §7 checklist re-run on staging. Boot/restart cycle exercised (kill the process, confirm clean restart, confirm auth still works). 2-hour soak — server stays up, no error log spam, no unexpected restarts. You are reachable for alerts during this window. |
+| **G4** | **Dev verified (expanded; absorbs former G5 scope)** | Backend deployed to dev. Boot tested with valid env vars (succeeds), missing env var (boot-fails with named error), placeholder env var values (boot-fails). §7 verification checklist run end-to-end on dev. Boot/restart cycle exercised (kill process, confirm clean restart, confirm auth still works). 2-hour soak on dev — server stays up, no error log spam, no unexpected restarts. |
+| **G5** | **ABSORBED INTO G4 (N/A)** | No staging gate in the active Prime Studios topology (intentional dev + prod infra). Former staging checks are mandatory inside G4 before G6 can open. |
 | **G6** | **Prod cutover** | Frontend deployed to prod, then backend. You spend 30 focused minutes exercising the app: log in, write to a Stats route, write to a wardrobe route, write to a franchise-brain route (this is where F34 closes), write something in BookEditor and navigate away (CZ-5 path), write to a `/decision-logs` route (F-Auth-5 path). Confirm boot logs are clean. No errors visible in app or server logs. |
 | **G7** | **Post-deploy soak** | Server stays up overnight. Next morning, exercise the app again — same surfaces as G6. If clean, declare F-AUTH-1 closed. Tier 1 fix queue (F-App-1, F-Stats-1, F-Ward-1, F-Reg-2, F-Ward-3, F-Sec-3, F-Franchise-1) is now unblocked. |
 
@@ -434,7 +434,7 @@ Without real-user traffic, the standard "watch the metrics" framing does not app
 - **G2 fails** — implementation incomplete or CI red. Stay at G2. Do not let "I can fix this in staging" pressure push you forward.
 - **G3 fails** — self-review found a bug or a missing test. Return to G2. Add the test, fix the bug, re-run CI.
 - **G4 fails** — boot-fail when it should succeed, or unexpected behavior in §7 checklist. Diagnose. Likely a code bug, not a deploy issue. Return to G2 if a code change is needed.
-- **G5 fails** — staging crash, error spam, or §7 checklist regression. Diagnose. If staging-specific (env, infra), fix in place. If code, return to G2.
+- **G5 fails** — N/A (gate absorbed into G4).
 - **G6 fails** — prod cutover surfaces an issue. Roll back per §8. Do not try to fix forward in prod. Return to G2 or G4 depending on cause.
 - **G7 fails** — overnight soak revealed instability. Roll back. Same rule: do not fix forward in prod.
 
@@ -442,7 +442,7 @@ Without real-user traffic, the standard "watch the metrics" framing does not app
 
 ## 7. Post-Deploy Verification Checklist
 
-Run this checklist in staging before prod, and again in prod after deploy.
+Run this checklist in dev (expanded G4) before prod, and again in prod after deploy.
 
 ### 7.1 Auth module integrity
 
