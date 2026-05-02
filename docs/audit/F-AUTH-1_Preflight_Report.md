@@ -21,8 +21,6 @@ mounts) added this round per user request — see §14. Five findings
 3. D18 — disposition for the two test-disabled mutation routes at
    `episodes.js:400, :473`.
 4. D21 — drop or keep `authenticate` alias at `auth.js:237`.
-5. §5.1 deliverable — Cognito runtime env-var confirmation in dev,
-   staging, prod (out-of-band; user-owned action).
 
 No implementation work begins until G1 actually passes.
 
@@ -210,12 +208,24 @@ Per-file counts from v1 §4 unchanged. `sceneSetRoutes.js` (51), `worldEvents.js
 
 ---
 
-## §5. Cognito env vars (item e) — UNCHANGED
+## §5. Cognito env vars (item e) — INFRA SCOPE LOCKED (dev + prod)
 
-v1 §5 stands. Templates contain the vars; runtime status in dev / staging /
-prod is **not confirmable from this sandbox**. Fix plan §5.1 step 24 (line
-602–604) and §6.1 G4 (line 753–758) require boot-test verification before
-G5; that verification is not pre-flight's job.
+Infrastructure scope is now explicitly locked by user decision:
+**Prime Studios intended runtime is dev + prod.** Staging is not part of
+the active topology for this audit cycle.
+
+Runtime verification from this round:
+
+- Interactive SSH shell env did not expose `COGNITO_*` vars (expected when
+  values are injected at process manager level).
+- PM2 runtime env for both `episode-api` and `episode-worker` includes:
+  - `COGNITO_USER_POOL_ID=us-east-1_mFVU52978`
+  - `COGNITO_CLIENT_ID=lgtf3odnar8c456iehqfck1au`
+  - `COGNITO_REGION=us-east-1`
+
+Fix plan §5.1 step 24 and §6.1 G4 still require runtime confirmation before
+backend deploy gates; with infra scope now locked, that confirmation is
+required for **dev and prod**.
 
 **Fix plan §5.2 step 34 (line 661–665) — NEW INSIGHT:** Step 1 (F-Auth-2
 boot-fail) lands **LAST** within the PR. v1 implied a different ordering.
@@ -470,9 +480,9 @@ all of them) but need locks before later steps:
    on 9 mount sites in `compositions.js` (7) + `routes/auth.js` (2).
    Recommend it stays out of Step 6b scope; user override welcome.
    Needed before Step 6b.
-4. **Cognito runtime env confirmation (Gate G4 prerequisite).** User
-   verifies out-of-band before backend deploy to dev. Not pre-flight's
-   job.
+4. **Cognito runtime env scope.** **LOCKED:** Prime Studios infra is
+  intentionally **dev + prod**. Staging is intentionally out of active
+  scope for this cycle.
 
 ### §11.6 Items LOCKED by canon (no longer open)
 
