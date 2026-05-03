@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.2 — Single-PR plan. Track 1.5 approved (frontend test scaffolding). Test patterns recorded.
+**Document version:** v2.3 — Single-PR plan. Track 1.6 approved (backend requireAuth split + AUTH_INVALID_FORMAT contract closure).
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Track 1 + Track 1.5 complete. Track 1.6 (backend requireAuth split) is next.
+**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Track 1 + Track 1.5 + Track 1.6 complete. F-Auth-4 contract closed end-to-end. Track 2 (Path A migration) is next.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -358,16 +358,43 @@ Track 1 surfaced (§3.2) that **backend `requireAuth` currently emits `AUTH_REQU
 
 - Track 1.6 closes the contract end-to-end before migration tracks land. Without it, Tracks 2/3/4/6/7 migrate call sites that depend on the new contract working correctly — and they would silently log users out on token expiry instead of refreshing.
 - Deliverables for Track 1.6 (backend, `src/middleware/auth.js`):
-  - In `requireAuth`: branch on whether the Authorization header was present. No header → 401 with code `AUTH_REQUIRED` (current behavior). Header present, verifier rejected → 401 with code `AUTH_INVALID_TOKEN` (new).
-  - Use the same Cognito-vs-rejected classifier landed in Step 2: `findCognitoInfraCause(err)` → if matches, this is an infra failure (already handled by F-Auth-3 path); else this is a token-rejection (emit `AUTH_INVALID_TOKEN`).
+  - In `requireAuth`: emit four distinct error codes based on what was wrong with the request:
+    - No Authorization header → 401 with code `AUTH_REQUIRED` (current behavior; preserved)
+    - Authorization header present but malformed (not 2 parts or not "Bearer ...") → 401 with code `AUTH_INVALID_FORMAT` (v2.3 amendment — see below)
+    - Header valid format, verifier rejected token → 401 with code `AUTH_INVALID_TOKEN` (NEW)
+    - Header valid format, Cognito infra failure → 503 with code `AUTH_SERVICE_UNAVAILABLE` (existing F-Auth-3 path; preserved)
+  - Use the same Cognito-vs-rejected classifier landed in Step 2: `findCognitoInfraCause(err)` → if matches, this is an infra failure; else this is a token-rejection (emit `AUTH_INVALID_TOKEN`).
 - Add unit tests for the split:
   - No header → 401 + `AUTH_REQUIRED`
+  - Malformed header → 401 + `AUTH_INVALID_FORMAT` (v2.3 amendment — matches authenticateToken; Track 1 interceptor pass-throughs)
   - Header + valid token → 200 + `req.user` populated
-  - Header + verifier-rejected token → 401 + `AUTH_INVALID_TOKEN` (new)
+  - Header + verifier-rejected token → 401 + `AUTH_INVALID_TOKEN` (NEW)
   - Header + Cognito infra failure → 503 (already covered by Step 2 tests; verify no regression)
 - Once Track 1.6 lands, the F-Auth-4 Path 1 contract is complete on requireAuth routes: frontend interceptor + backend codes both speak the new vocabulary. Mid-session token expiry now triggers refresh, not logout.
-- Track 1.6 does NOT touch `authenticateToken` (which already emits `AUTH_INVALID_TOKEN`). `authenticateToken` is removed entirely later in Step 6b backend cleanup per §4.6 backend changes (LOCKED v1.8) — the duplicate at `middleware/auth.js:256–293` is deleted.
+
+##### Track 1.6 — AUTH_INVALID_FORMAT amendment (v2.3, locked from commit `e0b03d18`)
+
+Track 1.6 was originally specced (v2.1) with three outcomes: `AUTH_REQUIRED` / `AUTH_INVALID_TOKEN` / `AUTH_SERVICE_UNAVAILABLE`. The malformed-header case (header present but not in "Bearer <token>" 2-part format) was inherited as `AUTH_REQUIRED` from prior code. Track 1.6 implementation review surfaced this as a contract mismatch:
+
+- A logged-in user whose code accidentally sends a malformed Authorization header receives 401 `AUTH_REQUIRED`.
+- Track 1 frontend interceptor reads `AUTH_REQUIRED` → wipes session and redirects to `/login`.
+- Net effect: a client-side integration bug punts the user to login. The user IS logged in (the header is set); they should see an inline error, not a session redirect.
+
+Resolution: **`requireAuth` emits `AUTH_INVALID_FORMAT` for the malformed-header case** (matches `authenticateToken`'s existing behavior at `auth.js:98`). The Track 1 interceptor already pass-throughs `AUTH_INVALID_FORMAT` per LOCKED §4.6 (the user sees the error inline, no redirect). The contract is now end-to-end consistent across all four codes:
+
+- `AUTH_REQUIRED` → frontend redirects to login (correct: user is not logged in)
+- `AUTH_INVALID_FORMAT` → frontend pass-through, inline error (correct: user IS logged in, integration bug)
+- `AUTH_INVALID_TOKEN` → frontend refreshes-then-redirects (correct: user was logged in, token expired, auto-recover or escalate)
+- `AUTH_SERVICE_UNAVAILABLE` → frontend caller decides UX (correct: not a session issue)
+
+Implementation note: response message and error label aligned to `authenticateToken`'s existing `AUTH_INVALID_FORMAT` response for cross-middleware consistency. A 4-line comment at the malformed-header branch in `auth.js` documents the WHY, preventing future maintainers from "fixing" it back to `AUTH_REQUIRED`.
+
+- Track 1.6 does NOT touch `authenticateToken` (which already emits `AUTH_INVALID_TOKEN` and `AUTH_INVALID_FORMAT`). `authenticateToken` is removed entirely later in Step 6b backend cleanup per §4.6 backend changes (LOCKED v1.8) — the duplicate at `middleware/auth.js:256–293` is deleted.
 - Estimated: middleware change + tests = single commit. Reviewed and approved before Track 2 begins.
+
+##### Pre-existing message-leak fix (silently closed in Track 1.6)
+
+Pre-Track-1.6 `requireAuth`'s catch block returned `message: error.message` to clients — the wrapped verifier error message ("Token verification failed: JwtExpiredError: ..." etc.) leaked verifier internals. Track 1.6's refactor hardened this to a generic "The provided token is invalid or expired." message. Verifier internals stay in server-side logs only via the structured `[F-Auth-4] requireAuth: token rejected` log line. Net effect: small information-leak surface closed as a side effect of the spec'd work. Documented here so future readers see the fix was intentional, not silent.
 
 ##### Track 2 — Migrate Path A (authHeader) to apiClient
 
@@ -820,7 +847,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2` on `feature/f-auth-1`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`, 14/14 tests pass, Track 1 interceptor verified clean by tests). Track 1.6 backend requireAuth split is next, then Track 2.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2` on `feature/f-auth-1`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`, 14/14 tests pass). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18` — amended in v2.3 to emit `AUTH_INVALID_FORMAT` for malformed headers, closing F-Auth-4 contract end-to-end across all four codes; 436/436 middleware tests pass). Track 2 (Path A migration) is next.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
