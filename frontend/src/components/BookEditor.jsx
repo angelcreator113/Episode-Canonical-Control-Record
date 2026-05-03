@@ -173,10 +173,15 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (!proseSavedRef.current && proseRef.current && chapterIdRef.current) {
-        // Use sendBeacon for reliable save during unload
+        // keepalive: true preserves the request through page navigation;
+        // unlike sendBeacon, fetch carries the Authorization header.
         const url = `${API}/chapters/${chapterIdRef.current}/save-draft`;
-        const blob = new Blob([JSON.stringify({ draft_prose: proseRef.current })], { type: 'application/json' });
-        navigator.sendBeacon(url, blob);
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader() },
+          body: JSON.stringify({ draft_prose: proseRef.current }),
+          keepalive: true,
+        });
         e.preventDefault();
         e.returnValue = '';
       }
