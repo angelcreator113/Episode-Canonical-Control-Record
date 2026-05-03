@@ -1,12 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import apiClient from '../services/api';
 
 const API = '/api/v1';
-const getToken = () => localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-const authHeaders = () => ({
-  'Content-Type': 'application/json',
-  Authorization: `Bearer ${getToken()}`,
-});
+
+// Track 3 module-scope helpers (Pattern D).
+export const fetchEpisodeForBeats = (episodeId) =>
+  apiClient.get(`${API}/episodes/${episodeId}`);
+
+export const fetchScenesByEpisode = (episodeId) =>
+  apiClient.get(`${API}/scenes?episode_id=${episodeId}`);
+
+export const fetchSceneDetail = (sceneId) =>
+  apiClient.get(`${API}/scenes/${sceneId}`);
+
+export const generateSceneBeats = (sceneId, scriptLines) =>
+  apiClient.post(`${API}/scenes/${sceneId}/beats/generate`, { scriptLines });
+
+export const fetchSceneComposition = (sceneId) =>
+  apiClient.get(`${API}/scenes/${sceneId}/composition`);
 
 export default function BeatGeneration() {
   const { episodeId } = useParams();
@@ -19,12 +31,12 @@ export default function BeatGeneration() {
   const load = useCallback(async () => {
     try {
       const [epRes, scRes] = await Promise.all([
-        fetch(`${API}/episodes/${episodeId}`, { headers: authHeaders() }),
-        fetch(`${API}/scenes?episode_id=${episodeId}`, { headers: authHeaders() }),
+        fetchEpisodeForBeats(episodeId).catch(() => null),
+        fetchScenesByEpisode(episodeId).catch(() => null),
       ]);
-      if (epRes.ok) setEpisode(await epRes.json());
-      if (scRes.ok) {
-        const d = await scRes.json();
+      if (epRes) setEpisode(epRes.data);
+      if (scRes) {
+        const d = scRes.data;
         setScenes(Array.isArray(d) ? d : d.data || []);
       }
     } catch (e) {
@@ -40,9 +52,8 @@ export default function BeatGeneration() {
     setGenerating(sceneId);
     setFlash(null);
     try {
-      const sceneRes = await fetch(`${API}/scenes/${sceneId}`, { headers: authHeaders() });
-      if (!sceneRes.ok) throw new Error('Failed to load scene');
-      const scene = await sceneRes.json();
+      const sceneRes = await fetchSceneDetail(sceneId);
+      const scene = sceneRes.data;
 
       const scriptLines = (scene.script_lines || scene.scriptLines || []);
       if (scriptLines.length === 0) {
@@ -51,19 +62,11 @@ export default function BeatGeneration() {
         return;
       }
 
-      const res = await fetch(`${API}/scenes/${sceneId}/beats/generate`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ scriptLines }),
-      });
-      const d = await res.json();
-      if (res.ok) {
-        setFlash({ type: 'ok', msg: `Generated ${d.data?.count || 0} beats for scene.` });
-      } else {
-        setFlash({ type: 'err', msg: d.error || 'Beat generation failed' });
-      }
+      const res = await generateSceneBeats(sceneId, scriptLines);
+      const d = res.data;
+      setFlash({ type: 'ok', msg: `Generated ${d.data?.count || 0} beats for scene.` });
     } catch (e) {
-      setFlash({ type: 'err', msg: e.message });
+      setFlash({ type: 'err', msg: e.response?.data?.error || e.message || 'Beat generation failed' });
     } finally {
       setGenerating(null);
     }
@@ -71,13 +74,11 @@ export default function BeatGeneration() {
 
   const viewComposition = async (sceneId) => {
     try {
-      const res = await fetch(`${API}/scenes/${sceneId}/composition`, { headers: authHeaders() });
-      if (res.ok) {
-        const d = await res.json();
-        setFlash({ type: 'ok', msg: `Scene has ${d.data?.total_beats || 0} beats (${d.data?.dialogue_beats || 0} dialogue, ${d.data?.ui_beats || 0} UI)` });
-      }
+      const res = await fetchSceneComposition(sceneId);
+      const d = res.data;
+      setFlash({ type: 'ok', msg: `Scene has ${d.data?.total_beats || 0} beats (${d.data?.dialogue_beats || 0} dialogue, ${d.data?.ui_beats || 0} UI)` });
     } catch (e) {
-      setFlash({ type: 'err', msg: e.message });
+      setFlash({ type: 'err', msg: e.response?.data?.error || e.message });
     }
   };
 
