@@ -334,56 +334,102 @@ const authenticate = authenticateToken;
  */
 const authorizeRole = authorize;
 
+/**
+ * requireAuth — F-Auth-4 Path 1 (post Track 1.6 split).
+ *
+ * Emits distinct error codes so the frontend interceptor can branch:
+ *   - No Authorization header → 401 AUTH_REQUIRED. Frontend wipes
+ *     creds and redirects to /login (no session present).
+ *   - Header present but malformed (not "Bearer <token>") →
+ *     401 AUTH_INVALID_FORMAT. Frontend pass-throughs (LOCKED §4.6) —
+ *     this is a client-side integration bug, NOT a session failure.
+ *   - Cognito/JWKS infra failure (verifier could not reach Cognito) →
+ *     503 AUTH_SERVICE_UNAVAILABLE. Inherits F-Auth-3 classifier and
+ *     structured server-side log.
+ *   - Header present, verifier rejected the token → 401 AUTH_INVALID_TOKEN.
+ *     Frontend attempts refresh-once-then-redirect.
+ *
+ * Functionally same path as authenticateToken minus the unified-contract codes.
+ * The duplicate authenticateToken implementation is removed in a later Step 6b
+ * backend cleanup commit.
+ */
+const requireAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({
+      error: 'Authorization required',
+      message: 'This action requires a signed-in user.',
+      code: 'AUTH_REQUIRED',
+    });
+  }
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
+    // Header present but unparseable — the user IS logged in (header is set);
+    // this is a client-side integration bug, NOT a session failure. Match
+    // authenticateToken's contract so the Track 1 interceptor pass-throughs
+    // (LOCKED §4.6) instead of redirecting to /login.
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Invalid authorization header format. Use: Bearer <token>',
+      code: 'AUTH_INVALID_FORMAT',
+    });
+  }
+  try {
+    const decoded = await verifyToken(parts[1]);
+    req.user = {
+      id: decoded.sub,
+      email: decoded.email,
+      name: decoded.name,
+      groups: decoded['cognito:groups'] || decoded.groups || [],
+      tokenUse: decoded.token_use,
+      issuedAt: decoded.iat,
+      expiresAt: decoded.exp,
+      raw: decoded,
+    };
+    return next();
+  } catch (error) {
+    const infraCause = findCognitoInfraCause(error);
+    if (infraCause) {
+      // Inherits F-Auth-3 structured log + 503 contract from optionalAuth.
+      // requireAuth is strict — no degradeOnInfraFailure option.
+      console.error('[F-Auth-3] cognito_unreachable', {
+        name: infraCause.name,
+        code: infraCause.code,
+        message: error.message,
+        path: req.path,
+        method: req.method,
+        degraded: false,
+      });
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'Authentication service is temporarily unavailable',
+        code: 'AUTH_SERVICE_UNAVAILABLE',
+      });
+    }
+    // F-Auth-4: token-rejection emits AUTH_INVALID_TOKEN so the frontend
+    // interceptor can attempt refresh-once-then-redirect (per fix plan §4.6).
+    // Cause is logged server-side; client sees a generic message — no verifier
+    // internals leak.
+    console.log('[F-Auth-4] requireAuth: token rejected', {
+      message: error.message,
+      path: req.path,
+      method: req.method,
+    });
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'The provided token is invalid or expired.',
+      code: 'AUTH_INVALID_TOKEN',
+    });
+  }
+};
+
 module.exports = {
   authenticate,
   authenticateToken,
   authorize,
   authorizeRole,
   optionalAuth,
-  // requireAuth — same as authenticateToken, but returns a distinct
-  // response code (`AUTH_REQUIRED`) that the frontend interceptor
-  // recognizes as "this endpoint needs a token, but failing it should
-  // NOT wipe credentials or force a redirect to /login." Use on
-  // mutations that creators may invoke while their session is mid-
-  // refresh. Functionally identical to authenticateToken otherwise.
-  requireAuth: async (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({
-        error: 'Authorization required',
-        message: 'This action requires a signed-in user.',
-        code: 'AUTH_REQUIRED',
-      });
-    }
-    const parts = authHeader.split(' ');
-    if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
-      return res.status(401).json({
-        error: 'Authorization required',
-        message: 'Invalid authorization header. Use: Bearer <token>',
-        code: 'AUTH_REQUIRED',
-      });
-    }
-    try {
-      const decoded = await verifyToken(parts[1]);
-      req.user = {
-        id: decoded.sub,
-        email: decoded.email,
-        name: decoded.name,
-        groups: decoded['cognito:groups'] || decoded.groups || [],
-        tokenUse: decoded.token_use,
-        issuedAt: decoded.iat,
-        expiresAt: decoded.exp,
-        raw: decoded,
-      };
-      next();
-    } catch (error) {
-      return res.status(401).json({
-        error: 'Authorization required',
-        message: error.message,
-        code: 'AUTH_REQUIRED',
-      });
-    }
-  },
+  requireAuth,
   verifyToken,
   verifyGroup,
 };
