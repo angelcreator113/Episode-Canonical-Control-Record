@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import apiClient from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import '../styles/AuditLog.css';
@@ -28,22 +29,18 @@ const AuditLogViewer = () => {
     const fetchLogs = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem('authToken');
-        
+
         // Build query parameters
         const params = new URLSearchParams();
         if (filters.action !== 'all') params.append('action', filters.action);
         if (filters.resource !== 'all') params.append('resource', filters.resource);
         if (filters.user) params.append('user', filters.user);
         if (searchQuery) params.append('search', searchQuery);
-        
-        const response = await fetch(`/api/v1/audit-logs?${params.toString()}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
 
-        if (!response.ok) {
+        let response;
+        try {
+          response = await apiClient.get(`/api/v1/audit-logs?${params.toString()}`);
+        } catch (apiErr) {
           // Fallback to mock data if API fails
           console.warn('Audit API unavailable, using sample data');
           const mockLogs = [
@@ -88,7 +85,7 @@ const AuditLogViewer = () => {
           return;
         }
 
-        const data = await response.json();
+        const data = response.data;
         setLogs(data.data || []);
       } catch (err) {
         console.error('Error fetching audit logs:', err);

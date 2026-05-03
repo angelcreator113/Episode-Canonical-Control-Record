@@ -1,6 +1,10 @@
 import { useState } from 'react';
+import apiClient from '../services/api';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+export const pushToBrain = (pageName, data) =>
+  apiClient.post(`${API}/franchise-brain/push-from-page`, { page_name: pageName, page_data: data });
 
 /**
  * "Push to Brain" button — sends page data through the franchise brain ingest pipeline.
@@ -16,23 +20,11 @@ export default function PushToBrain({ pageName, data }) {
     setPushing(true);
     setResult(null);
     try {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-      const res = await fetch(`${API}/franchise-brain/push-from-page`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ page_name: pageName, page_data: data }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Push failed');
-      }
-      const d = await res.json();
+      const res = await pushToBrain(pageName, data);
+      const d = res.data;
       setResult({ ok: true, msg: d.message || `Pushed ${d.entries_created} entries` });
     } catch (e) {
-      setResult({ ok: false, msg: e.message });
+      setResult({ ok: false, msg: e.response?.data?.error || e.message || 'Push failed' });
     } finally {
       setPushing(false);
     }

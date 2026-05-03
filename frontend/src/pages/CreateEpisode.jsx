@@ -10,6 +10,7 @@ import { useToast } from '../components/ToastContainer';
 import { API_URL } from '../config/api';
 import episodeService from '../services/episodeService';
 import thumbnailService from '../services/thumbnailService';
+import apiClient from '../services/api';
 import ErrorMessage from '../components/ErrorMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
 import TagInput from '../components/TagInput';
@@ -146,15 +147,8 @@ const CreateEpisode = () => {
     const fetchShows = async () => {
       try {
         setLoadingShows(true);
-        const response = await fetch(`${API_URL}/shows`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setShows(data.data || []);
-        }
+        const response = await apiClient.get(`${API_URL}/shows`);
+        setShows(response.data?.data || []);
       } catch (err) {
         console.error('Failed to load shows:', err);
       } finally {

@@ -5,6 +5,7 @@
    ──────────────────────────────────────────────────────────────────────────── */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 
 const API_BASE = '/api/v1';
 
@@ -17,21 +18,18 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
     if (!showId) return;
     setLoading(true);
     try {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-      // Fetch multiple data sources in parallel
+      // Fetch multiple data sources in parallel; apiClient interceptor handles auth.
       const [eventsRes, wardrobeRes, episodesRes, overlaysRes] = await Promise.allSettled([
-        fetch(`${API_BASE}/world/${showId}/events?limit=100`, { headers }).then(r => r.json()).catch(() => ({})),
-        fetch(`${API_BASE}/wardrobe?show_id=${showId}&limit=200`, { headers }).then(r => r.json()).catch(() => ({})),
-        fetch(`${API_BASE}/episodes?show_id=${showId}&limit=100`, { headers }).then(r => r.json()).catch(() => ({})),
-        fetch(`${API_BASE}/ui-overlays/${showId}`, { headers }).then(r => r.json()).catch(() => ({})),
+        apiClient.get(`${API_BASE}/world/${showId}/events?limit=100`),
+        apiClient.get(`${API_BASE}/wardrobe?show_id=${showId}&limit=200`),
+        apiClient.get(`${API_BASE}/episodes?show_id=${showId}&limit=100`),
+        apiClient.get(`${API_BASE}/ui-overlays/${showId}`),
       ]);
 
-      const events = eventsRes.status === 'fulfilled' ? (eventsRes.value?.events || []) : [];
-      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value?.data || []) : [];
-      const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value?.data || episodesRes.value || []) : [];
-      const overlays = overlaysRes.status === 'fulfilled' ? (overlaysRes.value?.data || []) : [];
+      const events = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.events || []) : [];
+      const wardrobe = wardrobeRes.status === 'fulfilled' ? (wardrobeRes.value.data?.data || []) : [];
+      const episodes = episodesRes.status === 'fulfilled' ? (episodesRes.value.data?.data || episodesRes.value.data || []) : [];
+      const overlays = overlaysRes.status === 'fulfilled' ? (overlaysRes.value.data?.data || []) : [];
 
       const readyEvents = events.filter(e => e.status !== 'draft').length;
       const overlayGenerated = overlays.filter(o => o.generated || o.url || o.asset_id).length;

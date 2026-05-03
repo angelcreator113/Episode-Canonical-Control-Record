@@ -98,15 +98,11 @@ export const authService = {
    */
   async logout() {
     try {
-      // Try to call backend logout endpoint
-      const token = this.getToken();
-      if (token) {
+      // Try to call backend logout endpoint. apiClient request interceptor
+      // adds Authorization automatically — no explicit Bearer construction needed.
+      if (this.getToken()) {
         try {
-          await api.post('/api/v1/auth/logout', {}, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          });
+          await api.post('/api/v1/auth/logout', {});
         } catch (err) {
           console.warn('Backend logout failed (continuing with local logout):', err.message);
         }

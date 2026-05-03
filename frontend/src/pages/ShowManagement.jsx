@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
+import apiClient from '../services/api';
 import './Shows.css';
 
 const ShowManagement = () => {
@@ -47,16 +48,8 @@ const ShowManagement = () => {
   const fetchShows = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/shows`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-      });
-      
-      if (!response.ok) throw new Error('Failed to load shows');
-      
-      const data = await response.json();
-      setShows(data.data || []);
+      const response = await apiClient.get(`${API_URL}/shows`);
+      setShows(response.data?.data || []);
       setError(null);
     } catch (err) {
       console.error('Error fetching shows:', err);
@@ -108,18 +101,10 @@ const ShowManagement = () => {
 
     setUploadingCover(true);
     try {
-      const response = await fetch(`${API_URL}/shows/${showId}/cover-image`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-        body: coverFormData,
-      });
-
-      if (!response.ok) throw new Error('Failed to upload cover image');
-
-      const data = await response.json();
-      return data.data.coverImageUrl;
+      // FormData: apiClient request interceptor strips Content-Type and lets
+      // the browser set the multipart boundary header. Authorization still added.
+      const response = await apiClient.post(`${API_URL}/shows/${showId}/cover-image`, coverFormData);
+      return response.data?.data?.coverImageUrl;
     } catch (err) {
       console.error('Error uploading cover:', err);
       throw err;
@@ -142,25 +127,18 @@ const ShowManagement = () => {
       const url = editingShow
         ? `${API_URL}/shows/${editingShow.id}`
         : `${API_URL}/shows`;
-      
-      const method = editingShow ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-        body: JSON.stringify(formData),
-      });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || errData.error || 'Failed to save show');
+      let response;
+      try {
+        response = editingShow
+          ? await apiClient.put(url, formData)
+          : await apiClient.post(url, formData);
+      } catch (apiErr) {
+        const body = apiErr.response?.data;
+        throw new Error(body?.message || body?.error || 'Failed to save show');
       }
 
-      const result = await response.json();
-      const savedShow = result.data;
+      const savedShow = response.data?.data;
 
       // Upload cover image if provided
       if (coverImage) {
@@ -198,12 +176,10 @@ const ShowManagement = () => {
 
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/shows/${showId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-      });
+      const response = await apiClient.delete(`${API_URL}/shows/${showId}`).then(
+        (r) => ({ ok: true, data: r.data }),
+        (err) => ({ ok: false, status: err.response?.status, data: err.response?.data }),
+      );
 
       if (!response.ok) throw new Error('Failed to delete show');
 

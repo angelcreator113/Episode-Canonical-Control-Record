@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useCallback, lazy, Suspense, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import apiClient from '../services/api';
 import './WorldStudio.css';
 
 const RelationshipEngine = lazy(() => import('./RelationshipEngine'));
@@ -21,6 +22,12 @@ const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
 
 const API = '/api/v1';
 const PAGE_SIZE = 20;
+
+// Track 4 module-scope helpers (Pattern D) for CharacterFollowsTab.
+export const fetchCharacterFollows = (characterKey) =>
+  apiClient.get(`/api/v1/character-follows/${characterKey}`);
+export const generateCharacterFollows = (characterKey) =>
+  apiClient.post(`/api/v1/character-follows/generate/${characterKey}`);
 
 /* ── World options ──────────────────────────────────────────────────── */
 const WORLD_OPTIONS = [
@@ -471,33 +478,27 @@ function CharacterFollowsTab({ characterKey, characterName }) {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
 
-  const API = '/api/v1/character-follows';
-  const getToken = () => localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-  const headers = () => { const t = getToken(); return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }; };
+  // Auth headers handled by apiClient request interceptor (Track 4).
 
   useEffect(() => {
     if (!characterKey) return;
     setLoading(true);
     setError(null);
-    fetch(`${API}/${characterKey}`, { headers: headers() })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { setFollowData(d); setLoading(false); })
-      .catch((e) => { setError('Failed to load follow data'); setLoading(false); });
+    fetchCharacterFollows(characterKey)
+      .then(r => { setFollowData(r.data); setLoading(false); })
+      .catch(() => { setError('Failed to load follow data'); setLoading(false); });
   }, [characterKey]);
 
   const generateProfile = async () => {
     setGenerating(true);
     setError(null);
     try {
-      const res = await fetch(`${API}/generate/${characterKey}`, { method: 'POST', headers: headers() });
-      if (res.ok) {
-        const refreshRes = await fetch(`${API}/${characterKey}`, { headers: headers() });
-        if (refreshRes.ok) setFollowData(await refreshRes.json());
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setError(err.error || 'Failed to generate follow profile');
-      }
-    } catch { setError('Network error generating follow profile'); }
+      await generateCharacterFollows(characterKey);
+      const refreshRes = await fetchCharacterFollows(characterKey);
+      setFollowData(refreshRes.data);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to generate follow profile');
+    }
     setGenerating(false);
   };
 
