@@ -8,6 +8,11 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../services/api';
 
+// Extracted to module scope so Track 2.5 behavioral tests can exercise the
+// network call shape without mounting the full component.
+export const saveSections = (chapterId, sections) =>
+  apiClient.put(`/api/v1/storyteller/chapters/${chapterId}`, { sections });
+
 const SECTION_TYPES = [
   { value: 'scene', label: 'Scene', dot: '🟢' },
   { value: 'beat', label: 'Beat', dot: '🔵' },
@@ -41,7 +46,7 @@ export default function SectionEditor({ chapter, onSave, onGoToSection, toast })
     setSaving(true);
     try {
       const cleaned = updated.map(({ _key, ...rest }) => rest);
-      await apiClient.put(`/api/v1/storyteller/chapters/${chapter.id}`, { sections: cleaned });
+      await saveSections(chapter.id, cleaned);
       onSave?.(cleaned);
       toast.add('Sections saved');
     } catch {

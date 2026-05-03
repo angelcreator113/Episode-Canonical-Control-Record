@@ -30,6 +30,34 @@ import { getCharacterRulesPrompt } from '../data/characterAppearanceRules';
 import { getVentureContext } from '../data/ventureData';
 import { API, api } from '../utils/storytellerApi';
 import apiClient from '../services/api';
+
+// Extracted to module scope for Track 2.5 behavioral tests.
+export const saveDraftProse = (chapterId, text) =>
+  apiClient.post(`${API}/chapters/${chapterId}/save-draft`, { draft_prose: text });
+
+export const runAiActionRequest = (endpoint, payload) =>
+  apiClient.post(endpoint, payload);
+
+export const confirmVoiceType = (lineId, voiceType) =>
+  apiClient.post('/api/v1/memories/confirm-voice', { line_id: lineId, voice_type: voiceType });
+
+// Documented exception: this is the ONLY raw-fetch survivor in the post-Track-2
+// codebase. apiClient/axios does not natively support keepalive: true, which is
+// required for the request to survive page navigation per CZ-5 contract.
+// Token is read inline (Path D shape) rather than via apiClient's request
+// interceptor because the interceptor only runs on apiClient calls.
+export const sendKeepaliveBeforeUnload = (chapterId, text) => {
+  const token = localStorage.getItem('authToken');
+  return fetch(`${API}/chapters/${chapterId}/save-draft`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ draft_prose: text }),
+    keepalive: true,
+  });
+};
 import { numberWord } from '../utils/storytellerHelpers';
 
 export default
@@ -147,7 +175,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
     const chId = chapterIdRef.current;
     if (!text || !chId) return;
     try {
-      await apiClient.post(`${API}/chapters/${chId}/save-draft`, { draft_prose: text });
+      await saveDraftProse(chId, text);
       setProseSaved(true);
       proseSavedRef.current = true;
       markSaved();
@@ -164,27 +192,12 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
     return () => clearTimeout(proseSaveTimer.current);
   }, [proseText, proseSaved, activeChapterId, doSave]);
 
-  // Save immediately before page unload (handles refresh / tab close).
-  // Track 2 note: this site intentionally remains raw fetch + inline Bearer
-  // (Path D shape) because apiClient/axios does not natively support
-  // `keepalive: true`. keepalive is required for the request to survive
-  // page navigation — that's the whole point of this beforeunload handler
-  // (CZ-5 contract). The Track 1 interceptor's session-redirect logic does
-  // not apply here either: the user is already navigating away.
+  // Save immediately before page unload — uses sendKeepaliveBeforeUnload
+  // helper (Track 2 documented raw-fetch exception per CZ-5 contract).
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (!proseSavedRef.current && proseRef.current && chapterIdRef.current) {
-        const token = localStorage.getItem('authToken');
-        const url = `${API}/chapters/${chapterIdRef.current}/save-draft`;
-        fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ draft_prose: proseRef.current }),
-          keepalive: true,
-        });
+        sendKeepaliveBeforeUnload(chapterIdRef.current, proseRef.current);
         e.preventDefault();
         e.returnValue = '';
       }
@@ -301,7 +314,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
     }
 
     try {
-      const res = await apiClient.post(action.endpoint, payload);
+      const res = await runAiActionRequest(action.endpoint, payload);
       const data = res.data;
 
       if (action.id === 'rewrite') {
@@ -598,7 +611,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
               onConfirm={async (lineId, newType) => {
                 updateLineLocal(lineId, { voice_type: newType, voice_confirmed: true });
                 try {
-                  await apiClient.post('/api/v1/memories/confirm-voice', { line_id: lineId, voice_type: newType });
+                  await confirmVoiceType(lineId, newType);
                 } catch (e) { console.error('Voice confirm failed:', e); }
               }}
             />

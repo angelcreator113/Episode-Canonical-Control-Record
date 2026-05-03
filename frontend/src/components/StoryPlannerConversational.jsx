@@ -14,6 +14,19 @@ import './StoryPlannerConversational.css';
 
 const API = '/api/v1';
 
+// Extracted to module scope for Track 2.5 behavioral tests.
+export const sendStoryPlannerChat = (payload) =>
+  apiClient.post(`${API}/memories/story-planner-chat`, payload);
+
+export const updateBookViaPlanner = (bookId, updates) =>
+  apiClient.put(`${API}/storyteller/books/${bookId}`, updates);
+
+export const createChapterViaPlanner = (bookId, payload) =>
+  apiClient.post(`${API}/storyteller/books/${bookId}/chapters`, payload);
+
+export const updateChapterViaPlanner = (chapterId, body) =>
+  apiClient.put(`${API}/storyteller/chapters/${chapterId}`, body);
+
 // ── Opening message — adapts to what we already know ─────────────────────
 function makeOpeningMessage(book, chapters) {
   const title   = book?.title;
@@ -385,7 +398,7 @@ export default function StoryPlannerConversational({
     setSending(true);
 
     try {
-      const res = await apiClient.post(`${API}/memories/story-planner-chat`, {
+      const res = await sendStoryPlannerChat({
         message:    trimmed,
         history:    messages.slice(-20),
         book:       { id: book?.id, title: book?.title },
@@ -553,7 +566,7 @@ export default function StoryPlannerConversational({
         if (plan.setting)     bookUpdates.setting      = plan.setting;
         if (plan.conflict)    bookUpdates.conflict     = plan.conflict;
         if (plan.stakes)      bookUpdates.stakes       = plan.stakes;
-        await apiClient.put(`${API}/storyteller/books/${book.id}`, bookUpdates);
+        await updateBookViaPlanner(book.id, bookUpdates);
       }
 
       // Save chapter-level fields
@@ -591,7 +604,7 @@ export default function StoryPlannerConversational({
 
         if (ch._isNew || !ch.id) {
           // CREATE new chapter via POST
-          const createRes = await apiClient.post(`${API}/storyteller/books/${book.id}/chapters`, {
+          const createRes = await createChapterViaPlanner(book.id, {
             title:          chapterBody.title || `Chapter ${saved + 1}`,
             chapter_number: plan.chapters.indexOf(ch) + 1,
           });
@@ -599,11 +612,11 @@ export default function StoryPlannerConversational({
           if (createData.chapter?.id) {
             // Now update with all fields
             ch.id = createData.chapter.id;
-            await apiClient.put(`${API}/storyteller/chapters/${ch.id}`, chapterBody);
+            await updateChapterViaPlanner(ch.id, chapterBody);
           }
         } else {
           // UPDATE existing chapter via PUT
-          await apiClient.put(`${API}/storyteller/chapters/${ch.id}`, chapterBody);
+          await updateChapterViaPlanner(ch.id, chapterBody);
         }
         saved++;
       }
