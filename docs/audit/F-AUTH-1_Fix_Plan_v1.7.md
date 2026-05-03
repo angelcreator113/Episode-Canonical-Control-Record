@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v1.5 — Single-PR plan. G1 closed. Two-environment infra (dev + prod). All G2 prereqs verified.
+**Document version:** v1.7 — Single-PR plan. G2 reset after lost-work incident. All v1.6 amendments preserved. Cleanup discipline locked.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G1 CLOSED — pre-flight complete. G2 prereqs verified. Ready to begin Step 6a as commit 1 of F-AUTH-1 PR.
+**Status:** G2 RESET — implementation work lost in container reset (see §9.13). Re-implementation begins fresh against v1.7 canon with backup-push-after-approval discipline.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -110,20 +110,56 @@ All six steps land in a single PR. Each step has its own §4.x detail section be
 
 #### Fix
 
-- In optionalAuth, catch token-verification errors separately from "no Authorization header" and "header but verifier rejected as invalid token".
-- On verifier-throws-unexpected-error (Cognito timeout, DNS failure, JWKS unreachable): log at error level (not warn), increment a metric, and return 503 with a clear message — do NOT silently degrade to `req.user = null`.
+- In `optionalAuth`, catch token-verification errors separately from "no Authorization header" and "header but verifier rejected as invalid token".
+- Preserve the underlying verifier error via `Error.cause` when `verifyToken` rethrows. Without this preservation, the inner aws-jwt-verify error class is lost and `optionalAuth` cannot classify the failure mode. Detection in the classifier should match by `error.name` and `error.code` (not `instanceof`) to survive bundler/module-loading edge cases. (Confirmed during Step 2 implementation; recorded here so Step 6b reconciliation does not undo it.)
+- On verifier-throws-unexpected-error (Cognito timeout, DNS failure, JWKS unreachable): log at error level with a structured grep-friendly format, and return 503 with code `AUTH_SERVICE_UNAVAILABLE` — do **NOT** silently degrade to `req.user = null`. **EXCEPTION:** the `degradeOnInfraFailure` flag (see below).
 - On no-Authorization-header: `req.user = null` is correct, no log needed.
-- On invalid-token: `req.user = null` with a debug log (current `console.warn` is too loud for an expected case).
+- On invalid-token: `req.user = null` with a quiet log (use `console.log("[F-Auth-3] optionalAuth: token rejected", …)` — codebase ESLint config forbids `console.debug`; do not add lint suppressions or new dep).
 
-#### Verification
+#### `degradeOnInfraFailure` flag (v1.6 amendment)
 
-1. Hit a route under optionalAuth with no Authorization header → `req.user = null`, no log spam.
-2. Hit it with a malformed token → `req.user = null`, debug log only.
-3. Simulate Cognito unavailability (e.g., point JWKS URI at an invalid host) → expect 503, error log, metric incremented.
+Step 2 implementation surfaced a real edge case: a few `optionalAuth` routes are genuine public reads (`manuscript-export.js`, `press.js` per pre-flight §7.2 exemption list) that do NOT read `req.user` at all. For those routes, returning 503 during a Cognito outage is a regression — anonymous users would no longer be able to read the press kit or download a published manuscript just because the auth service is degraded. Public-read availability should not be coupled to auth-service health.
+
+**Resolution: `optionalAuth` accepts an options object with a `degradeOnInfraFailure` boolean.**
+
+- **Default: `false`.** Preserves the strict §4.2 behavior — Cognito outage returns 503 instead of silently degrading to anonymous. This is correct for routes that gate on `req.user` (most current optionalAuth users) because silent degradation hides the failure.
+- **When `degradeOnInfraFailure: true`:** Cognito outage falls back to `req.user = null` and continues. The structured error log still fires (visibility preserved); only the 503 response is suppressed.
+- **Usage:** routes pass the option at mount time, e.g., `router.get('/path', optionalAuth({ degradeOnInfraFailure: true }), handler)`.
+- Step 3 sweep applies this option to the genuine-public-read exemption list (the routes pre-flight §7.2 tagged for `// PUBLIC:` comments). All other optionalAuth-using routes get the default behavior (503 on outage).
+- Pre-flight §7.2 exemption list maps directly: `pageContent.js` GETs (already correct under default), `manuscript-export.js` GETs (need `degradeOnInfraFailure: true`), `press.js` GETs (need `degradeOnInfraFailure: true`). Other routes pre-flight surfaced as candidates remain default (strict 503) unless their route file explicitly justifies the flag with a `// PUBLIC:` comment.
+
+#### Metric mechanism — DECIDED
+
+Pre-flight confirmed Prime Studios has **no metrics library** in the codebase (no prom-client, statsd, opentelemetry, or in-house helper). Adding one mid-PR is scope creep. **Decision:** use a stable, grep-friendly structured log line in the format:
+
+```js
+console.error("[F-Auth-3] cognito_unreachable", { name, code, message, path, method })
+```
+
+Operators can wire this to a CloudWatch Logs metric filter, ELK/Loki count query, or PM2 log-monitor to derive the alarm signal §4.2 calls for. Real metric library is filed as P1 follow-up if/when needed; the call site is a single line so the swap is trivial.
+
+#### Tests (G3 prerequisite — added in Step 2)
+
+Unit tests added at `tests/unit/middleware/auth-gaps.test.js` (or equivalent) covering four cases:
+
+- **Case 1** — no Authorization header → `req.user = null`, no 503, no log spam
+- **Case 2** — token rejected (verifier throws JwtInvalidClaimError or similar) → `req.user = null`, single `console.log`, no 503
+- **Case 3** — Cognito infra error (FetchError, ECONNREFUSED, etc.) with default options → 503 with code `AUTH_SERVICE_UNAVAILABLE`, structured `console.error` fired
+- **Case 4** — Cognito infra error with `degradeOnInfraFailure: true` → `req.user = null`, structured `console.error` still fired (visibility), no 503
+
+Tests run as part of CI before G2 closes. G3 self-review confirms all four pass.
+
+#### Verification (G4)
+
+1. Hit a route under optionalAuth (default options) with no Authorization header → `req.user = null`, no log spam.
+2. Hit it with a malformed token → `req.user = null`, single quiet log only.
+3. Simulate Cognito unavailability (e.g., point JWKS URI at an invalid host) → expect 503 with `AUTH_SERVICE_UNAVAILABLE`, structured error log fired.
+4. Hit a route configured with `degradeOnInfraFailure: true` under simulated Cognito unavailability → expect 200 (or whatever the public route returns), structured error log still fired, no 503.
 
 #### Risk
 
-- Routes that intentionally accept partial-degradation behavior may need explicit opt-in. Audit each remaining optionalAuth use during pre-flight (§5.1) to confirm 503-on-outage is the correct response.
+- Step 3 sweep must correctly apply `degradeOnInfraFailure: true` to the exemption list. If applied wrongly (e.g., to a route that does gate on `req.user`), that route silently degrades during outages — exactly the bug F-Auth-3 was meant to prevent. Mitigation: every route receiving the flag gets a `// PUBLIC:` comment in Step 3 with the reasoning.
+- `Error.cause` requires Node ≥ 16.9. `package.json` specifies `"node": ">=20.0.0"` — fine. Note here so a future Node downgrade triggers a check.
 
 ---
 
@@ -159,6 +195,7 @@ All six steps land in a single PR. Each step has its own §4.x detail section be
 - After the per-route requireAuth is in place, remove the global optionalAuth mount at `app.js:364` — leaving it creates two passes through auth and confuses error handling.
 - Remove no-op fallback require blocks (`characterRegistry.js:12–22` and any twin instances).
 - For routes confirmed during pre-flight as genuinely public (read-only, no `req.user` gating downstream), document the exemption in a comment with the audit reasoning. Do not leave bare optionalAuth without a justifying comment.
+- For each genuine-public-read exemption, also pass `optionalAuth({ degradeOnInfraFailure: true })` instead of bare `optionalAuth` (per §4.2 amendment). This preserves availability of public reads during Cognito outages. The `// PUBLIC:` comment justifying the exemption should also reference the flag, e.g., `// PUBLIC: published canon, no req.user gating; degradeOnInfraFailure preserves availability during Cognito outages`.
 
 #### F34 absorbed here
 
@@ -451,9 +488,11 @@ Run this checklist on dev (during G4) and again on prod after G5 cutover.
 
 ### 7.2 optionalAuth error semantics (F-Auth-3)
 
-- [ ] optionalAuth route, no Authorization header — `req.user = null`, no log spam.
-- [ ] optionalAuth route, malformed token — `req.user = null`, debug log only.
-- [ ] optionalAuth route, simulated Cognito unavailability — 503 response, error log, metric incremented.
+- [ ] optionalAuth route (default options), no Authorization header — `req.user = null`, no log spam.
+- [ ] optionalAuth route, malformed token — `req.user = null`, single quiet log only.
+- [ ] optionalAuth route (default options), simulated Cognito unavailability — 503 response with code `AUTH_SERVICE_UNAVAILABLE`, structured error log fired (`[F-Auth-3] cognito_unreachable`).
+- [ ] optionalAuth route configured with `degradeOnInfraFailure: true` (manuscript-export.js GETs, press.js GETs), simulated Cognito unavailability — request still returns the public content (not 503), structured error log STILL fires.
+- [ ] Step 2 unit tests pass (4 cases per §4.2): no header / token rejected / infra error default / infra error with flag.
 
 ### 7.3 Sweep (a) — optionalAuth → requireAuth
 
@@ -593,6 +632,73 @@ Pre-flight env-var verification surfaced an unintentional finding: dev and prod 
 - Implication: any user signed up via dev exists in prod. Any auth state created in dev affects prod. Token issued by dev validates against prod (same User Pool).
 - F-AUTH-1 impact: **zero.** Both environments authenticate against real (non-placeholder) Cognito identifiers. F-Auth-2 boot-fail logic passes for both. Step 6b interceptor logic is pool-agnostic.
 - **Out of F-AUTH-1 scope.** Filed as P1 architectural follow-up: split Cognito pools — separate dev pool with separate Client ID, prod pool retained as canonical user store, env config updated per environment. **Trigger condition: schedule before any beta tester or external user signs up.** Once a non-Evoni user exists in the shared pool, the split becomes a data-migration problem rather than a config change.
+
+### 9.11 G2 progress log
+
+Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`. **Reset on v1.7 — see §9.13.**
+
+- **Step 6a — NEEDS REIMPLEMENTATION.** Original commit `23c9ffd` approved on first pass; lost when its container was reset before push (§9.13). Re-implement against §4.6 CZ-5 spec.
+- **Step 2 (F-Auth-3) — NEEDS REIMPLEMENTATION.** Original commits `54d4d09` (initial) and `ab2ce44` (amendment) approved on first pass; lost in same incident. Re-implement against §4.2 spec including `degradeOnInfraFailure` flag + four-case tests + `Error.cause` preservation.
+- **Step 6b — NOT STARTED.** Awaits Step 6a + Step 2 redo + frontend `authHeader()` caller inventory.
+- **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
+
+#### Surfaces for Step 6b reconciliation (preserved from original Step 6a transcript)
+
+- Frontend has TWO auth-injection paths: axios `apiClient` interceptor at `src/services/api.js` + `authHeader()` direct-fetch helper at `frontend/src/utils/storytellerApi.js`. `BookEditor.jsx` uses `authHeader()`. Both must be reconciled in Step 6b. Inventory of `authHeader()` callers required before Step 6b implementation begins.
+- `jest.spyOn` cannot intercept calls from inside the same module on CommonJS const-bound exports (closure binding, not export reference). Use `jest.mock('<dependency-module>')` instead. Worth knowing for future test additions.
+- Polymorphic `optionalAuth` detection (middleware vs factory shape) means `optionalAuth.toString()` introspection is no longer reliable. No consumer in codebase does this; flagged in case Step 6b interceptor work hits it.
+
+### 9.12 Deferred cleanups (post-F-AUTH-1)
+
+- Outer try/catch in `optionalAuth` at `~line 217` — currently unreachable defense-in-depth shell. Surfaced during original Step 2 implementation. Cleanup deferred to post-F-AUTH-1; not removed during this PR to avoid scope creep.
+- Real metrics library — Step 2 ships with structured-log-derived metrics. If Prime Studios adds prom-client / opentelemetry / similar later, the F-Auth-3 call site is one line and trivially swappable.
+- `console.debug` enablement — current ESLint config blocks it; Step 2 uses `console.log` as the quietest allowed level. If the project later wires up the `debug` package or adjusts ESLint, the F-Auth-3 quiet-log call site can move to `console.debug`.
+
+### 9.13 Lost-work incident (May 2, 2026) + cleanup discipline
+
+#### What happened
+
+Three approved F-AUTH-1 implementation commits were lost when the Claude Code container holding them was reset before the work was pushed to origin:
+
+- `23c9ffd` — Step 6a: BookEditor.jsx sendBeacon → fetch+keepalive
+- `54d4d09` — Step 2 initial: F-Auth-3 three-case classifier + Error.cause preservation
+- `ab2ce44` — Step 2 amendment: degradeOnInfraFailure flag + four-case unit tests
+
+All three commits were verified real (not generated text) in their original session via `git show --stat`. They lived only in the local container's `.git` object store. Per the standing constraint "do NOT push to a PR yet," no push was made. The constraint was meant to prevent premature PR opening; it was incorrectly extended to mean no push at all. When the container was replaced before the F-AUTH-1 PR was ready, the three commits became unrecoverable — not present in any ref of any clone with origin access.
+
+#### Recovery
+
+- Original SHAs are documented in §9.11 as historical-only references. They will not appear in the eventual F-AUTH-1 PR commit graph.
+- All implementation decisions reached during the lost work are preserved in this fix plan: §4.2 (Step 2 spec including `degradeOnInfraFailure` flag, `Error.cause` preservation, structured log schema with `degraded` field, four-case test requirement) and §4.6 (Step 6a CZ-5 spec).
+- Re-implementation runs against the locked v1.7 spec, not from the original transcripts. If the new implementation diverges from the locked spec, fix plan amendment is the correct path — not "the original commit did it differently."
+
+#### Cleanup discipline (LOCKED at v1.7, applies to all future F-AUTH-1 implementation work and all post-F-AUTH-1 fix work)
+
+**Rule 1 — One Claude Code session at a time touches dev.**
+
+If multiple Claude Code sessions are open, only one is the "writer" — the others are read-only. Writer is named at the start of each work block and stays the writer for the duration. Other sessions can read and diagnose but do not commit.
+
+**Rule 2 — Every approved commit on `feature/f-auth-1` (or any feature branch) gets pushed immediately to a backup branch.**
+
+- Backup branch name: `claude/f-auth-1-backup` (single, not date-stamped). Force-push is allowed; that is its purpose. Always points at the latest approved state.
+- The push happens **the same turn as approval**, not "at the end of G2," not "next session," not "before opening the PR." Same turn.
+- Command: `git push origin feature/f-auth-1:claude/f-auth-1-backup --force`
+
+**Rule 3 — The canonical feature branch name stays clean for the eventual PR.**
+
+`feature/f-auth-1` (or future `feature/f-app-1`, `feature/f-stats-1`, etc.) is pushed to origin only when the PR opens. Until then, all backups go to `claude/<feature>-backup`.
+
+**Rule 4 — No PR opened until all steps are committed and approved.**
+
+Push-to-backup is not a PR. The "do NOT open a PR yet" constraint stays. The "do NOT push" misinterpretation is rejected.
+
+**Rule 5 — If a session container looks unstable, push backup before logging off.**
+
+Indicators: container about to reset (rare warnings), switching machines, end of work session, network instability. When in doubt, push backup.
+
+#### Why this is in the canon document
+
+The audit principle from v8 §0 holds: **the audit trail is the audit trail.** Future Claude Code sessions reading this fix plan will see the lost-work incident and the discipline that followed it. Future sessions will be less likely to repeat the same failure mode because they read about it before starting work. This is operational learning made durable — exactly the use case "documentation as a living system" exists for.
 
 ---
 
