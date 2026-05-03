@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { authHeader } from '../utils/storytellerApi';
+import apiClient from '../services/api';
 import './StoryPlannerConversational.css';
 
 const API = '/api/v1';
@@ -385,34 +385,30 @@ export default function StoryPlannerConversational({
     setSending(true);
 
     try {
-      const res  = await fetch(`${API}/memories/story-planner-chat`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body:    JSON.stringify({
-          message:    trimmed,
-          history:    messages.slice(-20),
-          book:       { id: book?.id, title: book?.title },
-          plan:       plan,
-          characters: characters.map(c => ({
-            id:   c.id,
-            name: c.selected_name || c.name,
-            type: c.type,
+      const res = await apiClient.post(`${API}/memories/story-planner-chat`, {
+        message:    trimmed,
+        history:    messages.slice(-20),
+        book:       { id: book?.id, title: book?.title },
+        plan:       plan,
+        characters: characters.map(c => ({
+          id:   c.id,
+          name: c.selected_name || c.name,
+          type: c.type,
+        })),
+        approvalStatus: {
+          pending:  pendingApprovals.length,
+          approved: approvedCount,
+          items:    approvals.filter(a => a.status !== 'dismissed').map(a => ({
+            title: a.title, type: a.type, status: a.status,
           })),
-          approvalStatus: {
-            pending:  pendingApprovals.length,
-            approved: approvedCount,
-            items:    approvals.filter(a => a.status !== 'dismissed').map(a => ({
-              title: a.title, type: a.type, status: a.status,
-            })),
-          },
-          healthReport: {
-            issues: healthIssues,
-            counts: countHealthSeverity(healthIssues),
-          },
-        }),
+        },
+        healthReport: {
+          issues: healthIssues,
+          counts: countHealthSeverity(healthIssues),
+        },
       });
 
-      const data = await res.json();
+      const data = res.data;
 
       // Update plan with extracted fields
       if (data.planUpdates && Object.keys(data.planUpdates).length > 0) {
@@ -557,11 +553,7 @@ export default function StoryPlannerConversational({
         if (plan.setting)     bookUpdates.setting      = plan.setting;
         if (plan.conflict)    bookUpdates.conflict     = plan.conflict;
         if (plan.stakes)      bookUpdates.stakes       = plan.stakes;
-        await fetch(`${API}/storyteller/books/${book.id}`, {
-          method:  'PUT',
-          headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body:    JSON.stringify(bookUpdates),
-        });
+        await apiClient.put(`${API}/storyteller/books/${book.id}`, bookUpdates);
       }
 
       // Save chapter-level fields
@@ -599,31 +591,19 @@ export default function StoryPlannerConversational({
 
         if (ch._isNew || !ch.id) {
           // CREATE new chapter via POST
-          const createRes = await fetch(`${API}/storyteller/books/${book.id}/chapters`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', ...authHeader() },
-            body:    JSON.stringify({
-              title:          chapterBody.title || `Chapter ${saved + 1}`,
-              chapter_number: plan.chapters.indexOf(ch) + 1,
-            }),
+          const createRes = await apiClient.post(`${API}/storyteller/books/${book.id}/chapters`, {
+            title:          chapterBody.title || `Chapter ${saved + 1}`,
+            chapter_number: plan.chapters.indexOf(ch) + 1,
           });
-          const createData = await createRes.json();
+          const createData = createRes.data;
           if (createData.chapter?.id) {
             // Now update with all fields
             ch.id = createData.chapter.id;
-            await fetch(`${API}/storyteller/chapters/${ch.id}`, {
-              method:  'PUT',
-              headers: { 'Content-Type': 'application/json', ...authHeader() },
-              body:    JSON.stringify(chapterBody),
-            });
+            await apiClient.put(`${API}/storyteller/chapters/${ch.id}`, chapterBody);
           }
         } else {
           // UPDATE existing chapter via PUT
-          await fetch(`${API}/storyteller/chapters/${ch.id}`, {
-            method:  'PUT',
-            headers: { 'Content-Type': 'application/json', ...authHeader() },
-            body:    JSON.stringify(chapterBody),
-          });
+          await apiClient.put(`${API}/storyteller/chapters/${ch.id}`, chapterBody);
         }
         saved++;
       }

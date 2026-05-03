@@ -6,7 +6,7 @@
  * Extracted from StorytellerPage.jsx for maintainability.
  */
 import React, { useState, useEffect } from 'react';
-import { authHeader } from '../utils/storytellerApi';
+import apiClient from '../services/api';
 
 const SECTION_TYPES = [
   { value: 'scene', label: 'Scene', dot: '🟢' },
@@ -41,11 +41,7 @@ export default function SectionEditor({ chapter, onSave, onGoToSection, toast })
     setSaving(true);
     try {
       const cleaned = updated.map(({ _key, ...rest }) => rest);
-      await fetch(`/api/v1/storyteller/chapters/${chapter.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body: JSON.stringify({ sections: cleaned }),
-      });
+      await apiClient.put(`/api/v1/storyteller/chapters/${chapter.id}`, { sections: cleaned });
       onSave?.(cleaned);
       toast.add('Sections saved');
     } catch {
