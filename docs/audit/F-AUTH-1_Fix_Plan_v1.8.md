@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v1.7 — Single-PR plan. G2 reset after lost-work incident. All v1.6 amendments preserved. Cleanup discipline locked.
+**Document version:** v1.8 — Single-PR plan. Step 6a + Step 2 approved and backed up. Post-Step-2 amendments locked.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 RESET — implementation work lost in container reset (see §9.13). Re-implementation begins fresh against v1.7 canon with backup-push-after-approval discipline.
+**Status:** G2 IN PROGRESS — Step 6a + Step 2 complete. Step 6b is next, gated on frontend authHeader() caller inventory.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -133,10 +133,16 @@ Step 2 implementation surfaced a real edge case: a few `optionalAuth` routes are
 Pre-flight confirmed Prime Studios has **no metrics library** in the codebase (no prom-client, statsd, opentelemetry, or in-house helper). Adding one mid-PR is scope creep. **Decision:** use a stable, grep-friendly structured log line in the format:
 
 ```js
-console.error("[F-Auth-3] cognito_unreachable", { name, code, message, path, method })
+console.error("[F-Auth-3] cognito_unreachable", { name, code, message, path, method, degraded })
 ```
 
-Operators can wire this to a CloudWatch Logs metric filter, ELK/Loki count query, or PM2 log-monitor to derive the alarm signal §4.2 calls for. Real metric library is filed as P1 follow-up if/when needed; the call site is a single line so the swap is trivial.
+The `degraded` field is boolean: `true` when the request fell through to anonymous via `degradeOnInfraFailure`, `false` when 503 was returned. Operators can wire this to a CloudWatch Logs metric filter, ELK/Loki count query, or PM2 log-monitor to derive the alarm signal §4.2 calls for. Real metric library is filed as P1 follow-up if/when needed; the call site is a single line so the swap is trivial.
+
+#### Implementation note — wrapper vs. cause (LOCKED, do not regress)
+
+The structured log payload's `name` and `code` fields come from the matching cause via a classifier helper (`findCognitoInfraCause(err)`), **NOT** from the wrapper error directly. Reasoning: `verifyToken` wraps verifier errors via `Error.cause` to preserve information across the rethrow boundary. The wrapper itself has `name='Error'` and `code=undefined`, which would render the log payload useless if logged directly. The classifier walks the cause chain matching on `name` (set: `FetchError`, `NonRetryableFetchError`, `JwksNotAvailableInCacheError`, `WaitPeriodNotYetEndedJwkError`) or `code` (set: `ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`, `EAI_AGAIN`, `ECONNRESET`, `EHOSTUNREACH`, `ENETUNREACH`) and returns the matching error. The wrapper's `message` is preserved separately because it carries the readable "Token verification failed: ..." prefix.
+
+Future maintainers may be tempted to log `error.name` directly because the wrapper is the immediate object in scope. **Do not.** The first draft of Step 2 hit this and the test suite caught it. Lock as canon.
 
 #### Tests (G3 prerequisite — added in Step 2)
 
@@ -635,22 +641,24 @@ Pre-flight env-var verification surfaced an unintentional finding: dev and prod 
 
 ### 9.11 G2 progress log
 
-Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`. **Reset on v1.7 — see §9.13.**
+Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`. Backup of approved commits at `claude/f-auth-1-backup` on origin (§9.13 Rule 2).
 
-- **Step 6a — NEEDS REIMPLEMENTATION.** Original commit `23c9ffd` approved on first pass; lost when its container was reset before push (§9.13). Re-implement against §4.6 CZ-5 spec.
-- **Step 2 (F-Auth-3) — NEEDS REIMPLEMENTATION.** Original commits `54d4d09` (initial) and `ab2ce44` (amendment) approved on first pass; lost in same incident. Re-implement against §4.2 spec including `degradeOnInfraFailure` flag + four-case tests + `Error.cause` preservation.
-- **Step 6b — NOT STARTED.** Awaits Step 6a + Step 2 redo + frontend `authHeader()` caller inventory.
+- **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
+- **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
+- **Step 6b — NOT STARTED.** Pre-flight required: frontend `authHeader()` caller inventory before implementation begins (see surfaces below).
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
-#### Surfaces for Step 6b reconciliation (preserved from original Step 6a transcript)
+#### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
 
-- Frontend has TWO auth-injection paths: axios `apiClient` interceptor at `src/services/api.js` + `authHeader()` direct-fetch helper at `frontend/src/utils/storytellerApi.js`. `BookEditor.jsx` uses `authHeader()`. Both must be reconciled in Step 6b. Inventory of `authHeader()` callers required before Step 6b implementation begins.
-- `jest.spyOn` cannot intercept calls from inside the same module on CommonJS const-bound exports (closure binding, not export reference). Use `jest.mock('<dependency-module>')` instead. Worth knowing for future test additions.
+- Frontend has TWO auth-injection paths: axios `apiClient` interceptor at `src/services/api.js` + `authHeader()` direct-fetch helper at `frontend/src/utils/storytellerApi.js`. `BookEditor.jsx` uses `authHeader()`. Both must be reconciled in Step 6b. Inventory of `authHeader()` callers required before Step 6b implementation begins — this is a Step 6b prep deliverable.
+- `jest.spyOn` cannot intercept calls from inside the same module on CommonJS const-bound exports (closure binding, not export reference). Use `jest.mock('<dependency-module>')` with the factory form. Worth knowing for future test additions.
 - Polymorphic `optionalAuth` detection (middleware vs factory shape) means `optionalAuth.toString()` introspection is no longer reliable. No consumer in codebase does this; flagged in case Step 6b interceptor work hits it.
+- `verifyToken` has TWO paths that wrap verifier errors with `Error.cause`: the test path (`NODE_ENV=test` → `tokenService.verifyToken`) and the prod path (aws-jwt-verify direct). Both were updated in Step 2; do not regress either if Step 6b reconciliation touches `verifyToken`.
 
 ### 9.12 Deferred cleanups (post-F-AUTH-1)
 
-- Outer try/catch in `optionalAuth` at `~line 217` — currently unreachable defense-in-depth shell. Surfaced during original Step 2 implementation. Cleanup deferred to post-F-AUTH-1; not removed during this PR to avoid scope creep.
+Note: the outer try/catch entry that was deferred in v1.6/v1.7 was **cleaned up during Step 2 implementation** (commit `e80c711d`). The defense-in-depth shell was hiding bugs (synchronous throws in console calls, `req.headers` access edge cases) that the new three-case structure handles explicitly. Removed entry from this list as resolved.
+
 - Real metrics library — Step 2 ships with structured-log-derived metrics. If Prime Studios adds prom-client / opentelemetry / similar later, the F-Auth-3 call site is one line and trivially swappable.
 - `console.debug` enablement — current ESLint config blocks it; Step 2 uses `console.log` as the quietest allowed level. If the project later wires up the `debug` package or adjusts ESLint, the F-Auth-3 quiet-log call site can move to `console.debug`.
 
