@@ -4,11 +4,25 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v1.7.md
+========
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v1.7.md
+>>>>>>>> origin/main:docs/audit/F-AUTH-1_Fix_Plan_v1.5.md
 **Document version:** v1.7 — Single-PR plan. G2 reset after lost-work incident. All v1.6 amendments preserved. Cleanup discipline locked.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
 **Status:** G2 RESET — implementation work lost in container reset (see §9.13). Re-implementation begins fresh against v1.7 canon with backup-push-after-approval discipline.
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v1.7.md
+========
+========
+**Document version:** v1.5 — Single-PR plan. G1 closed. Two-environment infra (dev + prod). All G2 prereqs verified.
+
+**Author:** JAWIHP / Evoni — Prime Studios
+
+**Status:** G1 CLOSED — pre-flight complete. G2 prereqs verified. Ready to begin Step 6a as commit 1 of F-AUTH-1 PR.
+>>>>>>>> origin/main:docs/audit/F-AUTH-1_Fix_Plan_v1.5.md
+>>>>>>>> origin/main:docs/audit/F-AUTH-1_Fix_Plan_v1.5.md
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -633,6 +647,10 @@ Pre-flight env-var verification surfaced an unintentional finding: dev and prod 
 - F-AUTH-1 impact: **zero.** Both environments authenticate against real (non-placeholder) Cognito identifiers. F-Auth-2 boot-fail logic passes for both. Step 6b interceptor logic is pool-agnostic.
 - **Out of F-AUTH-1 scope.** Filed as P1 architectural follow-up: split Cognito pools — separate dev pool with separate Client ID, prod pool retained as canonical user store, env config updated per environment. **Trigger condition: schedule before any beta tester or external user signs up.** Once a non-Evoni user exists in the shared pool, the split becomes a data-migration problem rather than a config change.
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v1.7.md
+========
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v1.7.md
+>>>>>>>> origin/main:docs/audit/F-AUTH-1_Fix_Plan_v1.5.md
 ### 9.11 G2 progress log
 
 Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`. **Reset on v1.7 — see §9.13.**
@@ -700,6 +718,11 @@ Indicators: container about to reset (rare warnings), switching machines, end of
 
 The audit principle from v8 §0 holds: **the audit trail is the audit trail.** Future Claude Code sessions reading this fix plan will see the lost-work incident and the discipline that followed it. Future sessions will be less likely to repeat the same failure mode because they read about it before starting work. This is operational learning made durable — exactly the use case "documentation as a living system" exists for.
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v1.7.md
+========
+========
+>>>>>>>> origin/main:docs/audit/F-AUTH-1_Fix_Plan_v1.5.md
+>>>>>>>> origin/main:docs/audit/F-AUTH-1_Fix_Plan_v1.5.md
 ---
 
 ## 10. What This Unblocks
