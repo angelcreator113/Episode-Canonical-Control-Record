@@ -37,34 +37,93 @@ apiClient.interceptors.request.use(
   }
 );
 
-// ✅ RESPONSE INTERCEPTOR - Handle errors
+// ✅ RESPONSE INTERCEPTOR — F-Auth-4 Path 1 contract (Track 1, fix plan v2.0 §4.6)
+//
+// Codes the interceptor acts on:
+//  - AUTH_INVALID_FORMAT, AUTH_GROUP_REQUIRED, AUTH_ROLE_REQUIRED — pass-through (LOCKED).
+//    These are integration/permission errors, NOT session failures. Surfaced inline
+//    so the caller can show "you don't have access" rather than redirecting to /login.
+//  - AUTH_INVALID_TOKEN — header present, verifier rejected. Attempt refresh ONCE
+//    via the existing /api/v1/auth/refresh path; on success retry the original
+//    request, on failure redirect to /login. Single-retry-then-redirect — never loop.
+//  - AUTH_REQUIRED, AUTH_MISSING_TOKEN — no session present. Wipe creds, redirect.
+//  - 401 with no code / unknown code — treated as session failure for safety.
+//  - All other errors — pass through unchanged.
+
+// Inline refresh helper avoids circular import with authService and uses bare axios
+// so the refresh request itself bypasses this interceptor (no recursion risk).
+const refreshAccessToken = async () => {
+  const refreshToken = localStorage.getItem('refreshToken');
+  if (!refreshToken) throw new Error('No refresh token in storage');
+  const baseURL = apiClient.defaults.baseURL || '';
+  const res = await axios.post(`${baseURL}/api/v1/auth/refresh`, { refreshToken });
+  const newToken = res.data?.data?.accessToken;
+  if (!newToken) throw new Error('No accessToken in refresh response');
+  localStorage.setItem('authToken', newToken);
+  return newToken;
+};
+
+const wipeSessionAndRedirect = () => {
+  // Skip in DEV — keeps hot-reload from kicking devs to /login on every restart.
+  if (import.meta.env.DEV) return;
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
+  window.location.href = '/login';
+};
+
+const PASS_THROUGH_CODES = new Set([
+  'AUTH_INVALID_FORMAT',
+  'AUTH_GROUP_REQUIRED',
+  'AUTH_ROLE_REQUIRED',
+]);
+
+const SESSION_FAIL_CODES = new Set([
+  'AUTH_REQUIRED',
+  'AUTH_MISSING_TOKEN',
+]);
+
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    // Handle 401 Unauthorized.
-    //
-    // We distinguish two flavors:
-    //  - AUTH_REQUIRED: the endpoint needs a logged-in user but the
-    //    server didn't choose to invalidate the session. The caller
-    //    sees a normal rejected promise and can show its own UI
-    //    (toast, "sign in to do that" hint). We do NOT wipe the
-    //    stored token or hard-redirect — that nuked the session
-    //    every time a write briefly raced an in-flight token refresh.
-    //  - AUTH_INVALID_TOKEN / AUTH_MISSING_TOKEN (legacy strict
-    //    middleware): treat as a real session failure and bounce.
-    if (error.response?.status === 401 && !import.meta.env.DEV) {
-      const code = error.response?.data?.code;
-      const isHardFail = code === 'AUTH_INVALID_TOKEN' || code === 'AUTH_MISSING_TOKEN' || !code;
-      if (isHardFail && code !== 'AUTH_REQUIRED') {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-      }
-      // AUTH_REQUIRED: leave creds alone, let the caller handle UX.
+  async (error) => {
+    const status = error.response?.status;
+    const code = error.response?.data?.code;
+    const originalConfig = error.config;
+
+    // LOCKED pass-through — permission/format failures never trigger session-redirect.
+    if (code && PASS_THROUGH_CODES.has(code)) {
+      return Promise.reject(error);
     }
 
-    // Log errors in development
-    if (process.env.NODE_ENV === 'development') {
+    if (status === 401 && code === 'AUTH_INVALID_TOKEN') {
+      // Single-retry contract: if this request was already retried, redirect.
+      if (!originalConfig || originalConfig._retried) {
+        wipeSessionAndRedirect();
+        return Promise.reject(error);
+      }
+      // The refresh endpoint itself returning AUTH_INVALID_TOKEN means the
+      // refresh token is bad — don't loop, just redirect.
+      if (originalConfig.url && originalConfig.url.includes('/api/v1/auth/refresh')) {
+        wipeSessionAndRedirect();
+        return Promise.reject(error);
+      }
+      try {
+        await refreshAccessToken();
+        originalConfig._retried = true;
+        // Request interceptor re-reads localStorage and re-attaches the new token.
+        return apiClient(originalConfig);
+      } catch (_refreshError) {
+        wipeSessionAndRedirect();
+        return Promise.reject(error);
+      }
+    }
+
+    if (status === 401 && (!code || SESSION_FAIL_CODES.has(code))) {
+      wipeSessionAndRedirect();
+      return Promise.reject(error);
+    }
+
+    if (import.meta.env.DEV) {
       console.error('API Error:', error.response?.data || error.message);
     }
 
