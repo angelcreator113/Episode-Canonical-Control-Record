@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.0 — Single-PR plan. Step 6b expanded to ~556 sites (Track 5 surfaced 345 BUG sites). Pace 2 batched, multi-week.
+**Document version:** v2.1 — Single-PR plan. Track 1 surfaced two new sub-tracks: 1.5 (frontend test scaffolding) + 1.6 (backend requireAuth split).
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 triage complete. Step 6b expanded to ~556 sites (Tracks 1, 2, 3, 4, 6, 7) at Pace 2 batched checkpoints.
+**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Track 1 complete. Tracks 1.5 + 1.6 added per Track 1 surfaces.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -326,10 +326,48 @@ Step 6b implementation runs as four tracks in sequence. Track 5 (raw-fetch triag
 
 ##### Track 1 — apiClient interceptor update (Path B, 563 sites covered automatically)
 
-- Update the response interceptor at `src/services/api.js:41–73` to handle the unified F-Auth-4 contract:
+- Update the response interceptor in `src/services/api.js` to handle the unified F-Auth-4 contract:
   - `AUTH_REQUIRED` (no header) → redirect to login.
   - `AUTH_INVALID_TOKEN` (header rejected) → attempt token refresh once via the existing refresh path; on refresh failure, redirect to login.
-  - **Pass-through (LOCKED):** `AUTH_INVALID_FORMAT` and `AUTH_GROUP_REQUIRED` MUST NOT trigger session-redirect logic. Display inline as user-facing errors. Reasoning preserved from v1.8.
+  - **Pass-through (LOCKED):** `AUTH_INVALID_FORMAT`, `AUTH_GROUP_REQUIRED`, and `AUTH_ROLE_REQUIRED` MUST NOT trigger session-redirect logic. Display inline as user-facing errors. Reasoning preserved from v1.8. (`AUTH_ROLE_REQUIRED` added in v2.1 per Track 1 surface §3.3 — `jwtAuth.js` emits it, code-before-status check covers it correctly.)
+- Implementation note (v2.1, locked from Track 1 commit `da604ed2`): check `error.response.data.code` BEFORE `error.response.status`. Pass-through codes can be 400 or 403, not just 401 — code-first dispatch handles them correctly regardless of status.
+- Single-retry guard: `AUTH_INVALID_TOKEN` retries refresh once (`originalConfig._retried` flag). If retry still fails, wipe + redirect. Refresh-endpoint URL itself excluded from retry to prevent recursion.
+- Refresh helper uses bare `axios.post()`, NOT `apiClient` — this bypasses the interceptor for refresh requests, avoiding circular auth.
+
+##### Track 1.5 — Frontend test scaffolding (NEW v2.1)
+
+Track 1 surfaced (§3.1) that **the frontend has never run a test**. vitest is in package.json but no `vitest.config.js`, no jsdom, no `.test` files exist. ESLint v9 is broken because `.eslintrc.js` is the v8 format and not auto-detected. G3 gate ("test coverage minimum") is unenforceable on the frontend until this is fixed.
+
+- Establish frontend test scaffolding before Tracks 2/3/4/6/7 land. Each later migration commit then includes tests for the migrated call sites in the same commit — that is how G3 becomes enforceable for the ~556-site migration.
+- Deliverables for Track 1.5:
+  - Add `vitest.config.js` with `environment: jsdom` (or happy-dom — pick whichever has cleaner DOM emulation for our use case).
+  - Add `jsdom` (or happy-dom) to devDependencies.
+  - Write `frontend/src/services/api.test.js` covering the 5 interceptor cases:
+    - **Case A** — `AUTH_REQUIRED` triggers `wipeSessionAndRedirect`, no retry.
+    - **Case B** — `AUTH_INVALID_TOKEN` first hit triggers refresh, request retries with new token.
+    - **Case C** — `AUTH_INVALID_TOKEN` on retry triggers `wipeSessionAndRedirect` (no infinite loop).
+    - **Case D** — `AUTH_INVALID_FORMAT` / `AUTH_GROUP_REQUIRED` / `AUTH_ROLE_REQUIRED` do NOT trigger redirect, pass through as caller errors.
+    - **Case E** — non-auth errors (500, network, etc.) pass through unchanged.
+  - Mock `localStorage`, `window.location.href`, and `axios.post` (for refresh path).
+- ESLint v9 migration is OUT of scope for Track 1.5. `.eslintrc.js` → `eslint.config.js` is a separate concern; pre-flight or post-F-AUTH-1 follow-up. Track 1.5 only adds test runner scaffolding; lint config stays as-is.
+- Estimated: ~10 lines vitest config + 1 devDep + ~150 lines test file = single commit. Reviewed and approved before Track 1.6 begins.
+
+##### Track 1.6 — Backend requireAuth split (NEW v2.1)
+
+Track 1 surfaced (§3.2) that **backend `requireAuth` currently emits `AUTH_REQUIRED` for both no-header AND verifier-rejected cases** — never `AUTH_INVALID_TOKEN`. The Track 1 interceptor's refresh-on-`AUTH_INVALID_TOKEN` branch is wired correctly but fires for nothing on requireAuth routes today (only `authenticateToken` legacy middleware emits `AUTH_INVALID_TOKEN`, at `auth.js:126`).
+
+- Track 1.6 closes the contract end-to-end before migration tracks land. Without it, Tracks 2/3/4/6/7 migrate call sites that depend on the new contract working correctly — and they would silently log users out on token expiry instead of refreshing.
+- Deliverables for Track 1.6 (backend, `src/middleware/auth.js`):
+  - In `requireAuth`: branch on whether the Authorization header was present. No header → 401 with code `AUTH_REQUIRED` (current behavior). Header present, verifier rejected → 401 with code `AUTH_INVALID_TOKEN` (new).
+  - Use the same Cognito-vs-rejected classifier landed in Step 2: `findCognitoInfraCause(err)` → if matches, this is an infra failure (already handled by F-Auth-3 path); else this is a token-rejection (emit `AUTH_INVALID_TOKEN`).
+- Add unit tests for the split:
+  - No header → 401 + `AUTH_REQUIRED`
+  - Header + valid token → 200 + `req.user` populated
+  - Header + verifier-rejected token → 401 + `AUTH_INVALID_TOKEN` (new)
+  - Header + Cognito infra failure → 503 (already covered by Step 2 tests; verify no regression)
+- Once Track 1.6 lands, the F-Auth-4 Path 1 contract is complete on requireAuth routes: frontend interceptor + backend codes both speak the new vocabulary. Mid-session token expiry now triggers refresh, not logout.
+- Track 1.6 does NOT touch `authenticateToken` (which already emits `AUTH_INVALID_TOKEN`). `authenticateToken` is removed entirely later in Step 6b backend cleanup per §4.6 backend changes (LOCKED v1.8) — the duplicate at `middleware/auth.js:256–293` is deleted.
+- Estimated: middleware change + tests = single commit. Reviewed and approved before Track 2 begins.
 
 ##### Track 2 — Migrate Path A (authHeader) to apiClient
 
@@ -417,7 +455,9 @@ This is multi-week work, not multi-day. Locked at v2.0: **multi-week timeline ac
 
 Each track lands as multiple commits, with explicit checkpoints between commits. The pace is *not "sprint through 556 sites,"* it's "land a commit, observe, approve, push backup, repeat."
 
-- Track 1 (apiClient interceptor update): 1 commit. Reviewed and approved before Track 2 begins.
+- Track 1 (apiClient interceptor update): 1 commit. Reviewed and approved before Track 1.5 begins.
+- Track 1.5 (frontend test scaffolding): 1 commit. Vitest config + jsdom + 5 interceptor tests. Reviewed and approved before Track 1.6 begins.
+- Track 1.6 (backend requireAuth split): 1 commit. Middleware change + tests. Reviewed and approved before Track 2 begins.
 - Track 2 (Path A migration): 1-2 commits. Reviewed and approved before Track 3.
 - Track 3 (Path C consolidation + migration): 2-3 commits. Each stage of consolidation reviewed.
 - Track 4 (Path D inline cleanup): 1-2 commits. Reviewed.
@@ -780,7 +820,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Surfaced 345 BUG-class sites, prompting v2.0 amendment to expand Step 6b scope to ~556 sites total via new Tracks 6 and 7. Pace 2 batched checkpoints locked. Tracks 1, 2, 3, 4, 6, 7 all NOT STARTED — Track 1 (apiClient interceptor update on `feature/f-auth-1`) is next.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2` on `feature/f-auth-1`, backed up to `claude/f-auth-1-backup`). Track 1.5 + Track 1.6 added in v2.1 per Track 1 surfaces; both NOT STARTED. Track 1.5 (frontend test scaffolding) is next, then Track 1.6 (backend requireAuth split), then Track 2.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -789,6 +829,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 - `jest.spyOn` cannot intercept calls from inside the same module on CommonJS const-bound exports (closure binding, not export reference). Use `jest.mock('<dependency-module>')` with the factory form. Worth knowing for future test additions.
 - Polymorphic `optionalAuth` detection (middleware vs factory shape) means `optionalAuth.toString()` introspection is no longer reliable. No consumer in codebase does this; flagged in case Step 6b interceptor work hits it.
 - `verifyToken` has TWO paths that wrap verifier errors with `Error.cause`: the test path (`NODE_ENV=test` → `tokenService.verifyToken`) and the prod path (aws-jwt-verify direct). Both were updated in Step 2; do not regress either if Step 6b reconciliation touches `verifyToken`.
+- **Track 1 surfaces (preserved for sequencing):** (1) frontend has no test scaffolding — vitest in package.json but no config, no jsdom, no `.test` files; addressed by Track 1.5. (2) Backend `requireAuth` emits `AUTH_REQUIRED` for both no-header and verifier-rejected; new contract requires the split; addressed by Track 1.6. (3) `AUTH_GROUP_REQUIRED` returns 403 (not 401); code-before-status check in Track 1 interceptor handles this correctly. (4) `authService.refreshToken()` duplicates the new `refreshAccessToken` helper — kept separate in Track 1 to avoid circular auth; cleanup in §9.12.
 
 ### 9.12 Deferred cleanups (post-F-AUTH-1)
 
@@ -796,6 +837,10 @@ Note: the outer try/catch entry that was deferred in v1.6/v1.7 was **cleaned up 
 
 - Real metrics library — Step 2 ships with structured-log-derived metrics. If Prime Studios adds prom-client / opentelemetry / similar later, the F-Auth-3 call site is one line and trivially swappable.
 - `console.debug` enablement — current ESLint config blocks it; Step 2 uses `console.log` as the quietest allowed level. If the project later wires up the `debug` package or adjusts ESLint, the F-Auth-3 quiet-log call site can move to `console.debug`.
+- **`authService.refreshToken()` duplication** (surfaced in Track 1 §3.4) — `frontend/src/services/authService.js:125–147` has a `refreshToken()` method that nearly duplicates the new bare-axios `refreshAccessToken` helper in `src/services/api.js`. Track 1 kept them separate to avoid circular auth (authService imports api). Cleanup candidate when authService is touched in a Track 6 file: migrate `authService.refreshToken()` callers (login flow primarily) to use the bare-axios helper, then delete the apiClient-based duplicate.
+- **Parallel-request refresh storm** (surfaced in Track 1 §3.7) — N simultaneous `AUTH_INVALID_TOKEN` responses trigger N parallel refresh calls. Backend rate-limiter (10/min) keeps it from being catastrophic but it is wasteful. Optimal solution: refresh-promise singleton — first request starts refresh, others await the same promise. Real complexity for marginal gain; deferred until evidence of operational impact.
+- **ESLint v9 migration** — `.eslintrc.js` is the v8 format and ESLint v9 (installed) does not auto-detect it. Frontend lint has been broken for some time. Out of F-AUTH-1 scope; separate config-modernization PR.
+- **Refresh-via-cookie hardening** — login endpoint sets a refreshToken httpOnly cookie (`src/routes/auth.js:75`), but the refresh endpoint at `:112` reads from request body only, ignoring the cookie. The Track 1 helper passes from localStorage (matching the body path). Cookie-based refresh would be a hardening follow-up; out of F-AUTH-1 scope.
 
 ### 9.13 Lost-work incident (May 2, 2026) + cleanup discipline
 
