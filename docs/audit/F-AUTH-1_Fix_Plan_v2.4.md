@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.3 — Single-PR plan. Track 1.6 approved (backend requireAuth split + AUTH_INVALID_FORMAT contract closure).
+**Document version:** v2.4 — Single-PR plan. Auto-merge pipeline documented (§9.13 Rule 6). Track 1.6 closure preserved.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Track 1 + Track 1.5 + Track 1.6 complete. F-Auth-4 contract closed end-to-end. Track 2 (Path A migration) is next.
+**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Track 1 + Track 1.5 + Track 1.6 complete. Auto-merge pipeline documented for future sessions. Track 2 (Path A migration) is next.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -934,9 +934,27 @@ Push-to-backup is not a PR. The "do NOT open a PR yet" constraint stays. The "do
 
 Indicators: container about to reset (rare warnings), switching machines, end of work session, network instability. When in doubt, push backup.
 
+**Rule 6 — Auto-merge pipeline documented (added v2.4).**
+
+Prime Studios runs an automation pipeline that integrates implementation work into `dev` continuously. Future Claude Code sessions need to understand this so backup-branch advancement and dev's `docs/audit/` state are not mistaken for discipline slips. The pipeline has four parallel writers:
+
+- **Implementation track** (this writer): commits to `feature/f-auth-1`, force-pushes to `claude/f-auth-1-backup` after each track approval per Rule 2.
+- **Auto-merge track** (automation): commits like `Auto-merge claude/f-auth-1-backup into dev` fire on every backup-branch push, replaying implementation commits onto `dev`.
+- **Fix-plan revision track** (integrator, TySteamTest): commits like `docs(audit): F-AUTH-1 fix plan vX.Y` go directly to `dev` after each fix-plan version locks. These flow to `main` via standard PR.
+- **Main-sync track** (integrator): periodic `Merge origin/main into claude/f-auth-1-backup` commits keep backup's docs view consistent with main's preserved version history. Touches only `docs/audit/` files; no implementation conflict.
+
+Implications for the implementation writer (this session):
+
+- Force-pushing backup overwrites the integrator's main-sync merge commits. This is safe because the docs they brought in already exist on main and (via the auto-merge chain) on dev. No data loss.
+- Dev's `docs/audit/` directory is the union of: dev-tip cleanup state + main's preserved version history (via merge chain). When v1.5 or v2.2 reappear in `git ls-tree origin/dev` it is the merge chain working as designed, not a regression. Each individual fix-plan revision commit on dev still does its `git rm` of the prior version (cleanup discipline at the commit level); the merges from main re-introduce older versions as historical record.
+- Rule 1 (one writer at a time) still holds for implementation work on `feature/f-auth-1`. The auto-merge / main-sync / fix-plan-revision writers operate on different branches or different paths and do not conflict with implementation commits. If a future session is uncertain whether something is "another writer touching my work" vs "the pipeline doing its thing," check whether the surprising commit touched any implementation file (`frontend/src/`, `src/middleware/`, `tests/`). If only `docs/audit/` files are touched, it is the pipeline.
+- When in doubt, run `git log <branch> --oneline` and look for the four commit-message patterns above. They identify the writer and confirm the work is benign.
+
 #### Why this is in the canon document
 
 The audit principle from v8 §0 holds: **the audit trail is the audit trail.** Future Claude Code sessions reading this fix plan will see the lost-work incident and the discipline that followed it. Future sessions will be less likely to repeat the same failure mode because they read about it before starting work. This is operational learning made durable — exactly the use case "documentation as a living system" exists for.
+
+The Rule 6 addition (v2.4) is a second instance of this principle. The auto-merge pipeline was not visible to this session's author until commit `a8877a19` surfaced as backup-branch advancement; without diagnostics we could have mistaken it for a session-coordination failure and force-overwritten benign integrator work. Documenting the pipeline now means future sessions read v2.4 and understand the data flow before they have to diagnose it.
 
 ---
 
