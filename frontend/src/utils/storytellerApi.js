@@ -1,26 +1,46 @@
 /**
  * storytellerApi.js — Shared API helpers for storyteller features
  *
- * Centralises auth header injection, base URL, and JSON fetch wrapper.
+ * Centralises the storyteller-route base URL and the api() JSON wrapper.
+ * Auth header injection is now handled by the apiClient request interceptor
+ * (services/api.js) — Path A → apiClient migration, Track 2 fix plan v2.4 §4.6.
+ *
  * Used by StorytellerPage, PlanWithVoicePage, BookEditor, ChapterSelection, etc.
  */
 
+import apiClient from '../services/api';
+
 export const API = '/api/v1/storyteller';
 
-export function authHeader() {
-  const token = localStorage.getItem('authToken');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
+// api() helper now delegates to apiClient. Public contract preserved:
+//  - returns parsed response body (apiClient's res.data) — NOT the response object
+//  - throws Error with the backend's error message string on non-2xx
+//  - 401 with AUTH_REQUIRED / AUTH_INVALID_TOKEN handled by the apiClient
+//    response interceptor (Track 1) before this catch sees the error
 export async function api(path, opts = {}) {
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...authHeader(), ...(opts.headers || {}) },
-  });
-  if (!res.ok) {
-    const err = await res.text().catch(() => 'Request failed');
-    throw new Error(err);
+  const method = (opts.method || 'GET').toLowerCase();
+  let data;
+  if (opts.body !== undefined) {
+    try {
+      data = JSON.parse(opts.body);
+    } catch {
+      data = opts.body;
+    }
   }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  try {
+    const res = await apiClient.request({
+      url: `${API}${path}`,
+      method,
+      data,
+      headers: opts.headers,
+    });
+    return res.data;
+  } catch (err) {
+    const body = err.response?.data;
+    const msg =
+      (typeof body === 'string' ? body : body?.error || body?.message) ||
+      err.message ||
+      'Request failed';
+    throw new Error(msg);
+  }
 }

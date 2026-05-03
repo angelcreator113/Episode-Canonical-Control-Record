@@ -6,7 +6,12 @@
  * Extracted from StorytellerPage.jsx for maintainability.
  */
 import React, { useState, useEffect } from 'react';
-import { authHeader } from '../utils/storytellerApi';
+import apiClient from '../services/api';
+
+// Extracted to module scope so Track 2.5 behavioral tests can exercise the
+// network call shape without mounting the full component.
+export const saveSections = (chapterId, sections) =>
+  apiClient.put(`/api/v1/storyteller/chapters/${chapterId}`, { sections });
 
 const SECTION_TYPES = [
   { value: 'scene', label: 'Scene', dot: '🟢' },
@@ -41,11 +46,7 @@ export default function SectionEditor({ chapter, onSave, onGoToSection, toast })
     setSaving(true);
     try {
       const cleaned = updated.map(({ _key, ...rest }) => rest);
-      await fetch(`/api/v1/storyteller/chapters/${chapter.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body: JSON.stringify({ sections: cleaned }),
-      });
+      await saveSections(chapter.id, cleaned);
       onSave?.(cleaned);
       toast.add('Sections saved');
     } catch {
