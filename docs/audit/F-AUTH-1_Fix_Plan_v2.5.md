@@ -4,11 +4,19 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
+**Document version:** v2.5 — Single-PR plan. Track 2 + Track 2.5 approved. Keepalive exception locked. Two new test patterns recorded.
+
+**Author:** JAWIHP / Evoni — Prime Studios
+
+**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Tracks 1, 1.5, 1.6, 2 (A+B), 2.5 complete (47/47 frontend, 436/436 backend tests). Track 3 (Path C migration) is next.
+========
 **Document version:** v2.3 — Single-PR plan. Track 1.6 approved (backend requireAuth split + AUTH_INVALID_FORMAT contract closure).
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
 **Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Track 1 + Track 1.5 + Track 1.6 complete. F-Auth-4 contract closed end-to-end. Track 2 (Path A migration) is next.
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -396,12 +404,25 @@ Implementation note: response message and error label aligned to `authenticateTo
 
 Pre-Track-1.6 `requireAuth`'s catch block returned `message: error.message` to clients — the wrapped verifier error message ("Token verification failed: JwtExpiredError: ..." etc.) leaked verifier internals. Track 1.6's refactor hardened this to a generic "The provided token is invalid or expired." message. Verifier internals stay in server-side logs only via the structured `[F-Auth-4] requireAuth: token rejected` log line. Net effect: small information-leak surface closed as a side effect of the spec'd work. Documented here so future readers see the fix was intentional, not silent.
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
+##### Track 2 — Migrate Path A (authHeader) to apiClient (LOCKED v2.5, COMPLETE)
+========
 ##### Track 2 — Migrate Path A (authHeader) to apiClient
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
 
 - 34 call sites across 7 files. Replace `fetch + ...authHeader()` spread with `apiClient` method calls.
 - Tested change. Each migration must preserve: HTTP method, URL, payload shape, response shape consumption. Add tests for any migrated path that did not have them.
 - Once migration is complete: delete `authHeader()` export from `frontend/src/utils/storytellerApi.js`. Confirm zero remaining imports before deletion.
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
+**Track 2 implementation pattern (LOCKED v2.5 from commits `501cd737` + `59f9868a` + `a079a04b`) — helper-internal migration covers transitive call sites with zero touches:** if a Path A site is reached via a wrapping helper (e.g., `api()` in `storytellerApi.js`), migrate the helper's internals to call `apiClient` while preserving the helper's external contract (return shape, error throw shape). All transitive call sites are migrated by changing one helper. Use this pattern wherever Tracks 3/4/6/7 encounter wrapping helpers — saves linear-scan migration work.
+
+**Track 2.5 amendment (v2.5):** for direct call sites that aren't reached via a wrapping helper, **extract small module-scope const helpers** from inline `apiClient.X(url, payload)` invocations into 1-4 line `export const helperName = (args) => apiClient.method(url, payload)` definitions. Tests import the helpers directly and verify call shape. This avoids full RTL component-render setup. Pattern proven across 8 helpers in 3 files (SectionEditor, StoryPlannerConversational, BookEditor) with zero RTL setup required. Apply pattern to Tracks 3/4/6/7 when migrated sites need behavioral test coverage.
+
+- **Track 2 keepalive exception (LOCKED v2.5)** — `BookEditor.jsx:181` (the beforeunload save established by Step 6a per CZ-5) **cannot migrate to apiClient**. axios does not support `keepalive: true`; the request must survive page unload to satisfy CZ-5's data-loss-prevention contract. Migration converts this site from Path A (`...authHeader` spread) to Path D (inline `Bearer ${token}`) with a 6-line in-code comment explaining the exception. This is the only Path D site that has a documented engineering reason to remain after Track 4 lands. Track 4 verification grep must allowlist this site.
+
+========
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
 ##### Track 3 — Migrate Path C (authHeaders plural duplicates) to apiClient
 
 - 75 call sites across 9 files. Seven files define their own local `authHeaders()` helper; one shared in `feedConstants.js` used by `SocialProfileGenerator.jsx` (~40 sites alone) and `ProfileDetailPanel.jsx`.
@@ -415,6 +436,10 @@ Pre-Track-1.6 `requireAuth`'s catch block returned `message: error.message` to c
 - 25+ call sites across ~17 files. Replace inline `Bearer ${token}` construction with `apiClient` method calls.
 - Cohabiting files (apiClient + inline Bearer in the same file): `ProductionTab.jsx`, `WorldAdmin.jsx`. The inline Bearer sites in these files are accidental drift, not intentional dual-paradigm. Convert all to `apiClient`.
 - Special case: `FeedBulkImport.jsx` mixes Path C local helper + Path D inline. Track 3 + Track 4 work converges in this file.
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
+- **LOCKED EXCEPTION (v2.5 — Track 2 surfaced)** — `BookEditor.jsx:181` is the **only Path D site that survives Track 4**. The beforeunload save (Step 6a / CZ-5) requires `keepalive: true`; axios does not support keepalive, so apiClient cannot replace it without breaking CZ-5's data-loss-prevention contract. The site has a 6-line in-code comment documenting the exception, and a regression-lock test (Track 2.5) that asserts `apiClient.post/put/request` are NOT called when the keepalive helper fires. Track 4 must preserve this site, allowlist it in the verification grep, and not "fix" it.
+========
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
 
 ##### Track 6 — Migrate BUG-class raw fetches to apiClient (NEW v2.0)
 
@@ -451,6 +476,21 @@ UNCLEAR-B (144 sites in 32 files): per Track 5's spot-check, ~80% are Path D (al
 
 ##### Verification (G3 + G4)
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
+After all six implementation tracks (1, 2, 3, 4, 6, 7): zero imports of `authHeader` (Path A), zero local `authHeaders()` helpers (Path C), zero inline `Bearer ${token}` (Path D) — except the locked `BookEditor:181` keepalive exception, zero BUG-class raw fetches (Track 6), zero unresolved UNCLEAR-A (Track 7). Verification greps confirm.
+
+```bash
+grep -rn "authHeader\b" frontend/src/ | grep -v "authHeaders" | grep -v "test\.\|\.test\."
+```
+
+Expected output: zero matches. (Production code; test files may contain "authHeader" in test descriptions and are excluded.)
+
+```bash
+grep -rn "Bearer \${" frontend/src/ | grep -v "src/services/api.js" | grep -v "BookEditor.jsx:" | grep -v "test\."
+```
+
+Expected output: zero matches. The two allowlisted locations are: (a) `src/services/api.js` — the apiClient request interceptor itself; (b) `BookEditor.jsx:181` — the locked CZ-5 keepalive exception (v2.5).
+========
 After all six implementation tracks (1, 2, 3, 4, 6, 7): zero imports of `authHeader` (Path A), zero local `authHeaders()` helpers (Path C), zero inline `Bearer ${token}` (Path D), zero BUG-class raw fetches (Track 6), zero unresolved UNCLEAR-A (Track 7). Verification greps confirm.
 
 ```bash
@@ -458,12 +498,17 @@ grep -rn "authHeader\|Bearer \${" frontend/src/ | grep -v "src/services/api.js"
 ```
 
 Expected output: zero matches outside `src/services/api.js` (the interceptor itself).
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
 
 ```bash
 grep -rn "fetch(" frontend/src/ | wc -l
 ```
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
+Expected: drops from 627 (current) to count of intentionally-public reads only (PUBLIC class — currently 5 confirmed, may grow as Track 7 reclassifies UNCLEAR-A) PLUS the BookEditor:181 keepalive exception = 6 minimum.
+========
 Expected: drops from 627 (current) to count of intentionally-public reads only (PUBLIC class — currently 5 confirmed, may grow as Track 7 reclassifies UNCLEAR-A).
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
 
 - Authenticated request via `apiClient` succeeds and `req.user` populated server-side.
 - Mid-session token expiry: `apiClient` interceptor sees `AUTH_INVALID_TOKEN`, refreshes silently, request continues. User does not see a logout.
@@ -847,7 +892,11 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` helper migration + 2 small files, `59f9868a` BookEditor migration + authHeader deletion). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`, 47/47 frontend tests pass). All approved commits backed up at `a079a04b` on `claude/f-auth-1-backup`. Track 3 (Path C migration) is next.
+========
 - **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2` on `feature/f-auth-1`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`, 14/14 tests pass). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18` — amended in v2.3 to emit `AUTH_INVALID_FORMAT` for malformed headers, closing F-Auth-4 contract end-to-end across all four codes; 436/436 middleware tests pass). Track 2 (Path A migration) is next.
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -879,6 +928,15 @@ vi.mock('axios', async (importOriginal) => {
 **Pattern C — `apiClient.defaults.adapter` swap for retry verification:** To prove that an interceptor retry actually fires apiClient a second time without making real network calls, swap `apiClient.defaults.adapter` to a `vi.fn().mockResolvedValue(...)` for the duration of the test. After the interceptor handler resolves, `expect(adapterMock).toHaveBeenCalledTimes(1)` confirms the retry happened. Restore in `finally` so test isolation holds. The retry exercises real interceptor logic end-to-end, not a mock chain.
 
 Note: pattern A applies to any DEV-gated code in any module. Patterns B and C are specific to apiClient testing but the techniques generalize: partial mocks preserving constructor methods, adapter swapping to test retry/redirect/interceptor behavior end-to-end without network.
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
+
+**Pattern D — `vi.mock` + static imports for module-scope helpers that capture apiClient at load time:** Track 2.5 (commit `a079a04b`) extracted small const helpers like `export const saveDraftProse = (chapterId, proseText) => apiClient.post(...)` to make migrated call sites testable. The helper captures `apiClient` at module load. To test the helper with a mocked apiClient, declare `vi.mock('@/services/api', () => ({ default: { post: vi.fn(), ... } }))` BEFORE the static `import { saveDraftProse } from '@/components/BookEditor.jsx'`. vi.mock is hoisted by vitest, so the mock is in place when the helper module evaluates. The helper sees the mocked `apiClient`; tests verify call shape with `expect(apiClient.post).toHaveBeenCalledWith(...)`. This pattern lets module-scope helper extractions be tested without full RTL component rendering.
+
+**Pattern E — multi-method mock reset for apiClient mocks:** When the apiClient mock has multiple `vi.fn()` properties (post, put, get, delete, request, etc.), reset all of them between tests with `Object.values(apiClient).forEach((fn) => fn?.mockReset?.())` in `beforeEach`. The optional-chain on `mockReset` handles the case where some properties of the mock object are not `vi.fn()` (defensive against future changes to the mock factory). Track 2.5 established this pattern; reuse for all later tracks that mock apiClient.
+
+Patterns D and E together enable the **module-scope-extraction** approach Tracks 3, 4, 6, and 7 should use for behavioral test coverage of migrated call sites: extract inline `apiClient.X(...)` invocations to 1-4 line const helpers, mock apiClient with vi.mock at module top, import the helpers statically, reset all methods in beforeEach. No full RTL setup required. Validated across 8 helpers in 3 files (Track 2.5) with zero genuine "cannot test without RTL" cases surfaced.
+========
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
 
 ### 9.12 Deferred cleanups (post-F-AUTH-1)
 
@@ -934,9 +992,27 @@ Push-to-backup is not a PR. The "do NOT open a PR yet" constraint stays. The "do
 
 Indicators: container about to reset (rare warnings), switching machines, end of work session, network instability. When in doubt, push backup.
 
+**Rule 6 — Auto-merge pipeline documented (added v2.4).**
+
+Prime Studios runs an automation pipeline that integrates implementation work into `dev` continuously. Future Claude Code sessions need to understand this so backup-branch advancement and dev's `docs/audit/` state are not mistaken for discipline slips. The pipeline has four parallel writers:
+
+- **Implementation track** (this writer): commits to `feature/f-auth-1`, force-pushes to `claude/f-auth-1-backup` after each track approval per Rule 2.
+- **Auto-merge track** (automation): commits like `Auto-merge claude/f-auth-1-backup into dev` fire on every backup-branch push, replaying implementation commits onto `dev`.
+- **Fix-plan revision track** (integrator, TySteamTest): commits like `docs(audit): F-AUTH-1 fix plan vX.Y` go directly to `dev` after each fix-plan version locks. These flow to `main` via standard PR.
+- **Main-sync track** (integrator): periodic `Merge origin/main into claude/f-auth-1-backup` commits keep backup's docs view consistent with main's preserved version history. Touches only `docs/audit/` files; no implementation conflict.
+
+Implications for the implementation writer (this session):
+
+- Force-pushing backup overwrites the integrator's main-sync merge commits. This is safe because the docs they brought in already exist on main and (via the auto-merge chain) on dev. No data loss.
+- Dev's `docs/audit/` directory is the union of: dev-tip cleanup state + main's preserved version history (via merge chain). When v1.5 or v2.2 reappear in `git ls-tree origin/dev` it is the merge chain working as designed, not a regression. Each individual fix-plan revision commit on dev still does its `git rm` of the prior version (cleanup discipline at the commit level); the merges from main re-introduce older versions as historical record.
+- Rule 1 (one writer at a time) still holds for implementation work on `feature/f-auth-1`. The auto-merge / main-sync / fix-plan-revision writers operate on different branches or different paths and do not conflict with implementation commits. If a future session is uncertain whether something is "another writer touching my work" vs "the pipeline doing its thing," check whether the surprising commit touched any implementation file (`frontend/src/`, `src/middleware/`, `tests/`). If only `docs/audit/` files are touched, it is the pipeline.
+- When in doubt, run `git log <branch> --oneline` and look for the four commit-message patterns above. They identify the writer and confirm the work is benign.
+
 #### Why this is in the canon document
 
 The audit principle from v8 §0 holds: **the audit trail is the audit trail.** Future Claude Code sessions reading this fix plan will see the lost-work incident and the discipline that followed it. Future sessions will be less likely to repeat the same failure mode because they read about it before starting work. This is operational learning made durable — exactly the use case "documentation as a living system" exists for.
+
+The Rule 6 addition (v2.4) is a second instance of this principle. The auto-merge pipeline was not visible to this session's author until commit `a8877a19` surfaced as backup-branch advancement; without diagnostics we could have mistaken it for a session-coordination failure and force-overwritten benign integrator work. Documenting the pipeline now means future sessions read v2.4 and understand the data flow before they have to diagnose it.
 
 ---
 
