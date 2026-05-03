@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v1.9 — Single-PR plan. Step 6b scope expanded: Maximum (migrate all four auth paths to apiClient). §4.6 rewritten against inventory.
+**Document version:** v2.0 — Single-PR plan. Step 6b expanded to ~556 sites (Track 5 surfaced 345 BUG sites). Pace 2 batched, multi-week.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Step 6a + Step 2 complete. Step 6b scope expanded per inventory; raw-fetch triage runs first, then four-track migration to apiClient.
+**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 triage complete. Step 6b expanded to ~556 sites (Tracks 1, 2, 3, 4, 6, 7) at Pace 2 batched checkpoints.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -351,31 +351,90 @@ Step 6b implementation runs as four tracks in sequence. Track 5 (raw-fetch triag
 - Cohabiting files (apiClient + inline Bearer in the same file): `ProductionTab.jsx`, `WorldAdmin.jsx`. The inline Bearer sites in these files are accidental drift, not intentional dual-paradigm. Convert all to `apiClient`.
 - Special case: `FeedBulkImport.jsx` mixes Path C local helper + Path D inline. Track 3 + Track 4 work converges in this file.
 
+##### Track 6 — Migrate BUG-class raw fetches to apiClient (NEW v2.0)
+
+**v2.0 amendment:** Track 5 triage (commit `a929ce29` on dev, `F-AUTH-1_Step6b_Inventory_v2.md`) reclassified ~478 raw fetch() calls. Found **345 BUG-class sites** — auth-required-but-missing. These would silently 401 the moment Step 3 sweep lands. Track 6 closes them by migrating to apiClient.
+
+Why this is in F-AUTH-1 (not deferred): Step 3 sweep transforms backend `optionalAuth` → `requireAuth`. The 345 BUG-class fetches today get unauth'd responses (which the routes serve under `optionalAuth`). The moment Step 3 lands, those routes return 401. Every user hitting these features sees broken writes, blank pages, silent failures. **Shipping Step 3 without Track 6 actively breaks the product.** That is worse than not shipping F-AUTH-1.
+
+###### Track 6 — priority order (10 high-density files first, ~180 of 345 sites)
+
+1. `SceneSetsTab.jsx` (64 sites). Single-file cluster. `sceneSetRoutes.js` will Step-3-sweep to `requireAuth`; this page would silently break for every user. **Migrate first.**
+2. `WriteMode.jsx` (33 sites). `/storyteller/*` writes.
+3. `FranchiseBrain.jsx` (18 sites). All 9 franchise-brain mutations bare. F34 closure depends on this file.
+4. `StoryThreadTracker.jsx` (11 sites). Thread writes.
+5. `CharacterGenerator.jsx` (10 sites).
+6. `ContinuityEnginePage.jsx` (10 sites).
+7. `Episodes/EpisodeScenesTab.jsx` (9 sites).
+8. `TemplateDesigner.jsx` (9 sites).
+9. `CharacterTherapy.jsx` (9 sites).
+10. `SeriesPage.jsx` (8 sites).
+
+Remaining ~165 sites distributed across ~60 other files at 1-8 sites each. Track 6 continues file-by-file in priority order (highest count first) until 0 BUG sites remain.
+
+Each file becomes its own commit per Pace 2 batched checkpoints. `SceneSetsTab.jsx` alone is ~64 sites in one file — that single file is one commit and gets reviewed before the next file starts.
+
+##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
+
+71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
+
+- Step 3 sweep classifies each backend mixed-verb route as either: (a) PUBLIC published-only data (gets `// PUBLIC:` comment + `degradeOnInfraFailure` flag), or (b) auth-required (gets `requireAuth`).
+- Track 7 mirrors that classification on the frontend: for each Step 3 (a) classification, the corresponding frontend GET stays as raw fetch with no auth (PUBLIC); for each (b), the GET migrates to `apiClient`.
+- Track 7 does not run independently — it runs in parallel with Step 3, file-by-file, as Step 3 classifies each route. This avoids re-doing Track 7 work if Step 3 reclassifies later.
+
+UNCLEAR-B (144 sites in 32 files): per Track 5's spot-check, ~80% are Path D (already covered by Track 4) and ~20% are hidden BUGs (covered by Track 6). **No separate Track 8.** UNCLEAR-B resolves naturally as Tracks 4 and 6 land. `EpisodeDetail.jsx` is the clearest example: mixed-paradigm with hidden bare-fetch BUGs; treated as a Track 6 file when its turn comes.
+
 ##### Verification (G3 + G4)
 
-- After all four tracks: zero imports of `authHeader` (Path A), zero local `authHeaders()` helpers (Path C), zero inline `Bearer ${token}` (Path D). Verification grep confirms.
-  ```bash
-  grep -rn "authHeader\|Bearer \${" frontend/src/ | grep -v "src/services/api.js"
-  ```
-- Expected output: zero matches outside `src/services/api.js` (the interceptor itself).
+After all six implementation tracks (1, 2, 3, 4, 6, 7): zero imports of `authHeader` (Path A), zero local `authHeaders()` helpers (Path C), zero inline `Bearer ${token}` (Path D), zero BUG-class raw fetches (Track 6), zero unresolved UNCLEAR-A (Track 7). Verification greps confirm.
+
+```bash
+grep -rn "authHeader\|Bearer \${" frontend/src/ | grep -v "src/services/api.js"
+```
+
+Expected output: zero matches outside `src/services/api.js` (the interceptor itself).
+
+```bash
+grep -rn "fetch(" frontend/src/ | wc -l
+```
+
+Expected: drops from 627 (current) to count of intentionally-public reads only (PUBLIC class — currently 5 confirmed, may grow as Track 7 reclassifies UNCLEAR-A).
+
 - Authenticated request via `apiClient` succeeds and `req.user` populated server-side.
 - Mid-session token expiry: `apiClient` interceptor sees `AUTH_INVALID_TOKEN`, refreshes silently, request continues. User does not see a logout.
 - Token deletion: `apiClient` interceptor sees `AUTH_REQUIRED`, redirects to login.
 - `AUTH_INVALID_FORMAT` and `AUTH_GROUP_REQUIRED` responses do NOT trigger session-redirect logic; surfaced inline.
+- `SceneSetsTab.jsx` full exercise on dev: every CRUD operation succeeds authenticated, 401s unauthenticated. (Single-file regression check given the 64-site density.)
+- `FranchiseBrain.jsx` full exercise: every entry mutation succeeds authenticated, 401s unauthenticated. F34 closes at this checkpoint.
 
-##### Scope acknowledgment — this is bigger than v1.8 implied
+##### Scope acknowledgment — Track 5 changed the math (v2.0)
 
-Step 6b at v1.9 scope is the largest commit-set in F-AUTH-1. ~134 site migrations + 7 helper consolidations + 25+ inline cleanups + interceptor update + raw-fetch triage. Reasoning for keeping it in F-AUTH-1: shipping Step 6b as v1.8 specified would have left 134 sites silently logging users out mid-session because they have no interceptor coverage. The four-paradigm problem is the F-AUTH-1 frontend bug; deferring it to a follow-up means F-AUTH-1 doesn't actually close the loop F-Auth-4 Path 1 was meant to close.
+Pre-Track-5 v1.9 scope: ~134 site migrations. Post-Track-5 v2.0 scope: **~556 sites total** (~134 paradigm + ~345 BUG + ~71 UNCLEAR-A + ~140 UNCLEAR-B Path-D resolutions absorbed by Track 4). Roughly 4× the v1.8 estimate. Track 5 was the data we should have had before locking scope at v1.9; v1.9's number was incomplete because the four-path inventory found four paradigms but did not catalog raw fetches against backend routes. v2.0 corrects.
 
-Reviewability: Step 6b should land as multiple commits on `feature/f-auth-1`. Suggested split:
+This is multi-week work, not multi-day. Locked at v2.0: **multi-week timeline acknowledged.** If F-AUTH-1 needs to ship by a specific date, the timeline must shape the pace; otherwise Pace 2 batched checkpoints (see below) is the locked working model.
 
-1. Track 5 triage commit (commit on dev — docs)
-2. Track 1 interceptor update
-3. Track 2 apiClient migration (Path A)
-4. Track 3 helper consolidation (Path C)
-5. Track 4 inline cleanup (Path D)
+##### Pace 2 — Batched with checkpoints (LOCKED v2.0)
 
-Each implementation commit gets backup-pushed per §9.13 Rule 2 after my approval.
+Each track lands as multiple commits, with explicit checkpoints between commits. The pace is *not "sprint through 556 sites,"* it's "land a commit, observe, approve, push backup, repeat."
+
+- Track 1 (apiClient interceptor update): 1 commit. Reviewed and approved before Track 2 begins.
+- Track 2 (Path A migration): 1-2 commits. Reviewed and approved before Track 3.
+- Track 3 (Path C consolidation + migration): 2-3 commits. Each stage of consolidation reviewed.
+- Track 4 (Path D inline cleanup): 1-2 commits. Reviewed.
+- Track 6 (BUG migration): file-by-file in priority order. `SceneSetsTab.jsx` is one commit. `FranchiseBrain.jsx` is one commit. Each high-density file reviewed and approved before the next file starts. Lower-density files may batch (e.g., 5-10 small files per commit) but only after the high-density tracks have established the migration pattern.
+- Track 7 (UNCLEAR-A reconciliation): runs in parallel with Step 3, classification by classification.
+- Estimated commit count for Step 6b alone: 12-20. Each commit gets backup-pushed per §9.13 Rule 2 after my approval.
+
+Failure mode Pace 2 prevents: a regression introduced at site #347 that doesn't surface until G4 dev exercise, by which point 200 sites have changed and the bisection is hard. Pace 2 means a regression surfaces at the file that introduced it.
+
+##### What happens if Track 6 (or any later track) reveals new scope
+
+Locked discipline (matches v1.7 §9.13 framing): **surface the finding, lock the scope decision, amend the fix plan, then proceed.**
+
+- Example: Track 6 file-by-file work reveals a fifth auth paradigm not seen in inventories — surface immediately, lock scope, amend §4.6, proceed.
+- Example: a BUG-class fetch can't cleanly migrate to `apiClient` (different request signature, special response handling) — surface, decide whether to migrate-anyway-with-adapter or document-as-exemption, amend, proceed.
+- Example: regression in dev exercise — roll back, surface, fix at source, re-do affected commit(s), proceed.
+- What does NOT happen: silent scope expansion, surprise bug-fixes mid-track, "while we're here" cleanups outside the locked spec.
 
 #### F-Auth-4 — out-of-scope (LOCKED, unchanged from v1.8)
 
@@ -721,7 +780,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — PREP COMPLETE, IMPLEMENTATION PENDING** (inventory commit `a9c8b36e` on dev). Inventory revealed 4 parallel auth-injection paths (not 2 as v1.8 implied): authHeader (34 sites), apiClient (563 sites), authHeaders plural (75 sites), inline Bearer (25+ sites). Plus ~478 raw fetch() calls needing triage. v1.9 expands scope to Maximum: migrate all four paths to apiClient. See §4.6 for track structure.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Surfaced 345 BUG-class sites, prompting v2.0 amendment to expand Step 6b scope to ~556 sites total via new Tracks 6 and 7. Pace 2 batched checkpoints locked. Tracks 1, 2, 3, 4, 6, 7 all NOT STARTED — Track 1 (apiClient interceptor update on `feature/f-auth-1`) is next.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
