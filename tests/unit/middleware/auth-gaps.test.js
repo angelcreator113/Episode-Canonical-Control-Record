@@ -15,7 +15,7 @@ jest.mock('../../../src/services/tokenService', () => ({
   generateTestToken: jest.fn(),
 }));
 
-const { authenticateToken, optionalAuth } = require('../../../src/middleware/auth');
+const { authenticateToken, optionalAuth, requireAuth } = require('../../../src/middleware/auth');
 const tokenService = require('../../../src/services/tokenService');
 
 describe('Auth Middleware - Gap Coverage', () => {
@@ -258,5 +258,142 @@ describe('optionalAuth — F-Auth-3 three-case classifier', () => {
     await optionalAuth(req, res, next);
     expect(next).toHaveBeenCalledTimes(1);
     expect(req.user).toBeNull();
+  });
+});
+
+// ============================================================================
+// F-AUTH-4 Path 1 — requireAuth split (Track 1.6)
+// AUTH_REQUIRED for no-header / malformed; AUTH_INVALID_TOKEN for verifier-rejected;
+// AUTH_SERVICE_UNAVAILABLE for Cognito infra failures (shared classifier with optionalAuth).
+// ============================================================================
+describe('requireAuth — F-Auth-4 Path 1 split', () => {
+  let req;
+  let res;
+  let next;
+  let consoleLogSpy;
+  let consoleErrorSpy;
+
+  beforeEach(() => {
+    req = { headers: {}, path: '/protected', method: 'POST' };
+    res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+    next = jest.fn();
+    tokenService.verifyToken.mockReset();
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  test('Case 1 — no Authorization header → 401 AUTH_REQUIRED, next() not called, no req.user', async () => {
+    await requireAuth(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'AUTH_REQUIRED' })
+    );
+    expect(next).not.toHaveBeenCalled();
+    expect(req.user).toBeUndefined();
+    expect(tokenService.verifyToken).not.toHaveBeenCalled();
+  });
+
+  test('Case 2 — valid Authorization header → next() called, req.user populated, no response sent', async () => {
+    req.headers.authorization = 'Bearer valid.token';
+    tokenService.verifyToken.mockReturnValue({
+      sub: 'user-123',
+      email: 'creator@example.com',
+      name: 'Creator',
+      'cognito:groups': ['EDITOR'],
+      token_use: 'access',
+      iat: 1000,
+      exp: 9999,
+    });
+
+    await requireAuth(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).not.toHaveBeenCalled();
+    expect(req.user).toEqual(
+      expect.objectContaining({
+        id: 'user-123',
+        email: 'creator@example.com',
+        groups: ['EDITOR'],
+      })
+    );
+  });
+
+  test('Case 3 — header present, verifier rejected → 401 AUTH_INVALID_TOKEN, generic message, server-side log', async () => {
+    req.headers.authorization = 'Bearer expired.token';
+    const rejectErr = new Error('Token expired');
+    rejectErr.name = 'JwtExpiredError';
+    tokenService.verifyToken.mockImplementation(() => {
+      throw rejectErr;
+    });
+
+    await requireAuth(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'AUTH_INVALID_TOKEN' })
+    );
+    // Generic message — no verifier internals leaked to the client.
+    const responseBody = res.json.mock.calls[0][0];
+    expect(responseBody.message).not.toContain('JwtExpiredError');
+    expect(responseBody.message).toBe('The provided token is invalid or expired.');
+    expect(next).not.toHaveBeenCalled();
+    // Server-side log fires (cause preserved for debugging).
+    expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+    expect(consoleLogSpy.mock.calls[0][0]).toBe('[F-Auth-4] requireAuth: token rejected');
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  test('Case 4 — Cognito infra failure → 503 AUTH_SERVICE_UNAVAILABLE, structured error log (regression)', async () => {
+    req.headers.authorization = 'Bearer some.token';
+    const infra = new Error('connect ECONNREFUSED 169.254.169.254:443');
+    infra.name = 'FetchError';
+    infra.code = 'ECONNREFUSED';
+    tokenService.verifyToken.mockImplementation(() => {
+      throw infra;
+    });
+
+    await requireAuth(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'AUTH_SERVICE_UNAVAILABLE' })
+    );
+    expect(next).not.toHaveBeenCalled();
+    // Structured F-Auth-3 log fires with degraded:false (requireAuth is strict).
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe('[F-Auth-3] cognito_unreachable');
+    expect(consoleErrorSpy.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        name: expect.any(String),
+        code: expect.any(String),
+        path: '/protected',
+        method: 'POST',
+        degraded: false,
+      })
+    );
+    expect(consoleLogSpy).not.toHaveBeenCalled();
+  });
+
+  test('malformed Authorization header → 401 AUTH_INVALID_FORMAT (matches authenticateToken; Track 1 interceptor pass-throughs per LOCKED §4.6)', async () => {
+    req.headers.authorization = 'NotBearer xyz';
+
+    await requireAuth(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'AUTH_INVALID_FORMAT' })
+    );
+    expect(next).not.toHaveBeenCalled();
+    expect(tokenService.verifyToken).not.toHaveBeenCalled();
   });
 });
