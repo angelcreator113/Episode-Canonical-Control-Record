@@ -7,6 +7,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import apiClient from '../services/api';
 import FeedBulkImport from '../components/FeedBulkImport';
 import ProfileCard from './feed/ProfileCard';
 import { DetailPanel, FeedStatePicker } from './feed/ProfileDetailPanel';
@@ -21,8 +22,68 @@ function Spinner() {
 import {
   API, SCHED_API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
   FEED_STATE_CONFIG, LALAVERSE_CITIES, LALA_RELATIONSHIPS, CAREER_PRESSURES,
-  PROTAGONISTS, lalaClass, fp, authHeaders,
+  PROTAGONISTS, lalaClass, fp,
 } from './feed/feedConstants';
+
+// ── Track 3 module-scope helpers (Pattern D) — user-facing operations ──
+// Profile listing + lookup
+export const fetchProfiles = (qs) => apiClient.get(`${API}?${qs}`);
+export const fetchProfileDetail = (id) => apiClient.get(`${API}/${id}`);
+export const fetchJustAWomanProfile = () =>
+  apiClient.get(`${API}?feed_layer=lalaverse&search=justawoman&limit=1`);
+
+// Profile lifecycle (Api suffix avoids name shadow vs the component-local
+// user-facing handlers — those wrap these network helpers + UI state).
+export const generateProfileApi = (payload) => apiClient.post(`${API}/generate`, payload);
+export const finalizeProfileApi = (id) => apiClient.post(`${API}/${id}/finalize`);
+export const crossProfileApi = (id) => apiClient.post(`${API}/${id}/cross`, {});
+export const editProfileApi = (id, updates) => apiClient.put(`${API}/${id}`, updates);
+export const deleteProfileById = (id) => apiClient.delete(`${API}/${id}`);
+export const regenerateProfileApi = (id, payload) => apiClient.post(`${API}/${id}/regenerate`, payload);
+export const fetchCrossingPreview = (id) => apiClient.post(`${API}/${id}/crossing-preview`);
+export const fetchSceneContext = (id) => apiClient.get(`${API}/${id}/scene-context`);
+export const approveProfileApi = (id, approvalNotes) =>
+  apiClient.post(`${API}/${id}/approve`, { approval_notes: approvalNotes || '' });
+export const rejectProfileCrossingApi = (id, reason) =>
+  apiClient.post(`${API}/${id}/reject-crossing`, { rejection_reason: reason || '' });
+
+// Bulk job lifecycle
+export const fetchBulkJob = (jobId) => apiClient.get(`${API}/bulk/jobs/${jobId}`);
+export const cancelBulkJob = (jobId) => apiClient.post(`${API}/bulk/jobs/${jobId}/cancel`);
+export const runBulkActionApi = (endpoint, ids) =>
+  apiClient.post(`${API}/${endpoint}`, { ids });
+
+// Export / stats / analytics / suggestions
+export const exportProfilesApi = (qs, responseType = 'json') =>
+  apiClient.get(`${API}/export?${qs}`, { responseType });
+export const fetchFollowEngineStats = () => apiClient.get(`${API}/follow-engine/stats`);
+export const fetchAnalyticsComposition = (feedLayer) =>
+  apiClient.get(`${API}/analytics/composition?feed_layer=${feedLayer}`);
+export const fetchMomentsTimeline = (feedLayer) =>
+  apiClient.get(`${API}/moments/timeline?feed_layer=${feedLayer}&limit=50`);
+export const fetchRelationshipSuggestions = (feedLayer) =>
+  apiClient.get(`${API}/relationships/suggestions?feed_layer=${feedLayer}&limit=20`);
+export const acceptRelationshipSuggestion = (payload) =>
+  apiClient.post(`${API}/relationships/suggestions/accept`, payload);
+
+// Templates
+export const fetchTemplates = () => apiClient.get(`${API}/templates`);
+export const saveTemplate = (payload) => apiClient.post(`${API}/templates`, payload);
+export const deleteTemplateApi = (id) => apiClient.delete(`${API}/templates/${id}`);
+
+// Scheduler
+export const fetchSchedulerStatus = () => apiClient.get(`${SCHED_API}/status`);
+export const fetchSchedulerHistory = () => apiClient.get(`${SCHED_API}/history?limit=5`);
+export const fetchSchedulerLayerStatus = () => apiClient.get(`${SCHED_API}/layer-status`);
+export const triggerSchedulerAction = (action) => apiClient.post(`${SCHED_API}/${action}`);
+export const runSchedulerNow = () => apiClient.post(`${SCHED_API}/run-now`);
+export const fillOneSchedulerLayer = (layer) =>
+  apiClient.post(`${SCHED_API}/fill-one`, { feed_layer: layer });
+export const updateSchedulerConfig = (updates) => apiClient.put(`${SCHED_API}/config`, updates);
+export const triggerAutoGenerateJob = (payload) =>
+  apiClient.post(`${SCHED_API}/auto-generate-job`, payload);
+export const previewAutoSparksApi = (payload) =>
+  apiClient.post(`${SCHED_API}/preview-sparks`, payload);
 
 function FeedPagination({ page, totalPages, loading, setPage }) {
   if(loading||totalPages<=1)return null;
@@ -61,7 +122,7 @@ function ExportDropdown({ exporting, onExport }) {
   );
 }
 
-// lalaClass, authHeaders imported from ./feed/feedConstants
+// lalaClass imported from ./feed/feedConstants; auth handled by apiClient interceptor (Track 3)
 
 // ══════════════════════════════════════════════════════════════════════
 export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId, onNavigateToTab }) {
@@ -164,9 +225,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       if(filterAdultContent!==null)qs.set('adult_content',filterAdultContent.toString());
       if(filterCelebrityTier)qs.set('celebrity_tier',filterCelebrityTier);
       if(filterFollowMotivation)qs.set('follow_motivation',filterFollowMotivation);
-      const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});
-      if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`Server error (${res.status})`);}
-      const data=await res.json();
+      const res=await fetchProfiles(qs);
+      const data=res.data;
       setProfiles(data.profiles||[]);
       if(data.pagination){setTotalPages(data.pagination.totalPages||1);setTotalCount(data.pagination.total||0);}
       if(data.statusCounts)setStatusCounts(data.statusCounts);
@@ -182,9 +242,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   // Load JustAWoman's locked record for Lala's Feed pinned card
   useEffect(()=>{
     if(feedLayer!=='lalaverse'){setJustAwomanProfile(null);return;}
-    fetch(`${API}?feed_layer=lalaverse&search=justawoman&limit=1`,{headers:authHeaders()})
-      .then(r=>{if(!r.ok)throw new Error();return r.json();})
-      .then(d=>{const jw=(d.profiles||[]).find(p=>p.is_justawoman_record);setJustAwomanProfile(jw||null);})
+    fetchJustAWomanProfile()
+      .then(r=>{const jw=(r.data?.profiles||[]).find(p=>p.is_justawoman_record);setJustAwomanProfile(jw||null);})
       .catch(()=>{setJustAwomanProfile(null);});
   },[feedLayer]);
 
@@ -211,22 +270,22 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     es.addEventListener('done',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'completed'}));}catch{}localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
     // Listen for job_error (custom named event from backend — NOT the built-in EventSource error)
     es.addEventListener('job_error',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,status:'failed',error_message:d.error||'Unknown error'}));localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}catch{}});
-    es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){
+    es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetchBulkJob(jobId);const d=res.data;if(d.job){
       // Detect stuck: processing with error_message but 0 progress
       const isStuck=d.job.status==='processing'&&d.job.error_message&&(d.job.completed||0)===0&&(d.job.failed||0)===0;
       if(isStuck){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');loadProfiles();}
       else{setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}
     }}catch{}},3000);});
     // Safety-net: if still pending after 4s, poll REST to catch missed SSE events
-    const pendingFallback=setTimeout(async()=>{try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job&&d.job.status!=='pending'){setActiveJob(prev=>{if(prev?.status==='pending')return{...prev,...d.job};return prev;});if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},4000);
+    const pendingFallback=setTimeout(async()=>{try{const res=await fetchBulkJob(jobId);const d=res.data;if(d.job&&d.job.status!=='pending'){setActiveJob(prev=>{if(prev?.status==='pending')return{...prev,...d.job};return prev;});if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},4000);
     // Safety-net: if stuck at 0 progress for 2 minutes, poll REST to detect dead jobs
-    const stuckFallback=setTimeout(async()=>{try{const res=await fetch(`${API}/bulk/jobs/${jobId}`,{headers:authHeaders()});const d=await res.json();if(d.job){if(['completed','failed','cancelled'].includes(d.job.status)){setActiveJob(d.job);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}else if((d.job.completed||0)===0&&(d.job.failed||0)===0&&d.job.error_message){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},120000);
+    const stuckFallback=setTimeout(async()=>{try{const res=await fetchBulkJob(jobId);const d=res.data;if(d.job){if(['completed','failed','cancelled'].includes(d.job.status)){setActiveJob(d.job);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}else if((d.job.completed||0)===0&&(d.job.failed||0)===0&&d.job.error_message){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},120000);
     const origClose=es.close.bind(es);es.close=()=>{clearTimeout(pendingFallback);clearTimeout(stuckFallback);origClose();};
   },[loadProfiles]);
 
   useEffect(()=>{
     const saved=localStorage.getItem('spg_active_job');
-    if(saved){fetch(`${API}/bulk/jobs/${saved}`,{headers:authHeaders()}).then(r=>r.json()).then(d=>{if(d.job){
+    if(saved){fetchBulkJob(saved).then(r=>r.data).then(d=>{if(d.job){
       // Detect stuck jobs on reconnect: processing with error_message but 0 progress
       const isStuck=d.job.status==='processing'&&d.job.error_message&&(d.job.completed||0)===0&&(d.job.failed||0)===0;
       if(isStuck){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');}
@@ -237,7 +296,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
 
   const startJobPolling = (id,total)=>{localStorage.setItem('spg_active_job',id);setActiveJob({id,status:'pending',total:total||0,completed:0,failed:0});connectJobSSE(id);};
   const dismissJob = ()=>{setActiveJob(null);localStorage.removeItem('spg_active_job');if(sseRef.current){sseRef.current.close();sseRef.current=null;}};
-  const cancelJob = async()=>{if(!activeJob?.id)return;setCancellingJob(true);try{const res=await fetch(`${API}/bulk/jobs/${activeJob.id}/cancel`,{method:'POST',headers:authHeaders()});if(!res.ok){const d=await res.json().catch(()=>({}));if(d.error&&/already/.test(d.error)){try{const jr=await fetch(`${API}/bulk/jobs/${activeJob.id}`,{headers:authHeaders()});const jd=await jr.json();if(jd.job){setActiveJob(jd.job);localStorage.removeItem('spg_active_job');loadProfiles();}}catch{}}}}catch{}finally{setCancellingJob(false);}};
+  const cancelJob = async()=>{if(!activeJob?.id)return;setCancellingJob(true);try{await cancelBulkJob(activeJob.id);}catch(err){const e=err.response?.data;if(e?.error&&/already/.test(e.error)){try{const jr=await fetchBulkJob(activeJob.id);const jd=jr.data;if(jd.job){setActiveJob(jd.job);localStorage.removeItem('spg_active_job');loadProfiles();}}catch{}}}finally{setCancellingJob(false);}};
 
   const showToast = (message,type='success')=>{clearTimeout(toastTimer.current);setToast({message,type});toastTimer.current=setTimeout(()=>setToast(null),4000);};
 
@@ -247,10 +306,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     if(selected?.id===profile.id){setSelected(null);return;}
     setSelected(profile); // show immediately with partial data
     try{
-      const res=await fetch(`${API}/${profile.id}`,{headers:authHeaders()});
-      if(res.ok){const d=await res.json();if(d.profile)setSelected(d.profile);}
-      else{showToast('Failed to load full profile details','error');}
-    }catch(err){showToast('Failed to load profile: '+err.message,'error');}
+      const res=await fetchProfileDetail(profile.id);
+      if(res.data?.profile)setSelected(res.data.profile);
+      else showToast('Failed to load full profile details','error');
+    }catch(err){showToast('Failed to load profile: '+(err.response?.data?.error||err.message),'error');}
   };
 
   const changeFilter = s=>{setFilterStatus(s);setPage(1);setSelectedIds(new Set());};
@@ -263,10 +322,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const getBulkIds = async()=>{
     if(!selectAllPages)return[...selectedIds];
     const allIds=[];let pg=1;
-    while(true){const qs=new URLSearchParams();if(filterStatus)qs.set('status',filterStatus);if(feedLayer)qs.set('feed_layer',feedLayer);if(search.trim())qs.set('search',search.trim());qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',100);const res=await fetch(`${API}?${qs}`,{headers:authHeaders()});const d=await res.json();const batch=(d.profiles||[]).map(p=>p.id);allIds.push(...batch);if(batch.length<100||allIds.length>=(d.pagination?.total||d.total||0))break;pg++;}
+    while(true){const qs=new URLSearchParams();if(filterStatus)qs.set('status',filterStatus);if(feedLayer)qs.set('feed_layer',feedLayer);if(search.trim())qs.set('search',search.trim());qs.set('sort',sortBy);qs.set('page',pg);qs.set('limit',100);const res=await fetchProfiles(qs);const d=res.data;const batch=(d.profiles||[]).map(p=>p.id);allIds.push(...batch);if(batch.length<100||allIds.length>=(d.pagination?.total||d.total||0))break;pg++;}
     return allIds;
   };
-  const runBulk = async(ids,endpoint)=>{const results=[];for(let i=0;i<ids.length;i+=100){const chunk=ids.slice(i,i+100);const res=await fetch(`${API}/${endpoint}`,{method:'POST',headers:authHeaders(),body:JSON.stringify({ids:chunk})});const d=await res.json();if(!res.ok)throw new Error(d.error);results.push(d);}return results;};
+  const runBulk = async(ids,endpoint)=>{const results=[];for(let i=0;i<ids.length;i+=100){const chunk=ids.slice(i,i+100);try{const res=await runBulkActionApi(endpoint,chunk);results.push(res.data);}catch(err){throw new Error(err.response?.data?.error||err.message||'Bulk action failed');}}return results;};
   const bulkOp = async(endpoint,confirmMsg,onDone)=>{const ids=await getBulkIds();if(!ids.length)return;if(!window.confirm(confirmMsg.replace('$n',selectAllPages?`all ${statusCounts.total}`:ids.length)))return;try{const r=await runBulk(ids,endpoint);onDone(r);setSelectedIds(new Set());setSelectAllPages(false);setPage(1);loadProfiles();}catch(err){setError(err.message);}};
 
   // ── Generate ───────────────────────────────────────────────────────
@@ -276,51 +335,45 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     try{
       const hasAdv=Object.values(advFields).some(v=>v);
       const lvFields=feedLayer==='lalaverse'?{feed_layer:'lalaverse',city:lvCity,lala_relationship:lvRelationship,career_pressure:lvPressure}:{feed_layer:'real_world'};
-      const res=await fetch(`${API}/generate`,{method:'POST',headers:authHeaders(),body:JSON.stringify({handle:handle.trim(),platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...lvFields,...(hasAdv?{advanced_context:advFields}:{})})});
-      const data=await res.json();
-      if(!res.ok)throw new Error(data.error||'Generation failed');
+      const res=await generateProfileApi({handle:handle.trim(),platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...lvFields,...(hasAdv?{advanced_context:advFields}:{})});
+      const data=res.data;
       setSelected(data.profile);setHandle('');setVibe('');setAdvFields({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});setShowAdvanced(false);setPage(1);
-    }catch(err){setError(err.message);}
+    }catch(err){setError(err.response?.data?.error||err.message||'Generation failed');}
     finally{setGenerating(false);}
   };
 
-  const finalizeProfile = async id=>{try{const res=await fetch(`${API}/${id}/finalize`,{method:'POST',headers:authHeaders()});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.message);}};
-  const crossProfile   = async id=>{try{const res=await fetch(`${API}/${id}/cross`,{method:'POST',headers:authHeaders(),body:JSON.stringify({})});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.message);}};
-  const editProfile    = async(id,updates)=>{try{const res=await fetch(`${API}/${id}`,{method:'PUT',headers:authHeaders(),body:JSON.stringify(updates)});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.message);}};
-  const deleteProfile  = async id=>{if(!window.confirm('Delete this profile permanently?'))return;try{const res=await fetch(`${API}/${id}`,{method:'DELETE',headers:authHeaders()});const d=await res.json();if(!res.ok)throw new Error(d.error);setProfiles(p=>p.filter(x=>x.id!==id));if(selected?.id===id)setSelected(null);}catch(err){setError(err.message);}};
+  const finalizeProfile = async id=>{try{const res=await finalizeProfileApi(id);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
+  const crossProfile   = async id=>{try{const res=await crossProfileApi(id);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
+  const editProfile    = async(id,updates)=>{try{const res=await editProfileApi(id,updates);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
+  const deleteProfile  = async id=>{if(!window.confirm('Delete this profile permanently?'))return;try{await deleteProfileById(id);setProfiles(p=>p.filter(x=>x.id!==id));if(selected?.id===id)setSelected(null);}catch(err){setError(err.response?.data?.error||err.message);}};
 
   // ── Regenerate profile ────────────────────────────────────────────
   const regenerateProfile = async (id, overrides={})=>{
     setRegenerating(true);setError(null);
     try{
-      const res=await fetch(`${API}/${id}/regenerate`,{method:'POST',headers:authHeaders(),body:JSON.stringify({...overrides,character_context:protagonist.context,character_key:protagonist.key})});
-      const data=await res.json();
-      if(!res.ok)throw new Error(data.error||'Regeneration failed');
+      const res=await regenerateProfileApi(id,{...overrides,character_context:protagonist.context,character_key:protagonist.key});
+      const data=res.data;
       setProfiles(p=>p.map(x=>x.id===id?data.profile:x));
       if(selected?.id===id)setSelected(data.profile);
       showToast('Profile regenerated');
-    }catch(err){setError(err.message);}
+    }catch(err){setError(err.response?.data?.error||err.message||'Regeneration failed');}
     finally{setRegenerating(false);}
   };
 
   // ── Crossing preview ────────────────────────────────────────────
   const loadCrossingPreview = async (id)=>{
     try{
-      const res=await fetch(`${API}/${id}/crossing-preview`,{method:'POST',headers:authHeaders()});
-      const data=await res.json();
-      if(!res.ok)throw new Error(data.error||'Preview failed');
-      setCrossingPreview(data.preview);
-    }catch(err){setError(err.message);}
+      const res=await fetchCrossingPreview(id);
+      setCrossingPreview(res.data.preview);
+    }catch(err){setError(err.response?.data?.error||err.message||'Preview failed');}
   };
 
   // ── Scene context ───────────────────────────────────────────────
   const loadSceneContext = async (id)=>{
     try{
-      const res=await fetch(`${API}/${id}/scene-context`,{headers:authHeaders()});
-      const data=await res.json();
-      if(!res.ok)throw new Error(data.error||'Failed to load scene context');
-      setSceneContext(data.context);
-    }catch(err){setError(err.message);}
+      const res=await fetchSceneContext(id);
+      setSceneContext(res.data.context);
+    }catch(err){setError(err.response?.data?.error||err.message||'Failed to load scene context');}
   };
 
   const copySceneContext = ()=>{
@@ -334,31 +387,28 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     try{
       const qs=new URLSearchParams({format,feed_layer:feedLayer});
       if(filterStatus)qs.set('status',filterStatus);
-      const res=await fetch(`${API}/export?${qs}`,{headers:authHeaders()});
-      if(!res.ok)throw new Error('Export failed');
+      const res=await exportProfilesApi(qs, format==='csv'?'blob':'json');
       if(format==='csv'){
-        const blob=await res.blob();
+        const blob=res.data; // axios returned a Blob (responseType: 'blob')
         const url=URL.createObjectURL(blob);
         const a=document.createElement('a');a.href=url;a.download='feed-profiles.csv';a.click();URL.revokeObjectURL(url);
       }else{
-        const data=await res.json();
+        const data=res.data;
         const blob=new Blob([JSON.stringify(data.profiles,null,2)],{type:'application/json'});
         const url=URL.createObjectURL(blob);
         const a=document.createElement('a');a.href=url;a.download='feed-profiles.json';a.click();URL.revokeObjectURL(url);
       }
       showToast(`Exported as ${format.toUpperCase()}`);
-    }catch(err){setError(err.message);}
+    }catch(err){setError(err.response?.data?.error||err.message||'Export failed');}
     finally{setExporting(false);}
   };
 
   // ── Follow stats ───────────────────────────────────────────────
   const loadFollowStats = async ()=>{
     try{
-      const res=await fetch(`${API}/follow-engine/stats`,{headers:authHeaders()});
-      if(!res.ok)throw new Error('Failed to load follow stats');
-      const data=await res.json();
-      setFollowStats(data);
-    }catch(err){console.warn('loadFollowStats:',err.message);}
+      const res=await fetchFollowEngineStats();
+      setFollowStats(res.data);
+    }catch(err){console.warn('loadFollowStats:',err.response?.data?.error||err.message);}
   };
 
   // ── Feed Automation helpers ──────────────────────────────────────────
@@ -381,74 +431,72 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const loadAutoStatus = async ()=>{
     try{
       const [statusRes,histRes,layerRes]=await Promise.all([
-        fetch(`${SCHED_API}/status`,{headers:authHeaders()}),
-        fetch(`${SCHED_API}/history?limit=5`,{headers:authHeaders()}),
-        fetch(`${SCHED_API}/layer-status`,{headers:authHeaders()}),
+        fetchSchedulerStatus().catch(()=>null),
+        fetchSchedulerHistory().catch(()=>null),
+        fetchSchedulerLayerStatus().catch(()=>null),
       ]);
-      if(statusRes.ok)setAutoStatus(await statusRes.json());
-      if(histRes.ok){const hd=await histRes.json();setAutoHistory(hd.history||[]);}
-      if(layerRes.ok)setLayerStatus((await layerRes.json()).layers||null);
+      if(statusRes)setAutoStatus(statusRes.data);
+      if(histRes)setAutoHistory(histRes.data?.history||[]);
+      if(layerRes)setLayerStatus(layerRes.data?.layers||null);
     }catch(err){console.warn('loadAutoStatus:',err.message);}
   };
 
   const toggleScheduler = async (action)=>{
     try{
-      const res=await fetch(`${SCHED_API}/${action}`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()}});
-      if(!res.ok){const e=await res.json().catch(()=>({}));showToast(e.error||'Scheduler action failed','error');}
+      await triggerSchedulerAction(action);
       await loadAutoStatus();
-    }catch(err){showToast('Scheduler action failed: '+err.message,'error');}
+    }catch(err){showToast('Scheduler action failed: '+(err.response?.data?.error||err.message),'error');}
   };
 
   const runAutoNow = async ()=>{
     setAutoRunning(true);
     try{
-      await fetch(`${SCHED_API}/run-now`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()}});
+      await runSchedulerNow();
       await loadAutoStatus();
       await loadProfiles();
       showToast('Automation cycle complete','success');
-    }catch(e){showToast('Cycle failed: '+e.message,'error');}
+    }catch(e){showToast('Cycle failed: '+(e.response?.data?.error||e.message),'error');}
     finally{setAutoRunning(false);}
   };
 
   const fillOneProfile = async (layer)=>{
     setAutoRunning(true);
     try{
-      const res=await fetch(`${SCHED_API}/fill-one`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({feed_layer:layer})});
-      const data=await res.json();
+      const res=await fillOneSchedulerLayer(layer);
+      const data=res.data;
       if(data.profile){showToast(`Created @${data.profile.handle}`,'success');await loadProfiles();await loadAutoStatus();}
       else showToast(data.error||'Failed','error');
-    }catch(e){showToast(e.message,'error');}
+    }catch(e){showToast(e.response?.data?.error||e.message,'error');}
     finally{setAutoRunning(false);}
   };
 
   const updateAutoConfig = async (updates)=>{
     try{
-      const res=await fetch(`${SCHED_API}/config`,{method:'PUT',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify(updates)});
-      if(!res.ok){const e=await res.json().catch(()=>({}));showToast(e.error||'Config update failed','error');}
+      await updateSchedulerConfig(updates);
       await loadAutoStatus();
-    }catch(err){showToast('Config update failed: '+err.message,'error');}
+    }catch(err){showToast('Config update failed: '+(err.response?.data?.error||err.message),'error');}
   };
 
   // ── Auto-Generate (background job — continues even if you leave the page) ──
   const runAutoGenerate = async ()=>{
     setAutoGenRunning(true);setError(null);
     try{
-      const res=await fetch(`${SCHED_API}/auto-generate-job`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({feed_layer:feedLayer,count:autoGenCount})});
-      const data=await res.json();
-      if(!res.ok){throw new Error(data.error||'Failed to start auto-generation');}
+      const res=await triggerAutoGenerateJob({feed_layer:feedLayer,count:autoGenCount});
+      const data=res.data;
       // Track via the existing bulk-job SSE infrastructure (activeJob bar handles all progress)
       startJobPolling(data.job_id, autoGenCount);
       showToast(`Auto-generating ${autoGenCount} profile(s) in background — you can leave this page`,'success');
-    }catch(err){setError(err.message);}
+    }catch(err){setError(err.response?.data?.error||err.message||'Failed to start auto-generation');}
     finally{setAutoGenRunning(false);}
   };
 
   const previewAutoSparks = async ()=>{
     setPreviewLoading(true);setPreviewSparks(null);
     try{
-      const res=await fetch(`${SCHED_API}/preview-sparks`,{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({feed_layer:feedLayer,count:autoGenCount})});
-      const data=await res.json();if(data.sparks)setPreviewSparks(data.sparks);else setError(data.error||'Preview failed');
-    }catch(err){setError(err.message);}
+      const res=await previewAutoSparksApi({feed_layer:feedLayer,count:autoGenCount});
+      const data=res.data;
+      if(data.sparks)setPreviewSparks(data.sparks);else setError(data.error||'Preview failed');
+    }catch(err){setError(err.response?.data?.error||err.message);}
     finally{setPreviewLoading(false);}
   };
 
@@ -456,11 +504,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const loadDiversity = async ()=>{
     setDiversityLoading(true);
     try{
-      const res=await fetch(`${API}/analytics/composition?feed_layer=${feedLayer}`,{headers:authHeaders()});
-      if(!res.ok)throw new Error('Failed to load analytics');
-      const data=await res.json();
-      setDiversityData(data);
-    }catch(err){console.warn('loadDiversity:',err.message);}
+      const res=await fetchAnalyticsComposition(feedLayer);
+      setDiversityData(res.data);
+    }catch(err){console.warn('loadDiversity:',err.response?.data?.error||err.message);}
     finally{setDiversityLoading(false);}
   };
 
@@ -468,11 +514,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const loadMoments = async ()=>{
     setMomentsLoading(true);
     try{
-      const res=await fetch(`${API}/moments/timeline?feed_layer=${feedLayer}&limit=50`,{headers:authHeaders()});
-      if(!res.ok)throw new Error('Failed to load moments');
-      const data=await res.json();
-      setMomentsData(data);
-    }catch(err){console.warn('loadMoments:',err.message);}
+      const res=await fetchMomentsTimeline(feedLayer);
+      setMomentsData(res.data);
+    }catch(err){console.warn('loadMoments:',err.response?.data?.error||err.message);}
     finally{setMomentsLoading(false);}
   };
 
@@ -480,63 +524,58 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const loadSuggestions = async ()=>{
     setSuggestionsLoading(true);
     try{
-      const res=await fetch(`${API}/relationships/suggestions?feed_layer=${feedLayer}&limit=20`,{headers:authHeaders()});
-      if(!res.ok)throw new Error('Failed to load suggestions');
-      const data=await res.json();
-      setSuggestions(data);
-    }catch(err){console.warn('loadSuggestions:',err.message);}
+      const res=await fetchRelationshipSuggestions(feedLayer);
+      setSuggestions(res.data);
+    }catch(err){console.warn('loadSuggestions:',err.response?.data?.error||err.message);}
     finally{setSuggestionsLoading(false);}
   };
 
   const acceptSuggestion = async (sourceId,targetId,relType)=>{
     try{
-      const res=await fetch(`${API}/relationships/suggestions/accept`,{method:'POST',headers:authHeaders(),body:JSON.stringify({source_id:sourceId,target_id:targetId,relationship_type:relType})});
-      if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||'Accept failed');}
+      await acceptRelationshipSuggestion({source_id:sourceId,target_id:targetId,relationship_type:relType});
       showToast('Relationship created');
       loadSuggestions();
-    }catch(err){setError(err.message);}
+    }catch(err){setError(err.response?.data?.error||err.message||'Accept failed');}
   };
 
   // ── Templates loader ────────────────────────────────────────────
   const loadTemplates = async ()=>{
-    try{const res=await fetch(`${API}/templates`,{headers:authHeaders()});if(!res.ok)throw new Error('Failed to load templates');const d=await res.json();setTemplates(d.templates||[]);}catch(err){console.warn('loadTemplates:',err.message);}
+    try{const res=await fetchTemplates();setTemplates(res.data?.templates||[]);}catch(err){console.warn('loadTemplates:',err.response?.data?.error||err.message);}
   };
 
   const saveAsTemplate = async (profileId)=>{
     const name=prompt('Template name:');
     if(!name)return;
     try{
-      await fetch(`${API}/templates`,{method:'POST',headers:authHeaders(),body:JSON.stringify({profile_id:profileId,name})});
+      await saveTemplate({profile_id:profileId,name});
       showToast('Template saved');
       loadTemplates();
-    }catch(err){setError(err.message);}
+    }catch(err){setError(err.response?.data?.error||err.message);}
   };
 
   const deleteTemplate = async (templateId)=>{
-    try{const res=await fetch(`${API}/templates/${templateId}`,{method:'DELETE',headers:authHeaders()});if(!res.ok)throw new Error('Delete failed');setTemplates(t=>t.filter(x=>x.id!==templateId));}catch(err){showToast('Delete template failed: '+err.message,'error');}
+    try{await deleteTemplateApi(templateId);setTemplates(t=>t.filter(x=>x.id!==templateId));}catch(err){showToast('Delete template failed: '+(err.response?.data?.error||err.message),'error');}
   };
 
   // ── Crossing Approval ───────────────────────────────────────────
   const approveForCrossing = async (id,notes)=>{
     try{
-      const res=await fetch(`${API}/${id}/approve`,{method:'POST',headers:authHeaders(),body:JSON.stringify({approval_notes:notes||''})});
-      const d=await res.json();
-      if(!res.ok)throw new Error(d.error);
+      const res=await approveProfileApi(id,notes);
+      const d=res.data;
       setProfiles(p=>p.map(x=>x.id===id?d.profile:x));
       if(selected?.id===id)setSelected(d.profile);
       showToast('Approved for crossing');
-    }catch(err){setError(err.message);}
+    }catch(err){setError(err.response?.data?.error||err.message);}
   };
 
   const rejectCrossing = async (id,reason)=>{
     try{
-      const res=await fetch(`${API}/${id}/reject-crossing`,{method:'POST',headers:authHeaders(),body:JSON.stringify({rejection_reason:reason||''})});
-      const d=await res.json();
-      if(!res.ok)throw new Error(d.error);
+      const res=await rejectProfileCrossingApi(id,reason);
+      const d=res.data;
       setProfiles(p=>p.map(x=>x.id===id?d.profile:x));
       if(selected?.id===id)setSelected(d.profile);
       showToast('Crossing rejected');
-    }catch(err){setError(err.message);}
+    }catch(err){setError(err.response?.data?.error||err.message);}
   };
 
   // fp imported from ./feed/feedConstants

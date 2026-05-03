@@ -164,5 +164,10 @@ export const ENHANCED_API = '/api/v1/feed-enhanced';
 // ── Helpers ────────────────────────────────────────────────────────────
 export function lalaClass(score) { return score>=7?'high':score>=4?'mid':'low'; }
 export function fp(p) { return p?.full_profile||p||{}; }
+// getToken() retained for Path D files that import it (App.jsx, SidebarProgress,
+// FeedBulkImport, NarrativeControlCenter, ProductionTab, WorldStudio). Track 4
+// (Path D migration) deletes those importers, then drops getToken() as final
+// cleanup. The sessionStorage fallback is unreachable code — confirmed via grep
+// (zero sessionStorage.setItem('token') sites in frontend/src) — but preserved
+// here for parity with Path D files that still reference it.
 export function getToken() { return localStorage.getItem('authToken')||localStorage.getItem('token')||sessionStorage.getItem('token'); }
-export function authHeaders() { const t=getToken(); return t?{Authorization:`Bearer ${t}`,'Content-Type':'application/json'}:{'Content-Type':'application/json'}; }
