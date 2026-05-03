@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.6 — Single-PR plan. Track 3 approved (76 Path C sites migrated). Pattern F (Api-suffix) locked. Path E candidates filed.
+**Document version:** v2.7 — Single-PR plan. Track 4 approved (25 Path D sites migrated + getToken() deletion). All inline-Bearer construction eliminated except locked CZ-5 keepalive exception.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2) complete (126/126 frontend, 436/436 backend tests). Track 4 (Path D migration) is next.
+**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete (135/135 frontend, 436/436 backend tests). Only inline-Bearer remaining: BookEditor.jsx:55 (CZ-5 keepalive, locked exception). Track 6 (BUG-class, ~345 sites) is next.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -422,7 +422,7 @@ Pre-Track-1.6 `requireAuth`'s catch block returned `message: error.message` to c
 - **SessionStorage fallback was unreachable code.** 5 of 7 helpers fell back through `localStorage.authToken || localStorage.token || sessionStorage.token`. Stage 1 §5 investigation found **zero** write sites for `sessionStorage.token` anywhere in the codebase — the third fallback was never reachable. apiClient's 2-fallback (`localStorage.authToken || localStorage.token`) covers every reachable token path. No interceptor change needed. The `sessionStorage.getItem('token')` pattern persists in 7 Path D files (App.jsx, SidebarProgress.jsx, FeedBulkImport.jsx ×2, NarrativeControlCenter.jsx, ProductionTab.jsx, WorldStudio.jsx) plus `feedConstants.js getToken()`; Track 4 will scrub these as it migrates the dependents.
 - **Helper-name shadow conflicts when extracting Track 2.5-style helpers — Pattern F locked in §9.11.** SocialProfileGenerator.jsx had 11 component-local handlers whose names matched proposed module-scope exports. Resolution: `Api` suffix on the network helpers (finalizeProfileApi, crossProfileApi, etc.). Component handlers stay unchanged — they wrap the network helper plus UI state updates. Convention applies wherever Tracks 4/6 encounter files where component handler names mirror endpoint operation names.
 
-##### Track 4 — Migrate Path D (inline Bearer) to apiClient
+##### Track 4 — Migrate Path D (inline Bearer) to apiClient (LOCKED v2.7, COMPLETE)
 
 - 25+ call sites across ~17 files. Replace inline `Bearer ${token}` construction with `apiClient` method calls.
 - Cohabiting files (apiClient + inline Bearer in the same file): `ProductionTab.jsx`, `WorldAdmin.jsx`. The inline Bearer sites in these files are accidental drift, not intentional dual-paradigm. Convert all to `apiClient`.
@@ -430,6 +430,16 @@ Pre-Track-1.6 `requireAuth`'s catch block returned `message: error.message` to c
 - **LOCKED EXCEPTION (v2.5 — Track 2 surfaced)** — `BookEditor.jsx:181` is the **only Path D site that survives Track 4**. The beforeunload save (Step 6a / CZ-5) requires `keepalive: true`; axios does not support keepalive, so apiClient cannot replace it without breaking CZ-5's data-loss-prevention contract. The site has a 6-line in-code comment documenting the exception, and a regression-lock test (Track 2.5) that asserts `apiClient.post/put/request` are NOT called when the keepalive helper fires. Track 4 must preserve this site, allowlist it in the verification grep, and not "fix" it.
 - **getToken() handoff from Track 3 (LOCKED v2.6)** — `pages/feed/feedConstants.js` exports a `getToken()` function that reads the same 3-fallback chain (with the unreachable sessionStorage). Track 3 Stage 2 deleted the shared `authHeaders()` but kept `getToken()` because **seven Path D files import it**: App.jsx, SidebarProgress.jsx, FeedBulkImport.jsx (×2 sites), NarrativeControlCenter.jsx, ProductionTab.jsx, WorldStudio.jsx. Track 4 migrates these seven files to apiClient (which doesn't need `getToken` because the request interceptor reads localStorage directly). Once all seven importers are migrated, `getToken()` has zero callers and gets deleted from `feedConstants.js` as Track 4's final cleanup commit. After that deletion, the unreachable sessionStorage code path is fully eliminated from frontend production code.
 - **Pattern F applies (LOCKED v2.6 §9.11)** — when extracting Track 2.5-style helpers from Track 4 files where component handler names mirror endpoint operation names, suffix the module-scope helper with `Api`. Track 3 Stage 2 surfaced this in SocialProfileGenerator.jsx (11 shadow conflicts resolved with the suffix). Tracks 4 and 6 will hit similar patterns in larger files — apply the convention from the start.
+
+**Track 4 architectural findings (v2.7, locked from commits `08a24fec` migration + `06beb1d1` getToken deletion):**
+
+- 25 active sites migrated across 19 files (1 site preserved per locked exception). **The only inline-Bearer construction in frontend production code is now BookEditor.jsx:55** — the CZ-5 keepalive helper, with 3 protective regression-lock tests (Track 2.5 lock). All other auth injection now flows through the apiClient request interceptor.
+- **Inventory v2 scope correction — WorldStudio `headers()` helper covered 3 sites, not 32.** Track 4 surface re-read found the helper is scoped to the `CharacterFollowsTab` sub-component (line 468) with 3 callers, not module-scope wrapping all 32 file fetches. The other 29 fetches in WorldStudio.jsx are unrelated unauth Path E candidates (filed in §9.12). Surface-before-execute discipline caught the misclassification before any code changes.
+- **BookEditor keepalive line corrected — inline-Bearer literal is at line 55, not line 181.** Track 2.5's extraction of `sendKeepaliveBeforeUnload` to module scope moved the literal from inline component-body (pre-2.5 line 181) to the helper definition (post-2.5 line 55). v2.5/v2.6 references to `BookEditor.jsx:181` are stale. v2.7 verification grep allowlist updated to `BookEditor.jsx:55`. Track 2.5 regression-lock tests (3 tests in `BookEditor.test.jsx`) cover the corrected line.
+- **templateService stale-token bug self-resolved — inadvertent fix as side effect of the migration.** `templateService.js` cached `this.token = localStorage.getItem('authToken')` at construction time; re-login mid-session left the service using the stale token (inventory v2 §8.7 surfaced). Migration to apiClient eliminates the bug because the request interceptor reads localStorage fresh on every call. Same pattern as Track 1.6's pre-existing message-leak silent-fix: surface explicitly so it's not "silent."
+- **NarrativeControlCenter.fetchJSON contract change — shipped behavioral change worth flagging.** Pre-Track-4 `fetchJSON` returned `res.json()` unconditionally including on non-2xx responses (callers received error bodies as if successful). Post-Track-4 `fetchJSON` throws on non-2xx via apiClient. All 17 callers verified to follow the happy-path `await fetchJSON(...).then(data => check shape)` pattern; none rely on receiving error bodies. Net effect: silent error-body returns eliminated; error handling now consistently flows through try/catch. Documented in `fetchJSON`'s docblock.
+- **getToken() handoff was unnecessary — dead code, not dependent code.** v2.6 §4.6 Track 4 spec assumed seven Path D files imported `getToken` from feedConstants.js; Track 4 surface grep found **zero importers anywhere in the codebase**. The seven Path D files reimplemented the 3-fallback chain inline rather than importing the helper. feedConstants.getToken() was dead code through the entire F-AUTH-1 work and likely through prior history. Deleted in commit `06beb1d1` as the final Track 4 cleanup. The unreachable sessionStorage code path is now fully eliminated from frontend production code.
+- **Pattern F applied prophylactically — did not trigger.** Track 4 surface flagged WorldAdmin.jsx (6000+ lines, not read end-to-end) as a Pattern F candidate. During migration, no shadow conflicts surfaced in WorldAdmin, ProductionTab, or WorldStudio. Conservative-application discipline correct: the cost of preparation was zero (naming convention from the start), the cost of mid-flow discovery would have been a refactor. Pattern F stays as canon for Track 6.
 
 ##### Track 6 — Migrate BUG-class raw fetches to apiClient (NEW v2.0)
 
@@ -475,10 +485,10 @@ grep -rn "authHeader\b" frontend/src/ | grep -v "authHeaders" | grep -v "test\.\
 Expected output: zero matches. (Production code; test files may contain "authHeader" in test descriptions and are excluded.)
 
 ```bash
-grep -rn "Bearer \${" frontend/src/ | grep -v "src/services/api.js" | grep -v "BookEditor.jsx:" | grep -v "test\."
+grep -rn "Bearer \${" frontend/src/ | grep -v "src/services/api.js" | grep -v "BookEditor.jsx:55" | grep -v "test\."
 ```
 
-Expected output: zero matches. The two allowlisted locations are: (a) `src/services/api.js` — the apiClient request interceptor itself; (b) `BookEditor.jsx:181` — the locked CZ-5 keepalive exception (v2.5).
+Expected output: zero matches. The two allowlisted locations are: (a) `src/services/api.js` — the apiClient request interceptor itself; (b) `BookEditor.jsx:55` — the locked CZ-5 keepalive exception (line corrected v2.7; was `BookEditor.jsx:181` in v2.5/v2.6 before Track 2.5 extraction moved the literal).
 
 ```bash
 grep -rn "fetch(" frontend/src/ | wc -l
@@ -868,7 +878,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` Stage 1 + `69f0a926` Stage 2; 76 sites migrated; 8 authHeaders helpers eliminated; 126/126 frontend tests pass). All approved commits backed up at `69f0a926` on `claude/f-auth-1-backup`. Track 4 (Path D migration) is next.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` Stage 1 + `69f0a926` Stage 2; 76 sites). Track 4 Path D migration COMPLETE (commits `08a24fec` migration + `06beb1d1` getToken deletion; 25 active sites + 1 keepalive exception preserved at `BookEditor.jsx:55`; 135/135 frontend tests pass). All approved commits backed up at `06beb1d1` on `claude/f-auth-1-backup`. Track 6 (BUG-class migration, ~345 sites) is next.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -923,13 +933,22 @@ Note: the outer try/catch entry that was deferred in v1.6/v1.7 was **cleaned up 
 - **Refresh-via-cookie hardening** — login endpoint sets a refreshToken httpOnly cookie (`src/routes/auth.js:75`), but the refresh endpoint at `:112` reads from request body only, ignoring the cookie. The Track 1 helper passes from localStorage (matching the body path). Cookie-based refresh would be a hardening follow-up; out of F-AUTH-1 scope.
 - **npm audit follow-up** — Track 1.5 install reported 24 vulnerabilities (3 low, 13 moderate, 7 high, 1 critical) in the existing frontend dep tree. None new from jsdom; ambient state of the codebase pre-F-AUTH-1. Run `npm audit fix` and review the manual cases after F-AUTH-1 ships.
 
-**Path E candidates surfaced during Track 3 (4 sites across 3 files) — reclassify during Step 3 sweep:**
+**Path E candidates surfaced during Tracks 3 and 4 (~37 sites across 8 files) — reclassify during Step 3 sweep:**
+
+From Track 3 (4 sites, 3 files):
 
 - `frontend/src/hooks/useStoryEngine.js:527` — POST to `/api/v1/memories/extract-story-memories` with no auth header. Inline `headers: { 'Content-Type': 'application/json' }` only.
 - `frontend/src/pages/RelationshipEngine.jsx:111` — bare `fetch(url)` GET `/api/v1/character-registry/registries` with no auth at all.
 - `frontend/src/pages/SocialProfileGenerator.jsx:1213, 1229` — bare `fetch` to `/api/v1/world/<showId>/events` and `/api/v1/world/<showId>/events/from-profile` with no auth helper.
 
-Disposition pattern: each is either intentionally PUBLIC (backend route serves unauth-safe data) or a BUG (backend route requires auth and the frontend silently sends none). Step 3 sweep classifies each backend route as PUBLIC or requireAuth; Path E sites whose backend is PUBLIC stay as raw fetch (correct), Path E sites whose backend is requireAuth get migrated to apiClient (Track 6-equivalent fix). No action until Step 3 reaches the corresponding routes.
+From Track 4 (~33 additional sites):
+
+- `frontend/src/components/FeedBulkImport.jsx:164` — GET `/bulk/jobs` with no auth. `:197` — parseCsv POST has Content-Type only, no auth.
+- `frontend/src/pages/WorldStudio.jsx` — ~29 unauth fetches across multiple sites (lines 231, 248, 259, 271, 714, 722, 744, and others) hitting `/character-depth`, `/world/*`, `/api/v1/character-registry/registries`. Most likely intentional PUBLIC reads (world data is presumably visible to non-authenticated users) but Step 3 must classify each backend route.
+- `frontend/src/pages/StoryReviewPanel.jsx` — 3 fetch sites besides the migrated Path D site need Path E spot-check during Step 3 sweep.
+- `frontend/src/components/AuditLogViewer.jsx` — mockLogs fallback. *Intentional dev-mode fallback, not a bug*. No action needed.
+
+Disposition pattern (unchanged from v2.6): each is either intentionally PUBLIC (backend route serves unauth-safe data) or a BUG (backend route requires auth and the frontend silently sends none). Step 3 sweep classifies each backend route as PUBLIC or requireAuth; Path E sites whose backend is PUBLIC stay as raw fetch (correct), Path E sites whose backend is requireAuth get migrated to apiClient (Track 6-equivalent fix). No action until Step 3 reaches the corresponding routes. The WorldStudio.jsx cluster (29 sites) is the largest and warrants priority attention during Step 3 sweep — if the backend routes are PUBLIC, no work; if any are requireAuth, that one file becomes a meaningful Track-6-equivalent surface.
 
 ### 9.13 Lost-work incident (May 2, 2026) + cleanup discipline
 
