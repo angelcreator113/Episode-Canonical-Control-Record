@@ -28,7 +28,36 @@ import SectionEditor from './SectionEditor';
 import { getLalaSessionPrompt } from '../data/lalaVoiceData';
 import { getCharacterRulesPrompt } from '../data/characterAppearanceRules';
 import { getVentureContext } from '../data/ventureData';
-import { API, authHeader, api } from '../utils/storytellerApi';
+import { API, api } from '../utils/storytellerApi';
+import apiClient from '../services/api';
+
+// Extracted to module scope for Track 2.5 behavioral tests.
+export const saveDraftProse = (chapterId, text) =>
+  apiClient.post(`${API}/chapters/${chapterId}/save-draft`, { draft_prose: text });
+
+export const runAiActionRequest = (endpoint, payload) =>
+  apiClient.post(endpoint, payload);
+
+export const confirmVoiceType = (lineId, voiceType) =>
+  apiClient.post('/api/v1/memories/confirm-voice', { line_id: lineId, voice_type: voiceType });
+
+// Documented exception: this is the ONLY raw-fetch survivor in the post-Track-2
+// codebase. apiClient/axios does not natively support keepalive: true, which is
+// required for the request to survive page navigation per CZ-5 contract.
+// Token is read inline (Path D shape) rather than via apiClient's request
+// interceptor because the interceptor only runs on apiClient calls.
+export const sendKeepaliveBeforeUnload = (chapterId, text) => {
+  const token = localStorage.getItem('authToken');
+  return fetch(`${API}/chapters/${chapterId}/save-draft`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ draft_prose: text }),
+    keepalive: true,
+  });
+};
 import { numberWord } from '../utils/storytellerHelpers';
 
 export default
@@ -146,19 +175,13 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
     const chId = chapterIdRef.current;
     if (!text || !chId) return;
     try {
-      const res = await fetch(`${API}/chapters/${chId}/save-draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body: JSON.stringify({ draft_prose: text }),
-      });
-      if (res.ok) {
-        setProseSaved(true);
-        proseSavedRef.current = true;
-        markSaved();
-      } else {
-        console.error('Prose save failed:', res.status);
-      }
-    } catch (e) { console.error('Prose autosave failed:', e); }
+      await saveDraftProse(chId, text);
+      setProseSaved(true);
+      proseSavedRef.current = true;
+      markSaved();
+    } catch (e) {
+      console.error('Prose autosave failed:', e);
+    }
   }, []);  // no deps — reads from refs
 
   // Autosave prose (debounced 2s after last edit)
@@ -169,19 +192,12 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
     return () => clearTimeout(proseSaveTimer.current);
   }, [proseText, proseSaved, activeChapterId, doSave]);
 
-  // Save immediately before page unload (handles refresh / tab close)
+  // Save immediately before page unload — uses sendKeepaliveBeforeUnload
+  // helper (Track 2 documented raw-fetch exception per CZ-5 contract).
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (!proseSavedRef.current && proseRef.current && chapterIdRef.current) {
-        // keepalive: true preserves the request through page navigation;
-        // unlike sendBeacon, fetch carries the Authorization header.
-        const url = `${API}/chapters/${chapterIdRef.current}/save-draft`;
-        fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body: JSON.stringify({ draft_prose: proseRef.current }),
-          keepalive: true,
-        });
+        sendKeepaliveBeforeUnload(chapterIdRef.current, proseRef.current);
         e.preventDefault();
         e.returnValue = '';
       }
@@ -198,9 +214,9 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
   }, []);
 
   useEffect(() => {
-    fetch('/api/v1/character-registry/registries', { headers: authHeader() })
-      .then(r => r.json())
-      .then(data => {
+    apiClient.get('/api/v1/character-registry/registries')
+      .then(res => {
+        const data = res.data;
         // API returns { registries: [{ characters: [...] }, ...] } — flatten to character list
         const regs = data?.registries || data || [];
         const chars = Array.isArray(regs)
@@ -214,9 +230,8 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
   // Fetch incoming echoes for the active chapter
   useEffect(() => {
     if (!activeChapterId || !book?.id) return;
-    fetch(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`, { headers: authHeader() })
-      .then(r => r.json())
-      .then(data => setIncomingEchoes(Array.isArray(data) ? data : []))
+    apiClient.get(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`)
+      .then(res => setIncomingEchoes(Array.isArray(res.data) ? res.data : []))
       .catch(() => setIncomingEchoes([]));
   }, [activeChapterId, book?.id]);
 
@@ -299,12 +314,8 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
     }
 
     try {
-      const res = await fetch(action.endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
+      const res = await runAiActionRequest(action.endpoint, payload);
+      const data = res.data;
 
       if (action.id === 'rewrite') {
         // rewrite-options returns { rewrites: [...] }
@@ -600,11 +611,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
               onConfirm={async (lineId, newType) => {
                 updateLineLocal(lineId, { voice_type: newType, voice_confirmed: true });
                 try {
-                  await fetch(`/api/v1/memories/confirm-voice`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', ...authHeader() },
-                    body: JSON.stringify({ line_id: lineId, voice_type: newType }),
-                  });
+                  await confirmVoiceType(lineId, newType);
                 } catch (e) { console.error('Voice confirm failed:', e); }
               }}
             />
@@ -668,8 +675,8 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                     chapters={chapters}
                     bookId={book.id}
                     onPlanted={() => {
-                      fetch(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`, { headers: authHeader() })
-                        .then(r => r.json()).then(d => setIncomingEchoes(d.echoes || []));
+                      apiClient.get(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`)
+                        .then(res => setIncomingEchoes(res.data?.echoes || []));
                     }}
                   />
                 </>
@@ -1362,28 +1369,25 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
               useEffect(() => {
                 if (!activeChapterId) return;
                 setLoading(true);
-                fetch(`/api/v1/story-health/versions/chapter/${activeChapterId}`, { headers: authHeader() })
-                  .then(r => r.json())
-                  .then(d => setVersions(d.versions || []))
+                apiClient.get(`/api/v1/story-health/versions/chapter/${activeChapterId}`)
+                  .then(res => setVersions(res.data?.versions || []))
                   .catch(() => {})
                   .finally(() => setLoading(false));
               }, []);
 
               const viewVersion = (id) => {
-                fetch(`/api/v1/story-health/versions/${id}/content`, { headers: authHeader() })
-                  .then(r => r.json())
-                  .then(d => setViewContent({ id, content: d.content || '' }))
+                apiClient.get(`/api/v1/story-health/versions/${id}/content`)
+                  .then(res => setViewContent({ id, content: res.data?.content || '' }))
                   .catch(() => {});
               };
 
               const saveSnapshot = () => {
-                fetch(`/api/v1/story-health/versions/chapter/${activeChapterId}`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', ...authHeader() },
-                  body: JSON.stringify({ content: proseText, label: `Manual snapshot` })
+                apiClient.post(`/api/v1/story-health/versions/chapter/${activeChapterId}`, {
+                  content: proseText,
+                  label: `Manual snapshot`,
                 })
-                  .then(r => r.json())
-                  .then(d => {
+                  .then(res => {
+                    const d = res.data;
                     if (d.version) setVersions(prev => [d.version, ...prev]);
                     toast?.('Snapshot saved');
                   })
