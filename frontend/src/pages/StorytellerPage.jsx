@@ -15,7 +15,7 @@
  *   BookEditor        → ../components/BookEditor.jsx
  *
  * Shared utilities:
- *   api / authHeader  → ../utils/storytellerApi.js
+ *   api               → ../utils/storytellerApi.js (auth handled by apiClient)
  *   useToasts         → ../hooks/useToasts.jsx
  *   timeAgo / etc     → ../utils/storytellerHelpers.js
  */

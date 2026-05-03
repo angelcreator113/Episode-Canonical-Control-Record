@@ -12,13 +12,6 @@ import apiClient from '../services/api';
 
 export const API = '/api/v1/storyteller';
 
-// Kept temporarily until BookEditor's direct fetch+authHeader sites migrate
-// in the next commit. Removed at the end of Track 2.
-export function authHeader() {
-  const token = localStorage.getItem('authToken');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 // api() helper now delegates to apiClient. Public contract preserved:
 //  - returns parsed response body (apiClient's res.data) — NOT the response object
 //  - throws Error with the backend's error message string on non-2xx
