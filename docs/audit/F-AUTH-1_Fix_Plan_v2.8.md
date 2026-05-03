@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.7 — Single-PR plan. Track 4 approved (25 Path D sites migrated + getToken() deletion). All inline-Bearer construction eliminated except locked CZ-5 keepalive exception.
+**Document version:** v2.8 — Single-PR plan. Track 6 multi-session pacing model locked. Per-site cost estimation added to surface-report deliverables.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete (135/135 frontend, 436/436 backend tests). Only inline-Bearer remaining: BookEditor.jsx:55 (CZ-5 keepalive, locked exception). Track 6 (BUG-class, ~345 sites) is next.
+**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2 (SceneSetsTab) multi-session migration underway. Pacing model amended in v2.8.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -464,6 +464,28 @@ Remaining ~165 sites distributed across ~60 other files at 1-8 sites each. Track
 
 Each file becomes its own commit per Pace 2 batched checkpoints. `SceneSetsTab.jsx` alone is ~64 sites in one file — that single file is one commit and gets reviewed before the next file starts.
 
+###### Track 6 multi-session pacing model (NEW v2.8)
+
+CP2 (SceneSetsTab.jsx) execution surfaced that **high-density files cannot complete in one conversation session**. The 64 sites in SceneSetsTab.jsx are not 64 simple inline migrations — they are 64 fetch+state-update+toast+callback chains, each embedded in different surrounding state-management contexts. Per-site migration cost (read 15-30 lines of context, write a state-preserving Edit, sometimes trace downstream consumers) consumes meaningfully more conversation budget than a single-session checkpoint can absorb.
+
+Pacing model amended (LOCKED v2.8): **a checkpoint spans sessions for high-density files**. The model is:
+
+- **Session 1** through **Session N**: Claude Code migrates as far as available budget allows. Each session lands WIP commits on `feature/f-auth-1`. WIP commits are NOT pushed to backup — they are private progress markers across sessions.
+- **Final session**: when the file is fully migrated (all sites + tests + verification grep), Claude Code squashes the WIP commits into a single coherent CP commit. Sends report. I review. Approve. Backup push.
+
+This preserves the original review-once-per-checkpoint discipline. It just acknowledges that "checkpoint" does not mean "single conversation turn" for high-density files.
+
+Estimated session counts: CP2 (SceneSetsTab, 64 sites) — 3-4 sessions. CP3 (WriteMode, 33 sites + 3,721 lines + Pattern F max density) — 2-3 sessions. CP4 (FranchiseBrain, 18 sites) — likely 1 session. CP5/CP6/CP7 mid-tier — 1 session each. CP8 long-tail — 1 session if the simpler-site hypothesis holds (1-3 sites per file, less surrounding state-management); multi-session if not. **Total Track 6 session estimate: 8-12 sessions.** Total commit count when squashed: 7-10 (unchanged from CP1 plan; squashing preserves clean history).
+
+WIP commit discipline: each WIP commit must leave the working tree in a **clean state** — file compiles, no half-edits in the middle of a function, no dangling syntax errors. WIP commits are private to `feature/f-auth-1` and never go to backup until the checkpoint is complete. Pre-push hook should still pass on each WIP commit (it does today; existing async-handler warnings are informational and stay informational).
+
+###### Per-site cost estimation in surface reports (NEW v2.8)
+
+CP1 surface report estimated structural shape (uniform vs clustered, wrapping helpers vs direct, Pattern F risk) but **did not estimate per-site migration cost**. The 64-vs-64 site count match was correct as raw fetch count; the cost-per-site was 5-10x higher than expected because each site is embedded in a state-management chain. Surface reports for future high-density files (CP3+) must include per-site cost estimation.
+
+- Surface report deliverable for high-density files (>20 sites): in addition to site count and structural shape, sample 3-5 representative sites and estimate per-site migration cost. Cost factors: (a) lines of context required to migrate safely, (b) presence of state-update chains, (c) downstream consumer tracing requirements, (d) Pattern F suffix-resolution overhead. The estimate informs session-count planning per the multi-session pacing model.
+- Inventory v2 (Track 5 commit `a929ce29`) counted raw fetch literals only. It is correct as a count but undersells migration cost on dense files. Future tracks should treat inventory site counts as a lower bound on work, not a complete estimate.
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -878,7 +900,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` Stage 1 + `69f0a926` Stage 2; 76 sites). Track 4 Path D migration COMPLETE (commits `08a24fec` migration + `06beb1d1` getToken deletion; 25 active sites + 1 keepalive exception preserved at `BookEditor.jsx:55`; 135/135 frontend tests pass). All approved commits backed up at `06beb1d1` on `claude/f-auth-1-backup`. Track 6 (BUG-class migration, ~345 sites) is next.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 IN PROGRESS — CP2 (SceneSetsTab.jsx) multi-session migration underway. WIP commit at `96cc3341` (16/64 sites, NOT pushed to backup, awaiting full CP2 completion across multiple sessions per the v2.8 pacing model). Backup remains at `06beb1d1` from Track 4 until CP2 completes.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
