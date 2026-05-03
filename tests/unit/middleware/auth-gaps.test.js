@@ -2,7 +2,21 @@
  * Auth Middleware - Gap Coverage Tests
  * Tests for error paths and optional auth functionality
  */
+
+// Mock the tokenService dependency module so we can drive verifier outcomes
+// per test case. jest.spyOn cannot intercept calls from inside the same module
+// on CJS const-bound exports — see §9.11. Mocking the dependency module instead.
+jest.mock('../../../src/services/tokenService', () => ({
+  verifyToken: jest.fn(),
+  generateToken: jest.fn(),
+  generateTokenPair: jest.fn(),
+  refreshAccessToken: jest.fn(),
+  revokeToken: jest.fn(),
+  generateTestToken: jest.fn(),
+}));
+
 const { authenticateToken, optionalAuth } = require('../../../src/middleware/auth');
+const tokenService = require('../../../src/services/tokenService');
 
 describe('Auth Middleware - Gap Coverage', () => {
   describe('authenticateToken - Error handling', () => {
@@ -127,5 +141,122 @@ describe('Auth Middleware - Gap Coverage', () => {
       expect(parts[0].toLowerCase()).toBe('bearer');
       expect(parts[1]).toBeTruthy();
     });
+  });
+});
+
+// ============================================================================
+// F-AUTH-3 — optionalAuth three-case classifier + degradeOnInfraFailure flag
+// ============================================================================
+describe('optionalAuth — F-Auth-3 three-case classifier', () => {
+  let req;
+  let res;
+  let next;
+  let consoleLogSpy;
+  let consoleErrorSpy;
+
+  beforeEach(() => {
+    req = { headers: {}, path: '/test', method: 'GET' };
+    res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+    next = jest.fn();
+    tokenService.verifyToken.mockReset();
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  test('Case 1 — no Authorization header → req.user=null, no log spam, no 503, next() called', async () => {
+    await optionalAuth(req, res, next);
+
+    expect(req.user).toBeNull();
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(consoleLogSpy).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(tokenService.verifyToken).not.toHaveBeenCalled();
+  });
+
+  test('Case 2 — token rejected by verifier → req.user=null, exactly one console.log, no 503, next() called', async () => {
+    req.headers.authorization = 'Bearer bad.token.here';
+    const rejectErr = new Error('Token use mismatch');
+    rejectErr.name = 'JwtInvalidClaimError';
+    tokenService.verifyToken.mockImplementation(() => {
+      throw rejectErr;
+    });
+
+    await optionalAuth(req, res, next);
+
+    expect(req.user).toBeNull();
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+    expect(consoleLogSpy.mock.calls[0][0]).toBe('[F-Auth-3] optionalAuth: token rejected');
+  });
+
+  test('Case 3 — Cognito infra error, default options → 503 AUTH_SERVICE_UNAVAILABLE, structured error log with degraded:false', async () => {
+    req.headers.authorization = 'Bearer some.token';
+    const infra = new Error('connect ECONNREFUSED 169.254.169.254:443');
+    infra.name = 'FetchError';
+    infra.code = 'ECONNREFUSED';
+    tokenService.verifyToken.mockImplementation(() => {
+      throw infra;
+    });
+
+    await optionalAuth(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'AUTH_SERVICE_UNAVAILABLE' })
+    );
+    expect(next).not.toHaveBeenCalled();
+    expect(consoleLogSpy).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe('[F-Auth-3] cognito_unreachable');
+    expect(consoleErrorSpy.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        name: expect.any(String),
+        code: expect.any(String),
+        message: expect.any(String),
+        path: '/test',
+        method: 'GET',
+        degraded: false,
+      })
+    );
+  });
+
+  test('Case 4 — Cognito infra error with degradeOnInfraFailure:true → req.user=null, structured log with degraded:true, no 503, next() called', async () => {
+    req.headers.authorization = 'Bearer some.token';
+    const infra = new Error('JWKS endpoint unreachable');
+    infra.name = 'FetchError';
+    tokenService.verifyToken.mockImplementation(() => {
+      throw infra;
+    });
+
+    const middleware = optionalAuth({ degradeOnInfraFailure: true });
+    await middleware(req, res, next);
+
+    expect(req.user).toBeNull();
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(consoleLogSpy).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy.mock.calls[0][0]).toBe('[F-Auth-3] cognito_unreachable');
+    expect(consoleErrorSpy.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ degraded: true })
+    );
+  });
+
+  test('factory mode — bare optionalAuth still works as middleware reference (backward compat)', async () => {
+    expect(typeof optionalAuth).toBe('function');
+    await optionalAuth(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.user).toBeNull();
   });
 });
