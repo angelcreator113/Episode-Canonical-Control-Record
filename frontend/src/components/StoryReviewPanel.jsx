@@ -17,6 +17,7 @@
  *   charColor    — accent color for the character
  */
 import { useState, useEffect, useRef } from 'react';
+import apiClient from '../services/api';
 import './StoryReviewPanel.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -77,28 +78,23 @@ export default function StoryReviewPanel({
     setSaving(true);
     setSaveStatus('saving');
     try {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/stories`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({
-          character_key: characterKey,
-          story_number: story.story_number,
-          title: story.title,
-          text: story.text,
-          phase: story.phase,
-          story_type: story.story_type,
-          word_count: (story.text || '').split(/\s+/).length,
-          task_brief: taskBrief,
-          new_character: story.new_character,
-          new_character_name: story.new_character_name,
-          new_character_role: story.new_character_role,
-          opening_line: story.opening_line,
-          editor_notes: editorNotes || undefined,
-        }),
+      const res = await apiClient.post(`${API_BASE}/stories`, {
+        character_key: characterKey,
+        story_number: story.story_number,
+        title: story.title,
+        text: story.text,
+        phase: story.phase,
+        story_type: story.story_type,
+        word_count: (story.text || '').split(/\s+/).length,
+        task_brief: taskBrief,
+        new_character: story.new_character,
+        new_character_name: story.new_character_name,
+        new_character_role: story.new_character_role,
+        opening_line: story.opening_line,
+        editor_notes: editorNotes || undefined,
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = res.data;
+      if (data?.story) {
         setDbStory(data.story);
         setSavedVersion(data.story.version);
         setSaveStatus('saved');

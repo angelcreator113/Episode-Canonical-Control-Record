@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import apiClient from '../../services/api';
 import './SearchHistory.css';
+
+// Track 4 module-scope helpers (Pattern D).
+export const fetchSearchHistory = (limit = 10) =>
+  apiClient.get(`/api/v1/search/history?limit=${limit}`);
+export const clearSearchHistory = () =>
+  apiClient.delete('/api/v1/search/history');
 
 export default function SearchHistory({ onQueryClick }) {
   const [history, setHistory] = useState([]);
@@ -12,38 +19,11 @@ export default function SearchHistory({ onQueryClick }) {
 
   const loadHistory = async () => {
     try {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-
-      // Don't attempt to load if no token
-      if (!token) {
-        console.log('No auth token available, skipping history load');
-        setHistory([]);
-        setLoading(false);
-        return;
-      }
-
-      const response = await fetch(
-        '/api/v1/search/history?limit=10',
-        {
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setHistory(data.data || []);
-      } else if (response.status === 401) {
-        console.log('Unauthorized - token may be expired');
-        setHistory([]);
-      } else {
-        console.warn('Failed to load search history:', response.status);
-        setHistory([]);
-      }
+      const response = await fetchSearchHistory(10);
+      setHistory(response.data?.data || []);
     } catch (err) {
-      console.warn('Failed to load search history:', err);
+      // 401s flow through the apiClient interceptor; only log unexpected errors.
+      console.warn('Failed to load search history:', err.response?.status || err.message);
       setHistory([]);
     } finally {
       setLoading(false);
@@ -54,34 +34,11 @@ export default function SearchHistory({ onQueryClick }) {
     if (!confirm('Clear all search history?')) return;
 
     try {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-
-      if (!token) {
-        alert('Please log in to clear history');
-        return;
-      }
-
-      const response = await fetch(
-        '/api/v1/search/history',
-        {
-          method: 'DELETE',
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (response.ok) {
-        setHistory([]);
-        alert('Search history cleared');
-      } else if (response.status === 401) {
-        alert('Session expired. Please log in again.');
-      } else {
-        alert('Failed to clear history');
-      }
+      await clearSearchHistory();
+      setHistory([]);
+      alert('Search history cleared');
     } catch (err) {
-      alert('Failed to clear history: ' + err.message);
+      alert('Failed to clear history: ' + (err.response?.data?.message || err.message));
     }
   };
 

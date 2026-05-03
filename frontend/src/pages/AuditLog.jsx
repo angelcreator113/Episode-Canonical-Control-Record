@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import apiClient from '../services/api';
 import ErrorMessage from '../components/ErrorMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
 import '../styles/AuditLog.css';
@@ -58,15 +59,13 @@ const AuditLog = () => {
       if (filters.startDate) params.append('startDate', filters.startDate);
       if (filters.endDate) params.append('endDate', filters.endDate);
 
-      const response = await fetch(`/api/v1/audit-logs?${params}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('authToken') || localStorage.getItem('token')}` },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load audit logs');
+      let response;
+      try {
+        response = await apiClient.get(`/api/v1/audit-logs?${params}`);
+      } catch (apiErr) {
+        throw new Error(apiErr.response?.data?.error || 'Failed to load audit logs');
       }
-
-      const data = await response.json();
+      const data = response.data;
       setLogs(data.data || []);
       setPagination(data.pagination || {});
     } catch (err) {

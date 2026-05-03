@@ -1,40 +1,29 @@
 /**
  * Template Service
- * Handles all API communication for template management
+ * Handles all API communication for template management.
+ *
+ * Track 4 migration: Path D inline-Bearer construction (line 18 in pre-Track-4
+ * version) replaced by apiClient delegation. The previous implementation cached
+ * the auth token as a class field at construction time (this.token =
+ * localStorage.getItem('authToken') in the constructor) — a known staleness bug
+ * (inventory v2 §8.7) where re-login mid-session left the service using the old
+ * token. The bug self-resolves: apiClient's request interceptor reads
+ * localStorage on every call, so this service automatically picks up the new
+ * token after re-login.
  */
 
+import apiClient from './api';
+
+const BASE = '/api/v1/templates';
+
 class TemplateService {
-  constructor() {
-    this.baseURL = '/api/v1/templates';
-    this.token = localStorage.getItem('authToken');
-  }
-
-  /**
-   * Get authorization headers
-   */
-  getHeaders() {
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-    };
-  }
-
   /**
    * List all templates
    */
   async getTemplates() {
     try {
-      const response = await fetch(this.baseURL, {
-        method: 'GET',
-        headers: this.getHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.data || [];
+      const response = await apiClient.get(BASE);
+      return response.data?.data || [];
     } catch (error) {
       console.error('Error fetching templates:', error);
       throw error;
@@ -46,17 +35,8 @@ class TemplateService {
    */
   async getTemplate(id) {
     try {
-      const response = await fetch(`${this.baseURL}/${id}`, {
-        method: 'GET',
-        headers: this.getHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.data;
+      const response = await apiClient.get(`${BASE}/${id}`);
+      return response.data?.data;
     } catch (error) {
       console.error('Error fetching template:', error);
       throw error;
@@ -68,22 +48,12 @@ class TemplateService {
    */
   async createTemplate(templateData) {
     try {
-      const response = await fetch(this.baseURL, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(templateData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.data;
+      const response = await apiClient.post(BASE, templateData);
+      return response.data?.data;
     } catch (error) {
+      const msg = error.response?.data?.message || error.message;
       console.error('Error creating template:', error);
-      throw error;
+      throw new Error(msg);
     }
   }
 
@@ -92,22 +62,12 @@ class TemplateService {
    */
   async updateTemplate(id, templateData) {
     try {
-      const response = await fetch(`${this.baseURL}/${id}`, {
-        method: 'PUT',
-        headers: this.getHeaders(),
-        body: JSON.stringify(templateData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.data;
+      const response = await apiClient.put(`${BASE}/${id}`, templateData);
+      return response.data?.data;
     } catch (error) {
+      const msg = error.response?.data?.message || error.message;
       console.error('Error updating template:', error);
-      throw error;
+      throw new Error(msg);
     }
   }
 
@@ -116,20 +76,12 @@ class TemplateService {
    */
   async deleteTemplate(id) {
     try {
-      const response = await fetch(`${this.baseURL}/${id}`, {
-        method: 'DELETE',
-        headers: this.getHeaders(),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-
+      await apiClient.delete(`${BASE}/${id}`);
       return true;
     } catch (error) {
+      const msg = error.response?.data?.message || error.message;
       console.error('Error deleting template:', error);
-      throw error;
+      throw new Error(msg);
     }
   }
 

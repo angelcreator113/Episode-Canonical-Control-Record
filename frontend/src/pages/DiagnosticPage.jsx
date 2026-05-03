@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { API_URL, API_BASE_URL } from '../config/api';
+import apiClient from '../services/api';
 import './DiagnosticPage.css';
 
 const DiagnosticPage = () => {
@@ -10,38 +11,36 @@ const DiagnosticPage = () => {
   const testEndpoint = async (name, url, method = 'GET', body = null) => {
     const startTime = Date.now();
     try {
-      const options = {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || 'none'}`,
-        },
-      };
-      
-      if (body) {
-        options.body = JSON.stringify(body);
+      let response;
+      let isError = false;
+      try {
+        response = await apiClient.request({
+          url,
+          method: method.toLowerCase(),
+          data: body || undefined,
+          // diagnostic page: don't throw on non-2xx — we want to see error responses
+          validateStatus: () => true,
+        });
+      } catch (apiErr) {
+        // network-level error (no response)
+        if (!apiErr.response) throw apiErr;
+        response = apiErr.response;
+        isError = true;
       }
-
-      const response = await fetch(url, options);
       const duration = Date.now() - startTime;
-      const contentType = response.headers.get('content-type');
-      
-      let data;
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        data = await response.text();
-      }
+      // axios already parsed JSON if content-type was application/json
+      const data = response.data;
+      const headers = response.headers || {};
 
       return {
         name,
         url,
         method,
-        status: response.ok ? 'SUCCESS' : 'ERROR',
+        status: (response.status >= 200 && response.status < 300) ? 'SUCCESS' : 'ERROR',
         statusCode: response.status,
         duration: `${duration}ms`,
         data: typeof data === 'string' ? data.substring(0, 500) : data,
-        headers: Object.fromEntries(response.headers.entries()),
+        headers,
       };
     } catch (error) {
       return {
