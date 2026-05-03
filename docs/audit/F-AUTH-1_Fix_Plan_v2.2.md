@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.1 — Single-PR plan. Track 1 surfaced two new sub-tracks: 1.5 (frontend test scaffolding) + 1.6 (backend requireAuth split).
+**Document version:** v2.2 — Single-PR plan. Track 1.5 approved (frontend test scaffolding). Test patterns recorded.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Track 1 complete. Tracks 1.5 + 1.6 added per Track 1 surfaces.
+**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Track 1 + Track 1.5 complete. Track 1.6 (backend requireAuth split) is next.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -820,7 +820,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2` on `feature/f-auth-1`, backed up to `claude/f-auth-1-backup`). Track 1.5 + Track 1.6 added in v2.1 per Track 1 surfaces; both NOT STARTED. Track 1.5 (frontend test scaffolding) is next, then Track 1.6 (backend requireAuth split), then Track 2.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2` on `feature/f-auth-1`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`, 14/14 tests pass, Track 1 interceptor verified clean by tests). Track 1.6 backend requireAuth split is next, then Track 2.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -830,6 +830,28 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 - Polymorphic `optionalAuth` detection (middleware vs factory shape) means `optionalAuth.toString()` introspection is no longer reliable. No consumer in codebase does this; flagged in case Step 6b interceptor work hits it.
 - `verifyToken` has TWO paths that wrap verifier errors with `Error.cause`: the test path (`NODE_ENV=test` → `tokenService.verifyToken`) and the prod path (aws-jwt-verify direct). Both were updated in Step 2; do not regress either if Step 6b reconciliation touches `verifyToken`.
 - **Track 1 surfaces (preserved for sequencing):** (1) frontend has no test scaffolding — vitest in package.json but no config, no jsdom, no `.test` files; addressed by Track 1.5. (2) Backend `requireAuth` emits `AUTH_REQUIRED` for both no-header and verifier-rejected; new contract requires the split; addressed by Track 1.6. (3) `AUTH_GROUP_REQUIRED` returns 403 (not 401); code-before-status check in Track 1 interceptor handles this correctly. (4) `authService.refreshToken()` duplicates the new `refreshAccessToken` helper — kept separate in Track 1 to avoid circular auth; cleanup in §9.12.
+
+#### Track 1.5 — frontend test patterns (LOCKED v2.2 for reuse in Tracks 2/3/4/6/7)
+
+Three reusable test patterns established by Track 1.5 (commit `94f6cce6`). Future migration tracks should adopt these rather than re-deriving them.
+
+**Pattern A — `vi.stubEnv` for DEV-gated code:** `import.meta.env.DEV` is **truthy by default in vitest** (vitest 0.34 derives DEV from `NODE_ENV ≠ 'production'`; `MODE='test'` does not flip it). Vite's `define` config does not apply because vitest evaluates `import.meta.env.DEV` at runtime via its env proxy. Use `vi.stubEnv('DEV', '')` in `beforeEach` + `vi.unstubAllEnvs()` in `afterEach`. Empty string is falsy → DEV-guarded early-returns are bypassed → real logic runs.
+
+**Pattern B — partial axios mock that preserves `axios.create`:** `apiClient` is constructed via `axios.create({...})` at module load. Mocking the entire axios default export would break that construction. Use `Object.assign` to copy real `axios.default` properties onto a callable function shell, then override only the methods you want to mock:
+
+```js
+vi.mock('axios', async (importOriginal) => {
+  const actual = await importOriginal();
+  const mockedDefault = function axiosFn(config) { return actual.default(config); };
+  Object.assign(mockedDefault, actual.default);
+  mockedDefault.post = vi.fn();
+  return { default: mockedDefault };
+});
+```
+
+**Pattern C — `apiClient.defaults.adapter` swap for retry verification:** To prove that an interceptor retry actually fires apiClient a second time without making real network calls, swap `apiClient.defaults.adapter` to a `vi.fn().mockResolvedValue(...)` for the duration of the test. After the interceptor handler resolves, `expect(adapterMock).toHaveBeenCalledTimes(1)` confirms the retry happened. Restore in `finally` so test isolation holds. The retry exercises real interceptor logic end-to-end, not a mock chain.
+
+Note: pattern A applies to any DEV-gated code in any module. Patterns B and C are specific to apiClient testing but the techniques generalize: partial mocks preserving constructor methods, adapter swapping to test retry/redirect/interceptor behavior end-to-end without network.
 
 ### 9.12 Deferred cleanups (post-F-AUTH-1)
 
@@ -841,6 +863,7 @@ Note: the outer try/catch entry that was deferred in v1.6/v1.7 was **cleaned up 
 - **Parallel-request refresh storm** (surfaced in Track 1 §3.7) — N simultaneous `AUTH_INVALID_TOKEN` responses trigger N parallel refresh calls. Backend rate-limiter (10/min) keeps it from being catastrophic but it is wasteful. Optimal solution: refresh-promise singleton — first request starts refresh, others await the same promise. Real complexity for marginal gain; deferred until evidence of operational impact.
 - **ESLint v9 migration** — `.eslintrc.js` is the v8 format and ESLint v9 (installed) does not auto-detect it. Frontend lint has been broken for some time. Out of F-AUTH-1 scope; separate config-modernization PR.
 - **Refresh-via-cookie hardening** — login endpoint sets a refreshToken httpOnly cookie (`src/routes/auth.js:75`), but the refresh endpoint at `:112` reads from request body only, ignoring the cookie. The Track 1 helper passes from localStorage (matching the body path). Cookie-based refresh would be a hardening follow-up; out of F-AUTH-1 scope.
+- **npm audit follow-up** — Track 1.5 install reported 24 vulnerabilities (3 low, 13 moderate, 7 high, 1 critical) in the existing frontend dep tree. None new from jsdom; ambient state of the codebase pre-F-AUTH-1. Run `npm audit fix` and review the manual cases after F-AUTH-1 ships.
 
 ### 9.13 Lost-work incident (May 2, 2026) + cleanup discipline
 
