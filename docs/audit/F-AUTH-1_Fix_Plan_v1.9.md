@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v1.8 — Single-PR plan. Step 6a + Step 2 approved and backed up. Post-Step-2 amendments locked.
+**Document version:** v1.9 — Single-PR plan. Step 6b scope expanded: Maximum (migrate all four auth paths to apiClient). §4.6 rewritten against inventory.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Step 6a + Step 2 complete. Step 6b is next, gated on frontend authHeader() caller inventory.
+**Status:** G2 IN PROGRESS — Step 6a + Step 2 complete. Step 6b scope expanded per inventory; raw-fetch triage runs first, then four-track migration to apiClient.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -286,7 +286,11 @@ Zone 26 confirmed a third sub-form: `episodeOrchestrationRoute.js:135` explicitl
 
 `middleware/auth.js:256–293` reimplements `authenticateToken` with one differing string: `AUTH_REQUIRED` instead of `AUTH_INVALID_TOKEN`. The frontend interceptor differentiates on these strings to decide whether to wipe credentials and redirect (per the comment at lines 250–255). Two parallel auth-checking code paths must be kept in sync.
 
-#### F-Auth-4 — fix (Path 1 LOCKED)
+#### F-Auth-4 — fix (Path 1 LOCKED, Maximum scope locked v1.9)
+
+**v1.9 amendment: the Step 6b prep inventory (commit `a9c8b36e` on dev, `F-AUTH-1_Step6b_Inventory.md`) revealed that "the frontend interceptor" referenced in v1.8 is actually FOUR parallel auth-injection paths, not one.** v1.8 §4.6 was written assuming a single interceptor; reality is more complex. v1.9 expands Step 6b scope to Maximum: collapse all four paths into one (axios apiClient).
+
+##### Backend changes (unchanged from v1.8)
 
 - Delete the duplicate `authenticateToken` implementation at `middleware/auth.js:256–293`.
 - Have requireAuth emit two distinct error codes: `AUTH_REQUIRED` when no Authorization header is present, `AUTH_INVALID_TOKEN` when a header is present but verifier rejects the token.
@@ -297,15 +301,87 @@ Zone 26 confirmed a third sub-form: `episodeOrchestrationRoute.js:135` explicitl
   - Plus 10 additional files. Pre-flight report §14.1 carries the full inventory.
 - Touch the **lazy-import fallbacks** too: `characterRegistry.js:17` and `worldEvents.js:28` use `authenticateToken` as a defensive fallback. Update both to fall back to `requireAuth` instead.
 - **Drop the dead alias** at `middleware/auth.js:237` (`exports.authenticate = authenticateToken`). Pre-flight confirmed zero callers (Decision **D21**). One-line cleanup in the same commit as the duplicate removal.
-- Update the frontend interceptor to consume the unified contract: `AUTH_REQUIRED` → redirect to login; `AUTH_INVALID_TOKEN` → attempt token refresh once, then redirect on failure.
-- **Interceptor — pass-through for non-session codes (LOCKED):** `AUTH_INVALID_FORMAT` (malformed Authorization header) and `AUTH_GROUP_REQUIRED` (insufficient Cognito group) **MUST NOT** trigger session-redirect logic. They display inline as user-facing errors. Interceptor session logic touches only `AUTH_REQUIRED` and `AUTH_INVALID_TOKEN`. Reasoning: `AUTH_INVALID_FORMAT` is a developer/integration bug — redirecting to login on a malformed header punishes a logged-in user for a frontend bug. `AUTH_GROUP_REQUIRED` is a permission failure — the correct UX is "you don't have access," not "your session is bad."
-- Confirm the comment at `middleware/auth.js:250–255` (which documents the old contract) is updated or removed.
 
-#### F-Auth-4 — out-of-scope (LOCKED, do not touch)
+##### Frontend changes (Maximum scope — v1.9)
+
+The frontend has **four** parallel auth-injection paths per the inventory:
+
+- **Path A** — `authHeader()` (singular) from `frontend/src/utils/storytellerApi.js`. ~34 call sites across 7 files.
+- **Path B** — axios `apiClient` from `src/services/api.js` with response interceptor at lines 41–73. ~563 call sites across 53 files. The de facto standard.
+- **Path C** — `authHeaders()` (plural) — local helper functions duplicated across 7 files plus a shared one in `pages/feed/feedConstants.js`. ~75 call sites.
+- **Path D** — inline `Bearer ${token}` construction. ~25+ call sites across ~17 files.
+
+Plus ~478 raw `fetch()` calls without auth-header injection — see Track 5 below for triage.
+
+Step 6b implementation runs as four tracks in sequence. Track 5 (raw-fetch triage) runs **before** the migration tracks so any auth-required-but-missing-bug findings can adjust scope before code lands.
+
+##### Track 5 — Raw fetch() triage (FIRST, sequential before migration)
+
+- Audit ~478 raw `fetch()` calls in `frontend/src/`. Classify each as:
+  - **(a) Intentionally public** — read-only published data, no auth needed. Annotate with `// PUBLIC:` comment matching backend Step 3 exemption convention.
+  - **(b) Auth-required-but-missing** — bug. Auth was needed but never wired up. These get migrated to `apiClient` as part of Step 6b.
+  - **(c) Unclear** — cannot determine intent from the call site. Surface for review; default to `apiClient` migration if uncertain.
+- Triage produces an updated inventory file with classifications. Commit on dev (docs work), not `feature/f-auth-1`.
+- Triage findings can adjust the migration scope. If many (b)-class bugs surface, the migration becomes "the four paths + the bugs." If almost all are (a), the migration is just the four paths.
+
+##### Track 1 — apiClient interceptor update (Path B, 563 sites covered automatically)
+
+- Update the response interceptor at `src/services/api.js:41–73` to handle the unified F-Auth-4 contract:
+  - `AUTH_REQUIRED` (no header) → redirect to login.
+  - `AUTH_INVALID_TOKEN` (header rejected) → attempt token refresh once via the existing refresh path; on refresh failure, redirect to login.
+  - **Pass-through (LOCKED):** `AUTH_INVALID_FORMAT` and `AUTH_GROUP_REQUIRED` MUST NOT trigger session-redirect logic. Display inline as user-facing errors. Reasoning preserved from v1.8.
+
+##### Track 2 — Migrate Path A (authHeader) to apiClient
+
+- 34 call sites across 7 files. Replace `fetch + ...authHeader()` spread with `apiClient` method calls.
+- Tested change. Each migration must preserve: HTTP method, URL, payload shape, response shape consumption. Add tests for any migrated path that did not have them.
+- Once migration is complete: delete `authHeader()` export from `frontend/src/utils/storytellerApi.js`. Confirm zero remaining imports before deletion.
+
+##### Track 3 — Migrate Path C (authHeaders plural duplicates) to apiClient
+
+- 75 call sites across 9 files. Seven files define their own local `authHeaders()` helper; one shared in `feedConstants.js` used by `SocialProfileGenerator.jsx` (~40 sites alone) and `ProfileDetailPanel.jsx`.
+- Migration consolidates the seven duplicate helpers AND migrates call sites to `apiClient`. Two-stage:
+  - Stage 1: replace each local `authHeaders()` helper with `apiClient` calls at the call site. Delete the local helper.
+  - Stage 2: migrate the shared `authHeaders()` in `feedConstants.js` + its consumers (`SocialProfileGenerator.jsx`, `ProfileDetailPanel.jsx`) to `apiClient`. Delete the shared helper.
+- Pre-flight inventory noted subtle drift between copies (`useStoryEngine.js` accepts an extra param; others do not). The migration eliminates this drift surface.
+
+##### Track 4 — Migrate Path D (inline Bearer) to apiClient
+
+- 25+ call sites across ~17 files. Replace inline `Bearer ${token}` construction with `apiClient` method calls.
+- Cohabiting files (apiClient + inline Bearer in the same file): `ProductionTab.jsx`, `WorldAdmin.jsx`. The inline Bearer sites in these files are accidental drift, not intentional dual-paradigm. Convert all to `apiClient`.
+- Special case: `FeedBulkImport.jsx` mixes Path C local helper + Path D inline. Track 3 + Track 4 work converges in this file.
+
+##### Verification (G3 + G4)
+
+- After all four tracks: zero imports of `authHeader` (Path A), zero local `authHeaders()` helpers (Path C), zero inline `Bearer ${token}` (Path D). Verification grep confirms.
+  ```bash
+  grep -rn "authHeader\|Bearer \${" frontend/src/ | grep -v "src/services/api.js"
+  ```
+- Expected output: zero matches outside `src/services/api.js` (the interceptor itself).
+- Authenticated request via `apiClient` succeeds and `req.user` populated server-side.
+- Mid-session token expiry: `apiClient` interceptor sees `AUTH_INVALID_TOKEN`, refreshes silently, request continues. User does not see a logout.
+- Token deletion: `apiClient` interceptor sees `AUTH_REQUIRED`, redirects to login.
+- `AUTH_INVALID_FORMAT` and `AUTH_GROUP_REQUIRED` responses do NOT trigger session-redirect logic; surfaced inline.
+
+##### Scope acknowledgment — this is bigger than v1.8 implied
+
+Step 6b at v1.9 scope is the largest commit-set in F-AUTH-1. ~134 site migrations + 7 helper consolidations + 25+ inline cleanups + interceptor update + raw-fetch triage. Reasoning for keeping it in F-AUTH-1: shipping Step 6b as v1.8 specified would have left 134 sites silently logging users out mid-session because they have no interceptor coverage. The four-paradigm problem is the F-AUTH-1 frontend bug; deferring it to a follow-up means F-AUTH-1 doesn't actually close the loop F-Auth-4 Path 1 was meant to close.
+
+Reviewability: Step 6b should land as multiple commits on `feature/f-auth-1`. Suggested split:
+
+1. Track 5 triage commit (commit on dev — docs)
+2. Track 1 interceptor update
+3. Track 2 apiClient migration (Path A)
+4. Track 3 helper consolidation (Path C)
+5. Track 4 inline cleanup (Path D)
+
+Each implementation commit gets backup-pushed per §9.13 Rule 2 after my approval.
+
+#### F-Auth-4 — out-of-scope (LOCKED, unchanged from v1.8)
 
 - **Decision D20** — `src/middleware/jwtAuth.js` is a separate verification path (custom JWT via TokenService, not Cognito). Different `req.user` shape (adds `role`, `tokenType`, `source`, `expiresAt`). Different helpers (`requireRole` has no equivalent in `auth.js`). 9 production mounts: `routes/auth.js:10` (`/logout`, `/me`) and `routes/compositions.js:20` (composition CRUD + admin gates).
 - `jwtAuth.js` stays as-is in F-AUTH-1. Folding it into Step 6b means rewriting two architecturally distinct auth systems in one PR — scope explosion, not consolidation.
-- Frontend interceptor handles `AUTH_REQUIRED` and `AUTH_INVALID_TOKEN` regardless of which auth module emitted them. Soft-fail pass-through applies to other codes from both modules.
+- Frontend changes apply to all auth-injection paths regardless of which backend module the responses came from. apiClient interceptor handles `AUTH_REQUIRED` and `AUTH_INVALID_TOKEN` regardless of source.
 - Architectural follow-up (out of F-AUTH-1 scope): does Prime Studios want two auth modules long-term? `jwtAuth.js` looks like a legacy or special-case path predating the Cognito migration. Worth a separate audit after F-AUTH-1 ships.
 
 #### F-Auth-5 — current behavior
@@ -645,7 +721,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — NOT STARTED.** Pre-flight required: frontend `authHeader()` caller inventory before implementation begins (see surfaces below).
+- **Step 6b — PREP COMPLETE, IMPLEMENTATION PENDING** (inventory commit `a9c8b36e` on dev). Inventory revealed 4 parallel auth-injection paths (not 2 as v1.8 implied): authHeader (34 sites), apiClient (563 sites), authHeaders plural (75 sites), inline Bearer (25+ sites). Plus ~478 raw fetch() calls needing triage. v1.9 expands scope to Maximum: migrate all four paths to apiClient. See §4.6 for track structure.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
