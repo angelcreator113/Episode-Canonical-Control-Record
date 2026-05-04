@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.10 — Single-PR plan. Track 6 CP3 (WriteMode.jsx, 31/33 sites + 2 streaming exceptions) approved. Pattern G locked.
+**Document version:** v2.11 — Single-PR plan. Track 6 CP4 (FranchiseBrain.jsx, 18 sites) approved. F34 closed at call site. Pacing model validated against three data points.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2 + CP3 COMPLETE (`b0127817`). Pattern G locked. CP4 (FranchiseBrain.jsx, F34 closure) is next.
+**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2 + CP3 + CP4 COMPLETE (`11a82876`). F34 closed at call site. CP5 (mid-tier batch) is next.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -512,6 +512,37 @@ CP3 completed at commit `b0127817` (squashed from 3 WIP commits across 3 session
 - No HTTP method mismatches surfaced in CP3 (CP2 caught 3; CP3 caught 0). No Path E candidates surfaced. No bugs surfaced. Multi-session pacing handoffs (`2a021cf2 → 22ab7a4e → b0127817` squashed) were clean.
 - CP3 squashed commit message follows the canonical Track 6 closing format: file name, sites migrated count, exceptions count and rationale, helpers added, test count, "Closes Track 6 CP3" marker. Future CPs follow same template.
 
+###### Track 6 CP4 architectural findings (LOCKED v2.11, COMPLETE — FranchiseBrain.jsx; F34 CLOSED at call site)
+
+CP4 completed at commit `11a82876` (single commit, single session — 1-session forecast held exactly per v2.10 §4.6). 18/18 sites migrated to apiClient via 11 module-scope helpers with Pattern F Api suffix. 20 new behavioral tests added; full frontend suite at 225/225 passing across 20 test files. Backed up at `11a82876` on `claude/f-auth-1-backup`.
+
+**F34 from audit handoff v8 — CLOSED at the call site** by this commit. Server-side enforcement closes via Step 3 backend sweep on `franchiseBrainRoutes.js` (`optionalAuth → requireAuth` swap). The push-from-page route was already `requireAuth` and is the model the rest of the file conforms to per v2.10 §4.4. F34 marked closed in §9.12.
+
+- Pattern F prophylactic discipline confirmed correct (third data point). 4 direct shadow conflicts (`unarchiveEntry`, `activateEntry`, `archiveEntry`, `deleteEntry` handlers ↔ same-named `*Api` helpers) cleanly avoided. ~7 indirect operation-name overlaps prevented from surfacing mid-flow. Discipline now validated across three files (CP2 + CP3 + CP4); apply prophylactically to all high-density and operation-named files going forward.
+- Pattern G NOT triggered — verified zero SSE / keepalive / streaming markers in FranchiseBrain.jsx. Three Pattern G sites total in F-AUTH-1 scope (BookEditor.jsx:55, WriteMode.jsx:980, WriteMode.jsx:1145). No new Pattern G sites added.
+- Throw-on-error idiom cleanup applied at every site. apiClient request interceptor handles non-2xx; the surrounding component-level try/catch already routed errors to `showToast`. Net: -2 LOC per site typical, -85 deletions total against +79 insertions in source file.
+- Two-reload pattern (`load()` + `loadCounts()` after every entry mutation) preserved verbatim across `unarchiveEntry`, `handleCreate`, `activateEntry`, `archiveEntry`, `deleteEntry`, `bulkActivate`. UI-state-refresh discipline outside Track 6 scope.
+- Promise.all parallelism preserved in `loadCounts` (4 GETs) and `bulkActivate` (filtered list). `loadCounts` collapsed from two-stage `Promise.all` (fetches + `.json()` parses) to one stage because axios returns parsed `data` directly — net cleanup.
+- Error message fallback strengthened: `showToast(e.message || 'Failed to <op>', 'error')` preserves caller-thrown text when present and provides operation-named fallback when apiClient errors don't carry a message.
+- Path E candidates surfaced: 8 GET sites on `/franchise-brain/*` (entries listing ×6 + documents + amber-activity) filed for §9.12 Step 3 sweep awareness. CP4 read suggests all are auth-required (LalaVerse internal knowledge); Step 3 backend audit will adjudicate per-route disposition.
+- No HTTP method mismatches surfaced (CP2 caught 3, CP3 caught 0, CP4 caught 0). File-level variation expected per v2.9 §9.12 finding pattern.
+
+###### Pacing model validated against three data points (UPDATED v2.11)
+
+Three checkpoints across Track 6 high-density / mid-density work:
+
+- **CP2** (SceneSetsTab.jsx, 64 sites): 4 sessions, ~16 sites/session. Highest density file. Per-site state-management complexity (fetch+state+toast+callback chains) drove session-count up.
+- **CP3** (WriteMode.jsx, 33 sites + 2 Pattern G exceptions): 3 sessions, ~11 sites/session. State-management complexity per site higher than CP2; two-stage saveDraft, fire-and-forget patterns, closure captures, thenable rewrites, plus mid-flow Pattern G surface adjudication.
+- **CP4** (FranchiseBrain.jsx, 18 sites): 1 session, 18 sites/session. Lower-density file with no state-management chains, no fire-and-forget, no closures, no Pattern G triggers. Throughput at the upper end of the band.
+
+Throughput band: **11-18 sites/session**, modulated by file's state-management complexity. The cost-class predictor (simple/medium/complex distribution from surface report) is now a reliable input to session-count forecasting. CP5+ uses this band for forecasting:
+
+- Files with state-management chains, fire-and-forget, closure captures: forecast 11-13 sites/session (CP3 zone)
+- Files with simple shape (mostly direct fetch + setState + reload): forecast 15-18 sites/session (CP4 zone)
+- Files with combined density and complexity: forecast 14-16 sites/session (CP2 zone)
+
+CP5 mid-tier targets per v2.10 CP1 priority order: `StoryThreadTracker.jsx` (~10 sites), `EpisodeScenesTab.jsx` (~10 sites), `SeriesPage.jsx` (~8 sites). Three files at 8-10 sites each. CP5 surface report will adjudicate whether they cluster into one CP commit (if Pattern F surfaces are similar across them) or split into CP5/CP6/CP7 (if files are independent in their migration shape).
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -928,7 +959,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2 SceneSetsTab.jsx COMPLETE (commit `30a15d05` squashed). Track 6 CP3 WriteMode.jsx COMPLETE (commit `b0127817` squashed; 31/33 sites + 2 streaming exceptions; 205/205 frontend tests pass; Pattern G locked). Backed up at `b0127817` on `claude/f-auth-1-backup`. Track 6 CP4 (FranchiseBrain.jsx, 18 sites, F34 closure) is next, fresh session.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2 SceneSetsTab.jsx COMPLETE (commit `30a15d05` squashed). Track 6 CP3 WriteMode.jsx COMPLETE (commit `b0127817` squashed; Pattern G locked). Track 6 CP4 FranchiseBrain.jsx COMPLETE (commit `11a82876`; 18/18 sites; 225/225 frontend tests; F34 closed at call site). Backed up at `11a82876` on `claude/f-auth-1-backup`. Track 6 CP5 (mid-tier batch — StoryThreadTracker / EpisodeScenesTab / SeriesPage) is next, fresh session.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -992,6 +1023,8 @@ Threshold for revisiting Pattern G: if Track 6 long-tail or future feature work 
 
 Note: the outer try/catch entry that was deferred in v1.6/v1.7 was **cleaned up during Step 2 implementation** (commit `e80c711d`). The defense-in-depth shell was hiding bugs (synchronous throws in console calls, `req.headers` access edge cases) that the new three-case structure handles explicitly. Removed entry from this list as resolved.
 
+**F34 status: CLOSED at the call site** (Track 6 CP4 commit `11a82876`). Server-side enforcement closes via Step 3 backend sweep on `franchiseBrainRoutes.js` (`optionalAuth → requireAuth` swap on all 10 mutation routes). Both halves required for full F34 closure: frontend now sends auth on every `/franchise-brain/*` mutation; backend will reject unauth attempts post-Step-3. Audit handoff v8 Decision #34 honored: F34 closes inside this PR's scope, not as a separate hotfix.
+
 - Real metrics library — Step 2 ships with structured-log-derived metrics. If Prime Studios adds prom-client / opentelemetry / similar later, the F-Auth-3 call site is one line and trivially swappable.
 - `console.debug` enablement — current ESLint config blocks it; Step 2 uses `console.log` as the quietest allowed level. If the project later wires up the `debug` package or adjusts ESLint, the F-Auth-3 quiet-log call site can move to `console.debug`.
 - **`authService.refreshToken()` duplication** (surfaced in Track 1 §3.4) — `frontend/src/services/authService.js:125–147` has a `refreshToken()` method that nearly duplicates the new bare-axios `refreshAccessToken` helper in `src/services/api.js`. Track 1 kept them separate to avoid circular auth (authService imports api). Cleanup candidate when authService is touched in a Track 6 file: migrate `authService.refreshToken()` callers (login flow primarily) to use the bare-axios helper, then delete the apiClient-based duplicate.
@@ -1016,6 +1049,12 @@ From Track 4 (~33 additional sites):
 - `frontend/src/components/AuditLogViewer.jsx` — mockLogs fallback. *Intentional dev-mode fallback, not a bug*. No action needed.
 
 Disposition pattern (unchanged from v2.6): each is either intentionally PUBLIC (backend route serves unauth-safe data) or a BUG (backend route requires auth and the frontend silently sends none). Step 3 sweep classifies each backend route as PUBLIC or requireAuth; Path E sites whose backend is PUBLIC stay as raw fetch (correct), Path E sites whose backend is requireAuth get migrated to apiClient (Track 6-equivalent fix). No action until Step 3 reaches the corresponding routes. The WorldStudio.jsx cluster (29 sites) is the largest and warrants priority attention during Step 3 sweep — if the backend routes are PUBLIC, no work; if any are requireAuth, that one file becomes a meaningful Track-6-equivalent surface.
+
+**Path E running list growth from CP4: FranchiseBrain.jsx GET sites (8 total) filed for Step 3 sweep awareness.** CP4 migration applied apiClient (auth-required disposition) under the read that LalaVerse internal knowledge — laws, characters, locked decisions — is canonical-knowledge-class. Step 3 backend audit on `franchiseBrainRoutes.js` will adjudicate per-route disposition; if any GET is classified PUBLIC, that specific call site can be reverted in a follow-up commit.
+
+- `GET /franchise-brain/entries` with query-string filters (×6 sites: load, loadCounts ×4, loadSourceCounts)
+- `GET /franchise-brain/documents` (loadBrainDocs)
+- `GET /franchise-brain/amber-activity` (loadAmberActivity)
 
 **HTTP method mismatches surfaced during Track 6 CP2 (3 sites in SceneSetsTab.jsx) — Step 3 sweep awareness items:**
 
