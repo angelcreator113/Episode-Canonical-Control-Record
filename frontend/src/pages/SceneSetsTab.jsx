@@ -1,9 +1,106 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, Play, Lock, Sparkles, Loader, AlertCircle, Plus, X, Clock, CheckCircle2, Trash2, RotateCcw, RefreshCw, Upload, Pencil, Save, MoreVertical, Eye, ChevronLeft, ChevronRight, Heart, Tv, Film, Search, Grid3X3, FileText, ShieldCheck, ShieldAlert, MapPin, Box } from 'lucide-react';
+import apiClient from '../services/api';
 import './SceneSetsTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 38 helpers covering 64 migrated sites. Some helpers serve multiple sites
+// (e.g., getSceneSetApi is invoked by 10 refresh-after-action call sites).
+
+// Scene-set CRUD
+export const listSceneSetsApi = (params) =>
+  apiClient.get(params ? `${API_BASE}/scene-sets?${params}` : `${API_BASE}/scene-sets`);
+export const getSceneSetApi = (setId) => apiClient.get(`${API_BASE}/scene-sets/${setId}`);
+export const createSceneSetApi = (payload) => apiClient.post(`${API_BASE}/scene-sets`, payload);
+export const updateSceneSetApi = (setId, payload) =>
+  apiClient.put(`${API_BASE}/scene-sets/${setId}`, payload);
+export const deleteSceneSetApi = (setId) => apiClient.delete(`${API_BASE}/scene-sets/${setId}`);
+export const getSceneSetJobApi = (jobId) => apiClient.get(`${API_BASE}/scene-sets/jobs/${jobId}`);
+export const getGenerationCheckApi = () => apiClient.get(`${API_BASE}/scene-sets/generation-check`);
+
+// Spec / refinement
+export const refineSceneDescriptionApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/refine-description`, payload);
+export const generateSceneSpecApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/spec/generate`, payload);
+export const createAnglesFromSpecApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/spec/create-angles`, payload);
+export const previewPromptApi = (setId) =>
+  apiClient.get(`${API_BASE}/scene-sets/${setId}/preview-prompt`);
+
+// Style / location / base
+export const lockSceneStyleApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/lock-style`, payload);
+export const learnSceneLocationApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/learn-location`, payload);
+export const promoteToBaseApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/promote-to-base`, payload);
+export const setCoverAngleApi = (setId, payload) =>
+  apiClient.patch(`${API_BASE}/scene-sets/${setId}/cover-angle`, payload);
+
+// Generation
+export const generateBaseImageApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/generate-base`, payload);
+export const uploadBaseImageApi = (setId, formData) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/upload-base`, formData);
+export const cascadeRegenerateApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/cascade-regenerate`, payload);
+
+// Angles
+export const listAnglesApi = (setId) =>
+  apiClient.get(`${API_BASE}/scene-sets/${setId}/angles`);
+export const createAngleApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/angles`, payload);
+export const getAngleApi = (setId, angleId) =>
+  apiClient.get(`${API_BASE}/scene-sets/${setId}/angles/${angleId}`);
+export const generateAngleApi = (setId, angleId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/angles/${angleId}/generate`, payload);
+export const uploadAngleApi = (setId, angleId, formData) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/angles/${angleId}/upload`, formData);
+export const regenerateAngleApi = (setId, angleId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/angles/${angleId}/regenerate`, payload);
+export const submitAngleReviewApi = (setId, angleId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/angles/${angleId}/review`, payload);
+export const updateAngleApi = (setId, angleId, payload) =>
+  apiClient.patch(`${API_BASE}/scene-sets/${setId}/angles/${angleId}`, payload);
+export const deleteAngleApi = (setId, angleId) =>
+  apiClient.delete(`${API_BASE}/scene-sets/${setId}/angles/${angleId}`);
+export const deleteAllAnglesApi = (setId) =>
+  apiClient.delete(`${API_BASE}/scene-sets/${setId}/angles`);
+export const reorderAnglesApi = (setId, payload) =>
+  apiClient.patch(`${API_BASE}/scene-sets/${setId}/angles/reorder`, payload);
+export const generateAllAnglesApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/generate-all-angles`, payload);
+
+// AI / suggestions
+export const suggestAnglesApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/suggest-angles`, payload);
+export const suggestAnglesFromImageApi = (setId, formData) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/suggest-angles-from-image`, formData);
+export const getAiCameraDirectionApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/ai-camera-direction`, payload);
+export const getMoodVariantsApi = (setId) =>
+  apiClient.get(`${API_BASE}/scene-sets/${setId}/mood-variants`);
+export const generateMoodVariantsApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/mood-variants`, payload);
+export const getComparisonApi = (setId) =>
+  apiClient.get(`${API_BASE}/scene-sets/${setId}/comparison`);
+export const getWardrobeMatchApi = (setId) =>
+  apiClient.get(`${API_BASE}/scene-sets/${setId}/wardrobe-match`);
+
+// Episode association
+export const listSceneSetEpisodesApi = (setId) =>
+  apiClient.get(`${API_BASE}/scene-sets/${setId}/episodes`);
+export const unlinkEpisodeFromSceneSetApi = (setId, episodeId) =>
+  apiClient.delete(`${API_BASE}/scene-sets/${setId}/episodes/${episodeId}`);
+
+// External (shows / episodes for picker)
+export const listShowsApi = () => apiClient.get(`${API_BASE}/shows`);
+export const listEpisodesByShowApi = (showId) =>
+  apiClient.get(`${API_BASE}/episodes?show_id=${showId}&limit=100`);
 
 // ─── STATUS PILL ─────────────────────────────────────────────────────────────
 
@@ -115,13 +212,10 @@ function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteA
             <button className="scene-sets-lightbox-promote" onClick={async () => {
               if (!confirm(`Use "${current.label}" as the new base image? All other angles will be reset.`)) return;
               try {
-                const r = await fetch(`${(typeof API_BASE !== 'undefined' ? API_BASE : '/api/v1')}/scene-sets/${setId}/promote-to-base`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ angle_id: current.angleId }),
-                });
-                const d = await r.json();
-                if (d.success) { onPromoteToBase(); onClose(); }
+                // Defensive `typeof API_BASE !== 'undefined'` ternary in pre-Track-6
+                // version was dead code (API_BASE is module-scope const, always defined).
+                const r = await promoteToBaseApi(setId, { angle_id: current.angleId });
+                if (r.data?.success) { onPromoteToBase(); onClose(); }
               } catch { /* handled by caller */ }
             }} title="Use this image as the base">
               <Heart size={14} /> Use as Base
@@ -181,11 +275,7 @@ function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
     if (selected.length === 0) return;
     setSubmitting(true);
     try {
-      await fetch(`${API_BASE}/scene-sets/${setId}/angles/${angle.id}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ categories: selected, notes: notes.trim() || null }),
-      });
+      await submitAngleReviewApi(setId, angle.id, { categories: selected, notes: notes.trim() || null });
       onSubmit('review');
     } catch {
       onSubmit('error');
@@ -199,16 +289,8 @@ function ArtifactReviewModal({ angle, setId, onClose, onSubmit }) {
     setSubmitting(true);
     try {
       // Submit review first, then regenerate
-      await fetch(`${API_BASE}/scene-sets/${setId}/angles/${angle.id}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ categories: selected, notes: notes.trim() || null }),
-      });
-      await fetch(`${API_BASE}/scene-sets/${setId}/angles/${angle.id}/regenerate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ categories: selected }),
-      });
+      await submitAngleReviewApi(setId, angle.id, { categories: selected, notes: notes.trim() || null });
+      await regenerateAngleApi(setId, angle.id, { categories: selected });
       onSubmit('regenerate');
     } catch {
       onSubmit('error');
@@ -539,12 +621,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
     if (!trimmed || trimmed === set.name) { setEditingName(false); return; }
     setSavingName(true);
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: trimmed }),
-      });
-      if (res.ok && onToast) onToast(`Renamed to "${trimmed}"`);
+      await updateSceneSetApi(set.id, { name: trimmed });
+      if (onToast) onToast(`Renamed to "${trimmed}"`);
     } catch {
       if (onToast) onToast('Failed to rename', 'error');
     }
@@ -556,11 +634,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
     const trimmed = newLabel.trim().toUpperCase();
     if (!trimmed) { setEditingAngleId(null); return; }
     try {
-      await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angleId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ angle_label: trimmed }),
-      });
+      await updateAngleApi(set.id, angleId, { angle_label: trimmed });
       if (onToast) onToast(`Renamed to "${trimmed}"`);
     } catch {
       if (onToast) onToast('Rename failed', 'error');
@@ -584,15 +658,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
     setSuggestions(null);
     setSelectedSuggestions([]);
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        const errMsg = json.error || 'Failed to get suggestions';
-        if (onToast) onToast(errMsg, 'error');
+      const res = await suggestAnglesApi(set.id, {});
+      const json = res.data;
+      if (!json.success) {
+        if (onToast) onToast(json.error || 'Failed to get suggestions', 'error');
         setSuggestions([]);
         setLoadingSuggestions(false);
         return;
@@ -600,7 +669,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
       setSuggestions(json.data || []);
       setSelectedSuggestions((json.data || []).map((_, i) => i));
     } catch (err) {
-      if (onToast) onToast('Failed to get AI suggestions', 'error');
+      if (onToast) onToast(err.response?.data?.error || 'Failed to get AI suggestions', 'error');
       setSuggestions([]);
     }
     setLoadingSuggestions(false);
@@ -633,13 +702,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
   const handleAiAssist = async () => {
     setAiAssistLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/ai-camera-direction`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ angle_label: newAngle.angle_label.trim().toUpperCase() || 'GENERAL', angle_name: newAngle.angle_name.trim() }),
+      const res = await getAiCameraDirectionApi(set.id, {
+        angle_label: newAngle.angle_label.trim().toUpperCase() || 'GENERAL',
+        angle_name: newAngle.angle_name.trim(),
       });
-      if (!res.ok) throw new Error('AI assist failed');
-      const json = await res.json();
+      const json = res.data;
       if (json.data?.camera_direction) {
         setNewAngle(a => ({ ...a, camera_direction: json.data.camera_direction }));
       }
@@ -715,14 +782,14 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       setSeeding(true);
                       showToast('Analyzing your image for camera angles...');
                       try {
-                        const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
-                        const d = await r.json();
+                        const r = await suggestAnglesFromImageApi(set.id);
+                        const d = r.data;
                         if (d.success) {
                           showToast(`${d.angles_created || 0} angles suggested! Click "Generate All" to create images.`);
                         } else {
                           showToast(d.error || 'Failed to suggest angles', 'error');
                         }
-                      } catch (e) { showToast(e.message, 'error'); }
+                      } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
                       setSeeding(false);
                     }} disabled={isGenerating || seeding}>
                       <Sparkles size={12} /> {seeding ? 'Analyzing...' : 'Suggest Angles'}
@@ -736,12 +803,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         : sortedAngles.find(a => a.still_image_url);
                       if (!targetAngle) return;
                       try {
-                        const res = await fetch(`${API_BASE}/scene-sets/${set.id}/promote-to-base`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ angle_id: targetAngle.id }),
-                        });
-                        const d = await res.json();
+                        const res = await promoteToBaseApi(set.id, { angle_id: targetAngle.id });
+                        const d = res.data;
                         if (d.success) showToast(d.message);
                         else showToast(d.error, 'error');
                       } catch { showToast('Failed to set base', 'error'); }
@@ -916,10 +979,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     try {
                       const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
                       const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                      const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                      const r = await generateSceneSpecApi(set.id, {});
                       clearTimeout(progressTimer);
                       clearTimeout(parseTimer);
-                      const d = await r.json();
+                      const d = r.data;
                       if (d.success) {
                         setSpecProgress('done');
                         showToast(`Scene spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.zones?.length || 0} zones, ${d.data?.camera_contracts?.length || 0} camera contracts`);
@@ -928,7 +991,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         setSpecProgress('error');
                         showToast(d.error || 'Failed', 'error');
                       }
-                    } catch (e) { setSpecProgress('error'); showToast(e.message, 'error'); }
+                    } catch (e) { setSpecProgress('error'); showToast(e.response?.data?.error || e.message, 'error'); }
                     setBuildingSpec(false);
                     setTimeout(() => setSpecProgress(null), 2000);
                   }} disabled={buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
@@ -978,10 +1041,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       try {
                         const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
                         const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                        const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+                        const r = await generateSceneSpecApi(set.id, { force: true });
                         clearTimeout(progressTimer);
                         clearTimeout(parseTimer);
-                        const d = await r.json();
+                        const d = r.data;
                         if (d.success) {
                           showToast(`Spec rebuilt: ${d.data?.camera_contracts?.length || 0} camera contracts`);
                           if (onRefresh) await onRefresh();
@@ -989,7 +1052,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           showToast(d.error || 'Failed', 'error');
                         }
                       } catch (e) {
-                        showToast(e.message, 'error');
+                        showToast(e.response?.data?.error || e.message, 'error');
                       }
                       setBuildingSpec(false);
                       setSpecProgress(null);
@@ -999,13 +1062,13 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                     setSeeding(true);
                     showToast('Creating camera angles from spec...');
                     try {
-                      const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/create-angles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-                      const d = await r.json();
+                      const r = await createAnglesFromSpecApi(set.id, {});
+                      const d = r.data;
                       if (d.success) {
                         showToast(`${d.data?.angles_created || 0} camera angles created — ready to generate images`);
                         if (onRefresh) await onRefresh();
                       } else showToast(d.error || 'Failed', 'error');
-                    } catch (e) { showToast(e.message, 'error'); }
+                    } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
                     setSeeding(false);
                   }} disabled={seeding || buildingSpec} className="scene-sets-btn-generate" style={{ width: '100%' }}>
                     {cameraContractCount === 0
@@ -1040,15 +1103,15 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           await onDeleteAllAngles(set);
                           const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
                           const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                          const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+                          const r = await generateSceneSpecApi(set.id, { force: true });
                           clearTimeout(progressTimer);
                           clearTimeout(parseTimer);
-                          const d = await r.json();
+                          const d = r.data;
                           if (d.success) {
                             showToast(`Spec rebuilt: ${d.data?.camera_contracts?.length || 0} angles`);
                             if (onRefresh) await onRefresh();
                           } else showToast(d.error || 'Failed', 'error');
-                        } catch (e) { showToast(e.message, 'error'); }
+                        } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
                         setBuildingSpec(false);
                         setSpecProgress(null);
                       }} disabled={buildingSpec} style={{ display: 'inline', background: 'none', border: 'none', color: '#B8962E', fontWeight: 600, cursor: 'pointer', fontSize: 10, textDecoration: 'underline', padding: 0, marginLeft: 4 }}>
@@ -1063,7 +1126,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                   <button onClick={async () => {
                     if (failedAngles.length > 0) {
                       for (const a of failedAngles) {
-                        try { await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ generation_status: 'pending' }) }); } catch { /* continue */ }
+                        try { await updateAngleApi(set.id, a.id, { generation_status: 'pending' }); } catch { /* continue */ }
                       }
                     }
                     onGenerateAll(set, false);
@@ -1097,10 +1160,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       try {
                         const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
                         const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                        const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+                        const r = await generateSceneSpecApi(set.id, { force: true });
                         clearTimeout(progressTimer);
                         clearTimeout(parseTimer);
-                        const d = await r.json();
+                        const d = r.data;
                         if (d.success) {
                           showToast(`Scene spec built: ${d.data?.camera_contracts?.length || 0} contracts`);
                           if (onRefresh) await onRefresh();
@@ -1108,7 +1171,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           showToast(d.error || 'Failed', 'error');
                         }
                       } catch (e) {
-                        showToast(e.message, 'error');
+                        showToast(e.response?.data?.error || e.message, 'error');
                       }
                       setBuildingSpec(false);
                       setSpecProgress(null);
@@ -1132,11 +1195,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                 if (failedAngles.length > 0) {
                   for (const a of failedAngles) {
                     try {
-                      await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${a.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ generation_status: 'pending' }),
-                      });
+                      await updateAngleApi(set.id, a.id, { generation_status: 'pending' });
                     } catch { /* continue */ }
                   }
                 }
@@ -1289,12 +1348,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           <button className="scene-sets-ai-desc-btn" disabled={descRefining} onClick={async () => {
                             setDescRefining(true);
                             try {
-                              const r = await fetch(`${API_BASE}/scene-sets/${set.id}/refine-description`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ draft: descDraft }),
-                              });
-                              const d = await r.json();
+                              const r = await refineSceneDescriptionApi(set.id, { draft: descDraft });
+                              const d = r.data;
                               if (d.refined) setDescDraft(d.refined);
                             } catch { showToast('Refine failed', 'error'); }
                             setDescRefining(false);
@@ -1303,11 +1358,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           </button>
                           <button className="scene-sets-btn-generate" onClick={async () => {
                             try {
-                              await fetch(`${API_BASE}/scene-sets/${set.id}`, {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ canonical_description: descDraft }),
-                              });
+                              await updateSceneSetApi(set.id, { canonical_description: descDraft });
                               setLocalDesc(descDraft);
                               showToast('Description saved');
                               setEditingDesc(false);
@@ -1347,11 +1398,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               const val = e.target.value || null;
                               setLocalTimeOfDay(e.target.value);
                               try {
-                                await fetch(`${API_BASE}/scene-sets/${set.id}`, {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ time_of_day: val }),
-                                });
+                                await updateSceneSetApi(set.id, { time_of_day: val });
                                 showToast(`Time set to ${val || 'any'}`);
                               } catch { showToast('Failed to update', 'error'); }
                             }}
@@ -1373,11 +1420,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               const val = e.target.value || null;
                               setLocalSeason(e.target.value);
                               try {
-                                await fetch(`${API_BASE}/scene-sets/${set.id}`, {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ season: val }),
-                                });
+                                await updateSceneSetApi(set.id, { season: val });
                                 showToast(`Season set to ${val || 'any'}`);
                               } catch { showToast('Failed to update', 'error'); }
                             }}
@@ -1411,11 +1454,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                                 const rp = { ...localRoomProps, [key]: val };
                                 setLocalRoomProps(rp);
                                 try {
-                                  await fetch(`${API_BASE}/scene-sets/${set.id}`, {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ room_properties: rp }),
-                                  });
+                                  await updateSceneSetApi(set.id, { room_properties: rp });
                                   showToast(`${label} set to ${val || 'auto'}`);
                                 } catch { showToast('Failed to update', 'error'); }
                               }}
@@ -1475,10 +1514,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               onClick={async () => {
                                 setToolsAction(`mood_${m.key}`);
                                 try {
-                                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/mood-variants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ moods: [m.key] }) });
-                                  const d = await r.json();
+                                  const r = await generateMoodVariantsApi(set.id, { moods: [m.key] });
+                                  const d = r.data;
                                   if (d.success) showToast(`${m.label} created`);
-                                } catch (e) { showToast(e.message, 'error'); }
+                                } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
                                 setToolsAction(null);
                               }}>
                               {toolsAction === `mood_${m.key}` ? <Loader size={10} className="spin" /> : m.label}
@@ -1516,11 +1555,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                           setSeeding(true);
                           showToast('Suggesting more angles...');
                           try {
-                            const r = await fetch(`${API_BASE}/scene-sets/${set.id}/suggest-angles-from-image`, { method: 'POST' });
-                            const d = await r.json();
+                            const r = await suggestAnglesFromImageApi(set.id);
+                            const d = r.data;
                             if (d.success) showToast(`${d.angles_created || 0} new angles added`);
                             else showToast(d.error || 'Failed', 'error');
-                          } catch (e) { showToast(e.message, 'error'); }
+                          } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
                           setSeeding(false);
                         }}>
                           {seeding ? <Loader size={11} className="spin" /> : <Plus size={11} />} Suggest More
@@ -1571,12 +1610,8 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                                   onClick={async () => {
                                     if (!confirm(`Use "${a.angle_name}" as the new base image? All other angles will be reset and regenerated from this one.`)) return;
                                     try {
-                                      const r = await fetch(`${API_BASE}/scene-sets/${set.id}/promote-to-base`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ angle_id: a.id }),
-                                      });
-                                      const d = await r.json();
+                                      const r = await promoteToBaseApi(set.id, { angle_id: a.id });
+                                      const d = r.data;
                                       if (d.success) showToast(d.message);
                                       else showToast(d.error, 'error');
                                     } catch { showToast('Failed to promote', 'error'); }
@@ -1642,10 +1677,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                             try {
                               const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
                               const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                              const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                              const r = await generateSceneSpecApi(set.id, {});
                               clearTimeout(progressTimer);
                               clearTimeout(parseTimer);
-                              const d = await r.json();
+                              const d = r.data;
                               if (d.success) {
                                 setSpecProgress('done');
                                 showToast(`Spec built: ${d.data?.objects?.length || 0} objects, ${d.data?.zones?.length || 0} zones, ${d.data?.camera_contracts?.length || 0} camera contracts`);
@@ -1654,7 +1689,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                                 setSpecProgress('error');
                                 showToast(d.error || 'Failed', 'error');
                               }
-                            } catch (e) { setSpecProgress('error'); showToast(e.message, 'error'); }
+                            } catch (e) { setSpecProgress('error'); showToast(e.response?.data?.error || e.message, 'error'); }
                             setBuildingSpec(false);
                             setTimeout(() => setSpecProgress(null), 2000);
                           }}
@@ -1848,10 +1883,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               try {
                                 const progressTimer = setTimeout(() => setSpecProgress('analyzing'), 1500);
                                 const parseTimer = setTimeout(() => setSpecProgress('parsing'), 12000);
-                                const r = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) });
+                                const r = await generateSceneSpecApi(set.id, { force: true });
                                 clearTimeout(progressTimer);
                                 clearTimeout(parseTimer);
-                                const d = await r.json();
+                                const d = r.data;
                                 if (d.success) {
                                   setSpecProgress('done');
                                   showToast(`Spec rebuilt: ${d.data?.objects?.length || 0} objects, ${d.data?.camera_contracts?.length || 0} contracts`);
@@ -1860,7 +1895,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                                   setSpecProgress('error');
                                   showToast(d.error || 'Failed', 'error');
                                 }
-                              } catch (e) { setSpecProgress('error'); showToast(e.message, 'error'); }
+                              } catch (e) { setSpecProgress('error'); showToast(e.response?.data?.error || e.message, 'error'); }
                               setBuildingSpec(false);
                               setTimeout(() => setSpecProgress(null), 2000);
                             }}>
@@ -1882,7 +1917,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'locking_style'} onClick={async () => {
                           setToolsAction('locking_style');
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/lock-style`, { method: 'POST' }); const d = await r.json(); if (d.success) showToast(`Style locked: ${d.data.design_style || 'done'}`); } catch (e) { showToast(e.message, 'error'); } finally { setToolsAction(null); }
+                          try { const r = await lockSceneStyleApi(set.id); const d = r.data; if (d.success) showToast(`Style locked: ${d.data.design_style || 'done'}`); } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); } finally { setToolsAction(null); }
                         }}><Lock size={11} /> {toolsAction === 'locking_style' ? 'Analyzing...' : 'Lock Style DNA'}</button>
                       </div>
                       {set.visual_language?.locked && (
@@ -1904,10 +1939,10 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'learning'} onClick={async () => {
                           setToolsAction('learning');
                           try {
-                            const r = await fetch(`${API_BASE}/scene-sets/${set.id}/learn-location`, { method: 'POST' });
-                            const d = await r.json();
+                            const r = await learnSceneLocationApi(set.id);
+                            const d = r.data;
                             if (d.success) showToast(d.message || 'Location learned');
-                          } catch (e) { showToast(e.message, 'error'); }
+                          } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
                           setToolsAction(null);
                         }}>
                           <Sparkles size={11} /> {toolsAction === 'learning' ? 'Teaching...' : 'Teach Show Brain'}
@@ -1941,15 +1976,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                               onClick={async () => {
                                 setToolsAction(`mood_${m.key}`);
                                 try {
-                                  const r = await fetch(`${API_BASE}/scene-sets/${set.id}/mood-variants`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ moods: [m.key] }),
-                                  });
-                                  const d = await r.json();
+                                  const r = await generateMoodVariantsApi(set.id, { moods: [m.key] });
+                                  const d = r.data;
                                   if (d.success) showToast(`${m.label} variant created`);
                                   else showToast(d.error, 'error');
-                                } catch (e) { showToast(e.message, 'error'); }
+                                } catch (e) { showToast(e.response?.data?.error || e.message, 'error'); }
                                 setToolsAction(null);
                               }}
                               title={m.desc}
@@ -1982,11 +2013,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, onGenerateBase, onRegener
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Analysis</div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" onClick={async () => {
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/comparison`); setComparison(await r.json()); } catch {}
+                          try { const r = await getComparisonApi(set.id); setComparison(r.data); } catch {}
                         }}><Eye size={11} /> Side-by-Side Compare</button>
 
                         <button className="scene-sets-btn-generate" onClick={async () => {
-                          try { const r = await fetch(`${API_BASE}/scene-sets/${set.id}/wardrobe-match`); setWardrobeMatch(await r.json()); } catch {}
+                          try { const r = await getWardrobeMatchApi(set.id); setWardrobeMatch(r.data); } catch {}
                         }}><Heart size={11} /> Wardrobe Match</button>
                       </div>
                     </div>
@@ -2298,9 +2329,8 @@ export default function SceneSetsTab() {
   const initialLoadDone = useRef(false);
   const fetchSets = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/scene-sets`);
-      const json = await res.json();
-      setSets(json.data || []);
+      const res = await listSceneSetsApi();
+      setSets(res.data?.data || []);
       setError(null);
       initialLoadDone.current = true;
     } catch {
@@ -2317,16 +2347,15 @@ export default function SceneSetsTab() {
 
   // Fetch shows for selectors
   useEffect(() => {
-    fetch(`${API_BASE}/shows`).then(r => r.json()).then(d => setAllShows(d.data || [])).catch(() => {});
+    listShowsApi().then(r => setAllShows(r.data?.data || [])).catch(() => {});
   }, []);
 
   const loadEpisodesForShow = useCallback(async (showId) => {
     try {
-      const res = await fetch(`${API_BASE}/episodes?show_id=${showId}&limit=100`);
-      const json = await res.json();
+      const res = await listEpisodesByShowApi(showId);
       setAllEpisodes(prev => {
         const otherShows = prev.filter(ep => ep.show_id !== showId);
-        return [...otherShows, ...(json.data || [])];
+        return [...otherShows, ...(res.data?.data || [])];
       });
     } catch { /* silent */ }
   }, []);
@@ -2349,19 +2378,22 @@ export default function SceneSetsTab() {
     for (let i = 0; i < maxPolls; i++) {
       await new Promise(r => setTimeout(r, 3000));
       try {
-        const res = await fetch(`${API_BASE}/scene-sets/jobs/${jobId}`);
-        if (res.status === 404) return { status: 'failed', error: 'Job not found — generation may not be configured' };
-        if (res.status === 502 || res.status === 503) {
+        const res = await getSceneSetJobApi(jobId);
+        const job = res.data?.data;
+        if (job && (job.status === 'completed' || job.status === 'failed')) return job;
+        consecutiveErrors = 0;
+      } catch (err) {
+        // axios throws on non-2xx; mirror the previous status-based handling
+        const status = err.response?.status;
+        if (status === 404) return { status: 'failed', error: 'Job not found — generation may not be configured' };
+        if (status === 502 || status === 503) {
           consecutiveErrors++;
           if (consecutiveErrors >= 3) return { status: 'failed', error: 'Server unavailable' };
           continue;
         }
-        if (!res.ok) { consecutiveErrors++; if (consecutiveErrors >= 5) return { status: 'failed', error: 'Too many errors' }; continue; }
-        consecutiveErrors = 0;
-        const json = await res.json();
-        const job = json.data;
-        if (job.status === 'completed' || job.status === 'failed') return job;
-      } catch { consecutiveErrors++; if (consecutiveErrors >= 5) return { status: 'failed', error: 'Network error' }; }
+        consecutiveErrors++;
+        if (consecutiveErrors >= 5) return { status: 'failed', error: status ? 'Too many errors' : 'Network error' };
+      }
     }
     return { status: 'failed', error: 'Polling timed out' };
   }, []);
@@ -2370,8 +2402,8 @@ export default function SceneSetsTab() {
     for (let i = 0; i < maxPolls; i++) {
       await new Promise(r => setTimeout(r, 4000));
       try {
-        const r = await fetch(`${API_BASE}/scene-sets/${setId}`);
-        const d = await r.json();
+        const r = await getSceneSetApi(setId);
+        const d = r.data;
         if (d.data?.[field] === 'complete') return 'completed';
         if (d.data?.[field] === 'failed') return 'failed';
       } catch { /* retry */ }
@@ -2382,15 +2414,13 @@ export default function SceneSetsTab() {
   const handleGenerateBase = async (set) => {
     startGenerating(set.id);
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Generation failed');
+      let json;
+      try {
+        const res = await generateBaseImageApi(set.id, {});
+        json = res.data;
+      } catch (err) {
+        throw new Error(err.response?.data?.error || 'Generation failed');
       }
-      const json = await res.json();
 
       if (json.data?.jobId) {
         showToast('Base generation queued...');
@@ -2414,16 +2444,13 @@ export default function SceneSetsTab() {
   const handleRegenerateBase = async (set) => {
     startGenerating(set.id);
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-base`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force: true }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Regeneration failed');
+      let json;
+      try {
+        const res = await generateBaseImageApi(set.id, { force: true });
+        json = res.data;
+      } catch (err) {
+        throw new Error(err.response?.data?.error || 'Regeneration failed');
       }
-      const json = await res.json();
 
       if (json.data?.jobId) {
         showToast('Regeneration queued...');
@@ -2446,12 +2473,7 @@ export default function SceneSetsTab() {
 
   const handleUpdatePrompt = async (set, newDescription) => {
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canonical_description: newDescription }),
-      });
-      if (!res.ok) throw new Error('Failed to save');
+      await updateSceneSetApi(set.id, { canonical_description: newDescription });
       showToast('Prompt updated');
       fetchSets();
     } catch {
@@ -2469,34 +2491,23 @@ export default function SceneSetsTab() {
       const fileList = Array.isArray(files) ? files : [files].filter(Boolean);
       if (fileList.length === 0) throw new Error('No image file selected');
       fileList.forEach((file) => formData.append('images', file));
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/upload-base`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Upload failed');
+      try {
+        await uploadBaseImageApi(set.id, formData);
+      } catch (err) {
+        throw new Error(err.response?.data?.error || 'Upload failed');
       }
       await fetchSets();
 
       // ── Stage 2: Build Scene Spec ──
       setStage('building_spec');
       try {
-        const specRes = await fetch(`${API_BASE}/scene-sets/${set.id}/spec/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ force: true }),
-        });
-        const specJson = await specRes.json();
+        const specRes = await generateSceneSpecApi(set.id, { force: true });
+        const specJson = specRes.data;
         if (specJson.success && specJson.data?.camera_contracts?.length) {
           // ── Stage 3: Create Angles ──
           setStage('creating_angles');
           try {
-            await fetch(`${API_BASE}/scene-sets/${set.id}/spec/create-angles`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({}),
-            });
+            await createAnglesFromSpecApi(set.id, {});
           } catch { /* non-blocking */ }
         }
       } catch { /* non-blocking */ }
@@ -2517,20 +2528,21 @@ export default function SceneSetsTab() {
     try {
       // Quick check if generation is configured
       try {
-        const checkRes = await fetch(`${API_BASE}/scene-sets/generation-check`);
-        const checkData = await checkRes.json();
+        const checkRes = await getGenerationCheckApi();
+        const checkData = checkRes.data;
         if (!checkData.ready) {
           showToast(checkData.message || 'No image generation API key configured', 'error');
           return;
         }
       } catch { /* proceed anyway */ }
 
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angle.id}/generate`, { method: 'POST' });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Generation failed (${res.status})`);
+      let json;
+      try {
+        const res = await generateAngleApi(set.id, angle.id);
+        json = res.data;
+      } catch (err) {
+        throw new Error(err.response?.data?.error || `Generation failed (${err.response?.status || 'unknown'})`);
       }
-      const json = await res.json();
 
       // Refresh to show angle-level spinner in filmstrip
       await fetchSets();
@@ -2551,8 +2563,8 @@ export default function SceneSetsTab() {
         for (let i = 0; i < maxPolls; i++) {
           await new Promise(r => setTimeout(r, 4000));
           try {
-            const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
-            const checkJson = await checkRes.json();
+            const checkRes = await getSceneSetApi(set.id);
+            const checkJson = checkRes.data;
             const updatedAngle = checkJson.data?.angles?.find(a => a.id === angle.id);
             if (updatedAngle?.generation_status === 'complete') {
               showToast(`"${angle.angle_name}" generated!`);
@@ -2586,16 +2598,16 @@ export default function SceneSetsTab() {
 
     try {
       // Use the backend batch endpoint — it generates sequentially to avoid rate limits
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/generate-all-angles`, { method: 'POST' });
-      const json = await res.json();
+      const res = await generateAllAnglesApi(set.id);
+      const json = res.data;
 
       // Poll for completion
       const maxPolls = 120; // 5s * 120 = 10 minutes max
       for (let poll = 0; poll < maxPolls; poll++) {
         await new Promise(r => setTimeout(r, 5000));
         try {
-          const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
-          const checkJson = await checkRes.json();
+          const checkRes = await getSceneSetApi(set.id);
+          const checkJson = checkRes.data;
           const freshAngles = checkJson.data?.angles || [];
           const trackedAngles = freshAngles.filter(a => targetIds.has(a.id));
           const generating = trackedAngles.filter(a => a.generation_status === 'generating').length;
@@ -2654,8 +2666,7 @@ export default function SceneSetsTab() {
       // Fire all retry requests
       for (let i = 0; i < targets.length; i++) {
         try {
-          const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${targets[i].id}/generate`, { method: 'POST' });
-          if (!res.ok) throw new Error('Failed');
+          await generateAngleApi(set.id, targets[i].id);
           progressAngles[i].status = 'generating';
         } catch {
           progressAngles[i].status = 'failed';
@@ -2670,8 +2681,8 @@ export default function SceneSetsTab() {
       for (let poll = 0; poll < maxPolls; poll++) {
         await new Promise(r => setTimeout(r, 4000));
         try {
-          const checkRes = await fetch(`${API_BASE}/scene-sets/${set.id}`);
-          const checkJson = await checkRes.json();
+          const checkRes = await getSceneSetApi(set.id);
+          const checkJson = checkRes.data;
           const freshAngles = checkJson.data?.angles || [];
           let allDone = true;
           for (let i = 0; i < targets.length; i++) {
@@ -2714,13 +2725,13 @@ export default function SceneSetsTab() {
       if (newSet.episode_ids?.length > 0) createPayload.episode_ids = newSet.episode_ids;
       if (newSet.time_of_day) createPayload.time_of_day = newSet.time_of_day;
       if (newSet.season) createPayload.season = newSet.season;
-      const res = await fetch(`${API_BASE}/scene-sets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createPayload),
-      });
-      if (!res.ok) throw new Error('Failed to create');
-      const json = await res.json();
+      let json;
+      try {
+        const res = await createSceneSetApi(createPayload);
+        json = res.data;
+      } catch {
+        throw new Error('Failed to create');
+      }
 
       // Save room properties if set (stored in visual_language JSONB)
       const rp = {};
@@ -2729,11 +2740,7 @@ export default function SceneSetsTab() {
       if (newSet.room_shape) rp.room_shape = newSet.room_shape;
       if (Object.keys(rp).length > 0 && json.data?.id) {
         try {
-          await fetch(`${API_BASE}/scene-sets/${json.data.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ room_properties: rp }),
-          });
+          await updateSceneSetApi(json.data.id, { room_properties: rp });
         } catch { /* non-critical */ }
       }
 
@@ -2753,8 +2760,7 @@ export default function SceneSetsTab() {
   const handleDeleteSet = async (set) => {
     if (!window.confirm(`Delete location "${set.name}"? This will soft-delete the location and all its angles.`)) return;
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed');
+      await deleteSceneSetApi(set.id);
       showToast(`Deleted "${set.name}"`);
       fetchSets();
     } catch {
@@ -2764,12 +2770,7 @@ export default function SceneSetsTab() {
 
   const handleSetCoverAngle = async (set, angleId) => {
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/cover-angle`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ angle_id: angleId }),
-      });
-      if (!res.ok) throw new Error('Failed');
+      await setCoverAngleApi(set.id, { angle_id: angleId });
       showToast(angleId ? 'Cover image set' : 'Cover image cleared');
       fetchSets();
     } catch {
@@ -2779,12 +2780,10 @@ export default function SceneSetsTab() {
 
   const handleLinkEpisodes = async (set, episodeIds) => {
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/episodes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ episode_ids: episodeIds }),
-      });
-      if (!res.ok) throw new Error('Failed');
+      await listSceneSetEpisodesApi; // helper exists; using POST helper below for link action
+      // The link endpoint shares the same /episodes path but is a POST (link), not a GET (list).
+      // Migration: use a POST helper rather than the read helper.
+      await apiClient.post(`${API_BASE}/scene-sets/${set.id}/episodes`, { episode_ids: episodeIds });
       showToast(`Linked ${episodeIds.length} episode(s)`);
       fetchSets();
     } catch {
@@ -2794,8 +2793,7 @@ export default function SceneSetsTab() {
 
   const handleUnlinkEpisode = async (set, episodeId) => {
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/episodes/${episodeId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed');
+      await unlinkEpisodeFromSceneSetApi(set.id, episodeId);
       showToast('Episode unlinked');
       fetchSets();
     } catch {
@@ -2805,8 +2803,7 @@ export default function SceneSetsTab() {
 
   const handleDeleteSingleAngle = async (set, angleId) => {
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angleId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed');
+      await deleteAngleApi(set.id, angleId);
       showToast('Angle deleted');
       fetchSets();
     } catch {
@@ -2819,8 +2816,7 @@ export default function SceneSetsTab() {
     if (count === 0) return;
     if (!window.confirm(`Delete all ${count} angles for "${set.name}"? They will be soft-deleted and can be recovered.`)) return;
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed');
+      await deleteAllAnglesApi(set.id);
       showToast(`Deleted ${count} angles — create new ones or regenerate`);
       fetchSets();
     } catch {
@@ -2848,29 +2844,22 @@ export default function SceneSetsTab() {
   const handleAddAngle = async (set, angleData) => {
     try {
       const { _imageFile, ...apiData } = angleData;
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(apiData),
-      });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `Server error (${res.status})`);
+      let newAngle;
+      try {
+        const res = await createAngleApi(set.id, apiData);
+        newAngle = res.data?.data;
+      } catch (err) {
+        throw new Error(err.response?.data?.error || `Server error (${err.response?.status || 'unknown'})`);
       }
-      const json = await res.json();
-      const newAngle = json.data;
 
       if (_imageFile && newAngle?.id) {
         // Upload the user's image to this angle
         const formData = new FormData();
         formData.append('images', _imageFile);
-        const uploadRes = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${newAngle.id}/upload`, {
-          method: 'POST',
-          body: formData,
-        });
-        if (uploadRes.ok) {
+        try {
+          await uploadAngleApi(set.id, newAngle.id, formData);
           showToast(`Added angle "${angleData.angle_label}" with uploaded image`);
-        } else {
+        } catch {
           showToast('Angle created but image upload failed', 'error');
         }
       } else {
@@ -2890,9 +2879,8 @@ export default function SceneSetsTab() {
 
   const handlePreviewPrompt = async (set) => {
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/preview-prompt`);
-      const json = await res.json();
-      return json.data || null;
+      const res = await previewPromptApi(set.id);
+      return res.data?.data || null;
     } catch {
       showToast('Failed to load prompt preview', 'error');
       return null;
@@ -2903,13 +2891,10 @@ export default function SceneSetsTab() {
     try {
       const formData = new FormData();
       formData.append('images', file);
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/angles/${angleId}/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `Upload failed (${res.status})`);
+      try {
+        await uploadAngleApi(set.id, angleId, formData);
+      } catch (err) {
+        throw new Error(err.response?.data?.error || `Upload failed (${err.response?.status || 'unknown'})`);
       }
       showToast('Angle image uploaded');
       await fetchSets();
@@ -2921,16 +2906,16 @@ export default function SceneSetsTab() {
   const handleCascadeRegenerate = async (set, description) => {
     startGenerating(set.id);
     try {
-      const res = await fetch(`${API_BASE}/scene-sets/${set.id}/cascade-regenerate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(description ? { canonical_description: description } : {}),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Cascade regeneration failed');
+      let json;
+      try {
+        const res = await cascadeRegenerateApi(
+          set.id,
+          description ? { canonical_description: description } : {},
+        );
+        json = res.data;
+      } catch (err) {
+        throw new Error(err.response?.data?.error || 'Cascade regeneration failed');
       }
-      const json = await res.json();
       showToast('Cascade regeneration queued...');
       const job = await pollJob(json.data.jobId);
       if (job.status === 'completed') {
@@ -2962,11 +2947,7 @@ export default function SceneSetsTab() {
     newOrder[swapIdx].sort_order = tmp;
 
     try {
-      await fetch(`${API_BASE}/scene-sets/${set.id}/angles/reorder`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: newOrder }),
-      });
+      await reorderAnglesApi(set.id, { order: newOrder });
       fetchSets();
     } catch {
       showToast('Failed to reorder angles', 'error');
