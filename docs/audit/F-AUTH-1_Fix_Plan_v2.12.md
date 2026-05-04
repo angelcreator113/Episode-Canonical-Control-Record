@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.11 — Single-PR plan. Track 6 CP4 (FranchiseBrain.jsx, 18 sites) approved. F34 closed at call site. Pacing model validated against three data points.
+**Document version:** v2.12 — Single-PR plan. Track 6 CP5 (mid-tier batch — 28 sites across 3 files) approved. File-local helper convention locked. 4-data-point pacing model with multi-file batch effect.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2 + CP3 + CP4 COMPLETE (`11a82876`). F34 closed at call site. CP5 (mid-tier batch) is next.
+**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2-CP5 COMPLETE (`c306ad4d`). 141 sites migrated, 41% of Track 6 by site count. CP6 (mid-tier batch 2) is next.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -543,6 +543,48 @@ Throughput band: **11-18 sites/session**, modulated by file's state-management c
 
 CP5 mid-tier targets per v2.10 CP1 priority order: `StoryThreadTracker.jsx` (~10 sites), `EpisodeScenesTab.jsx` (~10 sites), `SeriesPage.jsx` (~8 sites). Three files at 8-10 sites each. CP5 surface report will adjudicate whether they cluster into one CP commit (if Pattern F surfaces are similar across them) or split into CP5/CP6/CP7 (if files are independent in their migration shape).
 
+###### Track 6 CP5 architectural findings (LOCKED v2.12, COMPLETE — mid-tier batch)
+
+CP5 completed at commit `c306ad4d` (single squashed commit, 3 file-boundary WIPs collapsed; single session). 28/28 sites migrated across three files via 27 module-scope helpers with Pattern F Api suffix (helpers duplicated locally per file, 4 cross-file overlaps with CP2 SceneSetsTab handlers preserved as duplicates per file-local convention). 37 new behavioral tests added; full frontend suite at 262/262 passing across 23 test files. Backed up at `c306ad4d` on `claude/f-auth-1-backup`.
+
+Per-file breakdown:
+
+- `frontend/src/pages/StoryThreadTracker.jsx` — 11 sites, 11 helpers, 14 tests. Idiom: `if (res.ok) { ... }` collapsed (apiClient interceptor handles failure via thrown error caught by component-level catch).
+- `frontend/src/components/Episodes/EpisodeScenesTab.jsx` — 9 sites, 9 helpers (3 duplicated from CP2), 11 tests. Idiom: success-envelope `{ success, data, error }` preserved verbatim via `res.data?.success`.
+- `frontend/src/pages/SeriesPage.jsx` — 8 sites, 7 helpers (1 duplicated from CP2), 12 tests. Idiom: `if (!res.ok) throw` removed (apiClient interceptor throws). Error path strengthened to read `err.response?.data?.error || err.message` preserving pre-migration 4xx body exposure.
+
+**File-local helper convention LOCKED v2.12. Helper modules are file-local; cross-file imports are not used in F-AUTH-1 even when endpoints overlap.** Validated against 4 cross-file duplications in CP5 (3 in EpisodeScenesTab: `listSceneSetsApi`, `suggestAnglesApi`, `createAngleApi` + 1 in SeriesPage: `listShowsApi`). Each duplicated helper is ~3 LOC; total drift surface ~12 LOC. Rationale: each CP commit's helper module is self-contained per CP2/CP3/CP4 precedent; cross-file imports would break test-per-file isolation; bounded duplication is cheaper than coupling.
+
+- Pattern F prophylactic discipline confirmed correct (fourth data point). All three CP5 files had LOW direct-shadow density (zero direct conflicts; ~15 indirect operation-name overlaps total). Suffix from first extraction kept the migration mechanical. Discipline now validated across four files (CP2 + CP3 + CP4 + CP5 batch); apply prophylactically to all Track 6 files going forward.
+- Pattern G NOT triggered — verified zero SSE / keepalive / streaming markers across all three files. Three Pattern G sites total in F-AUTH-1 scope remain (BookEditor.jsx:55, WriteMode.jsx:980, WriteMode.jsx:1145). No new Pattern G sites added.
+- Throw-on-error idiom cleanup applied where applicable (StoryThreadTracker, SeriesPage). Success-envelope preservation applied where applicable (EpisodeScenesTab). Three different idioms migrated cleanly per file with no cross-contamination.
+- Promise.all parallelism preserved in StoryThreadTracker (`fetchThreads`, `fetchVoice`) and SeriesPage (`load`). Sequential POST loop in EpisodeScenesTab.`generateAngles` preserves await semantics inside `for...of`.
+- Path E candidates surfaced from CP5: ~10 GET sites filed for §9.12 Step 3 sweep awareness.
+- No HTTP method mismatches surfaced (CP2 caught 3, CP3-CP5 caught 0). The three method-correction findings remain a CP2-specific finding pattern; later CPs running cleanly on this dimension.
+- CP5 squashed commit message follows the canonical Track 6 closing format with the mid-tier-batch variant: per-file site count breakdown, helpers added, tests added, "Closes Track 6 CP5" marker.
+
+###### Pacing model — 4 data points validated, multi-file batch effect (NEW v2.12, supersedes v2.11 §4.6 3-data-point band)
+
+Four checkpoints across Track 6 high-density / mid-density work:
+
+- **CP2** (SceneSetsTab.jsx, 64 sites): 4 sessions, ~16 sites/session. Highest density single file with state-management complexity.
+- **CP3** (WriteMode.jsx, 33 sites + 2 Pattern G): 3 sessions, ~11 sites/session. Single file with state-management chains, fire-and-forget, closure captures, mid-flow Pattern G adjudication.
+- **CP4** (FranchiseBrain.jsx, 18 sites): 1 session, 18 sites/session. Single lower-density file with simple shape.
+- **CP5** (StoryThreadTracker + EpisodeScenesTab + SeriesPage, 28 sites): 1 session, **28 sites/session** — exceeded the v2.11 throughput band's upper bound. Multi-file batch of simple-shape files stacked higher than predicted.
+
+Updated throughput model — **multi-file batch effect locked** as a fifth predictor:
+
+- **Single high-density file** with state-management chains, fire-and-forget, closure captures: 11-13 sites/session (CP3 zone)
+- **Single mid-density file** with combined density: 14-16 sites/session (CP2 zone)
+- **Single lower-density simple file**: 15-18 sites/session (CP4 zone)
+- **Multi-file batch of simple-shape files** (each <600 LOC, 8-12 sites each): 25-30 sites/session (CP5 zone) — NEW
+
+Why CP5 exceeded the single-file throughput band: (a) all three files were simple-shape (verified pre-execution via surface report), (b) per-site cost averaged 4.7 min/site (CP4 was 5.1, CP3 was 10.7), (c) sites distributed across 3 smaller files vs concentrated in one larger file, (d) file-boundary WIP discipline gave clean per-file checkpoints, (e) no mid-flow surprises (no Pattern G, no HTTP method corrections, no architectural decisions to adjudicate during execution).
+
+CP6 mid-tier batch 2 targets per v2.10 CP1 priority order: `CharacterGenerator.jsx`, `ContinuityEnginePage.jsx`, `TemplateDesigner.jsx`, `CharacterTherapy.jsx`. Total estimated ~30 sites across 4 files. CP6 surface report will adjudicate whether the multi-file batch effect applies (single CP6 commit) or whether file-specific complexity argues for splitting. If shapes are similar to CP5 (all simple), single-session execution at ~25-30 sites/session is achievable. If any file has CP3-zone state-management complexity, the batch may split.
+
+**Track 6 progress as of CP5: 141 sites migrated** across 5 files (SceneSetsTab 64 + WriteMode 31 + FranchiseBrain 18 + StoryThreadTracker 11 + EpisodeScenesTab 9 + SeriesPage 8). 3 Pattern G locked exceptions (BookEditor:55 + WriteMode:980,1145). Tests grew from 135 (Track 6 start) to 262 (+127). Track 6 projected total ~345 sites; current progress ~41% by site count. Remaining: CP6 mid-tier batch 2 (~30 sites across 4 files), then CP7-CP8 long-tail (~165 sites distributed across ~50 files at 1-8 each).
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -959,7 +1001,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2 SceneSetsTab.jsx COMPLETE (commit `30a15d05` squashed). Track 6 CP3 WriteMode.jsx COMPLETE (commit `b0127817` squashed; Pattern G locked). Track 6 CP4 FranchiseBrain.jsx COMPLETE (commit `11a82876`; 18/18 sites; 225/225 frontend tests; F34 closed at call site). Backed up at `11a82876` on `claude/f-auth-1-backup`. Track 6 CP5 (mid-tier batch — StoryThreadTracker / EpisodeScenesTab / SeriesPage) is next, fresh session.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2 SceneSetsTab.jsx COMPLETE (commit `30a15d05` squashed). Track 6 CP3 WriteMode.jsx COMPLETE (commit `b0127817`; Pattern G locked). Track 6 CP4 FranchiseBrain.jsx COMPLETE (commit `11a82876`; F34 closed at call site). Track 6 CP5 mid-tier batch COMPLETE (commit `c306ad4d`; 28 sites across StoryThreadTracker + EpisodeScenesTab + SeriesPage; 262/262 frontend tests; file-local helper convention locked). Backed up at `c306ad4d` on `claude/f-auth-1-backup`. Track 6 CP6 (mid-tier batch 2 — CharacterGenerator + ContinuityEnginePage + TemplateDesigner + CharacterTherapy) is next, fresh session.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -1001,6 +1043,8 @@ Patterns D and E together enable the **module-scope-extraction** approach Tracks
 **Pattern F — Api-suffix convention for shadow-conflict resolution:** When extracting Track 2.5-style module-scope helpers from a file where component-local handler names mirror the endpoint operation names (e.g., a component with `finalizeProfile` handler whose body wraps a network call to `/profiles/finalize`), naming the extracted helper `finalizeProfile` shadows the component handler. Resolution: suffix the network helper with `Api` (`finalizeProfileApi`). Component handler stays unchanged — it imports and wraps the API helper plus UI state updates. Track 3 Stage 2 (commit `69f0a926`) established this pattern across 11 conflicts in SocialProfileGenerator.jsx; document the convention in a module-scope comment when applied so future contributors understand the suffix.
 
 Pattern F applies wherever Tracks 4 and 6 encounter files with component-handler names matching endpoint operation names. Two notable Track 6 files where this is likely: `SceneSetsTab.jsx` (64 sites) and `FranchiseBrain.jsx` (18 sites). Apply the suffix convention from the start of each file's migration rather than discovering shadow conflicts mid-flow.
+
+**File-local helper convention (LOCKED v2.12, validated by CP5 cross-file overlaps): helper modules are file-local; cross-file imports are not used in F-AUTH-1 even when endpoints overlap.** When a Track 6 file hits an endpoint already covered by another Track 6 file's helper, the helper is duplicated locally rather than imported. Each CP commit's helper module is self-contained per CP2/CP3/CP4/CP5 precedent. Duplication cost is bounded (~3 LOC per helper) and discoverable; cross-file imports would break test-per-file isolation. Validated against 4 cross-file duplications in CP5 (3 in EpisodeScenesTab: `listSceneSetsApi`, `suggestAnglesApi`, `createAngleApi` + 1 in SeriesPage: `listShowsApi`). Total drift surface ~12 LOC across CP5; benign.
 
 **Pattern G — "can't-migrate-to-axios" exception class:** When a fetch site uses an underlying HTTP feature that axios does not support in browsers (response-body streaming via SSE, `keepalive: true`, or other browser-only features), the site cannot migrate to apiClient without breaking functionality. These sites are retained as raw `fetch()` calls with inline auth header injection from localStorage, structurally identical to Path D (inline Bearer construction). Pattern G is the locked-exception class for these cases.
 
@@ -1055,6 +1099,12 @@ Disposition pattern (unchanged from v2.6): each is either intentionally PUBLIC (
 - `GET /franchise-brain/entries` with query-string filters (×6 sites: load, loadCounts ×4, loadSourceCounts)
 - `GET /franchise-brain/documents` (loadBrainDocs)
 - `GET /franchise-brain/amber-activity` (loadAmberActivity)
+
+**Path E running list growth from CP5: ~10 GET sites across three mid-tier files filed for Step 3 sweep awareness.** CP5 migration applied apiClient (auth-required disposition default) under the read that per-user storyteller / episode / universe data is auth-required. Step 3 backend audit will adjudicate per-route disposition; if any GET is classified PUBLIC, that specific call site can be reverted in a follow-up commit.
+
+- StoryThreadTracker (6 GETs): `/storyteller/threads`, `/storyteller/threads/dangling`, `/storyteller/memories/pending`, `/storyteller/continuity/issues`, `/storyteller/voice-signals`, `/storyteller/voice-rules`
+- EpisodeScenesTab (3 GETs): `/episodes/:id/scene-sets`, `/episodes/:id/scenes`, `/scene-sets`
+- SeriesPage (3 GETs): `/universe/series`, `/storyteller/books`, `/shows` — the `/shows` GET is consistent with CP2's migration disposition (already auth-required).
 
 **HTTP method mismatches surfaced during Track 6 CP2 (3 sites in SceneSetsTab.jsx) — Step 3 sweep awareness items:**
 
