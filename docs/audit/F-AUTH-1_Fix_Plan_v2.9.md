@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.8 — Single-PR plan. Track 6 multi-session pacing model locked. Per-site cost estimation added to surface-report deliverables.
+**Document version:** v2.9 — Single-PR plan. Track 6 CP2 (SceneSetsTab.jsx, 64 sites) approved. 3 HTTP method corrections caught mid-flow.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2 (SceneSetsTab) multi-session migration underway. Pacing model amended in v2.8.
+**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2 (SceneSetsTab.jsx, 64 sites) COMPLETE at commit `30a15d05`. CP3 (WriteMode.jsx) is next, fresh session.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -486,6 +486,21 @@ CP1 surface report estimated structural shape (uniform vs clustered, wrapping he
 - Surface report deliverable for high-density files (>20 sites): in addition to site count and structural shape, sample 3-5 representative sites and estimate per-site migration cost. Cost factors: (a) lines of context required to migrate safely, (b) presence of state-update chains, (c) downstream consumer tracing requirements, (d) Pattern F suffix-resolution overhead. The estimate informs session-count planning per the multi-session pacing model.
 - Inventory v2 (Track 5 commit `a929ce29`) counted raw fetch literals only. It is correct as a count but undersells migration cost on dense files. Future tracks should treat inventory site counts as a lower bound on work, not a complete estimate.
 
+###### Track 6 CP2 architectural findings (LOCKED v2.9, COMPLETE — SceneSetsTab.jsx)
+
+CP2 completed at commit `30a15d05` (squashed from 4 WIP commits across multiple sessions per the v2.8 pacing model). 64/64 sites migrated, 39 module-scope helpers added with Pattern F Api suffix. 45 new behavioral tests added; full frontend suite at 180/180 passing. Backed up at `30a15d05` on `claude/f-auth-1-backup`.
+
+**3 HTTP method corrections caught mid-flow — shipping bugs, not migration choices.** CP2 surfaced three sites where the original fetch used the wrong HTTP method against the backend route. The migration documented the correct method in the helper definition; the original wrong method has been shipping to production. Filed in §9.12 for Step 3 sweep awareness.
+
+- `setCoverAngleApi` — backend route is PATCH; original code used GET. Backend tolerated it (or the path wasn't reaching execution) — the migration uses PATCH per backend contract.
+- `reorderAnglesApi` — backend route is PATCH; original code used POST. Same disposition.
+- `getAiCameraDirectionApi` — backend route is POST; original code used GET. Same disposition.
+
+**Pattern: BUG-class migrations surface pre-existing HTTP method mismatches.** The migration writer should **use the correct method per backend contract** (it is a regression to preserve a wrong method) and surface the original wrong method in the report. Don't analyze why the original was wrong — the migration's job is correctness, not forensics. Step 3 sweep will further audit each route's contract.
+
+- Pattern F prophylactic discipline confirmed correct. CP2 surfaced 8 component-handler shadow-conflict prone names (`handleCreate`, `handleDeleteSet`, `handleSetCoverAngle`, `handleAddAngle`, `handlePreviewPrompt`, `handleUploadAngleImage`, `handleCascadeRegenerate`, `handleReorderAngle`); the Api suffix on every helper from the start avoided 8 mid-flow refactors. Future high-density files (CP3 WriteMode, CP4 FranchiseBrain) apply Pattern F prophylactically from the first extraction per same discipline.
+- Multi-session pacing model worked as designed. WIP commits across sessions, squash before approval, single CP2 commit at the end. Each session was a clean handoff via WIP commit hash. The `96cc3341 → 97808e97 → b328226b → 30a15d05` progression preserved progress without polluting the eventual squashed commit's history.
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -900,7 +915,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 IN PROGRESS — CP2 (SceneSetsTab.jsx) multi-session migration underway. WIP commit at `96cc3341` (16/64 sites, NOT pushed to backup, awaiting full CP2 completion across multiple sessions per the v2.8 pacing model). Backup remains at `06beb1d1` from Track 4 until CP2 completes.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2 SceneSetsTab.jsx COMPLETE (commit `30a15d05` squashed from multi-session WIP; 64/64 sites migrated; 180/180 frontend tests pass). Backed up at `30a15d05` on `claude/f-auth-1-backup`. Track 6 CP3 (WriteMode.jsx, 33 sites) is next, fresh session.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -971,6 +986,14 @@ From Track 4 (~33 additional sites):
 - `frontend/src/components/AuditLogViewer.jsx` — mockLogs fallback. *Intentional dev-mode fallback, not a bug*. No action needed.
 
 Disposition pattern (unchanged from v2.6): each is either intentionally PUBLIC (backend route serves unauth-safe data) or a BUG (backend route requires auth and the frontend silently sends none). Step 3 sweep classifies each backend route as PUBLIC or requireAuth; Path E sites whose backend is PUBLIC stay as raw fetch (correct), Path E sites whose backend is requireAuth get migrated to apiClient (Track 6-equivalent fix). No action until Step 3 reaches the corresponding routes. The WorldStudio.jsx cluster (29 sites) is the largest and warrants priority attention during Step 3 sweep — if the backend routes are PUBLIC, no work; if any are requireAuth, that one file becomes a meaningful Track-6-equivalent surface.
+
+**HTTP method mismatches surfaced during Track 6 CP2 (3 sites in SceneSetsTab.jsx) — Step 3 sweep awareness items:**
+
+- `setCoverAngleApi` — backend route is PATCH; frontend was using GET. Migration uses correct PATCH per backend contract. Step 3 should verify the backend route's expected method matches what other consumers (if any) send.
+- `reorderAnglesApi` — backend route is PATCH; frontend was using POST. Migration uses correct PATCH.
+- `getAiCameraDirectionApi` — backend route is POST; frontend was using GET. Migration uses correct POST.
+
+These are pre-existing wrong-method sites that were either tolerated by the backend (e.g., Express router accepting both methods, or the backend's body-parser silently doing the right thing on POST-with-no-body) or never hit execution in the path the frontend was reaching. Migration to apiClient documents and uses the correct method. The original wrong methods have been shipping; verifying via Step 3 sweep that no other callers depend on the wrong method behavior is sound discipline. Surface, do not fix the original — apiClient migration is itself the fix at the call site.
 
 ### 9.13 Lost-work incident (May 2, 2026) + cleanup discipline
 
