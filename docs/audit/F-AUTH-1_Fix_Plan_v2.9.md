@@ -4,19 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
-**Document version:** v2.5 — Single-PR plan. Track 2 + Track 2.5 approved. Keepalive exception locked. Two new test patterns recorded.
+**Document version:** v2.9 — Single-PR plan. Track 6 CP2 (SceneSetsTab.jsx, 64 sites) approved. 3 HTTP method corrections caught mid-flow.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Tracks 1, 1.5, 1.6, 2 (A+B), 2.5 complete (47/47 frontend, 436/436 backend tests). Track 3 (Path C migration) is next.
-========
-**Document version:** v2.3 — Single-PR plan. Track 1.6 approved (backend requireAuth split + AUTH_INVALID_FORMAT contract closure).
-
-**Author:** JAWIHP / Evoni — Prime Studios
-
-**Status:** G2 IN PROGRESS — Step 6a + Step 2 + Track 5 + Track 1 + Track 1.5 + Track 1.6 complete. F-Auth-4 contract closed end-to-end. Track 2 (Path A migration) is next.
->>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
+**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2 (SceneSetsTab.jsx, 64 sites) COMPLETE at commit `30a15d05`. CP3 (WriteMode.jsx) is next, fresh session.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -404,26 +396,19 @@ Implementation note: response message and error label aligned to `authenticateTo
 
 Pre-Track-1.6 `requireAuth`'s catch block returned `message: error.message` to clients — the wrapped verifier error message ("Token verification failed: JwtExpiredError: ..." etc.) leaked verifier internals. Track 1.6's refactor hardened this to a generic "The provided token is invalid or expired." message. Verifier internals stay in server-side logs only via the structured `[F-Auth-4] requireAuth: token rejected` log line. Net effect: small information-leak surface closed as a side effect of the spec'd work. Documented here so future readers see the fix was intentional, not silent.
 
-<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
 ##### Track 2 — Migrate Path A (authHeader) to apiClient (LOCKED v2.5, COMPLETE)
-========
-##### Track 2 — Migrate Path A (authHeader) to apiClient
->>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
 
 - 34 call sites across 7 files. Replace `fetch + ...authHeader()` spread with `apiClient` method calls.
 - Tested change. Each migration must preserve: HTTP method, URL, payload shape, response shape consumption. Add tests for any migrated path that did not have them.
 - Once migration is complete: delete `authHeader()` export from `frontend/src/utils/storytellerApi.js`. Confirm zero remaining imports before deletion.
 
-<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
 **Track 2 implementation pattern (LOCKED v2.5 from commits `501cd737` + `59f9868a` + `a079a04b`) — helper-internal migration covers transitive call sites with zero touches:** if a Path A site is reached via a wrapping helper (e.g., `api()` in `storytellerApi.js`), migrate the helper's internals to call `apiClient` while preserving the helper's external contract (return shape, error throw shape). All transitive call sites are migrated by changing one helper. Use this pattern wherever Tracks 3/4/6/7 encounter wrapping helpers — saves linear-scan migration work.
 
 **Track 2.5 amendment (v2.5):** for direct call sites that aren't reached via a wrapping helper, **extract small module-scope const helpers** from inline `apiClient.X(url, payload)` invocations into 1-4 line `export const helperName = (args) => apiClient.method(url, payload)` definitions. Tests import the helpers directly and verify call shape. This avoids full RTL component-render setup. Pattern proven across 8 helpers in 3 files (SectionEditor, StoryPlannerConversational, BookEditor) with zero RTL setup required. Apply pattern to Tracks 3/4/6/7 when migrated sites need behavioral test coverage.
 
 - **Track 2 keepalive exception (LOCKED v2.5)** — `BookEditor.jsx:181` (the beforeunload save established by Step 6a per CZ-5) **cannot migrate to apiClient**. axios does not support `keepalive: true`; the request must survive page unload to satisfy CZ-5's data-loss-prevention contract. Migration converts this site from Path A (`...authHeader` spread) to Path D (inline `Bearer ${token}`) with a 6-line in-code comment explaining the exception. This is the only Path D site that has a documented engineering reason to remain after Track 4 lands. Track 4 verification grep must allowlist this site.
 
-========
->>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
-##### Track 3 — Migrate Path C (authHeaders plural duplicates) to apiClient
+##### Track 3 — Migrate Path C (authHeaders plural duplicates) to apiClient (LOCKED v2.6, COMPLETE)
 
 - 75 call sites across 9 files. Seven files define their own local `authHeaders()` helper; one shared in `feedConstants.js` used by `SocialProfileGenerator.jsx` (~40 sites alone) and `ProfileDetailPanel.jsx`.
 - Migration consolidates the seven duplicate helpers AND migrates call sites to `apiClient`. Two-stage:
@@ -431,15 +416,30 @@ Pre-Track-1.6 `requireAuth`'s catch block returned `message: error.message` to c
   - Stage 2: migrate the shared `authHeaders()` in `feedConstants.js` + its consumers (`SocialProfileGenerator.jsx`, `ProfileDetailPanel.jsx`) to `apiClient`. Delete the shared helper.
 - Pre-flight inventory noted subtle drift between copies (`useStoryEngine.js` accepts an extra param; others do not). The migration eliminates this drift surface.
 
-##### Track 4 — Migrate Path D (inline Bearer) to apiClient
+**Track 3 architectural findings (v2.6, locked from commits `c6047c46` Stage 1 + `69f0a926` Stage 2):**
+
+- **Five subtly different `authHeaders()` implementations dissolved into one apiClient interceptor contract.** Pre-migration shapes: A (Content-Type + optional Auth + 3-fallback), B (A + dead `extra=` param), C (Content-Type + always-Auth + no token guard), D (Content-Type + optional Auth + 2-fallback), E (Auth-only, relied on Express default JSON parse). Post-migration: uniform via apiClient. Drift surface eliminated.
+- **SessionStorage fallback was unreachable code.** 5 of 7 helpers fell back through `localStorage.authToken || localStorage.token || sessionStorage.token`. Stage 1 §5 investigation found **zero** write sites for `sessionStorage.token` anywhere in the codebase — the third fallback was never reachable. apiClient's 2-fallback (`localStorage.authToken || localStorage.token`) covers every reachable token path. No interceptor change needed. The `sessionStorage.getItem('token')` pattern persists in 7 Path D files (App.jsx, SidebarProgress.jsx, FeedBulkImport.jsx ×2, NarrativeControlCenter.jsx, ProductionTab.jsx, WorldStudio.jsx) plus `feedConstants.js getToken()`; Track 4 will scrub these as it migrates the dependents.
+- **Helper-name shadow conflicts when extracting Track 2.5-style helpers — Pattern F locked in §9.11.** SocialProfileGenerator.jsx had 11 component-local handlers whose names matched proposed module-scope exports. Resolution: `Api` suffix on the network helpers (finalizeProfileApi, crossProfileApi, etc.). Component handlers stay unchanged — they wrap the network helper plus UI state updates. Convention applies wherever Tracks 4/6 encounter files where component handler names mirror endpoint operation names.
+
+##### Track 4 — Migrate Path D (inline Bearer) to apiClient (LOCKED v2.7, COMPLETE)
 
 - 25+ call sites across ~17 files. Replace inline `Bearer ${token}` construction with `apiClient` method calls.
 - Cohabiting files (apiClient + inline Bearer in the same file): `ProductionTab.jsx`, `WorldAdmin.jsx`. The inline Bearer sites in these files are accidental drift, not intentional dual-paradigm. Convert all to `apiClient`.
 - Special case: `FeedBulkImport.jsx` mixes Path C local helper + Path D inline. Track 3 + Track 4 work converges in this file.
-<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
 - **LOCKED EXCEPTION (v2.5 — Track 2 surfaced)** — `BookEditor.jsx:181` is the **only Path D site that survives Track 4**. The beforeunload save (Step 6a / CZ-5) requires `keepalive: true`; axios does not support keepalive, so apiClient cannot replace it without breaking CZ-5's data-loss-prevention contract. The site has a 6-line in-code comment documenting the exception, and a regression-lock test (Track 2.5) that asserts `apiClient.post/put/request` are NOT called when the keepalive helper fires. Track 4 must preserve this site, allowlist it in the verification grep, and not "fix" it.
-========
->>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
+- **getToken() handoff from Track 3 (LOCKED v2.6)** — `pages/feed/feedConstants.js` exports a `getToken()` function that reads the same 3-fallback chain (with the unreachable sessionStorage). Track 3 Stage 2 deleted the shared `authHeaders()` but kept `getToken()` because **seven Path D files import it**: App.jsx, SidebarProgress.jsx, FeedBulkImport.jsx (×2 sites), NarrativeControlCenter.jsx, ProductionTab.jsx, WorldStudio.jsx. Track 4 migrates these seven files to apiClient (which doesn't need `getToken` because the request interceptor reads localStorage directly). Once all seven importers are migrated, `getToken()` has zero callers and gets deleted from `feedConstants.js` as Track 4's final cleanup commit. After that deletion, the unreachable sessionStorage code path is fully eliminated from frontend production code.
+- **Pattern F applies (LOCKED v2.6 §9.11)** — when extracting Track 2.5-style helpers from Track 4 files where component handler names mirror endpoint operation names, suffix the module-scope helper with `Api`. Track 3 Stage 2 surfaced this in SocialProfileGenerator.jsx (11 shadow conflicts resolved with the suffix). Tracks 4 and 6 will hit similar patterns in larger files — apply the convention from the start.
+
+**Track 4 architectural findings (v2.7, locked from commits `08a24fec` migration + `06beb1d1` getToken deletion):**
+
+- 25 active sites migrated across 19 files (1 site preserved per locked exception). **The only inline-Bearer construction in frontend production code is now BookEditor.jsx:55** — the CZ-5 keepalive helper, with 3 protective regression-lock tests (Track 2.5 lock). All other auth injection now flows through the apiClient request interceptor.
+- **Inventory v2 scope correction — WorldStudio `headers()` helper covered 3 sites, not 32.** Track 4 surface re-read found the helper is scoped to the `CharacterFollowsTab` sub-component (line 468) with 3 callers, not module-scope wrapping all 32 file fetches. The other 29 fetches in WorldStudio.jsx are unrelated unauth Path E candidates (filed in §9.12). Surface-before-execute discipline caught the misclassification before any code changes.
+- **BookEditor keepalive line corrected — inline-Bearer literal is at line 55, not line 181.** Track 2.5's extraction of `sendKeepaliveBeforeUnload` to module scope moved the literal from inline component-body (pre-2.5 line 181) to the helper definition (post-2.5 line 55). v2.5/v2.6 references to `BookEditor.jsx:181` are stale. v2.7 verification grep allowlist updated to `BookEditor.jsx:55`. Track 2.5 regression-lock tests (3 tests in `BookEditor.test.jsx`) cover the corrected line.
+- **templateService stale-token bug self-resolved — inadvertent fix as side effect of the migration.** `templateService.js` cached `this.token = localStorage.getItem('authToken')` at construction time; re-login mid-session left the service using the stale token (inventory v2 §8.7 surfaced). Migration to apiClient eliminates the bug because the request interceptor reads localStorage fresh on every call. Same pattern as Track 1.6's pre-existing message-leak silent-fix: surface explicitly so it's not "silent."
+- **NarrativeControlCenter.fetchJSON contract change — shipped behavioral change worth flagging.** Pre-Track-4 `fetchJSON` returned `res.json()` unconditionally including on non-2xx responses (callers received error bodies as if successful). Post-Track-4 `fetchJSON` throws on non-2xx via apiClient. All 17 callers verified to follow the happy-path `await fetchJSON(...).then(data => check shape)` pattern; none rely on receiving error bodies. Net effect: silent error-body returns eliminated; error handling now consistently flows through try/catch. Documented in `fetchJSON`'s docblock.
+- **getToken() handoff was unnecessary — dead code, not dependent code.** v2.6 §4.6 Track 4 spec assumed seven Path D files imported `getToken` from feedConstants.js; Track 4 surface grep found **zero importers anywhere in the codebase**. The seven Path D files reimplemented the 3-fallback chain inline rather than importing the helper. feedConstants.getToken() was dead code through the entire F-AUTH-1 work and likely through prior history. Deleted in commit `06beb1d1` as the final Track 4 cleanup. The unreachable sessionStorage code path is now fully eliminated from frontend production code.
+- **Pattern F applied prophylactically — did not trigger.** Track 4 surface flagged WorldAdmin.jsx (6000+ lines, not read end-to-end) as a Pattern F candidate. During migration, no shadow conflicts surfaced in WorldAdmin, ProductionTab, or WorldStudio. Conservative-application discipline correct: the cost of preparation was zero (naming convention from the start), the cost of mid-flow discovery would have been a refactor. Pattern F stays as canon for Track 6.
 
 ##### Track 6 — Migrate BUG-class raw fetches to apiClient (NEW v2.0)
 
@@ -464,6 +464,43 @@ Remaining ~165 sites distributed across ~60 other files at 1-8 sites each. Track
 
 Each file becomes its own commit per Pace 2 batched checkpoints. `SceneSetsTab.jsx` alone is ~64 sites in one file — that single file is one commit and gets reviewed before the next file starts.
 
+###### Track 6 multi-session pacing model (NEW v2.8)
+
+CP2 (SceneSetsTab.jsx) execution surfaced that **high-density files cannot complete in one conversation session**. The 64 sites in SceneSetsTab.jsx are not 64 simple inline migrations — they are 64 fetch+state-update+toast+callback chains, each embedded in different surrounding state-management contexts. Per-site migration cost (read 15-30 lines of context, write a state-preserving Edit, sometimes trace downstream consumers) consumes meaningfully more conversation budget than a single-session checkpoint can absorb.
+
+Pacing model amended (LOCKED v2.8): **a checkpoint spans sessions for high-density files**. The model is:
+
+- **Session 1** through **Session N**: Claude Code migrates as far as available budget allows. Each session lands WIP commits on `feature/f-auth-1`. WIP commits are NOT pushed to backup — they are private progress markers across sessions.
+- **Final session**: when the file is fully migrated (all sites + tests + verification grep), Claude Code squashes the WIP commits into a single coherent CP commit. Sends report. I review. Approve. Backup push.
+
+This preserves the original review-once-per-checkpoint discipline. It just acknowledges that "checkpoint" does not mean "single conversation turn" for high-density files.
+
+Estimated session counts: CP2 (SceneSetsTab, 64 sites) — 3-4 sessions. CP3 (WriteMode, 33 sites + 3,721 lines + Pattern F max density) — 2-3 sessions. CP4 (FranchiseBrain, 18 sites) — likely 1 session. CP5/CP6/CP7 mid-tier — 1 session each. CP8 long-tail — 1 session if the simpler-site hypothesis holds (1-3 sites per file, less surrounding state-management); multi-session if not. **Total Track 6 session estimate: 8-12 sessions.** Total commit count when squashed: 7-10 (unchanged from CP1 plan; squashing preserves clean history).
+
+WIP commit discipline: each WIP commit must leave the working tree in a **clean state** — file compiles, no half-edits in the middle of a function, no dangling syntax errors. WIP commits are private to `feature/f-auth-1` and never go to backup until the checkpoint is complete. Pre-push hook should still pass on each WIP commit (it does today; existing async-handler warnings are informational and stay informational).
+
+###### Per-site cost estimation in surface reports (NEW v2.8)
+
+CP1 surface report estimated structural shape (uniform vs clustered, wrapping helpers vs direct, Pattern F risk) but **did not estimate per-site migration cost**. The 64-vs-64 site count match was correct as raw fetch count; the cost-per-site was 5-10x higher than expected because each site is embedded in a state-management chain. Surface reports for future high-density files (CP3+) must include per-site cost estimation.
+
+- Surface report deliverable for high-density files (>20 sites): in addition to site count and structural shape, sample 3-5 representative sites and estimate per-site migration cost. Cost factors: (a) lines of context required to migrate safely, (b) presence of state-update chains, (c) downstream consumer tracing requirements, (d) Pattern F suffix-resolution overhead. The estimate informs session-count planning per the multi-session pacing model.
+- Inventory v2 (Track 5 commit `a929ce29`) counted raw fetch literals only. It is correct as a count but undersells migration cost on dense files. Future tracks should treat inventory site counts as a lower bound on work, not a complete estimate.
+
+###### Track 6 CP2 architectural findings (LOCKED v2.9, COMPLETE — SceneSetsTab.jsx)
+
+CP2 completed at commit `30a15d05` (squashed from 4 WIP commits across multiple sessions per the v2.8 pacing model). 64/64 sites migrated, 39 module-scope helpers added with Pattern F Api suffix. 45 new behavioral tests added; full frontend suite at 180/180 passing. Backed up at `30a15d05` on `claude/f-auth-1-backup`.
+
+**3 HTTP method corrections caught mid-flow — shipping bugs, not migration choices.** CP2 surfaced three sites where the original fetch used the wrong HTTP method against the backend route. The migration documented the correct method in the helper definition; the original wrong method has been shipping to production. Filed in §9.12 for Step 3 sweep awareness.
+
+- `setCoverAngleApi` — backend route is PATCH; original code used GET. Backend tolerated it (or the path wasn't reaching execution) — the migration uses PATCH per backend contract.
+- `reorderAnglesApi` — backend route is PATCH; original code used POST. Same disposition.
+- `getAiCameraDirectionApi` — backend route is POST; original code used GET. Same disposition.
+
+**Pattern: BUG-class migrations surface pre-existing HTTP method mismatches.** The migration writer should **use the correct method per backend contract** (it is a regression to preserve a wrong method) and surface the original wrong method in the report. Don't analyze why the original was wrong — the migration's job is correctness, not forensics. Step 3 sweep will further audit each route's contract.
+
+- Pattern F prophylactic discipline confirmed correct. CP2 surfaced 8 component-handler shadow-conflict prone names (`handleCreate`, `handleDeleteSet`, `handleSetCoverAngle`, `handleAddAngle`, `handlePreviewPrompt`, `handleUploadAngleImage`, `handleCascadeRegenerate`, `handleReorderAngle`); the Api suffix on every helper from the start avoided 8 mid-flow refactors. Future high-density files (CP3 WriteMode, CP4 FranchiseBrain) apply Pattern F prophylactically from the first extraction per same discipline.
+- Multi-session pacing model worked as designed. WIP commits across sessions, squash before approval, single CP2 commit at the end. Each session was a clean handoff via WIP commit hash. The `96cc3341 → 97808e97 → b328226b → 30a15d05` progression preserved progress without polluting the eventual squashed commit's history.
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -476,7 +513,6 @@ UNCLEAR-B (144 sites in 32 files): per Track 5's spot-check, ~80% are Path D (al
 
 ##### Verification (G3 + G4)
 
-<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
 After all six implementation tracks (1, 2, 3, 4, 6, 7): zero imports of `authHeader` (Path A), zero local `authHeaders()` helpers (Path C), zero inline `Bearer ${token}` (Path D) — except the locked `BookEditor:181` keepalive exception, zero BUG-class raw fetches (Track 6), zero unresolved UNCLEAR-A (Track 7). Verification greps confirm.
 
 ```bash
@@ -486,29 +522,16 @@ grep -rn "authHeader\b" frontend/src/ | grep -v "authHeaders" | grep -v "test\.\
 Expected output: zero matches. (Production code; test files may contain "authHeader" in test descriptions and are excluded.)
 
 ```bash
-grep -rn "Bearer \${" frontend/src/ | grep -v "src/services/api.js" | grep -v "BookEditor.jsx:" | grep -v "test\."
+grep -rn "Bearer \${" frontend/src/ | grep -v "src/services/api.js" | grep -v "BookEditor.jsx:55" | grep -v "test\."
 ```
 
-Expected output: zero matches. The two allowlisted locations are: (a) `src/services/api.js` — the apiClient request interceptor itself; (b) `BookEditor.jsx:181` — the locked CZ-5 keepalive exception (v2.5).
-========
-After all six implementation tracks (1, 2, 3, 4, 6, 7): zero imports of `authHeader` (Path A), zero local `authHeaders()` helpers (Path C), zero inline `Bearer ${token}` (Path D), zero BUG-class raw fetches (Track 6), zero unresolved UNCLEAR-A (Track 7). Verification greps confirm.
-
-```bash
-grep -rn "authHeader\|Bearer \${" frontend/src/ | grep -v "src/services/api.js"
-```
-
-Expected output: zero matches outside `src/services/api.js` (the interceptor itself).
->>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
+Expected output: zero matches. The two allowlisted locations are: (a) `src/services/api.js` — the apiClient request interceptor itself; (b) `BookEditor.jsx:55` — the locked CZ-5 keepalive exception (line corrected v2.7; was `BookEditor.jsx:181` in v2.5/v2.6 before Track 2.5 extraction moved the literal).
 
 ```bash
 grep -rn "fetch(" frontend/src/ | wc -l
 ```
 
-<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
 Expected: drops from 627 (current) to count of intentionally-public reads only (PUBLIC class — currently 5 confirmed, may grow as Track 7 reclassifies UNCLEAR-A) PLUS the BookEditor:181 keepalive exception = 6 minimum.
-========
-Expected: drops from 627 (current) to count of intentionally-public reads only (PUBLIC class — currently 5 confirmed, may grow as Track 7 reclassifies UNCLEAR-A).
->>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
 
 - Authenticated request via `apiClient` succeeds and `req.user` populated server-side.
 - Mid-session token expiry: `apiClient` interceptor sees `AUTH_INVALID_TOKEN`, refreshes silently, request continues. User does not see a logout.
@@ -892,11 +915,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` helper migration + 2 small files, `59f9868a` BookEditor migration + authHeader deletion). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`, 47/47 frontend tests pass). All approved commits backed up at `a079a04b` on `claude/f-auth-1-backup`. Track 3 (Path C migration) is next.
-========
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2` on `feature/f-auth-1`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`, 14/14 tests pass). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18` — amended in v2.3 to emit `AUTH_INVALID_FORMAT` for malformed headers, closing F-Auth-4 contract end-to-end across all four codes; 436/436 middleware tests pass). Track 2 (Path A migration) is next.
->>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2 SceneSetsTab.jsx COMPLETE (commit `30a15d05` squashed from multi-session WIP; 64/64 sites migrated; 180/180 frontend tests pass). Backed up at `30a15d05` on `claude/f-auth-1-backup`. Track 6 CP3 (WriteMode.jsx, 33 sites) is next, fresh session.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -928,15 +947,16 @@ vi.mock('axios', async (importOriginal) => {
 **Pattern C — `apiClient.defaults.adapter` swap for retry verification:** To prove that an interceptor retry actually fires apiClient a second time without making real network calls, swap `apiClient.defaults.adapter` to a `vi.fn().mockResolvedValue(...)` for the duration of the test. After the interceptor handler resolves, `expect(adapterMock).toHaveBeenCalledTimes(1)` confirms the retry happened. Restore in `finally` so test isolation holds. The retry exercises real interceptor logic end-to-end, not a mock chain.
 
 Note: pattern A applies to any DEV-gated code in any module. Patterns B and C are specific to apiClient testing but the techniques generalize: partial mocks preserving constructor methods, adapter swapping to test retry/redirect/interceptor behavior end-to-end without network.
-<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.5.md
 
 **Pattern D — `vi.mock` + static imports for module-scope helpers that capture apiClient at load time:** Track 2.5 (commit `a079a04b`) extracted small const helpers like `export const saveDraftProse = (chapterId, proseText) => apiClient.post(...)` to make migrated call sites testable. The helper captures `apiClient` at module load. To test the helper with a mocked apiClient, declare `vi.mock('@/services/api', () => ({ default: { post: vi.fn(), ... } }))` BEFORE the static `import { saveDraftProse } from '@/components/BookEditor.jsx'`. vi.mock is hoisted by vitest, so the mock is in place when the helper module evaluates. The helper sees the mocked `apiClient`; tests verify call shape with `expect(apiClient.post).toHaveBeenCalledWith(...)`. This pattern lets module-scope helper extractions be tested without full RTL component rendering.
 
 **Pattern E — multi-method mock reset for apiClient mocks:** When the apiClient mock has multiple `vi.fn()` properties (post, put, get, delete, request, etc.), reset all of them between tests with `Object.values(apiClient).forEach((fn) => fn?.mockReset?.())` in `beforeEach`. The optional-chain on `mockReset` handles the case where some properties of the mock object are not `vi.fn()` (defensive against future changes to the mock factory). Track 2.5 established this pattern; reuse for all later tracks that mock apiClient.
 
 Patterns D and E together enable the **module-scope-extraction** approach Tracks 3, 4, 6, and 7 should use for behavioral test coverage of migrated call sites: extract inline `apiClient.X(...)` invocations to 1-4 line const helpers, mock apiClient with vi.mock at module top, import the helpers statically, reset all methods in beforeEach. No full RTL setup required. Validated across 8 helpers in 3 files (Track 2.5) with zero genuine "cannot test without RTL" cases surfaced.
-========
->>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.3.md
+
+**Pattern F — Api-suffix convention for shadow-conflict resolution:** When extracting Track 2.5-style module-scope helpers from a file where component-local handler names mirror the endpoint operation names (e.g., a component with `finalizeProfile` handler whose body wraps a network call to `/profiles/finalize`), naming the extracted helper `finalizeProfile` shadows the component handler. Resolution: suffix the network helper with `Api` (`finalizeProfileApi`). Component handler stays unchanged — it imports and wraps the API helper plus UI state updates. Track 3 Stage 2 (commit `69f0a926`) established this pattern across 11 conflicts in SocialProfileGenerator.jsx; document the convention in a module-scope comment when applied so future contributors understand the suffix.
+
+Pattern F applies wherever Tracks 4 and 6 encounter files with component-handler names matching endpoint operation names. Two notable Track 6 files where this is likely: `SceneSetsTab.jsx` (64 sites) and `FranchiseBrain.jsx` (18 sites). Apply the suffix convention from the start of each file's migration rather than discovering shadow conflicts mid-flow.
 
 ### 9.12 Deferred cleanups (post-F-AUTH-1)
 
@@ -949,6 +969,31 @@ Note: the outer try/catch entry that was deferred in v1.6/v1.7 was **cleaned up 
 - **ESLint v9 migration** — `.eslintrc.js` is the v8 format and ESLint v9 (installed) does not auto-detect it. Frontend lint has been broken for some time. Out of F-AUTH-1 scope; separate config-modernization PR.
 - **Refresh-via-cookie hardening** — login endpoint sets a refreshToken httpOnly cookie (`src/routes/auth.js:75`), but the refresh endpoint at `:112` reads from request body only, ignoring the cookie. The Track 1 helper passes from localStorage (matching the body path). Cookie-based refresh would be a hardening follow-up; out of F-AUTH-1 scope.
 - **npm audit follow-up** — Track 1.5 install reported 24 vulnerabilities (3 low, 13 moderate, 7 high, 1 critical) in the existing frontend dep tree. None new from jsdom; ambient state of the codebase pre-F-AUTH-1. Run `npm audit fix` and review the manual cases after F-AUTH-1 ships.
+
+**Path E candidates surfaced during Tracks 3 and 4 (~37 sites across 8 files) — reclassify during Step 3 sweep:**
+
+From Track 3 (4 sites, 3 files):
+
+- `frontend/src/hooks/useStoryEngine.js:527` — POST to `/api/v1/memories/extract-story-memories` with no auth header. Inline `headers: { 'Content-Type': 'application/json' }` only.
+- `frontend/src/pages/RelationshipEngine.jsx:111` — bare `fetch(url)` GET `/api/v1/character-registry/registries` with no auth at all.
+- `frontend/src/pages/SocialProfileGenerator.jsx:1213, 1229` — bare `fetch` to `/api/v1/world/<showId>/events` and `/api/v1/world/<showId>/events/from-profile` with no auth helper.
+
+From Track 4 (~33 additional sites):
+
+- `frontend/src/components/FeedBulkImport.jsx:164` — GET `/bulk/jobs` with no auth. `:197` — parseCsv POST has Content-Type only, no auth.
+- `frontend/src/pages/WorldStudio.jsx` — ~29 unauth fetches across multiple sites (lines 231, 248, 259, 271, 714, 722, 744, and others) hitting `/character-depth`, `/world/*`, `/api/v1/character-registry/registries`. Most likely intentional PUBLIC reads (world data is presumably visible to non-authenticated users) but Step 3 must classify each backend route.
+- `frontend/src/pages/StoryReviewPanel.jsx` — 3 fetch sites besides the migrated Path D site need Path E spot-check during Step 3 sweep.
+- `frontend/src/components/AuditLogViewer.jsx` — mockLogs fallback. *Intentional dev-mode fallback, not a bug*. No action needed.
+
+Disposition pattern (unchanged from v2.6): each is either intentionally PUBLIC (backend route serves unauth-safe data) or a BUG (backend route requires auth and the frontend silently sends none). Step 3 sweep classifies each backend route as PUBLIC or requireAuth; Path E sites whose backend is PUBLIC stay as raw fetch (correct), Path E sites whose backend is requireAuth get migrated to apiClient (Track 6-equivalent fix). No action until Step 3 reaches the corresponding routes. The WorldStudio.jsx cluster (29 sites) is the largest and warrants priority attention during Step 3 sweep — if the backend routes are PUBLIC, no work; if any are requireAuth, that one file becomes a meaningful Track-6-equivalent surface.
+
+**HTTP method mismatches surfaced during Track 6 CP2 (3 sites in SceneSetsTab.jsx) — Step 3 sweep awareness items:**
+
+- `setCoverAngleApi` — backend route is PATCH; frontend was using GET. Migration uses correct PATCH per backend contract. Step 3 should verify the backend route's expected method matches what other consumers (if any) send.
+- `reorderAnglesApi` — backend route is PATCH; frontend was using POST. Migration uses correct PATCH.
+- `getAiCameraDirectionApi` — backend route is POST; frontend was using GET. Migration uses correct POST.
+
+These are pre-existing wrong-method sites that were either tolerated by the backend (e.g., Express router accepting both methods, or the backend's body-parser silently doing the right thing on POST-with-no-body) or never hit execution in the path the frontend was reaching. Migration to apiClient documents and uses the correct method. The original wrong methods have been shipping; verifying via Step 3 sweep that no other callers depend on the wrong method behavior is sound discipline. Surface, do not fix the original — apiClient migration is itself the fix at the call site.
 
 ### 9.13 Lost-work incident (May 2, 2026) + cleanup discipline
 
