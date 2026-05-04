@@ -5,6 +5,7 @@ import useRegistries from '../hooks/useRegistries';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, rectSortingStrategy } from '@dnd-kit/sortable';
 import { CSS as DndCSS } from '@dnd-kit/utilities';
+import apiClient from '../services/api';
 import './CharacterGenerator.css';
 
 // ─── LocalStorage persistence helpers ─────────────────────────────────────────
@@ -34,6 +35,35 @@ function loadHistory() {
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP6 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 8 helpers covering 10 fetch sites on /world/* and /character-generator/*
+// (plus a single /character-registry DELETE). File-local per Track 6 convention.
+// MEDIUM-HIGH cost class per CP6 surface — nested Promise.all in
+// handleGenerateBatch + handleProposeSeeds, manual commit loop in
+// handleCommitAll, inline anonymous onClick at line 312.
+
+// World / ecosystem
+export const generateEcosystemApi = (payload) =>
+  apiClient.post(`${API_BASE}/world/generate-ecosystem`, payload);
+export const getEcosystemApi = () =>
+  apiClient.get(`${API_BASE}/character-generator/ecosystem`);
+
+// Generation pipeline
+export const proposeSeedsApi = (payload) =>
+  apiClient.post(`${API_BASE}/character-generator/propose-seeds`, payload);
+export const generateBatchApi = (payload) =>
+  apiClient.post(`${API_BASE}/character-generator/generate-batch`, payload);
+export const checkStagingApi = (payload) =>
+  apiClient.post(`${API_BASE}/character-generator/check-staging`, payload);
+export const commitCharacterApi = (payload) =>
+  apiClient.post(`${API_BASE}/character-generator/commit`, payload);
+export const rewriteFieldApi = (payload) =>
+  apiClient.post(`${API_BASE}/character-generator/rewrite-field`, payload);
+
+// Character registry deletion (this file's only character-registry touch)
+export const deleteRegistryCharacterApi = (charId) =>
+  apiClient.delete(`${API_BASE}/character-registry/characters/${charId}`);
 
 // ─── Utility functions ────────────────────────────────────────────────────────────────
 function computeCompleteness(profile) {
@@ -309,19 +339,15 @@ function WorldBuilderPanel({ worldTarget, ecosystem, onEcosystemGenerated }) {
               onClick={async () => {
                 setGenerating(true);
                 try {
-                  const res = await fetch(`${API_BASE}/world/generate-ecosystem`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      world_context: {
-                        city: form.city || (worldTarget === 'lalaverse' ? 'a fashion capital' : 'a major city'),
-                        industry: form.industry || (worldTarget === 'lalaverse' ? 'content creation and fashion' : 'professional careers'),
-                        career_stage: form.career_stage,
-                      },
-                      character_count: form.character_count,
-                    }),
+                  const res = await generateEcosystemApi({
+                    world_context: {
+                      city: form.city || (worldTarget === 'lalaverse' ? 'a fashion capital' : 'a major city'),
+                      industry: form.industry || (worldTarget === 'lalaverse' ? 'content creation and fashion' : 'professional careers'),
+                      career_stage: form.career_stage,
+                    },
+                    character_count: form.character_count,
                   });
-                  const data = await res.json();
+                  const data = res.data;
                   if (data.characters || data.count) {
                     setShowForm(false);
                     if (onEcosystemGenerated) onEcosystemGenerated();
@@ -1263,8 +1289,8 @@ export default function CharacterGenerator() {
   async function loadEcosystem() {
     setEcoLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/character-generator/ecosystem`);
-      if (res.ok) setEcosystem(await res.json());
+      const res = await getEcosystemApi();
+      setEcosystem(res.data);
     } catch { /* silent */ }
     finally { setEcoLoading(false); }
   }
@@ -1287,20 +1313,15 @@ export default function CharacterGenerator() {
 
       const allSeeds = [];
       await Promise.all(worldsToFetch.map(async (w) => {
-        const res = await fetch(`${API_BASE}/character-generator/propose-seeds`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        try {
+          const res = await proposeSeedsApi({
             world: w,
             count: worldTarget === 'both' ? Math.ceil(seedCount / 2) : seedCount,
             existing_names: existingNames,
             ecosystem_stats: ecosystem?.[w]?.stats || ecosystem,
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          allSeeds.push(...(data.seeds || []));
-        }
+          });
+          allSeeds.push(...(res.data?.seeds || []));
+        } catch { /* one world's failure shouldn't kill the merge */ }
       }));
 
       setSeeds(allSeeds.map((s) => ({ ...s, _status: 'pending' })));
@@ -1355,36 +1376,25 @@ export default function CharacterGenerator() {
         ...(ecosystem?.lalaverse?.characters || []),
       ];
 
-      const res = await fetch(`${API_BASE}/character-generator/generate-batch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seeds: approvedSeeds, existingCharacters }),
-      });
+      const res = await generateBatchApi({ seeds: approvedSeeds, existingCharacters });
+      const data = res.data;
+      setBatch(data.batch || []);
 
-      if (res.ok) {
-        const data = await res.json();
-        setBatch(data.batch || []);
+      // Run staging checks for all generated characters
+      const checks = {};
+      await Promise.all((data.batch || []).map(async (result, i) => {
+        if (result.status !== 'generated') return;
+        try {
+          const checkRes = await checkStagingApi({
+            character: { ...result.profile, seed: result.seed },
+            existingCharacters,
+            ecosystemStats: ecosystem,
+          });
+          checks[i] = checkRes.data;
+        } catch { /* silent */ }
+      }));
 
-        // Run staging checks for all generated characters
-        const checks = {};
-        await Promise.all((data.batch || []).map(async (result, i) => {
-          if (result.status !== 'generated') return;
-          try {
-            const checkRes = await fetch(`${API_BASE}/character-generator/check-staging`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                character: { ...result.profile, seed: result.seed },
-                existingCharacters,
-                ecosystemStats: ecosystem,
-              }),
-            });
-            if (checkRes.ok) checks[i] = await checkRes.json();
-          } catch { /* silent */ }
-        }));
-
-        setStagingChecks(checks);
-      }
+      setStagingChecks(checks);
     } catch (e) {
       console.error('generate batch error:', e);
     } finally {
@@ -1395,28 +1405,18 @@ export default function CharacterGenerator() {
   // ── Commit to registry ────────────────────────────────────────────────────
   async function handleCommit(result, registryId) {
     try {
-      const res = await fetch(`${API_BASE}/character-generator/commit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile: result.profile,
-          seed: result.seed,
-          registryId,
-        }),
+      const res = await commitCharacterApi({
+        profile: result.profile,
+        seed: result.seed,
+        registryId,
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        setBatch((prev) =>
-          prev.map((r) => r === result ? { ...r, _committed: true, _charId: data.character_id } : r)
-        );
-        loadEcosystem(); // Refresh ecosystem after commit
-      } else {
-        const err = await res.json();
-        alert('Commit failed: ' + err.error);
-      }
+      const data = res.data;
+      setBatch((prev) =>
+        prev.map((r) => r === result ? { ...r, _committed: true, _charId: data.character_id } : r)
+      );
+      loadEcosystem(); // Refresh ecosystem after commit
     } catch (e) {
-      alert('Commit failed: ' + e.message);
+      alert('Commit failed: ' + (e.response?.data?.error || e.message));
     }
   }
 
@@ -1440,20 +1440,13 @@ export default function CharacterGenerator() {
         ...(ecosystem?.book1?.characters || []),
         ...(ecosystem?.lalaverse?.characters || []),
       ];
-      const res = await fetch(`${API_BASE}/character-generator/generate-batch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seeds: [seed], existingCharacters }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const newResult = data.batch?.[0];
-        if (newResult) {
-          setBatch(prev => prev.map(r =>
-            r.seed?.name === seed.name && (r.status === 'regenerating' || r === result)
-              ? newResult : r
-          ));
-        }
+      const res = await generateBatchApi({ seeds: [seed], existingCharacters });
+      const newResult = res.data?.batch?.[0];
+      if (newResult) {
+        setBatch(prev => prev.map(r =>
+          r.seed?.name === seed.name && (r.status === 'regenerating' || r === result)
+            ? newResult : r
+        ));
       }
     } catch (e) {
       console.error('Regenerate failed:', e);
@@ -1485,24 +1478,17 @@ export default function CharacterGenerator() {
   // ── AI rewrite a single profile field ──────────────────────────────────────
   async function handleRewriteField(result, fieldPath, currentValue) {
     try {
-      const res = await fetch(`${API_BASE}/character-generator/rewrite-field`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fieldPath,
-          currentValue,
-          characterContext: {
-            name: result.seed?.name,
-            role: result.seed?.role_type,
-            tension: result.seed?.tension,
-            world: result.seed?.world,
-          },
-        }),
+      const res = await rewriteFieldApi({
+        fieldPath,
+        currentValue,
+        characterContext: {
+          name: result.seed?.name,
+          role: result.seed?.role_type,
+          tension: result.seed?.tension,
+          world: result.seed?.world,
+        },
       });
-      if (res.ok) {
-        const data = await res.json();
-        return data.newValue;
-      }
+      return res.data?.newValue ?? null;
     } catch (e) {
       console.error('Rewrite failed:', e);
     }
@@ -1530,18 +1516,11 @@ export default function CharacterGenerator() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/character-registry/characters/${charId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        setBatch((prev) => prev.filter((r) => r !== result));
-        loadEcosystem();
-      } else {
-        const err = await res.json();
-        alert('Delete failed: ' + (err.error || 'Unknown error'));
-      }
+      await deleteRegistryCharacterApi(charId);
+      setBatch((prev) => prev.filter((r) => r !== result));
+      loadEcosystem();
     } catch (e) {
-      alert('Delete failed: ' + e.message);
+      alert('Delete failed: ' + (e.response?.data?.error || e.message || 'Unknown error'));
     }
   }
 
@@ -1571,21 +1550,15 @@ export default function CharacterGenerator() {
     let ok = 0;
     for (const result of pending) {
       try {
-        const res = await fetch(`${API_BASE}/character-generator/commit`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            profile: result.profile,
-            seed: result.seed,
-            registryId: regId,
-          }),
+        await commitCharacterApi({
+          profile: result.profile,
+          seed: result.seed,
+          registryId: regId,
         });
-        if (res.ok) {
-          setBatch((prev) =>
-            prev.map((r) => r === result ? { ...r, _committed: true } : r)
-          );
-          ok++;
-        }
+        setBatch((prev) =>
+          prev.map((r) => r === result ? { ...r, _committed: true } : r)
+        );
+        ok++;
       } catch { /* continue */ }
     }
     loadEcosystem();

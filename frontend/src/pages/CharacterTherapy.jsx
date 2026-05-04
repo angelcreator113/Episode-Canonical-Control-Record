@@ -10,9 +10,29 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import './CharacterTherapy.css';
 
 const API = '/api/v1/therapy';
+
+// ─── Track 6 CP6 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 9 helpers covering 9 fetch sites. 7 file-local on /therapy/* + 2 duplicated
+// locally from CP3 WriteMode.jsx (listRegistriesApi, getRegistryApi) per
+// v2.12 §9.11 file-local helper convention.
+
+// Character registry (duplicated from CP3 WriteMode.jsx)
+export const listRegistriesApi = () => apiClient.get(`/api/v1/character-registry/registries`);
+export const getRegistryApi = (registryId) =>
+  apiClient.get(`/api/v1/character-registry/registries/${registryId}`);
+
+// Therapy
+export const listWaitingApi = () => apiClient.get(`${API}/waiting`);
+export const getTherapyProfileApi = (charId) => apiClient.get(`${API}/profile/${charId}`);
+export const openSessionApi = (payload) => apiClient.post(`${API}/session-open`, payload);
+export const respondSessionApi = (payload) => apiClient.post(`${API}/session-respond`, payload);
+export const revealApi = (payload) => apiClient.post(`${API}/reveal`, payload);
+export const closeSessionApi = (payload) => apiClient.post(`${API}/session-close`, payload);
+export const clearWaitingApi = (waitingId) => apiClient.post(`${API}/clear-waiting/${waitingId}`);
 
 /* ── Character Nature Map ───────────────────────────────────── */
 
@@ -299,9 +319,9 @@ export default function CharacterTherapy() {
         let resolvedId = registryId;
         // Resolve 'default' → first available registry
         if (registryId === 'default') {
-          const listRes  = await fetch('/api/v1/character-registry/registries');
-          const listData = await listRes.json();
-          const first    = listData.registries?.[0] || listData[0];
+          const listRes = await listRegistriesApi();
+          const listData = listRes.data;
+          const first = listData?.registries?.[0] || listData?.[0];
           if (first?.id) {
             resolvedId = first.id;
           } else {
@@ -309,8 +329,8 @@ export default function CharacterTherapy() {
             return;
           }
         }
-        const res  = await fetch(`/api/v1/character-registry/registries/${resolvedId}`);
-        const data = await res.json();
+        const res = await getRegistryApi(resolvedId);
+        const data = res.data;
         if (data.success && data.registry?.characters) {
           setCharacters(data.registry.characters);
         }
@@ -327,9 +347,8 @@ export default function CharacterTherapy() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API}/waiting`);
-        const data = await res.json();
-        if (Array.isArray(data)) setWaiting(data);
+        const res = await listWaitingApi();
+        if (Array.isArray(res.data)) setWaiting(res.data);
       } catch (e) {
         console.error('Failed to load waiting sessions:', e);
       }
@@ -340,8 +359,8 @@ export default function CharacterTherapy() {
 
   const loadProfile = useCallback(async (charId) => {
     try {
-      const res = await fetch(`${API}/profile/${charId}`);
-      const data = await res.json();
+      const res = await getTherapyProfileApi(charId);
+      const data = res.data;
       if (data.success) {
         setProfile(data.profile);
       }
@@ -369,17 +388,13 @@ export default function CharacterTherapy() {
     try {
       const charKey = (selectedChar.selected_name || selectedChar.display_name || '')
         .toLowerCase().replace(/\s+/g, '_');
-      const res = await fetch(`${API}/session-open`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_id: selectedChar.id,
-          character_key: charKey,
-          event_description: event,
-          profile: profile,
-        }),
+      const res = await openSessionApi({
+        character_id: selectedChar.id,
+        character_key: charKey,
+        event_description: event,
+        profile: profile,
       });
-      const data = await res.json();
+      const data = res.data;
       if (data.success) {
         setSessionOpen(true);
         // Add system message about the event
@@ -420,18 +435,14 @@ export default function CharacterTherapy() {
     try {
       const charKey = (selectedChar.selected_name || selectedChar.display_name || '')
         .toLowerCase().replace(/\s+/g, '_');
-      const res = await fetch(`${API}/session-respond`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_id: selectedChar.id,
-          character_key: charKey,
-          author_response: text,
-          current_state: profile?.emotional_state || {},
-          defense: profile?.primary_defense || CHARACTER_NATURES[charKey]?.defense || '',
-        }),
+      const res = await respondSessionApi({
+        character_id: selectedChar.id,
+        character_key: charKey,
+        author_response: text,
+        current_state: profile?.emotional_state || {},
+        defense: profile?.primary_defense || CHARACTER_NATURES[charKey]?.defense || '',
       });
-      const data = await res.json();
+      const data = res.data;
       if (data.success && data.character_response) {
         addMessage('character', data.character_response, {
           characterName: selectedChar.display_name,
@@ -463,18 +474,14 @@ export default function CharacterTherapy() {
       const charKey = (selectedChar.selected_name || selectedChar.display_name || '')
         .toLowerCase().replace(/\s+/g, '_');
       addMessage('author', `[Revealed ${type}: ${truth}]`);
-      const res = await fetch(`${API}/reveal`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_id: selectedChar.id,
-          character_key: charKey,
-          truth,
-          reveal_type: type,
-          current_state: profile?.emotional_state || {},
-        }),
+      const res = await revealApi({
+        character_id: selectedChar.id,
+        character_key: charKey,
+        truth,
+        reveal_type: type,
+        current_state: profile?.emotional_state || {},
       });
-      const data = await res.json();
+      const data = res.data;
       if (data.success && data.character_response) {
         addMessage('character', data.character_response, {
           characterName: selectedChar.display_name,
@@ -510,23 +517,19 @@ export default function CharacterTherapy() {
     if (!selectedChar) return;
     setBusy(true);
     try {
-      const res = await fetch(`${API}/session-close`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_id: selectedChar.id,
-          emotional_state: profile?.emotional_state || {},
-          baseline: profile?.baseline || {},
-          session_log: messages,
-          sessions_completed: (profile?.sessions_completed || 0) + 1,
-          known: profile?.known || [],
-          sensed: profile?.sensed || [],
-          never_knows: profile?.never_knows || [],
-          deja_vu_events: profile?.deja_vu_events || [],
-          primary_defense: profile?.primary_defense || '',
-        }),
+      const res = await closeSessionApi({
+        character_id: selectedChar.id,
+        emotional_state: profile?.emotional_state || {},
+        baseline: profile?.baseline || {},
+        session_log: messages,
+        sessions_completed: (profile?.sessions_completed || 0) + 1,
+        known: profile?.known || [],
+        sensed: profile?.sensed || [],
+        never_knows: profile?.never_knows || [],
+        deja_vu_events: profile?.deja_vu_events || [],
+        primary_defense: profile?.primary_defense || '',
       });
-      const data = await res.json();
+      const data = res.data;
       if (data.success) {
         addMessage('system', 'Session closed. Emotional baseline updated.');
         setSessionOpen(false);
@@ -622,7 +625,7 @@ export default function CharacterTherapy() {
                       if (match) {
                         selectCharacter(match);
                         try {
-                          await fetch(`${API}/clear-waiting/${w.id}`, { method: 'POST' });
+                          await clearWaitingApi(w.id);
                           setWaiting(prev => prev.filter(p => p.id !== w.id));
                         } catch {}
                       }
