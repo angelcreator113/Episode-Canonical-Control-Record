@@ -5,12 +5,36 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 import './UniversePage.css';
 
 const UNIVERSE_API    = '/api/v1/universe';
 const STORYTELLER_API = '/api/v1/storyteller';
 const SHOWS_API       = '/api/v1/shows';
 const LALAVERSE_ID = 'a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e';
+
+// ─── Track 6 CP5 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 7 helpers covering 8 fetch sites across 3 resource families. listShowsApi
+// is intentionally duplicated locally from CP2 SceneSetsTab.jsx per Track 6
+// file-local convention.
+
+// Series (universe namespace)
+export const listSeriesApi = (universeId) =>
+  apiClient.get(`${UNIVERSE_API}/series?universe_id=${universeId}`);
+export const createSeriesApi = (payload) =>
+  apiClient.post(`${UNIVERSE_API}/series`, payload);
+export const updateSeriesApi = (seriesId, payload) =>
+  apiClient.put(`${UNIVERSE_API}/series/${seriesId}`, payload);
+export const deleteSeriesApi = (seriesId) =>
+  apiClient.delete(`${UNIVERSE_API}/series/${seriesId}`);
+
+// Books (storyteller namespace)
+export const listBooksApi = () => apiClient.get(`${STORYTELLER_API}/books`);
+export const updateBookApi = (bookId, payload) =>
+  apiClient.put(`${STORYTELLER_API}/books/${bookId}`, payload);
+
+// Shows (duplicated from CP2 SceneSetsTab.jsx per file-local convention)
+export const listShowsApi = () => apiClient.get(SHOWS_API);
 
 function useWindowWidth() {
   const [w, setW] = useState(window.innerWidth);
@@ -40,17 +64,15 @@ export default function SeriesPage() {
     setLoading(true);
     try {
       const [sRes, bRes] = await Promise.all([
-        fetch(`${UNIVERSE_API}/series?universe_id=${LALAVERSE_ID}`),
-        fetch(`${STORYTELLER_API}/books`),
+        listSeriesApi(LALAVERSE_ID),
+        listBooksApi(),
       ]);
-      const sData = await sRes.json();
-      const bData = await bRes.json();
-      setSeries(sData.series || []);
-      setBooks(bData.books || []);
+      setSeries(sRes.data?.series || []);
+      setBooks(bRes.data?.books || []);
       try {
-        const shRes = await fetch(SHOWS_API);
-        const shData = await shRes.json();
-        const showsList = shData.data || shData.shows || shData;
+        const shRes = await listShowsApi();
+        const shData = shRes.data;
+        const showsList = shData?.data || shData?.shows || shData;
         setShows(Array.isArray(showsList) ? showsList : []);
       } catch (_) {}
     } catch (err) {
@@ -72,31 +94,21 @@ export default function SeriesPage() {
 
   async function linkShow(seriesId, showId) {
     try {
-      const res = await fetch(`${UNIVERSE_API}/series/${seriesId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ show_id: showId || null }),
-      });
-      if (!res.ok) throw new Error('Failed to link show');
+      await updateSeriesApi(seriesId, { show_id: showId || null });
       showToast(showId ? 'Show linked to series' : 'Show unlinked');
       load();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'Failed to link show', 'error');
     }
   }
 
   async function assignToSeries(bookId, seriesId) {
     try {
-      const res = await fetch(`${STORYTELLER_API}/books/${bookId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ series_id: seriesId || null }),
-      });
-      if (!res.ok) throw new Error('Failed to assign');
+      await updateBookApi(bookId, { series_id: seriesId || null });
       showToast('Book assigned to series');
       load();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'Failed to assign', 'error');
     }
   }
 
@@ -104,24 +116,18 @@ export default function SeriesPage() {
     if (!newName.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch(`${UNIVERSE_API}/series`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          universe_id: LALAVERSE_ID,
-          name: newName.trim(),
-          description: newDesc.trim(),
-          order_index: series.length,
-        }),
+      await createSeriesApi({
+        universe_id: LALAVERSE_ID,
+        name: newName.trim(),
+        description: newDesc.trim(),
+        order_index: series.length,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
       setCreating(false);
       setNewName('');
       setNewDesc('');
       load();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.response?.data?.error || err.message || 'Failed to create series', 'error');
     } finally {
       setSaving(false);
     }
@@ -130,27 +136,21 @@ export default function SeriesPage() {
   async function saveEra(bookId) {
     const val = eraValues[bookId];
     try {
-      const res = await fetch(`${STORYTELLER_API}/books/${bookId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ era_name: val }),
-      });
-      if (!res.ok) throw new Error('Failed');
+      await updateBookApi(bookId, { era_name: val });
       setEditingEra(null);
       load();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'Failed', 'error');
     }
   }
 
   async function deleteSeries(seriesId) {
     if (!confirm('Delete this series? Books will be unlinked but not deleted.')) return;
     try {
-      const res = await fetch(`${UNIVERSE_API}/series/${seriesId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete');
+      await deleteSeriesApi(seriesId);
       load();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'Failed to delete', 'error');
     }
   }
 

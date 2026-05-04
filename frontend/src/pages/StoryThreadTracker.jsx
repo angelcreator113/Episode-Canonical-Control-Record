@@ -8,7 +8,29 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 const API = '/api/v1/storyteller';
+
+// ─── Track 6 CP5 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 11 helpers covering 11 fetch sites on /storyteller/* (threads, memories,
+// continuity, voice). File-local per Track 6 convention.
+
+// Threads
+export const listThreadsApi = () => apiClient.get(`${API}/threads`);
+export const listDanglingThreadsApi = () => apiClient.get(`${API}/threads/dangling`);
+export const createThreadApi = (payload) => apiClient.post(`${API}/threads`, payload);
+export const updateThreadApi = (id, payload) => apiClient.patch(`${API}/threads/${id}`, payload);
+export const deleteThreadApi = (id) => apiClient.delete(`${API}/threads/${id}`);
+
+// Memories
+export const listPendingMemoriesApi = () => apiClient.get(`${API}/memories/pending`);
+export const confirmMemoryApi = (id) => apiClient.patch(`${API}/memories/${id}/confirm`);
+export const rejectMemoryApi = (id) => apiClient.patch(`${API}/memories/${id}/reject`);
+
+// Continuity / voice
+export const listContinuityIssuesApi = () => apiClient.get(`${API}/continuity/issues`);
+export const listVoiceSignalsApi = () => apiClient.get(`${API}/voice-signals`);
+export const listVoiceRulesApi = () => apiClient.get(`${API}/voice-rules`);
 
 const C = {
   bg: '#f7f4ef', surface: '#fff', surfaceAlt: '#faf8f4', border: '#e8e0d0',
@@ -50,11 +72,11 @@ export default function StoryThreadTracker() {
     setLoading(true);
     try {
       const [tRes, dRes] = await Promise.all([
-        fetch(`${API}/threads`),
-        fetch(`${API}/threads/dangling`),
+        listThreadsApi(),
+        listDanglingThreadsApi(),
       ]);
-      if (tRes.ok) { const d = await tRes.json(); setThreads(d.threads || []); }
-      if (dRes.ok) { const d = await dRes.json(); setDangling(d.threads || []); }
+      setThreads(tRes.data?.threads || []);
+      setDangling(dRes.data?.threads || []);
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
@@ -62,8 +84,8 @@ export default function StoryThreadTracker() {
   const fetchMemories = useCallback(async () => {
     setMemLoading(true);
     try {
-      const res = await fetch(`${API}/memories/pending`);
-      if (res.ok) { const d = await res.json(); setPendingMemories(d.memories || []); }
+      const res = await listPendingMemoriesApi();
+      setPendingMemories(res.data?.memories || []);
     } catch { /* ignore */ }
     setMemLoading(false);
   }, []);
@@ -71,8 +93,8 @@ export default function StoryThreadTracker() {
   const fetchContinuity = useCallback(async () => {
     setContLoading(true);
     try {
-      const res = await fetch(`${API}/continuity/issues`);
-      if (res.ok) { const d = await res.json(); setIssues(d.issues || []); }
+      const res = await listContinuityIssuesApi();
+      setIssues(res.data?.issues || []);
     } catch { /* ignore */ }
     setContLoading(false);
   }, []);
@@ -81,11 +103,11 @@ export default function StoryThreadTracker() {
     setVoiceLoading(true);
     try {
       const [sRes, rRes] = await Promise.all([
-        fetch(`${API}/voice-signals`),
-        fetch(`${API}/voice-rules`),
+        listVoiceSignalsApi(),
+        listVoiceRulesApi(),
       ]);
-      if (sRes.ok) { const d = await sRes.json(); setSignals(d.signals || []); }
-      if (rRes.ok) { const d = await rRes.json(); setRules(d.rules || []); }
+      setSignals(sRes.data?.signals || []);
+      setRules(rRes.data?.rules || []);
     } catch { /* ignore */ }
     setVoiceLoading(false);
   }, []);
@@ -100,47 +122,37 @@ export default function StoryThreadTracker() {
   const handleCreateThread = async () => {
     if (!newThread.thread_name.trim()) return;
     try {
-      const res = await fetch(`${API}/threads`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newThread),
-      });
-      if (res.ok) {
-        setNewThread({ thread_name: '', description: '', thread_type: 'subplot' });
-        setShowCreate(false);
-        fetchThreads();
-      }
+      await createThreadApi(newThread);
+      setNewThread({ thread_name: '', description: '', thread_type: 'subplot' });
+      setShowCreate(false);
+      fetchThreads();
     } catch { /* ignore */ }
   };
 
   const handleUpdateThread = async (id, updates) => {
     try {
-      await fetch(`${API}/threads/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
+      await updateThreadApi(id, updates);
       fetchThreads();
     } catch { /* ignore */ }
   };
 
   const handleDeleteThread = async (id) => {
     try {
-      await fetch(`${API}/threads/${id}`, { method: 'DELETE' });
+      await deleteThreadApi(id);
       fetchThreads();
     } catch { /* ignore */ }
   };
 
   const handleConfirmMemory = async (id) => {
     try {
-      await fetch(`${API}/memories/${id}/confirm`, { method: 'PATCH' });
+      await confirmMemoryApi(id);
       setPendingMemories(prev => prev.filter(m => m.id !== id));
     } catch { /* ignore */ }
   };
 
   const handleRejectMemory = async (id) => {
     try {
-      await fetch(`${API}/memories/${id}/reject`, { method: 'PATCH' });
+      await rejectMemoryApi(id);
       setPendingMemories(prev => prev.filter(m => m.id !== id));
     } catch { /* ignore */ }
   };

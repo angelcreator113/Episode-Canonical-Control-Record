@@ -10,6 +10,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import WriteModeAIWriter from '../components/WriteModeAIWriter';
 
@@ -27,6 +28,48 @@ import { MemoryCard, MEMORY_STYLES } from '../components/MemoryConfirmation';
 import './WriteMode.css';
 
 const API = '/api/v1';
+
+// ─── Track 6 CP3 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// Helpers cover 33 fetch sites across storyteller, memories, and
+// character-registry endpoints. Component handlers (saveDraft, handleContinue,
+// handleDeepen, handleNudge, generateSynopsis, etc.) keep their original names;
+// the Api suffix on the network helpers prevents shadow conflicts and signals
+// "this is the network call, not the UI handler".
+
+// Storyteller — books / chapters / lines
+export const getBookApi = (bookId) => apiClient.get(`${API}/storyteller/books/${bookId}`);
+export const getChapterApi = (chapterId) => apiClient.get(`${API}/storyteller/chapters/${chapterId}`);
+export const updateChapterApi = (chapterId, payload) =>
+  apiClient.put(`${API}/storyteller/chapters/${chapterId}`, payload);
+export const createChapterApi = (bookId, payload) =>
+  apiClient.post(`${API}/storyteller/books/${bookId}/chapters`, payload);
+export const saveDraftApi = (chapterId, payload) =>
+  apiClient.post(`${API}/storyteller/chapters/${chapterId}/save-draft`, payload);
+export const importChapterApi = (chapterId, payload) =>
+  apiClient.post(`${API}/storyteller/chapters/${chapterId}/import`, payload);
+export const submitEmotionalImpactApi = (chapterId, payload) =>
+  apiClient.post(`${API}/storyteller/chapters/${chapterId}/emotional-impact`, payload);
+export const updateLineApi = (lineId, payload) =>
+  apiClient.put(`${API}/storyteller/lines/${lineId}`, payload);
+export const deleteLineApi = (lineId) =>
+  apiClient.delete(`${API}/storyteller/lines/${lineId}`);
+
+// Memories (AI generation)
+export const storyEditApi = (payload) => apiClient.post(`${API}/memories/story-edit`, payload);
+export const storyContinueApi = (payload) => apiClient.post(`${API}/memories/story-continue`, payload);
+export const storyDeepenApi = (payload) => apiClient.post(`${API}/memories/story-deepen`, payload);
+export const storyNudgeApi = (payload) => apiClient.post(`${API}/memories/story-nudge`, payload);
+export const chapterSynopsisApi = (payload) =>
+  apiClient.post(`${API}/memories/chapter-synopsis`, payload);
+export const sceneTransitionApi = (payload) =>
+  apiClient.post(`${API}/memories/scene-transition`, payload);
+export const voiceToStoryApi = (payload) =>
+  apiClient.post(`${API}/memories/voice-to-story`, payload);
+
+// Character registry
+export const listRegistriesApi = () => apiClient.get(`${API}/character-registry/registries`);
+export const getRegistryApi = (registryId) =>
+  apiClient.get(`${API}/character-registry/registries/${registryId}`);
 
 /* Planning-field completeness helper */
 const PLAN_FIELDS = ['scene_goal', 'theme', 'chapter_notes', 'pov', 'emotional_state_start', 'emotional_state_end'];
@@ -361,8 +404,8 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   // ── RELOAD CHAPTERS (callable from child components) ────────────────
   const reloadChapters = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/storyteller/books/${bookId}`);
-      const data = await res.json();
+      const res = await getBookApi(bookId);
+      const data = res.data;
       const bookData = data?.book || data;
       setBook(bookData);
       const chapters = (bookData.chapters || []).sort((a, b) =>
@@ -378,8 +421,8 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API}/storyteller/books/${bookId}`);
-        const data = await res.json();
+        const res = await getBookApi(bookId);
+        const data = res.data;
         const bookData = data?.book || data;
         setBook(bookData);
 
@@ -452,13 +495,13 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     async function loadCharacters() {
       setCharLoading(true);
       try {
-        const res = await fetch(`${API}/character-registry/registries`);
-        const data = await res.json();
+        const res = await listRegistriesApi();
+        const data = res.data;
         const regs = data.registries || data || [];
         const allChars = [];
         for (const reg of regs) {
-          const rRes = await fetch(`${API}/character-registry/registries/${reg.id}`);
-          const rData = await rRes.json();
+          const rRes = await getRegistryApi(reg.id);
+          const rData = rRes.data;
           const chars = rData.characters || rData.registry?.characters || [];
           chars.forEach(c => allChars.push({ ...c, _registryTitle: reg.title || reg.book_tag }));
         }
@@ -511,9 +554,9 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   // ── NEW: Load registry characters (for alive systems + NI) ────────────
 
   useEffect(() => {
-    fetch(`${API}/character-registry/registries`)
-      .then(r => r.json())
-      .then(data => {
+    listRegistriesApi()
+      .then(res => {
+        const data = res.data;
         const regs = data?.registries || data || [];
         const chars = Array.isArray(regs)
           ? regs.flatMap(r => (r.characters || []))
@@ -589,18 +632,14 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       } else {
         editNote = 'Expand this paragraph with more sensory detail, interiority, and emotional depth. Keep the same voice.';
       }
-      const res = await fetch(`${API}/memories/story-edit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          current_prose: targetPara,
-          edit_note: editNote,
-          pnos_act: chapter?.pnos_act || 'act_1',
-          chapter_title: chapter?.title,
-          character_id: selectedCharacter?.id || null,
-        }),
+      const res = await storyEditApi({
+        current_prose: targetPara,
+        edit_note: editNote,
+        pnos_act: chapter?.pnos_act || 'act_1',
+        chapter_title: chapter?.title,
+        character_id: selectedCharacter?.id || null,
       });
-      const data = await res.json();
+      const data = res.data;
       if (data.prose) {
         const newParagraphs = [...paragraphs];
         newParagraphs[selectedParagraph] = data.prose.trim();
@@ -631,11 +670,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     if (!text) return;
     setSaving(true);
     try {
-      await fetch(`${API}/storyteller/chapters/${chapterId}/save-draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draft_prose: text }),
-      });
+      await saveDraftApi(chapterId, { draft_prose: text });
       // Also persist per-section prose into sections JSONB
       const curSP = sectionProseRef.current;
       if (Object.keys(curSP).length > 0) {
@@ -646,11 +681,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
               ...s,
               prose: curSP[s.id] ?? s.prose ?? '',
             }));
-            fetch(`${API}/storyteller/chapters/${chapterId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ sections: updatedSections }),
-            }).catch(() => {});
+            updateChapterApi(chapterId, { sections: updatedSections }).catch(() => {});
             return { ...prev, sections: updatedSections };
           }
           return prev;
@@ -667,17 +698,13 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     if (!chapterInstruction.trim() || !prose.trim()) return;
     setChapterInstructionLoading(true);
     try {
-      const res = await fetch(`${API}/memories/story-edit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id: bookId,
-          chapter_id: chapterId,
-          current_prose: prose,
-          edit_note: chapterInstruction.trim(),
-        }),
+      const res = await storyEditApi({
+        book_id: bookId,
+        chapter_id: chapterId,
+        current_prose: prose,
+        edit_note: chapterInstruction.trim(),
       });
-      const data = await res.json();
+      const data = res.data;
       const revised = data.revised_prose || data.prose || data.content;
       if (revised) {
         setProse(revised);
@@ -750,16 +777,12 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     if (!prose.trim()) return;
     setSynopsisLoading(true);
     try {
-      const res = await fetch(`${API}/memories/chapter-synopsis`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prose: prose.slice(0, 4000),
-          chapter_title: chapter?.title || 'Untitled',
-          character_id: selectedCharacter?.id || null,
-        }),
+      const res = await chapterSynopsisApi({
+        prose: prose.slice(0, 4000),
+        chapter_title: chapter?.title || 'Untitled',
+        character_id: selectedCharacter?.id || null,
       });
-      const data = await res.json();
+      const data = res.data;
       setSynopsis(data.synopsis || '');
     } catch { setSynopsis('Error generating synopsis.'); }
     setSynopsisLoading(false);
@@ -772,18 +795,14 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setGenerating(true);
     takeSnapshot('Before transition');
     try {
-      const res = await fetch(`${API}/memories/scene-transition`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scene_a_end: sceneAEnd,
-          scene_b_start: sceneBStart,
-          chapter_title: chapter?.title || '',
-          character_id: selectedCharacter?.id || null,
-          theme: chapter?.theme || '',
-        }),
+      const res = await sceneTransitionApi({
+        scene_a_end: sceneAEnd,
+        scene_b_start: sceneBStart,
+        chapter_title: chapter?.title || '',
+        character_id: selectedCharacter?.id || null,
+        theme: chapter?.theme || '',
       });
-      const data = await res.json();
+      const data = res.data;
       const transition = data.transition || data.prose || '';
       if (transition && insertPos != null) {
         const before = prose.slice(0, insertPos);
@@ -802,8 +821,8 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   const loadReferenceChapter = useCallback(async (refChId) => {
     if (!refChId) return;
     try {
-      const res = await fetch(`${API}/storyteller/chapters/${refChId}`);
-      const data = await res.json();
+      const res = await getChapterApi(refChId);
+      const data = res.data;
       const ch = data?.chapter || data;
       setReferenceChapter(ch);
       setReferenceProse(ch?.draft_prose || ch?.prose || '');
@@ -857,29 +876,25 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       const sceneBrief = `${chapter?.scene_goal || chapter?.title || ''}\nCURRENT SCENE: "${sceneName}" (scene ${i + 1} of ${sceneHeaders.length})\n${chapter?.chapter_notes || ''}`;
 
       try {
-        const res = await fetch(`${API}/memories/story-continue`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            current_prose: accumulated.trim() || `[Opening — ${sceneName}]`,
-            chapter_title: chapter?.title || 'Untitled Chapter',
-            chapter_brief: sceneBrief,
-            pnos_act: chapter?.pnos_act || 'act_1',
-            book_character: book?.character || 'JustAWoman',
-            character_id: selectedCharacter?.id || null,
-            gen_length: genLength,
-            stream: false,
-            emotional_state_start: i === 0 ? (chapter?.emotional_state_start || '') : '',
-            emotional_state_end: i === sceneHeaders.length - 1 ? (chapter?.emotional_state_end || '') : '',
-            theme: chapter?.theme || book?.theme || '',
-            pov: chapter?.pov || '',
-            sections: chapter?.sections || [],
-            chapter_notes: chapter?.chapter_notes || '',
-            tone: chapter?.tone || book?.tone || '',
-          }),
+        const res = await storyContinueApi({
+          current_prose: accumulated.trim() || `[Opening — ${sceneName}]`,
+          chapter_title: chapter?.title || 'Untitled Chapter',
+          chapter_brief: sceneBrief,
+          pnos_act: chapter?.pnos_act || 'act_1',
+          book_character: book?.character || 'JustAWoman',
+          character_id: selectedCharacter?.id || null,
+          gen_length: genLength,
+          stream: false,
+          emotional_state_start: i === 0 ? (chapter?.emotional_state_start || '') : '',
+          emotional_state_end: i === sceneHeaders.length - 1 ? (chapter?.emotional_state_end || '') : '',
+          theme: chapter?.theme || book?.theme || '',
+          pov: chapter?.pov || '',
+          sections: chapter?.sections || [],
+          chapter_notes: chapter?.chapter_notes || '',
+          tone: chapter?.tone || book?.tone || '',
         });
 
-        const data = await res.json();
+        const data = res.data;
         const newProse = data.prose || data.continuation || data.content || data.text || '';
         if (newProse) {
           // Add scene header + generated prose
@@ -953,9 +968,21 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setGenerating(true);
     setStreamingText('');
     try {
+      // STREAMING EXCEPTION: this site uses Server-Sent Events
+      // via fetch() + res.body.getReader() to stream Claude
+      // AI generation output incrementally. axios (apiClient)
+      // does not support response-body streaming in browsers,
+      // so this site cannot migrate to apiClient. Auth is
+      // injected inline from localStorage. Tracked in fix
+      // plan v2.10 §4.6 + §9.11 as a "can't-migrate-to-axios"
+      // exception class.
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       const res = await fetch(`${API}/memories/voice-to-story`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           spoken,
           existing_prose:  prose,
@@ -1075,17 +1102,13 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     takeSnapshot('Before edit');
     setGenerating(true);
     try {
-      const res = await fetch(`${API}/memories/story-edit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          current_prose: prose,
-          edit_note:     editNote.trim(),
-          pnos_act:      chapter?.pnos_act || 'act_1',
-          chapter_title: chapter?.title,
-        }),
+      const res = await storyEditApi({
+        current_prose: prose,
+        edit_note:     editNote.trim(),
+        pnos_act:      chapter?.pnos_act || 'act_1',
+        chapter_title: chapter?.title,
       });
-      const data = await res.json();
+      const data = res.data;
       if (data.prose) {
         setProse(data.prose);
         setWordCount(data.prose.split(/\s+/).filter(Boolean).length);
@@ -1110,9 +1133,21 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setNudgeText(null);
     setStreamingText('');
     try {
+      // STREAMING EXCEPTION: this site uses Server-Sent Events
+      // via fetch() + res.body.getReader() to stream Claude
+      // AI generation output incrementally. axios (apiClient)
+      // does not support response-body streaming in browsers,
+      // so this site cannot migrate to apiClient. Auth is
+      // injected inline from localStorage. Tracked in fix
+      // plan v2.10 §4.6 + §9.11 as a "can't-migrate-to-axios"
+      // exception class.
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       const res = await fetch(`${API}/memories/story-continue`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           current_prose:  prose.trim() || `[Opening scene — ${chapter?.scene_goal || chapter?.chapter_notes || chapter?.title || 'begin the chapter'}]`,
           chapter_title:  chapter?.title || 'Untitled Chapter',
@@ -1212,10 +1247,9 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setProseBeforeAi(prose);
     setNudgeText(null);
     try {
-      const res = await fetch(`${API}/memories/story-deepen`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let data;
+      try {
+        const res = await storyDeepenApi({
           current_prose:  prose,
           pnos_act:       chapter?.pnos_act || 'act_1',
           chapter_title:  chapter?.title,
@@ -1231,16 +1265,15 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           setting:               chapter?.setting || book?.setting || '',
           conflict:              chapter?.conflict || book?.conflict || '',
           stakes:                chapter?.stakes || book?.stakes || '',
-        }),
-      });
-      if (!res.ok) {
-        setHint(`Deepen failed (${res.status}) — please try again.`);
+        });
+        data = res.data;
+      } catch (httpErr) {
+        setHint(`Deepen failed (${httpErr.response?.status || 'error'}) — please try again.`);
         setTimeout(() => setHint(null), 5000);
         setGenerating(false);
         setAiAction(null);
         return;
       }
-      const data = await res.json();
       if (data.prose) {
         pushAiHistory('deepen', data.prose);
         setProse(data.prose);
@@ -1265,10 +1298,9 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setGenerating(true);
     setNudgeText(null);
     try {
-      const res = await fetch(`${API}/memories/story-nudge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let data;
+      try {
+        const res = await storyNudgeApi({
           current_prose:  prose,
           chapter_title:  chapter?.title,
           chapter_brief:  chapter?.scene_goal || chapter?.chapter_notes,
@@ -1284,16 +1316,15 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
           setting:               chapter?.setting || book?.setting || '',
           conflict:              chapter?.conflict || book?.conflict || '',
           stakes:                chapter?.stakes || book?.stakes || '',
-        }),
-      });
-      if (!res.ok) {
-        setHint(`Nudge failed (${res.status}) — please try again.`);
+        });
+        data = res.data;
+      } catch (httpErr) {
+        setHint(`Nudge failed (${httpErr.response?.status || 'error'}) — please try again.`);
         setTimeout(() => setHint(null), 5000);
         setGenerating(false);
         setAiAction(null);
         return;
       }
-      const data = await res.json();
       if (data.nudge) {
         setNudgeText(data.nudge);
       }
@@ -1337,8 +1368,8 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   const loadReviewLines = useCallback(async () => {
     setReviewLoading(true);
     try {
-      const res  = await fetch(`${API}/storyteller/books/${bookId}`);
-      const data = await res.json();
+      const res = await getBookApi(bookId);
+      const data = res.data;
       const bookData = data?.book || data;
       const ch = (bookData.chapters || []).find(c => c.id === chapterId);
       setReviewLines(ch?.lines || []);
@@ -1354,11 +1385,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
 
   const approveLine = async (lineId) => {
     try {
-      await fetch(`${API}/storyteller/lines/${lineId}`, {
-        method:  'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ status: 'approved' }),
-      });
+      await updateLineApi(lineId, { status: 'approved' });
       const updatedLines = reviewLines.map(ln => ln.id === lineId ? { ...ln, status: 'approved' } : ln);
       setReviewLines(updatedLines);
       const line = reviewLines.find(l => l.id === lineId);
@@ -1370,7 +1397,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
 
   const rejectLine = async (lineId) => {
     try {
-      await fetch(`${API}/storyteller/lines/${lineId}`, { method: 'DELETE' });
+      await deleteLineApi(lineId);
       setReviewLines(prev => prev.filter(l => l.id !== lineId));
     } catch {}
   };
@@ -1379,11 +1406,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
 
   const saveLineEdit = async () => {
     try {
-      await fetch(`${API}/storyteller/lines/${editingLine}`, {
-        method:  'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ text: editText, content: editText, status: 'edited' }),
-      });
+      await updateLineApi(editingLine, { text: editText, content: editText, status: 'edited' });
       const updatedLines = reviewLines.map(ln => ln.id === editingLine ? { ...ln, text: editText, content: editText, status: 'edited' } : ln);
       setReviewLines(updatedLines);
       setEditingLine(null);
@@ -1412,11 +1435,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setWordCount(rebuiltProse.split(/\s+/).filter(Boolean).length);
     // Persist to server
     try {
-      await fetch(`${API}/storyteller/chapters/${chapterId}/save-draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draft_prose: rebuiltProse }),
-      });
+      await saveDraftApi(chapterId, { draft_prose: rebuiltProse });
     } catch {}
   }, [reviewLines, chapterId]);
 
@@ -1425,15 +1444,11 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   const sendToReview = useCallback(async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/storyteller/chapters/${chapterId}/save-draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draft_prose: prose }),
-      });
+      await saveDraftApi(chapterId, { draft_prose: prose });
 
       // Check for existing approved/edited lines that should be preserved
-      const existingRes = await fetch(`${API}/storyteller/books/${bookId}`);
-      const existingData = await existingRes.json();
+      const existingRes = await getBookApi(bookId);
+      const existingData = existingRes.data;
       const existingBook = existingData?.book || existingData;
       const existingCh = (existingBook.chapters || []).find(c => c.id === chapterId);
       const existingLines = existingCh?.lines || [];
@@ -1448,7 +1463,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
         const toDelete = existingLines.filter(l => l.status === 'pending' || l.status === 'rejected');
         for (const ln of toDelete) {
           try {
-            await fetch(`${API}/storyteller/lines/${ln.id}`, { method: 'DELETE' });
+            await deleteLineApi(ln.id);
           } catch {}
         }
       }
@@ -1456,21 +1471,13 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
       // Convert paragraphs to LINE-marked format for import
       const paragraphs = prose.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
       const lineMarked = paragraphs.map((p, i) => `LINE ${i + 1}\n${p}`).join('\n\n');
-      await fetch(`${API}/storyteller/chapters/${chapterId}/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_text: lineMarked, mode: importMode }),
-      });
+      await importChapterApi(chapterId, { raw_text: lineMarked, mode: importMode });
 
       // ── Emotional Impact — the character carries the scene ──
       if (selectedCharacter?.id && prose) {
-        fetch(`${API}/storyteller/chapters/${chapterId}/emotional-impact`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prose,
-            character_id: selectedCharacter.id,
-          }),
+        submitEmotionalImpactApi(chapterId, {
+          prose,
+          character_id: selectedCharacter.id,
         }).catch(() => {}); // Fire-and-forget
       }
 
@@ -1649,11 +1656,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     // persist new sort_order
     try {
       await Promise.all(reordered.map((ch, i) =>
-        fetch(`${API}/storyteller/chapters/${ch.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sort_order: i + 1 }),
-        })
+        updateChapterApi(ch.id, { sort_order: i + 1 })
       ));
     } catch (err) {
       console.error('reorder error', err);
@@ -1668,11 +1671,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     if (editingTocId === chapterId) setChapter(prev => ({ ...prev, title: tocEditTitle.trim() }));
     setEditingTocId(null);
     try {
-      await fetch(`${API}/storyteller/chapters/${editingTocId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: tocEditTitle.trim() }),
-      });
+      await updateChapterApi(editingTocId, { title: tocEditTitle.trim() });
     } catch (err) { console.error('rename error', err); }
   }, [editingTocId, tocEditTitle, chapterId]);
 
@@ -1694,11 +1693,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
   const saveTocSections = useCallback(async (secs) => {
     if (!expandedTocId) return;
     try {
-      await fetch(`${API}/storyteller/chapters/${expandedTocId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections: secs }),
-      });
+      await updateChapterApi(expandedTocId, { sections: secs });
       // update local cache
       setAllChapters(prev => prev.map(c => c.id === expandedTocId ? { ...c, sections: secs } : c));
       if (expandedTocId === chapterId) setChapter(prev => ({ ...prev, sections: secs }));
@@ -1761,16 +1756,12 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setAddingTocChapter(false);
     setNewTocTitle('');
     try {
-      const res = await fetch(`${API}/storyteller/books/${bookId}/chapters`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          chapter_number: allChapters.length + 1,
-          sort_order: allChapters.length + 1,
-        }),
+      const res = await createChapterApi(bookId, {
+        title,
+        chapter_number: allChapters.length + 1,
+        sort_order: allChapters.length + 1,
       });
-      const data = await res.json();
+      const data = res.data;
       const newCh = data.chapter || data;
       setAllChapters(prev => [...prev, newCh]);
     } catch (err) { console.error('add chapter error', err); }
@@ -1784,11 +1775,7 @@ export default function WriteMode({ hideTopBar = false, initialCenterTab = 'writ
     setAllChapters(prev => prev.map(c => c.id === chapterId ? { ...c, [field]: value } : c));
     setEditingContext(null);
     try {
-      await fetch(`${API}/storyteller/chapters/${chapterId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [field]: value }),
-      });
+      await updateChapterApi(chapterId, { [field]: value });
     } catch (err) { console.error('save context field error', err); }
   }, [chapterId]);
 

@@ -1,9 +1,38 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, ChevronDown, ChevronRight, Camera, Plus, Trash2, GripVertical, ExternalLink, Clapperboard, Film, Sparkles, Loader } from 'lucide-react';
+import apiClient from '../../services/api';
 import './EpisodeScenesTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP5 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 9 helpers covering 9 fetch sites. 6 are file-local (episode-scoped routes
+// + scene/scenes routes); 3 are intentionally duplicated locally from CP2
+// SceneSetsTab.jsx (listSceneSetsApi, suggestAnglesApi, createAngleApi) per
+// Track 6 file-local convention — duplication is preferred to cross-file
+// imports to keep test scope file-local.
+
+// Episode-scoped routes
+export const listEpisodeSceneSetsApi = (episodeId) =>
+  apiClient.get(`${API_BASE}/episodes/${episodeId}/scene-sets`);
+export const listEpisodeScenesApi = (episodeId) =>
+  apiClient.get(`${API_BASE}/episodes/${episodeId}/scenes`);
+export const linkSceneSetsToEpisodeApi = (episodeId, payload) =>
+  apiClient.post(`${API_BASE}/episodes/${episodeId}/scene-sets`, payload);
+export const unlinkSceneSetFromEpisodeApi = (episodeId, setId) =>
+  apiClient.delete(`${API_BASE}/episodes/${episodeId}/scene-sets/${setId}`);
+export const createSceneFromAngleApi = (episodeId, payload) =>
+  apiClient.post(`${API_BASE}/episodes/${episodeId}/scenes/from-angle`, payload);
+export const deleteSceneApi = (sceneId) =>
+  apiClient.delete(`${API_BASE}/scenes/${sceneId}`);
+
+// Scene-set routes (duplicated from CP2 SceneSetsTab.jsx per file-local convention)
+export const listSceneSetsApi = () => apiClient.get(`${API_BASE}/scene-sets`);
+export const suggestAnglesApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/suggest-angles`, payload);
+export const createAngleApi = (setId, payload) =>
+  apiClient.post(`${API_BASE}/scene-sets/${setId}/angles`, payload);
 
 const SCENE_TYPE_COLORS = {
   HOME_BASE: { bg: '#dbeafe', color: '#1d4ed8' },
@@ -47,8 +76,8 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
     if (!episodeId) return;
     setLoadingSets(true);
     try {
-      const res = await fetch(`${API_BASE}/episodes/${episodeId}/scene-sets`);
-      const data = await res.json();
+      const res = await listEpisodeSceneSetsApi(episodeId);
+      const data = res.data;
       if (data.success) {
         setSceneSets(data.data || []);
       } else {
@@ -66,8 +95,8 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
     if (!episodeId) return;
     setLoadingScenes(true);
     try {
-      const res = await fetch(`${API_BASE}/episodes/${episodeId}/scenes`);
-      const data = await res.json();
+      const res = await listEpisodeScenesApi(episodeId);
+      const data = res.data;
       if (data.success) {
         setScenes(data.data || []);
       }
@@ -99,9 +128,8 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
     setSelectedPickerIds([]);
     setLoadingAllSets(true);
     try {
-      const res = await fetch(`${API_BASE}/scene-sets`);
-      const data = await res.json();
-      setAllSets(data.data || []);
+      const res = await listSceneSetsApi();
+      setAllSets(res.data?.data || []);
     } catch (err) {
       console.error('Failed to load all scene sets:', err);
     } finally {
@@ -118,13 +146,8 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
   const confirmPicker = async () => {
     if (selectedPickerIds.length === 0) return;
     try {
-      const res = await fetch(`${API_BASE}/episodes/${episodeId}/scene-sets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sceneSetIds: selectedPickerIds }),
-      });
-      const data = await res.json();
-      if (data.success) {
+      const res = await linkSceneSetsToEpisodeApi(episodeId, { sceneSetIds: selectedPickerIds });
+      if (res.data?.success) {
         toast(`Linked ${selectedPickerIds.length} location(s)`, 'success');
         setShowPicker(false);
         fetchSceneSets();
@@ -137,7 +160,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
 
   const unlinkSet = async (setId) => {
     try {
-      await fetch(`${API_BASE}/episodes/${episodeId}/scene-sets/${setId}`, { method: 'DELETE' });
+      await unlinkSceneSetFromEpisodeApi(episodeId, setId);
       setSceneSets((prev) => prev.filter((s) => s.id !== setId));
       toast('Location unlinked', 'info');
     } catch (err) {
@@ -149,12 +172,8 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
   const createSceneFromAngle = async (sceneSetId, angle) => {
     setCreatingSceneFor(angle.id);
     try {
-      const res = await fetch(`${API_BASE}/episodes/${episodeId}/scenes/from-angle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sceneSetId, sceneAngleId: angle.id }),
-      });
-      const data = await res.json();
+      const res = await createSceneFromAngleApi(episodeId, { sceneSetId, sceneAngleId: angle.id });
+      const data = res.data;
       if (data.success) {
         toast('Scene created from angle', 'success');
         fetchScenes();
@@ -172,7 +191,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
   // ---- Delete Scene ----
   const deleteScene = async (sceneId) => {
     try {
-      await fetch(`${API_BASE}/scenes/${sceneId}`, { method: 'DELETE' });
+      await deleteSceneApi(sceneId);
       setScenes((prev) => prev.filter((s) => s.id !== sceneId));
       toast('Scene removed', 'info');
     } catch (err) {
@@ -185,11 +204,8 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
     setGeneratingAnglesFor(setId);
     try {
       // Step 1: AI suggests angles
-      const suggestRes = await fetch(`${API_BASE}/scene-sets/${setId}/suggest-angles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const suggestData = await suggestRes.json();
+      const suggestRes = await suggestAnglesApi(setId, {});
+      const suggestData = suggestRes.data;
       if (!suggestData.success || !suggestData.data?.length) {
         toast(suggestData.error || 'No angles suggested — add a description to the location first', 'error');
         return;
@@ -198,19 +214,14 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
       // Step 2: Save all suggested angles
       let savedCount = 0;
       for (const angle of suggestData.data) {
-        const saveRes = await fetch(`${API_BASE}/scene-sets/${setId}/angles`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            angle_name: angle.angle_name,
-            angle_label: angle.angle_label,
-            camera_direction: angle.camera_direction,
-            mood: angle.mood,
-            beat_affinity: angle.beat_affinity,
-          }),
+        const saveRes = await createAngleApi(setId, {
+          angle_name: angle.angle_name,
+          angle_label: angle.angle_label,
+          camera_direction: angle.camera_direction,
+          mood: angle.mood,
+          beat_affinity: angle.beat_affinity,
         });
-        const saveData = await saveRes.json();
-        if (saveData.success) savedCount++;
+        if (saveRes.data?.success) savedCount++;
       }
 
       toast(`Generated ${savedCount} angles`, 'success');
