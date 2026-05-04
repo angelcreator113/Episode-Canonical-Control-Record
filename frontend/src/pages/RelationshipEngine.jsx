@@ -6,6 +6,7 @@
  */
 import { useReducer, useEffect, useCallback, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import apiClient from '../services/api';
 import './RelationshipEngine.css';
 
 import {
@@ -15,11 +16,29 @@ import {
   API, T, LAYER, TENSION, cname, clayer, initials, roleColor,
 } from '../components/RelationshipEngine';
 
-/* ── Auth helper ─────────────────────────────────────────────────────── */
-function authHeaders() {
-  const t = localStorage.getItem('authToken') || localStorage.getItem('token');
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
+/* ── Track 3 module-scope helpers (Pattern D) ────────────────────────── */
+export const fetchRelationshipTree = (regId) =>
+  apiClient.get(`${API}/relationships/tree/${regId}`);
+export const fetchPendingRelationships = () =>
+  apiClient.get(`${API}/relationships/pending`);
+export const fetchFamilyTree = (regId) =>
+  apiClient.get(`${API}/relationships/family-tree/${regId}`);
+export const confirmRelationship = (id) =>
+  apiClient.post(`${API}/relationships/confirm/${id}`);
+export const dismissRelationship = (id) =>
+  apiClient.post(`${API}/relationships/dismiss/${id}`);
+export const deleteRelationship = (id) =>
+  apiClient.delete(`${API}/relationships/${id}`);
+export const generateRelationships = (payload) =>
+  apiClient.post(`${API}/relationships/generate`, payload);
+export const createRelationship = (payload) =>
+  apiClient.post(`${API}/relationships`, payload);
+export const generateFamilyRelationships = (payload) =>
+  apiClient.post(`${API}/relationships/generate-family`, payload);
+export const updateRelationshipFamilyRole = (id, fields) =>
+  apiClient.patch(`${API}/relationships/${id}/family`, fields);
+export const updateRelationshipFields = (id, fields) =>
+  apiClient.patch(`${API}/relationships/${id}`, fields);
 
 /* ═══════════════════════════════════════════════════════════════════════
    State management (replaces 16 individual useState hooks)
@@ -103,13 +122,11 @@ export default function RelationshipEngine() {
     dispatch({ type: 'SET', payload: { loading: true, error: null } });
     try {
       const [treeR, pendR] = await Promise.all([
-        fetch(`${API}/relationships/tree/${s.reg.id}`, { headers: authHeaders() }),
-        fetch(`${API}/relationships/pending`, { headers: authHeaders() }),
+        fetchRelationshipTree(s.reg.id),
+        fetchPendingRelationships(),
       ]);
-      if (!treeR.ok) throw new Error(`Tree load failed (${treeR.status})`);
-      if (!pendR.ok) throw new Error(`Pending load failed (${pendR.status})`);
-      const tree = await treeR.json();
-      const pend = await pendR.json();
+      const tree = treeR.data;
+      const pend = pendR.data;
       dispatch({
         type: 'TREE_LOADED',
         payload: {
@@ -130,9 +147,8 @@ export default function RelationshipEngine() {
   const fetchFamily = useCallback(async () => {
     if (!s.reg) return;
     try {
-      const r = await fetch(`${API}/relationships/family-tree/${s.reg.id}`, { headers: authHeaders() });
-      if (!r.ok) throw new Error(`Family tree load failed (${r.status})`);
-      dispatch({ type: 'FAM_LOADED', payload: await r.json() });
+      const r = await fetchFamilyTree(s.reg.id);
+      dispatch({ type: 'FAM_LOADED', payload: r.data });
     } catch (err) {
       toast(err.message || 'Could not load family tree', 'error');
     }
@@ -144,8 +160,7 @@ export default function RelationshipEngine() {
   const confirm = async id => {
     dispatch({ type: 'SET', payload: { busy: id } });
     try {
-      const r = await fetch(`${API}/relationships/confirm/${id}`, { method: 'POST', headers: authHeaders() });
-      if (!r.ok) throw new Error(`Confirm failed (${r.status})`);
+      await confirmRelationship(id);
       dispatch({ type: 'REMOVE_CAND', id });
       toast('Relationship confirmed', 'success');
       fetchTree();
@@ -158,8 +173,7 @@ export default function RelationshipEngine() {
   const dismiss = async id => {
     dispatch({ type: 'SET', payload: { busy: id } });
     try {
-      const r = await fetch(`${API}/relationships/dismiss/${id}`, { method: 'POST', headers: authHeaders() });
-      if (!r.ok) throw new Error(`Dismiss failed (${r.status})`);
+      await dismissRelationship(id);
       dispatch({ type: 'REMOVE_CAND', id });
       toast('Seed dismissed', 'info');
     } catch (err) {
@@ -171,8 +185,7 @@ export default function RelationshipEngine() {
   const del = async id => {
     dispatch({ type: 'SET', payload: { busy: id } });
     try {
-      const r = await fetch(`${API}/relationships/${id}`, { method: 'DELETE', headers: authHeaders() });
-      if (!r.ok) throw new Error(`Delete failed (${r.status})`);
+      await deleteRelationship(id);
       dispatch({ type: 'DELETE_REL', id });
       toast('Deleted', 'info');
     } catch (err) {
@@ -184,12 +197,8 @@ export default function RelationshipEngine() {
   const generate = async focusId => {
     dispatch({ type: 'SET', payload: { genning: true } });
     try {
-      const r = await fetch(`${API}/relationships/generate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ registry_id: s.reg?.id, focus_character_id: focusId }),
-      });
-      if (!r.ok) throw new Error(`Generate failed (${r.status})`);
-      const d = await r.json();
+      const r = await generateRelationships({ registry_id: s.reg?.id, focus_character_id: focusId });
+      const d = r.data;
       dispatch({ type: 'SET', payload: { cands: d.candidates || d || [], genning: false, genOpen: false, tab: 'candidates' } });
       toast('Seeds generated', 'success');
     } catch (err) {
@@ -200,12 +209,8 @@ export default function RelationshipEngine() {
 
   const addRel = async f => {
     try {
-      const r = await fetch(`${API}/relationships`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ ...f, registry_id: s.reg?.id }),
-      });
-      if (!r.ok) throw new Error(`Add failed (${r.status})`);
-      const d = await r.json();
+      const r = await createRelationship({ ...f, registry_id: s.reg?.id });
+      const d = r.data;
       dispatch({ type: 'ADD_REL', rel: d.relationship || d });
       toast('Relationship added', 'success');
     } catch (err) {
@@ -216,11 +221,7 @@ export default function RelationshipEngine() {
   const genFamFn = async () => {
     dispatch({ type: 'SET', payload: { genFam: true } });
     try {
-      const r = await fetch(`${API}/relationships/generate-family`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ registry_id: s.reg?.id }),
-      });
-      if (!r.ok) throw new Error(`Family generation failed (${r.status})`);
+      await generateFamilyRelationships({ registry_id: s.reg?.id });
       fetchFamily();
       toast('Family tree generated', 'success');
     } catch (err) {
@@ -231,11 +232,7 @@ export default function RelationshipEngine() {
 
   const updateFamRole = async (id, fields) => {
     try {
-      const r = await fetch(`${API}/relationships/${id}/family`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify(fields),
-      });
-      if (!r.ok) throw new Error(`Update failed (${r.status})`);
+      await updateRelationshipFamilyRole(id, fields);
       fetchFamily();
     } catch (err) {
       toast(err.message || 'Update failed', 'error');
@@ -244,11 +241,7 @@ export default function RelationshipEngine() {
 
   const updateRel = async (id, fields) => {
     try {
-      const r = await fetch(`${API}/relationships/${id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify(fields),
-      });
-      if (!r.ok) throw new Error(`Update failed (${r.status})`);
+      await updateRelationshipFields(id, fields);
       dispatch({ type: 'UPDATE_REL', id, fields });
       toast('Updated', 'success');
     } catch (err) {

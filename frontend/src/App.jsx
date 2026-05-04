@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import apiClient from './services/api';
 
 // Contexts
 import { BulkSelectionProvider } from './contexts/BulkSelectionContext';
@@ -63,9 +64,8 @@ const BookToWriteRedirect = () => {
   const [loading, setLoading] = useState(true);
   const nav = useNavigate();
   useEffect(() => {
-    const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-    fetch(`/api/v1/storyteller/books/${id}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
+    apiClient.get(`/api/v1/storyteller/books/${id}`)
+      .then(r => r.data)
       .then(data => {
         const chapters = Array.isArray(data.chapters) ? data.chapters : [];
         if (chapters.length > 0) {

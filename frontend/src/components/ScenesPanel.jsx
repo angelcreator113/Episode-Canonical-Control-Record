@@ -9,16 +9,19 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 
 const API = '/api/v1';
 
-const authHeaders = () => {
-  const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-};
+// Track 3 module-scope helpers (Pattern D).
+export const updateChapterSections = (chapterId, sections) =>
+  apiClient.put(`${API}/storyteller/chapters/${chapterId}`, { sections });
+
+export const planScenesForChapter = (payload) =>
+  apiClient.post(`${API}/memories/scene-planner`, payload);
+
+export const fetchBookSceneSuggestions = (bookId) =>
+  apiClient.get(`${API}/memories/books/${bookId}/scenes`);
 
 export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, book, characterId }) {
   const [expanded, setExpanded] = useState({});
@@ -60,11 +63,7 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
     };
     currentSections.push(newSection);
     try {
-      await fetch(`${API}/storyteller/chapters/${chId}`, {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify({ sections: currentSections }),
-      });
+      await updateChapterSections(chId, currentSections);
       if (onChaptersChange) onChaptersChange();
     } catch (e) { console.error('Add scene error:', e); }
     setAddingSceneTo(null);
@@ -79,11 +78,7 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
       s.id === secId ? { ...s, content: newTitle } : s
     );
     try {
-      await fetch(`${API}/storyteller/chapters/${chId}`, {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify({ sections: currentSections }),
-      });
+      await updateChapterSections(chId, currentSections);
       if (onChaptersChange) onChaptersChange();
     } catch (e) { console.error('Rename scene error:', e); }
     setEditingScene(null);
@@ -95,11 +90,7 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
     if (!ch) return;
     const currentSections = (Array.isArray(ch.sections) ? ch.sections : []).filter(s => s.id !== secId);
     try {
-      await fetch(`${API}/storyteller/chapters/${chId}`, {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify({ sections: currentSections }),
-      });
+      await updateChapterSections(chId, currentSections);
       if (onChaptersChange) onChaptersChange();
     } catch (e) { console.error('Delete scene error:', e); }
   }, [chapters, onChaptersChange]);
@@ -113,31 +104,26 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
         .filter(s => s.type === 'h3')
         .map(s => ({ content: s.content, title: s.content }));
 
-      const res = await fetch(`${API}/memories/scene-planner`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          book_id: bookId,
-          chapter_id: ch.id,
-          chapter_title: ch.title,
-          chapter_type: ch.chapter_type || 'chapter',
-          character_id: characterId || null,
-          existing_scenes: existingScenes,
-          draft_prose: ch.draft_prose || '',
-          book_title: book?.title || '',
-          book_description: book?.description || '',
-          all_chapters: chapters.map(c => ({
-            id: c.id,
-            title: c.title,
-            chapter_type: c.chapter_type,
-            scenes: (Array.isArray(c.sections) ? c.sections : []).filter(s => s.type === 'h3'),
-          })),
-          theme: ch.theme || '',
-          scene_goal: ch.scene_goal || '',
-        }),
+      const res = await planScenesForChapter({
+        book_id: bookId,
+        chapter_id: ch.id,
+        chapter_title: ch.title,
+        chapter_type: ch.chapter_type || 'chapter',
+        character_id: characterId || null,
+        existing_scenes: existingScenes,
+        draft_prose: ch.draft_prose || '',
+        book_title: book?.title || '',
+        book_description: book?.description || '',
+        all_chapters: chapters.map(c => ({
+          id: c.id,
+          title: c.title,
+          chapter_type: c.chapter_type,
+          scenes: (Array.isArray(c.sections) ? c.sections : []).filter(s => s.type === 'h3'),
+        })),
+        theme: ch.theme || '',
+        scene_goal: ch.scene_goal || '',
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'AI request failed');
+      const data = res.data;
       setAiSuggestions(prev => ({ ...prev, [ch.id]: data.suggestions || [] }));
     } catch (e) {
       console.error('AI scene planner error:', e);
@@ -152,11 +138,8 @@ export default function ScenesPanel({ bookId, chapters = [], onChaptersChange, b
     setBookAiLoading(true);
     setAiError(null);
     try {
-      const res = await fetch(`${API}/memories/books/${bookId}/scenes`, {
-        headers: authHeaders(),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'AI request failed');
+      const res = await fetchBookSceneSuggestions(bookId);
+      const data = res.data;
       setBookAiScenes(data.scenes || data);
     } catch (e) {
       console.error('Book AI scenes error:', e);

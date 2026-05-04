@@ -164,5 +164,8 @@ export const ENHANCED_API = '/api/v1/feed-enhanced';
 // ── Helpers ────────────────────────────────────────────────────────────
 export function lalaClass(score) { return score>=7?'high':score>=4?'mid':'low'; }
 export function fp(p) { return p?.full_profile||p||{}; }
-export function getToken() { return localStorage.getItem('authToken')||localStorage.getItem('token')||sessionStorage.getItem('token'); }
-export function authHeaders() { const t=getToken(); return t?{Authorization:`Bearer ${t}`,'Content-Type':'application/json'}:{'Content-Type':'application/json'}; }
+// Track 4 final cleanup: getToken() and authHeaders() exports removed.
+// Auth header injection is centralized in the apiClient request interceptor
+// (services/api.js). Deletion verified zero importers via grep prior to commit.
+// The unreachable sessionStorage.token fallback path has been fully eliminated
+// from frontend production code.

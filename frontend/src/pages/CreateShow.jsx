@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/api';
+import apiClient from '../services/api';
 import './CreateShow.css';
 
 function CreateShow() {
@@ -100,11 +101,9 @@ function CreateShow() {
     }
     
     setSaving(true);
-    
+
     try {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-      
-      // First create the show with JSON data
+      // First create the show with JSON data. apiClient interceptor handles auth.
       const showPayload = {
         name: formData.name,
         description: formData.description,
@@ -115,40 +114,30 @@ function CreateShow() {
           tagline: formData.tagline
         }
       };
-      
-      const response = await fetch(`${API_URL}/shows`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(showPayload)
-      });
-      
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || errData.error || 'Failed to create show');
+
+      let result;
+      try {
+        const response = await apiClient.post(`${API_URL}/shows`, showPayload);
+        result = response.data;
+      } catch (apiErr) {
+        const body = apiErr.response?.data;
+        throw new Error(body?.message || body?.error || 'Failed to create show');
       }
-      
-      const result = await response.json();
+
       const newShow = result.data || result;
-      
+
       console.log('[CreateShow] API response:', JSON.stringify(result));
       console.log('[CreateShow] New show ID:', newShow.id, 'Name:', newShow.name);
-      
+
       if (!newShow.id) {
         throw new Error('Show created but no ID returned from API');
       }
-      
+
       // Upload cover image if provided
       if (formData.coverImage && newShow.id) {
         const imgForm = new FormData();
         imgForm.append('image', formData.coverImage);
-        await fetch(`${API_URL}/shows/${newShow.id}/cover-image`, {
-          method: 'POST',
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-          body: imgForm
-        });
+        await apiClient.post(`${API_URL}/shows/${newShow.id}/cover-image`, imgForm);
       }
       
       console.log('[CreateShow] Navigating to /shows/' + newShow.id);
