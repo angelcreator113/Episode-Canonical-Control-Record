@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.9 — Single-PR plan. Track 6 CP2 (SceneSetsTab.jsx, 64 sites) approved. 3 HTTP method corrections caught mid-flow.
+**Document version:** v2.10 — Single-PR plan. Track 6 CP3 (WriteMode.jsx, 31/33 sites + 2 streaming exceptions) approved. Pattern G locked.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2 (SceneSetsTab.jsx, 64 sites) COMPLETE at commit `30a15d05`. CP3 (WriteMode.jsx) is next, fresh session.
+**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2 + CP3 COMPLETE (`b0127817`). Pattern G locked. CP4 (FranchiseBrain.jsx, F34 closure) is next.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -501,6 +501,17 @@ CP2 completed at commit `30a15d05` (squashed from 4 WIP commits across multiple 
 - Pattern F prophylactic discipline confirmed correct. CP2 surfaced 8 component-handler shadow-conflict prone names (`handleCreate`, `handleDeleteSet`, `handleSetCoverAngle`, `handleAddAngle`, `handlePreviewPrompt`, `handleUploadAngleImage`, `handleCascadeRegenerate`, `handleReorderAngle`); the Api suffix on every helper from the start avoided 8 mid-flow refactors. Future high-density files (CP3 WriteMode, CP4 FranchiseBrain) apply Pattern F prophylactically from the first extraction per same discipline.
 - Multi-session pacing model worked as designed. WIP commits across sessions, squash before approval, single CP2 commit at the end. Each session was a clean handoff via WIP commit hash. The `96cc3341 → 97808e97 → b328226b → 30a15d05` progression preserved progress without polluting the eventual squashed commit's history.
 
+###### Track 6 CP3 architectural findings (LOCKED v2.10, COMPLETE — WriteMode.jsx)
+
+CP3 completed at commit `b0127817` (squashed from 3 WIP commits across 3 sessions per the v2.8 pacing model). 31/33 sites migrated to apiClient via 17 module-scope helpers with Pattern F Api suffix. 2 sites retained as locked exceptions (streaming SSE — see Pattern G below). 25 new behavioral tests added; full frontend suite at 205/205 passing across 19 test files. Backed up at `b0127817` on `claude/f-auth-1-backup`.
+
+- **Pacing model validated against two data points.** CP2 (SceneSetsTab, 64 sites) completed in 4 sessions (~16 sites/session). CP3 (WriteMode, 33 sites + 2 streaming exceptions) completed in 3 sessions (~11 sites/session — slightly slower per-site cadence due to higher state-management complexity per site, plus the streaming exception adjudication in Session 2). The v2.9 §4.6 forecast of "2-3 sessions" for CP3 held at the upper bound. The model holds for high-density files; CP4 (FranchiseBrain, 18 sites, lower density) is forecast at 1 session per same model.
+- **Pattern F prophylactic discipline confirmed correct (second data point).** CP3 surfaced ~20 component-handler shadow-conflict prone names (saveDraft, generateSynopsis, generateTransition, generateProse, loadReferenceChapter, loadReviewLines, approveLine, rejectLine, saveLineEdit, saveTocSections, deleteTocSection, approveAll, handleContinue, handleDeepen, handleNudge, handleParagraphAction, handleChapterInstruction, commitAddChapter, commitTocRename, syncLinesToDraft); Pattern F suffix on every helper from the start avoided ~20 mid-flow refactors. The discipline is now validated across two files (CP2 + CP3); apply prophylactically to all high-density files going forward.
+- **Streaming SSE exception class surfaced (Session 2) — Pattern G locked in §9.11.** WriteMode.jsx had two sites that use Server-Sent Events (SSE) to stream Claude AI generation incrementally: `WriteMode.jsx:980` (voice-to-story) and `WriteMode.jsx:1145` (story-continue in handleContinue). Both use `fetch() + res.body.getReader()` for incremental response-body reads. axios cannot stream response bodies in browsers (only in Node), so these sites cannot migrate to apiClient. Both retained as locked exceptions per the BookEditor.jsx:55 keepalive precedent: raw fetch + inline Bearer auth from localStorage + 9-line documenting comment + verification-grep allowlist.
+- Implementation byte-identical across both streaming sites; only the endpoint path and payload differ. The 9-line comment template explains the SSE streaming requirement, the axios constraint, the inline-auth approach, and points at the v2.10 §4.6 + §9.11 canon. Future maintainers see the comment, do not "fix" by attempting apiClient migration.
+- No HTTP method mismatches surfaced in CP3 (CP2 caught 3; CP3 caught 0). No Path E candidates surfaced. No bugs surfaced. Multi-session pacing handoffs (`2a021cf2 → 22ab7a4e → b0127817` squashed) were clean.
+- CP3 squashed commit message follows the canonical Track 6 closing format: file name, sites migrated count, exceptions count and rationale, helpers added, test count, "Closes Track 6 CP3" marker. Future CPs follow same template.
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -522,16 +533,18 @@ grep -rn "authHeader\b" frontend/src/ | grep -v "authHeaders" | grep -v "test\.\
 Expected output: zero matches. (Production code; test files may contain "authHeader" in test descriptions and are excluded.)
 
 ```bash
-grep -rn "Bearer \${" frontend/src/ | grep -v "src/services/api.js" | grep -v "BookEditor.jsx:55" | grep -v "test\."
+grep -rn "Bearer \${" frontend/src/ | grep -v "src/services/api.js" | grep -v "BookEditor.jsx:55" | grep -v "WriteMode.jsx:980" | grep -v "WriteMode.jsx:1145" | grep -v "test\."
 ```
 
-Expected output: zero matches. The two allowlisted locations are: (a) `src/services/api.js` — the apiClient request interceptor itself; (b) `BookEditor.jsx:55` — the locked CZ-5 keepalive exception (line corrected v2.7; was `BookEditor.jsx:181` in v2.5/v2.6 before Track 2.5 extraction moved the literal).
+Expected output: zero matches. The four allowlisted locations are: (a) `src/services/api.js` — the apiClient request interceptor itself; (b) `BookEditor.jsx:55` — the locked CZ-5 keepalive exception; (c) `WriteMode.jsx:980` — locked streaming SSE exception (voice-to-story, v2.10); (d) `WriteMode.jsx:1145` — locked streaming SSE exception (story-continue, v2.10).
 
 ```bash
 grep -rn "fetch(" frontend/src/ | wc -l
 ```
 
-Expected: drops from 627 (current) to count of intentionally-public reads only (PUBLIC class — currently 5 confirmed, may grow as Track 7 reclassifies UNCLEAR-A) PLUS the BookEditor:181 keepalive exception = 6 minimum.
+Expected: drops from 627 (current) to count of intentionally-public reads only (PUBLIC class — currently 5 confirmed, may grow as Track 7 reclassifies UNCLEAR-A) PLUS the three locked exceptions (BookEditor.jsx:55 keepalive + WriteMode.jsx:980 + WriteMode.jsx:1145 streaming SSE) = 8 minimum.
+
+Sharper file-scoped variant (locked v2.10 from CP3 verification): `grep -nE '^\s*[^/]*\bfetch\(' <file>` — anchors to start-of-line plus excludes comment-prefixed matches. The default `grep -cE 'fetch\('` counts comment hits too; the sharper form is more precise for per-file verification during CP execution. Use the sharper form in CP reports.
 
 - Authenticated request via `apiClient` succeeds and `req.user` populated server-side.
 - Mid-session token expiry: `apiClient` interceptor sees `AUTH_INVALID_TOKEN`, refreshes silently, request continues. User does not see a logout.
@@ -915,7 +928,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2 SceneSetsTab.jsx COMPLETE (commit `30a15d05` squashed from multi-session WIP; 64/64 sites migrated; 180/180 frontend tests pass). Backed up at `30a15d05` on `claude/f-auth-1-backup`. Track 6 CP3 (WriteMode.jsx, 33 sites) is next, fresh session.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2 SceneSetsTab.jsx COMPLETE (commit `30a15d05` squashed). Track 6 CP3 WriteMode.jsx COMPLETE (commit `b0127817` squashed; 31/33 sites + 2 streaming exceptions; 205/205 frontend tests pass; Pattern G locked). Backed up at `b0127817` on `claude/f-auth-1-backup`. Track 6 CP4 (FranchiseBrain.jsx, 18 sites, F34 closure) is next, fresh session.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -957,6 +970,23 @@ Patterns D and E together enable the **module-scope-extraction** approach Tracks
 **Pattern F — Api-suffix convention for shadow-conflict resolution:** When extracting Track 2.5-style module-scope helpers from a file where component-local handler names mirror the endpoint operation names (e.g., a component with `finalizeProfile` handler whose body wraps a network call to `/profiles/finalize`), naming the extracted helper `finalizeProfile` shadows the component handler. Resolution: suffix the network helper with `Api` (`finalizeProfileApi`). Component handler stays unchanged — it imports and wraps the API helper plus UI state updates. Track 3 Stage 2 (commit `69f0a926`) established this pattern across 11 conflicts in SocialProfileGenerator.jsx; document the convention in a module-scope comment when applied so future contributors understand the suffix.
 
 Pattern F applies wherever Tracks 4 and 6 encounter files with component-handler names matching endpoint operation names. Two notable Track 6 files where this is likely: `SceneSetsTab.jsx` (64 sites) and `FranchiseBrain.jsx` (18 sites). Apply the suffix convention from the start of each file's migration rather than discovering shadow conflicts mid-flow.
+
+**Pattern G — "can't-migrate-to-axios" exception class:** When a fetch site uses an underlying HTTP feature that axios does not support in browsers (response-body streaming via SSE, `keepalive: true`, or other browser-only features), the site cannot migrate to apiClient without breaking functionality. These sites are retained as raw `fetch()` calls with inline auth header injection from localStorage, structurally identical to Path D (inline Bearer construction). Pattern G is the locked-exception class for these cases.
+
+Implementation pattern (3 known sites today):
+
+- Keep raw `fetch()` call (do NOT migrate to apiClient).
+- Inject inline auth header: `const token = localStorage.getItem('authToken') || localStorage.getItem('token');` then `...(token ? { Authorization: \`Bearer ${token}\` } : {})` inside the headers object.
+- Add a 6-9 line documenting comment immediately above the fetch call. Comment must explain: (a) what underlying HTTP feature is being used, (b) why axios does not support it, (c) the inline-auth approach, (d) reference to fix plan v2.10 §4.6 + §9.11 Pattern G.
+- Allowlist the file:line in the verification grep. Future contributors see the comment, do not "fix" by attempting apiClient migration.
+
+Three known Pattern G sites (all locked, all documented):
+
+- `frontend/src/components/BookEditor.jsx:55` — `keepalive: true` for beforeunload draft save (CZ-5 contract). Locked in v2.5; line corrected to `:55` in v2.7.
+- `frontend/src/pages/WriteMode.jsx:980` — SSE streaming for voice-to-story Claude AI generation. Locked in v2.10 from CP3 commit `b0127817`.
+- `frontend/src/pages/WriteMode.jsx:1145` — SSE streaming for story-continue Claude AI generation in handleContinue. Locked in v2.10 from CP3 commit `b0127817`.
+
+Threshold for revisiting Pattern G: if Track 6 long-tail or future feature work surfaces 4+ Pattern G sites, evaluate adding a streaming-fetch helper to apiClient (a Track 1 amendment that would handle auth injection + response-body access without requiring inline construction). Today's 3 sites do not justify the scope; they are documented as locked exceptions instead.
 
 ### 9.12 Deferred cleanups (post-F-AUTH-1)
 
