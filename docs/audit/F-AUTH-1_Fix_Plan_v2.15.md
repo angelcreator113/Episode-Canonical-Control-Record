@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.14 — Single-PR plan. Track 6 CP7 (long-tail batch 1 — 39 sites across 10 files) approved. 6-data-point pacing. Multipart-upload + internal-helper-refactor patterns locked. Long-tail forecast updated to actuals.
+**Document version:** v2.15 — Single-PR plan. Track 6 CP8 (long-tail batch 2 — 38 sites across 10 files) approved. 7-data-point pacing. Existing-test-file amendment convention locked. Cross-CP duplication validated at scale. Pattern composability validated.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2-CP7 COMPLETE (`75c804e4`). 218 sites migrated, ~63% of Track 6 by site count. CP8 (next long-tail batch) is next.
+**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2-CP8 COMPLETE (`e5d4355f`). 256 sites migrated, ~74% of Track 6 by site count. CP9 (mid-density anchors mix) is next.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -689,6 +689,59 @@ Updated CP forecast: **6-8 more CPs total to close Track 6** (down from v2.13's 
 
 **Track 6 progress as of CP7: 218 sites migrated** across 19 files. 3 Pattern G locked exceptions. Tests grew from 135 (Track 6 start) to 368 (+233). **Current progress ~63% by site count** (218 / ~345). Remaining: CP8+ long-tail (~248 sites across ~70 files). CP8 candidate batch composition: world/* cluster (WorldFoundation, WorldStateTensions, SceneStudio, NovelAssembler, StoryProposer) + small filler files = ~30-35 sites. Defer high-density deferrals (useStoryEngine, WorldAdmin, EpisodeDetail) to dedicated CPs in CP9+ since each is potentially CP3-zone complexity.
 
+###### Track 6 CP8 architectural findings (LOCKED v2.15, COMPLETE — long-tail batch 2; cross-CP duplication scaling + pattern composability validated)
+
+CP8 completed at commit `e5d4355f` (single squashed commit, 10 file-boundary WIPs collapsed; single session). 38/38 sites migrated across ten files via 46 module-scope helpers with Pattern F Api suffix (11 cross-CP duplications across 5 files — highest cross-CP density of any CP yet). 56 new behavioral tests added; full frontend suite at 424/424 passing across 46 test files. Backed up at `e5d4355f` on `claude/f-auth-1-backup`.
+
+Per-file breakdown (simplest-first execution order):
+
+- `ArcTrackingPanel.jsx` (1 site, thenable warm-up), `NarrativeControlCenter.jsx` (1, joins existing Track 4 fetchJSON), `RelationshipEngine.jsx` (1, registries duplicate from CP3+CP6+CP7), `ChapterBrief.jsx` (1, updateChapter duplicate from CP3), `ImportDraftModal.jsx` (1, importChapter duplicate from CP3) — 5 single-site warm-ups
+- `SceneStudio.jsx` (6 sites, clean /world/*), `NovelAssembler.jsx` (6, clean /stories/*), `WorldStateTensions.jsx` (7, full CP7 helper duplication ×7), `StoryProposer.jsx` (7, registries duplicate + /memories/*), `WorldFoundation.jsx` (7, multipart + method-branching + 4 idiom sub-shapes — last per simplest-first)
+
+**Pattern reuse confirmed (second instances for both): multipart upload + method-branching split now validated against 2 files each.** WorldFoundation.uploadMapApi is the second F-AUTH-1 multipart site (PdfIngestZone was first); pattern held with `apiClient.post(url, formData)` and no manual Content-Type. WorldFoundation.saveLocation's editId-conditional split into `createLocationApi` + `updateLocationApi` reused CP6 TemplateDesigner pattern, with call site doing the conditional ternary.
+
+**Existing-test-file amendment convention LOCKED v2.15 (NEW). When amending a file with existing helpers and tests, append new helpers/tests to existing files rather than creating duplicate test files.** Validated against `RelationshipEngine.jsx` in CP8 — file already had 11 helpers (presumably from earlier track work), CP8 appended +1 helper (`listRegistriesApi`) and +1 test rather than creating a duplicate test file. Relevant for CP9+ — `StoryEvaluationEngine.jsx` and `NarrativeIntelligence.jsx` have existing test files from earlier tracks; same append-not-overwrite discipline applies.
+
+**Cross-CP duplication scaling validated (NEW v2.15 note). v2.12 §9.11 file-local convention scales without coupling concerns at 11 cross-CP duplications in a single CP.** CP5 had 4 dups, CP6 had 2 dups, CP7 had 1 dup, CP8 had 11 dups across 5 files (~33 LOC). The test-isolation benefit dominates the LOC cost. WorldStateTensions duplicating 7 helpers from CP7 WorldDashboard is the largest single-file cross-CP duplication in F-AUTH-1; the file-local module block kept the migration mechanical.
+
+**Pattern composability validated (NEW v2.15 note). First file applying three locked patterns simultaneously: WorldFoundation.jsx applied multipart upload (v2.14) + method-branching split (v2.13) + idiom mix (mixed thenable/async/multipart) in one file.** Migrated cleanly. Pattern composability was implicit in the convention library; CP8 explicitly validates that locked patterns can stack within a single file without cross-contamination.
+
+- Pattern F prophylactic discipline confirmed correct (seventh data point). All 10 CP8 files had LOW direct-shadow density.
+- Pattern G NOT triggered. One false-positive ruled out at surface (ChapterBrief comment text "downstream"). Three Pattern G sites total in F-AUTH-1 scope remain.
+- Five distinct idioms across 10 files all migrated cleanly: thenable + .catch (ArcTrackingPanel, NarrativeControlCenter), simple async (RelationshipEngine, ChapterBrief, ImportDraftModal), success-property check (SceneStudio), if-res-ok throw collapse (NovelAssembler, StoryProposer), dense one-liners mirroring CP7 (WorldStateTensions), 4-shape mix (WorldFoundation: async + thenable + multipart + method-branching).
+- No HTTP method mismatches surfaced (CP3-CP6+CP8 all clean; CP7 caught 1 at surface; CP2 caught 3 mid-flow). Method-correction discovery rate: 4/8 CPs caught zero, 1/8 caught at surface, 1/8 caught mid-flow. Pattern: surface-time discovery preferred when achievable.
+- Path E candidates surfaced from CP8: ~16 GET sites filed for §9.12 Step 3 sweep awareness (with deduplication note: 3 GETs already filed by CP7 for /world/state/* family).
+
+###### Pacing model — 7 data points, long-tail simplest-first reproducibility validated (NEW v2.15)
+
+Seven checkpoints across Track 6:
+
+- **CP2** (1 file, 64 sites): 4 sessions, ~16 sites/session.
+- **CP3** (1 file, 33 sites + 2 Pattern G): 3 sessions, ~11 sites/session.
+- **CP4** (1 file, 18 sites): 1 session, 18 sites/session.
+- **CP5** (3 files uniform-simple, 28 sites): 1 session, 28 sites/session.
+- **CP6** (4 files heterogeneous, 38 sites): 1 session, 38 sites/session.
+- **CP7** (10 files long-tail simplest-first, 39 sites): 1 session, 39 sites/session.
+- **CP8** (10 files long-tail simplest-first, 38 sites): 1 session, **38 sites/session**. CP7 zone reproducibility validated.
+
+CP7 + CP8 establish the long-tail simplest-first pattern as **reliably reproducible at the 35-40 sites/session band** for 10-file batches with idiom diversity and bounded cross-CP duplication. Two consecutive single-session executions at near-identical site counts and file counts confirm the throughput band is not a fluke. CP9+ uses this band for forecast.
+
+Throughput model unchanged from v2.14 — six predictors. v2.15 broadens the CP7 zone applicability via the CP8 second data point but does not introduce a new zone.
+
+###### Long-tail forecast updated to actuals — post-CP8 (UPDATED v2.15)
+
+CP8 inventory reconciliation:
+
+- Pre-CP8: 74 files / 286 sites (matched CP7 close exactly; no external work touched implementation files)
+- Post-CP8: **64 files / 248 sites**
+- Path E cluster (deferred to Step 3): WorldStudio.jsx 29 + LOCKED PUBLIC 5 + UIOverlaysTab external blob 1 = 35 sites
+- Pattern G locked exceptions: 3 (BookEditor:55, WriteMode:980, WriteMode:1145)
+- Estimated BUG-class remaining for Track 6 migration: **~210 sites across ~58 files**
+
+Updated CP forecast: **3-4 more long-tail CPs to clear ~140 long-tail sites at CP7-zone throughput** + 2-3 dedicated CPs for the remaining high-density files (useStoryEngine 14, WorldAdmin 11, EpisodeDetail 10) at CP3/CP4-zone throughput. Total: 5-7 more CPs to close Track 6. Trajectory remains coherent.
+
+**Track 6 progress as of CP8: 256 sites migrated** across 29 files. 3 Pattern G locked exceptions. Tests grew from 135 (Track 6 start) to 424 (+289). **Current progress ~74% by site count** (256 / ~345). Remaining: CP9+ long-tail (~210 sites across ~58 files). CP9 candidate batch composition: mid-density anchors mix — TextureReviewPage (5), SocialImport (5), StoryEvaluationEngine (5, existing test file — append), StoryEngine (5), CharacterProfilePage (5), WritingRhythm (5), NarrativeIntelligence (5, existing test file from CP3 mocks — append) + small filler = ~35-40 sites. Defer high-density deferrals (useStoryEngine, WorldAdmin, EpisodeDetail) to dedicated CPs in CP10+.
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -1105,7 +1158,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP7 COMPLETE through commit `75c804e4`; 218 sites migrated across 19 files; 368/368 frontend tests; ~63% of Track 6 by site count. Backed up at `75c804e4` on `claude/f-auth-1-backup`. Track 6 CP8 (next long-tail batch — likely world/* cluster) is next, fresh session.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP8 COMPLETE through commit `e5d4355f`; 256 sites migrated across 29 files; 424/424 frontend tests; ~74% of Track 6 by site count. Backed up at `e5d4355f` on `claude/f-auth-1-backup`. Track 6 CP9 (mid-density anchors mix) is next, fresh session.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -1165,6 +1218,12 @@ Pattern F applies wherever Tracks 4 and 6 encounter files with component-handler
 **Internal-helper-refactor pattern (LOCKED v2.14, validated by CP7 — WorldDashboard.safeFetch): when a file has its own internal fetch wrapper used by multiple callers, refactor the wrapper internally to use apiClient rather than migrating each caller individually.** Caller-side simplicity preserved (callers unchanged). The migration is a single edit inside the wrapper. Avoids unnecessary call-site churn. Future tracks encountering similar internal-fetch-wrapper patterns follow the same approach.
 
 **Method-correction discovery — surface-time vs mid-flow (NEW v2.14): with surface-with-cost-estimation discipline (locked v2.8), method-correction discovery moves earlier in the workflow.** CP2 caught 3 mid-flow; CP3-CP6 caught 0 mid-flow; CP7 caught 1 at surface (CFOAgent setBudget PUT-not-POST). Surface-time is preferred because corrections are cheaper to handle before any code changes. Both modes remain valid; the CP2 finding pattern of "BUG-class migrations surface pre-existing HTTP method mismatches" applies whether discovered at surface or mid-flow.
+
+**Existing-test-file amendment convention (LOCKED v2.15, validated by CP8 RelationshipEngine.jsx): when amending a file with existing helpers and tests, append new helpers/tests to existing files rather than creating duplicate test files.** RelationshipEngine.jsx already had 11 helpers (presumably from earlier track work); CP8 appended +1 helper (`listRegistriesApi`) and +1 test rather than creating a duplicate test file. Relevant for files with existing test coverage from prior tracks (e.g., StoryEvaluationEngine.jsx, NarrativeIntelligence.jsx). Append-not-overwrite preserves existing coverage and avoids duplicate test file proliferation.
+
+**Cross-CP duplication scaling note (NEW v2.15): v2.12 §9.11 file-local convention scales without coupling concerns at 11 cross-CP duplications in a single CP.** CP5 had 4 dups, CP6 had 2 dups, CP7 had 1 dup, CP8 had 11 dups across 5 files (~33 LOC). The test-isolation benefit dominates the LOC cost. WorldStateTensions duplicating 7 helpers from CP7 WorldDashboard is the largest single-file cross-CP duplication in F-AUTH-1; the file-local module block kept the migration mechanical. The convention's "duplicate locally rather than import" rule scales cleanly to high cross-CP density.
+
+**Pattern composability note (NEW v2.15): locked patterns can stack within a single file without cross-contamination.** WorldFoundation.jsx in CP8 was the first file to apply three locked patterns simultaneously: multipart upload (v2.14) + method-branching split (v2.13) + idiom mix (4 sub-shapes within one file: async + thenable + multipart + method-branching). Migrated cleanly. Pattern composability was implicit in the convention library; CP8 explicitly validates the stacking. Future high-pattern-density files apply the same composability.
 
 **Pattern G — "can't-migrate-to-axios" exception class:** When a fetch site uses an underlying HTTP feature that axios does not support in browsers (response-body streaming via SSE, `keepalive: true`, or other browser-only features), the site cannot migrate to apiClient without breaking functionality. These sites are retained as raw `fetch()` calls with inline auth header injection from localStorage, structurally identical to Path D (inline Bearer construction). Pattern G is the locked-exception class for these cases.
 
@@ -1234,6 +1293,8 @@ Disposition pattern (unchanged from v2.6): each is either intentionally PUBLIC (
 - TemplateDesigner (5 GETs): `/episodes`, `/episodes/:id/assets`, `/template-studio/:id`, `/compositions/:id`, `/thumbnail-templates/:id`
 
 **Path E running list growth from CP7: ~12 GET sites across ten long-tail batch 1 files filed for Step 3 sweep awareness.** Distribution: CFO cluster (5: `/cfo/quick`, `/cfo/scheduler`, `/cfo/audit`, `/cfo/agent/:name`, `/cfo/history`); AI usage cluster (6: `/ai-usage/summary`, `/ai-usage/by-model`, `/ai-usage/by-route`, `/ai-usage/daily`, `/ai-usage/optimizations`, `/ai-usage/recent`); world state cluster (3: `/world/state/snapshots`, `/world/state/timeline`, `/world/tension-scanner`); amber diagnostic (2: `/amber/diagnostic/findings`, `/amber/diagnostic/queue`); episode todo (2: `/episodes/:id/todo`, `/episodes/:id/todo/social`); story health (2: `/story-health/dashboard`, `/story-health/search`); session brief (1: `/session/brief`); character registry (1: `/character-registry/registries` — already filed by CP3+CP6; same disposition expected). CP7 migration applied apiClient (auth-required disposition default). Step 3 backend audit will adjudicate per-route disposition.
+
+**Path E running list growth from CP8: ~13 NEW GET sites filed for Step 3 sweep awareness (3 already filed by CP7 deduplicated).** Distribution: arc-tracking (1: `/arc-tracking/:key`); narrative pipeline (1: `/tier/pipeline`); world scenes (3: `/world/characters`, `/world/scenes`, `/world/tension-check`); stories character (3: `/stories/character/:char`, `/stories/assemblies/character/:char`, `/stories/social/character/:char`); world locations (3: `/world/locations`, `/world/map`, `/social-profiles/analytics/composition`); memories growth (1: `/memories/character-growth/flagged`); character-registry: `/character-registry/registries` — already filed by CP3+CP6+CP7. CP8 migration applied apiClient (auth-required disposition default). Step 3 backend audit will adjudicate per-route disposition.
 
 **HTTP method mismatches surfaced during Track 6 CP2 (3 sites in SceneSetsTab.jsx) — Step 3 sweep awareness items:**
 
