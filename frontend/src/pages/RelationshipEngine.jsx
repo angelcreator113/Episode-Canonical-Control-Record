@@ -17,6 +17,12 @@ import {
 } from '../components/RelationshipEngine';
 
 /* ── Track 3 module-scope helpers (Pattern D) ────────────────────────── */
+/* ── Track 6 CP8 added helper (Pattern F prophylactic — Api suffix) ────── */
+// listRegistriesApi duplicated locally per v2.12 §9.11 (CP3 WriteMode +
+// CP6 CharacterTherapy + CP7 Home + CP8 StoryProposer also have it).
+export const listRegistriesApi = () =>
+  apiClient.get(`${API}/character-registry/registries`);
+
 export const fetchRelationshipTree = (regId) =>
   apiClient.get(`${API}/relationships/tree/${regId}`);
 export const fetchPendingRelationships = () =>
@@ -108,9 +114,9 @@ export default function RelationshipEngine() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${API}/character-registry/registries`);
-        const d = await r.json();
-        const list = d.registries || d || [];
+        const r = await listRegistriesApi();
+        const d = r.data;
+        const list = d?.registries || d || [];
         if (list.length) dispatch({ type: 'SET', payload: { regs: list, reg: list[0] } });
       } catch { /* non-critical */ }
     })();

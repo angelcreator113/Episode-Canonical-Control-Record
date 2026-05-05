@@ -21,6 +21,12 @@ import './NarrativeControlCenter.css';
 
 const API = '/api/v1';
 
+// ─── Track 6 CP8 module-scope helper (Pattern F prophylactic — Api suffix) ───
+// CP8 added; existing Track 4 fetchJSON wrapper below covers other endpoints
+// in this file. This helper covers the one remaining bare-fetch site at the
+// PipelineTab useEffect.
+export const getTierPipelineApi = () => apiClient.get(`${API}/tier/pipeline`);
+
 // ── Design Tokens ────────────────────────────────────────────────────────
 const T = {
   parchment:  '#FAF7F0',
@@ -77,13 +83,10 @@ function PipelineTab() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API}/tier/pipeline`)
+    getTierPipelineApi()
       .then(res => {
-        if (!res.ok) throw new Error(`Server returned ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
         if (cancelled) return;
+        const data = res.data;
         setPipelines(data.pipelines || []);
         setStats(data.stats || null);
       })
