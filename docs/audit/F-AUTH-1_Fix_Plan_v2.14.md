@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.13 — Single-PR plan. Track 6 CP6 (mid-tier batch 2 — 38 sites across 4 files) approved. 5-data-point pacing model with heterogeneous-batch effect locked. Inline-anonymous-onClick handling pattern locked.
+**Document version:** v2.14 — Single-PR plan. Track 6 CP7 (long-tail batch 1 — 39 sites across 10 files) approved. 6-data-point pacing. Multipart-upload + internal-helper-refactor patterns locked. Long-tail forecast updated to actuals.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2-CP6 COMPLETE (`2e3db223`). 179 sites migrated, ~52% of Track 6 by site count. CP7 (long-tail batch 1) is next.
+**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2-CP7 COMPLETE (`75c804e4`). 218 sites migrated, ~63% of Track 6 by site count. CP8 (next long-tail batch) is next.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -630,6 +630,65 @@ Long-tail forecast (CP7+): ~165 sites distributed across ~50 files at 1-8 sites 
 
 **Track 6 progress as of CP6: 179 sites migrated** across 9 files (SceneSetsTab 64 + WriteMode 31 + FranchiseBrain 18 + StoryThreadTracker 11 + EpisodeScenesTab 9 + SeriesPage 8 + CharacterGenerator 10 + CharacterTherapy 9 + ContinuityEnginePage 10 + TemplateDesigner 9). 3 Pattern G locked exceptions. Tests grew from 135 (Track 6 start) to 313 (+178). Track 6 projected total ~345 sites; **current progress ~52% by site count** — past the halfway mark. Remaining: CP7+ long-tail (~165 sites distributed across ~50 files at 1-8 each).
 
+###### Track 6 CP7 architectural findings (LOCKED v2.14, COMPLETE — long-tail batch 1; multipart-upload + internal-helper-refactor patterns surfaced)
+
+CP7 completed at commit `75c804e4` (single squashed commit, 10 file-boundary WIPs collapsed; single session). 39/39 sites migrated across ten files via 37 module-scope helpers with Pattern F Api suffix (1 cross-CP overlap with CP3 + CP6 handlers preserved as duplicate per file-local convention). 55 new behavioral tests added; full frontend suite at 368/368 passing across 37 test files. Backed up at `75c804e4` on `claude/f-auth-1-backup`. Simplest-first execution order validated for long-tail batches.
+
+Per-file breakdown:
+
+- `Home.jsx` (1 site), `SessionStart.jsx` (1), `StoryHealthDashboard.jsx` (1), `CommandPalette.jsx` (1), `PdfIngestZone.jsx` (1, multipart) — 5 warm-up files cleared cadence in first ~15 min
+- `AICostTracker.jsx` (6 sites), `EpisodeTodoPage.jsx` (6), `AmberCommandCenter.jsx` (6), `CFOAgent.jsx` (8), `WorldDashboard.jsx` (8) — 5 anchors covering 34 sites across diverse idioms
+
+**Multipart upload pattern LOCKED v2.14 (NEW — first F-AUTH-1 multipart site).** `PdfIngestZone.jsx` uses FormData for PDF upload; pattern: pass FormData directly as second argument to `apiClient.post(url, formData)`. **Do NOT manually set Content-Type header.** axios detects FormData payload and sets the multipart Content-Type with the correct boundary automatically. The pre-migration code's comment "No Content-Type header — browser sets it with boundary automatically" is preserved verbatim by axios behavior. Future Track 6 multipart sites follow the same pattern.
+
+**Internal-helper-refactor pattern LOCKED v2.14 (NEW — surfaced in WorldDashboard).** `WorldDashboard.jsx` had its own internal `safeFetch(url)` wrapper used by 8 callers. Pattern: **refactor the wrapper internally to use apiClient rather than migrating each caller individually.** Caller-side simplicity preserved (8 callers unchanged); the migration is a single edit inside `safeFetch`. Future tracks encountering similar internal-fetch-wrapper patterns follow the same approach. Avoids unnecessary call-site churn.
+
+**Method-correction discovery — surface-time vs mid-flow (NEW v2.14).** CFOAgent's setBudget endpoint was identified as PUT (not POST) **during the surface report's sample-site analysis, NOT mid-flow during execution.** This is the first method correction caught at surface time across F-AUTH-1. CP2 caught 3 mid-flow; CP3-CP6 caught 0 mid-flow; CP7 caught 1 at surface. With surface-with-cost-estimation discipline (locked v2.8 §4.6), method-correction discovery moves earlier in the workflow. The CP2 finding pattern of "BUG-class migrations surface pre-existing HTTP method mismatches mid-flow" gets an addendum: surface-report rigor catches them at surface time when achievable. Both discovery modes remain valid; surface-time is preferred.
+
+- Pattern F prophylactic discipline confirmed correct (sixth data point). All 10 CP7 files had LOW direct-shadow density. Suffix from first extraction kept the migration mechanical even at long-tail batch composition with 10 files.
+- Pattern G NOT triggered — verified zero SSE / keepalive / streaming markers across all 10 files. Three Pattern G sites total in F-AUTH-1 scope remain.
+- Five distinct idioms across 10 files all migrated cleanly: thenable + .catch (Home, StoryHealthDashboard), Promise.all thenable (AICostTracker, EpisodeTodoPage), async + if(!res.ok) throw (AmberCommandCenter, parts of CFOAgent), mixed thenable + async (CFOAgent), internal helper refactor (WorldDashboard).
+- Helper reuse within a file: CP7 surfaced one example (CFOAgent.`getQuickStatsApi` covers 2 sites — mount + post-budget refresh).
+- Promise.all parallelism preserved: AICostTracker (5 parallel GETs), EpisodeTodoPage (3 parallel GETs). With apiClient returning parsed `res.data` directly, the typical two-stage Promise.all (fetches + `.json()` parses) collapses to one stage — net cleanup.
+- Path E candidates surfaced from CP7: ~12 GET sites filed for §9.12 Step 3 sweep awareness.
+- CP7 squashed commit message follows the canonical Track 6 long-tail format with per-file site count breakdown, helpers added, tests added, and the new patterns surfaced (multipart, internal-helper-refactor) noted.
+
+###### Pacing model — 6 data points, long-tail batch effect at 10 files (NEW v2.14, supersedes v2.13 §4.6 5-data-point band)
+
+Six checkpoints across Track 6:
+
+- **CP2** (1 file, 64 sites): 4 sessions, ~16 sites/session.
+- **CP3** (1 file, 33 sites + 2 Pattern G): 3 sessions, ~11 sites/session.
+- **CP4** (1 file, 18 sites): 1 session, 18 sites/session.
+- **CP5** (3 files uniform-simple, 28 sites): 1 session, 28 sites/session.
+- **CP6** (4 files heterogeneous, 38 sites): 1 session, 38 sites/session.
+- **CP7** (10 files long-tail simplest-first, 39 sites): 1 session, **39 sites/session**. Long-tail batch effect at higher file count held throughput band.
+
+Updated throughput model (CP7-zone added; CP6-zone broadened):
+
+- **Single high-density file** (state-management chains): 11-13 sites/session (CP3 zone)
+- **Single mid-density file** (combined density): 14-16 sites/session (CP2 zone)
+- **Single lower-density simple file**: 15-18 sites/session (CP4 zone)
+- **Multi-file batch uniform-simple shape** (3-4 files): 25-30 sites/session (CP5 zone)
+- **Multi-file batch heterogeneous** (1 medium-high + simples, 4 files): 35-40 sites/session (CP6 zone)
+- **Long-tail batch simplest-first** (~10 files, mostly small site counts): 35-40 sites/session (CP7 zone) — NEW
+
+Why CP7 worked at 39 sites/session despite 10 files: (a) simplest-first execution built migration cadence in the first ~15 min via 5 single-site warm-ups, (b) anchor files were structurally simple (mostly thenable or async with throw-on-error or success-envelope idioms), (c) per-file overhead — read context, extract helpers, write tests, verify — was the dominant cost as v2.13 §4.6 forecast predicted, but didn't exceed budget at 10-file scale, (d) zero Pattern G triggers, (e) the one method correction was caught at surface, not mid-flow.
+
+###### Long-tail forecast updated to actuals (NEW v2.14, supersedes v2.13 §4.6 estimate)
+
+CP7 inventory reconciliation against branch tip surfaced more accurate long-tail counts than v2.13's projection:
+
+- Pre-CP7 actuals: **84 files with bare fetch sites, 325 total sites** (vs v2.13 estimate of 50 files / 165 sites)
+- Post-CP7 actuals: 74 files with bare fetch sites, 286 total sites
+- Pattern G locked exceptions: 3 (BookEditor:55, WriteMode:980, WriteMode:1145)
+- Path E cluster: 35 sites (WorldStudio.jsx 29 + locked PUBLIC 5 + UIOverlaysTab external-blob 1, all deferred to Step 3)
+- Estimated BUG-class remaining for Track 6 migration: **~248 sites across ~70 files**
+
+Updated CP forecast: **6-8 more CPs total to close Track 6** (down from v2.13's 8-10 estimate, but up from v2.13's 4-6 because actual remaining sites are higher than v2.13 projected). At ~35-40 sites per CP at the CP7 throughput zone, ~248 remaining sites = 6-7 more CPs by raw arithmetic; high-density deferrals (useStoryEngine 14, WorldAdmin 11, EpisodeDetail 10) likely warrant dedicated CPs at lower throughput, balancing out to 4-5 long-tail CPs + 2-3 dedicated single-file CPs. Trajectory remains coherent.
+
+**Track 6 progress as of CP7: 218 sites migrated** across 19 files. 3 Pattern G locked exceptions. Tests grew from 135 (Track 6 start) to 368 (+233). **Current progress ~63% by site count** (218 / ~345). Remaining: CP8+ long-tail (~248 sites across ~70 files). CP8 candidate batch composition: world/* cluster (WorldFoundation, WorldStateTensions, SceneStudio, NovelAssembler, StoryProposer) + small filler files = ~30-35 sites. Defer high-density deferrals (useStoryEngine, WorldAdmin, EpisodeDetail) to dedicated CPs in CP9+ since each is potentially CP3-zone complexity.
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -1046,7 +1105,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP6 COMPLETE through commit `2e3db223`; 179 sites migrated across 9 files; 313/313 frontend tests; ~52% of Track 6 by site count. Backed up at `2e3db223` on `claude/f-auth-1-backup`. Track 6 CP7 (long-tail batch 1) is next, fresh session.
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP7 COMPLETE through commit `75c804e4`; 218 sites migrated across 19 files; 368/368 frontend tests; ~63% of Track 6 by site count. Backed up at `75c804e4` on `claude/f-auth-1-backup`. Track 6 CP8 (next long-tail batch — likely world/* cluster) is next, fresh session.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -1098,6 +1157,14 @@ Pattern F applies wherever Tracks 4 and 6 encounter files with component-handler
 **Method-branching split (LOCKED v2.13, validated by CP6 — 1 site): when a single handler conditionally chooses POST vs PUT based on whether an entity exists, split into two helpers (createXApi + updateXApi) and let the call site do the conditional.** Cleaner than parameterizing method on a single helper. Validated against TemplateDesigner.handleSave in CP6.
 
 **Hardest-first execution discipline (LOCKED v2.13, validated by CP6): in multi-file batches with heterogeneous cost-class distribution, migrate the highest-complexity file first.** Combined with explicit hard-cap on the hardest file (CP6 used 90-min cap on CharacterGenerator). Rationale: complexity surprises in the hardest file are most likely to force WIP-and-resume; surfacing them first preserves clean checkpoint discipline. The hard cap is a guardrail; if not triggered, it confirms the cost-class predictor was accurate.
+
+**Simplest-first execution for long-tail batches (LOCKED v2.14, validated by CP7): in long-tail batches with many small files, migrate simplest files first.** Builds migration cadence in the first ~15 minutes via single-site warm-up files; defers anchors (6-8 sites each) to second half when discipline is internalized. Opposite of hardest-first because long-tail files are bounded — no real cost-class outlier; momentum matters more than fail-fast. Validated against CP7's 10-file batch (5 single-site warm-ups + 5 anchor files).
+
+**Multipart upload pattern (LOCKED v2.14, validated by CP7 — 1 site at PdfIngestZone): when a fetch site uses FormData payload for multipart upload, pass FormData directly as second argument to `apiClient.post(url, formData)`.** Do NOT manually set Content-Type header — axios detects FormData and sets the multipart Content-Type with the correct boundary automatically. Helper signature: `uploadXxxApi(formData) → apiClient.post(url, formData)`. Future Track 6 multipart sites follow same pattern.
+
+**Internal-helper-refactor pattern (LOCKED v2.14, validated by CP7 — WorldDashboard.safeFetch): when a file has its own internal fetch wrapper used by multiple callers, refactor the wrapper internally to use apiClient rather than migrating each caller individually.** Caller-side simplicity preserved (callers unchanged). The migration is a single edit inside the wrapper. Avoids unnecessary call-site churn. Future tracks encountering similar internal-fetch-wrapper patterns follow the same approach.
+
+**Method-correction discovery — surface-time vs mid-flow (NEW v2.14): with surface-with-cost-estimation discipline (locked v2.8), method-correction discovery moves earlier in the workflow.** CP2 caught 3 mid-flow; CP3-CP6 caught 0 mid-flow; CP7 caught 1 at surface (CFOAgent setBudget PUT-not-POST). Surface-time is preferred because corrections are cheaper to handle before any code changes. Both modes remain valid; the CP2 finding pattern of "BUG-class migrations surface pre-existing HTTP method mismatches" applies whether discovered at surface or mid-flow.
 
 **Pattern G — "can't-migrate-to-axios" exception class:** When a fetch site uses an underlying HTTP feature that axios does not support in browsers (response-body streaming via SSE, `keepalive: true`, or other browser-only features), the site cannot migrate to apiClient without breaking functionality. These sites are retained as raw `fetch()` calls with inline auth header injection from localStorage, structurally identical to Path D (inline Bearer construction). Pattern G is the locked-exception class for these cases.
 
@@ -1165,6 +1232,8 @@ Disposition pattern (unchanged from v2.6): each is either intentionally PUBLIC (
 - CharacterTherapy (4 GETs): `/character-registry/registries`, `/character-registry/registries/:id`, `/therapy/waiting`, `/therapy/profile/:charId`
 - ContinuityEnginePage (3 GETs): `/continuity/timelines`, `/continuity/timelines/:id`, `/continuity/timelines/:id/conflicts`
 - TemplateDesigner (5 GETs): `/episodes`, `/episodes/:id/assets`, `/template-studio/:id`, `/compositions/:id`, `/thumbnail-templates/:id`
+
+**Path E running list growth from CP7: ~12 GET sites across ten long-tail batch 1 files filed for Step 3 sweep awareness.** Distribution: CFO cluster (5: `/cfo/quick`, `/cfo/scheduler`, `/cfo/audit`, `/cfo/agent/:name`, `/cfo/history`); AI usage cluster (6: `/ai-usage/summary`, `/ai-usage/by-model`, `/ai-usage/by-route`, `/ai-usage/daily`, `/ai-usage/optimizations`, `/ai-usage/recent`); world state cluster (3: `/world/state/snapshots`, `/world/state/timeline`, `/world/tension-scanner`); amber diagnostic (2: `/amber/diagnostic/findings`, `/amber/diagnostic/queue`); episode todo (2: `/episodes/:id/todo`, `/episodes/:id/todo/social`); story health (2: `/story-health/dashboard`, `/story-health/search`); session brief (1: `/session/brief`); character registry (1: `/character-registry/registries` — already filed by CP3+CP6; same disposition expected). CP7 migration applied apiClient (auth-required disposition default). Step 3 backend audit will adjudicate per-route disposition.
 
 **HTTP method mismatches surfaced during Track 6 CP2 (3 sites in SceneSetsTab.jsx) — Step 3 sweep awareness items:**
 
