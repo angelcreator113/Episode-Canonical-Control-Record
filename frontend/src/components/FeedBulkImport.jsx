@@ -4,6 +4,7 @@
 // keyboard shortcuts (#12), job cancellation UI (#5), error categories (#8)
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import apiClient from '../services/api';
 
 const API = '/api/v1/social-profiles';
 
@@ -49,30 +50,42 @@ function loadDraft() {
   } catch { return null; }
 }
 
-function getAuthHeaders() {
-  const t = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-  return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' }
-           : { 'Content-Type': 'application/json' };
-}
-
-async function fetchWithRetry(url, opts, { retries = 2, baseDelay = 3000 } = {}) {
+// Track 4 helper-internal migration: fetchWithRetry delegates to apiClient.
+// Retry semantics preserved (429 / 5xx / network exhaust). Returns a fetch-
+// Response-like object (ok / status / json()) so existing call sites that
+// check `res.ok` and `await res.json()` keep working unchanged.
+async function fetchWithRetry(url, opts = {}, { retries = 2, baseDelay = 3000 } = {}) {
+  const method = (opts.method || 'GET').toLowerCase();
+  let data;
+  if (opts.body !== undefined) {
+    if (opts.body instanceof FormData) data = opts.body;
+    else { try { data = JSON.parse(opts.body); } catch { data = opts.body; } }
+  }
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(url, opts);
-      // Retry on rate limit (429) or server errors (5xx)
-      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+      const res = await apiClient.request({ url, method, data });
+      return { ok: true, status: res.status, json: () => Promise.resolve(res.data) };
+    } catch (err) {
+      const status = err.response?.status;
+      const isRetryable = status === 429 || (status >= 500 && status < 600);
+      if (isRetryable && attempt < retries) {
         const delay = baseDelay * Math.pow(2, attempt);
-        console.warn(`[bulk-import] ${res.status} on attempt ${attempt + 1}, retrying in ${delay}ms…`);
+        console.warn(`[bulk-import] ${status} on attempt ${attempt + 1}, retrying in ${delay}ms…`);
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
-      return res;
-    } catch (err) {
-      if (attempt < retries) {
+      if (!err.response && attempt < retries) {
         const delay = baseDelay * Math.pow(2, attempt);
         console.warn(`[bulk-import] Network error on attempt ${attempt + 1}, retrying in ${delay}ms…`, err.message);
         await new Promise(r => setTimeout(r, delay));
         continue;
+      }
+      if (err.response) {
+        return {
+          ok: false,
+          status: err.response.status,
+          json: () => Promise.resolve(err.response.data),
+        };
       }
       throw err;
     }
@@ -179,7 +192,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
     setParsing(true); setErr(null); setCandidates(null);
     try {
       const res  = await fetchWithRetry(`${API}/bulk/parse-paste`, {
-        method: 'POST', headers: getAuthHeaders(),
+        method: 'POST',
         body: JSON.stringify({ text: pasteText }),
       });
       const data = await res.json();
@@ -218,10 +231,8 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
       for (const file of files) {
         const fd = new FormData();
         fd.append('file', file);
-        const authToken = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-        const fileHeaders = authToken ? { Authorization: `Bearer ${authToken}` } : {};
-        const res  = await fetchWithRetry(`${API}/bulk/parse-file`, {
-          method: 'POST', headers: fileHeaders, body: fd,
+        const res = await fetchWithRetry(`${API}/bulk/parse-file`, {
+          method: 'POST', body: fd,
         });
         const data = await res.json();
         if (!res.ok) throw new Error(`${file.name}: ${data.error}`);
@@ -276,7 +287,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
         setProgress({ done: allResults.length, total, batchNum, totalBatches, results: [...allResults] });
         try {
           const res = await fetchWithRetry(`${API}/bulk/generate`, {
-            method: 'POST', headers: getAuthHeaders(),
+            method: 'POST',
             body: JSON.stringify({ creators: batch, series_id: seriesId, character_context: characterContext, character_key: characterKey, feed_layer: feedLayer || 'real_world' }),
           }, { retries: 2, baseDelay: 4000 });
           const data = await res.json();
@@ -323,7 +334,6 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
     try {
       const res = await fetchWithRetry(`${API}/bulk/generate-job`, {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({
           creators: candidates,
           series_id: seriesId,

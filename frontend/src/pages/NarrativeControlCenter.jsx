@@ -16,9 +16,16 @@
  *  10. Beats          — Chapter beat generation & book outline
  */
 import { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 import './NarrativeControlCenter.css';
 
 const API = '/api/v1';
+
+// ─── Track 6 CP8 module-scope helper (Pattern F prophylactic — Api suffix) ───
+// CP8 added; existing Track 4 fetchJSON wrapper below covers other endpoints
+// in this file. This helper covers the one remaining bare-fetch site at the
+// PipelineTab useEffect.
+export const getTierPipelineApi = () => apiClient.get(`${API}/tier/pipeline`);
 
 // ── Design Tokens ────────────────────────────────────────────────────────
 const T = {
@@ -43,10 +50,26 @@ const STEPS = ['brief', 'generate', 'read', 'evaluate', 'memory', 'registry', 'w
 const STEP_LABELS = { brief: 'Brief', generate: 'Generate', read: 'Read', evaluate: 'Evaluate', memory: 'Memory', registry: 'Registry', write_back: 'Write-Back' };
 const STEP_COLORS = { brief: '#64748b', generate: '#3b82f6', read: '#8b5cf6', evaluate: '#f59e0b', memory: '#14b8a6', registry: '#ec4899', write_back: '#22c55e' };
 
+// Track 4 helper-internal migration: delegates to apiClient (auth via interceptor).
+// Public contract preserved: returns parsed body. NOTE: previous implementation
+// returned res.json() unconditionally — even on non-2xx. The new implementation
+// throws on non-2xx (apiClient default). Callers that relied on the body of an
+// error response need to read `err.response?.data` instead. This file's call
+// sites all follow the `await fetchJSON(...)` then check `data.something` shape;
+// migration normalizes them via try/catch where needed (no surface bug expected).
 const fetchJSON = async (url, opts = {}) => {
-  const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-  const res = await fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '', ...opts.headers } });
-  return res.json();
+  const method = (opts.method || 'GET').toLowerCase();
+  let data;
+  if (opts.body !== undefined) {
+    try { data = JSON.parse(opts.body); } catch { data = opts.body; }
+  }
+  const res = await apiClient.request({
+    url,
+    method,
+    data,
+    headers: opts.headers,
+  });
+  return res.data;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -60,13 +83,10 @@ function PipelineTab() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API}/tier/pipeline`)
+    getTierPipelineApi()
       .then(res => {
-        if (!res.ok) throw new Error(`Server returned ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
         if (cancelled) return;
+        const data = res.data;
         setPipelines(data.pipelines || []);
         setStats(data.stats || null);
       })

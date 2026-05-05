@@ -26,8 +26,14 @@
  */
 
 import { useState } from 'react';
+import apiClient from '../services/api';
 
 const STORYTELLER_API = '/api/v1/storyteller';
+
+// ─── Track 6 CP8 module-scope helper (Pattern F prophylactic — Api suffix) ───
+// updateChapterApi duplicated locally per v2.12 §9.11 (CP3 WriteMode also has it).
+export const updateChapterApi = (chapterId, payload) =>
+  apiClient.put(`${STORYTELLER_API}/chapters/${chapterId}`, payload);
 
 const POV_OPTIONS = [
   { value: 'first_person', label: 'First Person',       color: '#8B6914' },
@@ -72,16 +78,7 @@ export default function ChapterBrief({ chapter, characters = [], onUpdated }) {
   async function save() {
     setSaving(true);
     try {
-      const res = await fetch(
-        `${STORYTELLER_API}/chapters/${chapter.id}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form),
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Save failed');
+      await updateChapterApi(chapter.id, form);
       onUpdated?.({ ...chapter, ...form });
       setEditing(false);
     } catch (err) {

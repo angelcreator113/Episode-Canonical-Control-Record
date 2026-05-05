@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import apiClient from '../../services/api';
 import {
   API, C, PLATFORMS, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS,
-  FEED_STATE_CONFIG, PROTAGONISTS, lalaClass, fp, authHeaders,
+  FEED_STATE_CONFIG, PROTAGONISTS, lalaClass, fp,
 } from './feedConstants';
+
+// Track 3 module-scope helpers (Pattern D).
+export const updateProfileState = (profileId, currentState) =>
+  apiClient.patch(`${API}/${profileId}`, { current_state: currentState });
+
+export const removeFollower = (profileId, characterKey) =>
+  apiClient.delete(`${API}/${profileId}/followers/${characterKey}`);
+
+export const addFollower = (profileId, payload) =>
+  apiClient.post(`${API}/${profileId}/followers`, payload);
 
 function FeedStatePicker({ profile, onStateChange }) {
   const [open,setOpen]   = useState(false);
@@ -13,11 +24,14 @@ function FeedStatePicker({ profile, onStateChange }) {
     if(newState===current||saving)return;
     setSaving(true);
     try{
-      const res=await fetch(`${API}/${profile.id}`,{method:'PATCH',headers:authHeaders(),body:JSON.stringify({current_state:newState})});
-      if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||'State change failed');}
+      await updateProfileState(profile.id, newState);
       onStateChange?.(newState);
     }
-    catch(err){console.error('State change failed:',err);alert('State change failed: '+(err.message||'Unknown error'));}
+    catch(err){
+      const msg = err.response?.data?.error || err.message || 'Unknown error';
+      console.error('State change failed:',err);
+      alert('State change failed: '+msg);
+    }
     finally{setSaving(false);setOpen(false);}
   };
   return (
@@ -65,8 +79,14 @@ function DetailPanel({ profile, fp: d, onClose, onFinalize, onCross, onEdit, onD
     setFollowLoading(protag.key);
     try{
       const isF=followers.some(f=>f.character_key===protag.key);
-      if(isF){await fetch(`${API}/${p.id}/followers/${protag.key}`,{method:'DELETE',headers:authHeaders()});setFollowers(prev=>prev.filter(f=>f.character_key!==protag.key));}
-      else{const res=await fetch(`${API}/${p.id}/followers`,{method:'POST',headers:authHeaders(),body:JSON.stringify({character_key:protag.key,character_name:protag.context.name})});const dt=await res.json();if(dt.follower)setFollowers(prev=>[...prev,dt.follower]);}
+      if(isF){
+        await removeFollower(p.id, protag.key);
+        setFollowers(prev=>prev.filter(f=>f.character_key!==protag.key));
+      } else {
+        const res=await addFollower(p.id, { character_key: protag.key, character_name: protag.context.name });
+        const dt = res.data;
+        if(dt.follower) setFollowers(prev=>[...prev, dt.follower]);
+      }
       if(onRefresh)onRefresh();
     }catch(err){console.error('Follow toggle error:',err);}
     finally{setFollowLoading(null);}

@@ -1,12 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 
+import apiClient from '../services/api';
+
 const API = '/api/v1';
-const getToken = () => localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-const authHeaders = () => ({
-  'Content-Type': 'application/json',
-  Authorization: `Bearer ${getToken()}`,
-});
+
+// Track 3 module-scope helpers (Pattern D).
+export const fetchEpisodeForReview = (episodeId) =>
+  apiClient.get(`${API}/episodes/${episodeId}`);
+
+export const fetchUnacknowledgedReviews = () =>
+  apiClient.get(`${API}/reviews/unacknowledged`);
+
+export const acknowledgeReview = (reviewId) =>
+  apiClient.post(`${API}/reviews/${reviewId}/acknowledge`);
+
+export const requestPostGenerationReview = (sceneId) =>
+  apiClient.post(`${API}/reviews/post-generation`, { scene_id: sceneId });
 
 export default function EpisodeReview() {
   const { episodeId } = useParams();
@@ -18,12 +28,12 @@ export default function EpisodeReview() {
   const load = useCallback(async () => {
     try {
       const [epRes, revRes] = await Promise.all([
-        fetch(`${API}/episodes/${episodeId}`, { headers: authHeaders() }),
-        fetch(`${API}/reviews/unacknowledged`, { headers: authHeaders() }),
+        fetchEpisodeForReview(episodeId).catch(() => null),
+        fetchUnacknowledgedReviews().catch(() => null),
       ]);
-      if (epRes.ok) setEpisode(await epRes.json());
-      if (revRes.ok) {
-        const d = await revRes.json();
+      if (epRes) setEpisode(epRes.data);
+      if (revRes) {
+        const d = revRes.data;
         setReviews(Array.isArray(d) ? d : d.data || d.reviews || []);
       }
     } catch (e) {
@@ -37,38 +47,22 @@ export default function EpisodeReview() {
 
   const acknowledge = async (reviewId) => {
     try {
-      const res = await fetch(`${API}/reviews/${reviewId}/acknowledge`, {
-        method: 'POST',
-        headers: authHeaders(),
-      });
-      if (res.ok) {
-        setReviews(prev => prev.filter(r => r.id !== reviewId));
-        setFlash({ type: 'ok', msg: 'Review acknowledged.' });
-      } else {
-        setFlash({ type: 'err', msg: 'Failed to acknowledge review.' });
-      }
+      await acknowledgeReview(reviewId);
+      setReviews(prev => prev.filter(r => r.id !== reviewId));
+      setFlash({ type: 'ok', msg: 'Review acknowledged.' });
     } catch (e) {
-      setFlash({ type: 'err', msg: e.message });
+      setFlash({ type: 'err', msg: e.response?.data?.error || 'Failed to acknowledge review.' });
     }
   };
 
   const runPostGenReview = async (sceneId) => {
     setFlash(null);
     try {
-      const res = await fetch(`${API}/reviews/post-generation`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ scene_id: sceneId }),
-      });
-      const d = await res.json();
-      if (res.ok) {
-        setFlash({ type: 'ok', msg: 'Post-generation review complete.' });
-        load();
-      } else {
-        setFlash({ type: 'err', msg: d.error || 'Review failed' });
-      }
+      await requestPostGenerationReview(sceneId);
+      setFlash({ type: 'ok', msg: 'Post-generation review complete.' });
+      load();
     } catch (e) {
-      setFlash({ type: 'err', msg: e.message });
+      setFlash({ type: 'err', msg: e.response?.data?.error || e.message || 'Review failed' });
     }
   };
 

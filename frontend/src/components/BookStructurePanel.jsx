@@ -13,6 +13,17 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
+
+// Track 3 module-scope helpers (Pattern D) — call shape testable without RTL.
+export const loadBook = (bookId) =>
+  apiClient.get(`/api/v1/storyteller/books/${bookId}`);
+
+export const saveBookMetadata = (bookId, payload) =>
+  apiClient.put(`/api/v1/storyteller/books/${bookId}`, payload);
+
+export const saveChapterMetadata = (chapterId, updates) =>
+  apiClient.put(`/api/v1/storyteller/chapters/${chapterId}`, updates);
 
 const API = '/api/v1';
 
@@ -34,14 +45,7 @@ const toRoman = (n) => {
   return result || '';
 };
 
-/* ── Helper: auth headers ── */
-const authHeaders = () => {
-  const token = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-};
+/* ── Auth headers now handled by apiClient request interceptor (Track 3) ── */
 
 export default function BookStructurePanel({ bookId, allChapters = [], onChapterUpdate, onReloadChapters }) {
   /* ── State ── */
@@ -66,9 +70,9 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   useEffect(() => {
     if (!bookId) return;
     setLoading(true);
-    fetch(`${API}/storyteller/books/${bookId}`, { headers: authHeaders() })
-      .then(r => r.json())
-      .then(data => {
+    loadBook(bookId)
+      .then(res => {
+        const data = res.data;
         const b = data.book || data;
         setBook(b);
         setAuthorName(b.author_name || '');
@@ -84,14 +88,10 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
     if (!bookId) return;
     setSaving(true);
     try {
-      await fetch(`${API}/storyteller/books/${bookId}`, {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          author_name: authorName,
-          front_matter: frontMatter,
-          back_matter: backMatter,
-        }),
+      await saveBookMetadata(bookId, {
+        author_name: authorName,
+        front_matter: frontMatter,
+        back_matter: backMatter,
       });
     } catch (e) {
       console.error('Save book meta error:', e);
@@ -103,11 +103,7 @@ export default function BookStructurePanel({ bookId, allChapters = [], onChapter
   /* ── Save chapter type/part ── */
   const saveChapterMeta = useCallback(async (chId, updates) => {
     try {
-      await fetch(`${API}/storyteller/chapters/${chId}`, {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify(updates),
-      });
+      await saveChapterMetadata(chId, updates);
       if (onChapterUpdate) onChapterUpdate(chId, updates);
     } catch (e) {
       console.error('Save chapter meta error:', e);

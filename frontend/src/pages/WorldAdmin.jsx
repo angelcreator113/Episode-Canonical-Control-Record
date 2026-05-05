@@ -5972,16 +5972,10 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       // the image from S3 itself. Avoids the browser CORS block
                       // that was producing "Failed to fetch" when the client
                       // tried to hit the S3 URL directly from dev.primepisodes.com.
-                      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-                      const res = await fetch('/api/v1/wardrobe-library/analyze-image', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-                        },
-                        body: JSON.stringify({ wardrobe_id: editingWardrobeItem.id, showId }),
-                      });
-                      const data = await res.json();
+                      // apiClient interceptor handles auth.
+                      const apiRes = await api.post('/api/v1/wardrobe-library/analyze-image',
+                        { wardrobe_id: editingWardrobeItem.id, showId });
+                      const data = apiRes.data;
                       if (data.success && data.data) {
                         const ai = data.data;
                         setWardrobeEditBrandIsFictional(!!ai.brand_is_fictional && !wf.vendor);
@@ -6301,21 +6295,25 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         // recent tier mix + episode event and get gameplay suggestions.
                         // Without showId it falls back to the basic image-only flow.
                         if (showId) fd.append('showId', showId);
-                        const token = localStorage.getItem('authToken') || localStorage.getItem('token');
                         // Abort after 120s — Claude vision on a large image can take
                         // 30-60s under load, but anything beyond 2 min means the
                         // upstream is hung and we should surface that to the user.
+                        // axios's timeout option enforces this; signal kept as belt-and-suspenders.
                         const ac = new AbortController();
                         const timeout = setTimeout(() => ac.abort(), 120000);
                         let res;
                         try {
-                          res = await fetch(`/api/v1/wardrobe-library/analyze-image`, { method: 'POST', body: fd, headers: token ? { 'Authorization': `Bearer ${token}` } : {}, signal: ac.signal });
+                          res = await api.post('/api/v1/wardrobe-library/analyze-image', fd, {
+                            signal: ac.signal,
+                            timeout: 120000,
+                          });
                         } finally {
                           clearTimeout(timeout);
                         }
-                        const data = await res.json().catch(() => ({}));
-                        if (!res.ok || !data.success || !data.data) {
-                          const msg = data.error || `${res.status} ${res.statusText || 'request failed'}`;
+                        // apiClient threw on non-2xx before reaching here, so res.data is the parsed body.
+                        const data = res.data || {};
+                        if (!data.success || !data.data) {
+                          const msg = data.error || 'request failed';
                           console.error('[Auto-fill] backend rejected:', msg, data);
                           setWardrobeAutoFillError(msg);
                           return;

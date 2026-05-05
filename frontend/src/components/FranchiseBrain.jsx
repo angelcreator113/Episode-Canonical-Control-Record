@@ -5,9 +5,47 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import PdfIngestZone from './PdfIngestZone';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP4 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 11 helpers covering 18 fetch sites on /franchise-brain/*. Component-local
+// handlers (handleCreate, activateEntry, archiveEntry, deleteEntry,
+// unarchiveEntry, saveEdit, handleIngest, handleExtract, handleGuard,
+// loadCounts, loadSourceCounts, loadBrainDocs, loadAmberActivity, bulkActivate)
+// keep their original names; the Api suffix on the network helpers prevents
+// shadow conflicts and signals "this is the network call, not the UI handler".
+// Closes F34 (unauthenticated /franchise-brain/* mutations) per fix plan v2.10.
+
+// Entries
+export const listEntriesApi = (queryString) =>
+  apiClient.get(queryString ? `${API}/franchise-brain/entries?${queryString}` : `${API}/franchise-brain/entries`);
+export const createEntryApi = (payload) =>
+  apiClient.post(`${API}/franchise-brain/entries`, payload);
+export const updateEntryApi = (id, payload) =>
+  apiClient.patch(`${API}/franchise-brain/entries/${id}`, payload);
+export const deleteEntryApi = (id) =>
+  apiClient.delete(`${API}/franchise-brain/entries/${id}`);
+export const activateEntryApi = (id) =>
+  apiClient.patch(`${API}/franchise-brain/entries/${id}/activate`);
+export const archiveEntryApi = (id) =>
+  apiClient.patch(`${API}/franchise-brain/entries/${id}/archive`);
+export const unarchiveEntryApi = (id) =>
+  apiClient.patch(`${API}/franchise-brain/entries/${id}/unarchive`);
+
+// Documents / activity
+export const listDocumentsApi = () =>
+  apiClient.get(`${API}/franchise-brain/documents`);
+export const getAmberActivityApi = () =>
+  apiClient.get(`${API}/franchise-brain/amber-activity`);
+
+// Action endpoints
+export const ingestDocumentApi = (payload) =>
+  apiClient.post(`${API}/franchise-brain/ingest-document`, payload);
+export const guardApi = (payload) =>
+  apiClient.post(`${API}/franchise-brain/guard`, payload);
 
 const C = {
   bg: '#faf6f0',
@@ -183,12 +221,10 @@ export default function FranchiseBrain() {
       else if (innerTab === 'active') params.set('status', 'active');
       else if (innerTab === 'pending') params.set('status', 'pending_review');
       else if (innerTab === 'archived') params.set('status', 'archived');
-      const res = await fetch(`${API}/franchise-brain/entries?${params}`);
-      if (!res.ok) throw new Error('Failed to load');
-      const data = await res.json();
-      setEntries(data.entries || []);
+      const res = await listEntriesApi(params.toString());
+      setEntries(res.data?.entries || []);
     } catch (e) {
-      showToast(e.message, 'error');
+      showToast(e.message || 'Failed to load', 'error');
     } finally {
       setLoading(false);
     }
@@ -200,19 +236,16 @@ export default function FranchiseBrain() {
   const loadCounts = useCallback(async () => {
     try {
       const [lawsRes, activeRes, pendingRes, archivedRes] = await Promise.all([
-        fetch(`${API}/franchise-brain/entries?category=franchise_law`),
-        fetch(`${API}/franchise-brain/entries?status=active`),
-        fetch(`${API}/franchise-brain/entries?status=pending_review`),
-        fetch(`${API}/franchise-brain/entries?status=archived`),
-      ]);
-      const [lawsData, activeData, pendingData, archivedData] = await Promise.all([
-        lawsRes.json(), activeRes.json(), pendingRes.json(), archivedRes.json(),
+        listEntriesApi('category=franchise_law'),
+        listEntriesApi('status=active'),
+        listEntriesApi('status=pending_review'),
+        listEntriesApi('status=archived'),
       ]);
       setTabCounts({
-        laws: lawsData.count || 0,
-        active: activeData.count || 0,
-        pending: pendingData.count || 0,
-        archived: archivedData.count || 0,
+        laws: lawsRes.data?.count || 0,
+        active: activeRes.data?.count || 0,
+        pending: pendingRes.data?.count || 0,
+        archived: archivedRes.data?.count || 0,
       });
     } catch { /* silent */ }
   }, []);
@@ -222,11 +255,10 @@ export default function FranchiseBrain() {
   // Load per-source-document entry counts for Sources tab
   const loadSourceCounts = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/franchise-brain/entries?limit=5000`);
-      if (!res.ok) return;
-      const data = await res.json();
+      const res = await listEntriesApi('limit=5000');
+      const data = res.data;
       const counts = {};
-      for (const e of (data.entries || [])) {
+      for (const e of (data?.entries || [])) {
         if (e.source_document) counts[e.source_document] = (counts[e.source_document] || 0) + 1;
       }
       setSourceCounts(counts);
@@ -239,10 +271,8 @@ export default function FranchiseBrain() {
   const loadBrainDocs = useCallback(async () => {
     setDocsLoading(true);
     try {
-      const res = await fetch(`${API}/franchise-brain/documents`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setBrainDocs(data.documents || []);
+      const res = await listDocumentsApi();
+      setBrainDocs(res.data?.documents || []);
     } catch { /* silent */ }
     finally { setDocsLoading(false); }
   }, []);
@@ -253,10 +283,8 @@ export default function FranchiseBrain() {
   const loadAmberActivity = useCallback(async () => {
     setAmberLoading(true);
     try {
-      const res = await fetch(`${API}/franchise-brain/amber-activity`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setAmberActivity(data);
+      const res = await getAmberActivityApi();
+      setAmberActivity(res.data);
     } catch { /* silent */ }
     finally { setAmberLoading(false); }
   }, []);
@@ -265,12 +293,11 @@ export default function FranchiseBrain() {
 
   async function unarchiveEntry(id) {
     try {
-      const res = await fetch(`${API}/franchise-brain/entries/${id}/unarchive`, { method: 'PATCH' });
-      if (!res.ok) throw new Error('Failed to restore');
+      await unarchiveEntryApi(id);
       showToast('Entry restored to active');
       load();
       loadCounts();
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast(e.message || 'Failed to restore', 'error'); }
   }
 
   async function handleCreate(e) {
@@ -278,19 +305,14 @@ export default function FranchiseBrain() {
     if (!form.title.trim() || !form.content.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch(`${API}/franchise-brain/entries`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error('Failed to create');
+      await createEntryApi(form);
       showToast('Entry created');
       setForm({ title: '', content: '', category: 'narrative', severity: 'important', always_inject: false });
       setShowForm(false);
       load();
       loadCounts();
     } catch (e) {
-      showToast(e.message, 'error');
+      showToast(e.message || 'Failed to create', 'error');
     } finally {
       setSaving(false);
     }
@@ -298,33 +320,30 @@ export default function FranchiseBrain() {
 
   async function activateEntry(id) {
     try {
-      const res = await fetch(`${API}/franchise-brain/entries/${id}/activate`, { method: 'PATCH' });
-      if (!res.ok) throw new Error('Failed to activate');
+      await activateEntryApi(id);
       showToast('Entry activated');
       load();
       loadCounts();
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast(e.message || 'Failed to activate', 'error'); }
   }
 
   async function archiveEntry(id) {
     try {
-      const res = await fetch(`${API}/franchise-brain/entries/${id}/archive`, { method: 'PATCH' });
-      if (!res.ok) throw new Error('Failed to archive');
+      await archiveEntryApi(id);
       showToast('Entry archived');
       load();
       loadCounts();
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast(e.message || 'Failed to archive', 'error'); }
   }
 
   async function deleteEntry(id) {
     if (!confirm('Delete this entry permanently?')) return;
     try {
-      const res = await fetch(`${API}/franchise-brain/entries/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete');
+      await deleteEntryApi(id);
       showToast('Entry deleted');
       load();
       loadCounts();
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast(e.message || 'Failed to delete', 'error'); }
   }
 
   function startEdit(entry) {
@@ -334,16 +353,11 @@ export default function FranchiseBrain() {
 
   async function saveEdit(id) {
     try {
-      const res = await fetch(`${API}/franchise-brain/entries/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm),
-      });
-      if (!res.ok) throw new Error('Failed to update');
+      await updateEntryApi(id, editForm);
       showToast('Entry updated');
       setEditingId(null);
       load();
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast(e.message || 'Failed to update', 'error'); }
   }
 
   async function bulkActivate() {
@@ -351,13 +365,11 @@ export default function FranchiseBrain() {
     if (!pending.length) return;
     if (!confirm(`Activate all ${pending.length} pending entries?`)) return;
     try {
-      await Promise.all(pending.map(e =>
-        fetch(`${API}/franchise-brain/entries/${e.id}/activate`, { method: 'PATCH' })
-      ));
+      await Promise.all(pending.map(e => activateEntryApi(e.id)));
       showToast(`Activated ${pending.length} entries`);
       load();
       loadCounts();
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast(e.message || 'Failed to bulk-activate', 'error'); }
   }
 
   // Filter entries by search query
@@ -372,18 +384,12 @@ export default function FranchiseBrain() {
     if (!ingestText.trim()) return;
     setIngesting(true);
     try {
-      const res = await fetch(`${API}/franchise-brain/ingest-document`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ document_text: ingestText }),
-      });
-      if (!res.ok) throw new Error('Ingestion failed');
-      const data = await res.json();
-      showToast(`Ingested ${data.entries_created || 0} entries`);
+      const res = await ingestDocumentApi({ document_text: ingestText });
+      showToast(`Ingested ${res.data?.entries_created || 0} entries`);
       setIngestText('');
       setInnerTab('pending');
     } catch (e) {
-      showToast(e.message, 'error');
+      showToast(e.message || 'Ingestion failed', 'error');
     } finally {
       setIngesting(false);
     }
@@ -399,16 +405,10 @@ export default function FranchiseBrain() {
         scene_type: guardForm.scene_type || undefined,
         tone: guardForm.tone || undefined,
       };
-      const res = await fetch(`${API}/franchise-brain/guard`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error('Guard check failed');
-      const data = await res.json();
-      setGuardResult(data);
+      const res = await guardApi(payload);
+      setGuardResult(res.data);
     } catch (e) {
-      showToast(e.message, 'error');
+      showToast(e.message || 'Guard check failed', 'error');
     } finally {
       setGuarding(false);
     }
@@ -418,18 +418,12 @@ export default function FranchiseBrain() {
     if (!extractText.trim()) return;
     setExtracting(true);
     try {
-      const res = await fetch(`${API}/franchise-brain/ingest-document`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ document_text: extractText, source: 'chat_extract' }),
-      });
-      if (!res.ok) throw new Error('Extraction failed');
-      const data = await res.json();
-      showToast(`Extracted ${data.entries_created || 0} entries`);
+      const res = await ingestDocumentApi({ document_text: extractText, source: 'chat_extract' });
+      showToast(`Extracted ${res.data?.entries_created || 0} entries`);
       setExtractText('');
       setInnerTab('pending');
     } catch (e) {
-      showToast(e.message, 'error');
+      showToast(e.message || 'Extraction failed', 'error');
     } finally {
       setExtracting(false);
     }

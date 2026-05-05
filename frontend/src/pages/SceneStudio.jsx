@@ -14,9 +14,25 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import apiClient from '../services/api';
 import './WorldStudio.css';
 
 const API = '/api/v1';
+
+// ─── Track 6 CP8 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 6 helpers covering 6 fetch sites on /world/* (characters listing, scenes
+// listing with optional ?status=, tension-check, scene-generate, approve,
+// delete). File-local per Track 6 convention.
+export const listCharactersApi = () => apiClient.get(`${API}/world/characters`);
+export const listScenesApi = (status) =>
+  apiClient.get(status && status !== 'all' ? `${API}/world/scenes?status=${status}` : `${API}/world/scenes`);
+export const getTensionCheckApi = () => apiClient.get(`${API}/world/tension-check`);
+export const generateSceneApi = (payload) =>
+  apiClient.post(`${API}/world/scenes/generate`, payload);
+export const approveSceneApi = (sceneId) =>
+  apiClient.post(`${API}/world/scenes/${sceneId}/approve`);
+export const deleteSceneApi = (sceneId) =>
+  apiClient.delete(`${API}/world/scenes/${sceneId}`);
 
 /* ── Shared sub-components ─────────────────────────────────────────── */
 function Badge({ variant = 'default', children }) {
@@ -54,29 +70,24 @@ export default function SceneStudio() {
   /* ── Loaders ────────────────────────────────────────────────────── */
   const loadCharacters = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/world/characters`);
-      const d = await r.json();
-      setCharacters(d.characters || []);
+      const r = await listCharactersApi();
+      setCharacters(r.data?.characters || []);
     } catch { setCharacters([]); }
   }, []);
 
   const loadScenes = useCallback(async () => {
     try {
-      const url = filterStatus === 'all'
-        ? `${API}/world/scenes`
-        : `${API}/world/scenes?status=${filterStatus}`;
-      const r = await fetch(url);
-      const d = await r.json();
-      setScenes(d.scenes || []);
+      const r = await listScenesApi(filterStatus);
+      setScenes(r.data?.scenes || []);
     } catch { setScenes([]); }
   }, [filterStatus]);
 
   const loadTensionPairs = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/world/tension-check`);
-      const d = await r.json();
-      setTensionPairs(d.pairs || []);
-      flash(`Found ${(d.pairs || []).length} tension triggers`);
+      const r = await getTensionCheckApi();
+      const pairs = r.data?.pairs || [];
+      setTensionPairs(pairs);
+      flash(`Found ${pairs.length} tension triggers`);
     } catch { setTensionPairs([]); }
   }, [flash]);
 
@@ -105,34 +116,31 @@ export default function SceneStudio() {
     if (!sceneGen.charA) { flash('Select Character A', 'error'); return; }
     setSceneGen(p => ({ ...p, loading: true }));
     try {
-      const r = await fetch(`${API}/world/scenes/generate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_a_id: sceneGen.charA,
-          character_b_id: sceneGen.charB || undefined,
-          scene_type: sceneGen.sceneType,
-          location: sceneGen.location || undefined,
-        }),
+      const r = await generateSceneApi({
+        character_a_id: sceneGen.charA,
+        character_b_id: sceneGen.charB || undefined,
+        scene_type: sceneGen.sceneType,
+        location: sceneGen.location || undefined,
       });
-      const d = await r.json();
+      const d = r.data;
       if (d.scene) { setActiveScene(d.scene); flash('Scene generated'); loadScenes(); }
       else flash(d.error || 'Scene generation failed', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) { flash(e.response?.data?.error || e.message, 'error'); }
     finally { setSceneGen(p => ({ ...p, loading: false })); }
   };
 
   const approveScene = async (sceneId) => {
     try {
-      const r = await fetch(`${API}/world/scenes/${sceneId}/approve`, { method: 'POST' });
-      const d = await r.json();
+      const r = await approveSceneApi(sceneId);
+      const d = r.data;
       if (d.scene) { flash('Scene approved & written to StoryTeller'); setActiveScene(d.scene); loadScenes(); }
       else flash(d.error || 'Approve failed', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) { flash(e.response?.data?.error || e.message, 'error'); }
   };
 
   const deleteScene = async (sceneId) => {
     if (!window.confirm('Delete this scene draft?')) return;
-    await fetch(`${API}/world/scenes/${sceneId}`, { method: 'DELETE' });
+    await deleteSceneApi(sceneId);
     flash('Scene deleted'); setActiveScene(null); loadScenes();
   };
 

@@ -18,6 +18,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import apiClient from '../services/api';
 import './StoryEvaluationEngine.css';
 
 const API = '/api/v1/memories';
@@ -209,51 +210,32 @@ function composeBrief(b) {
 // briefInputStyle and briefTextareaStyle are computed inside the component
 // so they pick up the current theme value after darkMode toggles.
 
-// ── API helpers ───────────────────────────────────────────────────────────
-function authHeaders() {
-  const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-  const h = { 'Content-Type': 'application/json' };
-  if (token) h.Authorization = `Bearer ${token}`;
-  return h;
-}
-
+// ── API helpers — Track 3 migration: delegates to apiClient (auth via interceptor) ──
+// Public contract preserved: returns parsed body; throws Error with backend
+// message on non-2xx; throws "Request timed out" on AbortError/ECONNABORTED.
 async function apiPost(endpoint, body, { timeoutMs = 30000 } = {}) {
-  const ctrl = new AbortController();
-  const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
   try {
-    const res = await fetch(`${API}/${endpoint}`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
-    return data;
+    const res = await apiClient.post(`${API}/${endpoint}`, body, { timeout: timeoutMs });
+    return res.data;
   } catch (err) {
-    if (err.name === 'AbortError') throw new Error('Request timed out — please try again');
-    throw err;
-  } finally {
-    if (timer) clearTimeout(timer);
+    if (err.code === 'ECONNABORTED' || err.name === 'AbortError') {
+      throw new Error('Request timed out — please try again');
+    }
+    const msg = err.response?.data?.error || err.message || 'Request failed';
+    throw new Error(msg);
   }
 }
 
 async function apiGet(endpoint, { timeoutMs = 30000 } = {}) {
-  const ctrl = new AbortController();
-  const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
   try {
-    const res = await fetch(`${API}/${endpoint}`, {
-      headers: authHeaders(),
-      signal: ctrl.signal,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
-    return data;
+    const res = await apiClient.get(`${API}/${endpoint}`, { timeout: timeoutMs });
+    return res.data;
   } catch (err) {
-    if (err.name === 'AbortError') throw new Error('Request timed out — please try again');
-    throw err;
-  } finally {
-    if (timer) clearTimeout(timer);
+    if (err.code === 'ECONNABORTED' || err.name === 'AbortError') {
+      throw new Error('Request timed out — please try again');
+    }
+    const msg = err.response?.data?.error || err.message || 'Request failed';
+    throw new Error(msg);
   }
 }
 

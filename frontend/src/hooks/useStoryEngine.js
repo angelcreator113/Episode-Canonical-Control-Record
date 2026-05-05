@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import usePersistedState from './usePersistedState';
 import useGenerationJob from './useGenerationJob';
+import apiClient from '../services/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
-// Helper: build headers with auth token when available
-function authHeaders(extra = {}) {
-  const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-  const headers = { 'Content-Type': 'application/json', ...extra };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
-}
+// Track 3 module-scope helpers (Pattern D). Pre-flight (§9.11) noted the
+// previous local authHeaders(extra={}) supported header merging, but no
+// caller actually used the extra param — dead-code drift, dropped here.
+export const persistStory = (payload) =>
+  apiClient.post(`${API_BASE}/stories`, payload);
+
+export const deleteStoryFromDb = (dbId) =>
+  apiClient.delete(`${API_BASE}/stories/${dbId}`);
 
 const ROLE_COLORS = {
   protagonist: '#9a7d1e',
@@ -454,10 +456,7 @@ export default function useStoryEngine() {
     setProcessingStory(story.story_number);
     setSavingForLater(true);
     try {
-      const res = await fetch(`${API_BASE}/stories`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({
+      const res = await persistStory({
           character_key: selectedChar, story_number: story.story_number,
           title: story.title, text: story.text, phase: story.phase,
           story_type: story.story_type,
@@ -466,18 +465,15 @@ export default function useStoryEngine() {
           task_brief: tasks.find(t => t.story_number === story.story_number),
           new_character: story.new_character, new_character_name: story.new_character_name,
           new_character_role: story.new_character_role, opening_line: story.opening_line,
-        }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setSavedStories(prev => [...new Set([...prev, story.story_number])]);
-        setStories(prev => {
-          const next = { ...prev, [story.story_number]: { ...story, db_id: data.story?.id, db_status: 'draft' } };
-          setCachedStories(selectedChar, next, approvedStories);
-          return next;
-        });
-        addToast('Story saved — come back to review & approve anytime', 'success');
-      }
+      const data = res.data;
+      setSavedStories(prev => [...new Set([...prev, story.story_number])]);
+      setStories(prev => {
+        const next = { ...prev, [story.story_number]: { ...story, db_id: data.story?.id, db_status: 'draft' } };
+        setCachedStories(selectedChar, next, approvedStories);
+        return next;
+      });
+      addToast('Story saved — come back to review & approve anytime', 'success');
     } catch (e) {
       console.error('saveForLater error:', e);
       addToast('Failed to save story. Please try again.', 'error');
@@ -520,9 +516,8 @@ export default function useStoryEngine() {
     };
 
     // Group 1: Must complete (persist + extract memories)
-    const persistPromise = fetch(`${API_BASE}/stories`, {
-      method: 'POST', headers: authHeaders(), body: JSON.stringify(storyPayload),
-    }).catch(e => { console.error('story persist error:', e); addToast('Failed to save approved story to database', 'error'); });
+    const persistPromise = persistStory(storyPayload)
+      .catch(e => { console.error('story persist error:', e); addToast('Failed to save approved story to database', 'error'); });
 
     const memoryPromise = fetch(`${API_BASE}/memories/extract-story-memories`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -687,9 +682,7 @@ export default function useStoryEngine() {
     // Delete from DB if it has a db_id
     if (story.db_id) {
       try {
-        await fetch(`${API_BASE}/stories/${story.db_id}`, {
-          method: 'DELETE', headers: authHeaders(),
-        });
+        await deleteStoryFromDb(story.db_id);
       } catch (e) { console.error('story delete error:', e); }
     }
     // Remove from local state
@@ -719,16 +712,13 @@ export default function useStoryEngine() {
 
     try {
       const task = tasks.find(t => t.story_number === story.story_number);
-      await fetch(`${API_BASE}/stories`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({
-          character_key: selectedChar, story_number: story.story_number,
-          title: story.title, text: newText, phase: story.phase,
-          story_type: story.story_type, word_count: newText.split(/\s+/).length,
-          status: story.db_status || 'draft', task_brief: task,
-          new_character: story.new_character, new_character_name: story.new_character_name,
-          new_character_role: story.new_character_role, opening_line: story.opening_line,
-        }),
+      await persistStory({
+        character_key: selectedChar, story_number: story.story_number,
+        title: story.title, text: newText, phase: story.phase,
+        story_type: story.story_type, word_count: newText.split(/\s+/).length,
+        status: story.db_status || 'draft', task_brief: task,
+        new_character: story.new_character, new_character_name: story.new_character_name,
+        new_character_role: story.new_character_role, opening_line: story.opening_line,
       });
       addToast('Story saved', 'success');
     } catch (e) {

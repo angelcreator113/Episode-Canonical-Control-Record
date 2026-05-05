@@ -4,7 +4,28 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
+
 const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP8 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 7 helpers covering 7 fetch sites. listRegistriesApi duplicated locally per
+// v2.12 §9.11 (CP3 WriteMode + CP6 CharacterTherapy + CP7 Home + CP8
+// RelationshipEngine also have it).
+export const listRegistriesApi = () =>
+  apiClient.get(`${API}/character-registry/registries`);
+export const listFlaggedGrowthApi = () =>
+  apiClient.get(`${API}/memories/character-growth/flagged`);
+export const proposeSceneApi = (payload) =>
+  apiClient.post(`${API}/memories/propose-scene`, payload);
+export const updateSceneProposalApi = (proposalId, payload) =>
+  apiClient.patch(`${API}/memories/scene-proposals/${proposalId}`, payload);
+export const acceptSceneProposalApi = (proposalId, payload) =>
+  apiClient.post(`${API}/memories/scene-proposals/${proposalId}/accept`, payload);
+export const dismissSceneProposalApi = (proposalId) =>
+  apiClient.post(`${API}/memories/scene-proposals/${proposalId}/dismiss`);
+export const reviewGrowthFlagApi = (flagId, payload) =>
+  apiClient.post(`${API}/memories/character-growth/${flagId}/review`, payload);
 
 const C = {
   bg: '#f7f4ef',
@@ -93,13 +114,11 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
     if (registryIdProp) return;
     (async () => {
       try {
-        const res = await fetch(`${API}/character-registry/registries`);
-        if (res.ok) {
-          const data = await res.json();
-          const list = data.registries || data || [];
-          setRegistries(list);
-          if (list.length && !selectedRegistry) setSelectedRegistry(String(list[0].id));
-        }
+        const res = await listRegistriesApi();
+        const data = res.data;
+        const list = data?.registries || data || [];
+        setRegistries(list);
+        if (list.length && !selectedRegistry) setSelectedRegistry(String(list[0].id));
       } catch { /* non-fatal */ }
     })();
   }, [registryIdProp]);
@@ -110,9 +129,8 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
 
   async function loadGrowthFlags() {
     try {
-      const res = await fetch(`${API}/memories/character-growth/flagged`);
-      const data = await res.json();
-      setGrowthFlags(data.flags || []);
+      const res = await listFlaggedGrowthApi();
+      setGrowthFlags(res.data?.flags || []);
       setFlagsLoaded(true);
     } catch (err) {
       // non-fatal
@@ -128,26 +146,20 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
     setEditingChars(false);
 
     try {
-      const res = await fetch(`${API}/memories/propose-scene`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id: bookId,
-          chapter_id: chapterId,
-          registry_id: registryId || selectedRegistry || undefined,
-          force_scene_type: forceType || undefined,
-          author_note: authorNote || undefined,
-        }),
+      const res = await proposeSceneApi({
+        book_id: bookId,
+        chapter_id: chapterId,
+        registry_id: registryId || selectedRegistry || undefined,
+        force_scene_type: forceType || undefined,
+        author_note: authorNote || undefined,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
+      const data = res.data;
       setProposal(data);
       setArcState(data.arc_state);
       setSelectedTone(data.proposal.suggested_tone);
       setEditedBrief(data.proposal.scene_brief);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setProposing(false);
     }
@@ -157,19 +169,15 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
     if (!proposal) return;
     const currentChars = getActiveChars();
     try {
-      await fetch(`${API}/memories/scene-proposals/${proposal.proposal_id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scene_brief: editedBrief,
-          characters: currentChars,
-          tone: selectedTone,
-        }),
+      await updateSceneProposalApi(proposal.proposal_id, {
+        scene_brief: editedBrief,
+        characters: currentChars,
+        tone: selectedTone,
       });
       setEditingBrief(false);
       setEditingChars(false);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     }
   }
 
@@ -180,17 +188,11 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
       // Save edits first if any
       if (editingBrief || editingChars) await handleSaveEdits();
 
-      const res = await fetch(`${API}/memories/scene-proposals/${proposal.proposal_id}/accept`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tone_override: selectedTone }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
+      const res = await acceptSceneProposalApi(proposal.proposal_id, { tone_override: selectedTone });
+      const data = res.data;
       if (onProposalAccepted) onProposalAccepted(data.ready_to_generate);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setAccepting(false);
     }
@@ -198,20 +200,16 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
 
   async function handleDismiss() {
     if (!proposal) return;
-    await fetch(`${API}/memories/scene-proposals/${proposal.proposal_id}/dismiss`, { method: 'POST' });
+    await dismissSceneProposalApi(proposal.proposal_id);
     setProposal(null);
   }
 
   async function reviewFlag(flagId, decision) {
     try {
-      await fetch(`${API}/memories/character-growth/${flagId}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ decision }),
-      });
+      await reviewGrowthFlagApi(flagId, { decision });
       setGrowthFlags(prev => prev.filter(f => f.id !== flagId));
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     }
   }
 
