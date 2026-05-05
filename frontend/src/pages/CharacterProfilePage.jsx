@@ -10,7 +10,22 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/api';
 import CharacterDepthPanel from '../components/CharacterDepthPanel';
+import apiClient from '../services/api';
 import './CharacterProfilePage.css';
+
+// ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 5 helpers covering 5 fetch sites across /character-registry, /entanglements,
+// and /social-profiles. File-local per Track 6 convention.
+export const updateCharacterApi = (id, payload) =>
+  apiClient.put(`${API_URL}/character-registry/characters/${id}`, payload);
+export const getCharacterApi = (id) =>
+  apiClient.get(`${API_URL}/character-registry/characters/${id}`);
+export const getCharacterRelationshipsApi = (id) =>
+  apiClient.get(`${API_URL}/character-registry/characters/${id}/relationships`);
+export const getCharacterEntanglementsApi = (id) =>
+  apiClient.get(`${API_URL}/entanglements/character/${id}`);
+export const getSocialProfileApi = (profileId) =>
+  apiClient.get(`${API_URL}/social-profiles/${profileId}`);
 
 /* ── Config ──────────────────────────────────────────────────────────────────── */
 
@@ -132,12 +147,8 @@ function TabOverview({ character }) {
             onChange={async (e) => {
               const newWorld = e.target.value;
               try {
-                const res = await fetch(`${API_URL}/character-registry/characters/${character.id}`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ world: newWorld }),
-                });
-                if (res.ok) setCharacter(prev => ({ ...prev, world: newWorld }));
+                await updateCharacterApi(character.id, { world: newWorld });
+                setCharacter(prev => ({ ...prev, world: newWorld }));
               } catch (err) { console.error('Failed to update world:', err); }
             }}
             disabled={character.status === 'finalized'}
@@ -750,39 +761,35 @@ export default function CharacterProfilePage() {
     setError(null);
     try {
       const [charRes, relRes, entRes] = await Promise.all([
-        fetch(`${API_URL}/character-registry/characters/${id}`),
-        fetch(`${API_URL}/character-registry/characters/${id}/relationships`)
-          .catch(() => ({ ok: false })),
-        fetch(`${API_URL}/entanglements/character/${id}`)
-          .catch(() => ({ ok: false })),
+        getCharacterApi(id),
+        getCharacterRelationshipsApi(id).catch(() => null),
+        getCharacterEntanglementsApi(id).catch(() => null),
       ]);
 
-      if (!charRes.ok) throw new Error('Character not found');
-      const charData = await charRes.json();
+      const charData = charRes.data;
       const char = charData.character || charData;
       setCharacter(char);
 
-      if (relRes.ok) {
-        const relData = await relRes.json();
+      if (relRes) {
+        const relData = relRes.data;
         setRelationships(relData.relationships || relData || []);
       }
 
-      if (entRes.ok) {
-        const entData = await entRes.json();
+      if (entRes) {
+        const entData = entRes.data;
         setEntanglements(entData.entanglements || entData || []);
       }
 
       // Load feed profile if linked
       if (char.feed_profile_id) {
-        const feedRes = await fetch(`${API_URL}/social-profiles/${char.feed_profile_id}`)
-          .catch(() => null);
-        if (feedRes?.ok) {
-          const feedData = await feedRes.json();
+        const feedRes = await getSocialProfileApi(char.feed_profile_id).catch(() => null);
+        if (feedRes) {
+          const feedData = feedRes.data;
           setFeedProfile(feedData.profile || feedData);
         }
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message || 'Character not found');
     } finally {
       setLoading(false);
     }

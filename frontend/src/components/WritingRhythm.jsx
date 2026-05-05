@@ -3,8 +3,33 @@
 // Tab in the Universe page, story-side cluster (writing-rhythm tab)
 
 import { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 
 const API = import.meta.env.VITE_API_URL || '';
+
+// ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 5 helpers covering 5 fetch sites on /writing-rhythm/* and /multi-product/*.
+// URL COMPOSITION NOTE: API='' default (no '/api/v1' prefix) preserved
+// verbatim from pre-migration code per v2.15 §9.11 "bugs surface, don't
+// fix" discipline. If the relative-path shape is a pre-existing bug, it
+// is the original code's bug — surfaced for Step 3 audit, NOT corrected
+// at this layer. The helper preserves exact pre-migration URL shape;
+// build-time VITE_API_URL override (or Vite dev proxy) is the only
+// mechanism that would have made the original work, and the helper
+// inherits that same dependency.
+// METHOD VERIFICATION: surface report flagged updateContentStatus as
+// PUT-or-PATCH; actual backend contract is PATCH (verified at line 192
+// of pre-migration code). Helper uses PATCH per source.
+export const getWritingRhythmStatsApi = () =>
+  apiClient.get(`${API}/writing-rhythm/stats`);
+export const getMultiProductAllApi = () =>
+  apiClient.get(`${API}/multi-product/all`);
+export const logWritingRhythmApi = (payload) =>
+  apiClient.post(`${API}/writing-rhythm/log`, payload);
+export const setWritingRhythmGoalApi = (payload) =>
+  apiClient.patch(`${API}/writing-rhythm/goal`, payload);
+export const updateMultiProductStatusApi = (id, payload) =>
+  apiClient.patch(`${API}/multi-product/${id}/status`, payload);
 
 const C = {
   bg: '#f7f4ef',
@@ -117,11 +142,11 @@ export default function WritingRhythm() {
   const loadAll = useCallback(async () => {
     try {
       const [statsRes, contentRes] = await Promise.all([
-        fetch(`${API}/writing-rhythm/stats`),
-        fetch(`${API}/multi-product/all`),
+        getWritingRhythmStatsApi().catch(() => null),
+        getMultiProductAllApi().catch(() => null),
       ]);
-      if (statsRes.ok) {
-        const data = await statsRes.json();
+      if (statsRes) {
+        const data = statsRes.data;
         setStats(data);
         if (data.goal) {
           setGoalForm({
@@ -132,9 +157,8 @@ export default function WritingRhythm() {
           });
         }
       }
-      if (contentRes.ok) {
-        const data = await contentRes.json();
-        setContent(data.content || []);
+      if (contentRes) {
+        setContent(contentRes.data?.content || []);
       }
     } catch (e) {
       showToast(e.message, 'error');
@@ -149,18 +173,13 @@ export default function WritingRhythm() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch(`${API}/writing-rhythm/log`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(logForm),
-      });
-      if (!res.ok) throw new Error('Failed to log session');
+      await logWritingRhythmApi(logForm);
       showToast('Session logged');
       setShowLog(false);
       setLogForm({ scenes_proposed: 0, scenes_generated: 0, scenes_approved: 0, words_written: 0, session_note: '' });
       loadAll();
-    } catch (e) {
-      showToast(e.message, 'error');
+    } catch (err) {
+      showToast(err.response?.data?.error || err.message || 'Failed to log session', 'error');
     } finally {
       setSaving(false);
     }
@@ -170,17 +189,12 @@ export default function WritingRhythm() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch(`${API}/writing-rhythm/goal`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(goalForm),
-      });
-      if (!res.ok) throw new Error('Failed to update goal');
+      await setWritingRhythmGoalApi(goalForm);
       showToast('Goal updated');
       setShowGoal(false);
       loadAll();
-    } catch (e) {
-      showToast(e.message, 'error');
+    } catch (err) {
+      showToast(err.response?.data?.error || err.message || 'Failed to update goal', 'error');
     } finally {
       setSaving(false);
     }
@@ -188,16 +202,11 @@ export default function WritingRhythm() {
 
   async function updateContentStatus(id, status) {
     try {
-      const res = await fetch(`${API}/multi-product/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error('Failed to update');
+      await updateMultiProductStatusApi(id, { status });
       showToast(`Marked ${status}`);
       loadAll();
-    } catch (e) {
-      showToast(e.message, 'error');
+    } catch (err) {
+      showToast(err.response?.data?.error || err.message || 'Failed to update', 'error');
     }
   }
 
