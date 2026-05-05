@@ -135,4 +135,12 @@ describe('RelationshipEngine — Track 3 helpers', () => {
     vi.mocked(apiClient.post).mockRejectedValue(new Error('not found'));
     await expect(confirmRelationship('cand-x')).rejects.toThrow('not found');
   });
+
+  // ── Track 6 CP8 helper added (file-local duplicate of listRegistriesApi) ──
+  test('listRegistriesApi GET on /character-registry/registries (CP8 added)', async () => {
+    const { listRegistriesApi } = await import('./RelationshipEngine');
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { registries: [] } });
+    await listRegistriesApi();
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/character-registry/registries');
+  });
 });

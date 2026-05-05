@@ -6,8 +6,14 @@
  */
 
 import { useState } from 'react';
+import apiClient from '../services/api';
 
 const STORYTELLER_API = '/api/v1/storyteller';
+
+// ─── Track 6 CP8 module-scope helper (Pattern F prophylactic — Api suffix) ───
+// importChapterApi duplicated locally per v2.12 §9.11 (CP3 WriteMode also has it).
+export const importChapterApi = (chapterId, payload) =>
+  apiClient.post(`${STORYTELLER_API}/chapters/${chapterId}/import`, payload);
 
 export default function ImportDraftModal({
   chapterId,
@@ -81,20 +87,12 @@ export default function ImportDraftModal({
     setImporting(true);
     setError(null);
     try {
-      const res = await fetch(
-        `${STORYTELLER_API}/chapters/${chapterId}/import`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ raw_text: rawText, mode }),
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Import failed');
+      const res = await importChapterApi(chapterId, { raw_text: rawText, mode });
+      const data = res.data;
       setResult(data);
       onImported?.(data.lines);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message || 'Import failed');
     } finally {
       setImporting(false);
     }

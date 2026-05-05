@@ -7,9 +7,32 @@ import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 import PushToBrain from '../components/PushToBrain';
 import DreamMap from '../components/DreamMap';
+import apiClient from '../services/api';
 import { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS } from '../data/dreamCities';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP8 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 8 helpers covering 7 fetch sites — one site (saveLocation at line 89) uses
+// 2 helpers conditionally (createLocationApi or updateLocationApi) per the
+// method-branching split pattern (v2.13 §9.11). uploadMapApi is the second
+// F-AUTH-1 multipart site (after CP7 PdfIngestZone) — passes FormData
+// directly to apiClient.post; axios sets Content-Type with the multipart
+// boundary automatically.
+export const listLocationsApi = () => apiClient.get(`${API}/world/locations`);
+export const createLocationApi = (payload) =>
+  apiClient.post(`${API}/world/locations`, payload);
+export const updateLocationApi = (id, payload) =>
+  apiClient.put(`${API}/world/locations/${id}`, payload);
+export const deleteLocationApi = (id) =>
+  apiClient.delete(`${API}/world/locations/${id}`);
+export const seedInfrastructureApi = () =>
+  apiClient.post(`${API}/world/locations/seed-infrastructure`);
+export const getProfileCompositionApi = (feedLayer) =>
+  apiClient.get(`/api/v1/social-profiles/analytics/composition?feed_layer=${feedLayer}`);
+export const getMapApi = () => apiClient.get(`${API}/world/map`);
+export const uploadMapApi = (formData) =>
+  apiClient.post(`${API}/world/map/upload`, formData);
 const DEFAULTS = { DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS };
 
 const TABS = [
@@ -60,7 +83,7 @@ export default function WorldFoundation() {
 
   const loadLocations = useCallback(async () => {
     setLocLoading(true);
-    try { const r = await fetch(`${API}/world/locations`); const d = await r.json(); setLocations(d.locations || []); }
+    try { const r = await listLocationsApi(); setLocations(r.data?.locations || []); }
     catch (e) { console.error('loadLocations', e); }
     finally { setLocLoading(false); }
   }, []);
@@ -83,10 +106,9 @@ export default function WorldFoundation() {
   }), [filtered]);
 
   const saveLocation = useCallback(async () => {
-    const method = editId ? 'PUT' : 'POST';
-    const url = editId ? `${API}/world/locations/${editId}` : `${API}/world/locations`;
     try {
-      await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      if (editId) await updateLocationApi(editId, form);
+      else await createLocationApi(form);
       flash(editId ? 'Updated' : 'Created');
       setForm(emptyForm); setEditId(null); setShowForm(false); loadLocations();
     } catch { flash('Save failed', 'error'); }
@@ -94,12 +116,12 @@ export default function WorldFoundation() {
 
   const deleteLocation = useCallback(async (id) => {
     if (!confirm('Delete this location?')) return;
-    try { await fetch(`${API}/world/locations/${id}`, { method: 'DELETE' }); flash('Deleted'); loadLocations(); }
+    try { await deleteLocationApi(id); flash('Deleted'); loadLocations(); }
     catch { flash('Delete failed', 'error'); }
   }, [flash, loadLocations]);
 
   const seedInfra = useCallback(async () => {
-    try { const r = await fetch(`${API}/world/locations/seed-infrastructure`, { method: 'POST' }); const d = await r.json(); flash(`Seeded ${d.created || 0} locations`); loadLocations(); }
+    try { const r = await seedInfrastructureApi(); flash(`Seeded ${r.data?.created || 0} locations`); loadLocations(); }
     catch { flash('Seed failed', 'error'); }
   }, [flash, loadLocations]);
 
@@ -112,9 +134,9 @@ export default function WorldFoundation() {
   // Profile counts by city (for map)
   const [profileCounts, setProfileCounts] = useState([]);
   useEffect(() => {
-    fetch('/api/v1/social-profiles/analytics/composition?feed_layer=lalaverse')
-      .then(r => r.json()).then(d => {
-        const cities = d.cities || {};
+    getProfileCompositionApi('lalaverse')
+      .then(res => {
+        const cities = res.data?.cities || {};
         setProfileCounts(Object.entries(cities).map(([city, count]) => ({ city, count })));
       }).catch(() => {});
   }, []);
@@ -125,7 +147,7 @@ export default function WorldFoundation() {
   const mapFileRef = useRef(null);
 
   useEffect(() => {
-    fetch(`${API}/world/map`).then(r => r.json()).then(d => { if (d.url) setMapImageUrl(d.url); }).catch(() => {});
+    getMapApi().then(res => { if (res.data?.url) setMapImageUrl(res.data.url); }).catch(() => {});
   }, []);
 
   const handleMapUpload = useCallback(async (e) => {
@@ -135,11 +157,11 @@ export default function WorldFoundation() {
     try {
       const fd = new FormData();
       fd.append('image', file);
-      const r = await fetch(`${API}/world/map/upload`, { method: 'POST', body: fd });
-      const d = await r.json();
+      const r = await uploadMapApi(fd);
+      const d = r.data;
       if (d.success && d.url) { setMapImageUrl(d.url); flash('Map image uploaded'); }
       else flash(d.error || 'Upload failed', 'error');
-    } catch { flash('Upload failed', 'error'); }
+    } catch (err) { flash(err.response?.data?.error || 'Upload failed', 'error'); }
     finally { setUploading(false); if (mapFileRef.current) mapFileRef.current.value = ''; }
   }, [flash]);
 

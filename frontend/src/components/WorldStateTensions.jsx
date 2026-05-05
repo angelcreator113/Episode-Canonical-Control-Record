@@ -6,8 +6,24 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 
 const API = '/api/v1';
+
+// ─── Track 6 CP8 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// All 7 helpers duplicated locally from CP7 WorldDashboard.jsx per v2.12 §9.11
+// file-local convention. ~21 LOC duplication preserves test-per-file isolation.
+export const listSnapshotsApi = () => apiClient.get(`${API}/world/state/snapshots`);
+export const listTimelineApi = () => apiClient.get(`${API}/world/state/timeline`);
+export const getTensionScannerApi = () => apiClient.get(`${API}/world/tension-scanner`);
+export const createSnapshotApi = (payload) =>
+  apiClient.post(`${API}/world/state/snapshots`, payload);
+export const createTimelineEventApi = (payload) =>
+  apiClient.post(`${API}/world/state/timeline`, payload);
+export const deleteTimelineEventApi = (id) =>
+  apiClient.delete(`${API}/world/state/timeline/${id}`);
+export const createTensionProposalApi = (payload) =>
+  apiClient.post(`${API}/world/create-tension-proposal`, payload);
 
 export default function WorldStateTensions({ activeSubTab = 'world-state' }) {
   const navigate = useNavigate();
@@ -33,21 +49,21 @@ export default function WorldStateTensions({ activeSubTab = 'world-state' }) {
 
   const loadSnapshots = useCallback(async () => {
     setSnapLoading(true);
-    try { const r = await fetch(`${API}/world/state/snapshots`); const d = await r.json(); setSnapshots(d.snapshots || []); }
+    try { const r = await listSnapshotsApi(); setSnapshots(r.data?.snapshots || []); }
     catch (e) { console.error('loadSnapshots', e); }
     finally { setSnapLoading(false); }
   }, []);
 
   const loadTimeline = useCallback(async () => {
     setTlLoading(true);
-    try { const r = await fetch(`${API}/world/state/timeline`); const d = await r.json(); setTimelineEvents(d.events || []); }
+    try { const r = await listTimelineApi(); setTimelineEvents(r.data?.events || []); }
     catch (e) { console.error('loadTimeline', e); }
     finally { setTlLoading(false); }
   }, []);
 
   const loadTensions = useCallback(async () => {
     setTensionLoading(true);
-    try { const r = await fetch(`${API}/world/tension-scanner`); const d = await r.json(); setTensionPairs(d.pairs || []); }
+    try { const r = await getTensionScannerApi(); setTensionPairs(r.data?.pairs || []); }
     catch (e) { console.error('loadTensions', e); }
     finally { setTensionLoading(false); }
   }, []);
@@ -59,7 +75,7 @@ export default function WorldStateTensions({ activeSubTab = 'world-state' }) {
       active_threads: snapForm.active_threads ? snapForm.active_threads.split('\n').filter(Boolean) : [],
     };
     try {
-      await fetch(`${API}/world/state/snapshots`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      await createSnapshotApi(body);
       flash('Snapshot saved');
       setSnapForm({ snapshot_label: '', world_facts: '', active_threads: '' });
       loadSnapshots();
@@ -68,7 +84,7 @@ export default function WorldStateTensions({ activeSubTab = 'world-state' }) {
 
   const saveTimelineEvent = useCallback(async () => {
     try {
-      await fetch(`${API}/world/state/timeline`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tlForm) });
+      await createTimelineEventApi(tlForm);
       flash('Timeline event created');
       setTlForm({ event_name: '', event_description: '', event_type: 'plot', impact_level: 'moderate', story_date: '' });
       loadTimeline();
@@ -76,15 +92,14 @@ export default function WorldStateTensions({ activeSubTab = 'world-state' }) {
   }, [tlForm, loadTimeline]);
 
   const deleteTimelineEvent = useCallback(async (id) => {
-    try { await fetch(`${API}/world/state/timeline/${id}`, { method: 'DELETE' }); flash('Event deleted'); loadTimeline(); }
+    try { await deleteTimelineEventApi(id); flash('Event deleted'); loadTimeline(); }
     catch (e) { flash('Delete failed', 'error'); }
   }, [loadTimeline]);
 
   const proposeTensionScene = useCallback(async (pair) => {
     try {
-      const r = await fetch(`${API}/world/create-tension-proposal`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ char_a_id: pair.char_a_id, char_b_id: pair.char_b_id }) });
-      const d = await r.json();
-      if (d.proposal) navigate('/story-evaluation', { state: { sceneProposal: d.proposal } });
+      const r = await createTensionProposalApi({ char_a_id: pair.char_a_id, char_b_id: pair.char_b_id });
+      if (r.data?.proposal) navigate('/story-evaluation', { state: { sceneProposal: r.data.proposal } });
       else flash('Could not generate proposal', 'error');
     } catch (e) { flash('Proposal failed', 'error'); }
   }, [navigate]);

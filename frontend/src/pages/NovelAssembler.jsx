@@ -8,9 +8,26 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import './NovelAssembler.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP8 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 6 helpers covering 6 fetch sites on /stories/*. File-local per Track 6
+// convention. No cross-CP overlaps.
+export const listCharacterStoriesApi = (charKey) =>
+  apiClient.get(`${API_BASE}/stories/character/${charKey}`);
+export const listCharacterAssembliesApi = (charKey) =>
+  apiClient.get(`${API_BASE}/stories/assemblies/character/${charKey}`);
+export const listCharacterSocialApi = (charKey) =>
+  apiClient.get(`${API_BASE}/stories/social/character/${charKey}`);
+export const createAssemblyApi = (payload) =>
+  apiClient.post(`${API_BASE}/stories/assemblies`, payload);
+export const compileAssemblyApi = (assemblyId) =>
+  apiClient.post(`${API_BASE}/stories/assemblies/${assemblyId}/compile`);
+export const deleteAssemblyApi = (assemblyId) =>
+  apiClient.delete(`${API_BASE}/stories/assemblies/${assemblyId}`);
 
 const CHARACTERS = {
   justawoman: { display_name: 'JustAWoman', icon: '♛', color: '#9a7d1e' },
@@ -232,18 +249,11 @@ export default function NovelAssembler() {
     setLoading(true);
     try {
       const [storiesRes, assembliesRes] = await Promise.all([
-        fetch(`${API_BASE}/stories/character/${selectedChar}`),
-        fetch(`${API_BASE}/stories/assemblies/character/${selectedChar}`),
+        listCharacterStoriesApi(selectedChar),
+        listCharacterAssembliesApi(selectedChar),
       ]);
-
-      if (storiesRes.ok) {
-        const data = await storiesRes.json();
-        setStories(data.stories || []);
-      }
-      if (assembliesRes.ok) {
-        const data = await assembliesRes.json();
-        setAssemblies(data.assemblies || []);
-      }
+      setStories(storiesRes.data?.stories || []);
+      setAssemblies(assembliesRes.data?.assemblies || []);
     } catch (err) {
       console.error('Load data error:', err);
     } finally {
@@ -254,11 +264,8 @@ export default function NovelAssembler() {
   const loadSocialImports = useCallback(async () => {
     setImportsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/stories/social/character/${selectedChar}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSocialImports(data.imports || []);
-      }
+      const res = await listCharacterSocialApi(selectedChar);
+      setSocialImports(res.data?.imports || []);
     } catch { /* ignore */ }
     setImportsLoading(false);
   }, [selectedChar]);
@@ -281,21 +288,15 @@ export default function NovelAssembler() {
     if (!newTitle.trim() || selectedStoryIds.length === 0) return;
     setCreating(true);
     try {
-      const res = await fetch(`${API_BASE}/stories/assemblies`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newTitle,
-          character_key: selectedChar,
-          story_ids: selectedStoryIds,
-        }),
+      await createAssemblyApi({
+        title: newTitle,
+        character_key: selectedChar,
+        story_ids: selectedStoryIds,
       });
-      if (res.ok) {
-        setNewTitle('');
-        setSelectedStoryIds([]);
-        setShowCreate(false);
-        loadData();
-      }
+      setNewTitle('');
+      setSelectedStoryIds([]);
+      setShowCreate(false);
+      loadData();
     } catch (err) {
       console.error('Create assembly error:', err);
     } finally {
@@ -306,14 +307,9 @@ export default function NovelAssembler() {
   async function handleCompile(assemblyId) {
     setCompiling(true);
     try {
-      const res = await fetch(`${API_BASE}/stories/assemblies/${assemblyId}/compile`, {
-        method: 'POST',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setActiveAssembly(data.assembly);
-        loadData();
-      }
+      const res = await compileAssemblyApi(assemblyId);
+      setActiveAssembly(res.data?.assembly);
+      loadData();
     } catch (err) {
       console.error('Compile error:', err);
     } finally {
@@ -324,7 +320,7 @@ export default function NovelAssembler() {
   async function handleDelete(assemblyId) {
     if (!window.confirm('Delete this assembly?')) return;
     try {
-      await fetch(`${API_BASE}/stories/assemblies/${assemblyId}`, { method: 'DELETE' });
+      await deleteAssemblyApi(assemblyId);
       if (activeAssembly?.id === assemblyId) setActiveAssembly(null);
       loadData();
     } catch (err) {
