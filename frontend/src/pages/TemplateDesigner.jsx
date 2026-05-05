@@ -3,7 +3,30 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Stage, Layer, Rect, Text as KonvaText, Transformer, Image as KonvaImage } from 'react-konva';
 import useImage from 'use-image';
 import { CANONICAL_ROLES } from '../constants/canonicalRoles';
+import apiClient from '../services/api';
 import './TemplateDesigner.css';
+
+// ─── Track 6 CP6 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 8 helpers covering 9 fetch sites across 4 endpoint families: /episodes,
+// /template-studio, /compositions, /thumbnail-templates. createTemplateApi
+// + updateTemplateApi split from one conditional handleSave method-branching
+// site (POST when no templateId, PUT when present). File-local per Track 6
+// convention. Idiom: status === 'SUCCESS' uppercase envelope preserved
+// verbatim via res.data.status === 'SUCCESS'.
+
+export const listEpisodesApi = () => apiClient.get('/api/v1/episodes?limit=50');
+export const listEpisodeAssetsApi = (episodeId) =>
+  apiClient.get(`/api/v1/episodes/${episodeId}/assets`);
+export const getTemplateStudioApi = (id) => apiClient.get(`/api/v1/template-studio/${id}`);
+export const getCompositionApi = (compositionId) =>
+  apiClient.get(`/api/v1/compositions/${compositionId}`);
+export const getThumbnailTemplateApi = (templateId) =>
+  apiClient.get(`/api/v1/thumbnail-templates/${templateId}`);
+export const createTemplateApi = (payload) => apiClient.post('/api/v1/template-studio', payload);
+export const updateTemplateApi = (templateId, payload) =>
+  apiClient.put(`/api/v1/template-studio/${templateId}`, payload);
+export const publishTemplateApi = (templateId) =>
+  apiClient.post(`/api/v1/template-studio/${templateId}/publish`);
 
 /**
  * TemplateDesigner - Visual Canvas for Designing Thumbnail Templates
@@ -176,8 +199,8 @@ function TemplateDesigner() {
   
   const loadEpisodes = async () => {
     try {
-      const response = await fetch('/api/v1/episodes?limit=50');
-      const data = await response.json();
+      const response = await listEpisodesApi();
+      const data = response.data;
       if (data.status === 'SUCCESS') {
         setEpisodes(data.data || []);
       }
@@ -185,12 +208,12 @@ function TemplateDesigner() {
       console.error('Failed to load episodes:', err);
     }
   };
-  
+
   const loadEpisodeAssets = async (episodeId) => {
     try {
       console.log('🔄 Loading assets for episode:', episodeId);
-      const response = await fetch(`/api/v1/episodes/${episodeId}/assets`);
-      const data = await response.json();
+      const response = await listEpisodeAssetsApi(episodeId);
+      const data = response.data;
       
       if (data.status === 'SUCCESS') {
         const assets = data.data || [];
@@ -230,8 +253,8 @@ function TemplateDesigner() {
   
   const loadTemplate = async (id) => {
     try {
-      const response = await fetch(`/api/v1/template-studio/${id}`);
-      const data = await response.json();
+      const response = await getTemplateStudioApi(id);
+      const data = response.data;
       
       if (data.status === 'SUCCESS' && data.data) {
         const template = data.data;
@@ -280,8 +303,8 @@ function TemplateDesigner() {
   const loadComposition = async (compositionId) => {
     try {
       console.log('🔄 Loading composition:', compositionId);
-      const response = await fetch(`/api/v1/compositions/${compositionId}`);
-      const data = await response.json();
+      const response = await getCompositionApi(compositionId);
+      const data = response.data;
       
       if (data.status === 'SUCCESS' && data.data) {
         const composition = data.data;
@@ -349,8 +372,8 @@ function TemplateDesigner() {
   const loadTemplateForComposition = async (templateId) => {
     try {
       // Legacy template API - may have layout_config
-      const response = await fetch(`/api/v1/thumbnail-templates/${templateId}`);
-      const data = await response.json();
+      const response = await getThumbnailTemplateApi(templateId);
+      const data = response.data;
       
       if (data.status === 'SUCCESS' && data.data) {
         const template = data.data;
@@ -392,8 +415,8 @@ function TemplateDesigner() {
   
   const loadTemplateStudioForComposition = async (studioId) => {
     try {
-      const response = await fetch(`/api/v1/template-studio/${studioId}`);
-      const data = await response.json();
+      const response = await getTemplateStudioApi(studioId);
+      const data = response.data;
       
       if (data.status === 'SUCCESS' && data.data) {
         const template = data.data;
@@ -448,9 +471,9 @@ function TemplateDesigner() {
     // Poll every 3 seconds
     pollingIntervalRef.current = setInterval(async () => {
       try {
-        const response = await fetch(`/api/v1/compositions/${compId}`);
-        const data = await response.json();
-        
+        const response = await getCompositionApi(compId);
+        const data = response.data;
+
         if (data.status === 'SUCCESS' && data.data) {
           const outputs = data.data.outputs || [];
           setCompositionOutputs(outputs);
@@ -679,33 +702,23 @@ function TemplateDesigner() {
       };
       
       // Create or update
-      const url = templateId 
-        ? `/api/v1/template-studio/${templateId}`
-        : '/api/v1/template-studio';
-      
-      const method = templateId ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to save template');
+      let data;
+      try {
+        const response = templateId
+          ? await updateTemplateApi(templateId, payload)
+          : await createTemplateApi(payload);
+        data = response.data;
+      } catch (httpErr) {
+        throw new Error(httpErr.response?.data?.message || 'Failed to save template');
       }
-      
+
       const savedTemplateId = data.data.id;
-      
+
       // If publishing, call publish endpoint
       if (publish) {
-        const publishResponse = await fetch(`/api/v1/template-studio/${savedTemplateId}/publish`, {
-          method: 'POST'
-        });
-        
-        if (!publishResponse.ok) {
+        try {
+          await publishTemplateApi(savedTemplateId);
+        } catch (_publishErr) {
           throw new Error('Saved but failed to publish');
         }
         
