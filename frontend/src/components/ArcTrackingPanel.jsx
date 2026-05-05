@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
+import apiClient from '../services/api';
 
 const API = '/api/v1';
+
+// ─── Track 6 CP8 module-scope helper (Pattern F prophylactic — Api suffix) ───
+export const getArcTrackingApi = (characterKey) =>
+  apiClient.get(`${API}/arc-tracking/${characterKey}`);
 
 export default function ArcTrackingPanel({ characterKey, characterName }) {
   const [data, setData]       = useState(null);
@@ -10,10 +15,9 @@ export default function ArcTrackingPanel({ characterKey, characterName }) {
   useEffect(() => {
     if (!characterKey) return;
     setLoading(true);
-    fetch(`${API}/arc-tracking/${characterKey}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    getArcTrackingApi(characterKey)
+      .then(res => { setData(res.data); setLoading(false); })
+      .catch(() => { setData(null); setLoading(false); });
   }, [characterKey]);
 
   if (loading) return (

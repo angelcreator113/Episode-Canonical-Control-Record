@@ -6,9 +6,13 @@
  * evaluation scores, recent activity.
  */
 import { useState, useEffect, useMemo } from 'react';
+import apiClient from '../services/api';
 import './StoryEngine.css';
 
 const API = '/api/v1/story-health';
+
+// ─── Track 6 CP7 module-scope helper (Pattern F prophylactic — Api suffix) ───
+export const getStoryHealthDashboardApi = () => apiClient.get(`${API}/dashboard`);
 
 const PHASE_COLORS = {
   establishment: '#c9a84c',
@@ -22,9 +26,8 @@ export default function StoryHealthDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/dashboard`)
-      .then(r => r.json())
-      .then(d => setData(d))
+    getStoryHealthDashboardApi()
+      .then(res => setData(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);

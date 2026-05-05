@@ -3,8 +3,17 @@
 // Accepts PDF, TXT, MD, and DOCX files.
 
 import { useState, useRef, useCallback } from 'react';
+import apiClient from '../services/api';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP7 module-scope helper (Pattern F prophylactic — Api suffix) ───
+// MULTIPART POST: pass FormData payload directly to apiClient. Do NOT set
+// Content-Type header — axios sets it automatically with the correct
+// multipart boundary. First multipart-upload site in F-AUTH-1 (candidate
+// for fix plan v2.14 §9.11 documentation).
+export const ingestPdfApi = (formData) =>
+  apiClient.post(`${API}/franchise-brain/ingest-pdf`, formData);
 
 const C = {
   surface: '#ffffff', surfaceAlt: '#faf8f5', bgDeep: '#f0ece4',
@@ -57,16 +66,12 @@ export default function PdfIngestZone({ brain = 'story', source = 'franchise_bib
 
       setProgress('Sending to knowledge extraction…');
 
-      const res  = await fetch(`${API}/franchise-brain/ingest-pdf`, {
-        method: 'POST',
-        body:   formData,
-        // No Content-Type header — browser sets it with boundary automatically
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Upload failed');
+      let data;
+      try {
+        const res = await ingestPdfApi(formData);
+        data = res.data;
+      } catch (httpErr) {
+        throw new Error(httpErr.response?.data?.error || httpErr.message || 'Upload failed');
       }
 
       setProgress('');
