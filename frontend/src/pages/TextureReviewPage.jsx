@@ -2,9 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import './WorldStudio.css';
 
 const API = '/api/v1';
+
+// ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 3 helpers covering 5 fetch sites on /texture-layer/* (getTextureLayerApi
+// covers 2 sites — initial load + post-regenerate refetch;
+// confirmTextureLayerApi covers 2 sites — single-layer + all variants).
+export const getTextureLayerApi = (characterKey, storyNumber) =>
+  apiClient.get(`${API}/texture-layer/${characterKey}/${storyNumber}`);
+export const confirmTextureLayerApi = (storyNumber, payload) =>
+  apiClient.post(`${API}/texture-layer/confirm/${storyNumber}`, payload);
+export const regenerateTextureLayerApi = (storyNumber, layer, payload) =>
+  apiClient.post(`${API}/texture-layer/regenerate/${storyNumber}/${layer}`, payload);
 
 const LAYER_LABELS = {
   inner_thought:  'Inner Thought',
@@ -35,9 +47,8 @@ export default function TextureReviewPage() {
   const [saving, setSaving]    = useState(false);
 
   useEffect(() => {
-    fetch(`${API}/texture-layer/${characterKey}/${storyNumber}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { setTexture(d?.texture || null); setLoading(false); })
+    getTextureLayerApi(characterKey, storyNumber)
+      .then(res => { setTexture(res.data?.texture || null); setLoading(false); })
       .catch(() => setLoading(false));
   }, [characterKey, storyNumber]);
 
@@ -51,52 +62,34 @@ export default function TextureReviewPage() {
       post:           'post_confirmed',
       bleed:          'bleed_confirmed',
     };
-    const res = await fetch(`${API}/texture-layer/confirm/${storyNumber}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      const res = await confirmTextureLayerApi(storyNumber, {
         character_key: characterKey,
         fields: [fieldMap[layer]],
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setTexture(data.texture);
-    }
+      });
+      setTexture(res.data?.texture);
+    } catch { /* keep prior state on failure */ }
     setSaving(false);
   };
 
   const confirmAll = async () => {
     setSaving(true);
-    const res = await fetch(`${API}/texture-layer/confirm/${storyNumber}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ character_key: characterKey, fields: 'all' }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setTexture(data.texture);
-    }
+    try {
+      const res = await confirmTextureLayerApi(storyNumber, { character_key: characterKey, fields: 'all' });
+      setTexture(res.data?.texture);
+    } catch { /* keep prior state on failure */ }
     setSaving(false);
   };
 
   const regenerateLayer = async (layer) => {
-    const res = await fetch(
-      `${API}/texture-layer/regenerate/${storyNumber}/${layer}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ character_key: characterKey }),
-      }
-    );
-    if (res.ok) {
+    try {
+      await regenerateTextureLayerApi(storyNumber, layer, { character_key: characterKey });
       // Re-fetch texture after clearing
-      const fresh = await fetch(`${API}/texture-layer/${characterKey}/${storyNumber}`);
-      if (fresh.ok) {
-        const d = await fresh.json();
-        setTexture(d.texture);
-      }
-    }
+      try {
+        const fresh = await getTextureLayerApi(characterKey, storyNumber);
+        setTexture(fresh.data?.texture);
+      } catch { /* refetch failed; leave UI as-is */ }
+    } catch { /* regenerate failed; leave UI as-is */ }
   };
 
   if (loading) return (

@@ -8,7 +8,22 @@ import StoryNavigator from './StoryNavigator';
 import StoryInspector from './StoryInspector';
 import ArcGenerationStatus from './ArcGenerationStatus';
 import { API_BASE, PHASE_COLORS, PHASE_LABELS, TYPE_ICONS, WORLD_LABELS, getReadingTime } from './storyEngineConstants';
+import apiClient from '../services/api';
 import './StoryEngine.css';
+
+// ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 5 helpers covering 5 fetch sites across 4 endpoint families:
+// /story-health, /memories, /amber. File-local per Track 6 convention.
+export const getTherapySuggestionsApi = (characterKey) =>
+  apiClient.get(`${API_BASE}/story-health/therapy-suggestions/${characterKey}`);
+export const aiWriterActionApi = (payload) =>
+  apiClient.post(`${API_BASE}/memories/ai-writer-action`, payload);
+export const readStoryApi = (payload) =>
+  apiClient.post(`${API_BASE}/amber/read-story`, payload, { responseType: 'blob' });
+export const getEvalStoriesApi = (storyId) =>
+  apiClient.get(`${API_BASE}/memories/eval-stories/${storyId}`);
+export const getThreadsForStoryApi = (storyNumber, characterKey) =>
+  apiClient.get(`${API_BASE}/story-health/threads-for-story/${storyNumber}?character_key=${encodeURIComponent(characterKey)}`);
 
 // ─── Toast notification system ────────────────────────────────────────────────
 function ToastContainer({ toasts, onDismiss }) {
@@ -35,9 +50,8 @@ function TherapySuggestions({ characterKey, apiBase }) {
   useEffect(() => {
     if (!characterKey) return;
     setSuggestions(null);
-    fetch(`${apiBase}/story-health/therapy-suggestions/${characterKey}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setSuggestions(d))
+    getTherapySuggestionsApi(characterKey)
+      .then(res => setSuggestions(res.data))
       .catch(err => console.warn('therapy suggestions failed:', err.message));
   }, [characterKey, apiBase]);
 
@@ -136,12 +150,8 @@ function BottomWritingTools({ story, charObj, selectedCharKey, activeWorld, char
     };
 
     try {
-      const res = await fetch('/api/v1/memories/ai-writer-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
+      const res = await aiWriterActionApi(payload);
+      const data = res.data;
       const text = data.content || data.prose || data.nudge || data.continuation || data.text || data.result || '';
       if (text) setResult(text);
       else setError('No content returned — try a different action.');
@@ -368,27 +378,20 @@ function StoryPanel({
     // Try ElevenLabs first
     setTtsLoading(true);
     try {
-      const res = await fetch('/api/v1/amber/read-story', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.playbackRate = ttsRate;
-        audio.onended = () => { setTtsPlaying(false); setTtsPaused(false); URL.revokeObjectURL(url); };
-        audio.onerror = () => { setTtsPlaying(false); setTtsPaused(false); URL.revokeObjectURL(url); };
-        ttsAudioRef.current = audio;
-        ttsUsingElevenLabs.current = true;
-        setTtsLoading(false);
-        audio.play();
-        setTtsPlaying(true);
-        setTtsPaused(false);
-        return;
-      }
+      const res = await readStoryApi({ text });
+      const blob = res.data; // apiClient configured with responseType: 'blob'
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.playbackRate = ttsRate;
+      audio.onended = () => { setTtsPlaying(false); setTtsPaused(false); URL.revokeObjectURL(url); };
+      audio.onerror = () => { setTtsPlaying(false); setTtsPaused(false); URL.revokeObjectURL(url); };
+      ttsAudioRef.current = audio;
+      ttsUsingElevenLabs.current = true;
+      setTtsLoading(false);
+      audio.play();
+      setTtsPlaying(true);
+      setTtsPaused(false);
+      return;
     } catch {
       // ElevenLabs unavailable — fall through to browser TTS
     }
@@ -607,9 +610,9 @@ function StoryPanel({
   useEffect(() => {
     setEvalScore(null);
     if (!story?.id) return;
-    fetch(`${API_BASE}/memories/eval-stories/${story.id}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
+    getEvalStoriesApi(story.id)
+      .then(res => {
+        const d = res.data;
         if (d?.evaluation?.overall_score != null) setEvalScore(d.evaluation);
       })
       .catch(err => console.warn('eval score fetch failed:', err.message));
@@ -618,9 +621,8 @@ function StoryPanel({
   useEffect(() => {
     setActiveThreads([]);
     if (!story?.story_number || !selectedCharKey) return;
-    fetch(`${API_BASE}/story-health/threads-for-story/${story.story_number}?character_key=${encodeURIComponent(selectedCharKey)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.threads) setActiveThreads(d.threads); })
+    getThreadsForStoryApi(story.story_number, selectedCharKey)
+      .then(res => { if (res.data?.threads) setActiveThreads(res.data.threads); })
       .catch(err => console.warn('thread fetch failed:', err.message));
   }, [story?.story_number, selectedCharKey]);
 

@@ -8,9 +8,24 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import './SocialImport.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 5 helpers covering 5 fetch sites on /stories/social/*. listCharacterSocialApi
+// duplicated locally per v2.12 §9.11 (CP8 NovelAssembler also has it).
+export const importSocialApi = (payload) =>
+  apiClient.post(`${API_BASE}/stories/social/import`, payload);
+export const listCharacterSocialApi = (charKey) =>
+  apiClient.get(`${API_BASE}/stories/social/character/${charKey}`);
+export const updateSocialItemApi = (id, payload) =>
+  apiClient.patch(`${API_BASE}/stories/social/${id}`, payload);
+export const detectLalaApi = (id) =>
+  apiClient.post(`${API_BASE}/stories/social/${id}/detect-lala`);
+export const deleteSocialItemApi = (id) =>
+  apiClient.delete(`${API_BASE}/stories/social/${id}`);
 
 const CHARACTERS = {
   justawoman: { display_name: 'JustAWoman', icon: '♛', color: '#9a7d1e' },
@@ -50,17 +65,13 @@ function ImportForm({ selectedChar, onImported }) {
     setImporting(true);
     setResult(null);
     try {
-      const res = await fetch(`${API_BASE}/stories/social/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_key: selectedChar,
-          platform,
-          source_url: sourceUrl || undefined,
-          raw_content: rawContent,
-        }),
+      const res = await importSocialApi({
+        character_key: selectedChar,
+        platform,
+        source_url: sourceUrl || undefined,
+        raw_content: rawContent,
       });
-      const data = await res.json();
+      const data = res.data;
       if (data.success) {
         setResult({ type: 'success', data: data.import });
         setRawContent('');
@@ -70,7 +81,7 @@ function ImportForm({ selectedChar, onImported }) {
         setResult({ type: 'error', message: data.error });
       }
     } catch (err) {
-      setResult({ type: 'error', message: err.message });
+      setResult({ type: 'error', message: err.response?.data?.error || err.message });
     } finally {
       setImporting(false);
     }
@@ -269,11 +280,8 @@ export default function SocialImport({ embedded = false }) {
   const loadImports = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/stories/social/character/${selectedChar}`);
-      if (res.ok) {
-        const data = await res.json();
-        setImports(data.imports || []);
-      }
+      const res = await listCharacterSocialApi(selectedChar);
+      setImports(res.data?.imports || []);
     } catch (err) {
       console.error('Load imports error:', err);
     } finally {
@@ -291,11 +299,7 @@ export default function SocialImport({ embedded = false }) {
 
   async function handleStatusChange(id, newStatus) {
     try {
-      await fetch(`${API_BASE}/stories/social/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canon_status: newStatus }),
-      });
+      await updateSocialItemApi(id, { canon_status: newStatus });
       setImports(prev => prev.map(imp =>
         imp.id === id ? { ...imp, canon_status: newStatus } : imp
       ));
@@ -306,14 +310,12 @@ export default function SocialImport({ embedded = false }) {
 
   async function handleDetectLala(id) {
     try {
-      const res = await fetch(`${API_BASE}/stories/social/${id}/detect-lala`, { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.import) {
-          setImports(prev => prev.map(imp =>
-            imp.id === id ? data.import : imp
-          ));
-        }
+      const res = await detectLalaApi(id);
+      const data = res.data;
+      if (data.success && data.import) {
+        setImports(prev => prev.map(imp =>
+          imp.id === id ? data.import : imp
+        ));
       }
     } catch (err) {
       console.error('Lala detection error:', err);
@@ -323,7 +325,7 @@ export default function SocialImport({ embedded = false }) {
   async function handleDelete(id) {
     if (!window.confirm('Delete this import?')) return;
     try {
-      await fetch(`${API_BASE}/stories/social/${id}`, { method: 'DELETE' });
+      await deleteSocialItemApi(id);
       setImports(prev => prev.filter(imp => imp.id !== id));
     } catch (err) {
       console.error('Delete error:', err);
