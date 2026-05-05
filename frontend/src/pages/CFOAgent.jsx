@@ -6,8 +6,23 @@
  * Lights-Off, Health Patrol. Full audit or individual runs.
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 
 const API = '/api/v1/cfo';
+
+// ─── Track 6 CP7 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 7 helpers covering 8 fetch sites on /cfo/* (getQuickStatsApi covers 2 sites
+// — the initial-mount and post-save refresh). Mixed idiom: thenable for
+// fire-and-forget GETs (lines 70, 71, 140) and async for state-bearing
+// handlers. setBudgetApi is PUT (not POST per backend contract).
+export const getQuickStatsApi = () => apiClient.get(`${API}/quick`);
+export const getSchedulerApi = () => apiClient.get(`${API}/scheduler`);
+export const getAuditApi = () => apiClient.get(`${API}/audit`);
+export const getAgentApi = (name) => apiClient.get(`${API}/agent/${name}`);
+export const triggerSchedulerActionApi = (action, payload) =>
+  apiClient.post(`${API}/scheduler/${action}`, payload);
+export const getHistoryApi = () => apiClient.get(`${API}/history`);
+export const setBudgetApi = (payload) => apiClient.put(`${API}/budget`, payload);
 
 const LEVEL_COLORS = {
   critical: '#ef4444', warning: '#f59e0b', info: '#3b82f6', success: '#22c55e',
@@ -67,8 +82,8 @@ export default function CFOAgent() {
 
   // Load quick stats + scheduler status on mount
   useEffect(() => {
-    fetch(`${API}/quick`).then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(setQuickStats).catch(() => {});
-    fetch(`${API}/scheduler`).then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(setScheduler).catch(() => {});
+    getQuickStatsApi().then(res => setQuickStats(res.data)).catch(() => {});
+    getSchedulerApi().then(res => setScheduler(res.data)).catch(() => {});
   }, []);
 
   const runAudit = useCallback(async () => {
@@ -76,10 +91,8 @@ export default function CFOAgent() {
     setReport(null);
     setError(null);
     try {
-      const res = await fetch(`${API}/audit`);
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-      setReport(data);
+      const res = await getAuditApi();
+      setReport(res.data);
       setTab('overview');
     } catch (err) {
       console.error('CFO audit failed:', err);
@@ -94,10 +107,8 @@ export default function CFOAgent() {
     setAgentResult(null);
     setError(null);
     try {
-      const res = await fetch(`${API}/agent/${name}`);
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-      setAgentResult(data);
+      const res = await getAgentApi(name);
+      setAgentResult(res.data);
     } catch (err) {
       console.error(`Agent ${name} failed:`, err);
       setError(`${AGENT_META[name]?.label || name} failed — is the backend running?`);
@@ -108,10 +119,8 @@ export default function CFOAgent() {
   const toggleScheduler = useCallback(async () => {
     try {
       const action = scheduler?.running ? 'stop' : 'start';
-      const res = await fetch(`${API}/scheduler/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ interval_hours: 6 }) });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-      setScheduler(data);
+      const res = await triggerSchedulerActionApi(action, { interval_hours: 6 });
+      setScheduler(res.data);
     } catch (err) {
       setError('Scheduler toggle failed — is the backend running?');
     }
@@ -119,10 +128,8 @@ export default function CFOAgent() {
 
   const loadHistory = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/history`);
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-      setHistory(data);
+      const res = await getHistoryApi();
+      setHistory(res.data);
     } catch (err) {
       setError('Failed to load audit history.');
     }
@@ -130,14 +137,10 @@ export default function CFOAgent() {
 
   const saveBudget = useCallback(async (vals) => {
     try {
-      const res = await fetch(`${API}/budget`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(vals),
-      });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
+      const res = await setBudgetApi(vals);
+      const data = res.data;
       setBudgetEdit(null);
-      fetch(`${API}/quick`).then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(setQuickStats).catch(() => {});
+      getQuickStatsApi().then(r => setQuickStats(r.data)).catch(() => {});
       return data;
     } catch (err) {
       setError('Failed to save budget — is the backend running?');

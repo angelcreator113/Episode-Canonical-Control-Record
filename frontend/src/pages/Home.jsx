@@ -6,8 +6,14 @@ import { episodeService } from '../services/episodeService';
 import { showService } from '../services/showService';
 import universeService from '../services/universeService';
 import storytellerService from '../services/storytellerService';
+import apiClient from '../services/api';
 import PageLayout from '../components/layout/PageLayout';
 import './Home.css';
+
+// ─── Track 6 CP7 module-scope helper (Pattern F prophylactic — Api suffix) ───
+// listRegistriesApi duplicated locally per v2.12 §9.11 file-local convention
+// (CP3 WriteMode.jsx + CP6 CharacterTherapy.jsx also have it).
+export const listRegistriesApi = () => apiClient.get('/api/v1/character-registry/registries');
 
 const CHIP_COLORS = ['pink', 'purple', 'blue'];
 const BOOK_ICONS = ['📖', '📕', '📗', '📘', '📙'];
@@ -39,9 +45,10 @@ function Home() {
       storytellerService.getBooks(),
       showService.getAllShows(),
       episodeService.getEpisodes(1, 50).then(r => r?.data || []),
-      fetch('/api/v1/character-registry/registries').then(r => r.json()).then(d => {
+      listRegistriesApi().then(res => {
+        const d = res.data;
         const allChars = [];
-        (d.registries || []).forEach(reg => {
+        (d?.registries || []).forEach(reg => {
           (reg.characters || []).forEach(c => allChars.push(c));
         });
         return allChars;

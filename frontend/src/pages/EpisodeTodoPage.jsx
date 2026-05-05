@@ -9,7 +9,25 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import apiClient from '../services/api';
 import './WorldAdmin.css';
+
+// ─── Track 6 CP7 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 6 helpers covering 6 fetch sites. Promise.all + .catch fallback semantics
+// preserved with .catch(() => ({ data: {} })) on apiClient calls so the
+// destructure-on-empty pattern at the call site continues to work.
+export const getEpisodeTodoApi = (episodeId) =>
+  apiClient.get(`/api/v1/episodes/${episodeId}/todo`);
+export const getEpisodeTodoSocialApi = (episodeId) =>
+  apiClient.get(`/api/v1/episodes/${episodeId}/todo/social`);
+export const getEpisodeApi = (episodeId) =>
+  apiClient.get(`/api/v1/episodes/${episodeId}`);
+export const listShowEventsApi = (showId) =>
+  apiClient.get(`/api/v1/world/${showId}/events`);
+export const completeTodoSlotApi = (episodeId, slot, payload) =>
+  apiClient.post(`/api/v1/episodes/${episodeId}/todo/complete/${slot}`, payload);
+export const completeSocialTodoSlotApi = (episodeId, slot, payload) =>
+  apiClient.post(`/api/v1/episodes/${episodeId}/todo/complete-social/${slot}`, payload);
 
 const TIMING_ORDER = { before: 0, during: 1, after: 2 };
 const TIMING_LABELS = { before: 'Before Event', during: 'During Event', after: 'After Event' };
@@ -28,11 +46,11 @@ export default function EpisodeTodoPage() {
   useEffect(() => {
     if (!episodeId) return;
     Promise.all([
-      fetch(`/api/v1/episodes/${episodeId}/todo`).then(r => r.json()).catch(() => ({})),
-      fetch(`/api/v1/episodes/${episodeId}/todo/social`).then(r => r.json()).catch(() => ({})),
-      fetch(`/api/v1/episodes/${episodeId}`).then(r => r.json()).catch(() => ({})),
-    ]).then(([todoRes, socialRes, epRes]) => {
-      const td = todoRes.data;
+      getEpisodeTodoApi(episodeId).then(r => r.data).catch(() => ({})),
+      getEpisodeTodoSocialApi(episodeId).then(r => r.data).catch(() => ({})),
+      getEpisodeApi(episodeId).then(r => r.data).catch(() => ({})),
+    ]).then(([todoBody, socialBody, epBody]) => {
+      const td = todoBody.data;
       if (td) {
         setTodoList(td);
         if (td.financial_summary) {
@@ -40,13 +58,13 @@ export default function EpisodeTodoPage() {
           setFinancials(fs);
         }
       }
-      const st = socialRes.social_tasks || [];
+      const st = socialBody.social_tasks || [];
       setSocialTasks(typeof st === 'string' ? JSON.parse(st) : st);
-      if (socialRes.financial_summary) {
-        const fs = typeof socialRes.financial_summary === 'string' ? JSON.parse(socialRes.financial_summary) : socialRes.financial_summary;
+      if (socialBody.financial_summary) {
+        const fs = typeof socialBody.financial_summary === 'string' ? JSON.parse(socialBody.financial_summary) : socialBody.financial_summary;
         if (!financials) setFinancials(fs);
       }
-      const ep = epRes.episode || epRes.data || epRes;
+      const ep = epBody.episode || epBody.data || epBody;
       if (ep?.id) setEpisode(ep);
     }).catch(err => setError(err.message)).finally(() => setLoading(false));
   }, [episodeId]);
@@ -54,10 +72,9 @@ export default function EpisodeTodoPage() {
   // Load linked event
   useEffect(() => {
     if (!todoList?.event_id) return;
-    fetch(`/api/v1/world/${todoList.show_id}/events`)
-      .then(r => r.json())
-      .then(d => {
-        const ev = (d.events || []).find(e => e.id === todoList.event_id);
+    listShowEventsApi(todoList.show_id)
+      .then(res => {
+        const ev = (res.data?.events || []).find(e => e.id === todoList.event_id);
         if (ev) setEvent(ev);
       })
       .catch(() => {});
@@ -65,12 +82,9 @@ export default function EpisodeTodoPage() {
 
   const toggleWardrobeTask = async (slot) => {
     try {
-      const res = await fetch(`/api/v1/episodes/${episodeId}/todo/complete/${slot}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ completed: !todoList.tasks.find(t => t.slot === slot)?.completed }),
-      });
-      const d = await res.json();
+      const completed = !todoList.tasks.find(t => t.slot === slot)?.completed;
+      const res = await completeTodoSlotApi(episodeId, slot, { completed });
+      const d = res.data;
       if (d.success) {
         setTodoList(prev => ({ ...prev, tasks: d.tasks, completion: d.completion }));
       }
@@ -80,12 +94,8 @@ export default function EpisodeTodoPage() {
   const toggleSocialTask = async (slot) => {
     try {
       const task = socialTasks.find(t => t.slot === slot);
-      const res = await fetch(`/api/v1/episodes/${episodeId}/todo/complete-social/${slot}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ completed: !task?.completed }),
-      });
-      const d = await res.json();
+      const res = await completeSocialTodoSlotApi(episodeId, slot, { completed: !task?.completed });
+      const d = res.data;
       if (d.success) setSocialTasks(d.social_tasks);
     } catch {}
   };

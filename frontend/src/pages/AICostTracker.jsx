@@ -3,8 +3,20 @@
  * Route: /ai-costs
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 
 const API = '/api/v1/ai-usage';
+
+// ─── Track 6 CP7 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 6 helpers covering 6 fetch sites on /ai-usage/*. Pure thenable shape →
+// apiClient Promise.all (axios returns parsed res.data, .json() chain
+// collapses).
+export const getSummaryApi = (days) => apiClient.get(`${API}/summary?days=${days}`);
+export const getByModelApi = (days) => apiClient.get(`${API}/by-model?days=${days}`);
+export const getByRouteApi = (days) => apiClient.get(`${API}/by-route?days=${days}`);
+export const getDailyApi = (days) => apiClient.get(`${API}/daily?days=${days}`);
+export const getOptimizationsApi = () => apiClient.get(`${API}/optimizations`);
+export const getRecentApi = (limit) => apiClient.get(`${API}/recent?limit=${limit}`);
 
 const TIER_COLORS = { opus: '#ef4444', sonnet: '#f59e0b', haiku: '#22c55e', unknown: '#6b7280' };
 const TIER_LABELS = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku', unknown: 'Other' };
@@ -27,18 +39,18 @@ export default function AICostTracker() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, m, r, d, opt] = await Promise.all([
-        fetch(`${API}/summary?days=${days}`).then(r => r.json()),
-        fetch(`${API}/by-model?days=${days}`).then(r => r.json()),
-        fetch(`${API}/by-route?days=${days}`).then(r => r.json()),
-        fetch(`${API}/daily?days=${days}`).then(r => r.json()),
-        fetch(`${API}/optimizations`).then(r => r.json()),
+      const [sRes, mRes, rRes, dRes, optRes] = await Promise.all([
+        getSummaryApi(days),
+        getByModelApi(days),
+        getByRouteApi(days),
+        getDailyApi(days),
+        getOptimizationsApi(),
       ]);
-      setSummary(s);
-      setByModel(m);
-      setByRoute(r);
-      setDaily(d);
-      setOptimizations(opt);
+      setSummary(sRes.data);
+      setByModel(mRes.data);
+      setByRoute(rRes.data);
+      setDaily(dRes.data);
+      setOptimizations(optRes.data);
     } catch (err) {
       console.error('Failed to load AI usage data:', err);
     }
@@ -47,8 +59,8 @@ export default function AICostTracker() {
 
   const loadRecent = useCallback(async () => {
     try {
-      const data = await fetch(`${API}/recent?limit=100`).then(r => r.json());
-      setRecent(data);
+      const res = await getRecentApi(100);
+      setRecent(res.data);
     } catch (err) { console.error(err); }
   }, []);
 

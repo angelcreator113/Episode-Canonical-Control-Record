@@ -9,8 +9,26 @@
 //   <Route path="/amber" element={<AmberCommandCenter />} />
 
 import { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 
 const API = import.meta.env.VITE_API_URL || '';
+
+// ─── Track 6 CP7 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 6 helpers covering 6 fetch sites on /api/v1/amber/diagnostic/*. URLs use
+// `${API}/api/v1/...` shape because API base is empty by default
+// (VITE_API_URL override at build time when needed).
+export const listFindingsApi = (queryString) =>
+  apiClient.get(queryString ? `${API}/api/v1/amber/diagnostic/findings?${queryString}` : `${API}/api/v1/amber/diagnostic/findings`);
+export const getQueueApi = () =>
+  apiClient.get(`${API}/api/v1/amber/diagnostic/queue`);
+export const triggerScanApi = (payload) =>
+  apiClient.post(`${API}/api/v1/amber/diagnostic/scan`, payload);
+export const approveFindingApi = (id) =>
+  apiClient.post(`${API}/api/v1/amber/diagnostic/findings/${id}/approve`);
+export const executeFindingApi = (id) =>
+  apiClient.post(`${API}/api/v1/amber/diagnostic/findings/${id}/execute`);
+export const dismissFindingApi = (id) =>
+  apiClient.post(`${API}/api/v1/amber/diagnostic/findings/${id}/dismiss`);
 
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 const SEVERITY_COLOR = {
@@ -279,17 +297,17 @@ export default function AmberCommandCenter() {
         applied: 'applied',
         all:     '',
       };
-      const q   = statusMap[filter] ? `?status=${statusMap[filter]}` : '';
-      const res = await fetch(`${API}/api/v1/amber/diagnostic/findings${q}`);
-      const data = await res.json();
+      const qs = statusMap[filter] ? `status=${statusMap[filter]}` : '';
+      const res = await listFindingsApi(qs);
+      const data = res.data;
       setFindings(Array.isArray(data) ? data : []);
     } catch { setFindings([]); }
   }, [filter]);
 
   const loadTasks = useCallback(async () => {
     try {
-      const res  = await fetch(`${API}/api/v1/amber/diagnostic/queue`);
-      const data = await res.json();
+      const res = await getQueueApi();
+      const data = res.data;
       setTasks(Array.isArray(data) ? data : []);
     } catch { setTasks([]); }
   }, []);
@@ -302,13 +320,8 @@ export default function AmberCommandCenter() {
     setScanning(true);
     setScanResult(null);
     try {
-      const res  = await fetch(`${API}/api/v1/amber/diagnostic/scan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trigger: 'manual' }),
-      });
-      const data = await res.json();
-      setScanResult(data);
+      const res = await triggerScanApi({ trigger: 'manual' });
+      setScanResult(res.data);
       await loadFindings();
     } catch {
       setScanResult({ error: 'Scan failed' });
@@ -319,23 +332,21 @@ export default function AmberCommandCenter() {
 
   async function approveFinding(id) {
     try {
-      const res = await fetch(`${API}/api/v1/amber/diagnostic/findings/${id}/approve`, { method: 'POST' });
-      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
+      await approveFindingApi(id);
       await loadFindings();
     } catch (err) {
-      showToast(`Approve failed: ${err.message}`, true);
+      showToast(`Approve failed: ${err.response?.data?.error || err.message}`, true);
     }
   }
 
   async function executeFinding(id) {
     setExecuting(id);
     try {
-      const res = await fetch(`${API}/api/v1/amber/diagnostic/findings/${id}/execute`, { method: 'POST' });
-      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
+      await executeFindingApi(id);
       showToast('Fix applied via Claude Code');
       await loadFindings();
     } catch (err) {
-      showToast(`Execution failed: ${err.message}`, true);
+      showToast(`Execution failed: ${err.response?.data?.error || err.message}`, true);
     } finally {
       setExecuting(null);
     }
@@ -343,11 +354,10 @@ export default function AmberCommandCenter() {
 
   async function dismissFinding(id) {
     try {
-      const res = await fetch(`${API}/api/v1/amber/diagnostic/findings/${id}/dismiss`, { method: 'POST' });
-      if (!res.ok) throw new Error((await res.json()).error || `HTTP ${res.status}`);
+      await dismissFindingApi(id);
       await loadFindings();
     } catch (err) {
-      showToast(`Dismiss failed: ${err.message}`, true);
+      showToast(`Dismiss failed: ${err.response?.data?.error || err.message}`, true);
     }
   }
 
