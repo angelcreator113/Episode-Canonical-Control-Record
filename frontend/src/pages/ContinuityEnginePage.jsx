@@ -21,8 +21,39 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import apiClient from '../services/api';
 
 const API = '/api/v1/continuity';
+
+// ─── Track 6 CP6 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 10 helpers covering 10 fetch sites on /continuity/* (timelines, characters,
+// beats, conflicts, seed-demo). File-local per Track 6 convention. CP4-zone
+// idiom — if (!res.ok) return blocks become redundant with apiClient
+// interceptor (throws on non-2xx) and surrounding try/catch handles failure.
+
+// Timelines
+export const listTimelinesApi = (showId) =>
+  apiClient.get(showId ? `${API}/timelines?show_id=${showId}` : `${API}/timelines`);
+export const getTimelineApi = (id) => apiClient.get(`${API}/timelines/${id}`);
+export const listConflictsApi = (id) => apiClient.get(`${API}/timelines/${id}/conflicts`);
+export const createTimelineApi = (payload) => apiClient.post(`${API}/timelines`, payload);
+
+// Timeline characters
+export const addTimelineCharacterApi = (timelineId, payload) =>
+  apiClient.post(`${API}/timelines/${timelineId}/characters`, payload);
+export const deleteContinuityCharacterApi = (charId) =>
+  apiClient.delete(`${API}/characters/${charId}`);
+
+// Beats
+export const addBeatApi = (timelineId, payload) =>
+  apiClient.post(`${API}/timelines/${timelineId}/beats`, payload);
+export const updateBeatApi = (beatId, payload) =>
+  apiClient.put(`${API}/beats/${beatId}`, payload);
+export const deleteBeatApi = (beatId) => apiClient.delete(`${API}/beats/${beatId}`);
+
+// Demo seeding
+export const seedDemoApi = (timelineId) =>
+  apiClient.post(`${API}/timelines/${timelineId}/seed-demo`);
 
 /* ── Responsive hook ─────────────────────────────────────────────── */
 function useWindowWidth() {
@@ -90,18 +121,15 @@ export default function ContinuityEnginePage() {
   async function loadTimelines() {
     setLoading(true);
     try {
-      const url = showId
-        ? `${API}/timelines?show_id=${showId}`
-        : `${API}/timelines`;
-      const res  = await fetch(url);
-      if (!res.ok) { setTimelines([]); setLoading(false); return; }
-      const data = await res.json();
+      const res = await listTimelinesApi(showId);
+      const data = res.data;
       const list = data.timelines || data || [];
       setTimelines(list);
       if (list.length > 0 && !active) {
         await loadTimeline(list[0].id);
       }
     } catch (err) {
+      setTimelines([]);
       showToast('Failed to load timelines', 'error');
     } finally {
       setLoading(false);
@@ -110,9 +138,8 @@ export default function ContinuityEnginePage() {
 
   async function loadTimeline(id) {
     try {
-      const res  = await fetch(`${API}/timelines/${id}`);
-      if (!res.ok) return;
-      const data = await res.json();
+      const res = await getTimelineApi(id);
+      const data = res.data;
       setActive(data.timeline || data);
     } catch (err) {
       showToast('Failed to load timeline', 'error');
@@ -121,10 +148,8 @@ export default function ContinuityEnginePage() {
 
   async function loadConflicts(id) {
     try {
-      const res  = await fetch(`${API}/timelines/${id}/conflicts`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setConflicts(data.conflicts || []);
+      const res = await listConflictsApi(id);
+      setConflicts(res.data?.conflicts || []);
     } catch (err) {
       // silent — conflicts are supplementary
     }
@@ -132,13 +157,9 @@ export default function ContinuityEnginePage() {
 
   async function createTimeline(form) {
     try {
-      const res  = await fetch(`${API}/timelines`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ title: form.name, description: form.description, show_id: showId }),
-      });
-      const data = await res.json();
-      const t    = data.timeline || data;
+      const res = await createTimelineApi({ title: form.name, description: form.description, show_id: showId });
+      const data = res.data;
+      const t = data.timeline || data;
       setTimelines(prev => [...prev, t]);
       await loadTimeline(t.id);
       setShowNewTimeline(false);
@@ -151,12 +172,8 @@ export default function ContinuityEnginePage() {
   async function addCharacter(form) {
     if (!active) return;
     try {
-      const res  = await fetch(`${API}/timelines/${active.id}/characters`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(form),
-      });
-      const data = await res.json();
+      const res = await addTimelineCharacterApi(active.id, form);
+      const data = res.data;
       setActive(prev => ({
         ...prev,
         characters: [...(prev.characters || []), data.character || data],
@@ -170,7 +187,7 @@ export default function ContinuityEnginePage() {
 
   async function deleteCharacter(charId) {
     try {
-      await fetch(`${API}/characters/${charId}`, { method: 'DELETE' });
+      await deleteContinuityCharacterApi(charId);
       setActive(prev => ({
         ...prev,
         characters: (prev.characters || []).filter(c => c.id !== charId),
@@ -188,12 +205,8 @@ export default function ContinuityEnginePage() {
   async function addBeat(form) {
     if (!active) return;
     try {
-      const res  = await fetch(`${API}/timelines/${active.id}/beats`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(form),
-      });
-      const data = await res.json();
+      const res = await addBeatApi(active.id, form);
+      const data = res.data;
       const beat = data.beat || data;
       setActive(prev => ({
         ...prev,
@@ -210,12 +223,8 @@ export default function ContinuityEnginePage() {
 
   async function updateBeat(beatId, form) {
     try {
-      const res  = await fetch(`${API}/beats/${beatId}`, {
-        method:  'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(form),
-      });
-      const data = await res.json();
+      const res = await updateBeatApi(beatId, form);
+      const data = res.data;
       const updated = data.beat || data;
       setActive(prev => ({
         ...prev,
@@ -234,7 +243,7 @@ export default function ContinuityEnginePage() {
   async function deleteBeat(beatId) {
     if (!window.confirm('Delete this beat?')) return;
     try {
-      await fetch(`${API}/beats/${beatId}`, { method: 'DELETE' });
+      await deleteBeatApi(beatId);
       setActive(prev => ({
         ...prev,
         beats: (prev.beats || []).filter(b => b.id !== beatId),
@@ -250,7 +259,7 @@ export default function ContinuityEnginePage() {
   async function seedDemo() {
     if (!active) return;
     try {
-      await fetch(`${API}/timelines/${active.id}/seed-demo`, { method: 'POST' });
+      await seedDemoApi(active.id);
       await loadTimeline(active.id);
       await loadConflicts(active.id);
       showToast('Demo data loaded');
