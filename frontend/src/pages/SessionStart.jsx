@@ -5,9 +5,13 @@
  */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import './SessionStart.css';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP7 module-scope helper (Pattern F prophylactic — Api suffix) ───
+export const getSessionBriefApi = () => apiClient.get(`${API}/session/brief`);
 
 function SessionStart() {
   const navigate = useNavigate();
@@ -22,15 +26,11 @@ function SessionStart() {
   const fetchBrief = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API}/session/brief`);
-      if (!res.ok) throw new Error('Failed to load briefing');
-      const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) throw new Error('Server returned non-JSON response');
-      const data = await res.json();
-      setBrief(data);
+      const res = await getSessionBriefApi();
+      setBrief(res.data);
     } catch (err) {
       console.error('Session brief error:', err);
-      setError(err.message);
+      setError(err.message || 'Failed to load briefing');
     } finally {
       setLoading(false);
     }

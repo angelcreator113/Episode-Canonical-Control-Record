@@ -6,6 +6,11 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
+
+// ─── Track 6 CP7 module-scope helper (Pattern F prophylactic — Api suffix) ───
+export const searchStoryHealthApi = (query) =>
+  apiClient.get(`/api/v1/story-health/search?q=${encodeURIComponent(query)}`);
 
 const RESULT_ROUTES = {
   character: (r) => `/character-registry?search=${encodeURIComponent(r.display_name || r.character_key)}`,
@@ -67,9 +72,8 @@ export default function CommandPalette() {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/v1/story-health/search?q=${encodeURIComponent(q)}`);
-        const data = await res.json();
-        setResults(data.results || []);
+        const res = await searchStoryHealthApi(q);
+        setResults(res.data?.results || []);
         setHighlight(0);
       } catch {
         setResults([]);

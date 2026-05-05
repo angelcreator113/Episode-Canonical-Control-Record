@@ -4,8 +4,27 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP7 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 7 helpers covering 7 explicit-endpoint fetch sites on /world/* (snapshots,
+// timeline, tension-scanner, create-tension-proposal). The 8th site is the
+// component-local safeFetch helper at line 53 — refactored to use apiClient
+// internally, preserving its `safeFetch(url) → null on error` signature so
+// the 8 callers in the setup-status useEffect work unchanged.
+export const listSnapshotsApi = () => apiClient.get(`${API}/world/state/snapshots`);
+export const listTimelineApi = () => apiClient.get(`${API}/world/state/timeline`);
+export const getTensionScannerApi = () => apiClient.get(`${API}/world/tension-scanner`);
+export const createSnapshotApi = (payload) =>
+  apiClient.post(`${API}/world/state/snapshots`, payload);
+export const createTimelineEventApi = (payload) =>
+  apiClient.post(`${API}/world/state/timeline`, payload);
+export const deleteTimelineEventApi = (id) =>
+  apiClient.delete(`${API}/world/state/timeline/${id}`);
+export const createTensionProposalApi = (payload) =>
+  apiClient.post(`${API}/world/create-tension-proposal`, payload);
 
 const SETUP_STEPS = [
   { num: 1, key: 'infrastructure', icon: '🏗️', title: 'World Foundation', route: '/world-foundation', description: 'Define the DREAM cities, companies, universities, and legendary figures.', feeds: ['Cultural Calendar', 'Locations', 'Feed profiles'] },
@@ -49,9 +68,10 @@ export default function WorldDashboard() {
   const [tensionPairs, setTensionPairs] = useState([]);
   const [tensionLoading, setTensionLoading] = useState(false);
 
-  // Check setup status — safe fetch that returns null on 404/error
+  // Check setup status — safe fetch that returns null on 404/error.
+  // Uses apiClient under the hood so auth is injected via the interceptor.
   const safeFetch = async (url) => {
-    try { const r = await fetch(url); if (!r.ok) return null; return await r.json(); }
+    try { const res = await apiClient.get(url); return res.data; }
     catch { return null; }
   };
 
@@ -79,26 +99,26 @@ export default function WorldDashboard() {
   }, []);
 
   // Load state data
-  const loadSnapshots = useCallback(async () => { setSnapLoading(true); try { const r = await fetch(`${API}/world/state/snapshots`); const d = await r.json(); setSnapshots(d.snapshots||[]); } catch(e){console.error(e);} finally{setSnapLoading(false);} }, []);
-  const loadTimeline = useCallback(async () => { setTlLoading(true); try { const r = await fetch(`${API}/world/state/timeline`); const d = await r.json(); setTimelineEvents(d.events||[]); } catch(e){console.error(e);} finally{setTlLoading(false);} }, []);
-  const loadTensions = useCallback(async () => { setTensionLoading(true); try { const r = await fetch(`${API}/world/tension-scanner`); const d = await r.json(); setTensionPairs(d.pairs||[]); } catch(e){console.error(e);} finally{setTensionLoading(false);} }, []);
+  const loadSnapshots = useCallback(async () => { setSnapLoading(true); try { const r = await listSnapshotsApi(); setSnapshots(r.data?.snapshots||[]); } catch(e){console.error(e);} finally{setSnapLoading(false);} }, []);
+  const loadTimeline = useCallback(async () => { setTlLoading(true); try { const r = await listTimelineApi(); setTimelineEvents(r.data?.events||[]); } catch(e){console.error(e);} finally{setTlLoading(false);} }, []);
+  const loadTensions = useCallback(async () => { setTensionLoading(true); try { const r = await getTensionScannerApi(); setTensionPairs(r.data?.pairs||[]); } catch(e){console.error(e);} finally{setTensionLoading(false);} }, []);
 
   useEffect(() => { if (tab==='state') { loadSnapshots(); loadTimeline(); } if (tab==='tensions') loadTensions(); }, [tab]);
 
   const saveSnapshot = async () => {
-    try { await fetch(`${API}/world/state/snapshots`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ snapshot_label:snapForm.snapshot_label, world_facts:snapForm.world_facts?snapForm.world_facts.split('\n').filter(Boolean):[], active_threads:snapForm.active_threads?snapForm.active_threads.split('\n').filter(Boolean):[] }) }); flash('Snapshot saved'); setSnapForm({snapshot_label:'',world_facts:'',active_threads:''}); loadSnapshots(); } catch { flash('Failed','error'); }
+    try { await createSnapshotApi({ snapshot_label:snapForm.snapshot_label, world_facts:snapForm.world_facts?snapForm.world_facts.split('\n').filter(Boolean):[], active_threads:snapForm.active_threads?snapForm.active_threads.split('\n').filter(Boolean):[] }); flash('Snapshot saved'); setSnapForm({snapshot_label:'',world_facts:'',active_threads:''}); loadSnapshots(); } catch { flash('Failed','error'); }
   };
 
   const saveTimelineEvent = async () => {
-    try { await fetch(`${API}/world/state/timeline`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(tlForm) }); flash('Event added'); setTlForm({event_name:'',event_description:'',event_type:'plot',impact_level:'moderate',story_date:''}); loadTimeline(); } catch { flash('Failed','error'); }
+    try { await createTimelineEventApi(tlForm); flash('Event added'); setTlForm({event_name:'',event_description:'',event_type:'plot',impact_level:'moderate',story_date:''}); loadTimeline(); } catch { flash('Failed','error'); }
   };
 
   const deleteTimelineEvent = async (id) => {
-    try { await fetch(`${API}/world/state/timeline/${id}`, { method:'DELETE' }); flash('Deleted'); loadTimeline(); } catch { flash('Failed','error'); }
+    try { await deleteTimelineEventApi(id); flash('Deleted'); loadTimeline(); } catch { flash('Failed','error'); }
   };
 
   const proposeTensionScene = async (pair) => {
-    try { const r = await fetch(`${API}/world/create-tension-proposal`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({char_a_id:pair.char_a_id,char_b_id:pair.char_b_id}) }); const d = await r.json(); if (d.proposal) navigate('/story-evaluation', {state:{sceneProposal:d.proposal}}); else flash('Could not generate','error'); } catch { flash('Failed','error'); }
+    try { const r = await createTensionProposalApi({char_a_id:pair.char_a_id,char_b_id:pair.char_b_id}); if (r.data?.proposal) navigate('/story-evaluation', {state:{sceneProposal:r.data.proposal}}); else flash('Could not generate','error'); } catch { flash('Failed','error'); }
   };
 
   const completedCount = Object.values(status).filter(Boolean).length;
