@@ -1,7 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+// URL-branching split per v2.17 §9.11 — line 124 chooses between
+// /press/generate-post and /press/generate-scene. Each branch
+// becomes its own helper; call site does ternary.
+export const seedPressCharactersApi = () =>
+  apiClient.post(`${API}/press/seed-characters`).then((r) => r.data);
+export const generatePressPostApi = (slug) =>
+  apiClient.post(`${API}/press/generate-post`, { slug }).then((r) => r.data);
+export const generatePressSceneApi = (slug) =>
+  apiClient.post(`${API}/press/generate-scene`, { slug }).then((r) => r.data);
+export const advanceCareerApi = (slug) =>
+  apiClient.post(`${API}/press/advance-career`, { slug }).then((r) => r.data);
 
 /* ── colour tokens ────────────────────── */
 const PINK   = '#e8b4b8';
@@ -85,7 +98,20 @@ export default function PressPublisher() {
   const [genResult, setGenResult] = useState(null);
   const [error, setError] = useState(null);
 
-  /* ── fetch characters ── */
+  /* ── fetch characters ──
+   * LOCKED PUBLIC site (CP11 first F-AUTH-1 mixed PUBLIC+BUG instance).
+   * GET /press/characters is in the inventory v2 §4.2 LOCKED PUBLIC list:
+   * `press.js` is one of the routes pre-flight §7.2 tagged for the
+   * `degradeOnInfraFailure: true` flag in F-Auth-3 (Step 2). Public reads
+   * (press kit) must remain available during a Cognito outage. Migration
+   * to apiClient is intentionally NOT applied here — apiClient would
+   * attach an Authorization header and route through the F-Auth-3
+   * classifier path. Raw fetch with no auth header is the correct
+   * shape for genuine public reads. Step 3 backend audit applies
+   * `degradeOnInfraFailure: true` on the route side; this site stays.
+   * Pattern G-style locked-exception comment block; per-site adjudication
+   * v2.18 §9.11 candidate.
+   */
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -106,7 +132,7 @@ export default function PressPublisher() {
   const seed = async () => {
     setLoading(true);
     try {
-      await fetch(`${API}/press/seed-characters`, { method: 'POST' });
+      await seedPressCharactersApi();
       await load();
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -118,16 +144,9 @@ export default function PressPublisher() {
     setGenerating(true);
     setGenResult(null);
     try {
-      const url = type === 'post'
-        ? `${API}/press/generate-post`
-        : `${API}/press/generate-scene`;
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: selected.character_slug }),
-      });
-      if (!r.ok) throw new Error('Generation failed');
-      const d = await r.json();
+      const d = type === 'post'
+        ? await generatePressPostApi(selected.character_slug)
+        : await generatePressSceneApi(selected.character_slug);
       setGenResult(d);
     } catch (e) { setError(e.message); }
     finally { setGenerating(false); }
@@ -138,12 +157,7 @@ export default function PressPublisher() {
     if (!selected) return;
     setGenerating(true);
     try {
-      const r = await fetch(`${API}/press/advance-career`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: selected.character_slug }),
-      });
-      if (!r.ok) throw new Error('Advance failed');
+      await advanceCareerApi(selected.character_slug);
       await load();
     } catch (e) { setError(e.message); }
     finally { setGenerating(false); }

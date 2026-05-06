@@ -22,6 +22,15 @@ import './StoryReviewPanel.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
+// File-local helpers. listStoriesForCharacterApi is a CP9 cross-CP
+// duplicate per v2.12 §9.11; the other two are fresh.
+export const listStoriesForCharacterApi = (characterKey) =>
+  apiClient.get(`${API_BASE}/stories/character/${characterKey}`).then((r) => r.data);
+export const approveStoryApi = (storyId) =>
+  apiClient.post(`${API_BASE}/stories/${storyId}/approve`).then((r) => r.data);
+export const rejectStoryApi = (storyId) =>
+  apiClient.patch(`${API_BASE}/stories/${storyId}`, { status: 'rejected' });
+
 export default function StoryReviewPanel({
   story,
   characterKey,
@@ -59,14 +68,11 @@ export default function StoryReviewPanel({
     if (!characterKey) return;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/stories/character/${characterKey}`);
-        if (res.ok) {
-          const data = await res.json();
-          const existing = data.stories?.find(s => s.story_number === story?.story_number);
-          if (existing) {
-            setDbStory(existing);
-            setSavedVersion(existing.version);
-          }
+        const data = await listStoriesForCharacterApi(characterKey);
+        const existing = data.stories?.find(s => s.story_number === story?.story_number);
+        if (existing) {
+          setDbStory(existing);
+          setSavedVersion(existing.version);
         }
       } catch { /* ignore */ }
     })();
@@ -121,12 +127,9 @@ export default function StoryReviewPanel({
     if (!storyId) return;
 
     try {
-      const res = await fetch(`${API_BASE}/stories/${storyId}/approve`, { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        setDbStory(data.story);
-        onApproved?.(data.story);
-      }
+      const data = await approveStoryApi(storyId);
+      setDbStory(data.story);
+      onApproved?.(data.story);
     } catch (err) {
       console.error('Approve error:', err);
     }
@@ -136,11 +139,7 @@ export default function StoryReviewPanel({
   async function handleReject() {
     if (dbStory?.id) {
       try {
-        await fetch(`${API_BASE}/stories/${dbStory.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'rejected' }),
-        });
+        await rejectStoryApi(dbStory.id);
       } catch { /* ignore */ }
     }
     onRejected?.(story);

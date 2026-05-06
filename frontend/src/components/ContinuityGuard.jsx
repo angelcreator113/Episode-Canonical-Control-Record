@@ -17,9 +17,20 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import apiClient from '../services/api';
 
 const MEMORIES_API    = '/api/v1/memories';
 const STORYTELLER_API = '/api/v1/storyteller';
+
+// File-local helpers. continuityCheckApi + rewriteOptionsApi are
+// fresh; updateLineApi is fresh-in-CP11 (similar to CP3 updateChapter
+// but on /lines/:id rather than /chapters/:id).
+export const continuityCheckApi = (payload) =>
+  apiClient.post(`${MEMORIES_API}/continuity-check`, payload);
+export const rewriteOptionsApi = (payload) =>
+  apiClient.post(`${MEMORIES_API}/rewrite-options`, payload);
+export const updateLineApi = (lineId, payload) =>
+  apiClient.put(`${STORYTELLER_API}/lines/${lineId}`, payload);
 
 // ══════════════════════════════════════════════════════════════════════════
 //  CONTINUITY GUARD
@@ -49,25 +60,19 @@ export function ContinuityGuard({ chapter, lines, book, triggerLine }) {
         .map((l, i) => `LINE ${i + 1}: ${l.text}`)
         .join('\n\n');
 
-      const res = await fetch(`${MEMORIES_API}/continuity-check`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id:    book.id,
-          chapter_id: chapter.id,
-          chapter_brief: {
-            title:     chapter.title,
-            theme:     chapter.theme,
-            scene_goal: chapter.scene_goal,
-            emotional_state_start: chapter.emotional_state_start,
-            emotional_state_end:   chapter.emotional_state_end,
-          },
-          all_lines: allContent,
-          trigger_line: triggerLine.text,
-        }),
+      const { data } = await continuityCheckApi({
+        book_id:    book.id,
+        chapter_id: chapter.id,
+        chapter_brief: {
+          title:     chapter.title,
+          theme:     chapter.theme,
+          scene_goal: chapter.scene_goal,
+          emotional_state_start: chapter.emotional_state_start,
+          emotional_state_end:   chapter.emotional_state_end,
+        },
+        all_lines: allContent,
+        trigger_line: triggerLine.text,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
 
       if (data.issues?.length > 0) {
         setIssues(prev => {
@@ -182,27 +187,21 @@ export function RewriteOptions({ line, chapter, book, onAccept }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${MEMORIES_API}/rewrite-options`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id:    book.id,
-          chapter_id: chapter.id,
-          line_id:    line.id,
-          content:    line.text,
-          chapter_brief: {
-            title:     chapter.title,
-            theme:     chapter.theme,
-            pov:       chapter.pov || 'first_person',
-            emotional_state_start: chapter.emotional_state_start,
-          },
-        }),
+      const { data } = await rewriteOptionsApi({
+        book_id:    book.id,
+        chapter_id: chapter.id,
+        line_id:    line.id,
+        content:    line.text,
+        chapter_brief: {
+          title:     chapter.title,
+          theme:     chapter.theme,
+          pov:       chapter.pov || 'first_person',
+          emotional_state_start: chapter.emotional_state_start,
+        },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
       setOptions(data.options);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setLoading(false);
     }
@@ -212,22 +211,13 @@ export function RewriteOptions({ line, chapter, book, onAccept }) {
     setSelected(option.type);
     setAccepting(true);
     try {
-      const res = await fetch(`${STORYTELLER_API}/lines/${line.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: option.text,
-          status: 'edited',
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      await updateLineApi(line.id, { text: option.text, status: 'edited' });
       onAccept?.(option.text);
       setOpen(false);
       setOptions(null);
       setSelected(null);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setAccepting(false);
     }

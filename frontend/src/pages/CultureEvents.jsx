@@ -7,6 +7,7 @@
  *   History      — what the world remembers (memory system)
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 import usePageData from '../hooks/usePageData';
 import PushToBrain from '../components/PushToBrain';
 import EventsTab from '../components/Culture/EventsTab';
@@ -14,6 +15,22 @@ import AwardsMediaTab from '../components/Culture/AwardsMediaTab';
 import HistoryTab from '../components/Culture/HistoryTab';
 import { CALENDAR_DEFAULTS } from '../data/calendarData';
 import { MEMORY_DEFAULTS } from '../data/memoryData';
+
+// File-local cross-CP duplicates of CP10 CulturalCalendar helpers per
+// v2.12 §9.11 file-local convention. listShowsApi reaches 5-fold
+// cross-CP existence (CP2 + CP5 + CP7 + CP9 showService + CP10 + CP11).
+export const listShowsApi = () =>
+  apiClient.get('/api/v1/shows').then((r) => r.data);
+export const listCalendarEventsApi = (eventType) =>
+  apiClient
+    .get(`/api/v1/calendar/events?event_type=${encodeURIComponent(eventType)}`)
+    .then((r) => r.data);
+export const autoSpawnEventApi = (eventId, payload) =>
+  apiClient
+    .post(`/api/v1/calendar/events/${eventId}/auto-spawn`, payload)
+    .then((r) => r.data);
+export const deleteCalendarEventApi = (eventId) =>
+  apiClient.delete(`/api/v1/calendar/events/${eventId}`).then((r) => r.data);
 
 const TABS = [
   { key: 'events', label: 'Events', desc: 'Plan & create' },
@@ -34,11 +51,11 @@ export default function CultureEvents() {
 
   const flash = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
-  useEffect(() => { fetch('/api/v1/shows').then(r => r.json()).then(d => setShows(d.data || [])).catch(() => {}); }, []);
+  useEffect(() => { listShowsApi().then(d => setShows(d.data || [])).catch(() => {}); }, []);
 
   useEffect(() => {
-    fetch('/api/v1/calendar/events?event_type=lalaverse_cultural')
-      .then(r => r.json()).then(d => setEvents(d.events || []))
+    listCalendarEventsApi('lalaverse_cultural')
+      .then(d => setEvents(d.events || []))
       .catch(e => console.error(e)).finally(() => setLoading(false));
   }, []);
 
@@ -46,11 +63,7 @@ export default function CultureEvents() {
     const showId = shows[0]?.id;
     if (!showId) { alert('No show found — create a show first'); return; }
     try {
-      const res = await fetch(`/api/v1/calendar/events/${ev.id}/auto-spawn`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ show_id: showId, event_count: 1, max_guests: 6 }),
-      });
-      const d = await res.json();
+      const d = await autoSpawnEventApi(ev.id, { show_id: showId, event_count: 1, max_guests: 6 });
       if (d.success) flash(`Created "${d.data?.events?.[0]?.name || 'event'}" — check Events Library`);
       else flash(d.error || 'Failed', 'error');
     } catch (e) { flash(e.message, 'error'); }
@@ -58,7 +71,7 @@ export default function CultureEvents() {
 
   const handleDelete = useCallback(async (id) => {
     try {
-      await fetch(`/api/v1/calendar/events/${id}`, { method: 'DELETE' });
+      await deleteCalendarEventApi(id);
       setEvents(p => p.filter(e => e.id !== id));
       flash('Deleted');
     } catch { flash('Delete failed', 'error'); }

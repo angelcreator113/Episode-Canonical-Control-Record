@@ -5,9 +5,17 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 import './RecycleBin.css';
 
 const API = '/api/v1/memories';
+
+export const listRecycleBinApi = () =>
+  apiClient.get(`${API}/recycle-bin`).then((r) => r.data);
+export const restoreRecycleItemApi = (type, id) =>
+  apiClient.post(`${API}/recycle-bin/restore`, { type, id });
+export const permanentDeleteRecycleItemApi = (type, id) =>
+  apiClient.delete(`${API}/recycle-bin/${type}/${id}`);
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
@@ -38,8 +46,7 @@ export default function RecycleBin() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await fetch(`${API}/recycle-bin`);
-      const json = await res.json();
+      const json = await listRecycleBinApi();
       setData(json);
     } catch {
       setData(null);
@@ -53,11 +60,7 @@ export default function RecycleBin() {
   const restore = async (type, id) => {
     setWorking(id);
     try {
-      await fetch(`${API}/recycle-bin/restore`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ type, id }),
-      });
+      await restoreRecycleItemApi(type, id);
       await load();
     } finally {
       setWorking(null);
@@ -67,7 +70,7 @@ export default function RecycleBin() {
   const permanentDelete = async (type, id) => {
     setWorking(id);
     try {
-      await fetch(`${API}/recycle-bin/${type}/${id}`, { method: 'DELETE' });
+      await permanentDeleteRecycleItemApi(type, id);
       setConfirming(null);
       await load();
     } finally {
