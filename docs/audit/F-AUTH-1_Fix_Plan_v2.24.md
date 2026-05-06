@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.23 — Step 3 backend sweep fix plan locked. 11-CP cadence (10 domain CPs + 1 cleanup CP). ~803-handler sweep surface (writes on optionalAuth or no-auth). Step 3 disposition tier matrix (NEW architectural lock): Tier 1 requireAuth (default), Tier 2 requireAuth + authorize(["ADMIN"]) (admin tooling), Tier 3 optionalAuth({degradeOnInfraFailure:true}) (LOCKED PUBLIC with req.user consumption), Tier 4 plain optionalAuth (LOCKED PUBLIC without req.user), Tier 5 env-gated mount (development-only). All 17 planning-phase adjudication items locked. Track 7 timing Option C (hybrid — shared planning + separate execution). F-AUTH-2 lazy-init refactor + F-AUTH-3 9-handler degradeOnInfraFailure migration in CP1. F-AUTH-5 6/6 sites resolved naturally as F-AUTH-1 byproducts. Step 3 estimate ~20-22 sessions across 11 CPs.
+**Document version:** v2.24 — Step 3 CP1 (F-AUTH-2 lazy-init refactor + F-AUTH-3 5-handler migration + lazy-noop fallback removal) approved at commit `05cd536d`. Step 3 pacing model first data point: 1 session, ~75 min actual vs ~105-130 min forecast (1.4-1.7x conservative bias confirmed for backend cadence). press.js scope correction: 6 handlers = 2 GETs + 4 POSTs (NOT all GETs as v2.23 §5.5 stated); 5 of 6 migrated CP1, 4 POSTs deferred CP10. Lazy-noop fallback removal universal discipline (NEW v2.24 §9.11 lock): pattern endemic across ~40 route files (not 2 as planning §A.7 stated); per-CP discipline mandates removal in same commit as domain sweep. Module-load safety test pattern (NEW v2.24 §9.11 lock): jest.resetModules + env manipulation + require-doesn't-throw assertion. Partial-migration extension extends to Step 3 — press.js first instance (parallel to Track 6 CP13/CP14/CP15×3). Backend Path E running list expanded ~40-fold. Backend test suite: 1402 → 1417 passing (+15 tests, 0 regressions). Step 3 CP2 (Episodes cluster) is next.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** **TRACK 6 IMPLEMENTATION CLOSED.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. Pattern G locked: 6 sites (UNCHANGED). Backed up at `04777edd` on `claude/f-auth-1-backup`. **Step 3 backend sweep planning phase COMPLETE.** v2.23 locks 11-CP cadence + 5-tier disposition matrix + all 17 adjudication items. Step 3 CP1 (F-AUTH-2 lazy-init + F-AUTH-3 exemption list) kicks off next, fresh session.
+**Status:** **TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. Pattern G locked: 6 sites (UNCHANGED). **Step 3 CP1 COMPLETE through commit `05cd536d`**; F-AUTH-2 lazy-init refactor + F-AUTH-3 5-handler migration (consumer count 0 → 5) + lazy-noop fallback removal at press.js + manuscript-export.js. Backend test suite: 1402 → 1417 passing (+15 tests, +1 suite, 0 regressions). Press.js partial-migration: 5 of 6 handlers migrated; 4 POSTs deferred to CP10. Backed up at `05cd536d` on `claude/f-auth-1-backup`. Step 3 CP2 (Episodes cluster) kicks off next, fresh session.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -1370,6 +1370,84 @@ Critical callout: **outfitSets.js confirms audit §4.1(b) sub-form**. CP5 sweep 
 
 After v2.23 lands on origin/dev, Step 3 CP1 kicks off in fresh Claude Code session on feature/f-auth-1. CP1 is small + focused (F-AUTH-2 lazy-init refactor + F-AUTH-3 9-handler migration + lazy-noop removal); 1 session forecast.
 
+##### §5.7 — Step 3 CP1 architectural findings (LOCKED v2.24, COMPLETE — F-AUTH-2 lazy-init + F-AUTH-3 5-handler migration + lazy-noop fallback removal)
+
+CP1 completed at commit `05cd536d` (single squashed commit, 4 work-product WIPs collapsed; single session, ~75 min actual within ~105-130 min Option A forecast — **1.4-1.7x conservative bias confirmed for backend Step 3 cadence**). Three distinct work products in one commit: WP1 F-AUTH-2 lazy-init refactor at `src/middleware/auth.js` (+22 LOC net via getCognitoConfig/getIdTokenVerifier/getAccessTokenVerifier lazy getters with memoized module-scope caches); WP2 F-AUTH-3 5-handler migration to Tier 3 (consumer count **0 → 5**); WP3 lazy-noop fallback removal at press.js + manuscript-export.js (replaced try/catch require pattern with direct destructuring import). Strict execution sequence WP1 → WP3 → WP2 followed. Backend test suite: 1402 → 1417 passing (+15 tests, +1 suite, 0 regressions, 0 failed). Backed up at `05cd536d` on `claude/f-auth-1-backup`.
+
+Per-work-product execution outcomes:
+
+- **WP1 — F-AUTH-2 lazy-init refactor (middleware/auth.js):** eager const idTokenVerifier + accessTokenVerifier (lines 11-23 pre-CP1) replaced with lazy getters; `getCognitoConfig()` shared helper extracted (Decision 4 refinement); runtime guard at lines 50-54 consolidated into getter env-var check; structured AUTH_CONFIG_MISSING runtime error replaces module-load boot crash. Pattern: `let _verifier = null; const get = () => { if (!_verifier) { /* env check + throw or instantiate */ } return _verifier; }`. Module-load safety newly testable via jest.resetModules + env manipulation pattern (see §5.9 below).
+- **WP2 — F-AUTH-3 5-handler factory invocation:** 5 handlers migrated to Tier 3 (`optionalAuth({ degradeOnInfraFailure: true })`): press.js GETs at lines 455 /characters + 501 /characters/:slug; manuscript-export.js GETs at lines 123 /book/:bookId/meta + 153 /book/:bookId/docx + 561 /book/:bookId/pdf. Per Item 1 lock OPTION A — 4 press.js POST handlers (lines 361 /seed-characters, 531 /advance-career, 607 /generate-post, 696 /generate-scene) DEFERRED to CP10 with Tier 1 + aiRateLimiter on AI POSTs. F-AUTH-3 consumer count 0 → 5 verified by closure grep.
+- **WP3 — Lazy-noop fallback removal:** press.js try/catch require pattern (5 lines pre-CP1) replaced with `const { optionalAuth } = require('../middleware/auth');` direct destructuring import. manuscript-export.js same shape (7 lines pre-CP1). Both files now fail-fast on auth import error; defensive cruft removed. F-AUTH-2/F-AUTH-3 double-jeopardy at the 2 files closed.
+
+**Press.js scope correction (NEW v2.24 §5.5 amendment, supersedes v2.23 §5.5 wording).** v2.23 §5.5 + planning §A.7 + CP1 kickoff stated "press.js (6 handlers — all GETs)". CP1 surface-time empirical inspection caught the misclassification: **press.js has 6 handlers = 2 GETs + 4 POSTs**. The 4 POSTs are state mutations + AI-cost incurring operations — NOT semantically equivalent to "press kit GET during outage." Tier 3 disposition would have created security regression worse than current state (uncontrolled state changes + uncontrolled API spend during Cognito outage). Item 1 OPTION A locked the correction: 5 of 6 handlers in CP1, 4 POSTs deferred to CP10 with Tier 1 + aiRateLimiter on AI POSTs. **Surface-before-execute discipline confirmed essential for Step 3** — every CP's surface report MUST verify per-handler classification empirically; never assume planning phase or fix-plan classifications hold.
+
+**Press.js partial-migration first Step 3 instance (NEW v2.24 §9.11 lock — partial-migration extension extends to Step 3).** Track 6 graduated partial-migration extension to five-data-point pattern at v2.22 (CP13 + CP14 + CP15 × 3). CP1 contributes the first Step 3 instance: press.js (5 of 6 handlers migrated in CP1, 4 POSTs in CP10). Pattern robust across phase boundaries — partial-migration extension is now a six-data-point pattern spanning Track 6 frontend + Step 3 backend. Surface analysis discipline: when CP surface report encounters a route file with handlers spanning multiple disposition tiers, partial-migration extension is the default test; per-handler tier classification at surface determines per-handler CP assignment.
+
+- All 3 verification greps pass: (1) F-AUTH-3 consumer count = 5 in src/routes/ (was 0); (2) Lazy-noop fallback in press.js + manuscript-export.js = 0 (was 2); (3) F-AUTH-2 lazy-init pattern present at src/middleware/auth.js (getIdTokenVerifier + getAccessTokenVerifier + getCognitoConfig).
+- Backend test suite delta: +15 tests (vs surface forecast of ~7) — defensive scaffolding emerged in execution per locked expectation. 13 structural tests in new tests/unit/routes/press-manuscript-degrade.test.js (per-handler factory invocation assertions) + 2 module-load safety tests in auth-gaps.test.js. Tests anticipated count remains FLOOR not ceiling per v2.24 §9.11 carry-forward.
+- No HTTP method mismatches surfaced. CP1 didn't change any methods (backend method corrections deferred to CP11 cleanup). Track 6 streak (14 consecutive zero CPs CP3-CP15) closed at Track 6 boundary; Step 3 starts its own counter at 1.
+
+##### §5.8 — Lazy-noop fallback removal universal discipline (NEW v2.24 §9.11 lock — Step 3 universal pattern correction)
+
+CP1 surface-time grep across all route files revealed the lazy-noop fallback pattern is **endemic across ~40 additional route files** — NOT isolated to press.js + manuscript-export.js as planning §A.7 + Audit Handoff v8 §4.1 stated. Each is a F-AUTH-2/F-AUTH-3 double-jeopardy site by the same mechanism CP1 just closed at 2 files: defensive try/catch require + noop middleware fallback. If F-AUTH-2 boot-fail triggers (regex tightens, env var goes missing, lib upgrade incompatibility), every one of those ~40 files silently degrades to no-auth.
+
+**Lazy-noop fallback removal universal discipline (LOCKED v2.24 §9.11). When sweeping a route file in any Step 3 CP, the lazy-noop try/catch require + noop fallback pattern (if present) MUST be replaced with direct destructuring import in the same commit.** Pattern: `const { optionalAuth } = require('../middleware/auth');` (or similar destructuring per file's middleware needs). Pre-CP grep + post-CP grep verifies cleanup. Lazy-noop removal is structurally tied to the F-AUTH-2/F-AUTH-3 fix at CP1; without it, F-AUTH-2 boot-fail silently degrades the affected files to no-auth.
+
+CP-level distribution of lazy-noop sites (cross-referenced against v2.23 §5.4 CP scope; per-CP surface report MUST re-grep at execution time to catch any missed by CP1 surface):
+
+- **CP2 (Episodes cluster):** scriptParse.js, lala-scene-detection.js, onboarding.js, todoListRoutes.js (~4 files)
+- **CP3 (World cluster):** world.js, worldEvents.js, worldStudio.js (~3 files)
+- **CP4 (Scene cluster):** none surfaced in CP1 grep; re-grep at CP4 surface for completeness
+- **CP5 (Wardrobe cluster):** wardrobe.js, wardrobeBrands.js, wardrobeLibrary.js (~3 files)
+- **CP6 (Character cluster):** characterAI.js, characterDepthRoutes.js, characterFollowRoutes.js, characterGenerator.js, characterRegistry.js, characterSparkRoute.js, consciousness.js, relationships.js, therapy.js, universe.js (~10 files — largest concentration)
+- **CP7 (Storyteller + memories cluster):** arcRoutes.js, evaluation.js, generate-script-from-book.js, memories/* × 8 (assistant, core, extras, stories, voice, engine, interview, planning), storyEvaluationRoutes.js, storyHealth.js, storyteller.js, careerGoals.js (~14 files — largest concentration)
+- **CP8 (Social-feeds cluster):** feedSchedulerRoutes.js, socialProfileRoutes.js, socialProfileBulkRoutes.js, tierFeatures.js (~4 files)
+- **CP9 (Production tooling cluster):** none surfaced in CP1 grep; re-grep at CP9 surface for completeness
+- **CP10 (Admin/internal cluster):** opportunityRoutes.js (~1 file)
+
+Per-CP overhead: ~5-10 minutes per file for lazy-noop removal (mechanical 5-7 line try/catch → 1 line direct import). Total Step 3 estimate stays at ~20-22 sessions; CP2-CP10 each absorb ~30-60 min of additional work depending on file count per cluster. CP1's bias-under-forecast (1.4-1.7x) provides buffer.
+
+Per-CP discipline: surface report at each CP MUST re-grep for lazy-noop fallback in scope files; closure report MUST verify removal grep returns 0 in CP zone. Discipline carries forward unbroken from CP1 verification grep template.
+
+##### §5.9 — Module-load safety test pattern (NEW v2.24 §9.11 lock — Step 3 testing primitive)
+
+CP1 introduced the first module-load safety test pattern in F-AUTH-1 program. Pattern: `jest.resetModules()` + env-var manipulation + `require('../module')` assertion (success on empty env = no boot crash; runtime call throws structured error on missing env). The pattern is reusable for any future lazy-init refactor across Step 3 (or future tracks).
+
+Two CP1 module-load safety tests in tests/unit/middleware/auth-gaps.test.js:
+
+- Case 1 — require() with no Cognito env vars succeeds (no boot crash): delete env vars, jest.resetModules, require module, expect not to throw. Verifies F-AUTH-2 boot-fail closure.
+- Case 2 — call path throws wrapped AUTH_CONFIG_MISSING when env vars absent: NODE_ENV=production force, delete env vars, require module, call verifyToken, expect rejected with cause.code AUTH_CONFIG_MISSING. Verifies runtime error replaces silent module-load crash.
+
+**Pattern application discipline (LOCKED v2.24 §9.11). Module-load safety tests are required for any Step 3 CP that introduces a lazy-init refactor (or modifies an existing one). The pattern verifies the boot-safety property — that require() of the modified module succeeds with empty env.** Step 3 CPs that include lazy-init refactors: CP1 (auth.js, complete). Future CPs that may include lazy-init refactors: TBD per surface analysis. The pattern is the architectural primitive for module-load resilience verification.
+
+##### §5.10 — Step 3 pacing model — first data point (NEW v2.24)
+
+CP1 establishes Step 3 baseline: **1 session, ~75 min actual vs ~105-130 min forecast (Option A). 1.4-1.7x conservative bias confirmed for backend Step 3 cadence.**
+
+- **CP1 (3 work products in single commit):** 1 session, 5 Tier 3 handlers + lazy-init refactor + lazy-noop removal at 2 files. ~75 min actual within forecast range, lower estimate. Cost-per-work-product: WP1 ~15 min / WP2 ~5 min / WP3 ~5 min / test scaffolding ~25 min / squash + verification + closure ~10 min / baseline + post test runs ~15 min combined.
+
+Step 3 backend cadence characteristics (preliminary, single data point):
+
+- Backend mechanical edits faster than frontend migrations (per CP1 actuals). Single-line middleware swap is ~5 LOC vs frontend's ~15-30 LOC per migration. Per-handler cost ~5 min vs Track 6's 2.8-7.5 min/site.
+- Per-route adjudication overhead higher than expected (each route needs Tier 1-5 classification check). Forecasting bias should account for surface-time disposition adjudication separate from execution-time mechanical edits.
+- Conservative bias confirmed at first Step 3 data point: forecast ~105-130 min Option A, actual ~75 min = 1.4-1.7x. Track 6 trajectory (CP12 ~2.0x, CP13 ~1.7x, CP14 ~1.7x, CP15 ~1.0x) shows similar conservative bias trajectory; backend may run lower edge.
+- Tests anticipated count is FLOOR not ceiling: surface forecast 7, actual 15 (defensive scaffolding emerged in execution). Carry-forward discipline locked v2.24.
+
+Step 3 forecast revision (post-CP1): total estimate stays at **~20-22 sessions across 11 CPs**. Lazy-noop fallback removal expansion (~40 files across CP2-CP10) absorbed by CP1's bias-under-forecast (~30 min saved per CP × 10 CPs = ~5 hours buffer). Per-CP overhead remains bounded at 1-2 sessions per domain CP.
+
+##### §5.11 — Step 3 architectural findings filed for v2.24 §9.12
+
+CP1 surfaced 5 architectural findings filed for v2.24 §9.12 + §9.11:
+
+- **Finding 1: press.js scope correction (v2.23 §5.5 amendment).** Empirical surface-time inspection caught planning-phase miscount. Surface-before-execute discipline locked.
+- **Finding 2: Module-load safety test pattern (NEW v2.24 §9.11 lock).** Step 3 testing primitive. See §5.9.
+- **Finding 3: Lazy-noop fallback pattern endemic (~40 files; NEW v2.24 §9.11 universal discipline).** Major Path E expansion. See §5.8.
+- **Finding 4: F-AUTH-2 boot-fail was already silently mitigated** by placeholder env-var fallback ('us-east-1_XXXXXXXXX' / 'xxxxxxxxxxxxxxxxxxxxxxxxxx'). CP1 fix removes silent-mask AND moves to lazy path. Either failure mode (regex tightens OR env var missing) now produces structured runtime error — no more silent module-load mitigation.
+- **Finding 5: Press.js partial-migration first Step 3 instance.** Six-data-point pattern across Track 6 + Step 3 phase boundary (CP13 + CP14 + CP15 × 3 + CP1). v2.24 §9.11 partial-migration extension graduates to cross-phase pattern.
+
+CP10 surface report inheritance: when CP10 picks up press.js POSTs (lines 361, 531, 607, 696), surface report MUST explicitly enumerate them as inherited scope from CP1 partial-migration. Tier 1 disposition + aiRateLimiter on AI POSTs (lines 607, 696) per worldEvents reference model. Cross-CP inheritance handling becomes Step 3 surface-report discipline.
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -1786,7 +1864,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — TRACK 6 IMPLEMENTATION CLOSED.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope** (38 deferred-by-discipline sites remain). Pattern G locked: 6 sites (UNCHANGED throughout CP12-CP15). Backed up at `04777edd` on `claude/f-auth-1-backup`. **Step 3 backend sweep planning phase COMPLETE**; v2.23 fix plan locks 11-CP cadence + 5-tier disposition matrix + all 17 adjudication items. Step 3 CP1 (F-AUTH-2 lazy-init + F-AUTH-3 exemption list) kicks off next, fresh session after v2.23 lands on dev.
+- **Step 6b — TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope** (38 deferred-by-discipline sites remain). Pattern G locked: 6 sites (UNCHANGED throughout CP12-CP15). **Step 3 CP1 COMPLETE through commit `05cd536d`**; F-AUTH-2 lazy-init refactor + F-AUTH-3 5-handler migration (consumer count 0 → 5) + lazy-noop fallback removal at press.js + manuscript-export.js. Backend test suite: 1402 → 1417 passing (+15 tests, +1 suite, 0 regressions). Press.js partial-migration: 5 of 6 handlers migrated; 4 POSTs deferred to CP10. Backed up at `05cd536d` on `claude/f-auth-1-backup`. Step 3 CP2 (Episodes cluster) kicks off next, fresh session after v2.24 lands on dev.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
