@@ -8,19 +8,44 @@ const { verifyToken: verifyTestToken } = require('../services/tokenService');
  * In test environment, falls back to tokenService for simple JWT tokens
  */
 
-// Create verifier for ID tokens
-const idTokenVerifier = CognitoJwtVerifier.create({
-  userPoolId: process.env.COGNITO_USER_POOL_ID || 'us-east-1_XXXXXXXXX',
-  tokenUse: 'id',
-  clientId: process.env.COGNITO_CLIENT_ID || 'xxxxxxxxxxxxxxxxxxxxxxxxxx',
-});
+// F-AUTH-2 fix (Step 3 CP1): lazy-initialized verifiers.
+// Pre-fix: CognitoJwtVerifier.create() ran at module-load time with
+// `process.env.COGNITO_USER_POOL_ID || 'us-east-1_XXXXXXXXX'` placeholder
+// fallbacks. If the verifier library's input-format regex tightens, the
+// constructor would throw at require() time, taking down the entire server
+// boot (every route file imports this middleware). The fallback masked
+// missing config silently.
+//
+// Post-fix: verifiers instantiate lazily on first call via getter functions
+// with memoized module-scope caches. Missing env-vars now produce a runtime
+// AUTH_CONFIG_MISSING error wrapped via wrapVerifierError, NOT a boot crash.
+let _idTokenVerifier = null;
+let _accessTokenVerifier = null;
 
-// Create verifier for access tokens
-const accessTokenVerifier = CognitoJwtVerifier.create({
-  userPoolId: process.env.COGNITO_USER_POOL_ID || 'us-east-1_XXXXXXXXX',
-  tokenUse: 'access',
-  clientId: process.env.COGNITO_CLIENT_ID || 'xxxxxxxxxxxxxxxxxxxxxxxxxx',
-});
+const getCognitoConfig = () => {
+  const userPoolId = process.env.COGNITO_USER_POOL_ID;
+  const clientId = process.env.COGNITO_CLIENT_ID;
+  if (!userPoolId || !clientId) {
+    const err = new Error('COGNITO_USER_POOL_ID or COGNITO_CLIENT_ID not configured');
+    err.code = 'AUTH_CONFIG_MISSING';
+    throw err;
+  }
+  return { userPoolId, clientId };
+};
+
+const getIdTokenVerifier = () => {
+  if (_idTokenVerifier) return _idTokenVerifier;
+  const { userPoolId, clientId } = getCognitoConfig();
+  _idTokenVerifier = CognitoJwtVerifier.create({ userPoolId, tokenUse: 'id', clientId });
+  return _idTokenVerifier;
+};
+
+const getAccessTokenVerifier = () => {
+  if (_accessTokenVerifier) return _accessTokenVerifier;
+  const { userPoolId, clientId } = getCognitoConfig();
+  _accessTokenVerifier = CognitoJwtVerifier.create({ userPoolId, tokenUse: 'access', clientId });
+  return _accessTokenVerifier;
+};
 
 /**
  * Verify Cognito JWT token
@@ -47,20 +72,17 @@ const verifyToken = async (token) => {
   }
 
   try {
-    const userPoolId = process.env.COGNITO_USER_POOL_ID;
-
-    if (!userPoolId) {
-      throw new Error('COGNITO_USER_POOL_ID not configured');
-    }
-
-    // Try to verify as ID token first (contains user info)
+    // Try to verify as ID token first (contains user info).
+    // Lazy verifier getters throw AUTH_CONFIG_MISSING if env vars are absent —
+    // wrapped via wrapVerifierError below so callers see a normal verifier
+    // error path (no module-load crash).
     try {
-      const payload = await idTokenVerifier.verify(token);
+      const payload = await getIdTokenVerifier().verify(token);
       return payload;
     } catch (idError) {
       // If ID token verification fails, try as access token
       try {
-        const payload = await accessTokenVerifier.verify(token);
+        const payload = await getAccessTokenVerifier().verify(token);
         return payload;
       } catch (accessError) {
         // If both fail, throw the original ID token error
