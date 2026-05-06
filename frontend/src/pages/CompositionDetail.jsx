@@ -1,7 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import LayoutEditor from '../components/LayoutEditor';
+import apiClient from '../services/api';
 import './CompositionDetail.css';
+
+// ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 5 helpers covering 6 fetch sites. generateOutputsApi covers 2 sites
+// (handleRegenerateOutput single-format + handleRetryFailed multi-format
+// — same endpoint, different payloads). getCompositionApi duplicated
+// locally per v2.12 §9.11 (CP6 TemplateDesigner has it).
+export const getCompositionApi = (id) => apiClient.get(`/api/v1/compositions/${id}`);
+export const listCompositionOutputsApi = (id) =>
+  apiClient.get(`/api/v1/compositions/${id}/outputs`);
+export const deleteOutputApi = (outputId) =>
+  apiClient.delete(`/api/v1/outputs/${outputId}`);
+export const generateOutputsApi = (id, payload) =>
+  apiClient.post(`/api/v1/compositions/${id}/outputs/generate`, payload);
+export const setPrimaryCompositionApi = (id) =>
+  apiClient.put(`/api/v1/compositions/${id}/primary`);
 
 /**
  * CompositionDetail Component
@@ -26,20 +42,18 @@ export default function CompositionDetail() {
   const loadComposition = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/v1/compositions/${id}`);
-      if (!response.ok) throw new Error('Composition not found');
-      
-      const data = await response.json();
-      const comp = data.data || data;
+      const response = await getCompositionApi(id);
+      const data = response.data;
+      const comp = data?.data || data;
       setComposition(comp);
-      
+
       // Set default format
-      if (comp.selected_formats && comp.selected_formats.length > 0) {
+      if (comp?.selected_formats && comp.selected_formats.length > 0) {
         setSelectedFormat(comp.selected_formats[0]);
       }
     } catch (err) {
       console.error('Failed to load composition:', err);
-      setError(err.message);
+      setError(err.response?.data?.error || err.message || 'Composition not found');
     } finally {
       setLoading(false);
     }
@@ -47,11 +61,8 @@ export default function CompositionDetail() {
 
   const loadOutputs = async () => {
     try {
-      const response = await fetch(`/api/v1/compositions/${id}/outputs`);
-      if (!response.ok) throw new Error('Failed to load outputs');
-      
-      const data = await response.json();
-      setOutputs(data.data || []);
+      const response = await listCompositionOutputsApi(id);
+      setOutputs(response.data?.data || []);
     } catch (err) {
       console.error('Failed to load outputs:', err);
     }
@@ -61,63 +72,38 @@ export default function CompositionDetail() {
     if (!window.confirm('Delete this output?')) return;
 
     try {
-      const response = await fetch(`/api/v1/outputs/${outputId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) throw new Error('Failed to delete output');
-      
+      await deleteOutputApi(outputId);
       setOutputs(prev => prev.filter(o => o.id !== outputId));
     } catch (err) {
       console.error('Failed to delete output:', err);
-      alert('Failed to delete output: ' + err.message);
+      alert('Failed to delete output: ' + (err.response?.data?.error || err.message));
     }
   };
 
   const handleRegenerateOutput = async (format) => {
     try {
-      const response = await fetch(`/api/v1/compositions/${id}/outputs/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          formats: [format], 
-          regenerate: true 
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to regenerate');
-      
+      await generateOutputsApi(id, { formats: [format], regenerate: true });
       alert(`Queued ${format} for regeneration`);
       loadOutputs();
     } catch (err) {
       console.error('Failed to regenerate:', err);
-      alert('Failed to regenerate: ' + err.message);
+      alert('Failed to regenerate: ' + (err.response?.data?.error || err.message));
     }
   };
 
   const handleRetryFailed = async () => {
     const failedOutputs = outputs.filter(o => o.status === 'FAILED');
     const formats = failedOutputs.map(o => o.format);
-    
+
     if (formats.length === 0) return;
 
     try {
-      const response = await fetch(`/api/v1/compositions/${id}/outputs/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          formats, 
-          regenerate: true 
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to retry');
-      
+      await generateOutputsApi(id, { formats, regenerate: true });
       alert(`Retrying ${formats.length} failed output(s)`);
       loadOutputs();
     } catch (err) {
       console.error('Failed to retry:', err);
-      alert('Failed to retry: ' + err.message);
+      alert('Failed to retry: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -132,19 +118,12 @@ export default function CompositionDetail() {
     }
 
     try {
-      const response = await fetch(`/api/v1/compositions/${id}/primary`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      if (!response.ok) throw new Error('Failed to set as primary');
-      
-      const data = await response.json();
-      setComposition(data.data);
+      const response = await setPrimaryCompositionApi(id);
+      setComposition(response.data?.data);
       alert('✅ Set as primary thumbnail! Episode cover updated.');
     } catch (err) {
       console.error('Failed to set as primary:', err);
-      alert('Failed to set as primary: ' + err.message);
+      alert('Failed to set as primary: ' + (err.response?.data?.error || err.message));
     }
   };
 

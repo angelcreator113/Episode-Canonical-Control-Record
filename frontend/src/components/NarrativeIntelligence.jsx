@@ -14,9 +14,26 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import apiClient from '../services/api';
 
 const MEMORIES_API    = '/api/v1/memories';
 const STORYTELLER_API = '/api/v1/storyteller';
+
+// ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 5 helpers covering 5 fetch sites. addChapterLineApi covers 2 sites
+// (single-line accept + per-line in intimate-scene loop). Per v2.15 §9.11
+// existing-test-file convention: NarrativeIntelligence is mocked in CP3
+// WriteMode.test.jsx as `{ default: () => null }` (default-export-only
+// suppression); new named exports here do NOT conflict because WriteMode
+// imports only the default.
+export const listWorldCharactersByBookApi = (bookId) =>
+  apiClient.get(`/api/v1/world/characters?book_id=${bookId}`);
+export const requestNarrativeIntelligenceApi = (payload) =>
+  apiClient.post(`${MEMORIES_API}/narrative-intelligence`, payload);
+export const generateIntimateSceneApi = (payload) =>
+  apiClient.post(`${MEMORIES_API}/generate-intimate-scene`, payload);
+export const addChapterLineApi = (chapterId, payload) =>
+  apiClient.post(`${STORYTELLER_API}/chapters/${chapterId}/lines`, payload);
 
 // Suggestion type config
 const TYPE_CONFIG = {
@@ -86,9 +103,8 @@ export default function NarrativeIntelligence({
   // Load world characters for intimacy-trigger detection
   useEffect(() => {
     if (!book?.id) return;
-    fetch(`/api/v1/world/characters?book_id=${book.id}`)
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => setWorldChars(d.characters || d || []))
+    listWorldCharactersByBookApi(book.id)
+      .then(res => setWorldChars(res.data?.characters || res.data || []))
       .catch(() => {});
   }, [book?.id]);
 
@@ -148,31 +164,26 @@ export default function NarrativeIntelligence({
         .map(l => l.content || l.text || '')
         .filter(Boolean);
 
-      const res = await fetch(`${MEMORIES_API}/narrative-intelligence`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id:       book.id,
-          chapter_id:    chapter.id,
-          chapter_brief: {
-            title:                 chapter.title,
-            theme:                 chapter.theme,
-            scene_goal:            chapter.scene_goal,
-            emotional_state_start: chapter.emotional_state_start,
-            emotional_state_end:   chapter.emotional_state_end,
-            pov:                   chapter.pov || 'first_person',
-            chapter_notes:         chapter.chapter_notes,
-          },
-          recent_lines:  recentLines,
-          line_count:    lines.length,
-          characters:    (characters || []).map(c => ({
-            name: c.name || c.display_name,
-            type: c.type || c.role_type,
-          })),
-        }),
+      const res = await requestNarrativeIntelligenceApi({
+        book_id:       book.id,
+        chapter_id:    chapter.id,
+        chapter_brief: {
+          title:                 chapter.title,
+          theme:                 chapter.theme,
+          scene_goal:            chapter.scene_goal,
+          emotional_state_start: chapter.emotional_state_start,
+          emotional_state_end:   chapter.emotional_state_end,
+          pov:                   chapter.pov || 'first_person',
+          chapter_notes:         chapter.chapter_notes,
+        },
+        recent_lines:  recentLines,
+        line_count:    lines.length,
+        characters:    (characters || []).map(c => ({
+          name: c.name || c.display_name,
+          type: c.type || c.role_type,
+        })),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = res.data;
       setSuggestion(data.suggestion);
       setExpanded(true);
 
@@ -190,22 +201,13 @@ export default function NarrativeIntelligence({
     if (!suggestion?.line_suggestion) return;
     setAccepting(true);
     try {
-      const res = await fetch(
-        `${STORYTELLER_API}/chapters/${chapter.id}/lines`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text:        suggestion.line_suggestion,
-            source_tags: ['narrative_intelligence'],
-            group_label: `AI suggestion after line ${lineIndex + 1}`,
-            status:      'pending',
-          }),
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      onAccept?.(data.line);
+      const res = await addChapterLineApi(chapter.id, {
+        text:        suggestion.line_suggestion,
+        source_tags: ['narrative_intelligence'],
+        group_label: `AI suggestion after line ${lineIndex + 1}`,
+        status:      'pending',
+      });
+      onAccept?.(res.data?.line);
       setDismissed(true);
     } catch (err) {
       console.error('Accept suggestion error:', err);
@@ -233,39 +235,30 @@ export default function NarrativeIntelligence({
         .map(l => l.content || l.text || '')
         .filter(Boolean);
 
-      const res = await fetch(`${MEMORIES_API}/generate-intimate-scene`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chapter_id:   chapter.id,
-          character_id: intimateTrigger.character.id,
-          scene_type:   intimateTrigger.scene_type || 'charged_moment',
-          career_stage: intimateTrigger.character.career_stage || 'early_career',
-          recent_lines: recentLines,
-          chapter_brief: {
-            title:                 chapter.title,
-            theme:                 chapter.theme,
-            scene_goal:            chapter.scene_goal,
-            emotional_state_start: chapter.emotional_state_start,
-            emotional_state_end:   chapter.emotional_state_end,
-          },
-        }),
+      const res = await generateIntimateSceneApi({
+        chapter_id:   chapter.id,
+        character_id: intimateTrigger.character.id,
+        scene_type:   intimateTrigger.scene_type || 'charged_moment',
+        career_stage: intimateTrigger.character.career_stage || 'early_career',
+        recent_lines: recentLines,
+        chapter_brief: {
+          title:                 chapter.title,
+          theme:                 chapter.theme,
+          scene_goal:            chapter.scene_goal,
+          emotional_state_start: chapter.emotional_state_start,
+          emotional_state_end:   chapter.emotional_state_end,
+        },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = res.data;
 
       // Accept all generated lines into the chapter as pending
       if (data.lines?.length) {
         for (const line of data.lines) {
-          await fetch(`${STORYTELLER_API}/chapters/${chapter.id}/lines`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              text:        line.content || line.text,
-              source_tags: ['intimate_scene', intimateTrigger.character.name],
-              group_label: `Intimate scene — ${intimateTrigger.character.name}`,
-              status:      'pending',
-            }),
+          await addChapterLineApi(chapter.id, {
+            text:        line.content || line.text,
+            source_tags: ['intimate_scene', intimateTrigger.character.name],
+            group_label: `Intimate scene — ${intimateTrigger.character.name}`,
+            status:      'pending',
           });
         }
         onAccept?.({ count: data.lines.length, type: 'intimate_scene' });

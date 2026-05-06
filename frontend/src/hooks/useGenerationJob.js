@@ -1,6 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import apiClient from '../services/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Track 6 CP9 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 5 helpers covering 5 fetch sites on /memories/* (pipeline + batch
+// generation + status polling). Hook exports these as named exports so
+// behavioral tests can import them directly per Pattern D + E. The hook
+// itself (default export) consumes the helpers; consumer components
+// (callers of useGenerationJob) are unchanged.
+export const getPipelineStatusApi = (jobId) =>
+  apiClient.get(`${API_BASE}/memories/pipeline-generate-status/${jobId}`);
+export const getBatchStatusApi = (jobId) =>
+  apiClient.get(`${API_BASE}/memories/batch-generate-status/${jobId}`);
+export const getBatchStoryApi = (jobId, storyNum) =>
+  apiClient.get(`${API_BASE}/memories/batch-generate-story/${jobId}/${storyNum}`);
+export const startPipelineBackgroundApi = (payload) =>
+  apiClient.post(`${API_BASE}/memories/pipeline-generate-background`, payload);
+export const startBatchBackgroundApi = (payload) =>
+  apiClient.post(`${API_BASE}/memories/batch-generate-background`, payload);
 
 /**
  * Encapsulates the entire story-generation polling lifecycle.
@@ -77,10 +95,12 @@ export default function useGenerationJob({ selectedChar, tasks, stories, approve
       }
 
       try {
-        const res = await fetch(`${API_BASE}/memories/pipeline-generate-status/${jobId}`);
-        if (!res.ok) {
+        let res;
+        try {
+          res = await getPipelineStatusApi(jobId);
+        } catch (httpErr) {
           // Job not found (404) — server may have restarted and lost the in-memory job
-          if (res.status === 404) {
+          if (httpErr.response?.status === 404) {
             notFoundCount++;
             if (notFoundCount >= 3) {
               clearInterval(pollRef.current);
@@ -95,7 +115,7 @@ export default function useGenerationJob({ selectedChar, tasks, stories, approve
           return;
         }
         notFoundCount = 0; // reset on success
-        const job = await res.json();
+        const job = res.data;
 
         if (job.status === 'completed') {
           clearInterval(pollRef.current);
@@ -133,8 +153,10 @@ export default function useGenerationJob({ selectedChar, tasks, stories, approve
 
     pollRef.current = setInterval(async () => {
       try {
-        const statusRes = await fetch(`${API_BASE}/memories/batch-generate-status/${jobId}`);
-        if (!statusRes.ok) {
+        let statusRes;
+        try {
+          statusRes = await getBatchStatusApi(jobId);
+        } catch {
           clearInterval(pollRef.current);
           pollRef.current = null;
           localStorage.removeItem('storyEngine_activeBatchJob');
@@ -143,7 +165,7 @@ export default function useGenerationJob({ selectedChar, tasks, stories, approve
           addToast('Batch job expired — server may have restarted', 'warning');
           return;
         }
-        const job = await statusRes.json();
+        const job = statusRes.data;
 
         setBatchGenProgress({ current: job.completed, total: job.total, currentTitle: job.currentTitle });
 
@@ -151,12 +173,10 @@ export default function useGenerationJob({ selectedChar, tasks, stories, approve
         const newlyCompleted = (job.completedStories || []).filter(n => !fetchedStories.has(n));
         for (const storyNum of newlyCompleted) {
           try {
-            const storyRes = await fetch(`${API_BASE}/memories/batch-generate-story/${jobId}/${storyNum}`);
-            if (storyRes.ok) {
-              const storyData = await storyRes.json();
-              fetchedStories.add(storyNum);
-              onStoriesBatchUpdate(storyNum, storyData);
-            }
+            const storyRes = await getBatchStoryApi(jobId, storyNum);
+            const storyData = storyRes.data;
+            fetchedStories.add(storyNum);
+            onStoriesBatchUpdate(storyNum, storyData);
           } catch { /* retry next poll */ }
         }
 
@@ -192,19 +212,13 @@ export default function useGenerationJob({ selectedChar, tasks, stories, approve
           summary: stories[n]?.text?.slice(0, 800) || '',
         }));
 
-      const res = await fetch(`${API_BASE}/memories/pipeline-generate-background`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          characterKey: selectedChar,
-          storyNumber: task.story_number,
-          taskBrief: task,
-          previousStories,
-        }),
+      const res = await startPipelineBackgroundApi({
+        characterKey: selectedChar,
+        storyNumber: task.story_number,
+        taskBrief: task,
+        previousStories,
       });
-
-      if (!res.ok) throw new Error('Failed to start generation');
-      const { jobId } = await res.json();
+      const { jobId } = res.data;
 
       localStorage.setItem('storyEngine_activeJob', JSON.stringify({
         jobId, storyNumber: task.story_number, characterKey: selectedChar, startedAt: Date.now(),
@@ -243,18 +257,12 @@ export default function useGenerationJob({ selectedChar, tasks, stories, approve
       }));
 
     try {
-      const response = await fetch(`${API_BASE}/memories/batch-generate-background`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          characterKey: selectedChar,
-          taskBriefs: ungenerated,
-          previousStories,
-        }),
+      const response = await startBatchBackgroundApi({
+        characterKey: selectedChar,
+        taskBriefs: ungenerated,
+        previousStories,
       });
-
-      if (!response.ok) throw new Error('Failed to start batch generation');
-      const { jobId, total } = await response.json();
+      const { jobId, total } = response.data;
 
       localStorage.setItem('storyEngine_activeBatchJob', JSON.stringify({
         jobId, total, characterKey: selectedChar, startedAt: Date.now(),

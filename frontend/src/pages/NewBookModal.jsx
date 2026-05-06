@@ -33,6 +33,15 @@ function useWindowWidth() {
 const UNIVERSE_API    = '/api/v1/universe';
 const STORYTELLER_API = '/api/v1/storyteller';
 
+// ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 3 helpers covering 4 fetch sites (getUniverseApi covers 2 sites — initial
+// load + onSeriesChange). File-local per Track 6 convention.
+import apiClient from '../services/api';
+
+export const listAllSeriesApi = () => apiClient.get(`${UNIVERSE_API}/series`);
+export const getUniverseApi = (universeId) => apiClient.get(`${UNIVERSE_API}/${universeId}`);
+export const createBookApi = (payload) => apiClient.post(`${STORYTELLER_API}/books`, payload);
+
 const POV_OPTIONS = [
   { value: 'first_person',  label: 'First Person',        note: 'Raw · intimate · confessional' },
   { value: 'close_third',   label: 'Close Third Person',  note: 'Literary distance · reflection' },
@@ -76,10 +85,9 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
   // ── Load series list + universe on open ───────────────────────────────
   useEffect(() => {
     if (!open) return;
-    fetch(`${UNIVERSE_API}/series`)
-      .then(r => r.json())
-      .then(data => {
-        const list = data.series || [];
+    listAllSeriesApi()
+      .then(res => {
+        const list = res.data?.series || [];
         setSeries(list);
         // Pre-select Becoming Prime if present
         const becomingPrime = list.find(s =>
@@ -89,9 +97,8 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
         if (becomingPrime) {
           setForm(prev => ({ ...prev, series_id: becomingPrime.id }));
           if (becomingPrime.universe_id) {
-            fetch(`${UNIVERSE_API}/${becomingPrime.universe_id}`)
-              .then(r => r.json())
-              .then(d => setUniverse(d.universe))
+            getUniverseApi(becomingPrime.universe_id)
+              .then(r => setUniverse(r.data?.universe))
               .catch(() => {});
           }
         }
@@ -104,9 +111,8 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
     setForm(prev => ({ ...prev, series_id: seriesId }));
     const selected = series.find(s => s.id === seriesId);
     if (selected?.universe_id) {
-      fetch(`${UNIVERSE_API}/${selected.universe_id}`)
-        .then(r => r.json())
-        .then(d => setUniverse(d.universe))
+      getUniverseApi(selected.universe_id)
+        .then(r => setUniverse(r.data?.universe))
         .catch(() => {});
     }
   }
@@ -123,25 +129,19 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`${STORYTELLER_API}/books`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          show_id:           showId,
-          series_id:         form.series_id || null,
-          title:             form.title.trim(),
-          description:       form.description.trim() || null,
-          primary_pov:       form.pov,
-          era_name:          form.era_name.trim() || null,
-          timeline_position: form.timeline_position,
-          canon_status:      form.canon_status,
-        }),
+      const res = await createBookApi({
+        show_id:           showId,
+        series_id:         form.series_id || null,
+        title:             form.title.trim(),
+        description:       form.description.trim() || null,
+        primary_pov:       form.pov,
+        era_name:          form.era_name.trim() || null,
+        timeline_position: form.timeline_position,
+        canon_status:      form.canon_status,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create book');
-      onBookCreated?.(data.book);
+      onBookCreated?.(res.data?.book);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message || 'Failed to create book');
     } finally {
       setSaving(false);
     }
