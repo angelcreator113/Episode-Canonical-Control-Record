@@ -29,8 +29,13 @@
  */
 
 import { useState } from 'react';
+import apiClient from '../services/api';
 
 const API = '/api/v1/memories/generate-script-from-book';
+
+// File-local helper.
+export const generateScriptFromBookApi = (payload) =>
+  apiClient.post(API, payload).then((r) => r.data);
 
 const GOLD  = '#C9A84C';
 const INK   = '#1C1917';
@@ -84,35 +89,28 @@ export default function ScriptBridgePanel({ bookId, bookTitle, chapterId, chapte
     setResult(null);
 
     try {
-      const res = await fetch(API, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          book_id:     bookId,
-          chapter_id:  chapterId || undefined,
-          show_id:     showId    || undefined,
-          event_name:  form.event_name  || 'Upcoming Event',
-          event_prestige: Number(form.event_prestige),
-          dress_code:  form.dress_code  || 'Luxury',
-          stakes:      form.stakes      || 'Building reputation',
-          episode_arc: form.episode_arc,
-          pnos_act:    form.pnos_act,
-          pnos_belief: form.pnos_belief,
-          line_count:  Number(form.line_count),
-          lala_stats: {
-            confidence: Number(form.lala_confidence),
-            reputation: Number(form.lala_reputation),
-            coins:      Number(form.lala_coins),
-          },
-        }),
+      const data = await generateScriptFromBookApi({
+        book_id:     bookId,
+        chapter_id:  chapterId || undefined,
+        show_id:     showId    || undefined,
+        event_name:  form.event_name  || 'Upcoming Event',
+        event_prestige: Number(form.event_prestige),
+        dress_code:  form.dress_code  || 'Luxury',
+        stakes:      form.stakes      || 'Building reputation',
+        episode_arc: form.episode_arc,
+        pnos_act:    form.pnos_act,
+        pnos_belief: form.pnos_belief,
+        line_count:  Number(form.line_count),
+        lala_stats: {
+          confidence: Number(form.lala_confidence),
+          reputation: Number(form.lala_reputation),
+          coins:      Number(form.lala_coins),
+        },
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Generation failed');
       setResult(data);
       setTab('script');
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setLoading(false);
     }

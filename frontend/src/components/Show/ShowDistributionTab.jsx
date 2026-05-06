@@ -1,5 +1,12 @@
 // frontend/src/components/Show/ShowDistributionTab.jsx
 import React, { useState, useEffect } from 'react';
+import apiClient from '../../services/api';
+
+// File-local helpers — show distribution defaults persistence.
+export const getShowDistributionDefaultsApi = (showId) =>
+  apiClient.get(`/api/v1/world/${showId}/distribution-defaults`).then((r) => r.data);
+export const putShowDistributionDefaultsApi = (showId, defaults) =>
+  apiClient.put(`/api/v1/world/${showId}/distribution-defaults`, { distribution_defaults: defaults });
 
 /**
  * ShowDistributionTab — Compact, status-first distribution dashboard
@@ -36,8 +43,7 @@ function ShowDistributionTab({ show, onUpdate }) {
     }
     if (!data || Object.keys(data).length === 0) {
       try {
-        const res = await fetch(`/api/v1/world/${show.id}/distribution-defaults`);
-        const json = await res.json();
+        const json = await getShowDistributionDefaultsApi(show.id);
         if (json.success && json.data && Object.keys(json.data).length > 0) data = json.data;
       } catch { /* fall through */ }
     }
@@ -53,10 +59,7 @@ function ShowDistributionTab({ show, onUpdate }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await fetch(`/api/v1/world/${show.id}/distribution-defaults`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ distribution_defaults: defaults }),
-      });
+      await putShowDistributionDefaultsApi(show.id, defaults);
       setHasChanges(false);
     } catch {
       try { await onUpdate({ distribution_defaults: JSON.stringify(defaults) }); setHasChanges(false); } catch { /* fail */ }

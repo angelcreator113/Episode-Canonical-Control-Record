@@ -13,7 +13,15 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, Fragment } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import './ChapterJourney.css';
+
+// File-local helpers. getBookApi is a 2-fold cross-CP dup (CP10 StoryEvaluationEngine).
+// getDefaultRegistryApi is fresh.
+export const getBookApi = (bookId) =>
+  apiClient.get(`/api/v1/storyteller/books/${bookId}`).then((r) => r.data);
+export const getDefaultRegistryApi = () =>
+  apiClient.get('/api/v1/character-registry/registries/default').then((r) => r.data);
 
 // ── Lazy imports ───────────────────────────────────────────────────────────
 const StoryPlannerConversational = lazy(() =>
@@ -211,20 +219,11 @@ export default function ChapterJourney() {
       setError(null);
 
       // Load book + chapters AND characters in parallel
-      const [bookRes, charRes] = await Promise.all([
-        fetch(`/api/v1/storyteller/books/${bookId}`, {
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-        }),
-        fetch('/api/v1/character-registry/registries/default', {
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-        }).catch(() => null), // characters are optional — don't block on failure
+      const [data, charData] = await Promise.all([
+        getBookApi(bookId),
+        getDefaultRegistryApi().catch(() => null), // characters are optional — don't block on failure
       ]);
 
-      if (!bookRes.ok) throw new Error(`${bookRes.status} ${bookRes.statusText}`);
-
-      const data = await bookRes.json();
       const bookData = data.book || data;
       const chapters = bookData.chapters || [];
       const found = chapters.find(c => c.id === chapterId) || chapters[0];
@@ -233,12 +232,9 @@ export default function ChapterJourney() {
       setChapter(found || null);
 
       // Load characters from default registry
-      if (charRes?.ok) {
-        try {
-          const charData = await charRes.json();
-          const reg = charData.registry || charData;
-          setCharacters(reg.characters || reg.RegistryCharacters || []);
-        } catch { setCharacters([]); }
+      if (charData) {
+        const reg = charData.registry || charData;
+        setCharacters(reg.characters || reg.RegistryCharacters || []);
       }
 
       const stage = detectStage(found);

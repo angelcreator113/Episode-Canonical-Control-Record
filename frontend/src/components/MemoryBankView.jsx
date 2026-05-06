@@ -18,7 +18,16 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import apiClient from '../services/api';
 import './MemoryBankView.css';
+
+// File-local cross-CP duplicate per v2.12 §9.11 — listRegistriesApi reaches
+// 8-fold cross-CP existence after CP15 (CP3+CP6+CP7+CP10+RelationshipEngine
+// +CharacterTherapy+StoryProposer+Home+useRegistries+CP15 here). EXCEEDS
+// v2.17 §9.11 6-fold ceiling. Path A (continue file-local convention) per
+// CP15 Decision 2 / v2.22 §9.11.
+export const listRegistriesApi = () =>
+  apiClient.get('/api/v1/character-registry/registries').then((r) => r.data);
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -53,14 +62,22 @@ const CHARACTER_TYPE_COLORS = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+// CP15: v2.14 internal-helper-refactor — wrapper preserved (6 call sites
+// at lines 163, 278, 296, 310, 327, 346), internal fetch swapped for
+// apiClient.request. v2.20 NOT applicable: methods vary across call sites.
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  const data = await res.json();
-  if (!res.ok) throw Object.assign(new Error(data.error || 'Request failed'), { status: res.status, data });
-  return data;
+  const config = { url: `${API}${path}`, method: options.method || 'GET' };
+  if (options.body) config.data = JSON.parse(options.body);
+  try {
+    const res = await apiClient.request(config);
+    return res.data;
+  } catch (err) {
+    const data = err.response?.data || {};
+    throw Object.assign(new Error(data.error || err.message || 'Request failed'), {
+      status: err.response?.status,
+      data,
+    });
+  }
 }
 
 /** Derive 4-tier truth status from model fields */
@@ -146,8 +163,7 @@ export default function MemoryBankView({ bookId, showId }) {
   // ── Load registry characters ───────────────────────────────────
 
   useEffect(() => {
-    fetch('/api/v1/character-registry/registries')
-      .then(r => r.json())
+    listRegistriesApi()
       .then(d => {
         const chars = d.registries?.flatMap(r => r.characters || []) || [];
         setRegistryCharacters(chars.map(c => ({ id: c.id, name: c.display_name || c.name, type: c.role_type || c.type })));

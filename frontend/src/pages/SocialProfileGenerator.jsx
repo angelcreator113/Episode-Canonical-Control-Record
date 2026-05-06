@@ -27,6 +27,14 @@ import {
 
 // ── Track 3 module-scope helpers (Pattern D) — user-facing operations ──
 // Profile listing + lookup
+// Track 6 CP15 partial-migration extension (3rd instance) — file already
+// has 9 apiClient helpers below. Add 2 more for the previously unmigrated
+// /world/:show/events GET + /world/:show/events/from-profile POST sites.
+export const listWorldEventsApi = (showId) =>
+  apiClient.get(`/api/v1/world/${showId}/events`).then((r) => r.data);
+export const createEventFromProfileApi = (showId, payload) =>
+  apiClient.post(`/api/v1/world/${showId}/events/from-profile`, payload).then((r) => r.data);
+
 export const fetchProfiles = (qs) => apiClient.get(`${API}?${qs}`);
 export const fetchProfileDetail = (id) => apiClient.get(`${API}/${id}`);
 export const fetchJustAWomanProfile = () =>
@@ -1210,8 +1218,7 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
 
   useEffect(() => {
     if (!profileId || !showId) return;
-    fetch(`/api/v1/world/${showId}/events`)
-      .then(r => r.json())
+    listWorldEventsApi(showId)
       .then(d => {
         const all = d.events || d.success && d.events || [];
         const hosted = all.filter(ev => {
@@ -1226,11 +1233,7 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
   const createEvent = async () => {
     setCreating(true);
     try {
-      const res = await fetch(`/api/v1/world/${showId}/events/from-profile`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile_id: profileId, event_template: 'Event' }),
-      });
-      const d = await res.json();
+      const d = await createEventFromProfileApi(showId, { profile_id: profileId, event_template: 'Event' });
       if (d.success) {
         setEvents(prev => [...(prev || []), d.event]);
         showToast(`Event created for ${profileName}`);
@@ -1239,7 +1242,9 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
       } else {
         showToast(d.error || 'Failed', 'error');
       }
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) {
+      showToast(e.response?.data?.error || e.message, 'error');
+    }
     setCreating(false);
   };
 

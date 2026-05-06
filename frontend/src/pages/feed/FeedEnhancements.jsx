@@ -5,6 +5,11 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import apiClient from '../../services/api';
+
+// File-local helper. Memories AI is a generic prompt-completion endpoint.
+export const generateMemoriesAiApi = (payload) =>
+  apiClient.post('/api/v1/memories/ai', payload).then((r) => r.data);
 
 const C = { ink: '#2C2C2C', inkMid: '#666', inkLight: '#94a3b8', border: '#e2e8f0', surface: '#fff', surfaceAlt: '#FAF7F0', pink: '#ec4899', lavender: '#6366f1', blue: '#3b82f6', gold: '#B8962E', radius: 10, radiusSm: 6, shadow: '0 1px 3px rgba(0,0,0,0.06)' };
 
@@ -110,11 +115,8 @@ export function LalaReactions({ profile, showId, onClose }) {
   const generate = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/memories/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: `You are writing internal monologue for Lala, a luxury fashion content creator in the LalaVerse.
+      const d = await generateMemoriesAiApi({
+        prompt: `You are writing internal monologue for Lala, a luxury fashion content creator in the LalaVerse.
 
 She just saw content from ${p.display_name || p.handle} (${p.platform}).
 Follow motivation: ${p.follow_motivation || 'general interest'}
@@ -131,10 +133,8 @@ Generate 4 reaction scenarios as JSON:
 ]
 
 Make reactions feel real — jealousy, aspiration, self-comparison, motivation. Not generic.`,
-          maxTokens: 1500,
-        }),
+        maxTokens: 1500,
       });
-      const d = await res.json();
       const text = d.response || d.content || d.data;
       if (text) {
         const match = text.match(/\[[\s\S]*\]/);

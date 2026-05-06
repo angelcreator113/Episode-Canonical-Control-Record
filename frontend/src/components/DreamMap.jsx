@@ -12,6 +12,13 @@
  *   mapImageUrl     — custom map image URL (optional, falls back to default)
  */
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import apiClient from '../services/api';
+
+// File-local helpers — world map city positions persistence.
+export const getMapPositionsApi = () =>
+  apiClient.get('/api/v1/world/map/positions').then((r) => r.data);
+export const saveMapPositionsApi = (positions) =>
+  apiClient.put('/api/v1/world/map/positions', { positions });
 
 // ── DREAM City Zone Definitions ─────────────────────────────────────────────
 // Positions are % of the map image (x%, y%) for each city zone center
@@ -112,7 +119,7 @@ export default function DreamMap({
 
   // Load saved positions
   useEffect(() => {
-    fetch('/api/v1/world/map/positions').then(r => r.json()).then(d => {
+    getMapPositionsApi().then(d => {
       if (d.positions && Object.keys(d.positions).length > 0) setCityPositions(d.positions);
     }).catch(() => {});
   }, []);
@@ -149,11 +156,7 @@ export default function DreamMap({
   // Save positions
   const savePositions = useCallback(async () => {
     try {
-      await fetch('/api/v1/world/map/positions', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ positions: cityPositions }),
-      });
+      await saveMapPositionsApi(cityPositions);
       setPositionsDirty(false);
     } catch (err) {
       console.warn('[DreamMap] save positions failed:', err?.message);
