@@ -6,11 +6,24 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 import AmberPromptLibrary from './AmberPromptLibrary';
 import './AppAssistant.css';
 
 const API        = '/api/v1/memories/assistant-command';
 const STREAM_API = '/api/v1/memories/assistant-command-stream';
+
+// File-local helpers for non-streaming sites. The STREAM_API site (SSE
+// + getReader pair) is a Pattern G locked exception — see the comment
+// block at the call site. The fallback POST + binary-blob TTS POST
+// migrate normally. amberSpeakApi uses responseType:'blob' per v2.16
+// §9.11 binary-response pattern.
+export const amberSpeakApi = (text) =>
+  apiClient
+    .post('/api/v1/amber/speak', { text }, { responseType: 'blob' })
+    .then((r) => r.data);
+export const assistantCommandApi = (payload) =>
+  apiClient.post(API, payload).then((r) => r.data);
 
 // ─── Lightweight inline markdown → HTML (bold, italic, code) ────────────────
 function renderMarkdown(text) {
@@ -66,13 +79,7 @@ async function speak(text, onDone) {
   if (!text) { onDone?.(); return; }
   try {
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-    const res = await fetch(SPEAK_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    if (!res.ok) { console.warn('TTS failed:', res.status); onDone?.(); return; }
-    const blob = await res.blob();
+    const blob = await amberSpeakApi(text);
     const url  = URL.createObjectURL(blob);
     const audio = new Audio(url);
     currentAudio = audio;
@@ -193,6 +200,18 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       };
       if (forceVoice) body._voiceTriggered = true;
 
+      // ── PATTERN G LOCKED EXCEPTION (v2.10 §9.11 + v2.18 candidate) ─────────
+      // This site uses Server-Sent Events (SSE) streaming — the response body
+      // is consumed via res.body.getReader() in the loop below. axios cannot
+      // stream response bodies in the browser (only in Node), so this site
+      // CANNOT migrate to apiClient. Locked alongside BookEditor:55 keepalive
+      // + WriteMode:980/1145 + WriteModeAIWriter:273 SSE streaming sites.
+      // The AbortController.signal here also depends on raw fetch — apiClient
+      // wraps cancellation differently (CancelToken / AbortController via
+      // adapter). When this site moves under requireAuth post-Step 3, follow
+      // the WriteMode:980 inline-Bearer pattern. The fallback non-streaming
+      // POST a few lines below uses apiClient (assistantCommandApi).
+      // ───────────────────────────────────────────────────────────────────
       const res = await fetch(STREAM_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -202,12 +221,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
 
       if (!res.ok || !res.body) {
         // Fall back to non-streaming endpoint
-        const fallback = await fetch(API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const data = await fallback.json();
+        const data = await assistantCommandApi(body);
         const reply = data.reply || 'Done.';
         setMessages(prev => [...prev, {
           role: 'assistant', text: reply, ts: Date.now(),

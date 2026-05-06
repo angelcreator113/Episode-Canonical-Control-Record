@@ -1,4 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import apiClient from '../services/api';
+
+export const getPageContentApi = (pageName) =>
+  apiClient
+    .get(`/api/v1/page-content/${encodeURIComponent(pageName)}`)
+    .then((r) => r.data);
+export const putPageContentKeyApi = (pageName, constantKey, newData) =>
+  apiClient.put(
+    `/api/v1/page-content/${encodeURIComponent(pageName)}/${encodeURIComponent(constantKey)}`,
+    { data: newData },
+  );
+export const deletePageContentKeyApi = (pageName, constantKey) =>
+  apiClient.delete(
+    `/api/v1/page-content/${encodeURIComponent(pageName)}/${encodeURIComponent(constantKey)}`,
+  );
 
 /**
  * usePageData — loads page constants from DB, falls back to defaults.
@@ -19,11 +34,8 @@ export default function usePageData(pageName, defaultsMap) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/v1/page-content/${encodeURIComponent(pageName)}`);
-        if (res.ok) {
-          const saved = await res.json();
-          if (!cancelled) setOverrides(saved);
-        }
+        const saved = await getPageContentApi(pageName);
+        if (!cancelled) setOverrides(saved);
       } catch (err) {
         console.error(`[usePageData] load error for ${pageName}:`, err);
       }
@@ -41,17 +53,8 @@ export default function usePageData(pageName, defaultsMap) {
   const persistKey = useCallback(async (constantKey, newData) => {
     setSaving(true);
     try {
-      const res = await fetch(
-        `/api/v1/page-content/${encodeURIComponent(pageName)}/${encodeURIComponent(constantKey)}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: newData }),
-        }
-      );
-      if (res.ok) {
-        setOverrides(prev => ({ ...prev, [constantKey]: newData }));
-      }
+      await putPageContentKeyApi(pageName, constantKey, newData);
+      setOverrides(prev => ({ ...prev, [constantKey]: newData }));
     } catch (err) {
       console.error(`[usePageData] save error:`, err);
     } finally {
@@ -89,10 +92,7 @@ export default function usePageData(pageName, defaultsMap) {
   const resetKey = useCallback(async (constantKey) => {
     setSaving(true);
     try {
-      await fetch(
-        `/api/v1/page-content/${encodeURIComponent(pageName)}/${encodeURIComponent(constantKey)}`,
-        { method: 'DELETE' }
-      );
+      await deletePageContentKeyApi(pageName, constantKey);
       setOverrides(prev => {
         const copy = { ...prev };
         delete copy[constantKey];

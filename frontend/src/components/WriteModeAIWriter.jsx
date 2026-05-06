@@ -17,6 +17,15 @@
  */
 
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
+import apiClient from '../services/api';
+
+// File-local helpers for non-streaming sites. The streaming-fetch site
+// at runAction (line 251 + 259 getReader pair) is a Pattern G locked
+// exception per v2.10 §9.11 — see the comment block at the call site.
+export const aiWriterRewriteOptionsApi = (payload) =>
+  apiClient.post('/api/v1/memories/rewrite-options', payload).then((r) => r.data);
+export const aiWriterProseCritiqueApi = (payload) =>
+  apiClient.post('/api/v1/memories/prose-critique', payload).then((r) => r.data);
 
 const ACTIONS = [
   {
@@ -248,6 +257,19 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
     };
 
     try {
+      // ── PATTERN G LOCKED EXCEPTION (v2.10 §9.11 + v2.18 candidate) ─────────
+      // This site uses Server-Sent Events (SSE) streaming — server returns
+      // content-type: text/event-stream and the body is consumed via
+      // res.body.getReader(). axios cannot stream response bodies in the
+      // browser (only in Node), so this site CANNOT migrate to apiClient.
+      // Locked alongside BookEditor:55 keepalive + WriteMode:980/1145 SSE
+      // streaming sites. Inline raw fetch + interceptor-bypass-by-design.
+      // Auth: this endpoint is currently unauth-by-fetch — once Step 3
+      // backend sweep completes, the streaming endpoints' auth posture is
+      // determined server-side; the fetch here will need a manual Bearer
+      // header attach (see WriteMode:980 precedent for the inline-auth pattern
+      // when this site moves under requireAuth).
+      // ───────────────────────────────────────────────────────────────────
       const res = await fetch(action.endpoint, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -326,17 +348,12 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
     setCopied(false);
 
     try {
-      const res = await fetch('/api/v1/memories/rewrite-options', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          book_id:       bookId,
-          character_id:  selectedCharacter?.id,
-          content:       selected,
-          chapter_brief: chapterContext,
-        }),
+      const data = await aiWriterRewriteOptionsApi({
+        book_id:       bookId,
+        character_id:  selectedCharacter?.id,
+        content:       selected,
+        chapter_brief: chapterContext,
       });
-      const data = await res.json();
       if (data.options?.length) {
         setRewriteOptions(data.options);
       } else {
@@ -402,17 +419,12 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
     setCopied(false);
 
     try {
-      const res = await fetch('/api/v1/memories/prose-critique', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id:      bookId,
-          chapter_id:   chapterId,
-          character_id: selectedCharacter?.id,
-          prose:        currentProse,
-        }),
+      const data = await aiWriterProseCritiqueApi({
+        book_id:      bookId,
+        chapter_id:   chapterId,
+        character_id: selectedCharacter?.id,
+        prose:        currentProse,
       });
-      const data = await res.json();
       if (data.critique) {
         setResult(data.critique);
         setEditedResult(data.critique);

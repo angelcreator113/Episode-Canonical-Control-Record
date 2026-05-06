@@ -1,7 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Text, Line, Group } from 'react-konva';
 import useImage from 'use-image';
+import apiClient from '../services/api';
 import './LayoutEditor.css';
+
+// File-local helpers. getCompositionApi is a CP6 TemplateDesigner cross-CP
+// duplicate per v2.12 §9.11; saveDraft + applyDraft are fresh.
+export const getCompositionApi = (id) =>
+  apiClient.get(`/api/v1/compositions/${id}`).then((r) => r.data);
+export const saveCompositionDraftApi = (id, draftOverrides) =>
+  apiClient
+    .post(`/api/v1/compositions/${id}/save-draft`, { draft_overrides: draftOverrides })
+    .then((r) => r.data);
+export const applyCompositionDraftApi = (id, regenerateFormats) =>
+  apiClient
+    .post(`/api/v1/compositions/${id}/apply-draft`, { regenerate_formats: regenerateFormats })
+    .then((r) => r.data);
 
 /**
  * LayoutEditor Component
@@ -194,8 +208,7 @@ export default function LayoutEditor({ composition, onSave, onDiscard }) {
   const loadCompositionAssets = async () => {
     try {
       // Get composition assets
-      const response = await fetch(`/api/v1/compositions/${composition.id}`);
-      const data = await response.json();
+      const data = await getCompositionApi(composition.id);
       const comp = data.data || data;
 
       // Transform to canvas-ready format
@@ -274,13 +287,7 @@ export default function LayoutEditor({ composition, onSave, onDiscard }) {
         };
       });
 
-      const response = await fetch(`/api/v1/compositions/${composition.id}/save-draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draft_overrides: draftOverrides }),
-      });
-
-      if (!response.ok) throw new Error('Failed to save draft');
+      await saveCompositionDraftApi(composition.id, draftOverrides);
 
       setHasChanges(false);
       if (onSave) onSave();
@@ -302,13 +309,7 @@ export default function LayoutEditor({ composition, onSave, onDiscard }) {
       setSaving(true);
 
       const formats = composition.selected_formats || ['YOUTUBE'];
-      const response = await fetch(`/api/v1/compositions/${composition.id}/apply-draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ regenerate_formats: formats }),
-      });
-
-      if (!response.ok) throw new Error('Failed to apply changes');
+      await applyCompositionDraftApi(composition.id, formats);
 
       setHasChanges(false);
       if (onSave) onSave();

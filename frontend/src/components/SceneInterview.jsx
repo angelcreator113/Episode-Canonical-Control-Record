@@ -9,9 +9,19 @@
 
 import { useState, useEffect } from 'react';
 import { useVoice, MicButton, SpeakButton } from '../hooks/VoiceLayer';
+import apiClient from '../services/api';
 
 const STORYTELLER_API = '/api/v1/storyteller';
 const MEMORIES_API    = '/api/v1/memories';
+
+// File-local helpers. updateChapterApi is a CP3 WriteMode cross-CP duplicate
+// per v2.12 §9.11 (also dup'd in CP10 StoryPlanner — 3-fold cross-CP existence).
+export const sceneInterviewApi = (payload) =>
+  apiClient.post(`${MEMORIES_API}/scene-interview`, payload);
+export const updateChapterApi = (chapterId, payload) =>
+  apiClient.put(`${STORYTELLER_API}/chapters/${chapterId}`, payload);
+export const addChapterLineApi = (chapterId, payload) =>
+  apiClient.post(`${STORYTELLER_API}/chapters/${chapterId}/lines`, payload).then((r) => r.data);
 
 // ── The 7 interview questions ──────────────────────────────────────────────
 const QUESTIONS = [
@@ -136,30 +146,23 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
     setGenerating(true);
     setError(null);
     try {
-      const res = await fetch(`${MEMORIES_API}/scene-interview`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id:    book.id,
-          chapter_id: chapter.id,
-          chapter_title: chapter.title,
-          answers:    finalAnswers,
-          characters: (Array.isArray(characters) ? characters : []).map(c => ({ name: c.name || c.display_name, type: c.type || c.role_type })),
-        }),
+      const { data } = await sceneInterviewApi({
+        book_id:    book.id,
+        chapter_id: chapter.id,
+        chapter_title: chapter.title,
+        answers:    finalAnswers,
+        characters: (Array.isArray(characters) ? characters : []).map(c => ({ name: c.name || c.display_name, type: c.type || c.role_type })),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = data.error || 'Generation failed';
-        // Provide a user-friendly message for overloaded/server errors
-        if (msg.includes('overloaded') || msg.includes('Overloaded') || msg.includes('529')) {
-          throw new Error('The AI is temporarily busy. Please wait a moment and try again.');
-        }
-        throw new Error(msg);
-      }
       setBrief(data.brief);
       setStep(9);
     } catch (err) {
-      setError(err.message);
+      const msg = err.response?.data?.error || err.message || 'Generation failed';
+      // Provide a user-friendly message for overloaded/server errors
+      if (msg.includes('overloaded') || msg.includes('Overloaded') || msg.includes('529')) {
+        setError('The AI is temporarily busy. Please wait a moment and try again.');
+      } else {
+        setError(msg);
+      }
       setRetryReady(true);
       setStep(7); // back to last question so they can retry
     } finally {
@@ -171,20 +174,15 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
     setSaving(true);
     try {
       // Save brief fields + interview answers to chapter
-      const res = await fetch(`${STORYTELLER_API}/chapters/${chapter.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          theme:                 brief.theme,
-          scene_goal:            brief.scene_goal,
-          emotional_state_start: brief.emotional_state_start,
-          emotional_state_end:   brief.emotional_state_end,
-          chapter_notes:         brief.scene_setting, // setting stored in notes
-          pov:                   brief.pov || chapter.pov || 'first_person',
-          interview_answers:     answers, // persist the raw Q&A
-        }),
+      await updateChapterApi(chapter.id, {
+        theme:                 brief.theme,
+        scene_goal:            brief.scene_goal,
+        emotional_state_start: brief.emotional_state_start,
+        emotional_state_end:   brief.emotional_state_end,
+        chapter_notes:         brief.scene_setting, // setting stored in notes
+        pov:                   brief.pov || chapter.pov || 'first_person',
+        interview_answers:     answers, // persist the raw Q&A
       });
-      if (!res.ok) throw new Error('Failed to save');
       onComplete?.({
         theme:                 brief.theme,
         scene_goal:            brief.scene_goal,
@@ -395,17 +393,11 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
                   onClick={async () => {
                     setAddingOpening(true);
                     try {
-                      const res = await fetch(`${STORYTELLER_API}/chapters/${chapter.id}/lines`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          text: brief.opening_suggestion,
-                          group_label: 'Scene Interview opening',
-                          status: 'pending',
-                        }),
+                      const data = await addChapterLineApi(chapter.id, {
+                        text: brief.opening_suggestion,
+                        group_label: 'Scene Interview opening',
+                        status: 'pending',
                       });
-                      if (!res.ok) throw new Error('Failed to add line');
-                      const data = await res.json();
                       onLineAdded?.(data.line);
                       setOpeningAdded(true);
                     } catch (err) {

@@ -1,8 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import './SetupWizard.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+export const startOnboardingApi = (payload = {}) =>
+  apiClient.post(`${API_BASE}/onboarding/start`, payload).then((r) => r.data);
+export const respondOnboardingApi = (payload) =>
+  apiClient.post(`${API_BASE}/onboarding/respond`, payload).then((r) => r.data);
+export const confirmOnboardingApi = (payload) =>
+  apiClient.post(`${API_BASE}/onboarding/confirm`, payload).then((r) => r.data);
 
 // ─── Beat metadata ────────────────────────────────────────────────────────────
 const BEATS = [
@@ -155,12 +163,7 @@ export default function SetupWizard({ showId, registryId, onComplete }) {
   async function startWizard() {
     setSending(true);
     try {
-      const res = await fetch(`${API_BASE}/onboarding/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
+      const data = await startOnboardingApi({});
       setConversationId(data.conversation_id);
       setMessages([{ role: 'assistant', content: data.message }]);
       setCurrentBeat(data.beat || 1);
@@ -195,18 +198,12 @@ export default function SetupWizard({ showId, registryId, onComplete }) {
     setMessages(updatedMessages);
 
     try {
-      const res = await fetch(`${API_BASE}/onboarding/respond`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          creator_message: userMessage,
-          current_beat: currentBeat,
-          conversation_history: buildHistory(),
-          extracted_so_far: extracted,
-        }),
+      const data = await respondOnboardingApi({
+        creator_message: userMessage,
+        current_beat: currentBeat,
+        conversation_history: buildHistory(),
+        extracted_so_far: extracted,
       });
-
-      const data = await res.json();
 
       setMessages((prev) => [...prev, { role: 'assistant', content: data.message }]);
 
@@ -255,17 +252,11 @@ export default function SetupWizard({ showId, registryId, onComplete }) {
     setPhase('building');
 
     try {
-      const res = await fetch(`${API_BASE}/onboarding/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          extracted,
-          show_id:      showId,
-          registry_id:  registryId,
-        }),
+      const data = await confirmOnboardingApi({
+        extracted,
+        show_id:      showId,
+        registry_id:  registryId,
       });
-
-      const data = await res.json();
       setBuilt(data.built);
       setPhase('done');
 
