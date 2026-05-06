@@ -1,5 +1,10 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import apiClient from '../services/api';
 import { PHASE_COLORS, PHASE_LABELS, TYPE_ICONS, WORLD_LABELS, getReadingTime, API_BASE } from './storyEngineConstants';
+
+// File-local helper. 2× reuse across ScenePulse + loadSparks.
+export const listStorySparksApi = (characterKey) =>
+  apiClient.get(`${API_BASE}/story-health/story-sparks/${characterKey}`).then((r) => r.data);
 
 // ─── Scene Pulse — emotional feedback ────────────────────────────────────────
 function ScenePulse({ story }) {
@@ -54,8 +59,7 @@ function NextMoveSuggestion({ story, characterKey }) {
     setSuggestion(null);
     if (!story?.id || !characterKey) return;
     setLoading(true);
-    fetch(`${API_BASE}/story-health/story-sparks/${characterKey}`)
-      .then(r => r.json())
+    listStorySparksApi(characterKey)
       .then(d => {
         const sparks = d.sparks || [];
         if (sparks.length > 0) {
@@ -154,8 +158,8 @@ function StorySparksPanel({ characterKey }) {
   const loadSparks = useCallback(() => {
     if (sparks.length) { setOpen(!open); return; }
     setOpen(true); setLoading(true);
-    fetch(`${API_BASE}/story-health/story-sparks/${characterKey}`)
-      .then(r => r.json()).then(d => setSparks(d.sparks || []))
+    listStorySparksApi(characterKey)
+      .then(d => setSparks(d.sparks || []))
       .catch(err => console.warn('story sparks:', err.message))
       .finally(() => setLoading(false));
   }, [characterKey, sparks.length, open]);

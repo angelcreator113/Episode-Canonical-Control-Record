@@ -1,6 +1,13 @@
 import React, { useState, useCallback } from 'react';
+import apiClient from '../services/api';
 
 const API = '/api/v1/design-agent';
+
+// File-local helpers — admin-tooling family (similar shape to CP11 SiteOrganizer).
+export const runDesignAgentScanApi = () =>
+  apiClient.get(`${API}/scan`).then((r) => r.data);
+export const runDesignAgentApi = (name) =>
+  apiClient.get(`${API}/agent/${encodeURIComponent(name)}`).then((r) => r.data);
 const AGENTS = [
   { key: 'responsive_auditor',  icon: '📱', label: 'Responsive Auditor', desc: 'Media-query coverage & breakpoint consistency' },
   { key: 'token_compliance',    icon: '🎨', label: 'Token Compliance',   desc: 'Design-token usage vs hard-coded values' },
@@ -21,9 +28,8 @@ export default function DesignAgent() {
   const runScan = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const r = await fetch(`${API}/scan`);
-      if (!r.ok) throw new Error(`Scan failed (${r.status})`);
-      setReport(await r.json());
+      const data = await runDesignAgentScanApi();
+      setReport(data);
       setTab('overview');
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }, []);
@@ -31,9 +37,8 @@ export default function DesignAgent() {
   const runOne = useCallback(async (name) => {
     setLoading(true); setError(null);
     try {
-      const r = await fetch(`${API}/agent/${encodeURIComponent(name)}`);
-      if (!r.ok) throw new Error(`Agent failed (${r.status})`);
-      setSoloAgent({ name, ...(await r.json()) });
+      const data = await runDesignAgentApi(name);
+      setSoloAgent({ name, ...data });
       setTab('agents');
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }, []);

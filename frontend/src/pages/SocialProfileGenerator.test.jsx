@@ -41,6 +41,9 @@ vi.mock('./feed/FeedViews', () => ({ default: () => null }));
 
 import apiClient from '../services/api';
 import {
+  // CP15 partial-migration extension (3rd instance, v2.21 §9.11)
+  listWorldEventsApi,
+  createEventFromProfileApi,
   // Listing
   fetchProfiles,
   fetchProfileDetail,
@@ -354,6 +357,34 @@ describe('SocialProfileGenerator — Track 3 module-scope helpers', () => {
     test('exportProfilesApi rejection propagates', async () => {
       vi.mocked(apiClient.get).mockRejectedValue(new Error('export failed'));
       await expect(exportProfilesApi(new URLSearchParams())).rejects.toThrow('export failed');
+    });
+  });
+
+  // ── CP15 partial-migration extension (3rd instance, v2.21 §9.11) ──
+  describe('Track 6 CP15 — partial-migration extension', () => {
+    test('listWorldEventsApi GET on /world/:show/events (3-fold cross-CP)', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({ data: { events: [] } });
+      await listWorldEventsApi('s-1');
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/world/s-1/events');
+    });
+
+    test('createEventFromProfileApi POST on /world/:show/events/from-profile', async () => {
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { success: true, event: {} } });
+      const payload = { profile_id: 'p-1', event_template: 'Event' };
+      await createEventFromProfileApi('s-1', payload);
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/v1/world/s-1/events/from-profile',
+        payload,
+      );
+    });
+
+    test('createEventFromProfileApi rejection exposes response.data.error', async () => {
+      const httpErr = new Error('failed');
+      httpErr.response = { status: 500, data: { error: 'event creation failed' } };
+      vi.mocked(apiClient.post).mockRejectedValue(httpErr);
+      await expect(createEventFromProfileApi('s', {})).rejects.toMatchObject({
+        response: { data: { error: 'event creation failed' } },
+      });
     });
   });
 });

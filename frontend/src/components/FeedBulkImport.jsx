@@ -8,6 +8,14 @@ import apiClient from '../services/api';
 
 const API = '/api/v1/social-profiles';
 
+// Track 6 CP15 partial-migration extension (4th instance) — file already
+// imports apiClient + uses fetchWithRetry. Add helpers for the 2 remaining
+// raw fetch sites (job history GET + CSV parse POST).
+export const listFeedBulkJobsApi = () =>
+  apiClient.get(`${API}/bulk/jobs`).then((r) => r.data);
+export const parseFeedBulkCsvApi = (text) =>
+  apiClient.post(`${API}/bulk/parse-csv`, { text }).then((r) => r.data);
+
 const C = {
   bg: '#ffffff', surface: '#f7f6f9', surfaceHigh: '#eeedf2',
   border: '#ddd9e3', borderLight: '#ccc7d4',
@@ -174,7 +182,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
   // ── Load job history (#11) ────────────────────────────────────────────────
   useEffect(() => {
     if (showHistory) {
-      fetch(`${API}/bulk/jobs`).then(r => r.json()).then(d => setJobHistory(d.jobs || [])).catch(() => {});
+      listFeedBulkJobsApi().then(d => setJobHistory(d.jobs || [])).catch(() => {});
     }
   }, [showHistory]);
 
@@ -207,12 +215,12 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
     if (!csvText.trim()) return;
     setParsing(true); setErr(null); setCandidates(null);
     try {
-      const res = await fetch(`${API}/bulk/parse-csv`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: csvText }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      let data;
+      try {
+        data = await parseFeedBulkCsvApi(csvText);
+      } catch (httpErr) {
+        throw new Error(httpErr.response?.data?.error || 'Parse failed');
+      }
       setCandidates(data.creators || []);
       setParseErrors(data.errors || []);
       if (data.detected_columns) {

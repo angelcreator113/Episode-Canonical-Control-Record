@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import apiClient from '../services/api';
 import sceneLibraryService from '../services/sceneLibraryService';
 import { normalizeSceneThumbnail, normalizeSceneVideo } from '../utils/urlUtils';
 import './SceneLibraryPicker.css';
+
+// File-local helper.
+export const getEpisodeApi = (episodeId) =>
+  apiClient.get(`/api/v1/episodes/${episodeId}`).then((r) => r.data);
 
 const SceneLibraryPicker = ({ isOpen, onClose, onSelect, showId, episodeId }) => {
   const [scenes, setScenes] = useState([]);
@@ -34,8 +39,7 @@ const SceneLibraryPicker = ({ isOpen, onClose, onSelect, showId, episodeId }) =>
     const fetchShowId = async () => {
       if (!showId && episodeId && isOpen) {
         try {
-          const response = await fetch(`/api/v1/episodes/${episodeId}`);
-          const data = await response.json();
+          const data = await getEpisodeApi(episodeId);
           const fetchedShowId = data.data?.show_id || data.data?.showId;
           console.log('Fetched show_id from episode:', fetchedShowId);
           setResolvedShowId(fetchedShowId);

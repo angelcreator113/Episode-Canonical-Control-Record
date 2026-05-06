@@ -22,6 +22,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -46,15 +47,25 @@ const CHARACTER_TYPE_COLORS = {
 };
 
 // ── Shared fetch helpers ───────────────────────────────────────────────────
+// CP15: v2.14 internal-helper-refactor — wrapper preserved (5 call sites
+// at lines 128, 150, 196, 214, 455), internal fetch swapped for apiClient.
+// v2.20 data-driven URL pass-through NOT applicable here: methods vary
+// across call sites (GET / POST), so condition (1) fails. Wrapper kept
+// to preserve the (status, data) error-contract attached to thrown errors.
 
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  const data = await res.json();
-  if (!res.ok) throw Object.assign(new Error(data.error || 'Request failed'), { status: res.status, data });
-  return data;
+  const config = { url: `${API}${path}`, method: options.method || 'GET' };
+  if (options.body) config.data = JSON.parse(options.body);
+  try {
+    const res = await apiClient.request(config);
+    return res.data;
+  } catch (err) {
+    const data = err.response?.data || {};
+    throw Object.assign(new Error(data.error || err.message || 'Request failed'), {
+      status: err.response?.status,
+      data,
+    });
+  }
 }
 
 // ── Confidence label (word instead of bar) ────────────────────────────────

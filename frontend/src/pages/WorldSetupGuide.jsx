@@ -1,8 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import './WorldLocations.css';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+// Track 6 CP15 module-scope helpers — anchor file. UNCLEAR-B reclassified
+// all-BUG per v2.22 §9.11: cross-CP evidence shows every endpoint is auth-
+// required via apiClient elsewhere. NO LOCKED PUBLIC retention.
+//
+// Helper-reuse density: 6 helpers cover 8 sites (3-way reuse on
+// getPageContentApi sites 1, 2, 4 — second helper-reuse-density data
+// point after CP14 EpisodeDetail).
+//
+// Cross-CP duplications per v2.12 §9.11:
+//   - listLocationsApi: 4-fold (CP8 + CP11 + CP15 EpisodeScriptTab + here)
+//   - listShowsApi: 6-fold (CP2 + CP5 + CP10 + CP11 + CP15 UPP + here)
+//   - listWorldEventsApi: 4-fold (CP13 + CP14 + CP15 SocialProfileGenerator + here)
+export const getPageContentApi = (pageName) =>
+  apiClient.get(`${API}/page-content/${pageName}`).then((r) => r.data);
+export const listCalendarEventsApi = (eventType) =>
+  apiClient.get(`${API}/calendar/events?event_type=${encodeURIComponent(eventType)}`).then((r) => r.data);
+export const listLocationsApi = () =>
+  apiClient.get(`${API}/world/locations`).then((r) => r.data);
+export const listSocialProfilesApi = (qs) =>
+  apiClient.get(`${API}/social-profiles?${qs}`).then((r) => r.data);
+export const listShowsApi = () =>
+  apiClient.get(`${API}/shows`).then((r) => r.data);
+export const listWorldEventsApi = (showId, status) =>
+  apiClient.get(`${API}/world/${showId}/events?status=${status}`).then((r) => r.data);
 
 const STEPS = [
   {
@@ -96,54 +122,46 @@ export default function WorldSetupGuide() {
 
         // Check infrastructure
         try {
-          const r = await fetch(`${API}/page-content/world_infrastructure`);
-          const d = await r.json();
+          const d = await getPageContentApi('world_infrastructure');
           checks.infrastructure = d?.data && Object.keys(d.data).length > 0;
         } catch { checks.infrastructure = false; }
 
         // Check influencer systems
         try {
-          const r = await fetch(`${API}/page-content/influencer_systems`);
-          const d = await r.json();
+          const d = await getPageContentApi('influencer_systems');
           checks.influencer = d?.data && Object.keys(d.data).length > 0;
         } catch { checks.influencer = false; }
 
         // Check cultural calendar events
         try {
-          const r = await fetch(`${API}/calendar/events?event_type=lalaverse_cultural`);
-          const d = await r.json();
+          const d = await listCalendarEventsApi('lalaverse_cultural');
           checks.calendar = (d.events || []).length > 0;
         } catch { checks.calendar = false; }
 
         // Check cultural memory
         try {
-          const r = await fetch(`${API}/page-content/cultural_memory`);
-          const d = await r.json();
+          const d = await getPageContentApi('cultural_memory');
           checks.memory = d?.data && Object.keys(d.data).length > 0;
         } catch { checks.memory = false; }
 
         // Check locations
         try {
-          const r = await fetch(`${API}/world/locations`);
-          const d = await r.json();
+          const d = await listLocationsApi();
           checks.locations = (d.locations || []).length > 0;
         } catch { checks.locations = false; }
 
         // Check feed profiles
         try {
-          const r = await fetch(`${API}/social-profiles?feed_layer=lalaverse&limit=1`);
-          const d = await r.json();
+          const d = await listSocialProfilesApi('feed_layer=lalaverse&limit=1');
           checks.feed = (d.count || 0) > 0;
         } catch { checks.feed = false; }
 
         // Check world events
         try {
-          const r = await fetch(`${API}/shows`);
-          const shows = await r.json();
+          const shows = await listShowsApi();
           const showId = (shows.data || [])[0]?.id;
           if (showId) {
-            const er = await fetch(`${API}/world/${showId}/events?status=draft`);
-            const ed = await er.json();
+            const ed = await listWorldEventsApi(showId, 'draft');
             checks.events = (ed.events || []).length > 0;
           } else {
             checks.events = false;

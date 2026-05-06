@@ -4,6 +4,15 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import api from '../../services/api';
 
+// Track 6 CP15 partial-migration extension (5th instance) — file already
+// has 5 pre-existing api.* sites (lines 152, 161, 177, 191, 194). Add
+// helpers for the 2 remaining raw fetch sites (world locations + world map).
+// listLocationsApi is a CP8/CP11 cross-CP duplicate, reaches 3-fold.
+export const listLocationsApi = () =>
+  api.get('/api/v1/world/locations').then((r) => r.data);
+export const getWorldMapApi = () =>
+  api.get('/api/v1/world/map').then((r) => r.data);
+
 const DreamMap = lazy(() => import('../DreamMap'));
 
 const BEAT_NAMES = [
@@ -140,8 +149,8 @@ export default function EpisodeScriptTab({ episode, show }) {
   // Load map data when map is opened
   useEffect(() => {
     if (!showMap) return;
-    fetch('/api/v1/world/locations').then(r => r.json()).then(d => setMapLocations(d.locations || [])).catch(() => {});
-    fetch('/api/v1/world/map').then(r => r.json()).then(d => { if (d.url) setMapImageUrl(d.url); }).catch(() => {});
+    listLocationsApi().then(d => setMapLocations(d.locations || [])).catch(() => {});
+    getWorldMapApi().then(d => { if (d.url) setMapImageUrl(d.url); }).catch(() => {});
   }, [showMap]);
 
   useEffect(() => {
