@@ -4,11 +4,19 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.12.md
 **Document version:** v2.12 — Single-PR plan. Track 6 CP5 (mid-tier batch — 28 sites across 3 files) approved. File-local helper convention locked. 4-data-point pacing model with multi-file batch effect.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
 **Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2-CP5 COMPLETE (`c306ad4d`). 141 sites migrated, 41% of Track 6 by site count. CP6 (mid-tier batch 2) is next.
+========
+**Document version:** v2.9 — Single-PR plan. Track 6 CP2 (SceneSetsTab.jsx, 64 sites) approved. 3 HTTP method corrections caught mid-flow.
+
+**Author:** JAWIHP / Evoni — Prime Studios
+
+**Status:** G2 IN PROGRESS — Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 IN PROGRESS — CP2 (SceneSetsTab.jsx, 64 sites) COMPLETE at commit `30a15d05`. CP3 (WriteMode.jsx) is next, fresh session.
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.9.md
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -501,6 +509,7 @@ CP2 completed at commit `30a15d05` (squashed from 4 WIP commits across multiple 
 - Pattern F prophylactic discipline confirmed correct. CP2 surfaced 8 component-handler shadow-conflict prone names (`handleCreate`, `handleDeleteSet`, `handleSetCoverAngle`, `handleAddAngle`, `handlePreviewPrompt`, `handleUploadAngleImage`, `handleCascadeRegenerate`, `handleReorderAngle`); the Api suffix on every helper from the start avoided 8 mid-flow refactors. Future high-density files (CP3 WriteMode, CP4 FranchiseBrain) apply Pattern F prophylactically from the first extraction per same discipline.
 - Multi-session pacing model worked as designed. WIP commits across sessions, squash before approval, single CP2 commit at the end. Each session was a clean handoff via WIP commit hash. The `96cc3341 → 97808e97 → b328226b → 30a15d05` progression preserved progress without polluting the eventual squashed commit's history.
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.12.md
 ###### Track 6 CP3 architectural findings (LOCKED v2.10, COMPLETE — WriteMode.jsx)
 
 CP3 completed at commit `b0127817` (squashed from 3 WIP commits across 3 sessions per the v2.8 pacing model). 31/33 sites migrated to apiClient via 17 module-scope helpers with Pattern F Api suffix. 2 sites retained as locked exceptions (streaming SSE — see Pattern G below). 25 new behavioral tests added; full frontend suite at 205/205 passing across 19 test files. Backed up at `b0127817` on `claude/f-auth-1-backup`.
@@ -585,6 +594,8 @@ CP6 mid-tier batch 2 targets per v2.10 CP1 priority order: `CharacterGenerator.j
 
 **Track 6 progress as of CP5: 141 sites migrated** across 5 files (SceneSetsTab 64 + WriteMode 31 + FranchiseBrain 18 + StoryThreadTracker 11 + EpisodeScenesTab 9 + SeriesPage 8). 3 Pattern G locked exceptions (BookEditor:55 + WriteMode:980,1145). Tests grew from 135 (Track 6 start) to 262 (+127). Track 6 projected total ~345 sites; current progress ~41% by site count. Remaining: CP6 mid-tier batch 2 (~30 sites across 4 files), then CP7-CP8 long-tail (~165 sites distributed across ~50 files at 1-8 each).
 
+========
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.9.md
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -606,18 +617,29 @@ grep -rn "authHeader\b" frontend/src/ | grep -v "authHeaders" | grep -v "test\.\
 Expected output: zero matches. (Production code; test files may contain "authHeader" in test descriptions and are excluded.)
 
 ```bash
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.12.md
 grep -rn "Bearer \${" frontend/src/ | grep -v "src/services/api.js" | grep -v "BookEditor.jsx:55" | grep -v "WriteMode.jsx:980" | grep -v "WriteMode.jsx:1145" | grep -v "test\."
 ```
 
 Expected output: zero matches. The four allowlisted locations are: (a) `src/services/api.js` — the apiClient request interceptor itself; (b) `BookEditor.jsx:55` — the locked CZ-5 keepalive exception; (c) `WriteMode.jsx:980` — locked streaming SSE exception (voice-to-story, v2.10); (d) `WriteMode.jsx:1145` — locked streaming SSE exception (story-continue, v2.10).
+========
+grep -rn "Bearer \${" frontend/src/ | grep -v "src/services/api.js" | grep -v "BookEditor.jsx:55" | grep -v "test\."
+```
+
+Expected output: zero matches. The two allowlisted locations are: (a) `src/services/api.js` — the apiClient request interceptor itself; (b) `BookEditor.jsx:55` — the locked CZ-5 keepalive exception (line corrected v2.7; was `BookEditor.jsx:181` in v2.5/v2.6 before Track 2.5 extraction moved the literal).
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.9.md
 
 ```bash
 grep -rn "fetch(" frontend/src/ | wc -l
 ```
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.12.md
 Expected: drops from 627 (current) to count of intentionally-public reads only (PUBLIC class — currently 5 confirmed, may grow as Track 7 reclassifies UNCLEAR-A) PLUS the three locked exceptions (BookEditor.jsx:55 keepalive + WriteMode.jsx:980 + WriteMode.jsx:1145 streaming SSE) = 8 minimum.
 
 Sharper file-scoped variant (locked v2.10 from CP3 verification): `grep -nE '^\s*[^/]*\bfetch\(' <file>` — anchors to start-of-line plus excludes comment-prefixed matches. The default `grep -cE 'fetch\('` counts comment hits too; the sharper form is more precise for per-file verification during CP execution. Use the sharper form in CP reports.
+========
+Expected: drops from 627 (current) to count of intentionally-public reads only (PUBLIC class — currently 5 confirmed, may grow as Track 7 reclassifies UNCLEAR-A) PLUS the BookEditor:181 keepalive exception = 6 minimum.
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.9.md
 
 - Authenticated request via `apiClient` succeeds and `req.user` populated server-side.
 - Mid-session token expiry: `apiClient` interceptor sees `AUTH_INVALID_TOKEN`, refreshes silently, request continues. User does not see a logout.
@@ -1001,7 +1023,11 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.12.md
 - **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2 SceneSetsTab.jsx COMPLETE (commit `30a15d05` squashed). Track 6 CP3 WriteMode.jsx COMPLETE (commit `b0127817`; Pattern G locked). Track 6 CP4 FranchiseBrain.jsx COMPLETE (commit `11a82876`; F34 closed at call site). Track 6 CP5 mid-tier batch COMPLETE (commit `c306ad4d`; 28 sites across StoryThreadTracker + EpisodeScenesTab + SeriesPage; 262/262 frontend tests; file-local helper convention locked). Backed up at `c306ad4d` on `claude/f-auth-1-backup`. Track 6 CP6 (mid-tier batch 2 — CharacterGenerator + ContinuityEnginePage + TemplateDesigner + CharacterTherapy) is next, fresh session.
+========
+- **Step 6b — IN PROGRESS.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2 SceneSetsTab.jsx COMPLETE (commit `30a15d05` squashed from multi-session WIP; 64/64 sites migrated; 180/180 frontend tests pass). Backed up at `30a15d05` on `claude/f-auth-1-backup`. Track 6 CP3 (WriteMode.jsx, 33 sites) is next, fresh session.
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.9.md
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
@@ -1043,6 +1069,7 @@ Patterns D and E together enable the **module-scope-extraction** approach Tracks
 **Pattern F — Api-suffix convention for shadow-conflict resolution:** When extracting Track 2.5-style module-scope helpers from a file where component-local handler names mirror the endpoint operation names (e.g., a component with `finalizeProfile` handler whose body wraps a network call to `/profiles/finalize`), naming the extracted helper `finalizeProfile` shadows the component handler. Resolution: suffix the network helper with `Api` (`finalizeProfileApi`). Component handler stays unchanged — it imports and wraps the API helper plus UI state updates. Track 3 Stage 2 (commit `69f0a926`) established this pattern across 11 conflicts in SocialProfileGenerator.jsx; document the convention in a module-scope comment when applied so future contributors understand the suffix.
 
 Pattern F applies wherever Tracks 4 and 6 encounter files with component-handler names matching endpoint operation names. Two notable Track 6 files where this is likely: `SceneSetsTab.jsx` (64 sites) and `FranchiseBrain.jsx` (18 sites). Apply the suffix convention from the start of each file's migration rather than discovering shadow conflicts mid-flow.
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.12.md
 
 **File-local helper convention (LOCKED v2.12, validated by CP5 cross-file overlaps): helper modules are file-local; cross-file imports are not used in F-AUTH-1 even when endpoints overlap.** When a Track 6 file hits an endpoint already covered by another Track 6 file's helper, the helper is duplicated locally rather than imported. Each CP commit's helper module is self-contained per CP2/CP3/CP4/CP5 precedent. Duplication cost is bounded (~3 LOC per helper) and discoverable; cross-file imports would break test-per-file isolation. Validated against 4 cross-file duplications in CP5 (3 in EpisodeScenesTab: `listSceneSetsApi`, `suggestAnglesApi`, `createAngleApi` + 1 in SeriesPage: `listShowsApi`). Total drift surface ~12 LOC across CP5; benign.
 
@@ -1062,6 +1089,8 @@ Three known Pattern G sites (all locked, all documented):
 - `frontend/src/pages/WriteMode.jsx:1145` — SSE streaming for story-continue Claude AI generation in handleContinue. Locked in v2.10 from CP3 commit `b0127817`.
 
 Threshold for revisiting Pattern G: if Track 6 long-tail or future feature work surfaces 4+ Pattern G sites, evaluate adding a streaming-fetch helper to apiClient (a Track 1 amendment that would handle auth injection + response-body access without requiring inline construction). Today's 3 sites do not justify the scope; they are documented as locked exceptions instead.
+========
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.9.md
 
 ### 9.12 Deferred cleanups (post-F-AUTH-1)
 
@@ -1094,6 +1123,7 @@ From Track 4 (~33 additional sites):
 
 Disposition pattern (unchanged from v2.6): each is either intentionally PUBLIC (backend route serves unauth-safe data) or a BUG (backend route requires auth and the frontend silently sends none). Step 3 sweep classifies each backend route as PUBLIC or requireAuth; Path E sites whose backend is PUBLIC stay as raw fetch (correct), Path E sites whose backend is requireAuth get migrated to apiClient (Track 6-equivalent fix). No action until Step 3 reaches the corresponding routes. The WorldStudio.jsx cluster (29 sites) is the largest and warrants priority attention during Step 3 sweep — if the backend routes are PUBLIC, no work; if any are requireAuth, that one file becomes a meaningful Track-6-equivalent surface.
 
+<<<<<<<< HEAD:docs/audit/F-AUTH-1_Fix_Plan_v2.12.md
 **Path E running list growth from CP4: FranchiseBrain.jsx GET sites (8 total) filed for Step 3 sweep awareness.** CP4 migration applied apiClient (auth-required disposition) under the read that LalaVerse internal knowledge — laws, characters, locked decisions — is canonical-knowledge-class. Step 3 backend audit on `franchiseBrainRoutes.js` will adjudicate per-route disposition; if any GET is classified PUBLIC, that specific call site can be reverted in a follow-up commit.
 
 - `GET /franchise-brain/entries` with query-string filters (×6 sites: load, loadCounts ×4, loadSourceCounts)
@@ -1106,6 +1136,8 @@ Disposition pattern (unchanged from v2.6): each is either intentionally PUBLIC (
 - EpisodeScenesTab (3 GETs): `/episodes/:id/scene-sets`, `/episodes/:id/scenes`, `/scene-sets`
 - SeriesPage (3 GETs): `/universe/series`, `/storyteller/books`, `/shows` — the `/shows` GET is consistent with CP2's migration disposition (already auth-required).
 
+========
+>>>>>>>> origin/claude/f-auth-1-backup:docs/audit/F-AUTH-1_Fix_Plan_v2.9.md
 **HTTP method mismatches surfaced during Track 6 CP2 (3 sites in SceneSetsTab.jsx) — Step 3 sweep awareness items:**
 
 - `setCoverAngleApi` — backend route is PATCH; frontend was using GET. Migration uses correct PATCH per backend contract. Step 3 should verify the backend route's expected method matches what other consumers (if any) send.
