@@ -23,14 +23,10 @@ const express  = require('express');
 const router   = express.Router();
 const _path    = require('path');
 
-// Auth middleware — matches all other routes
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+// CP1 WP3: lazy-noop fallback removed. F-AUTH-2 fix (lazy-init in
+// middleware/auth.js) makes require() boot-safe — direct destructuring
+// import is now correct.
+const { optionalAuth } = require('../middleware/auth');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -124,7 +120,7 @@ function safeFilename(title) {
 
 // ── META endpoint ──────────────────────────────────────────────────────────
 
-router.get('/book/:bookId/meta', optionalAuth, async (req, res) => {
+router.get('/book/:bookId/meta', optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
   try {
     const db   = req.app.get('db') || require('../models');
     const book = await fetchBook(db, req.params.bookId);
@@ -154,7 +150,7 @@ router.get('/book/:bookId/meta', optionalAuth, async (req, res) => {
 
 // ── DOCX export ────────────────────────────────────────────────────────────
 
-router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
+router.get('/book/:bookId/docx', optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
   try {
     const db   = req.app.get('db') || require('../models');
     const book = await fetchBook(db, req.params.bookId);
@@ -562,7 +558,7 @@ router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
 
 // ── PDF export ─────────────────────────────────────────────────────────────
 
-router.get('/book/:bookId/pdf', optionalAuth, async (req, res) => {
+router.get('/book/:bookId/pdf', optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
   try {
     const db   = req.app.get('db') || require('../models');
     const book = await fetchBook(db, req.params.bookId);
