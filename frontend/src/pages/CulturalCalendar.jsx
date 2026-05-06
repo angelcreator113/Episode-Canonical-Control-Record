@@ -3,6 +3,19 @@ import './CulturalCalendar.css';
 import usePageData from '../hooks/usePageData';
 import { EditItemModal, PageEditContext, EditableList } from '../components/EditItemModal';
 import PushToBrain from '../components/PushToBrain';
+import apiClient from '../services/api';
+
+// ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 4 helpers covering 4 fetch sites. listShowsApi duplicated locally per
+// v2.12 §9.11 (CP2 SceneSetsTab + CP5 SeriesPage + CP7 Home + CP9
+// showService also have it; per v2.16 showService is canonical accessor).
+export const listShowsApi = () => apiClient.get('/api/v1/shows');
+export const autoSpawnEventApi = (eventId, payload) =>
+  apiClient.post(`/api/v1/calendar/events/${eventId}/auto-spawn`, payload);
+export const deleteCalendarEventApi = (eventId) =>
+  apiClient.delete(`/api/v1/calendar/events/${eventId}`);
+export const listCalendarEventsApi = (eventType) =>
+  apiClient.get(eventType ? `/api/v1/calendar/events?event_type=${eventType}` : '/api/v1/calendar/events');
 
 /* ═══════════════════════════════════════════════════════════════════════
    CulturalCalendar.jsx — LalaVerse Cultural & Social Systems v2.0
@@ -271,7 +284,7 @@ export default function CulturalCalendar() {
 
   // Fetch shows for event creation
   useEffect(() => {
-    fetch('/api/v1/shows').then(r => r.json()).then(d => setShows(d.data || [])).catch(() => {});
+    listShowsApi().then(res => setShows(res.data?.data || [])).catch(() => {});
   }, []);
 
   // Create world event from calendar event
@@ -281,19 +294,15 @@ export default function CulturalCalendar() {
     setSpawning(calendarEvent.id);
     setSpawnResult(null);
     try {
-      const res = await fetch(`/api/v1/calendar/events/${calendarEvent.id}/auto-spawn`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ show_id: showId, event_count: 1, max_guests: 6 }),
-      });
-      const data = await res.json();
+      const res = await autoSpawnEventApi(calendarEvent.id, { show_id: showId, event_count: 1, max_guests: 6 });
+      const data = res.data;
       if (data.success) {
         setSpawnResult({ type: 'success', message: `Created "${data.data.events[0]?.name}" with host and guest list — check Events Library` });
       } else {
         setSpawnResult({ type: 'error', message: data.error || 'Failed to create event' });
       }
     } catch (err) {
-      setSpawnResult({ type: 'error', message: err.message });
+      setSpawnResult({ type: 'error', message: err.response?.data?.error || err.message });
     }
     setSpawning(null);
   };
@@ -301,7 +310,7 @@ export default function CulturalCalendar() {
   // Delete calendar event
   const handleDeleteCalendarEvent = async (eventId) => {
     try {
-      await fetch(`/api/v1/calendar/events/${eventId}`, { method: 'DELETE' });
+      await deleteCalendarEventApi(eventId);
       setEvents(prev => prev.filter(e => e.id !== eventId));
       setSpawnResult({ type: 'success', message: 'Event deleted' });
     } catch { setSpawnResult({ type: 'error', message: 'Delete failed' }); }
@@ -312,9 +321,8 @@ export default function CulturalCalendar() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/v1/calendar/events?event_type=lalaverse_cultural');
-        const data = await res.json();
-        if (!cancelled) setEvents(data.events || []);
+        const res = await listCalendarEventsApi('lalaverse_cultural');
+        if (!cancelled) setEvents(res.data?.events || []);
       } catch (err) {
         console.error('[CulturalCalendar] fetch error:', err);
       } finally {

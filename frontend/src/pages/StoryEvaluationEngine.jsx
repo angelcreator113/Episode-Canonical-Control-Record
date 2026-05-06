@@ -23,6 +23,30 @@ import './StoryEvaluationEngine.css';
 
 const API = '/api/v1/memories';
 
+// ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 6 helpers covering 5 fetch sites. listRegistriesApi + listBooksApi +
+// getBookApi duplicated locally per v2.12 §9.11 (cross-CP from CP3+CP6+
+// CP7+CP8 / CP5 / CP3 respectively — listRegistriesApi reaches 6-fold
+// existence as the most-duplicated helper in F-AUTH-1).
+//
+// VARIABLE-URL split (line 1243): pre-migration `fetchChapters(bookId)`
+// fetched `/storyteller/books/:id` when bookId provided OR
+// `/storyteller/chapters` when no bookId. Split into 2 helpers per v2.13
+// §9.11 method-branching split pattern, applied to URL-branching: caller
+// does the conditional ternary at the call site.
+export const getWorldContextSummaryApi = () =>
+  apiClient.get('/api/v1/world/context-summary');
+export const listRegistriesApi = () =>
+  apiClient.get('/api/v1/character-registry/registries');
+export const getCharacterSceneContextApi = (charKey, registryId) =>
+  apiClient.get(`/api/v1/character-registry/characters/scene-context/${encodeURIComponent(charKey)}?registry_id=${encodeURIComponent(registryId)}`);
+export const listBooksApi = () =>
+  apiClient.get('/api/v1/storyteller/books');
+export const getBookApi = (bookId) =>
+  apiClient.get(`/api/v1/storyteller/books/${encodeURIComponent(bookId)}`);
+export const listAllChaptersApi = () =>
+  apiClient.get('/api/v1/storyteller/chapters');
+
 // ── Light theme ───────────────────────────────────────────────────────────
 const T_LIGHT = {
   bg:          '#f5f5f5',
@@ -579,9 +603,8 @@ export default function StoryEvaluationEngine() {
   const [worldCtx, setWorldCtx] = useState(null);
   const [worldCtxOpen, setWorldCtxOpen] = useState(false);
   useEffect(() => {
-    fetch('/api/v1/world/context-summary')
-      .then(r => r.json())
-      .then(d => setWorldCtx(d))
+    getWorldContextSummaryApi()
+      .then(res => setWorldCtx(res.data))
       .catch(() => {});
   }, []);
 
@@ -882,10 +905,10 @@ export default function StoryEvaluationEngine() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/v1/character-registry/registries');
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (!data.success || !data.registries?.length || cancelled) return;
+        const res = await listRegistriesApi();
+        if (cancelled) return;
+        const data = res.data;
+        if (!data?.success || !data?.registries?.length || cancelled) return;
 
         // Use the first (most recent) registry
         const reg = data.registries[0];
@@ -917,10 +940,9 @@ export default function StoryEvaluationEngine() {
     if (!registryId || !charKey) return;
     setCharFetchStatus(prev => ({ ...prev, [charKey]: 'loading' }));
     try {
-      const res = await fetch(`/api/v1/character-registry/characters/scene-context/${encodeURIComponent(charKey)}?registry_id=${encodeURIComponent(registryId)}`);
-      if (!res.ok) { setCharFetchStatus(prev => ({ ...prev, [charKey]: 'failed' })); return; }
-      const data = await res.json();
-      if (!data.success) { setCharFetchStatus(prev => ({ ...prev, [charKey]: 'failed' })); return; }
+      const res = await getCharacterSceneContextApi(charKey, registryId);
+      const data = res.data;
+      if (!data?.success) { setCharFetchStatus(prev => ({ ...prev, [charKey]: 'failed' })); return; }
       setCharContext(prev => ({ ...prev, [charKey]: data }));
       setCharFetchStatus(prev => ({ ...prev, [charKey]: 'loaded' }));
     } catch {
@@ -1228,22 +1250,20 @@ export default function StoryEvaluationEngine() {
   // ── Fetch books + chapters for picker ──────────────────────────────
   const fetchBooks = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/storyteller/books');
-      if (!res.ok) return;
-      const data = await res.json();
-      setBooks(data.books || data || []);
+      const res = await listBooksApi();
+      const data = res.data;
+      setBooks(data?.books || data || []);
     } catch { /* ignore */ }
   }, []);
 
   const fetchChapters = useCallback(async (bookId) => {
     try {
-      const url = bookId
-        ? `/api/v1/storyteller/books/${encodeURIComponent(bookId)}`
-        : '/api/v1/storyteller/chapters';
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const data = await res.json();
-      const ch = bookId ? (data.book?.chapters || data.chapters || []) : (data.chapters || data || []);
+      // VARIABLE-URL split per v2.13 §9.11 method-branching pattern
+      // (applied to URL-branching): bookId branch uses getBookApi,
+      // no-bookId branch uses listAllChaptersApi.
+      const res = bookId ? await getBookApi(bookId) : await listAllChaptersApi();
+      const data = res.data;
+      const ch = bookId ? (data?.book?.chapters || data?.chapters || []) : (data?.chapters || data || []);
       setChapters(ch);
     } catch { /* chapters endpoint may not exist */ }
   }, []);

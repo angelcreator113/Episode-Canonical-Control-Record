@@ -12,6 +12,21 @@
 
 import { useState, useCallback } from 'react';
 import { API_URL } from '../config/api';
+import apiClient from '../services/api';
+
+// ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 4 helpers covering 4 fetch sites on /character-depth/*. File-local per
+// Track 6 convention. Note: WorldStudio.jsx (deferred Path E cluster) hits
+// the same endpoints; WorldStudio's helpers don't exist yet, so no
+// cross-CP duplication concern at this point.
+export const getCharacterDepthApi = (characterId) =>
+  apiClient.get(`${API_URL}/character-depth/${characterId}`);
+export const generateDepthDimensionApi = (characterId, dimension) =>
+  apiClient.post(`${API_URL}/character-depth/${characterId}/generate/${dimension}`);
+export const generateAllDepthApi = (characterId) =>
+  apiClient.post(`${API_URL}/character-depth/${characterId}/generate`);
+export const confirmDepthApi = (characterId, payload) =>
+  apiClient.post(`${API_URL}/character-depth/${characterId}/confirm`, payload);
 
 /* ── Color scheme ───────────────────────────────────────────────────────────── */
 const PINK    = { bg: '#FDF0F5', border: '#e8b4c8' };
@@ -177,13 +192,11 @@ export default function CharacterDepthPanel({ characterId, characterName }) {
   const loadDepth = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/character-depth/${characterId}`);
-      if (!res.ok) throw new Error('Failed to load depth data');
-      const data = await res.json();
-      setDepth(data.depth || {});
+      const res = await getCharacterDepthApi(characterId);
+      setDepth(res.data?.depth || {});
       setLoaded(true);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message || 'Failed to load depth data');
     } finally {
       setLoading(false);
     }
@@ -205,14 +218,13 @@ export default function CharacterDepthPanel({ characterId, characterName }) {
   const generateDimension = async (dimension) => {
     setGenerating(prev => ({ ...prev, [dimension]: true }));
     try {
-      const res = await fetch(`${API_URL}/character-depth/${characterId}/generate/${dimension}`, { method: 'POST' });
-      if (!res.ok) throw new Error('Generation failed');
-      const data = await res.json();
-      if (data.proposed) {
+      const res = await generateDepthDimensionApi(characterId, dimension);
+      const data = res.data;
+      if (data?.proposed) {
         setProposed(prev => ({ ...prev, ...data.proposed }));
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message || 'Generation failed');
     } finally {
       setGenerating(prev => ({ ...prev, [dimension]: false }));
     }
@@ -221,14 +233,13 @@ export default function CharacterDepthPanel({ characterId, characterName }) {
   const generateAll = async () => {
     setGenerating(prev => ({ ...prev, all: true }));
     try {
-      const res = await fetch(`${API_URL}/character-depth/${characterId}/generate`, { method: 'POST' });
-      if (!res.ok) throw new Error('Generation failed');
-      const data = await res.json();
-      if (data.proposed) {
+      const res = await generateAllDepthApi(characterId);
+      const data = res.data;
+      if (data?.proposed) {
         setProposed(data.proposed);
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message || 'Generation failed');
     } finally {
       setGenerating(prev => ({ ...prev, all: false }));
     }
@@ -238,17 +249,11 @@ export default function CharacterDepthPanel({ characterId, characterName }) {
   const confirmAll = async () => {
     setConfirming(true);
     try {
-      const res = await fetch(`${API_URL}/character-depth/${characterId}/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ proposed }),
-      });
-      if (!res.ok) throw new Error('Confirm failed');
-      const data = await res.json();
-      setDepth(data.depth || {});
+      const res = await confirmDepthApi(characterId, { proposed });
+      setDepth(res.data?.depth || {});
       setProposed({});
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message || 'Confirm failed');
     } finally {
       setConfirming(false);
     }

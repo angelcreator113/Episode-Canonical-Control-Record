@@ -1,6 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import './TemplateStudio.css';
+
+// ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 6 helpers covering 6 fetch sites on /template-studio/*. publishTemplateApi
+// duplicated locally per v2.12 §9.11 (CP6 TemplateDesigner has it).
+export const listTemplatesApi = (params) =>
+  apiClient.get(params ? `/api/v1/template-studio?${params}` : '/api/v1/template-studio');
+export const cloneTemplateApi = (id) =>
+  apiClient.post(`/api/v1/template-studio/${id}/clone`);
+export const publishTemplateApi = (id) =>
+  apiClient.post(`/api/v1/template-studio/${id}/publish`);
+export const lockTemplateApi = (id) =>
+  apiClient.post(`/api/v1/template-studio/${id}/lock`);
+export const archiveTemplateApi = (id) =>
+  apiClient.post(`/api/v1/template-studio/${id}/archive`);
+export const deleteTemplateApi = (id) =>
+  apiClient.delete(`/api/v1/template-studio/${id}`);
 
 /**
  * TemplateStudio - Template Management Dashboard
@@ -27,23 +44,17 @@ function TemplateStudio() {
     try {
       setLoading(true);
       setError(null);
-      
+
       const params = new URLSearchParams();
       if (statusFilter !== 'ALL') {
         params.append('status', statusFilter);
       }
-      
-      const response = await fetch(`/api/v1/template-studio?${params}`);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to load templates');
-      }
-      
-      setTemplates(data.data || []);
+
+      const response = await listTemplatesApi(params.toString());
+      setTemplates(response.data?.data || []);
     } catch (err) {
       console.error('Error loading templates:', err);
-      setError(err.message);
+      setError(err.response?.data?.message || err.message || 'Failed to load templates');
     } finally {
       setLoading(false);
     }
@@ -65,119 +76,74 @@ function TemplateStudio() {
     if (!confirm(`Clone "${template.name}" to create version ${template.version + 1}?`)) {
       return;
     }
-    
+
     try {
-      const response = await fetch(`/api/v1/template-studio/${template.id}/clone`, {
-        method: 'POST'
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to clone template');
-      }
-      
-      alert(`✅ Template cloned successfully! New version: ${data.data.version}`);
+      const response = await cloneTemplateApi(template.id);
+      alert(`✅ Template cloned successfully! New version: ${response.data?.data?.version}`);
       loadTemplates();
     } catch (err) {
-      alert(`❌ ${err.message}`);
+      alert(`❌ ${err.response?.data?.message || err.message || 'Failed to clone template'}`);
     }
   };
-  
+
   const handlePublish = async (template) => {
     if (!confirm(`Publish "${template.name}"? This will make it available for use.`)) {
       return;
     }
-    
+
     try {
-      const response = await fetch(`/api/v1/template-studio/${template.id}/publish`, {
-        method: 'POST'
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to publish template');
-      }
-      
+      await publishTemplateApi(template.id);
       alert('✅ Template published successfully!');
       loadTemplates();
     } catch (err) {
-      alert(`❌ ${err.message}`);
+      alert(`❌ ${err.response?.data?.message || err.message || 'Failed to publish template'}`);
     }
   };
-  
+
   const handleLock = async (template) => {
     if (!confirm(`Lock "${template.name}"? This will prevent any future edits.`)) {
       return;
     }
-    
+
     try {
-      const response = await fetch(`/api/v1/template-studio/${template.id}/lock`, {
-        method: 'POST'
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to lock template');
-      }
-      
+      await lockTemplateApi(template.id);
       alert('✅ Template locked successfully!');
       loadTemplates();
     } catch (err) {
-      alert(`❌ ${err.message}`);
+      alert(`❌ ${err.response?.data?.message || err.message || 'Failed to lock template'}`);
     }
   };
-  
+
   const handleArchive = async (template) => {
     if (!confirm(`Archive "${template.name}"? It will no longer be available for new compositions.`)) {
       return;
     }
-    
+
     try {
-      const response = await fetch(`/api/v1/template-studio/${template.id}/archive`, {
-        method: 'POST'
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to archive template');
-      }
-      
+      await archiveTemplateApi(template.id);
       alert('✅ Template archived successfully!');
       loadTemplates();
     } catch (err) {
-      alert(`❌ ${err.message}`);
+      alert(`❌ ${err.response?.data?.message || err.message || 'Failed to archive template'}`);
     }
   };
-  
+
   const handleDelete = async (template) => {
     if (template.status !== 'DRAFT') {
       alert('Only DRAFT templates can be deleted. Use Archive instead.');
       return;
     }
-    
+
     if (!confirm(`Delete "${template.name}"? This cannot be undone.`)) {
       return;
     }
-    
+
     try {
-      const response = await fetch(`/api/v1/template-studio/${template.id}`, {
-        method: 'DELETE'
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to delete template');
-      }
-      
+      await deleteTemplateApi(template.id);
       alert('✅ Template deleted successfully!');
       loadTemplates();
     } catch (err) {
-      alert(`❌ ${err.message}`);
+      alert(`❌ ${err.response?.data?.message || err.message || 'Failed to delete template'}`);
     }
   };
   

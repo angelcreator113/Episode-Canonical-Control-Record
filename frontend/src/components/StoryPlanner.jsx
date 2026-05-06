@@ -9,9 +9,21 @@
  * 5. Apply the plan to create actual chapters in the DB
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 import './StoryPlanner.css';
 
 const API = '/api/v1';
+
+// ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 3 helpers covering 7 fetch sites — updateChapterApi reused 5× within
+// file (lines 135, 159, 237, 259, 274). updateChapterApi + createChapterApi
+// duplicated locally per v2.12 §9.11 (CP3 WriteMode has both).
+export const proposeStoryOutlineApi = (payload) =>
+  apiClient.post(`${API}/memories/story-outline`, payload);
+export const updateChapterApi = (chapterId, payload) =>
+  apiClient.put(`${API}/storyteller/chapters/${chapterId}`, payload);
+export const createChapterApi = (bookId, payload) =>
+  apiClient.post(`${API}/storyteller/books/${bookId}/chapters`, payload);
 
 /* ═══════════════════════════════════════
    StoryPlanner — Main Component
@@ -66,34 +78,29 @@ export default function StoryPlanner({ book, chapters = [], onRefresh, onChapter
     setError(null);
 
     try {
-      const res = await fetch(`${API}/memories/story-outline`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id: book.id,
-          book_title: book.title || '',
-          book_description: book.description || '',
-          character_name: book.character_name || '',
-          existing_chapters: chapters.map(ch => ({
-            id: ch.id,
-            title: ch.title,
-            chapter_type: ch.chapter_type || 'chapter',
-            part_number: ch.part_number,
-            part_title: ch.part_title,
-            sections: ch.sections || [],
-            scene_goal: ch.scene_goal || '',
-            draft_prose: ch.draft_prose || '',
-          })),
-          instructions,
-          mode,
-          target_chapter_id: targetChapterId,
-          num_parts: numParts ? parseInt(numParts) : null,
-          num_chapters: numChapters ? parseInt(numChapters) : null,
-        }),
+      const res = await proposeStoryOutlineApi({
+        book_id: book.id,
+        book_title: book.title || '',
+        book_description: book.description || '',
+        character_name: book.character_name || '',
+        existing_chapters: chapters.map(ch => ({
+          id: ch.id,
+          title: ch.title,
+          chapter_type: ch.chapter_type || 'chapter',
+          part_number: ch.part_number,
+          part_title: ch.part_title,
+          sections: ch.sections || [],
+          scene_goal: ch.scene_goal || '',
+          draft_prose: ch.draft_prose || '',
+        })),
+        instructions,
+        mode,
+        target_chapter_id: targetChapterId,
+        num_parts: numParts ? parseInt(numParts) : null,
+        num_chapters: numChapters ? parseInt(numChapters) : null,
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Generation failed');
+      const data = res.data;
 
       if (mode === 'full') {
         setPlan(data.outline);
@@ -132,11 +139,7 @@ export default function StoryPlanner({ book, chapters = [], onRefresh, onChapter
       },
     }));
 
-    await fetch(`${API}/storyteller/chapters/${chapterId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sections: sectionBlocks }),
-    });
+    await updateChapterApi(chapterId, { sections: sectionBlocks });
   };
 
   /* ── Apply full plan — creates chapters from the AI outline ── */
@@ -154,53 +157,37 @@ export default function StoryPlanner({ book, chapters = [], onRefresh, onChapter
             c => c.title?.toLowerCase().trim() === ch.title?.toLowerCase().trim()
           );
 
+          const sectionsPayload = (ch.sections || []).map((s, i) => ({
+            id: `sec-${Date.now()}-${i}`,
+            type: 'h3',
+            content: s.title || `Section ${i + 1}`,
+            collapsed: false,
+            meta: {
+              section_type: s.type || 'scene',
+              description: s.description || '',
+              emotional_beat: s.emotional_beat || '',
+            },
+          }));
+
           if (existing) {
             // Update existing chapter with plan data
-            await fetch(`${API}/storyteller/chapters/${existing.id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chapter_type: ch.chapter_type || 'chapter',
-                part_number: part.part_number,
-                part_title: part.part_title,
-                scene_goal: ch.scene_goal || '',
-                sections: (ch.sections || []).map((s, i) => ({
-                  id: `sec-${Date.now()}-${i}`,
-                  type: 'h3',
-                  content: s.title || `Section ${i + 1}`,
-                  collapsed: false,
-                  meta: {
-                    section_type: s.type || 'scene',
-                    description: s.description || '',
-                    emotional_beat: s.emotional_beat || '',
-                  },
-                })),
-              }),
+            await updateChapterApi(existing.id, {
+              chapter_type: ch.chapter_type || 'chapter',
+              part_number: part.part_number,
+              part_title: part.part_title,
+              scene_goal: ch.scene_goal || '',
+              sections: sectionsPayload,
             });
           } else {
             // Create new chapter
-            const createRes = await fetch(`${API}/storyteller/books/${book.id}/chapters`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                title: ch.title,
-                chapter_number: chapterNum,
-                chapter_type: ch.chapter_type || 'chapter',
-                part_number: part.part_number,
-                part_title: part.part_title,
-                scene_goal: ch.scene_goal || '',
-                sections: (ch.sections || []).map((s, i) => ({
-                  id: `sec-${Date.now()}-${i}`,
-                  type: 'h3',
-                  content: s.title || `Section ${i + 1}`,
-                  collapsed: false,
-                  meta: {
-                    section_type: s.type || 'scene',
-                    description: s.description || '',
-                    emotional_beat: s.emotional_beat || '',
-                  },
-                })),
-              }),
+            await createChapterApi(book.id, {
+              title: ch.title,
+              chapter_number: chapterNum,
+              chapter_type: ch.chapter_type || 'chapter',
+              part_number: part.part_number,
+              part_title: part.part_title,
+              scene_goal: ch.scene_goal || '',
+              sections: sectionsPayload,
             });
           }
         }
@@ -234,11 +221,7 @@ export default function StoryPlanner({ book, chapters = [], onRefresh, onChapter
     };
 
     try {
-      await fetch(`${API}/storyteller/chapters/${chapterId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections: [...existing, newSection] }),
-      });
+      await updateChapterApi(chapterId, { sections: [...existing, newSection] });
       toast?.add('Section added');
       setEditingSection(null);
       setSectionDraft({ title: '', type: 'scene', description: '' });
@@ -256,11 +239,7 @@ export default function StoryPlanner({ book, chapters = [], onRefresh, onChapter
     updated.splice(sectionIndex, 1);
 
     try {
-      await fetch(`${API}/storyteller/chapters/${chapterId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections: updated }),
-      });
+      await updateChapterApi(chapterId, { sections: updated });
       toast?.add('Section removed');
       onRefresh?.();
     } catch (e) {
@@ -271,11 +250,7 @@ export default function StoryPlanner({ book, chapters = [], onRefresh, onChapter
   /* ── Update chapter metadata (part, type, goal) ── */
   const updateChapterMeta = async (chapterId, updates) => {
     try {
-      await fetch(`${API}/storyteller/chapters/${chapterId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
+      await updateChapterApi(chapterId, updates);
       onRefresh?.();
     } catch (e) {
       toast?.add('Failed to update chapter', 'error');
