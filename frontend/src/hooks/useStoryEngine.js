@@ -14,6 +14,32 @@ export const persistStory = (payload) =>
 export const deleteStoryFromDb = (dbId) =>
   apiClient.delete(`${API_BASE}/stories/${dbId}`);
 
+// Track 6 CP12 module-scope helpers — hook structural pattern (v2.16 §9.11).
+// listStoriesForCharacterApi is a 3-fold cross-CP dup (CP9 + CP11 + CP12) per
+// v2.12 §9.11 file-local convention.
+export const getStoryEngineCharactersApi = () =>
+  apiClient.get(`${API_BASE}/memories/story-engine-characters`).then((r) => r.data);
+export const listStoriesForCharacterApi = (charKey) =>
+  apiClient.get(`${API_BASE}/stories/character/${charKey}`).then((r) => r.data);
+export const getStoryEngineTasksApi = (charKey) =>
+  apiClient.get(`${API_BASE}/memories/story-engine-tasks/${charKey}`).then((r) => r.data);
+export const generateNextChapterApi = (payload) =>
+  apiClient.post(`${API_BASE}/memories/generate-next-chapter`, payload).then((r) => r.data);
+export const extractStoryMemoriesApi = (payload) =>
+  apiClient.post(`${API_BASE}/memories/extract-story-memories`, payload).then((r) => r.data);
+export const updateStoryEngineRegistryApi = (payload) =>
+  apiClient.post(`${API_BASE}/memories/story-engine-update-registry`, payload).then((r) => r.data);
+export const generateTextureLayerApi = (payload) =>
+  apiClient.post(`${API_BASE}/texture-layer/generate`, payload).then((r) => r.data);
+export const updateArcTrackingApi = (payload) =>
+  apiClient.post(`${API_BASE}/arc-tracking/update`, payload);
+export const checkSceneEligibilityApi = (payload) =>
+  apiClient.post(`${API_BASE}/world/scenes/check-eligibility`, payload).then((r) => r.data);
+export const checkStoryConsistencyApi = (payload) =>
+  apiClient.post(`${API_BASE}/memories/check-story-consistency`, payload).then((r) => r.data);
+export const addStoryEngineCharacterApi = (payload) =>
+  apiClient.post(`${API_BASE}/memories/story-engine-add-character`, payload).then((r) => r.data);
+
 const ROLE_COLORS = {
   protagonist: '#9a7d1e',
   special:     '#9a7d1e',
@@ -194,9 +220,7 @@ export default function useStoryEngine() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/memories/story-engine-characters`);
-        if (!res.ok) throw new Error('Failed to load');
-        const data = await res.json();
+        const data = await getStoryEngineCharactersApi();
         if (cancelled) return;
 
         const chars = {};
@@ -258,31 +282,28 @@ export default function useStoryEngine() {
     // Load from DB
     (async () => {
       try {
-        const dbRes = await fetch(`${API_BASE}/stories/character/${selectedChar}`);
-        if (dbRes.ok) {
-          const dbData = await dbRes.json();
-          if (dbData.stories?.length) {
-            const dbStories = {};
-            const dbApproved = [];
-            const dbSaved = [];
-            for (const s of dbData.stories) {
-              dbStories[s.story_number] = {
-                story_number: s.story_number, title: s.title, text: s.text,
-                phase: s.phase, story_type: s.story_type, word_count: s.word_count,
-                new_character: s.new_character, new_character_name: s.new_character_name,
-                new_character_role: s.new_character_role, opening_line: s.opening_line,
-                character_key: s.character_key, db_id: s.id, db_status: s.status,
-              };
-              if (s.status === 'approved') dbApproved.push(s.story_number);
-              if (s.status === 'draft' || s.status === 'approved') dbSaved.push(s.story_number);
-            }
-            setStories(prev => ({ ...prev, ...dbStories }));
-            setApprovedStories(prev => [...new Set([...prev, ...dbApproved])]);
-            setSavedStories(dbSaved);
-            setCachedStories(selectedChar,
-              { ...(cachedStoryData?.stories || {}), ...dbStories },
-              [...new Set([...(cachedStoryData?.approved || []), ...dbApproved])]);
+        const dbData = await listStoriesForCharacterApi(selectedChar);
+        if (dbData.stories?.length) {
+          const dbStories = {};
+          const dbApproved = [];
+          const dbSaved = [];
+          for (const s of dbData.stories) {
+            dbStories[s.story_number] = {
+              story_number: s.story_number, title: s.title, text: s.text,
+              phase: s.phase, story_type: s.story_type, word_count: s.word_count,
+              new_character: s.new_character, new_character_name: s.new_character_name,
+              new_character_role: s.new_character_role, opening_line: s.opening_line,
+              character_key: s.character_key, db_id: s.id, db_status: s.status,
+            };
+            if (s.status === 'approved') dbApproved.push(s.story_number);
+            if (s.status === 'draft' || s.status === 'approved') dbSaved.push(s.story_number);
           }
+          setStories(prev => ({ ...prev, ...dbStories }));
+          setApprovedStories(prev => [...new Set([...prev, ...dbApproved])]);
+          setSavedStories(dbSaved);
+          setCachedStories(selectedChar,
+            { ...(cachedStoryData?.stories || {}), ...dbStories },
+            [...new Set([...(cachedStoryData?.approved || []), ...dbApproved])]);
         }
       } catch {}
     })();
@@ -300,18 +321,15 @@ export default function useStoryEngine() {
 
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/memories/story-engine-tasks/${selectedChar}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.cached && data.tasks?.length) {
-            setTasks(data.tasks);
-            setCachedTasks(selectedChar, data.tasks);
-            const savedNum = (() => { try { return Number(localStorage.getItem('se_activeTaskNum')); } catch { return 0; } })();
-            const restored = savedNum && data.tasks.find(t => t.story_number === savedNum);
-            setActiveTask(restored || data.tasks[0]);
-            if (restored && cachedStoryData?.stories?.[savedNum]) setActiveStory(cachedStoryData.stories[savedNum]);
-            return;
-          }
+        const data = await getStoryEngineTasksApi(selectedChar);
+        if (data.cached && data.tasks?.length) {
+          setTasks(data.tasks);
+          setCachedTasks(selectedChar, data.tasks);
+          const savedNum = (() => { try { return Number(localStorage.getItem('se_activeTaskNum')); } catch { return 0; } })();
+          const restored = savedNum && data.tasks.find(t => t.story_number === savedNum);
+          setActiveTask(restored || data.tasks[0]);
+          if (restored && cachedStoryData?.stories?.[savedNum]) setActiveStory(cachedStoryData.stories[savedNum]);
+          return;
         }
       } catch {}
       setTasks([]);
@@ -345,6 +363,16 @@ export default function useStoryEngine() {
     setArcProgress(null);
 
     try {
+      // ── PATTERN G LOCKED EXCEPTION (v2.10 §9.11; allowlist 5 → 6 in v2.19) ──
+      // SSE streaming site — server returns text/event-stream and the body is
+      // consumed via res.body.getReader() in the loop below. axios cannot
+      // stream response bodies in the browser (only in Node), so this site
+      // CANNOT migrate to apiClient. Locked alongside BookEditor:58 keepalive
+      // + WriteMode:1000/1191 SSE + WriteModeAIWriter:281 + AppAssistant:239.
+      // Shape match: POST + JSON.stringify body + getReader() (no
+      // AbortController). When this site moves under requireAuth post-Step 3
+      // backend sweep, follow the WriteMode:1000 inline-Bearer pattern.
+      // ─────────────────────────────────────────────────────────────────────
       const res = await fetch(`${API_BASE}/memories/generate-story-tasks-stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -409,16 +437,12 @@ export default function useStoryEngine() {
     if (generatingNextChapter) return;
     setGeneratingNextChapter(true);
     try {
-      const res = await fetch(`${API_BASE}/memories/generate-next-chapter`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ characterKey: selectedChar }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to generate next chapter');
+      let data;
+      try {
+        data = await generateNextChapterApi({ characterKey: selectedChar });
+      } catch (httpErr) {
+        throw new Error(httpErr.response?.data?.error || 'Failed to generate next chapter');
       }
-      const data = await res.json();
       if (data.complete) {
         addToast('All 50 chapters have been generated!', 'info');
         return;
@@ -519,13 +543,10 @@ export default function useStoryEngine() {
     const persistPromise = persistStory(storyPayload)
       .catch(e => { console.error('story persist error:', e); addToast('Failed to save approved story to database', 'error'); });
 
-    const memoryPromise = fetch(`${API_BASE}/memories/extract-story-memories`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        characterId: char?.id || selectedChar, characterKey: selectedChar,
-        storyNumber: story.story_number, storyTitle: story.title, storyText: story.text,
-      }),
-    }).then(r => r.ok ? r.json() : null).catch(e => {
+    const memoryPromise = extractStoryMemoriesApi({
+      characterId: char?.id || selectedChar, characterKey: selectedChar,
+      storyNumber: story.story_number, storyTitle: story.title, storyText: story.text,
+    }).catch(e => {
       console.error('extract memories error:', e);
       addToast('Failed to extract story memories', 'error');
       return null;
@@ -541,13 +562,10 @@ export default function useStoryEngine() {
 
     // Registry update
     postApprovalTasks.push(
-      fetch(`${API_BASE}/memories/story-engine-update-registry`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          characterKey: selectedChar, storyNumber: story.story_number,
-          storyTitle: story.title, storyText: story.text, extractedMemories: memoryData,
-        }),
-      }).then(r => r.ok ? r.json() : null).then(regData => {
+      updateStoryEngineRegistryApi({
+        characterKey: selectedChar, storyNumber: story.story_number,
+        storyTitle: story.title, storyText: story.text, extractedMemories: memoryData,
+      }).then(regData => {
         if (regData?.updated) {
           setRegistryUpdate(`Registry updated: ${regData.summary}`);
           setTimeout(() => setRegistryUpdate(null), 8000);
@@ -557,15 +575,12 @@ export default function useStoryEngine() {
 
     // Texture layer generation
     postApprovalTasks.push(
-      fetch(`${API_BASE}/texture-layer/generate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          story: { story_number: story.story_number, title: story.title, text: story.text, phase: story.phase, story_type: story.story_type },
-          character_key: selectedChar,
-          characters_present: [...new Set(task?.situations?.flatMap(s => s.characters_present || []) || [])],
-          registry_id: char?.registry_id || null,
-        }),
-      }).then(r => r.ok ? r.json() : null).then(textureData => {
+      generateTextureLayerApi({
+        story: { story_number: story.story_number, title: story.title, text: story.text, phase: story.phase, story_type: story.story_type },
+        character_key: selectedChar,
+        characters_present: [...new Set(task?.situations?.flatMap(s => s.characters_present || []) || [])],
+        registry_id: char?.registry_id || null,
+      }).then(textureData => {
         if (textureData?.texture) {
           setLastTexture({ story_number: story.story_number, story_title: story.title, texture: textureData.texture });
           if (textureData.texture.amber_notes?.length) {
@@ -577,27 +592,21 @@ export default function useStoryEngine() {
 
     // Arc tracking update
     postApprovalTasks.push(
-      fetch(`${API_BASE}/arc-tracking/update`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_key: selectedChar, story_number: story.story_number,
-          story_type: story.story_type, phase: story.phase,
-          phone_appeared: story.text?.toLowerCase().includes('her phone') || story.text?.toLowerCase().includes('the phone'),
-        }),
+      updateArcTrackingApi({
+        character_key: selectedChar, story_number: story.story_number,
+        story_type: story.story_type, phase: story.phase,
+        phone_appeared: story.text?.toLowerCase().includes('her phone') || story.text?.toLowerCase().includes('the phone'),
       }).catch(e => { console.error('arc tracking error:', e); addToast('Failed to update arc tracking', 'error'); })
     );
 
     // Scene eligibility check
     if (story.db_id) {
       postApprovalTasks.push(
-        fetch(`${API_BASE}/world/scenes/check-eligibility`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            story_id: story.db_id, character_key: selectedChar, story_text: story.text,
-            story_type: story.story_type, story_number: story.story_number,
-            characters_present: task?.characters_present || [],
-          }),
-        }).then(r => r.ok ? r.json() : null).then(eligibility => {
+        checkSceneEligibilityApi({
+          story_id: story.db_id, character_key: selectedChar, story_text: story.text,
+          story_type: story.story_type, story_number: story.story_number,
+          characters_present: task?.characters_present || [],
+        }).then(eligibility => {
           if (eligibility?.eligible) {
             setAmberNotification({ type: 'scene_eligible', story_number: story.story_number, story_title: story.title, eligibility });
           }
@@ -616,22 +625,15 @@ export default function useStoryEngine() {
       // Fire-and-forget — generates next chapter in background
       addToast('Generating next chapter brief…', 'info');
       try {
-        const nextRes = await fetch(`${API_BASE}/memories/generate-next-chapter`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ characterKey: selectedChar }),
-        });
-        if (nextRes.ok) {
-          const nextData = await nextRes.json();
-          if (nextData.chapter && nextData.allTasks) {
-            setTasks(nextData.allTasks);
-            setCachedTasks(selectedChar, nextData.allTasks);
-            setActiveTask(nextData.chapter);
-            setActiveStory(null);
-            addToast(`Chapter ${nextData.chapterNumber} brief ready`, 'success');
-          } else if (nextData.complete) {
-            addToast('All 50 chapters generated!', 'info');
-          }
+        const nextData = await generateNextChapterApi({ characterKey: selectedChar });
+        if (nextData.chapter && nextData.allTasks) {
+          setTasks(nextData.allTasks);
+          setCachedTasks(selectedChar, nextData.allTasks);
+          setActiveTask(nextData.chapter);
+          setActiveStory(null);
+          addToast(`Chapter ${nextData.chapterNumber} brief ready`, 'success');
+        } else if (nextData.complete) {
+          addToast('All 50 chapters generated!', 'info');
         }
       } catch (e) {
         console.error('auto-generate next chapter error:', e);
@@ -737,17 +739,11 @@ export default function useStoryEngine() {
       const existingStories = Object.values(stories).map(s => ({
         story_number: s.story_number, title: s.title, summary: s.text?.slice(0, 300),
       }));
-      const res = await fetch(`${API_BASE}/memories/check-story-consistency`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          characterKey: selectedChar, editedStoryNumber: story.story_number,
-          editedStoryText: story.text, existingStories,
-        }),
+      const data = await checkStoryConsistencyApi({
+        characterKey: selectedChar, editedStoryNumber: story.story_number,
+        editedStoryText: story.text, existingStories,
       });
-      if (res.ok) {
-        const data = await res.json();
-        setConsistencyConflicts(data.conflicts || []);
-      }
+      setConsistencyConflicts(data.conflicts || []);
     } catch (e) {
       console.error('consistency check error:', e);
     } finally {
@@ -759,37 +755,30 @@ export default function useStoryEngine() {
   const handleAddToRegistry = useCallback(async (story) => {
     if (!story.new_character_name) return;
     try {
-      const res = await fetch(`${API_BASE}/memories/story-engine-add-character`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_name: story.new_character_name, character_role: story.new_character_role,
-          world: char?.world || 'book-1', story_number: story.story_number, story_title: story.title,
-        }),
+      const data = await addStoryEngineCharacterApi({
+        character_name: story.new_character_name, character_role: story.new_character_role,
+        world: char?.world || 'book-1', story_number: story.story_number, story_title: story.title,
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.already_existed) {
-          addToast(`${story.new_character_name} already exists in the registry.`, 'warning');
-        } else {
-          addToast(`${story.new_character_name} added to the registry as draft.`, 'success');
-          // Refresh characters
-          const charRes = await fetch(`${API_BASE}/memories/story-engine-characters`);
-          if (charRes.ok) {
-            const charData = await charRes.json();
-            const chars = {};
-            for (const world of Object.keys(charData.worlds || {})) {
-              for (const c of charData.worlds[world]) {
-                chars[c.character_key] = {
-                  id: c.id, display_name: c.display_name, icon: c.icon || '◈',
-                  role_type: c.role_type, world: c.world,
-                  color: ROLE_COLORS[c.role_type] || '#546678',
-                  portrait_url: c.portrait_url, has_dna: c.has_dna,
-                };
-              }
+      if (data.already_existed) {
+        addToast(`${story.new_character_name} already exists in the registry.`, 'warning');
+      } else {
+        addToast(`${story.new_character_name} added to the registry as draft.`, 'success');
+        // Refresh characters
+        try {
+          const charData = await getStoryEngineCharactersApi();
+          const chars = {};
+          for (const world of Object.keys(charData.worlds || {})) {
+            for (const c of charData.worlds[world]) {
+              chars[c.character_key] = {
+                id: c.id, display_name: c.display_name, icon: c.icon || '◈',
+                role_type: c.role_type, world: c.world,
+                color: ROLE_COLORS[c.role_type] || '#546678',
+                portrait_url: c.portrait_url, has_dna: c.has_dna,
+              };
             }
-            if (Object.keys(chars).length > 0) setCHARACTERS(chars);
           }
-        }
+          if (Object.keys(chars).length > 0) setCHARACTERS(chars);
+        } catch { /* refresh failed — non-fatal */ }
       }
     } catch (e) {
       console.error('addToRegistry error:', e);
