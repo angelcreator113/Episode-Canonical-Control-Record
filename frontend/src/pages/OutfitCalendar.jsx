@@ -5,8 +5,15 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import { API_URL } from '../config/api';
 import './OutfitCalendar.css';
+
+// File-local helpers — wardrobe + outfit-sets read.
+export const listWardrobeApi = (limit = 1000) =>
+  apiClient.get(`${API_URL}/wardrobe?limit=${limit}`).then((r) => r.data);
+export const listOutfitSetsApi = () =>
+  apiClient.get(`${API_URL}/outfit-sets`).then((r) => r.data);
 
 const OutfitCalendar = () => {
   const navigate = useNavigate();
@@ -26,18 +33,16 @@ const OutfitCalendar = () => {
       setLoading(true);
       
       // Load wardrobe items
-      const itemsRes = await fetch(`${API_URL}/wardrobe?limit=1000`);
-      if (itemsRes.ok) {
-        const data = await itemsRes.json();
+      try {
+        const data = await listWardrobeApi(1000);
         setItems(data.data || []);
-      }
-      
+      } catch { /* leave items empty */ }
+
       // Load outfit sets
-      const setsRes = await fetch(`${API_URL}/outfit-sets`);
-      if (setsRes.ok) {
-        const data = await setsRes.json();
+      try {
+        const data = await listOutfitSetsApi();
         setOutfitSets(data.data || []);
-      }
+      } catch { /* leave outfitSets empty */ }
     } catch (err) {
       console.error('Error loading calendar data:', err);
     } finally {
