@@ -31,11 +31,10 @@ function getModels() {
   return _models;
 }
 
-let optionalAuth;
-try {
-  const m = require('../middleware/auth');
-  optionalAuth = m.optionalAuth || m.authenticate || ((q,r,n)=>n());
-} catch { optionalAuth = (q,r,n) => n(); }
+// CP1 WP3: lazy-noop fallback removed. F-AUTH-2 fix (lazy-init in
+// middleware/auth.js) makes require() boot-safe — direct destructuring
+// import is now correct.
+const { optionalAuth } = require('../middleware/auth');
 
 let anthropic;
 try {
@@ -453,7 +452,7 @@ router.post('/seed-characters', optionalAuth, async (req, res) => {
 // ROUTE 2: GET /characters
 // ════════════════════════════════════════════════════════════════════════
 
-router.get('/characters', optionalAuth, async (req, res) => {
+router.get('/characters', optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
   try {
     const models  = getModels();
     const careers = await models.PressCareer?.findAll({ paranoid: false }) || [];
@@ -499,7 +498,7 @@ router.get('/characters', optionalAuth, async (req, res) => {
 // ROUTE 3: GET /characters/:slug
 // ════════════════════════════════════════════════════════════════════════
 
-router.get('/characters/:slug', optionalAuth, async (req, res) => {
+router.get('/characters/:slug', optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
   try {
     const pc = PRESS_CHARACTERS.find(c => c.slug === req.params.slug);
     if (!pc) return res.status(404).json({ error: 'Character not found' });

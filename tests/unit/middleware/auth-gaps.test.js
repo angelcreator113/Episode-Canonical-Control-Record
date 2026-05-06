@@ -397,3 +397,59 @@ describe('requireAuth — F-Auth-4 Path 1 split', () => {
     expect(tokenService.verifyToken).not.toHaveBeenCalled();
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Step 3 CP1 — F-AUTH-2 lazy-init module-load safety
+// ──────────────────────────────────────────────────────────────────────────
+//
+// Pre-CP1: middleware/auth.js instantiated CognitoJwtVerifier at module-load
+// time. Missing env vars were silently masked by `'us-east-1_XXXXXXXXX'`
+// placeholder fallbacks; if the verifier library tightened its input regex,
+// require() would crash at boot. Compounded by lazy-noop fallback in press.js
+// + manuscript-export.js (now removed in CP1 WP3).
+//
+// Post-CP1: verifiers instantiate lazily via getIdTokenVerifier() and
+// getAccessTokenVerifier() with memoized module-scope caches. Missing env
+// vars produce a runtime AUTH_CONFIG_MISSING error wrapped via
+// wrapVerifierError, NOT a boot crash.
+//
+// NEW v2.24 §9.11 testing primitive: jest.resetModules() + env manipulation
+// + require-doesn't-throw assertion. Establishes pattern for Step 3
+// module-load resilience tests.
+
+describe('F-AUTH-2 — module-load safety (CP1 lazy-init)', () => {
+  test('Case 1 — require() with no Cognito env vars succeeds (no boot crash)', () => {
+    const original = {
+      pool: process.env.COGNITO_USER_POOL_ID,
+      client: process.env.COGNITO_CLIENT_ID,
+    };
+    delete process.env.COGNITO_USER_POOL_ID;
+    delete process.env.COGNITO_CLIENT_ID;
+    jest.resetModules();
+    expect(() => require('../../../src/middleware/auth')).not.toThrow();
+    if (original.pool !== undefined) process.env.COGNITO_USER_POOL_ID = original.pool;
+    if (original.client !== undefined) process.env.COGNITO_CLIENT_ID = original.client;
+  });
+
+  test('Case 2 — call path throws wrapped AUTH_CONFIG_MISSING when env vars absent', async () => {
+    const original = {
+      pool: process.env.COGNITO_USER_POOL_ID,
+      client: process.env.COGNITO_CLIENT_ID,
+      env: process.env.NODE_ENV,
+    };
+    delete process.env.COGNITO_USER_POOL_ID;
+    delete process.env.COGNITO_CLIENT_ID;
+    // Force the non-test verifier path so the lazy getter actually fires.
+    process.env.NODE_ENV = 'production';
+    jest.resetModules();
+    const { verifyToken } = require('../../../src/middleware/auth');
+    // verifyToken wraps the underlying error via Error.cause; assert the cause.
+    await expect(verifyToken('any.token')).rejects.toMatchObject({
+      cause: { code: 'AUTH_CONFIG_MISSING' },
+    });
+    if (original.pool !== undefined) process.env.COGNITO_USER_POOL_ID = original.pool;
+    if (original.client !== undefined) process.env.COGNITO_CLIENT_ID = original.client;
+    process.env.NODE_ENV = original.env;
+    jest.resetModules();
+  });
+});
