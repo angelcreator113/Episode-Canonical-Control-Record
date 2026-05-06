@@ -10,8 +10,13 @@
  */
 
 import { useState } from 'react';
+import apiClient from '../services/api';
 
 const ECHOES_API = '/api/v1/storyteller/echoes';
+
+// File-local helper.
+export const plantEchoApi = (payload) =>
+  apiClient.post(ECHOES_API, payload).then((r) => r.data);
 
 // ════════════════════════════════════════════════════════════════════════
 // PLANT ECHO BUTTON — shows on line action row
@@ -28,19 +33,15 @@ export function PlantEchoButton({ line, chapters = [], bookId, onPlanted }) {
     if (!targetChapter || !note.trim()) return;
     setSaving(true);
     try {
-      await fetch(ECHOES_API, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          book_id:                bookId,
-          source_line_id:         line.id,
-          source_line_content:    line.content,
-          source_chapter_id:      line.chapter_id,
-          target_chapter_id:      targetChapter,
-          note:                   note.trim(),
-          landing_note:           landingNote.trim() || null,
-          status:                 'planted',
-        }),
+      await plantEchoApi({
+        book_id:                bookId,
+        source_line_id:         line.id,
+        source_line_content:    line.content,
+        source_chapter_id:      line.chapter_id,
+        target_chapter_id:      targetChapter,
+        note:                   note.trim(),
+        landing_note:           landingNote.trim() || null,
+        status:                 'planted',
       });
       setOpen(false);
       setNote('');

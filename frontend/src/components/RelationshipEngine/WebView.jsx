@@ -4,8 +4,13 @@
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import * as d3 from 'd3';
+import apiClient from '../../services/api';
 import { T, EDGE_COLOR, NODE_R, roleColor, initials } from './tokens';
 import { Spinner, Pill } from './primitives';
+
+// File-local helper.
+export const getRelationshipMapApi = () =>
+  apiClient.get('/api/v1/memories/relationship-map').then((r) => r.data);
 
 /* ─── D3 force‐simulation hook ────────────────────────────────────── */
 function useD3(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDrag, focusId) {
@@ -161,9 +166,7 @@ export default function WebView({ navigate }) {
     (async () => {
       setWl(true);
       try {
-        const r = await fetch('/api/v1/memories/relationship-map');
-        if (!r.ok) throw new Error();
-        const d = await r.json();
+        const d = await getRelationshipMapApi();
         if (!cancelled) { setNds(d.nodes || []); setEds(d.edges || []); }
       } catch {
         if (!cancelled) setErr('Could not load relationship data.');

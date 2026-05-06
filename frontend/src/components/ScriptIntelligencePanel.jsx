@@ -39,6 +39,11 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
+import apiClient from '../services/api';
+
+// File-local helper.
+export const generateScriptMetadataApi = (payload) =>
+  apiClient.post('/api/v1/memories/script-metadata', payload).then((r) => r.data);
 
 const GOLD   = '#B8963F';
 const GOLD_D = 'rgba(168,136,40,0.8)';
@@ -266,21 +271,15 @@ export default function ScriptIntelligencePanel({
     setMetaLoading(true);
     setMetaError(null);
     try {
-      const res  = await fetch('/api/v1/memories/script-metadata', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          script_content: scriptContent.slice(0, 3000), // first 3000 chars enough for metadata
-          episode_title:  episode?.title,
-          beat_count:     parseResult?.beat_count,
-          tag_summary:    parseResult?.tag_summary,
-        }),
+      const data = await generateScriptMetadataApi({
+        script_content: scriptContent.slice(0, 3000), // first 3000 chars enough for metadata
+        episode_title:  episode?.title,
+        beat_count:     parseResult?.beat_count,
+        tag_summary:    parseResult?.tag_summary,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
       setMetadataResult(data);
     } catch (err) {
-      setMetaError(err.message);
+      setMetaError(err.response?.data?.error || err.message);
     } finally {
       setMetaLoading(false);
     }

@@ -5,11 +5,18 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 import ProductionTab from './ProductionTab';
 import './UniversePage.css';
 
 const SHOWS_API = '/api/v1/shows';
 const LALAVERSE_ID = 'a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e';
+
+// File-local cross-CP duplicate per v2.12 §9.11 — listShowsApi reaches
+// 5-fold cross-CP existence after CP15 (6-fold including WorldSetupGuide).
+// Path A (continue file-local convention) per CP15 Decision 2.
+export const listShowsApi = () =>
+  apiClient.get(SHOWS_API).then((r) => r.data);
 
 function useWindowWidth() {
   const [w, setW] = useState(window.innerWidth);
@@ -37,8 +44,7 @@ export default function UniverseProductionPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const shRes = await fetch(SHOWS_API);
-      const shData = await shRes.json();
+      const shData = await listShowsApi();
       const showsList = shData.data || shData.shows || shData;
       setShows(Array.isArray(showsList) ? showsList : []);
     } catch (_) {

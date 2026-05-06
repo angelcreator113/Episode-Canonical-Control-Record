@@ -25,9 +25,17 @@
  */
 
 import { useState } from 'react';
+import apiClient from '../services/api';
 
 const MEMORIES_API    = '/api/v1/memories';
 const STORYTELLER_API = '/api/v1/storyteller';
+
+// File-local helpers. addChapterLineApi is a CP12 SceneInterview cross-CP
+// duplicate per v2.12 §9.11 (2-fold cross-CP existence).
+export const generateBookScenesApi = (bookId) =>
+  apiClient.get(`${MEMORIES_API}/books/${bookId}/scenes`).then((r) => r.data);
+export const addChapterLineApi = (chapterId, payload) =>
+  apiClient.post(`${STORYTELLER_API}/chapters/${chapterId}/lines`, payload).then((r) => r.data);
 
 export default function ScenesPanel({ bookId, chapters = [], onLineAdded }) {
   const [scenes, setScenes]       = useState([]);
@@ -48,9 +56,12 @@ export default function ScenesPanel({ bookId, chapters = [], onLineAdded }) {
     setScenes([]);
     setAdded({});
     try {
-      const res = await fetch(`${MEMORIES_API}/books/${bookId}/scenes`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Generation failed');
+      let data;
+      try {
+        data = await generateBookScenesApi(bookId);
+      } catch (httpErr) {
+        throw new Error(httpErr.response?.data?.error || 'Generation failed');
+      }
       setScenes(data.scenes || []);
       setGeneratedAt(data.generated_at);
       setContextUsed(data.context_used);
@@ -74,17 +85,15 @@ export default function ScenesPanel({ bookId, chapters = [], onLineAdded }) {
 
     setAdding(prev => ({ ...prev, [idx]: true }));
     try {
-      const res = await fetch(`${STORYTELLER_API}/chapters/${chapterId}/lines`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let data;
+      try {
+        data = await addChapterLineApi(chapterId, {
           text: `[SCENE SUGGESTION] ${scene.title} — ${scene.description}`,
           source_tags: ['scene_suggestion'],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to add line');
-
+        });
+      } catch (httpErr) {
+        throw new Error(httpErr.response?.data?.error || 'Failed to add line');
+      }
       onLineAdded?.(chapterId, data.line);
       setAdded(prev => ({ ...prev, [idx]: true }));
     } catch (err) {

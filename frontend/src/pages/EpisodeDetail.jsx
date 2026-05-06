@@ -25,6 +25,32 @@ import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
 import './EpisodeDetail.css';
 
+// Track 6 CP14 module-scope helpers — page structural shape; partial-
+// migration extension per v2.20 §9.11 (file already partial-migrated
+// at lines 776+805 with `api.post` calls, untouched by CP14). File-local
+// `api.` import style preserved.
+//
+// Cross-CP duplications per v2.12 §9.11:
+// - listWorldEventsApi: CP13 WorldAdmin + CP14 = 2-fold cross-CP existence
+//   (and service-module precedence — 7+ component consumers across the
+//   wider codebase)
+//
+// Helper-reuse density: 6 helpers cover 10 sites.
+// - listEpisodeLibraryScenesApi reused 4× (mount + 3 reload-after-mutation)
+// - reorderEpisodeLibrarySceneApi reused 2× (Promise.all pair on drag-reorder)
+export const listEpisodeLibraryScenesApi = (epId) =>
+  api.get(`/api/v1/episodes/${epId}/library-scenes`).then((r) => r.data);
+export const listWorldEventsApi = (showId) =>
+  api.get(`/api/v1/world/${showId}/events`).then((r) => r.data);
+export const getCharacterStateApi = (charKey, showId) =>
+  api.get(`/api/v1/characters/${charKey}/state?show_id=${showId}`).then((r) => r.data);
+export const addEpisodeLibrarySceneApi = (epId, payload) =>
+  api.post(`/api/v1/episodes/${epId}/library-scenes`, payload).then((r) => r.data);
+export const reorderEpisodeLibrarySceneApi = (epId, sceneId, payload) =>
+  api.put(`/api/v1/episodes/${epId}/library-scenes/${sceneId}`, payload);
+export const removeEpisodeLibrarySceneApi = (epId, sceneId) =>
+  api.delete(`/api/v1/episodes/${epId}/library-scenes/${sceneId}`);
+
 
 const EpisodeDetail = () => {
   const { episodeId } = useParams();
@@ -230,8 +256,7 @@ const EpisodeDetail = () => {
     const fetchEpisodeScenes = async () => {
       if (!episodeId || activeTab !== 'scenes') return;
       try {
-        const response = await fetch(`/api/v1/episodes/${episodeId}/library-scenes`);
-        const data = await response.json();
+        const data = await listEpisodeLibraryScenesApi(episodeId);
         setEpisodeScenes(data.data || []);
       } catch (err) {
         console.error('Failed to load episode scenes:', err);
@@ -251,8 +276,7 @@ const EpisodeDetail = () => {
     // Fetch events injected into this episode
     const fetchEvents = async () => {
       try {
-        const res = await fetch(`/api/v1/world/${showId}/events`);
-        const data = await res.json();
+        const data = await listWorldEventsApi(showId);
         const allEvents = data.events || [];
         const linked = allEvents.filter(e => e.used_in_episode_id === episodeId);
         setEpisodeEvents(linked);
@@ -265,8 +289,7 @@ const EpisodeDetail = () => {
     // Fetch Lala's character state
     const fetchCharState = async () => {
       try {
-        const res = await fetch(`/api/v1/characters/lala/state?show_id=${showId}`);
-        const data = await res.json();
+        const data = await getCharacterStateApi('lala', showId);
         setCharacterState(data.state || {});
       } catch (err) {
         console.error('Failed to load character state:', err);
@@ -280,22 +303,14 @@ const EpisodeDetail = () => {
   // Handle scene selection from library
   const handleSceneSelect = async (libraryScene) => {
     try {
-      const response = await fetch(`/api/v1/episodes/${episodeId}/library-scenes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sceneLibraryId: libraryScene.id,
-          trimStart: 0,
-          trimEnd: libraryScene.durationSeconds || libraryScene.duration_seconds,
-        }),
+      await addEpisodeLibrarySceneApi(episodeId, {
+        sceneLibraryId: libraryScene.id,
+        trimStart: 0,
+        trimEnd: libraryScene.durationSeconds || libraryScene.duration_seconds,
       });
-
-      if (response.ok) {
-        // Reload scenes
-        const data = await fetch(`/api/v1/episodes/${episodeId}/library-scenes`);
-        const scenesData = await data.json();
-        setEpisodeScenes(scenesData.data || []);
-      }
+      // Reload scenes
+      const scenesData = await listEpisodeLibraryScenesApi(episodeId);
+      setEpisodeScenes(scenesData.data || []);
     } catch (err) {
       console.error('Failed to add scene to episode:', err);
       alert('Failed to add scene. Please try again.');
@@ -315,21 +330,12 @@ const EpisodeDetail = () => {
     // Update scene_order for both scenes
     try {
       await Promise.all([
-        fetch(`/api/v1/episodes/${episodeId}/library-scenes/${newScenes[index].id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sceneOrder: index + 1 }),
-        }),
-        fetch(`/api/v1/episodes/${episodeId}/library-scenes/${newScenes[targetIndex].id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sceneOrder: targetIndex + 1 }),
-        }),
+        reorderEpisodeLibrarySceneApi(episodeId, newScenes[index].id, { sceneOrder: index + 1 }),
+        reorderEpisodeLibrarySceneApi(episodeId, newScenes[targetIndex].id, { sceneOrder: targetIndex + 1 }),
       ]);
 
       // Reload scenes
-      const data = await fetch(`/api/v1/episodes/${episodeId}/library-scenes`);
-      const scenesData = await data.json();
+      const scenesData = await listEpisodeLibraryScenesApi(episodeId);
       setEpisodeScenes(scenesData.data || []);
     } catch (err) {
       console.error('Failed to reorder scenes:', err);
@@ -342,16 +348,10 @@ const EpisodeDetail = () => {
     if (!confirm('Remove this scene from the episode?')) return;
 
     try {
-      const response = await fetch(`/api/v1/episodes/${episodeId}/library-scenes/${sceneId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        // Reload scenes
-        const data = await fetch(`/api/v1/episodes/${episodeId}/library-scenes`);
-        const scenesData = await data.json();
-        setEpisodeScenes(scenesData.data || []);
-      }
+      await removeEpisodeLibrarySceneApi(episodeId, sceneId);
+      // Reload scenes
+      const scenesData = await listEpisodeLibraryScenesApi(episodeId);
+      setEpisodeScenes(scenesData.data || []);
     } catch (err) {
       console.error('Failed to remove scene:', err);
       alert('Failed to remove scene. Please try again.');

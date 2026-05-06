@@ -12,9 +12,19 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 import './ChapterStructureEditor.css';
 
 const API = '/api/v1/storyteller';
+
+// File-local helpers — both are cross-CP duplicates per v2.12 §9.11.
+// getBookApi: 3-fold (CP10 SEE + CP15 ChapterJourney + CP15 here).
+// updateChapterApi: 4-fold (CP3 WriteMode + CP10 StoryPlanner + CP12
+// SceneInterview + CP15 here).
+export const getBookApi = (bookId) =>
+  apiClient.get(`${API}/books/${bookId}`).then((r) => r.data);
+export const updateChapterApi = (chapterId, payload) =>
+  apiClient.put(`${API}/chapters/${chapterId}`, payload);
 
 /* ── Helpers ── */
 function uuid() {
@@ -155,8 +165,7 @@ export default function ChapterStructureEditor() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API}/books/${bookId}`);
-        const data = await res.json();
+        const data = await getBookApi(bookId);
         const bookData = data?.book || data;
         setBook(bookData);
 
@@ -190,12 +199,7 @@ export default function ChapterStructureEditor() {
     if (!chapterId) return;
     setSaving(true);
     try {
-      const res = await fetch(`${API}/chapters/${chapterId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections: data }),
-      });
-      if (!res.ok) throw new Error(`Save failed ${res.status}`);
+      await updateChapterApi(chapterId, { sections: data });
       setSaved(true);
       setSaving(false);
     } catch (err) {

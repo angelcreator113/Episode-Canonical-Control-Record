@@ -15,8 +15,16 @@
  */
 import { useState, useEffect, useRef } from 'react';
 
+import apiClient from '../services/api';
+
 const API_BASE = '/api/v1';
 const TOTAL    = 5;
+
+// File-local helpers — therapy dilemma family.
+export const listTherapyDilemmasApi = (characterId, count) =>
+  apiClient.get(`${API_BASE}/therapy/dilemmas?character_id=${characterId}&count=${count}`).then((r) => r.data);
+export const buildDilemmaProfileApi = (payload) =>
+  apiClient.post(`${API_BASE}/therapy/dilemma-profile`, payload).then((r) => r.data);
 
 const TYPE_ACCENT = {
   pressure: '#B85C38',
@@ -44,8 +52,7 @@ export default function CharacterDilemmaEngine({ character, onProfileBuilt }) {
     if (!character?.id) return;
     (async () => {
       try {
-        const res  = await fetch(`${API_BASE}/therapy/dilemmas?character_id=${character.id}&count=${TOTAL}`);
-        const data = await res.json();
+        const data = await listTherapyDilemmasApi(character.id, TOTAL);
         setDilemmas(
           data.success && data.dilemmas?.length ? data.dilemmas : getFallbackDilemmas(character)
         );
@@ -87,17 +94,12 @@ export default function CharacterDilemmaEngine({ character, onProfileBuilt }) {
   const buildProfile = async (allChoices) => {
     setPhase('processing');
     try {
-      const res  = await fetch(`${API_BASE}/therapy/dilemma-profile`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          character_id:   character.id,
-          character_name: charName,
-          wound:          character.wound || '',
-          choices:        allChoices,
-        }),
+      const data = await buildDilemmaProfileApi({
+        character_id:   character.id,
+        character_name: charName,
+        wound:          character.wound || '',
+        choices:        allChoices,
       });
-      const data = await res.json();
       const p = data.success && data.profile ? data.profile : buildFallbackProfile(allChoices);
       setProfile(p);
       setPhase('complete');
