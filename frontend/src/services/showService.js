@@ -1,7 +1,17 @@
 /**
  * Show Service
  * Handles all API calls for show management
+ *
+ * Track 6 CP9: migrated to apiClient. Service contract preserved —
+ * each method returns the same shape (result.data || []) per the
+ * pre-migration contract. apiClient injects auth via the request
+ * interceptor; explicit Content-Type headers removed (axios sets
+ * it automatically). Throw-on-error blocks collapsed because
+ * apiClient interceptor throws on non-2xx; the surrounding try/catch
+ * already routes errors to console.error + re-throw.
  */
+
+import apiClient from './api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -11,19 +21,8 @@ export const showService = {
    */
   async getAllShows() {
     try {
-      const response = await fetch(`${API_BASE}/shows`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch shows: ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      return result.data || [];
+      const response = await apiClient.get(`${API_BASE}/shows`);
+      return response.data?.data || [];
     } catch (error) {
       console.error('Error fetching shows:', error);
       throw error;
@@ -35,19 +34,8 @@ export const showService = {
    */
   async getShowById(id) {
     try {
-      const response = await fetch(`${API_BASE}/shows/${id}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch show: ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      return result.data;
+      const response = await apiClient.get(`${API_BASE}/shows/${id}`);
+      return response.data?.data;
     } catch (error) {
       console.error('Error fetching show:', error);
       throw error;
@@ -59,24 +47,11 @@ export const showService = {
    */
   async createShow(showData) {
     try {
-      const response = await fetch(`${API_BASE}/shows`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(showData),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create show');
-      }
-      
-      const result = await response.json();
-      return result.data;
+      const response = await apiClient.post(`${API_BASE}/shows`, showData);
+      return response.data?.data;
     } catch (error) {
       console.error('Error creating show:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || error.message || 'Failed to create show');
     }
   },
 
@@ -85,24 +60,11 @@ export const showService = {
    */
   async updateShow(id, showData) {
     try {
-      const response = await fetch(`${API_BASE}/shows/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(showData),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to update show');
-      }
-      
-      const result = await response.json();
-      return result.data;
+      const response = await apiClient.put(`${API_BASE}/shows/${id}`, showData);
+      return response.data?.data;
     } catch (error) {
       console.error('Error updating show:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || error.message || 'Failed to update show');
     }
   },
 
@@ -111,22 +73,11 @@ export const showService = {
    */
   async deleteShow(id) {
     try {
-      const response = await fetch(`${API_BASE}/shows/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to delete show');
-      }
-      
-      return await response.json();
+      const response = await apiClient.delete(`${API_BASE}/shows/${id}`);
+      return response.data;
     } catch (error) {
       console.error('Error deleting show:', error);
-      throw error;
+      throw new Error(error.response?.data?.message || error.message || 'Failed to delete show');
     }
   },
 };

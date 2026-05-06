@@ -3,8 +3,29 @@
 // Tab in the Universe page, story-side cluster
 
 import { useState, useEffect } from 'react';
+import apiClient from '../services/api';
 
 const API = import.meta.env.VITE_API_URL || '';
+
+// ─── Track 6 CP10 module-scope helpers (Pattern F prophylactic — Api suffix) ───
+// 6 helpers covering 6 fetch sites. listFlaggedGrowthApi duplicated locally
+// per v2.12 §9.11 (CP8 StoryProposer has it). URL COMPOSITION NOTE:
+// API='' empty default + ${API}/... → relative paths without /api/v1/
+// prefix. Preserved verbatim per v2.16 §9.11 "bugs surface, don't fix"
+// discipline (same shape as WritingRhythm). If pre-existing bug, surfaced
+// for Step 3 audit. apiClient.baseURL is also ''.
+export const postArcStageApi = (payload) =>
+  apiClient.post(`${API}/memories/arc-stage`, payload);
+export const listRegistryCharactersApi = (registryId) =>
+  apiClient.get(`${API}/character-registry/${registryId}/characters`);
+export const listSceneProposalsApi = (bookId, limit) =>
+  apiClient.get(`${API}/memories/scene-proposals?book_id=${bookId}&limit=${limit}`);
+export const listUnacknowledgedReviewsApi = () =>
+  apiClient.get(`${API}/reviews/unacknowledged`);
+export const listFlaggedGrowthApi = () =>
+  apiClient.get(`${API}/memories/character-growth/flagged`);
+export const acknowledgeReviewApi = (id) =>
+  apiClient.post(`${API}/reviews/${id}/acknowledge`);
 
 const C = {
   bg: '#f7f4ef',
@@ -67,53 +88,46 @@ export default function StoryDashboard({ bookId, registryId }) {
   async function loadArc() {
     if (!bookId) return;
     try {
-      const res = await fetch(`${API}/memories/arc-stage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ book_id: bookId }),
-      });
-      const data = await res.json();
-      setArc(data);
+      const res = await postArcStageApi({ book_id: bookId });
+      setArc(res.data);
     } catch {}
   }
 
   async function loadCharacters() {
     if (!registryId) return;
     try {
-      const res = await fetch(`${API}/character-registry/${registryId}/characters`);
-      const data = await res.json();
-      setCharacters((data.characters || []).filter(c => c.status !== 'declined'));
+      const res = await listRegistryCharactersApi(registryId);
+      setCharacters((res.data?.characters || []).filter(c => c.status !== 'declined'));
     } catch {}
   }
 
   async function loadRecentScenes() {
     if (!bookId) return;
     try {
-      const res = await fetch(`${API}/memories/scene-proposals?book_id=${bookId}&limit=8`);
-      const data = await res.json();
-      setRecentScenes(data.proposals || []);
+      const res = await listSceneProposalsApi(bookId, 8);
+      setRecentScenes(res.data?.proposals || []);
     } catch {}
   }
 
   async function loadReviews() {
     try {
-      const res = await fetch(`${API}/reviews/unacknowledged`);
-      const data = await res.json();
-      setPendingReviews((data.reviews || []).filter(r => !r.passed));
+      const res = await listUnacknowledgedReviewsApi();
+      setPendingReviews((res.data?.reviews || []).filter(r => !r.passed));
     } catch {}
   }
 
   async function loadGrowthFlags() {
     try {
-      const res = await fetch(`${API}/memories/character-growth/flagged`);
-      const data = await res.json();
-      setGrowthFlags(data.flags || []);
+      const res = await listFlaggedGrowthApi();
+      setGrowthFlags(res.data?.flags || []);
     } catch {}
   }
 
   async function acknowledgeReview(id) {
-    await fetch(`${API}/reviews/${id}/acknowledge`, { method: 'POST' });
-    setPendingReviews(p => p.filter(r => r.id !== id));
+    try {
+      await acknowledgeReviewApi(id);
+      setPendingReviews(p => p.filter(r => r.id !== id));
+    } catch {}
   }
 
   async function recalcArc() {
