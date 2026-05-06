@@ -8,7 +8,17 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../services/api';
 const API = '/api/v1/storyteller';
+
+export const listStoryCalendarEventsApi = (eventType) => {
+  const qs = eventType && eventType !== 'all' ? `?event_type=${eventType}` : '';
+  return apiClient.get(`${API}/calendar/events${qs}`).then((r) => r.data);
+};
+export const listStoryCalendarMarkersApi = () =>
+  apiClient.get(`${API}/calendar/markers`).then((r) => r.data);
+export const createStoryCalendarEventApi = (payload) =>
+  apiClient.post(`${API}/calendar/events`, payload).then((r) => r.data);
 
 const C = {
   bg: '#f7f4ef', surface: '#fff', surfaceAlt: '#faf8f4', border: '#e8e0d0',
@@ -53,12 +63,12 @@ export default function StoryCalendar() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [eRes, mRes] = await Promise.all([
-        fetch(`${API}/calendar/events${typeFilter !== 'all' ? `?event_type=${typeFilter}` : ''}`),
-        fetch(`${API}/calendar/markers`),
+      const [eData, mData] = await Promise.all([
+        listStoryCalendarEventsApi(typeFilter).catch(() => null),
+        listStoryCalendarMarkersApi().catch(() => null),
       ]);
-      if (eRes.ok) { const d = await eRes.json(); setEvents(d.events || []); }
-      if (mRes.ok) { const d = await mRes.json(); setMarkers(d.markers || []); }
+      if (eData) setEvents(eData.events || []);
+      if (mData) setMarkers(mData.markers || []);
     } catch { /* ignore */ }
     setLoading(false);
   }, [typeFilter]);
@@ -68,20 +78,14 @@ export default function StoryCalendar() {
   const handleCreateEvent = async () => {
     if (!newEvent.title.trim() || !newEvent.start_datetime) return;
     try {
-      const res = await fetch(`${API}/calendar/events`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newEvent),
+      await createStoryCalendarEventApi(newEvent);
+      setNewEvent({
+        title: '', event_type: 'story_event', start_datetime: '',
+        end_datetime: '', location_name: '', lalaverse_district: '',
+        visibility: 'public', what_world_knows: '', what_only_we_know: '', logged_by: 'system',
       });
-      if (res.ok) {
-        setNewEvent({
-          title: '', event_type: 'story_event', start_datetime: '',
-          end_datetime: '', location_name: '', lalaverse_district: '',
-          visibility: 'public', what_world_knows: '', what_only_we_know: '', logged_by: 'system',
-        });
-        setShowCreate(false);
-        fetchData();
-      }
+      setShowCreate(false);
+      fetchData();
     } catch { /* ignore */ }
   };
 

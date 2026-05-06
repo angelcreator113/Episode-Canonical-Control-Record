@@ -1,8 +1,24 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapPin, Building2, Store, Home, Trees, Coffee, ShoppingBag, Music, Dumbbell, Palette, Sparkles, ChevronRight, Search, Plus, Pencil, Trash2, X } from 'lucide-react';
+import apiClient from '../services/api';
 import './WorldLocations.css';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+// File-local cross-CP duplicates of CP8 WorldFoundation helpers per
+// v2.12 §9.11 file-local convention. Combined-axis branching split
+// (method+URL same conditional) per v2.13 + v2.17 §9.11 — call site
+// ternary chooses createLocationApi vs updateLocationApi based on editId.
+export const listLocationsApi = () =>
+  apiClient.get(`${API}/world/locations`).then((r) => r.data);
+export const seedInfrastructureApi = () =>
+  apiClient.post(`${API}/world/locations/seed-infrastructure`).then((r) => r.data);
+export const createLocationApi = (payload) =>
+  apiClient.post(`${API}/world/locations`, payload).then((r) => r.data);
+export const updateLocationApi = (id, payload) =>
+  apiClient.put(`${API}/world/locations/${id}`, payload).then((r) => r.data);
+export const deleteLocationApi = (id) =>
+  apiClient.delete(`${API}/world/locations/${id}`).then((r) => r.data);
 
 const LOCATION_TYPES = [
   { value: 'city', label: 'City', icon: Building2 },
@@ -78,8 +94,7 @@ export default function WorldLocations() {
   const loadLocations = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API}/world/locations`);
-      const d = await r.json();
+      const d = await listLocationsApi();
       setLocations(d.locations || []);
     } catch (e) { console.error('loadLocations', e); }
     finally { setLoading(false); }
@@ -116,16 +131,13 @@ export default function WorldLocations() {
 
   const seedInfrastructure = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/world/locations/seed-infrastructure`, { method: 'POST' });
-      const d = await r.json();
+      const d = await seedInfrastructureApi();
       flash(`Seeded ${d.created || 0} locations`);
       loadLocations();
     } catch { flash('Seed failed', 'error'); }
   }, [flash, loadLocations]);
 
   const saveLocation = useCallback(async () => {
-    const method = editId ? 'PUT' : 'POST';
-    const url = editId ? `${API}/world/locations/${editId}` : `${API}/world/locations`;
     const payload = { ...form };
     // Clean empty strings
     if (!payload.street_address) delete payload.street_address;
@@ -138,7 +150,7 @@ export default function WorldLocations() {
       delete payload.venue_details;
     }
     try {
-      await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      await (editId ? updateLocationApi(editId, payload) : createLocationApi(payload));
       flash(editId ? 'Location updated' : 'Location created');
       setForm(emptyForm);
       setEditId(null);
@@ -150,7 +162,7 @@ export default function WorldLocations() {
   const deleteLocation = useCallback(async (id) => {
     if (!confirm('Delete this location?')) return;
     try {
-      await fetch(`${API}/world/locations/${id}`, { method: 'DELETE' });
+      await deleteLocationApi(id);
       flash('Location deleted');
       loadLocations();
     } catch { flash('Delete failed', 'error'); }

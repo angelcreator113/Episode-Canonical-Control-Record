@@ -1,7 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/api';
+import apiClient from '../services/api';
 import './CharacterProfile.css';
+
+// File-local cross-CP duplicates of CP9 helpers per v2.12 §9.11
+// (CharacterProfilePage uses same endpoints).
+export const getCharacterApi = (id) =>
+  apiClient.get(`${API_URL}/character-registry/characters/${id}`).then((r) => r.data);
+export const getCharacterRelationshipsApi = (id) =>
+  apiClient
+    .get(`${API_URL}/character-registry/characters/${id}/relationships`)
+    .then((r) => r.data);
+export const getSocialProfileApi = (profileId) =>
+  apiClient.get(`${API_URL}/social-profiles/${profileId}`).then((r) => r.data);
 
 const DEPTH_CONFIG = {
   sparked:   { label: 'Sparked',   color: '#e8c4a0', bg: '#fdf6ee', dot: '#d4a574' },
@@ -549,33 +561,27 @@ export default function CharacterProfile() {
     setLoading(true);
     setError(null);
     try {
-      const [charRes, relRes] = await Promise.all([
-        fetch(`${API_URL}/character-registry/characters/${id}`),
-        fetch(`${API_URL}/character-registry/characters/${id}/relationships`)
-          .catch(() => ({ ok: false })),
+      const [charData, relData] = await Promise.all([
+        getCharacterApi(id),
+        getCharacterRelationshipsApi(id).catch(() => null),
       ]);
 
-      if (!charRes.ok) throw new Error('Character not found');
-      const charData = await charRes.json();
       const char = charData.character || charData;
       setCharacter(char);
 
-      if (relRes.ok) {
-        const relData = await relRes.json();
+      if (relData) {
         setRelationships(relData.relationships || relData || []);
       }
 
       // Load feed profile if linked
       if (char.feed_profile_id) {
-        const feedRes = await fetch(`${API_URL}/social-profiles/${char.feed_profile_id}`)
-          .catch(() => null);
-        if (feedRes?.ok) {
-          const feedData = await feedRes.json();
+        const feedData = await getSocialProfileApi(char.feed_profile_id).catch(() => null);
+        if (feedData) {
           setFeedProfile(feedData.profile || feedData);
         }
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Character not found');
     } finally {
       setLoading(false);
     }
