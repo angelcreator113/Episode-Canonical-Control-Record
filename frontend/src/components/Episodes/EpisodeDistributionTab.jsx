@@ -1,6 +1,22 @@
 // frontend/src/components/Episodes/EpisodeDistributionTab.jsx
 import React, { useState, useEffect } from 'react';
+import apiClient from '../../services/api';
 import './EpisodeDistributionTab.css';
+
+// File-local helpers (fresh — no cross-CP overlap).
+export const getEpisodeDistributionApi = (showId, episodeId) =>
+  apiClient
+    .get(`/api/v1/world/${showId}/episodes/${episodeId}/distribution`)
+    .then((r) => r.data);
+export const putEpisodeDistributionApi = (showId, episodeId, payload) =>
+  apiClient.put(
+    `/api/v1/world/${showId}/episodes/${episodeId}/distribution`,
+    { distribution_metadata: payload },
+  );
+export const generateEpisodeDistributionApi = (showId, episodeId, payload = {}) =>
+  apiClient
+    .post(`/api/v1/world/${showId}/episodes/${episodeId}/generate-distribution`, payload)
+    .then((r) => r.data);
 
 /**
  * EpisodeDistributionTab - Per-platform publishing metadata
@@ -83,8 +99,7 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
         try {
           const showId = episode?.show_id || episode?.showId;
           if (showId) {
-            const res = await fetch(`/api/v1/world/${showId}/episodes/${episode.id}/distribution`);
-            const json = await res.json();
+            const json = await getEpisodeDistributionApi(showId, episode.id);
             if (json.success && json.data && Object.keys(json.data).length > 0) {
               data = json.data;
             }
@@ -122,11 +137,7 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
       // Try dedicated distribution endpoint first, fall back to generic update
       const showId = episode?.show_id || episode?.showId;
       try {
-        await fetch(`/api/v1/world/${showId}/episodes/${episode.id}/distribution`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ distribution_metadata: distributionData }),
-        });
+        await putEpisodeDistributionApi(showId, episode.id, distributionData);
       } catch {
         await onUpdate({
           distribution_metadata: JSON.stringify(distributionData)
@@ -198,12 +209,7 @@ function EpisodeDistributionTab({ episode, onUpdate }) {
               btn.textContent = '⏳ Generating...';
               try {
                 const showId = episode?.show_id || episode?.showId;
-                const res = await fetch(`/api/v1/world/${showId}/episodes/${episode.id}/generate-distribution`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({}),
-                });
-                const data = await res.json();
+                const data = await generateEpisodeDistributionApi(showId, episode.id, {});
                 if (data.success && data.data?.platforms) {
                   // Merge generated data into current state
                   const generated = data.data.platforms;

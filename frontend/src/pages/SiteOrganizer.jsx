@@ -5,9 +5,17 @@
  * Four sub-agents: Navigation Auditor, Page Purpose, Flow Analyzer, Steps Planner
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import apiClient from '../services/api';
 import './SiteOrganizer.css';
 
 const API = '/api/v1/site-organizer';
+
+export const getSiteOrganizerQuickApi = () =>
+  apiClient.get(`${API}/quick`).then((r) => r.data);
+export const runSiteOrganizerScanApi = () =>
+  apiClient.get(`${API}/scan`).then((r) => r.data);
+export const runSiteOrganizerAgentApi = (name) =>
+  apiClient.get(`${API}/agent/${name}`).then((r) => r.data);
 
 // ──────────────────────────────────────────────────
 // ScoreRing — reusable SVG donut
@@ -57,13 +65,13 @@ export default function SiteOrganizer() {
 
   // Load quick summary on mount
   useEffect(() => {
-    fetch(`${API}/quick`).then(r => r.json()).then(setQuickStats).catch(() => {});
+    getSiteOrganizerQuickApi().then(setQuickStats).catch(() => {});
   }, []);
 
   const runScan = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetch(`${API}/scan`).then(r => r.json());
+      const data = await runSiteOrganizerScanApi();
       setReport(data);
       setTab('overview');
     } catch (err) { console.error('Scan failed:', err); }
@@ -75,7 +83,7 @@ export default function SiteOrganizer() {
     setActiveAgent(name);
     setAgentResult(null);
     try {
-      const data = await fetch(`${API}/agent/${name}`).then(r => r.json());
+      const data = await runSiteOrganizerAgentApi(name);
       setAgentResult(data);
     } catch (err) { console.error(`Agent ${name} failed:`, err); }
     setAgentLoading(false);
