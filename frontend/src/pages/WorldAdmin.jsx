@@ -25,6 +25,47 @@ import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import './WorldAdmin.css';
 
+// Track 6 CP13 module-scope helpers — page structural shape, file-local
+// `api` import style preserved (file already partial-migrated at line 6306).
+//
+// Cross-CP duplications per v2.12 §9.11 file-local convention:
+// - listEpisodeTodoSocialApi: CP9 EpisodeTodoPage + CP13 = 2-fold cross-CP
+// - listWorldEventsApi: service-module precedence (7+ component consumers)
+// - listShowWardrobeApi: wardrobeService.js + 7-component precedence inversion
+// - updateWardrobeItemApi: wardrobeService.js precedence inversion
+//
+// NEW v2.20 §9.11 candidate at bulkWardrobeOpApi: Data-driven URL pass-
+// through (config array dispatch). All 4 structural conditions verified —
+// method uniform (POST), payload+headers uniform (JSON), variants enumerated
+// as data (config array literal at lines 5539-5542), URLs file-internal.
+// Distinct from v2.17 URL-branching split. Helper-name verb-noun-Op preserves
+// Pattern F domain context.
+//
+// Multipart helper uploadWardrobeApi per v2.14 §9.11 — services/api.js
+// interceptor (lines 21-26) auto-strips Content-Type for FormData payloads.
+export const listEpisodeTodoSocialApi = (epId) =>
+  api.get(`/api/v1/episodes/${epId}/todo/social`).then((r) => r.data);
+export const listWorldEventsApi = (showId) =>
+  api.get(`/api/v1/world/${showId}/events`).then((r) => r.data);
+export const listShowWardrobeApi = (showId) =>
+  api.get(`/api/v1/shows/${showId}/wardrobe`).then((r) => r.data);
+export const updateWardrobeItemApi = (itemId, payload) =>
+  api.put(`/api/v1/wardrobe/${itemId}`, payload);
+export const promoteWardrobePrimaryVariantApi = (itemId, variant) =>
+  api.patch(`/api/v1/wardrobe/${itemId}/primary-variant`, { variant }).then((r) => r.data);
+export const sendWardrobeToPhoneApi = (itemId, payload) =>
+  api.post(`/api/v1/wardrobe/${itemId}/send-to-phone`, payload).then((r) => r.data);
+export const regenerateWardrobeProductShotApi = (itemId) =>
+  api.post(`/api/v1/wardrobe/${itemId}/regenerate-product-shot`).then((r) => r.data);
+export const getWardrobeUsageApi = (itemId) =>
+  api.get(`/api/v1/wardrobe/${itemId}/usage`).then((r) => r.data);
+export const bulkWardrobeOpApi = (endpoint, payload) =>
+  api.post(endpoint, payload).then((r) => r.data);
+export const uploadWardrobeApi = (formData) =>
+  api.post('/api/v1/wardrobe', formData).then((r) => r.data);
+export const createOutfitSetApi = (payload) =>
+  api.post('/api/v1/outfit-sets', payload).then((r) => r.data);
+
 const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
 const SceneSetsTab = lazy(() => import('./SceneSetsTab'));
 const UIOverlaysTab = lazy(() => import('./UIOverlaysTab'));
@@ -1632,8 +1673,8 @@ The revised event should feel like a completely different experience from the si
                           try {
                             // Fetch event details + real social tasks from todo list
                             const [todoRes, eventsRes] = await Promise.all([
-                              fetch(`/api/v1/episodes/${ep.id}/todo/social`).then(r => r.json()).catch(() => ({})),
-                              fetch(`/api/v1/world/${showId}/events`).then(r => r.json()).catch(() => ({ events: [] })),
+                              listEpisodeTodoSocialApi(ep.id).catch(() => ({})),
+                              listWorldEventsApi(showId).catch(() => ({ events: [] })),
                             ]);
                             const linkedEv = (eventsRes.events || []).find(ev => ev.used_in_episode_id === ep.id);
                             const automation = linkedEv?.canon_consequences?.automation;
@@ -5248,22 +5289,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
           if (promotingVariant) return;
           setPromotingVariant(true);
           try {
-            const res = await fetch(`/api/v1/wardrobe/${item.id}/primary-variant`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ variant }),
-            });
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}));
-              throw new Error(err.error || err.message || `HTTP ${res.status}`);
-            }
+            await promoteWardrobePrimaryVariantApi(item.id, variant);
             setWardrobeItems(prev => prev.map(i =>
               i.id === item.id ? { ...i, primary_image_variant: variant } : i
             ));
             setLightboxItem(prev => (prev && prev.id === item.id)
               ? { ...prev, primary_image_variant: variant } : prev);
           } catch (err) {
-            alert(`Couldn't set default: ${err.message}`);
+            const msg = err.response?.data?.error || err.response?.data?.message || err.message;
+            alert(`Couldn't set default: ${msg}`);
           } finally {
             setPromotingVariant(false);
           }
@@ -5288,16 +5322,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
           setSendingToPhone(true);
           try {
-            const res = await fetch(`/api/v1/wardrobe/${item.id}/send-to-phone`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ variant, showId }),
-            });
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}));
-              throw new Error(err.message || err.error || `HTTP ${res.status}`);
-            }
-            const result = await res.json();
+            const result = await sendWardrobeToPhoneApi(item.id, { variant, showId });
             // Close lightbox + navigate to the overlay editor tab. The new
             // Asset will appear in UIOverlaysTab's list automatically via
             // its existing GET /api/v1/ui-overlays/:showId fetch.
@@ -5307,7 +5332,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             setSearchParams({ tab: 'overlays-tab' });
             alert(`Sent to phone as "${result.data.name}". Opening overlay editor…`);
           } catch (err) {
-            alert(`Send to phone failed: ${err.message}`);
+            const msg = err.response?.data?.message || err.response?.data?.error || err.message;
+            alert(`Send to phone failed: ${msg}`);
           } finally {
             setSendingToPhone(false);
           }
@@ -5328,15 +5354,13 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
 
           setRegeneratingItemId(item.id);
           try {
-            const res = await fetch(`/api/v1/wardrobe/${item.id}/regenerate-product-shot`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-            });
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}));
-              throw new Error(err.error || err.message || `HTTP ${res.status}`);
+            let result;
+            try {
+              result = await regenerateWardrobeProductShotApi(item.id);
+            } catch (httpErr) {
+              const msg = httpErr.response?.data?.error || httpErr.response?.data?.message || httpErr.message;
+              throw new Error(msg);
             }
-            const result = await res.json();
             const newUrl = result.data?.s3_url_regenerated;
             if (!newUrl) throw new Error('No regenerated URL returned');
 
@@ -5547,20 +5571,22 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           if (op.emptyText && count === 0) { setToast(op.emptyText); return; }
                           if (!window.confirm(op.confirmText(count))) return;
                           try {
-                            const res = await fetch(op.endpoint, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify(body),
-                            });
-                            const data = await res.json();
-                            if (!res.ok) throw new Error(data.error || 'Operation failed');
+                            // Data-driven URL pass-through (v2.20 §9.11). Config array
+                            // at lines 5539-5542 enumerates 4 variants; method+payload+
+                            // headers are uniform; URLs file-internal — Option B applies.
+                            let data;
+                            try {
+                              data = await bulkWardrobeOpApi(op.endpoint, body);
+                            } catch (httpErr) {
+                              throw new Error(httpErr.response?.data?.error || 'Operation failed');
+                            }
                             // Endpoints report either { succeeded, failed } or { processed, failed } — show both shapes.
                             const succ = data.data?.succeeded?.length ?? data.data?.processed ?? 0;
                             const fail = data.data?.failed?.length ?? data.data?.failed ?? 0;
                             setToast(`Done: ${succ} ok, ${fail} failed`);
                             // Reload via the existing effect that fetches wardrobeItems when showId changes.
                             // Trigger that path by re-fetching manually:
-                            try { const r = await fetch(`/api/v1/shows/${showId}/wardrobe`); const j = await r.json(); if (j?.data) setWardrobeItems(j.data); } catch {}
+                            try { const j = await listShowWardrobeApi(showId); if (j?.data) setWardrobeItems(j.data); } catch {}
                           } catch (err) {
                             setToast(`Bulk op failed: ${err.message}`);
                           }
@@ -6010,11 +6036,12 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     setUsageModalItem(editingWardrobeItem);
                     setItemUsage(null);
                     try {
-                      const res = await fetch(`/api/v1/wardrobe/${editingWardrobeItem.id}/usage`);
-                      const data = await res.json();
-                      if (res.ok) setItemUsage(data.data || data);
-                      else setToast(data.error || 'Could not load usage');
-                    } catch (err) { setToast('Could not load usage'); }
+                      const data = await getWardrobeUsageApi(editingWardrobeItem.id);
+                      setItemUsage(data.data || data);
+                    } catch (err) {
+                      const msg = err.response?.data?.error || 'Could not load usage';
+                      setToast(msg);
+                    }
                   }} style={{ ...S.secBtn }}>🔍 View usage</button>
                   <div style={{ flex: 1 }} />
                   <button onClick={() => setEditingWardrobeItem(null)} style={S.secBtn}>Cancel</button>
@@ -6085,11 +6112,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         // Optimistic update
                         setWardrobeItems(prev => prev.map(w => w.id === item.id ? { ...w, is_favorite: next } : w));
                         try {
-                          await fetch(`/api/v1/wardrobe/${item.id}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ is_favorite: next }),
-                          });
+                          await updateWardrobeItemApi(item.id, { is_favorite: next });
                         } catch (err) {
                           // Roll back + surface a toast so the UI doesn't drift from the DB.
                           setWardrobeItems(prev => prev.map(w => w.id === item.id ? { ...w, is_favorite: !next } : w));
@@ -6556,9 +6579,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                     <button onClick={() => setShowWardrobeUpload(false)} style={{ padding: '7px 18px', border: '1px solid #e0d9cc', borderRadius: 6, background: '#fff', color: '#888', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
                     <button disabled={wardrobeUploading || !wardrobeUploadFile || !wardrobeUploadForm.name || !wardrobeUploadForm.clothingCategory} onClick={async () => {
                       setWardrobeUploading(true);
-                      try {
-                        const fd = new FormData();
-                        fd.append('image', wardrobeUploadFile);
+                      const fd = new FormData();
+                      fd.append('image', wardrobeUploadFile);
                         fd.append('name', wardrobeUploadForm.name);
                         fd.append('character', wardrobeUploadForm.character || 'Lala');
                         fd.append('clothingCategory', wardrobeUploadForm.clothingCategory);
@@ -6596,14 +6618,18 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         if (wardrobeUploadForm.lalaReactionLocked) fd.append('lalaReactionLocked', wardrobeUploadForm.lalaReactionLocked);
                         if (wardrobeUploadForm.lalaReactionReject) fd.append('lalaReactionReject', wardrobeUploadForm.lalaReactionReject);
                         fd.append('showId', showId);
-                        const res = await fetch('/api/v1/wardrobe', { method: 'POST', body: fd });
-                        if (res.ok) {
-                          const data = await res.json();
+                        try {
+                          // Multipart upload pattern v2.14 — pass FormData directly to
+                          // api.post; services/api.js interceptor (lines 21-26) auto-
+                          // strips JSON Content-Type so browser sets multipart boundary.
+                          const data = await uploadWardrobeApi(fd);
                           setWardrobeItems(prev => [data.data, ...prev]);
                           setShowWardrobeUpload(false);
                           setToast('Item uploaded!'); setTimeout(() => setToast(null), 2500);
-                        } else { const err = await res.json(); setToast(err.error || 'Upload failed'); }
-                      } catch (err) { setToast('Upload failed: ' + err.message); }
+                        } catch (httpErr) {
+                          const msg = httpErr.response?.data?.error || httpErr.message || 'Upload failed';
+                          setToast('Upload failed: ' + msg);
+                        }
                       setWardrobeUploading(false);
                     }} style={{ padding: '7px 22px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (wardrobeUploading || !wardrobeUploadFile || !wardrobeUploadForm.name || !wardrobeUploadForm.clothingCategory) ? 0.35 : 1 }}>
                       {wardrobeUploading ? 'Uploading...' : 'Upload Item'}
@@ -7171,12 +7197,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             const item = wardrobeItems.find(w => w.id === id);
                             return item ? { id: item.id, name: item.name, category: item.clothing_category || item.itemType, image: item.s3_url_processed || item.s3_url } : null;
                           }).filter(Boolean);
-                          const res = await fetch('/api/v1/outfit-sets', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ name: outfitSetName.trim(), character: 'Lala', items: payloadItems, show_id: showId }),
-                          });
-                          if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Create failed'); }
+                          try {
+                            await createOutfitSetApi({ name: outfitSetName.trim(), character: 'Lala', items: payloadItems, show_id: showId });
+                          } catch (httpErr) {
+                            throw new Error(httpErr.response?.data?.error || 'Create failed');
+                          }
                           setToast(`Outfit set "${outfitSetName.trim()}" created`);
                           setShowCreateOutfitSet(false);
                           setSelectedWardrobeIds(new Set());
