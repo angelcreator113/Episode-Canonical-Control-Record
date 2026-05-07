@@ -6,13 +6,13 @@
 
 const express = require('express');
 const worldTempRouter = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { computeWorldTemperature, snapshotTemperature } = require('../services/worldTemperatureService');
 
 /**
  * GET /api/v1/world-temperature/:universeId
  */
-worldTempRouter.get('/:universeId', optionalAuth, async (req, res) => {
+worldTempRouter.get('/:universeId', requireAuth, async (req, res) => {
   try {
     const { universeId } = req.params;
     const models = req.app.get('models') || require('../models');
@@ -30,7 +30,7 @@ worldTempRouter.get('/:universeId', optionalAuth, async (req, res) => {
  * Body: { temperature }
  * Call after every episode accept.
  */
-worldTempRouter.post('/:universeId/snapshot', optionalAuth, async (req, res) => {
+worldTempRouter.post('/:universeId/snapshot', requireAuth, async (req, res) => {
   try {
     const { universeId } = req.params;
     const { temperature } = req.body;

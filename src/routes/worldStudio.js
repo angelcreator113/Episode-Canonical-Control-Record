@@ -32,11 +32,7 @@ const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
 // ── Auth ───────────────────────────────────────────────────────────────────
-let optionalAuth;
-try {
-  const m = require('../middleware/auth');
-  optionalAuth = m.optionalAuth || m.authenticate || ((q, r, n) => n());
-} catch (e) { optionalAuth = (q, r, n) => n(); }
+const { optionalAuth, requireAuth } = require('../middleware/auth');
 
 // ── DB ─────────────────────────────────────────────────────────────────────
 const models = require('../models');
@@ -890,7 +886,7 @@ function resolveSceneLength(characterType, sceneType, _dynamic) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // POST /world/generate-ecosystem
-router.post('/world/generate-ecosystem', optionalAuth, async (req, res) => {
+router.post('/world/generate-ecosystem', requireAuth, async (req, res) => {
   try {
     const {
       show_id,
@@ -1069,6 +1065,7 @@ Return JSON only:
 });
 
 // GET /world/characters
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/characters', optionalAuth, async (req, res) => {
   try {
     const { character_type, status, intimate_eligible, world_tag } = req.query;
@@ -1093,6 +1090,7 @@ router.get('/world/characters', optionalAuth, async (req, res) => {
 });
 
 // GET /world/characters/:id
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/characters/:id', optionalAuth, async (req, res) => {
   try {
     const [char] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
@@ -1125,7 +1123,7 @@ router.get('/world/characters/:id', optionalAuth, async (req, res) => {
 });
 
 // PUT /world/characters/:id
-router.put('/world/characters/:id', optionalAuth, async (req, res) => {
+router.put('/world/characters/:id', requireAuth, async (req, res) => {
   try {
     const fields = ['name','age_range','occupation','world_location','sexuality','aesthetic','signature','surface_want','real_want',
       'what_they_want_from_lala','how_they_meet','dynamic','tension_type','intimate_style',
@@ -1280,7 +1278,7 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
 });
 
 // POST /world/characters/:id/activate
-router.post('/world/characters/:id/activate', optionalAuth, async (req, res) => {
+router.post('/world/characters/:id/activate', requireAuth, async (req, res) => {
   try {
     await sequelize.query(`UPDATE world_characters SET status = 'active', updated_at = NOW() WHERE id = :id`, { replacements: { id: req.params.id }, type: sequelize.QueryTypes.UPDATE });
     // Sync → registry: accepted
@@ -1293,7 +1291,7 @@ router.post('/world/characters/:id/activate', optionalAuth, async (req, res) => 
 });
 
 // POST /world/characters/:id/archive
-router.post('/world/characters/:id/archive', optionalAuth, async (req, res) => {
+router.post('/world/characters/:id/archive', requireAuth, async (req, res) => {
   try {
     await sequelize.query(`UPDATE world_characters SET status = 'archived', updated_at = NOW() WHERE id = :id`, { replacements: { id: req.params.id }, type: sequelize.QueryTypes.UPDATE });
     // Sync → registry: declined
@@ -1306,7 +1304,7 @@ router.post('/world/characters/:id/archive', optionalAuth, async (req, res) => {
 });
 
 // POST /world/characters/:id/deepen — AI fills in missing fields
-router.post('/world/characters/:id/deepen', optionalAuth, async (req, res) => {
+router.post('/world/characters/:id/deepen', requireAuth, async (req, res) => {
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
       return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
@@ -1550,7 +1548,7 @@ Return JSON only — an object with ONLY the missing field keys and their values
 
 // POST /world/characters/:id/re-sync
 // Push current world character data back into its linked registry character
-router.post('/world/characters/:id/re-sync', optionalAuth, async (req, res) => {
+router.post('/world/characters/:id/re-sync', requireAuth, async (req, res) => {
   try {
     const [char] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
     if (!char) return res.status(404).json({ error: 'Character not found' });
@@ -1685,7 +1683,7 @@ router.post('/world/characters/:id/re-sync', optionalAuth, async (req, res) => {
 
 // POST /world/characters/bulk-re-sync
 // Re-sync all active world characters to their linked registry entries
-router.post('/world/characters/bulk-re-sync', optionalAuth, async (req, res) => {
+router.post('/world/characters/bulk-re-sync', requireAuth, async (req, res) => {
   try {
     const { world_tag = 'lalaverse' } = req.body;
     const chars = await Q(req,
@@ -1828,7 +1826,7 @@ router.post('/world/characters/bulk-re-sync', optionalAuth, async (req, res) => 
 });
 
 // DELETE /world/characters/:id
-router.delete('/world/characters/:id', optionalAuth, async (req, res) => {
+router.delete('/world/characters/:id', requireAuth, async (req, res) => {
   try {
     // Remove linked relationship rows (via registry_characters)
     const [rc] = await Q(req,
@@ -1866,7 +1864,7 @@ router.delete('/world/characters/:id', optionalAuth, async (req, res) => {
 });
 
 // POST /world/seed-relationships — manually seed relationship candidates for all active world characters
-router.post('/world/seed-relationships', optionalAuth, async (req, res) => {
+router.post('/world/seed-relationships', requireAuth, async (req, res) => {
   try {
     const { world_tag = 'lalaverse' } = req.body;
     const registryId = await findOrCreateRegistryForWorld(req, world_tag);
@@ -1905,6 +1903,7 @@ router.post('/world/seed-relationships', optionalAuth, async (req, res) => {
 });
 
 // GET /world/batches
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/batches', optionalAuth, async (req, res) => {
   try {
     const batches = await Q(req, 'SELECT * FROM world_character_batches ORDER BY created_at DESC');
@@ -1917,6 +1916,7 @@ router.get('/world/batches', optionalAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // GET /world/tension-check — scan all active world character relationships for scene triggers
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/tension-check', optionalAuth, async (req, res) => {
   try {
     // Characters eligible for intimate scenes with non-calm tension
@@ -1964,7 +1964,7 @@ router.get('/world/tension-check', optionalAuth, async (req, res) => {
 });
 
 // POST /world/scenes/generate — generate intimate scene
-router.post('/world/scenes/generate', optionalAuth, async (req, res) => {
+router.post('/world/scenes/generate', requireAuth, async (req, res) => {
   try {
     const {
       character_a_id,
@@ -2132,6 +2132,7 @@ Return JSON only:
 });
 
 // GET /world/scenes
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/scenes', optionalAuth, async (req, res) => {
   try {
     const { character_id, status, scene_type } = req.query;
@@ -2152,6 +2153,7 @@ router.get('/world/scenes', optionalAuth, async (req, res) => {
 });
 
 // GET /world/scenes/:sceneId
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/scenes/:sceneId', optionalAuth, async (req, res) => {
   try {
     const [scene] = await Q(req, 'SELECT * FROM intimate_scenes WHERE id = :id', { replacements: { id: req.params.sceneId } });
@@ -2171,7 +2173,7 @@ router.get('/world/scenes/:sceneId', optionalAuth, async (req, res) => {
 });
 
 // POST /world/scenes/:sceneId/approve — approve, run all post-scene automations
-router.post('/world/scenes/:sceneId/approve', optionalAuth, async (req, res) => {
+router.post('/world/scenes/:sceneId/approve', requireAuth, async (req, res) => {
   try {
     const { sceneId } = req.params;
     const { chapter_id, book_id } = req.body;
@@ -2339,7 +2341,7 @@ Write 2-3 paragraphs. Start with a sensory detail. End with her moving forward �
 }
 
 // POST /world/scenes/:sceneId/continue — manually trigger continuation
-router.post('/world/scenes/:sceneId/continue', optionalAuth, async (req, res) => {
+router.post('/world/scenes/:sceneId/continue', requireAuth, async (req, res) => {
   try {
     const { continuation_type = 'morning_after' } = req.body;
     const [scene] = await Q(req, 'SELECT * FROM intimate_scenes WHERE id = :id', { replacements: { id: req.params.sceneId } });
@@ -2352,7 +2354,7 @@ router.post('/world/scenes/:sceneId/continue', optionalAuth, async (req, res) =>
 });
 
 // DELETE /world/scenes/:sceneId
-router.delete('/world/scenes/:sceneId', optionalAuth, async (req, res) => {
+router.delete('/world/scenes/:sceneId', requireAuth, async (req, res) => {
   try {
     await sequelize.query(
       `DELETE FROM intimate_scenes WHERE id = :id AND status = 'draft'`,
@@ -2365,6 +2367,7 @@ router.delete('/world/scenes/:sceneId', optionalAuth, async (req, res) => {
 });
 
 // GET /world/scenes/:sceneId/continuations
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/scenes/:sceneId/continuations', optionalAuth, async (req, res) => {
   try {
     const continuations = await Q(req,
@@ -2378,7 +2381,7 @@ router.get('/world/scenes/:sceneId/continuations', optionalAuth, async (req, res
 });
 
 // POST /world/continuations/:contId/approve — write continuation to StoryTeller
-router.post('/world/continuations/:contId/approve', optionalAuth, async (req, res) => {
+router.post('/world/continuations/:contId/approve', requireAuth, async (req, res) => {
   try {
     const { chapter_id } = req.body;
     const [cont] = await Q(req, 'SELECT * FROM scene_continuations WHERE id = :id', { replacements: { id: req.params.contId } });
@@ -2415,6 +2418,7 @@ router.post('/world/continuations/:contId/approve', optionalAuth, async (req, re
  * GET /world/preview/:previewId
  * Restore a server-side preview — checks in-memory cache first, then DB.
  */
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/preview/:previewId', optionalAuth, async (req, res) => {
   // Try in-memory cache first (fast path)
   const cached = getPreview(req.params.previewId);
@@ -2439,6 +2443,7 @@ router.get('/world/preview/:previewId', optionalAuth, async (req, res) => {
  * GET /world/previews
  * List all saved (pending) ecosystem previews — survives page navigation.
  */
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/previews', optionalAuth, async (req, res) => {
   try {
     if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
@@ -2457,7 +2462,7 @@ router.get('/world/previews', optionalAuth, async (req, res) => {
  * DELETE /world/previews/:previewId
  * Discard a saved preview.
  */
-router.delete('/world/previews/:previewId', optionalAuth, async (req, res) => {
+router.delete('/world/previews/:previewId', requireAuth, async (req, res) => {
   try {
     if (!previewsTableReady) { await ensurePreviewsTable(); previewsTableReady = true; }
     await sequelize.query(
@@ -2474,7 +2479,8 @@ router.delete('/world/previews/:previewId', optionalAuth, async (req, res) => {
  * Same Claude prompt as generate-ecosystem BUT does NOT commit to DB.
  * Returns preview characters so the user can select/deselect before confirming.
  */
-router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) => {
+// PUBLIC: World ecosystem preview generation with ownership-when-authenticated; degraded auth tolerated for audience growth — see Audit Handoff §4.1
+router.post('/world/generate-ecosystem-preview', optionalAuth({ degradeOnInfraFailure: true }), async (req, res) => {
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
       return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
@@ -2645,7 +2651,7 @@ Return JSON only:
  * POST /world/generate-ecosystem-confirm
  * Takes the user-selected characters from the preview and commits them to DB + registry.
  */
-router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) => {
+router.post('/world/generate-ecosystem-confirm', requireAuth, async (req, res) => {
   const { show_id, preview_id } = req.body;
   const t = await sequelize.transaction();
   try {
@@ -2814,7 +2820,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
 // ══════════════════════════════════════════════════════════════════════════════
 
 // POST /world/characters/seed-cross-batch — seed relationships across existing batches
-router.post('/world/characters/seed-cross-batch', optionalAuth, async (req, res) => {
+router.post('/world/characters/seed-cross-batch', requireAuth, async (req, res) => {
   try {
     const { world_tag = 'lalaverse', max_pairs = 10 } = req.body;
     // Fetch all active characters in this world that have registry IDs
@@ -2892,6 +2898,7 @@ router.post('/world/characters/seed-cross-batch', optionalAuth, async (req, res)
 // ══════════════════════════════════════════════════════════════════════════════
 
 // GET /world/characters/:id/export — export full character dossier as JSON
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/characters/:id/export', optionalAuth, async (req, res) => {
   try {
     const [char] = await Q(req,
@@ -2954,6 +2961,7 @@ router.get('/world/characters/:id/export', optionalAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // GET /world/characters/:id/relationships
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/characters/:id/relationships', optionalAuth, async (req, res) => {
   try {
     const [char] = await Q(req,
@@ -2980,7 +2988,7 @@ router.get('/world/characters/:id/relationships', optionalAuth, async (req, res)
 });
 
 // POST /world/characters/:id/relationships
-router.post('/world/characters/:id/relationships', optionalAuth, async (req, res) => {
+router.post('/world/characters/:id/relationships', requireAuth, async (req, res) => {
   try {
     const [char] = await Q(req,
       'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
@@ -3054,7 +3062,7 @@ router.post('/world/characters/:id/relationships', optionalAuth, async (req, res
 });
 
 // PUT /world/characters/:id/relationships/:relId
-router.put('/world/characters/:id/relationships/:relId', optionalAuth, async (req, res) => {
+router.put('/world/characters/:id/relationships/:relId', requireAuth, async (req, res) => {
   try {
     const [char] = await Q(req,
       'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
@@ -3099,7 +3107,7 @@ router.put('/world/characters/:id/relationships/:relId', optionalAuth, async (re
 });
 
 // DELETE /world/characters/:id/relationships/:relId
-router.delete('/world/characters/:id/relationships/:relId', optionalAuth, async (req, res) => {
+router.delete('/world/characters/:id/relationships/:relId', requireAuth, async (req, res) => {
   try {
     const [char] = await Q(req,
       'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
@@ -3131,6 +3139,7 @@ router.delete('/world/characters/:id/relationships/:relId', optionalAuth, async 
    ═══════════════════════════════════════════════════════════ */
 
 // GET /world/locations — list all locations
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/locations', optionalAuth, async (req, res) => {
   try {
     const WorldLocation = models.WorldLocation;
@@ -3209,7 +3218,7 @@ router.get('/world/locations', optionalAuth, async (req, res) => {
 });
 
 // POST /world/locations — create a location
-router.post('/world/locations', optionalAuth, async (req, res) => {
+router.post('/world/locations', requireAuth, async (req, res) => {
   try {
     const { name, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata, street_address, city, district, coordinates, venue_type, venue_details, property_type, style_guide, floor_plan } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
@@ -3245,7 +3254,7 @@ router.post('/world/locations', optionalAuth, async (req, res) => {
 });
 
 // PUT /world/locations/:id — update a location
-router.put('/world/locations/:id', optionalAuth, async (req, res) => {
+router.put('/world/locations/:id', requireAuth, async (req, res) => {
   try {
     const allowed = ['name', 'description', 'location_type', 'sensory_details', 'narrative_role', 'associated_characters', 'parent_location_id', 'metadata', 'street_address', 'city', 'district', 'coordinates', 'venue_type', 'venue_details', 'property_type', 'style_guide', 'floor_plan'];
     const WorldLocation = models.WorldLocation;
@@ -3263,7 +3272,7 @@ router.put('/world/locations/:id', optionalAuth, async (req, res) => {
 });
 
 // DELETE /world/locations/:id
-router.delete('/world/locations/:id', optionalAuth, async (req, res) => {
+router.delete('/world/locations/:id', requireAuth, async (req, res) => {
   try {
     const WorldLocation = models.WorldLocation;
     if (WorldLocation) {
@@ -3278,7 +3287,7 @@ router.delete('/world/locations/:id', optionalAuth, async (req, res) => {
 });
 
 // POST /world/locations/seed-infrastructure — generate full DREAM city infrastructure
-router.post('/world/locations/seed-infrastructure', optionalAuth, async (req, res) => {
+router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res) => {
   try {
     const WorldLocation = models.WorldLocation;
     if (!WorldLocation) return res.status(500).json({ error: 'WorldLocation model not available' });
@@ -3347,6 +3356,7 @@ router.post('/world/locations/seed-infrastructure', optionalAuth, async (req, re
    ═══════════════════════════════════════════════════════════ */
 
 // GET /world/state/snapshots
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/state/snapshots', optionalAuth, async (req, res) => {
   try {
     const WSS = models.WorldStateSnapshot;
@@ -3357,7 +3367,7 @@ router.get('/world/state/snapshots', optionalAuth, async (req, res) => {
 });
 
 // POST /world/state/snapshots
-router.post('/world/state/snapshots', optionalAuth, async (req, res) => {
+router.post('/world/state/snapshots', requireAuth, async (req, res) => {
   try {
     const { snapshot_label, book_id, chapter_id, active_threads, world_facts, character_states, relationship_states, timeline_position } = req.body;
     if (!snapshot_label) return res.status(400).json({ error: 'snapshot_label required' });
@@ -3369,7 +3379,7 @@ router.post('/world/state/snapshots', optionalAuth, async (req, res) => {
 });
 
 // PUT /world/state/snapshots/:id
-router.put('/world/state/snapshots/:id', optionalAuth, async (req, res) => {
+router.put('/world/state/snapshots/:id', requireAuth, async (req, res) => {
   try {
     const WSS = models.WorldStateSnapshot;
     if (!WSS) return res.status(500).json({ error: 'Model not available' });
@@ -3384,7 +3394,7 @@ router.put('/world/state/snapshots/:id', optionalAuth, async (req, res) => {
 });
 
 // DELETE /world/state/snapshots/:id
-router.delete('/world/state/snapshots/:id', optionalAuth, async (req, res) => {
+router.delete('/world/state/snapshots/:id', requireAuth, async (req, res) => {
   try {
     const WSS = models.WorldStateSnapshot;
     if (!WSS) return res.status(500).json({ error: 'Model not available' });
@@ -3396,6 +3406,7 @@ router.delete('/world/state/snapshots/:id', optionalAuth, async (req, res) => {
 });
 
 // GET /world/state/timeline — timeline events
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/state/timeline', optionalAuth, async (req, res) => {
   try {
     const WTE = models.WorldTimelineEvent;
@@ -3409,7 +3420,7 @@ router.get('/world/state/timeline', optionalAuth, async (req, res) => {
 });
 
 // POST /world/state/timeline — create timeline event
-router.post('/world/state/timeline', optionalAuth, async (req, res) => {
+router.post('/world/state/timeline', requireAuth, async (req, res) => {
   try {
     const { event_name, event_description, story_date, sort_order, event_type, characters_involved, location_id, impact_level, consequences, is_canon } = req.body;
     if (!event_name) return res.status(400).json({ error: 'event_name required' });
@@ -3430,7 +3441,7 @@ router.post('/world/state/timeline', optionalAuth, async (req, res) => {
 });
 
 // PUT /world/state/timeline/:id
-router.put('/world/state/timeline/:id', optionalAuth, async (req, res) => {
+router.put('/world/state/timeline/:id', requireAuth, async (req, res) => {
   try {
     const WTE = models.WorldTimelineEvent;
     if (!WTE) return res.status(500).json({ error: 'Model not available' });
@@ -3445,7 +3456,7 @@ router.put('/world/state/timeline/:id', optionalAuth, async (req, res) => {
 });
 
 // DELETE /world/state/timeline/:id
-router.delete('/world/state/timeline/:id', optionalAuth, async (req, res) => {
+router.delete('/world/state/timeline/:id', requireAuth, async (req, res) => {
   try {
     const WTE = models.WorldTimelineEvent;
     if (!WTE) return res.status(500).json({ error: 'Model not available' });
@@ -3461,6 +3472,7 @@ router.delete('/world/state/timeline/:id', optionalAuth, async (req, res) => {
    ═══════════════════════════════════════════════════════════ */
 
 // GET /world/tension-scanner — character pairs with unresolved tension
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
   try {
     const rows = await Q(req,
@@ -3494,7 +3506,7 @@ router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
 });
 
 // POST /world/create-story-task — generate a story task from a world character
-router.post('/world/create-story-task', optionalAuth, async (req, res) => {
+router.post('/world/create-story-task', requireAuth, async (req, res) => {
   try {
     const { character_id } = req.body;
     if (!character_id) return res.status(400).json({ error: 'character_id required' });
@@ -3522,7 +3534,7 @@ router.post('/world/create-story-task', optionalAuth, async (req, res) => {
 });
 
 // POST /world/create-tension-proposal — generate story proposal from tension pair
-router.post('/world/create-tension-proposal', optionalAuth, async (req, res) => {
+router.post('/world/create-tension-proposal', requireAuth, async (req, res) => {
   try {
     const { char_a_name, char_b_name, tension_state, relationship_type, conflict_summary, romantic } = req.body;
     if (!char_a_name || !char_b_name) return res.status(400).json({ error: 'char_a_name and char_b_name required' });
@@ -3541,6 +3553,7 @@ router.post('/world/create-tension-proposal', optionalAuth, async (req, res) => 
 });
 
 // GET /world/context-summary — auto-enrich world context for story generation
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/context-summary', optionalAuth, async (req, res) => {
   try {
     const WSS = models.WorldStateSnapshot;
@@ -3607,7 +3620,7 @@ const mapUpload = multer({
 });
 
 // POST /world/map/upload — upload custom DREAM map image
-router.post('/world/map/upload', optionalAuth, mapUpload.single('image'), async (req, res) => {
+router.post('/world/map/upload', requireAuth, mapUpload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No image file provided' });
     if (!S3_BUCKET) return res.status(500).json({ success: false, error: 'S3 bucket not configured — set S3_PRIMARY_BUCKET env var' });
@@ -3648,6 +3661,7 @@ router.post('/world/map/upload', optionalAuth, mapUpload.single('image'), async 
 });
 
 // GET /world/map — get current map image URL
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/map', optionalAuth, async (req, res) => {
   try {
     const PageContent = models.PageContent;
@@ -3661,6 +3675,7 @@ router.get('/world/map', optionalAuth, async (req, res) => {
 });
 
 // GET /world/map/positions — get saved city positions
+// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
 router.get('/world/map/positions', optionalAuth, async (req, res) => {
   try {
     const PageContent = models.PageContent;
@@ -3674,7 +3689,7 @@ router.get('/world/map/positions', optionalAuth, async (req, res) => {
 });
 
 // PUT /world/map/positions — save city positions
-router.put('/world/map/positions', optionalAuth, async (req, res) => {
+router.put('/world/map/positions', requireAuth, async (req, res) => {
   try {
     const { positions } = req.body;
     if (!positions || typeof positions !== 'object') return res.status(400).json({ error: 'positions required' });
