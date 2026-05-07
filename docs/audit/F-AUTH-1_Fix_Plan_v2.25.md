@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.24 — Step 3 CP1 (F-AUTH-2 lazy-init refactor + F-AUTH-3 5-handler migration + lazy-noop fallback removal) approved at commit `05cd536d`. Step 3 pacing model first data point: 1 session, ~75 min actual vs ~105-130 min forecast (1.4-1.7x conservative bias confirmed for backend cadence). press.js scope correction: 6 handlers = 2 GETs + 4 POSTs (NOT all GETs as v2.23 §5.5 stated); 5 of 6 migrated CP1, 4 POSTs deferred CP10. Lazy-noop fallback removal universal discipline (NEW v2.24 §9.11 lock): pattern endemic across ~40 route files (not 2 as planning §A.7 stated); per-CP discipline mandates removal in same commit as domain sweep. Module-load safety test pattern (NEW v2.24 §9.11 lock): jest.resetModules + env manipulation + require-doesn't-throw assertion. Partial-migration extension extends to Step 3 — press.js first instance (parallel to Track 6 CP13/CP14/CP15×3). Backend Path E running list expanded ~40-fold. Backend test suite: 1402 → 1417 passing (+15 tests, 0 regressions). Step 3 CP2 (Episodes cluster) is next.
+**Document version:** v2.25 — Step 3 CP2 (Episodes cluster — 22 files / 227 handlers / 91 new tests / 1 session / ~90 min) approved at commit `d73599f8`. Mount-collision discipline (NEW v2.25 §9.11 lock): 11 routers at /api/v1/episodes (NOT 9 as v2.24 §5.5 stated); per-router enumeration + cross-mount awareness + path-segment claim verification — template propagates to CP6/CP8/CP10. Cross-mount router pattern (NEW v2.25 §9.11): files mounted at multiple prefixes (gameShows.js + scriptParse.js); Tier promotion at file affects all URL surfaces. F-AUTH-4 obsolescence inversion (NEW v2.25 §9.11): line 307 was consistency-with-codebase argument, not token-expiry; F-AUTH-1 itself inverts the consistency baseline. F-AUTH-5 ?.id field-name expansion (NEW v2.25 §9.11): catalogue undercounted by ~16+; episodeController.js alone has 16 sites. Surface-correction four-data-point validation (CP15 + CP1 + CP2 × 3): file count + handler count + mount-collision count + grep baseline. Tests-FLOOR-not-ceiling four-data-point: CP1 forecast 7 → actual 15; CP2 forecast 30-50 → actual 91. Step 3 pacing second data point: CP1 75min/1.4-1.7x bias, CP2 90min/3-4x bias. Backend test suite: 1417 → 1508 passing (+91, 0 regressions). Step 3 CP3 (World cluster) is next.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** **TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. Pattern G locked: 6 sites (UNCHANGED). **Step 3 CP1 COMPLETE through commit `05cd536d`**; F-AUTH-2 lazy-init refactor + F-AUTH-3 5-handler migration (consumer count 0 → 5) + lazy-noop fallback removal at press.js + manuscript-export.js. Backend test suite: 1402 → 1417 passing (+15 tests, +1 suite, 0 regressions). Press.js partial-migration: 5 of 6 handlers migrated; 4 POSTs deferred to CP10. Backed up at `05cd536d` on `claude/f-auth-1-backup`. Step 3 CP2 (Episodes cluster) kicks off next, fresh session.
+**Status:** **TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. Pattern G locked: 6 sites (UNCHANGED). **Step 3 CP1 COMPLETE through commit `05cd536d`**; F-AUTH-2 lazy-init refactor + F-AUTH-3 5-handler migration + lazy-noop fallback removal. **Step 3 CP2 COMPLETE through commit `d73599f8`**; Episodes cluster — 22 files / 227 handlers / 91 new tests. Mount-collision discipline established; cross-mount router pattern locked; F-AUTH-5 4-site resolution + ?.id field-name expansion finding. Backend test suite: 1417 → 1508 passing (+91 tests, +1 suite, 0 regressions). Backed up at `d73599f8` on `claude/f-auth-1-backup`. Step 3 CP3 (World cluster — 4 files / ~85 handlers / WorldStudio Tier 3/Tier 4 split per Item 15) kicks off next, fresh session.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -1448,6 +1448,130 @@ CP1 surfaced 5 architectural findings filed for v2.24 §9.12 + §9.11:
 
 CP10 surface report inheritance: when CP10 picks up press.js POSTs (lines 361, 531, 607, 696), surface report MUST explicitly enumerate them as inherited scope from CP1 partial-migration. Tier 1 disposition + aiRateLimiter on AI POSTs (lines 607, 696) per worldEvents reference model. Cross-CP inheritance handling becomes Step 3 surface-report discipline.
 
+##### §5.12 — Step 3 CP2 architectural findings (LOCKED v2.25, COMPLETE — Episodes cluster sweep)
+
+CP2 completed at commit `d73599f8` (single squashed commit, 27 work-product WIPs collapsed at file boundaries; single session, ~90 min actual vs 4-6 hour forecast — **~3-4x conservative bias confirmed for largest-CP backend cadence**). Largest single Step 3 CP by file count and handler count: 22 files / 227 handlers / 91 new tests / 0 regressions. WP1 lazy-noop removal at 4 files (scriptParse, todoListRoutes, onboarding, lala-scene-detection per v2.24 §5.8 universal discipline); WP2 Tier 1 sweep at 22 files (222 handlers promoted to requireAuth); WP3 Tier 2 admin carve-outs (5 handlers per D1 + D2 locks); WP4 structural test file (91 tests passing in `episodes-cluster-tier-promotion.test.js` — 4th instance of FLOOR-not-ceiling pattern). Strict execution sequence WP1 → WP2 → WP3 → WP4 followed. Backend test suite: 1417 → 1508 passing (+91 tests, +1 suite, 0 regressions, 0 failed). Backed up at `d73599f8` on `claude/f-auth-1-backup`.
+
+Six adjudication decisions executed cleanly:
+
+- **D1 wardrobeApproval GET /approval-status:** Tier 2 (requireAuth + authorize(['ADMIN'])) consistent with file's 3 other admin handlers. 4 admin handlers total at file.
+- **D2 uiOverlayRoutes GET /:showId/debug:** Tier 2 (requireAuth + authorize(['ADMIN'])) per queue-monitor admin-tooling precedent.
+- **D3 episodeOrchestrationRoute POST /generate-episode-orchestration:** Tier 1 + aiRateLimiter (creator-facing AI-cost mutation; joins worldEvents + episodeBriefRoutes + episodes.js as aiRateLimiter consumers).
+- **D4 shows.js sweep posture:** Full Tier 1 sweep (all 18 no-auth handlers promoted to requireAuth). No partial-migration split — uniform tier. shows.js had cover-image multer ordering corrected (auth before multer per Express middleware best practice).
+- **D5 episodes.js commented-out auth resolution:** lines 400 + 473 uncommented + Tier 1 promotion; lines 313-317 (PUT /:id) + 372-376 (DELETE /:id) promoted from optionalAuth to requireAuth; obsolete 6-line comment block at lines 307-312 removed. F-AUTH-4 obsolescence inversion finding (see §5.15 below). Sentinel grep: 0 hits for `// ✅ COMMENTED OUT FOR TESTING` markers.
+- **D6 phonePlaythroughRoutes:** authenticate → requireAuth (unified contract). 4 handlers migrated.
+
+Per-tier handler distribution post-CP2:
+
+- Tier 1 (requireAuth): 222 handlers across 22 files (97.8% of CP2 zone)
+- Tier 2 (requireAuth + authorize(['ADMIN'])): 5 handlers (4 wardrobeApproval admin + 1 uiOverlayRoutes debug)
+- Tier 1 + aiRateLimiter: 1 NEW (D3 episodeOrchestrationRoute) + 5 preserved (3 episodeBriefRoutes + 2 episodes.js)
+- Tier 3 / 4 / 5: 0 (Episodes cluster is creator-owned; no public/admin-mount/env-gated handlers)
+
+All 4 verification greps pass: (1) degradeOnInfraFailure consumer count = 5 in routes + 2 in middleware/auth.js docstrings = 7 total (UNCHANGED from CP1 close — Episodes cluster has 0 Tier 3 handlers); (2) requireAuth consumer count 6 → 259 (matches CP2 promotion scope); (3) lazy-noop fallback in CP2 zone = 0 (was 4); (4) authenticateToken active hits in CP2 zone = 0 (was 19; remaining hits in non-CP2 files defer to CP3-CP10).
+
+- Mount-collision verification (NEW for CP2): 11 routers at /api/v1/episodes enumerated with mount order from app.js; no exact-path collisions across sibling routers; cross-mount routers (gameShows.js + scriptParse.js mounted at 2 prefixes simultaneously) tracked. v2.24 §5.5 Anomaly 8 wording "9 routers" superseded by empirical surface-time evidence.
+- F-AUTH-5 4-site resolution (CP2 zone): cursorPathController:22, iconCueController:22, musicCueController:20, productionPackageController:22 — all 4 sites resolved naturally as F-AUTH-1 byproducts (req.user non-null after Tier 1 promotion). The ?.sub fallback chains remain as defense-in-depth no-ops post-CP2 (will never fire because requireAuth at the route guarantees req.user existence).
+- No HTTP method mismatches surfaced. CP2 didn't change any methods (Step 3 backend method corrections deferred to CP11). Step 3 zero-method-mismatch streak: 2 consecutive CPs (CP1 + CP2).
+
+##### §5.13 — Mount-collision discipline (NEW v2.25 §9.11 lock — Step 3 universal pattern, propagates to CP6/CP8/CP10)
+
+CP2 surface-time empirical inspection caught the v2.24 §5.5 Anomaly 8 miscount: **11 routers share /api/v1/episodes prefix, NOT 9**. The 11: episodeRoutes (anchor), timelineDataRoutes, wardrobeApprovalRoutes, scriptGeneratorRoutes (out-of-scope — CP9), lalaScriptRoutes, scriptParseRoutes (cross-mount), gameShowRoutes (cross-mount), iconCueRoutes, cursorPathRoutes, musicCueRoutes, productionPackageRoutes. Mount-collision is structurally inherent in Express's app.use() pattern when multiple routers share a path prefix; sibling routers must claim distinct path segments to avoid silent shadowing.
+
+**Mount-collision discipline (LOCKED v2.25 §9.11). CP6/CP8/CP10 surface reports MUST enumerate all routers sharing a mount prefix before any sweep edits. Per-router enumeration includes: mount line in app.js, mount path, router file, handler count, middleware class summary, path-segment claim list. Path-segment claim verification: every sibling router's path patterns must be distinct from siblings; if path-pattern overlap exists, app.use order disambiguates and silent-shadowing risk is documented in surface report.**
+
+Future Step 3 mount-collision zones (per v2.23 §5.4 + v2.25 §5.13 lock):
+
+- CP6 (Character cluster): /api/v1/character-registry has multiple routers (characterRegistry.js + characterSparkRoute.js + others); /api/v1/characters / /api/v1/relationships clusters require enumeration
+- CP8 (Social-feeds cluster): /api/v1/social-profiles has multiple routers (socialProfileRoutes.js + socialProfileBulkRoutes.js + mirrorFieldRoutes.js + undergroundRoutes.js); /api/v1/calendar + /api/v1/feed-* mounts require enumeration
+- CP10 (Admin/internal cluster): /api/v1/admin + /api/v1/auth + /admin/queues mounts have potential cross-mount complexity; /api/v1/seed env-gated mount per v2.23 Item 7
+
+CP3-CP5 + CP9 generally have simpler mount topology (1-2 routers per prefix); per-CP surface reports verify no mount-collision exists or document if surfacing.
+
+##### §5.14 — Cross-mount router pattern (NEW v2.25 §9.11 architectural finding)
+
+CP2 surface caught two cross-mount routers — files mounted at multiple prefixes simultaneously:
+
+- gameShows.js mounted at BOTH /api/v1/episodes:954 AND /api/v1/shows:955. Same router instance, two URL surfaces.
+- scriptParse.js mounted at BOTH /api/v1/scripts:919 (POST /parse) AND /api/v1/episodes:920 (/:id/parse-script + /:id/apply-scene-plan). Same router instance, two URL surfaces.
+
+**Cross-mount router pattern (LOCKED v2.25 §9.11 architectural finding). Files mounted at multiple prefixes simultaneously have Tier promotion that affects ALL URL surfaces, not just the primary mount. Handler-level middleware doesn't know about mount prefix — it applies uniformly to every request reaching the handler regardless of which mount routed the request.** Pattern: when sweep modifies router-file handler middleware, the change propagates to every mount of that router file in app.js. Per-CP surface reports MUST enumerate cross-mount routers + flag in commit messages.
+
+Discovery primitive: `grep -n "require.*\\('./routes/<file>'\\)" src/app.js` returns the full mount list for a given route file. Multiple results = cross-mount router.
+
+##### §5.15 — F-AUTH-4 obsolescence inversion (NEW v2.25 §9.11 finding — supersedes v2.24 §5.7 paraphrase)
+
+CP2 surface caught a v2.24-era paraphrase error in adjudication. The v2.24 surface report described the episodes.js line 307 obsolete comment as "downgraded to optionalAuth for token-expiry tolerance" with F-AUTH-4 obsolescence rationale. CP2 mid-execution corrected this: **the actual 6-line comment block at lines 307-312 was a "consistency-with-existing-write-paths" argument**, NOT a token-expiry argument. Verbatim:
+
+> *"Uses optionalAuth to match the rest of the write endpoints in this codebase (world events, generate-episode, scene-sets, etc.). The previous strict authenticateToken caused a hard redirect to /login every time a creator's token expired even though every other write path tolerates a missing token. The controller already handles req.user?.id with optional chaining and an 'unknown' fallback."*
+
+**F-AUTH-4 obsolescence inversion: F-AUTH-1 itself inverts the consistency baseline.** After CP2-CP10 close, every write path requires auth (Tier 1+). The "every other write path tolerates a missing token" baseline ceases to exist — the comment becomes obsolete by virtue of the fix landing, not because of F-AUTH-4 interceptor handling. Comment removal at CP2 is correct disposition; rationale is consistency-baseline-inversion, not interceptor-supersedes-tolerance.
+
+**Discipline lesson (LOCKED v2.25 §9.11). When a surface report quotes commentary that drives architectural decisions, request literal text not paraphrase. Adjudication on rationale must reference verbatim comment content, not summary descriptions.**
+
+CP3-CP10 surface reports include multi-line F-AUTH-4 obsolescence grep variant (locked single-line grep at v2.24 §5.7 missed the 6-line block at episodes.js:307-312):
+
+```
+grep -nP -B0 -A8 "tolerat|expir|missing token|weakened|TESTING" src/routes/
+```
+
+catches multi-line comment blocks within ~8-line context. Surface report at each CP grep + manual review of any multi-line hits.
+
+##### §5.16 — F-AUTH-5 ?.id field-name expansion (NEW v2.25 §9.11 finding — Audit Handoff v8 §4.1 amendment)
+
+Audit Handoff v8 §4.1 catalogued F-AUTH-5 as "6 sites" using `req.user?.sub` silent-null fallback pattern. CP2 surface verified 4 of those 6 in CP2-zone controllers (cursorPathController:22, iconCueController:22, musicCueController:20, productionPackageController:22). **Mid-CP2 finding:** a separate silent-null pattern uses `req.user?.id || '<fallback>'` — same mechanism, different field name. episodeController.js alone has 16 sites of this pattern: lines 349 (createEpisode → 'anonymous' fallback), 571 (updateEpisode → 'unknown'), 654 (deleteEpisode → 'unknown'), 1230 (addCharacter or similar → 'system'), plus 12 bare ?.id reads in logger calls.
+
+**F-AUTH-5 catalog amendment (LOCKED v2.25 §9.11). The Audit Handoff v8 §4.1 6-site F-AUTH-5 inventory is undercounted by ~16+ in episodeController.js alone; the actual silent-null risk class includes ?.id field-name patterns in equivalent measure to ?.sub patterns. Both field names are silent-null patterns with literal-fallback chains.**
+
+CP2 disposition: Tier 1 promotion at the route layer renders both ?.sub and ?.id always-resolved. The `|| '<fallback>'` literals stay as defense-in-depth no-ops post-CP2; they will never fire because requireAuth at the route guarantees req.user existence. CP3-CP10 surface reports MUST grep for both patterns:
+
+```
+grep -rnE "req\\.user\\?\\.(sub|id)\\s*\\|\\|" src/
+```
+
+returns all silent-null + literal-fallback sites across both field names. Per-CP surface report enumerates hits in CP zone files; closure report confirms tier promotion at route layer renders these always-resolved.
+
+##### §5.17 — Surface-correction four-data-point validation (NEW v2.25 §9.11 — discipline lock)
+
+Surface-before-execute discipline (locked at v2.24 §5.7) reaches **four data points** across F-AUTH-1 program. Each instance: empirical surface-time inspection caught what fix-plan revisions and planning phase missed.
+
+- **Data point 1 (CP15, v2.21 → v2.22 surface lock):** WorldSetupGuide reclassification — provisional "mixed PUBLIC+BUG" inventory v2 §4.2 label superseded by cross-CP evidence; all 8 sites BUG-class.
+- **Data point 2 (CP1, v2.23 → v2.24 surface lock):** press.js scope correction — v2.23 §5.5 + planning §A.7 said "6 handlers all GETs"; surface caught 2 GETs + 4 POSTs.
+- **Data point 3 (CP2, v2.24 → v2.25 surface lock):** file count + handler count + mount-collision count — three corrections at one CP. v2.23 §5.4 said "21 files / ~170 handlers"; surface counted 22 / 227. v2.24 §5.5 Anomaly 8 said "9 routers"; surface counted 11.
+- **Data point 4 (CP2, v2.24 → v2.25 surface lock):** Grep 1 baseline — surface §10 forecast 5; actual 7 (5 routes + 2 middleware/auth.js docstrings). Outcome correct (Episodes cluster has 0 Tier 3 handlers); forecast number was off by 2.
+
+**Surface-correction pattern formal lock (LOCKED v2.25 §9.11). Four data points across two phases (Track 6 CP15 + Step 3 CP1/CP2). Empirical surface-time inspection is structurally essential for Step 3 — fix-plan revisions and planning phase consistently miss details that surface-time empirical inspection catches.** CP3-CP11 surface reports apply the discipline: per-handler tier classification verified empirically; per-router enumeration verified empirically; baseline forecasts verified before adjudication; comment text quoted verbatim before rationale-locking.
+
+##### §5.18 — Step 3 pacing model second data point (UPDATED v2.25, supersedes v2.24 §5.10)
+
+CP1 first data point: 1 session, ~75 min actual vs ~105-130 min forecast = 1.4-1.7x conservative bias (small focused CP — 5 handlers + lazy-init refactor + lazy-noop removal at 2 files).
+
+CP2 second data point: 1 session, ~90 min actual vs 4-6 hour (240-360 min) forecast = **~3-4x conservative bias for largest-CP backend cadence** (22 files, 227 handlers, 91 new tests, mount-collision discipline + 5 architectural decisions).
+
+Per-CP cost-per-handler analysis:
+
+- CP1: ~5 handlers in 75 min = ~15 min/handler (high architectural overhead — lazy-init refactor + lazy-noop removal + 4-decision adjudication absorbed disproportionately)
+- CP2: 227 handlers in 90 min = ~24 sec/handler (mechanical-edit dominance — single-line middleware swap × 222 + 6 adjudication-driven edits absorbed in margin)
+
+Step 3 pacing characteristics (two data points):
+
+- Conservative bias confirmed at both data points; backend cadence consistently bias-under-forecast (CP1: 1.4-1.7x; CP2: ~3-4x).
+- Per-handler cost diverges by orders of magnitude based on CP shape: small architectural CPs (CP1) at minutes-per-handler; large mechanical CPs (CP2) at seconds-per-handler.
+- Total Step 3 estimate stays at ~20-22 sessions across 11 CPs. CP1 + CP2 = 2 sessions actual = ~10% of estimate; ~9 CPs remaining at ~18-20 sessions estimate (post-CP2 buffer ~5+ hours from bias-under-forecast).
+- WIP-and-resume protocol available but unused at CP1 + CP2 (single-session execution at both). Available for CP3-CP10 if mid-flow cost overrun signals.
+
+##### §5.19 — Tests-FLOOR-not-ceiling four-data-point validation (UPDATED v2.25, supersedes v2.24 §9.11)
+
+v2.24 §9.11 locked the "tests anticipated count is FLOOR not ceiling" pattern at three data points (CP12 + CP13 + CP14). CP1 + CP2 add two more, **graduating the pattern to four+ data points across phase boundaries**:
+
+- Track 6 CP12: forecast not specifically tracked; Track 6 CP13/CP14 surface forecast vs actual ratio established the FLOOR pattern.
+- Step 3 CP1: surface forecast ~7 new tests; actual 15 (2.1x).
+- Step 3 CP2: surface forecast 30-50 new tests; actual 91 (1.8-3.0x).
+
+**Pattern formal lock (LOCKED v2.25 §9.11): Surface-time test count forecasts are FLOOR estimates, not ceiling estimates. Defensive scaffolding emerges during execution as edge cases surface and per-handler structural assertions accumulate. Per-CP forecast inflation factor: ~1.8-3.0x for backend route-health test files.**
+
+CP3-CP11 surface reports forecast tests with explicit "FLOOR" label; closure reports record actual vs forecast for ongoing pattern validation.
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -1864,7 +1988,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope** (38 deferred-by-discipline sites remain). Pattern G locked: 6 sites (UNCHANGED throughout CP12-CP15). **Step 3 CP1 COMPLETE through commit `05cd536d`**; F-AUTH-2 lazy-init refactor + F-AUTH-3 5-handler migration (consumer count 0 → 5) + lazy-noop fallback removal at press.js + manuscript-export.js. Backend test suite: 1402 → 1417 passing (+15 tests, +1 suite, 0 regressions). Press.js partial-migration: 5 of 6 handlers migrated; 4 POSTs deferred to CP10. Backed up at `05cd536d` on `claude/f-auth-1-backup`. Step 3 CP2 (Episodes cluster) kicks off next, fresh session after v2.24 lands on dev.
+- **Step 6b — TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. Pattern G locked: 6 sites (UNCHANGED throughout CP12-CP15). **Step 3 CP1 COMPLETE through commit `05cd536d`**; F-AUTH-2 lazy-init refactor + F-AUTH-3 5-handler migration + lazy-noop fallback removal. **Step 3 CP2 COMPLETE through commit `d73599f8`**; Episodes cluster — 22 files / 227 handlers / 91 new tests / 1 session / ~90 min. Mount-collision discipline established (11 routers at /api/v1/episodes); cross-mount router pattern locked; F-AUTH-5 4-site resolution + ?.id field-name expansion finding. Backend test suite: 1417 → 1508 passing (+91 tests, +1 suite, 0 regressions). Backed up at `d73599f8` on `claude/f-auth-1-backup`. Step 3 CP3 (World cluster — 4 files / ~85 handlers / WorldStudio Tier 3/Tier 4 split per Item 15) kicks off next, fresh session after v2.25 lands on dev.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
