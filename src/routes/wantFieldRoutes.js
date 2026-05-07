@@ -11,9 +11,10 @@
  */
 const express = require('express');
 const router  = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
-router.use(optionalAuth);
+router.use(requireAuth);
 
 function getModels(req) {
   return req.app.get('models') || require('../models');
@@ -39,7 +40,7 @@ router.put('/:id/want', async (req, res) => {
 });
 
 // POST /:id/unfollow-thread — generate story thread proposal
-router.post('/:id/unfollow-thread', async (req, res) => {
+router.post('/:id/unfollow-thread', aiRateLimiter, async (req, res) => {
   const models = getModels(req);
   const { CharacterEntanglement, RegistryCharacter, SocialProfile } = models;
   try {

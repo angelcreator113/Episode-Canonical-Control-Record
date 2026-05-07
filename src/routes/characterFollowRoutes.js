@@ -8,20 +8,10 @@ const {
   detectFollowTensions,
 } = require('../services/characterFollowService');
 
-let optionalAuth;
-try {
-  optionalAuth = require('../middleware/optionalAuth');
-} catch {
-  try {
-    const authModule = require('../middleware/auth');
-    optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-  } catch {
-    optionalAuth = (req, res, next) => next();
-  }
-}
+const { requireAuth } = require('../middleware/auth');
 
 // ── GET /character-follows — list all follow profiles ────────────────────────
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.CharacterFollowProfile) return res.json({ profiles: [] });
 
@@ -37,7 +27,7 @@ router.get('/', optionalAuth, async (req, res) => {
 
 // ── GET /character-follows/tensions/:charA/:charB — detect follow tensions ───
 // (Must be before /:characterKey to avoid "tensions" matching as a characterKey)
-router.get('/tensions/:charA/:charB', optionalAuth, async (req, res) => {
+router.get('/tensions/:charA/:charB', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
 
   try {
@@ -49,7 +39,7 @@ router.get('/tensions/:charA/:charB', optionalAuth, async (req, res) => {
 });
 
 // ── GET /character-follows/:characterKey — single profile detail ─────────────
-router.get('/:characterKey', optionalAuth, async (req, res) => {
+router.get('/:characterKey', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.CharacterFollowProfile) return res.status(404).json({ error: 'Follow profiles not available' });
 
@@ -81,7 +71,7 @@ router.get('/:characterKey', optionalAuth, async (req, res) => {
 });
 
 // ── POST /character-follows/generate/:characterKey — generate from DNA ───────
-router.post('/generate/:characterKey', optionalAuth, async (req, res) => {
+router.post('/generate/:characterKey', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.CharacterFollowProfile || !db.RegistryCharacter) {
     return res.status(500).json({ error: 'Required models not available' });
@@ -102,7 +92,7 @@ router.post('/generate/:characterKey', optionalAuth, async (req, res) => {
 });
 
 // ── POST /character-follows/generate-batch — generate for multiple characters ─
-router.post('/generate-batch', optionalAuth, async (req, res) => {
+router.post('/generate-batch', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.CharacterFollowProfile || !db.RegistryCharacter) {
     return res.status(500).json({ error: 'Required models not available' });
@@ -151,7 +141,7 @@ router.post('/generate-batch', optionalAuth, async (req, res) => {
 });
 
 // ── PATCH /character-follows/:characterKey — hand-tune a profile ─────────────
-router.patch('/:characterKey', optionalAuth, async (req, res) => {
+router.patch('/:characterKey', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.CharacterFollowProfile) return res.status(500).json({ error: 'Not available' });
 
@@ -183,7 +173,7 @@ router.patch('/:characterKey', optionalAuth, async (req, res) => {
 });
 
 // ── GET /character-follows/:characterKey/influence-context — story injection ──
-router.get('/:characterKey/influence-context', optionalAuth, async (req, res) => {
+router.get('/:characterKey/influence-context', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
 
   try {

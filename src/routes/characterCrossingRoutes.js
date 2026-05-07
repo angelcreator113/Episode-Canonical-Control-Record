@@ -15,9 +15,10 @@
  */
 const express = require('express');
 const router  = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
-router.use(optionalAuth);
+router.use(requireAuth);
 
 function getModels(req) {
   return req.app.get('models') || require('../models');
@@ -79,7 +80,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // POST /:id/propose-gap — Amber generates performance gap score
-router.post('/:id/propose-gap', async (req, res) => {
+router.post('/:id/propose-gap', aiRateLimiter, async (req, res) => {
   const models = getModels(req);
   const { CharacterCrossing, RegistryCharacter } = models;
   try {

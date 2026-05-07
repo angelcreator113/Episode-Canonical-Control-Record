@@ -23,13 +23,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { Op } = require('sequelize');
 
 // ── Auth middleware ──
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── Models ──
 const db = require('../models');
@@ -399,7 +394,7 @@ function formatConsciousness(character) {
 /* ═════════════════════════════════════════════
    ENDPOINT 1: WRITE A SCENE
    ═════════════════════════════════════════════ */
-router.post('/write-scene', optionalAuth, async (req, res) => {
+router.post('/write-scene', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_id, situation, mood, other_characters, length } = req.body;
     if (!character_id) return res.status(400).json({ success: false, error: 'character_id required' });
@@ -480,7 +475,7 @@ Respond with ONLY the prose. No preamble. No explanation. No quotes around it.`;
 /* ═════════════════════════════════════════════
    ENDPOINT 2: CHARACTER MONOLOGUE
    ═════════════════════════════════════════════ */
-router.post('/character-monologue', optionalAuth, async (req, res) => {
+router.post('/character-monologue', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_id, prompt, moment } = req.body;
     if (!character_id) return res.status(400).json({ success: false, error: 'character_id required' });
@@ -539,7 +534,7 @@ Respond with ONLY the monologue. No preamble. No quotes.`;
 /* ═════════════════════════════════════════════
    ENDPOINT 3: BUILD PROFILE FROM STORY DATA
    ═════════════════════════════════════════════ */
-router.post('/build-profile', optionalAuth, async (req, res) => {
+router.post('/build-profile', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_id } = req.body;
     if (!character_id) return res.status(400).json({ success: false, error: 'character_id required' });
@@ -643,7 +638,7 @@ Only include fields you have evidence for. Leave others out entirely.`;
 /* ═════════════════════════════════════════════
    ENDPOINT 4: SUGGEST GAPS
    ═════════════════════════════════════════════ */
-router.post('/suggest-gaps', optionalAuth, async (req, res) => {
+router.post('/suggest-gaps', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_id } = req.body;
     if (!character_id) return res.status(400).json({ success: false, error: 'character_id required' });
@@ -719,7 +714,7 @@ Respond with valid JSON:
 /* ═════════════════════════════════════════════
    ENDPOINT 5: WHAT HAPPENS NEXT
    ═════════════════════════════════════════════ */
-router.post('/what-happens-next', optionalAuth, async (req, res) => {
+router.post('/what-happens-next', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_id, direction } = req.body;
     if (!character_id) return res.status(400).json({ success: false, error: 'character_id required' });

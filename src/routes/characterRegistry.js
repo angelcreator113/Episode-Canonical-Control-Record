@@ -9,22 +9,8 @@
 const express = require('express');
 const router = express.Router();
 
-let optionalAuth;
-let requireAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-  requireAuth = authModule.requireAuth || authModule.authenticateToken || ((req, res, next) => next());
-} catch {
-  optionalAuth = (req, res, next) => next();
-  requireAuth = (req, res, next) => next();
-}
-let aiRateLimiter;
-try {
-  aiRateLimiter = require('../middleware/aiRateLimiter').aiRateLimiter;
-} catch {
-  aiRateLimiter = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { Op } = require('sequelize');
 const { autoCreateFeedProfile } = require('../services/feedAutoGeneration');
 let createFollowProfileFromDNA;
@@ -59,7 +45,7 @@ function getModels() {
  * GET /registries
  * List all registries with character-count + status summary
  */
-router.get('/registries', async (req, res) => {
+router.get('/registries', requireAuth, async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
@@ -82,7 +68,7 @@ router.get('/registries', async (req, res) => {
  * POST /registries
  * Create a new registry (optionally with initial characters array)
  */
-router.post('/registries', async (req, res) => {
+router.post('/registries', requireAuth, async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const { title, book_tag, description, core_rule, show_id, characters } = req.body;
@@ -137,7 +123,7 @@ router.post('/registries', async (req, res) => {
  * GET /registries/default
  * Auto-find the first registry (or create one)
  */
-router.get('/registries/default', async (req, res) => {
+router.get('/registries/default', requireAuth, async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     let registry = await CharacterRegistry.findOne({
@@ -161,7 +147,7 @@ router.get('/registries/default', async (req, res) => {
  * GET /registries/:id
  * Get single registry with all characters
  */
-router.get('/registries/:id', async (req, res) => {
+router.get('/registries/:id', requireAuth, async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const registry = await CharacterRegistry.findByPk(req.params.id, {
@@ -179,7 +165,7 @@ router.get('/registries/:id', async (req, res) => {
  * PUT /registries/:id
  * Update registry metadata
  */
-router.put('/registries/:id', async (req, res) => {
+router.put('/registries/:id', requireAuth, async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const registry = await CharacterRegistry.findByPk(req.params.id);
@@ -203,7 +189,7 @@ router.put('/registries/:id', async (req, res) => {
  * DELETE /registries/:id
  * Soft-delete registry (cascades to characters)
  */
-router.delete('/registries/:id', async (req, res) => {
+router.delete('/registries/:id', requireAuth, async (req, res) => {
   try {
     const { CharacterRegistry } = getModels();
     const registry = await CharacterRegistry.findByPk(req.params.id);
@@ -224,7 +210,7 @@ router.delete('/registries/:id', async (req, res) => {
  * POST /registries/:id/characters
  * Add a character to a registry
  */
-router.post('/registries/:id/characters', async (req, res) => {
+router.post('/registries/:id/characters', requireAuth, async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const registry = await CharacterRegistry.findByPk(req.params.id);
@@ -354,7 +340,7 @@ router.post('/registries/:id/characters', async (req, res) => {
  * Returns living_context + relationship edges for scene brief auto-populate.
  * Query params: ?registry_id=UUID (required)
  */
-router.get('/characters/scene-context/:characterKey', async (req, res) => {
+router.get('/characters/scene-context/:characterKey', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const db = require('../models');
@@ -430,7 +416,7 @@ router.get('/characters/scene-context/:characterKey', async (req, res) => {
  * GET /characters/:id
  * Get a single character by ID
  */
-router.get('/characters/:id', async (req, res) => {
+router.get('/characters/:id', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -446,7 +432,7 @@ router.get('/characters/:id', async (req, res) => {
  * GET /characters/:id/plot-threads
  * Returns plot threads stored in extra_fields.plot_threads
  */
-router.get('/characters/:id/plot-threads', async (req, res) => {
+router.get('/characters/:id/plot-threads', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -463,7 +449,7 @@ router.get('/characters/:id/plot-threads', async (req, res) => {
  * POST /characters/:id/plot-threads
  * Add a new plot thread
  */
-router.post('/characters/:id/plot-threads', async (req, res) => {
+router.post('/characters/:id/plot-threads', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -498,7 +484,7 @@ router.post('/characters/:id/plot-threads', async (req, res) => {
  * PUT /characters/:id/plot-threads/:threadId
  * Update a plot thread
  */
-router.put('/characters/:id/plot-threads/:threadId', async (req, res) => {
+router.put('/characters/:id/plot-threads/:threadId', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -530,7 +516,7 @@ router.put('/characters/:id/plot-threads/:threadId', async (req, res) => {
  * DELETE /characters/:id/plot-threads/:threadId
  * Delete a plot thread
  */
-router.delete('/characters/:id/plot-threads/:threadId', async (req, res) => {
+router.delete('/characters/:id/plot-threads/:threadId', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -554,7 +540,7 @@ router.delete('/characters/:id/plot-threads/:threadId', async (req, res) => {
  * PUT /characters/:id
  * Update any character fields
  */
-router.put('/characters/:id', express.json(), async (req, res) => {
+router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
   try {
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({ success: false, error: 'Request body is required' });
@@ -672,7 +658,7 @@ router.put('/characters/:id', express.json(), async (req, res) => {
  * DELETE /characters/:id
  * Soft-delete character
  */
-router.delete('/characters/:id', async (req, res) => {
+router.delete('/characters/:id', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -689,7 +675,7 @@ router.delete('/characters/:id', async (req, res) => {
  * POST /characters/bulk-delete
  * Bulk soft-delete multiple characters by id array
  */
-router.post('/characters/bulk-delete', async (req, res) => {
+router.post('/characters/bulk-delete', requireAuth, async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -712,7 +698,7 @@ router.post('/characters/bulk-delete', async (req, res) => {
  * POST /characters/bulk-status
  * Bulk update status for multiple characters
  */
-router.post('/characters/bulk-status', async (req, res) => {
+router.post('/characters/bulk-status', requireAuth, async (req, res) => {
   try {
     const { ids, status } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -738,7 +724,7 @@ router.post('/characters/bulk-status', async (req, res) => {
  * POST /characters/bulk-move
  * Move multiple characters to a different registry
  */
-router.post('/characters/bulk-move', async (req, res) => {
+router.post('/characters/bulk-move', requireAuth, async (req, res) => {
   try {
     const { ids, registryId } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -765,7 +751,7 @@ router.post('/characters/bulk-move', async (req, res) => {
  * POST /characters/:id/clone
  * Duplicate a character with all profile data
  */
-router.post('/characters/:id/clone', async (req, res) => {
+router.post('/characters/:id/clone', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const original = await RegistryCharacter.findByPk(req.params.id);
@@ -802,7 +788,7 @@ router.post('/characters/:id/clone', async (req, res) => {
  * POST /characters/:id/select-name
  * Select one of the name_options
  */
-router.post('/characters/:id/select-name', async (req, res) => {
+router.post('/characters/:id/select-name', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -826,7 +812,7 @@ router.post('/characters/:id/select-name', async (req, res) => {
  * POST /characters/:id/set-status
  * Accept / Decline / Finalize a character
  */
-router.post('/characters/:id/set-status', async (req, res) => {
+router.post('/characters/:id/set-status', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -858,7 +844,7 @@ router.post('/characters/:id/set-status', async (req, res) => {
  * POST /registries/:id/seed-book1
  * Seed a registry with the Book 1 characters from the mockup
  */
-router.post('/registries/:id/seed-book1', async (req, res) => {
+router.post('/registries/:id/seed-book1', requireAuth, async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const registry = await CharacterRegistry.findByPk(req.params.id);
@@ -1005,7 +991,7 @@ router.post('/registries/:id/seed-book1', async (req, res) => {
  * Backfill existing characters with skeleton JSONB sections and
  * set intimate_eligible based on role_label / extra_fields / relationships.
  */
-router.post('/registries/:id/backfill-sections', async (req, res) => {
+router.post('/registries/:id/backfill-sections', requireAuth, async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const registry = await CharacterRegistry.findByPk(req.params.id, {
@@ -1082,7 +1068,7 @@ router.post('/registries/:id/backfill-sections', async (req, res) => {
  *
  * Body: { universe_id: string }
  */
-router.post('/characters/:charId/promote-to-canon', async (req, res) => {
+router.post('/characters/:charId/promote-to-canon', requireAuth, async (req, res) => {
   try {
     const { charId } = req.params;
     const { universe_id } = req.body;
@@ -1175,7 +1161,7 @@ const portraitUpload = multer({
  * POST /characters/:id/portrait
  * Upload a portrait image for a character
  */
-router.post('/characters/:id/portrait', portraitUpload.single('portrait'), async (req, res) => {
+router.post('/characters/:id/portrait', requireAuth, portraitUpload.single('portrait'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No image uploaded' });
 
@@ -1198,7 +1184,7 @@ router.post('/characters/:id/portrait', portraitUpload.single('portrait'), async
  * DELETE /characters/:id/portrait
  * Remove portrait image
  */
-router.delete('/characters/:id/portrait', async (req, res) => {
+router.delete('/characters/:id/portrait', requireAuth, async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
@@ -1225,7 +1211,7 @@ router.delete('/characters/:id/portrait', async (req, res) => {
  * Infer and populate empty JSONB sections (career, aesthetic, voice, story,
  * evolution, living_context) from whatever data already exists on the character.
  */
-router.post('/characters/:id/backfill-sections', async (req, res) => {
+router.post('/characters/:id/backfill-sections', requireAuth, async (req, res) => {
   const { id } = req.params;
   const db = getModels();
   try {
@@ -1471,7 +1457,7 @@ ${allFieldsToFill}
  * Body: { section: 'demographics' | 'death' | 'dilemma' | 'plot_threads' | 'career_status' | ... }
  * Unlike backfill-sections, this overwrites existing data for the requested section.
  */
-router.post('/characters/:id/generate-section', async (req, res) => {
+router.post('/characters/:id/generate-section', requireAuth, async (req, res) => {
   const { id } = req.params;
   const { section } = req.body;
   const db = getModels();
@@ -1721,7 +1707,7 @@ ${config.schema}`,
  * POST /registries/:registryId/backfill-all
  * Bulk backfill: iterate every character in a registry and fill empty JSONB sections.
  */
-router.post('/registries/:registryId/backfill-all', async (req, res) => {
+router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res) => {
   const { registryId } = req.params;
   const db = getModels();
   try {
@@ -2035,7 +2021,7 @@ Return ONLY a JSON object matching this structure (include ALL 14 top-level dime
  * Accept free text from the writer, parse it into deep_profile dimensions via Claude,
  * return proposed additions for one-click accept.
  */
-router.post('/characters/:id/deep-profile/writer-input', async (req, res) => {
+router.post('/characters/:id/deep-profile/writer-input', requireAuth, async (req, res) => {
   const { id } = req.params;
   const { text } = req.body;
 
@@ -2097,7 +2083,7 @@ Parse the writer's text into the 14 deep_profile dimensions. Return ONLY a JSON 
  * DEPRECATED: Legacy 14-dimension system. See /api/v1/character-depth for canonical 10-dimension engine.
  * Merge proposed deep_profile additions into the character's existing deep_profile.
  */
-router.post('/characters/:id/deep-profile/accept', async (req, res) => {
+router.post('/characters/:id/deep-profile/accept', requireAuth, async (req, res) => {
   const { id } = req.params;
   const { additions } = req.body;
 
@@ -2152,7 +2138,7 @@ router.post('/characters/:id/deep-profile/accept', async (req, res) => {
  * NOTE: This bulk endpoint writes directly to DB for operational convenience.
  * Body: { ids: [1,2,3] }
  */
-router.post('/characters/bulk-deep-profile', async (req, res) => {
+router.post('/characters/bulk-deep-profile', requireAuth, async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
@@ -2236,7 +2222,7 @@ Return ONLY a JSON object with 14 dimensions: life_stage, the_body, class_and_mo
  * POST /characters/:id/writer-paragraph/generate
  * Generate a writer-friendly narrative paragraph from the character's deep_profile + registry data.
  */
-router.post('/characters/:id/writer-paragraph/generate', async (req, res) => {
+router.post('/characters/:id/writer-paragraph/generate', requireAuth, async (req, res) => {
   const { id } = req.params;
   const db = getModels();
   try {
@@ -2299,7 +2285,7 @@ Write a single, flowing paragraph (200–400 words) that captures who this perso
  * Generate writer paragraphs for multiple characters sequentially.
  * Body: { ids: [1,2,3] }
  */
-router.post('/characters/bulk-writer-paragraph', async (req, res) => {
+router.post('/characters/bulk-writer-paragraph', requireAuth, async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
@@ -2360,7 +2346,7 @@ Write a single flowing paragraph (200–400 words) capturing who this person IS 
 });
 
 // POST /characters/:id/sync-social — Sync social intelligence from linked feed profile
-router.post('/characters/:id/sync-social', optionalAuth, async (req, res) => {
+router.post('/characters/:id/sync-social', requireAuth, async (req, res) => {
   try {
     const models = req.app.get('models') || require('../models');
     const character = await models.RegistryCharacter.findByPk(req.params.id);
@@ -2383,7 +2369,7 @@ router.post('/characters/:id/sync-social', optionalAuth, async (req, res) => {
 });
 
 // POST /characters/sync-all-social — Bulk sync all linked profiles
-router.post('/characters/sync-all-social', optionalAuth, async (req, res) => {
+router.post('/characters/sync-all-social', requireAuth, async (req, res) => {
   try {
     const models = req.app.get('models') || require('../models');
     const registrySync = require('../services/registrySyncService');

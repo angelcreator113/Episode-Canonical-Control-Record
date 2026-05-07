@@ -2,47 +2,25 @@ const express = require('express');
 const router = express.Router();
 const characterClipController = require('../controllers/characterClipController');
 const { asyncHandler } = require('../middleware/errorHandler');
-
-console.log('🟣 CHARACTER CLIP ROUTES FILE LOADING... [TIMESTAMP:', new Date().toISOString(), ']');
-console.log('🆕 CHARACTER CLIP ROUTES VERSION: Phase 2.5 - Animatic System');
+const { requireAuth } = require('../middleware/auth');
 
 /**
  * Character Clip Routes (Phase 2.5 - Animatic System)
  * Video clips for each character in each scene
  * Enables per-character editing workflow
- * 
+ *
  * Base paths:
  *   - /api/v1/scenes/:sceneId/character-clips (scene-scoped)
  *   - /api/v1/character-clips/:id (single clip operations)
- *
- * ✅ AUTH TEMPORARILY DISABLED FOR TESTING
  */
 
-/**
- * Scene-Scoped Character Clip Routes
- * Mounted at /api/v1/scenes/:sceneId/character-clips
- */
+// Scene-Scoped Character Clip Routes
+router.get('/scenes/:sceneId/character-clips', requireAuth, asyncHandler(characterClipController.listCharacterClips));
+router.post('/scenes/:sceneId/character-clips', requireAuth, asyncHandler(characterClipController.createCharacterClip));
 
-// GET /api/v1/scenes/:sceneId/character-clips - List all character clips for scene
-router.get('/scenes/:sceneId/character-clips', asyncHandler(characterClipController.listCharacterClips));
-
-// POST /api/v1/scenes/:sceneId/character-clips - Create new character clip
-router.post('/scenes/:sceneId/character-clips', asyncHandler(characterClipController.createCharacterClip));
-
-/**
- * Single Character Clip Routes
- * Mounted at /api/v1/character-clips/:id
- */
-
-// GET /api/v1/character-clips/:id - Get single character clip
-router.get('/character-clips/:id', asyncHandler(characterClipController.getCharacterClip));
-
-// PATCH /api/v1/character-clips/:id - Update character clip
-router.patch('/character-clips/:id', asyncHandler(characterClipController.updateCharacterClip));
-
-// DELETE /api/v1/character-clips/:id - Delete character clip
-router.delete('/character-clips/:id', asyncHandler(characterClipController.deleteCharacterClip));
-
-console.log('✅ CHARACTER CLIP ROUTES LOADED');
+// Single Character Clip Routes
+router.get('/character-clips/:id', requireAuth, asyncHandler(characterClipController.getCharacterClip));
+router.patch('/character-clips/:id', requireAuth, asyncHandler(characterClipController.updateCharacterClip));
+router.delete('/character-clips/:id', requireAuth, asyncHandler(characterClipController.deleteCharacterClip));
 
 module.exports = router;
