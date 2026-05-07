@@ -14,13 +14,7 @@
 const express = require('express');
 const router = express.Router();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { return null; }
@@ -37,7 +31,7 @@ try { decisionLoggerModule = require('../utils/decisionLogger'); } catch (e) { d
 // GET /api/v1/world/:showId/history
 // ═══════════════════════════════════════════
 
-router.get('/world/:showId/history', optionalAuth, async (req, res) => {
+router.get('/world/:showId/history', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { limit = 50 } = req.query;
@@ -69,7 +63,7 @@ router.get('/world/:showId/history', optionalAuth, async (req, res) => {
 // GET /api/v1/world/:showId/decisions
 // ═══════════════════════════════════════════
 
-router.get('/world/:showId/decisions', optionalAuth, async (req, res) => {
+router.get('/world/:showId/decisions', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { limit = 50, type } = req.query;
@@ -104,7 +98,7 @@ router.get('/world/:showId/decisions', optionalAuth, async (req, res) => {
 // GET /api/v1/world/:showId/stats
 // ═══════════════════════════════════════════
 
-router.get('/world/:showId/stats', optionalAuth, async (req, res) => {
+router.get('/world/:showId/stats', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const models = await getModels();
@@ -165,7 +159,7 @@ router.get('/world/:showId/stats', optionalAuth, async (req, res) => {
 // POST /api/v1/world/:showId/browse-pool
 // ═══════════════════════════════════════════
 
-router.post('/world/:showId/browse-pool', optionalAuth, async (req, res) => {
+router.post('/world/:showId/browse-pool', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const {
