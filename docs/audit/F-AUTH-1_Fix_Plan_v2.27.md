@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.26 — Step 3 CP3 (World cluster — 4 files / 120 handlers / 42 new tests / 1 session / ~75 min) approved at commit `61f8a658`. Mixed Tier 1+3+4 within single file (NEW v2.26 §9.11 architectural primitive): worldStudio.js — 1 Tier 3 + 18 Tier 4 GETs + 34 Tier 1 mutations. Read vs write disposition discipline (NEW v2.26 §9.11 + §5.2 amendment): req.user-consumption matrix is read-only adjudication; mutations default Tier 1 unless domain owner explicit adjudication. Track 7 in-cycle coordination requirement (NEW v2.26 §9.11): when backend Tier 1 lands AND frontend correspondent uses raw fetch, Track 7 mini-CP must follow same backup-push cycle. Anomaly 5 amendment (v2.25 §5.5 supersession): worldTemperatureRoutes.js has 2 handlers (NOT 0); custom router var hid them from standard grep. WorldEvents reference model uniform state: 4 AI POSTs all requireAuth + aiRateLimiter post-CP3 (was 2 + 2 partial). Surface-correction graduates to 8 cumulative data points across CP15 + CP1 + CP2 + CP3. Tests-FLOOR methodology amendment: aggregate-counter methodology valid alternative to per-handler-implies-1-test (CP3 first BELOW-FLOOR: 120 forecast, 42 actual). Step 3 pacing third data point: CP3 75min/on-forecast. Backend test suite: 1508 → 1550 passing (+42, 0 regressions). Track 7 mini-CP for WorldStudio.jsx ~11 mutation sites is next (closes CP3 regression window); then Step 3 CP4 (Scene cluster).
+**Document version:** v2.27 — Track 7 mini-CP (WorldStudio.jsx 15 mutation sites — apiClient migration / 32 new tests / 1 session / ~45 min) approved at commit `3e447814`. CP3 regression window CLOSED — backend Tier 1 + Tier 3 mutations now properly authed via apiClient Bearer token interceptor. First Track 7 in-cycle execution since v2.0 Option C lock. Tier 3 → apiClient frontend migration discipline (NEW v2.27 §9.11 lock; extension of v2.26 §5.23): backend Tier 1 OR Tier 3 + frontend raw fetch triggers Track 7 mini-CP; Tier 4 alone does NOT trigger. Per-site structural assertion methodology (NEW v2.27 §5.26 amendment): third methodology variant alongside per-handler-FLOOR and aggregate-counter; ~1.0x at-forecast accuracy for in-place frontend migrations. Frontend pacing first data point: 15 sites / 45 min = ~3 min/site for uniform Pattern A. Surface-correction graduates to 9 cumulative data points (first frontend-phase correction: apiClient local name + per-category site count vs CP3 closing report §7 estimate). Track 7 mini-CP first-execution discipline established (NEW v2.27 §9.11 lock; template for future Track 7 mini-CPs at CP6/CP8/CP10 if backend Tier 1 OR Tier 3 + raw fetch surfaces). PE-9 filed (3 path-bug WorldStudio.jsx sites at lines 1099/1118/1704). Frontend test suite: 813 → 845 passing (+32, 0 regressions). Step 3 CP4 (Scene cluster — 8 files / ~140 handlers / 2 sessions per v2.23 §5.4) is next.
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** **TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 + CP3 COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. Pattern G locked: 6 sites (UNCHANGED). **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**; World cluster — 4 files / 120 handlers / 42 new tests. First mixed Tier 1+3+4 within single file (worldStudio.js); read vs write disposition discipline established; Track 7 in-cycle coordination requirement locked; Anomaly 5 amendment locked; WorldEvents reference model uniform (4 AI POSTs all requireAuth + aiRateLimiter). Backend test suite: 1508 → 1550 passing (+42 tests, +1 suite, 0 regressions). Backed up at `61f8a658` on `claude/f-auth-1-backup`. Track 7 mini-CP for WorldStudio.jsx ~11 mutation sites kicks off next (closes CP3 regression window); then Step 3 CP4 (Scene cluster).
+**Status:** **TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 + CP3 + TRACK 7 MINI-CP COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. Pattern G locked: 6 sites (UNCHANGED). **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**; WorldStudio.jsx 15 mutation sites migrated to apiClient (14 canonical + 1 Tier 3 per D2) + 32 new structural assertions. CP3 regression window CLOSED — backend Tier 1 + Tier 3 mutations now properly authed via apiClient Bearer token interceptor. Tier 3 → apiClient frontend migration discipline established (NEW v2.27 §9.11 lock; extension of v2.26 §5.23). Per-site structural assertion methodology established (NEW v2.27 §5.26 amendment; ~1.0x at-forecast). Frontend pacing first data point (15 sites / 45 min). Frontend test suite: 813 → 845 passing (+32 tests, 0 regressions). Backed up at `3e447814` on `claude/f-auth-1-backup`. Step 3 CP4 (Scene cluster — 8 files / ~140 handlers / 2 sessions per v2.23 §5.4) kicks off next, fresh session after v2.27 lands on dev.
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -1700,6 +1700,112 @@ Cross-CP correspondences:
 - CP3 closes the inconsistency at the reference model itself: worldEvents 4 AI POSTs uniformly correct
 - CP4-CP10 surface reports identify any AI-cost POSTs in CP zone files; apply the worldEvents post-CP3 uniform reference model (requireAuth + aiRateLimiter)
 
+##### §5.28 — Track 7 mini-CP architectural findings (LOCKED v2.27, COMPLETE — first Track 7 in-cycle execution)
+
+Track 7 mini-CP completed at commit `3e447814` (single squashed commit, 2 file-boundary WIPs collapsed; single session, ~45 min actual vs 60-100 min forecast — **on or under forecast**). **First Track 7 in-cycle execution since v2.0 Option C lock**. CP3 regression window CLOSED — backend 34 mutation handlers in worldStudio.js Tier 1 promoted at CP3; WorldStudio.jsx 15 corresponding mutation sites migrated to apiClient (Bearer token via interceptor) at Track 7 mini-CP. Pattern A canonical migration per Track 6 CP2-CP15 precedent applied uniformly.
+
+WP1 15 site Pattern A migration: 14 canonical mutations + 1 Tier 3 site (M1 line ~745 per D2 lock); WP2 32 new structural assertions extending WorldStudio.test.jsx (existing 3 Track 4 helper tests preserved; 35 tests in file total). Frontend test suite: 813 → 845 passing (+32 tests, 0 regressions, 0 failed). Backed up at `3e447814` on `claude/f-auth-1-backup`.
+
+Three adjudication decisions executed cleanly:
+
+- **D1 (3 path-bug sites at lines 1099, 1118, 1704):** SKIPPED + filed PE-9 in §9.12. Pre-existing /api/world/... (no /api/v1/) bug; 404 by default; not part of CP3 regression window. Bug-fix in future polish CP.
+- **D2 (Tier 3 site M1 at line ~745):** MIGRATED to apiClient. Backend Tier 3 at worldStudio.js:2483 consumes req.user?.id for ownership tagging when authed. apiClient sends Bearer token when user has valid token; backend tags ownership properly. Anonymous + Cognito-infra-failure behaviors preserved per Tier 3 contract.
+- **D3 (4 character-depth sites at lines 238, 255, 266, 278):** STAYED RAW FETCH. Out of Track 7 mini-CP scope (different backend cluster — Character cluster, CP6 zone). When CP6 lands, another Track 7 mini-CP may be needed for character-depth frontend correspondences depending on backend disposition decisions there.
+
+All 3 verification greps pass: (1) fetch( count in WorldStudio.jsx 29 → 14 (-15 = migration count; remaining 14 = 7 Tier 4 GET + 4 character-depth + 3 path-bug); (2) apiClient.(post|put|delete)( count 1 → 16 (+15 = migration count; baseline 1 from pre-existing Track 4 helper); (3) apiClient import in WorldStudio.jsx 1 → 1 (apiClient was already imported via Track 4; no new import needed — surface §6 amendment caught this).
+
+- Sentinel sub-grep: 0 /world/* mutation fetches remaining (zero `fetch(\`${API}/world/...\`, { method: 'POST|PUT|DELETE' })` patterns in WorldStudio.jsx).
+- Pattern A applicability per-site: all 15 migrated sites used canonical Pattern A. No Pattern G streaming exceptions surfaced (consistent with v2.22 Pattern G locked-6-sites list excluding WorldStudio.jsx). Pattern A variations handled: no-body POSTs (single-arg apiClient.post(url)); fire-and-forget batch (.catch(() => {}) preserved); status-code reporting (e.response?.status used in error message).
+- Frontend test count delta forecast vs actual: 15-30 forecast (per-site methodology); 32 actual = 1.07x at-forecast. First per-site methodology data point — see §5.30 amendment.
+- No new Path E candidates surfaced during execution. PE-9 already filed at surface adjudication.
+
+##### §5.29 — Tier 3 → apiClient frontend migration discipline (NEW v2.27 §9.11 lock + extension of v2.26 §5.23)
+
+v2.26 §5.23 locked Track 7 in-cycle coordination requirement: *"when backend Tier 1 disposition lands AND frontend correspondent uses raw fetch, Track 7 mini-CP must follow IMMEDIATELY after the backend backup-push."* Track 7 mini-CP D2 adjudication revealed an extension: **Tier 3 backend disposition also requires frontend apiClient migration** when frontend correspondent uses raw fetch.
+
+Rationale: Tier 3 backend handlers consume req.user?.id when authed (per Tier 3 contract: optionalAuth + degradeOnInfraFailure). If frontend stays raw fetch (no Bearer token), backend always treats as anonymous regardless of whether user has a valid token. Ownership tagging breaks; F-AUTH-5 silent-null fallback chains kick in. Migrating frontend to apiClient ensures Bearer token reaches backend when authed; backend Tier 3 contract still gracefully handles anonymous (no token in localStorage → apiClient sends without auth header → backend req.user undefined → ownerId fallback to req.ip per defense-in-depth).
+
+**Tier 3 → apiClient frontend migration discipline (LOCKED v2.27 §9.11). When backend disposition shift is Tier 1 OR Tier 3 AND frontend correspondent uses raw fetch, Track 7 mini-CP for the frontend correspondent must follow IMMEDIATELY after the backend backup-push (separate commit, same backup-push cycle). Tier 4 alone does NOT trigger Track 7 mini-CP (frontend stays raw fetch — Pattern E equivalent; backend tolerates anonymous AND does not consume req.user).**
+
+Tier-trigger matrix (post-v2.27 lock):
+
+- Backend Tier 1 (requireAuth) + frontend raw fetch → Track 7 mini-CP REQUIRED (frontend would 401 without Bearer token)
+- Backend Tier 2 (requireAuth + authorize) + frontend raw fetch → Track 7 mini-CP REQUIRED (same as Tier 1 from frontend perspective)
+- Backend Tier 3 (optionalAuth + degradeOnInfraFailure) + frontend raw fetch → Track 7 mini-CP REQUIRED for proper ownership tagging (NEW v2.27 lock)
+- Backend Tier 4 (plain optionalAuth + PUBLIC) + frontend raw fetch → Track 7 mini-CP NOT REQUIRED (Pattern E equivalent; backend tolerates anonymous AND does not consume req.user)
+- Backend Tier 5 (env-gated mount) + frontend raw fetch → context-dependent (likely no production frontend correspondence)
+
+Future CPs apply the matrix at surface: per-CP frontend-correspondent audit categorizes raw fetch sites by backend tier; Track 7 mini-CP scope = sum of Tier 1 + Tier 2 + Tier 3 frontend correspondences in that CP zone.
+
+##### §5.30 — Per-site structural assertion methodology (NEW v2.27 §5.26 amendment — third methodology variant)
+
+v2.26 §5.26 locked tests-FLOOR methodology amendment with two variants: per-handler-implies-1-test (FLOOR pattern, 1.8-3.0x inflation) and aggregate-counter (deflation pattern, 0.3-0.4x). Track 7 mini-CP introduces **a third methodology variant: per-site structural assertion**. WP2 produced 32 tests for 15 mutation sites (forecast 15-30) = 1.07x at-forecast accuracy.
+
+**Per-site structural assertion methodology (LOCKED v2.27 §5.26 amendment). Source-text structural assertions verify migration via grep-style checks against source file content (e.g., "assert apiClient.post('/api/v1/world/scenes/generate', ...) appears in source"). Appropriate when migration is in-place (handlers stay component-internal; not refactored to Pattern D module-scope helpers). Test methodology variant choice depends on file scope + future test maintenance burden.**
+
+Methodology decision tree (post-v2.27):
+
+- Pattern D refactor + behavioral tests: when migration is large enough to justify refactoring component-internal logic into module-scope helpers (Track 6 CP13 precedent — file-level effort)
+- In-place migration + structural assertions (per-site): when migration is small/contained and refactor cost exceeds benefit (Track 7 mini-CP first instance; ~1.0x at-forecast accuracy)
+- Per-handler-implies-1-test (FLOOR): when migration is per-handler and assertions naturally distribute across handler boundaries (CP1 + CP2 precedents; 1.8-3.0x inflation)
+- Aggregate-counter: when migration is uniform and assertions aggregate naturally (CP3 precedent; 0.3-0.4x deflation; reduces test count without losing coverage)
+
+Updated forecast accuracy table:
+
+- Per-handler methodology: 1.8-3.0x inflation factor confirmed at CP1 (2.1x) + CP2 (1.8x) + Track 6 CP12-CP15 (1.5x average)
+- Aggregate-counter methodology: 0.3-0.4x deflation factor at CP3 (0.35x) — single data point
+- Per-site structural assertion methodology: ~1.0x at-forecast at Track 7 mini-CP (1.07x) — single data point
+
+CP4-CP11 + future Track 7 mini-CPs choose methodology based on migration shape; closure reports record actual vs forecast for ongoing pattern validation across all three methodologies.
+
+##### §5.31 — Frontend pacing first data point (NEW v2.27 amendment to §5.25 Step 3 pacing model)
+
+Step 3 pacing model in v2.26 §5.25 captured three backend data points (CP1 + CP2 + CP3). Track 7 mini-CP introduces **the first frontend phase data point** to the cadence-tracking framework.
+
+Track 7 mini-CP: 1 session, ~45 min actual vs 60-100 min forecast = on or under forecast. 15 sites in 45 min = **~3 min/site for uniform Pattern A migration**.
+
+Cost-per-unit comparison across Step 3 phases (four data points):
+
+- CP1 (backend, architectural): ~5 handlers in 75 min = ~15 min/handler (lazy-init refactor + lazy-noop removal + 4-decision adjudication absorbed disproportionately)
+- CP2 (backend, mechanical): 227 handlers in 90 min = ~24 sec/handler (single-line middleware swap dominance)
+- CP3 (backend, mixed-disposition): 120 handlers in 75 min = ~38 sec/handler (per-handler tier classification + group PUBLIC comments + 5 D-decisions)
+- Track 7 mini-CP (frontend, uniform Pattern A): 15 sites in 45 min = ~3 min/site (apiClient.method() swap + literal /api/v1 path migration + r.data response shape)
+
+Frontend cadence characteristic (Track 7 mini-CP first data point):
+
+- Frontend Pattern A migration ~3 min/site is faster than backend mechanical sweep on a per-unit basis (CP2 backend ~24 sec/handler at scale would suggest equivalence, but small-scope frontend bypasses CP2-style sed bulk efficiency).
+- Pattern A uniform substitution + apiClient interface stable target = predictable cadence. Future Track 7 mini-CPs (CP6/CP8/CP10 candidates) likely fit similar ~3-5 min/site range for non-Pattern-G sites.
+- Test scaffolding overhead absorbed in single-session forecast: WP2 ~20 min for 32 tests at per-site methodology = ~38 sec/test creation, comparable to per-handler test creation cost at backend CPs.
+
+Total Step 3 + Track 7 estimate update: CP1 + CP2 + CP3 = 3 sessions actual + Track 7 mini-CP 1 session = 4 sessions used. ~8 backend CPs remaining (CP4-CP11) + estimated 1-3 Track 7 mini-CPs = ~9-11 sessions remaining at conservative bias. Total Step 3 + Track 7 trajectory: ~13-15 sessions estimate vs original v2.23 §5.4 lock of ~20-22 sessions = **~30-40% under original forecast** at this trajectory.
+
+##### §5.32 — Track 7 mini-CP first-execution discipline (NEW v2.27 §9.11 lock — template for future Track 7 mini-CPs)
+
+Track 7 mini-CP at WorldStudio.jsx is the first Track 7 in-cycle execution. The discipline established here is the template for any future Track 7 mini-CPs that surface during CP4-CP11 (CP6/CP8/CP10 most likely candidates given Character/Social-feeds/Admin-internal mount complexity).
+
+**Track 7 mini-CP first-execution discipline (LOCKED v2.27 §9.11). Per-site Pattern A applicability check at surface; per-site enumeration with backend handler correspondence; tier-trigger matrix applied (Tier 1 OR Tier 3 + raw fetch = migrate; Tier 4 + raw fetch = Pattern E equivalent stay raw fetch); per-site structural assertion methodology for in-place migrations; backup-push cycle in same session as backend CP backup-push; v2.x update captures closure.**
+
+Pre-execution checklist for future Track 7 mini-CPs:
+
+- Backend CP closure surfaces frontend regression window scope (per-CP closing report counts raw fetch correspondences in CP zone files)
+- Per-site enumeration verifies backend handler correspondence + tier classification at surface
+- Tier-trigger matrix categorizes per-site disposition (migrate vs stay raw fetch)
+- Path E candidates surfaced incidentally are filed in §9.12 (do NOT fix during mini-CP)
+- Out-of-scope sites (different backend cluster) noted but untouched
+- Pattern G streaming check (none in Track 7 mini-CP at WorldStudio.jsx; future Track 7 mini-CPs verify)
+- apiClient interface verification (local name, available methods, auth header injection mechanism)
+- Frontend test baseline capture before WP1 begins
+- Verification grep template (3 greps minimum: raw fetch count, apiClient method count, apiClient import presence)
+- Single-session forecast with WIP-and-resume protocol available
+- Backup-push immediately following Evoni approval (same-turn per §9.13 Rule 2)
+
+Future Track 7 mini-CP candidates (per v2.23 §5.4 + v2.27 §5.29 tier-trigger matrix):
+
+- CP4 Scene cluster: TBD at CP4 surface (potential mixed-tier disposition; surface verifies frontend correspondence)
+- CP6 Character cluster: likely candidate (Character cluster mount complexity per v2.25 §5.13; CharacterDepth + WorldStudio.jsx character-depth sites at lines 238/255/266/278 may need migration depending on CP6 backend disposition)
+- CP8 Social-feeds cluster: likely candidate (multiple frontend pages — SocialProfile.jsx, SocialFeed.jsx, etc.; multiple raw fetch sites likely)
+- CP10 Admin-internal cluster: possible candidate depending on admin-tooling frontend correspondence
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -2116,7 +2222,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 + CP3 COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. Pattern G locked: 6 sites (UNCHANGED throughout CP12-CP15). **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**; World cluster — 4 files / 120 handlers / 42 new tests / 1 session / ~75 min. First mixed Tier 1+3+4 within single file (worldStudio.js): 1 Tier 3 + 18 Tier 4 GETs + 34 Tier 1 mutations. Read vs write disposition discipline (NEW v2.26 §9.11 lock + §5.2 amendment) established. Track 7 in-cycle coordination requirement (NEW v2.26 §9.11 lock) — backend Tier 1 + frontend raw fetch correspondence triggers Track 7 mini-CP same backup-push cycle. WorldEvents reference model uniform: 4 AI POSTs all requireAuth + aiRateLimiter post-CP3. Anomaly 5 amendment locked (worldTemperatureRoutes 2 handlers, NOT 0). Backend test suite: 1508 → 1550 passing (+42 tests, +1 suite, 0 regressions). Backed up at `61f8a658` on `claude/f-auth-1-backup`. Track 7 mini-CP for WorldStudio.jsx ~11 mutation sites kicks off next (closes CP3 regression window); then Step 3 CP4 (Scene cluster).
+- **Step 6b — TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 + CP3 + TRACK 7 MINI-CP COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. Pattern G locked: 6 sites (UNCHANGED throughout CP12-CP15). **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**; WorldStudio.jsx 15 mutation sites migrated to apiClient (14 canonical + 1 Tier 3 per D2) + 32 new structural assertions. CP3 regression window CLOSED — backend Tier 1 + Tier 3 mutations now properly authed via apiClient Bearer token interceptor. Tier 3 → apiClient frontend migration discipline established (NEW v2.27 §9.11 lock; extension of v2.26 §5.23). Per-site structural assertion methodology established (NEW v2.27 §5.26 amendment; ~1.0x at-forecast). Frontend pacing first data point (15 sites / 45 min). Frontend test suite: 813 → 845 passing (+32 tests, 0 regressions). Backed up at `3e447814` on `claude/f-auth-1-backup`. Step 3 CP4 (Scene cluster — 8 files / ~140 handlers / 2 sessions per v2.23 §5.4) kicks off next, fresh session after v2.27 lands on dev.
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
