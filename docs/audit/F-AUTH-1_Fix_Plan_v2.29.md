@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.28 — Step 3 CP4 (Scene cluster — 6 files / 126 handlers / 61 new tests / 1 session / ~80 min) approved at commit `5c13531e`. Three architectural firsts in single CP: (1) first WP1 NO-OP CP (zero lazy-noop in zone — v2.24 §5.8 universal discipline holds at zero-removal state); (2) first NO-Track-7-coordination CP (frontend ideal state — service modules using apiClient cover all Scene cluster API calls; 0 raw fetch in frontend pages); (3) first pure Tier 1 sweep CP (no Tier 2/3/4/5 candidates surface). Mount-collision third topology variant: distinct-mounts (NEW v2.28 §5.13 amendment; CP2-shape + CP3-shape + distinct-mounts cumulative). AI POST reference model second application instance: ADD shape (CP4 D1) vs PROMOTE shape (CP3 D4); 13 handlers across sceneProposeRoute + sceneSetRoutes ADDed requireAuth + aiRateLimiter (NEW v2.28 §5.27 amendment). Frontend ideal state characteristics (NEW v2.28 §5.29 amendment): service-module pattern as architectural target; CP5-CP11 surface checks for this state. Surface-discovery methodology refinement (NEW v2.28 §5.30 amendment + PE-12): per-handler-block analysis preferred over fixed-line-window for bare-handler identification. Surface-correction graduates to 14 cumulative data points across CP15 + CP1 + CP2 + CP3 + Track 7 mini-CP + CP4. Step 3 pacing fourth backend data point: CP4 80min/on-forecast (CP1 75 / CP2 90 / CP3 75 / CP4 80 = ~80min ±15min mean). Backend test suite: 1550 → 1611 passing (+61, 0 regressions). Step 3 CP5 (next cluster per v2.23 §5.4) is next — NO Track 7 coordination needed (CP4 closes cleanly).
+**Document version:** v2.29 — Step 3 CP5 (Wardrobe cluster — 7 files / 86 handlers / 69 new tests / 1 session / ~95 min) approved at commit `1a2d433d`. Item 16 closure ESCALATED to requireAuth (architectural improvement on original v1.x lock which specified `authenticate`; NEW v2.29 §5.5 amendment). outfitSets §4.1(b) full audit Sweep b closure (combined with CP2 D5 episodes.js half; NEW v2.29 §4 amendment). Frontend ideal state confirmed at 2nd consecutive CP (NEW v2.29 §5.36 amendment — pattern reliable across multiple production-tooling clusters). Pure Tier 1 sweep at 2nd consecutive CP (NEW v2.29 §5.22 amendment — default disposition for creator-owned production tooling). AI POST reference model third application instance — ADD shape (12 handlers across 5 files); cumulative 29 handlers across 11 files at uniform requireAuth + aiRateLimiter pattern (NEW v2.29 §5.27 amendment). Surface-correction graduates to 19 cumulative data points across CP15 + CP1 + CP2 + CP3 + Track 7 mini-CP + CP4 + CP5. Step 3 pacing fifth backend data point: CP5 95min/on-forecast (CP1 75 / CP2 90 / CP3 75 / CP4 80 / CP5 95 = ~83min ±15min mean). MAJOR FINDINGS surfaced during CP5 closure — NOT in F-AUTH-1 scope, filed for separate work streams: F-AUTH-X1 (parallel HS256 JWT track at routes/auth.js + tokenService.js + jwtAuth.js + frontend localStorage; F-AUTH-1 requireAuth Cognito RS256 verifier rejects HS256 tokens; manifest as dev-environment login redirect-loop; architectural option B dual-verifier recommended short-term, option A Cognito frontend migration long-term). F-SOCKET-1 (P0 hardcoded JWT_SECRET fallback `your-secret-key` at SocketService.js:19; production exposure if env var unset; same-day hotfix orthogonal to F-AUTH-1). Audit-gap callout at v2.27 §5.29 + v2.28 §5.36 (frontend correspondence audits verified Bearer attachment but not token format compatibility). Backend test suite: 1611 → 1680 passing (+69, 0 regressions). Step 3 CP6 (Character cluster + universe Q13 per v2.23 §5.4) is next — NO Track 7 coordination needed (CP5 closes cleanly).
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** **TRACK 6 CLOSED + STEP 3 CP1+CP2+CP3+CP4 + TRACK 7 MINI-CP COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**. **Step 3 CP4 COMPLETE through commit `5c13531e`**; Scene cluster — 6 files / 126 handlers / 61 new tests. Three architectural firsts: first WP1 NO-OP CP, first NO-Track-7-coordination CP, first pure Tier 1 sweep CP. 13 AI POSTs ADDed requireAuth + aiRateLimiter (second worldEvents reference model application instance — ADD shape vs CP3 D4 PROMOTE shape). Mount-collision distinct-mounts third topology variant locked. Surface-correction graduates to 14 cumulative data points. Backend test suite: 1550 → 1611 passing (+61 tests, +1 suite, 0 regressions). Backed up at `5c13531e` on `claude/f-auth-1-backup`. Step 3 CP5 (next cluster per v2.23 §5.4) kicks off next, fresh session after v2.28 lands on dev. NO Track 7 mini-CP coordination needed at CP4 (frontend ideal state).
+**Status:** **TRACK 6 CLOSED + STEP 3 CP1+CP2+CP3+CP4+CP5 + TRACK 7 MINI-CP COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**. **Step 3 CP4 COMPLETE through commit `5c13531e`**. **Step 3 CP5 COMPLETE through commit `1a2d433d`**; Wardrobe cluster — 7 files / 86 handlers / 69 new tests. 2nd consecutive pure Tier 1 sweep + 2nd consecutive NO-Track-7-coordination CP. Item 16 closure ESCALATED to requireAuth. outfitSets §4.1(b) FULL audit Sweep b closure (combined with CP2 D5). 12 AI POSTs ADDed requireAuth + aiRateLimiter (third reference-model application — ADD shape; cumulative 29 across 11 files at uniform pattern). Surface-correction graduates to 19 cumulative data points. Backend test suite: 1611 → 1680 passing (+69 tests, +1 suite, 0 regressions). MAJOR FINDINGS surfaced during CP5 closure (NOT in F-AUTH-1 scope, separate work streams): F-AUTH-X1 + F-SOCKET-1. Backed up at `1a2d433d` on `claude/f-auth-1-backup`. Step 3 CP6 (Character cluster + universe Q13 per v2.23 §5.4) kicks off next, fresh session after v2.29 lands on dev. NO Track 7 mini-CP coordination needed at CP5 (frontend ideal state — 2nd consecutive).
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -1937,6 +1937,203 @@ Backend cost-per-handler analysis (post-v2.28):
 - Mixed-disposition CPs (CP3 shape): ~38 sec/handler (per-handler tier classification + adjudication overhead)
 - Pure Tier 1 + AI POST overlay CPs (CP4 shape): ~38 sec/handler (uniform sweep + 13 AI POST overlay)
 
+##### §5.40 — Step 3 CP5 architectural findings (LOCKED v2.29, COMPLETE — Wardrobe cluster, Item 16 escalation + audit Sweep b full closure)
+
+CP5 completed at commit `1a2d433d` (single squashed commit, 8 file-boundary WIPs collapsed; single session, ~95 min actual vs forecast 100-120 min — **on or under forecast**). Cleanest mid-scale CP closure in Step 3 backend phase: 7 files / 86 handlers / 69 new tests / 0 regressions / pure Tier 1 disposition (2nd consecutive after CP4). WP1 lazy-noop removal at 3 files (back to non-NO-OP after CP4 first WP1 NO-OP); WP2 Tier 1 promotion sweep at 74 handlers; WP3 AI POST reference model application at 12 handlers (5 files); WP4 aggregate-counter test methodology (69 tests passing — 1.06x at-forecast, slightly above forecast 55-65). Backend test suite: 1611 → 1680 passing (+69 tests, +1 suite, 0 regressions, 0 failed). Frontend unchanged at 845 (CP5 backend-only sweep; 2nd consecutive NO-Track-7-coordination CP). Backed up at `1a2d433d` on `claude/f-auth-1-backup`.
+
+Two architectural lock items closed at CP5:
+
+- **Item 16 closure ESCALATED:** original v1.x Item 16 lock specified replacement of wardrobeLibrary.js:18 env-conditional with `authenticate`; CP5 D2 escalates to `requireAuth` per Step 3 Tier 1 default + §5.22 read vs write disposition discipline. `requireAuth` is the canonical Step 3 Tier 1 middleware. Net effect at wardrobeLibrary.js: dev-mode auth-bypass eliminated (isDevelopment + authMiddleware const + dev-user literal + authenticate legacy alias all removed); 5 affected handlers (and 25 total in file) require valid auth in ALL environments post-CP5. Architectural improvement on original lock — see §5.41 amendment.
+- **outfitSets §4.1(b) FULL audit Sweep b closure:** CP5 D3 ADDed requireAuth import + applied requireAuth to all 5 outfitSets.js routes. Combined with CP2 D5 (episodes.js /:id/outfits half at lines 99/105/113/117): full audit §4.1(b) Sweep b closure achieved at CP5. Both halves of audit handoff §4.1(b) sub-form now resolved — see §5.42 amendment.
+
+Five adjudication decisions executed cleanly:
+
+- **D1 (12 AI POSTs ADD reference model):** All 12 promoted to requireAuth + aiRateLimiter uniformly per worldEvents reference model. ADD shape (no existing aiRateLimiter to PRESERVE). aiRateLimiter import added to 5 files. Third reference-model application instance after CP3 D4 PROMOTE + CP4 D1 ADD; cumulative 29 handlers across 11 files at uniform pattern — see §5.43 amendment.
+- **D2 (Item 16 escalation to requireAuth):** LOCKED with escalation note. See §5.41.
+- **D3 (outfitSets.js §4.1(b) Sweep b closure):** All 5 routes ADDed requireAuth. Combined with CP2 D5: full audit Sweep b closure; see §5.42.
+- **D4 (Test methodology aggregate-counter):** 69 tests at aggregate-counter methodology. Forecast 55-65; actual 69 (1.06x at-forecast). Third aggregate-counter data point.
+- **D5 (wardrobe.js 7 bare AI POSTs single-edit ADD shape):** Single edit applies both requireAuth + aiRateLimiter simultaneously per CP4 ADD shape canonical pattern.
+
+Per-tier handler distribution post-CP5:
+
+- Tier 1 (requireAuth): 74 handlers across 7 files
+- Tier 1 + aiRateLimiter (NEW promotions): 12 handlers per D1
+- Tier 2 / Tier 3 / Tier 4 / Tier 5: 0 handlers (matches CP4 pure Tier 1 shape)
+
+All 5 verification greps pass: (1) degradeOnInfraFailure consumer count 8 → 8 (UNCHANGED — no Tier 3); (2) requireAuth consumer count 491 → 584 (+93 = 7 imports + 86 handlers); (3) lazy-noop fallback in CP5 zone 3 → 0 (3 files cleaned at WP1); (4) authenticateToken active hits in CP5 zone = 0 (UNCHANGED); (5) NEW aiRateLimiter consumers in CP5 zone = +22.
+
+- F-AUTH-4 multi-line grep zero hits in CP5 zone.
+- F-AUTH-5 expansion: 13 sites in wardrobe controllers (5 in wardrobeApprovalController.js — CP2 zone; 8 in wardrobeLibraryController.js — CP5 zone).
+- Mount-collision distinct-mounts variant verified (CP4 third-shape precedent).
+- Frontend ideal state confirmed at 2nd consecutive CP — see §5.44 amendment.
+- No HTTP method mismatches surfaced. Step 3 zero-method-mismatch streak: 5 consecutive CPs.
+- PE-13 filed: wardrobe.js:1289-1294 schema-drift comment.
+- PE-14 filed (NEW): wardrobe.js:217 /:id/upscale + wardrobe.js:239 /bulk/upscale — likely AI POSTs not in D1 lock; aiRateLimiter ADD candidate for future polish CP.
+
+##### §5.41 — Item 16 lock escalation: authenticate → requireAuth (NEW v2.29 §5.5 amendment)
+
+Original v1.x Item 16 lock specified replacement of wardrobeLibrary.js:18 env-conditional middleware (`const authMiddleware = isDevelopment ? <noop> : authenticate`) with uniform `authenticate` everywhere. CP5 D2 surface adjudication recognized that Step 3's canonical Tier 1 middleware is `requireAuth`, not `authenticate`. CP5 escalates Item 16 closure to `requireAuth`.
+
+**Architectural improvement (LOCKED v2.29 §5.5 amendment). Item 16 closure ESCALATED from `authenticate` to `requireAuth` per Step 3 Tier 1 default + §5.22 read vs write disposition discipline.**
+
+Net effect at wardrobeLibrary.js: dev-mode auth-bypass eliminated. All 25 handlers in file now wrap requireAuth. The dev-user injection (`req.user = { id: 'dev-user', email: 'dev@example.com', name: 'Dev User' }`) that the env-conditional installed is gone. Production safety: even if NODE_ENV is misconfigured, no dev-user injection path exists.
+
+Pattern for future lock escalations (LOCKED v2.29 §5.5 amendment): when v1.x or v2.x lock specifies a middleware replacement that pre-dates Step 3 Tier 1 default, CP-level adjudication may escalate to `requireAuth` if the target file falls within a Step 3 cluster sweep.
+
+##### §5.42 — Audit §4.1(b) Sweep b FULL closure (NEW v2.29 §4 amendment)
+
+Audit handoff v8 §4.1(b) Sweep b identified two halves of the same auth gap: (1) outfitSets.js — 5 routes with no auth middleware declared; (2) episodes.js — sub-form mount of outfit-set controller at lines 99/105/113/117. Sweep b lock specified ADD requireAuth to both halves.
+
+Closure trajectory:
+
+- CP2 D5 (commit `d73599f8`): episodes.js /:id/outfits half closed.
+- CP5 D3 (commit `1a2d433d`): outfitSets.js half closed. ADD requireAuth import + 5 routes wrapped requireAuth.
+
+**Combined closure (LOCKED v2.29 §4 amendment). Audit §4.1(b) Sweep b is FULLY CLOSED at CP5.**
+
+Pattern for future multi-CP audit closures: when audit findings span multiple clusters, mark each half's CP closure individually + record full closure at the second CP's fix plan revision.
+
+##### §5.43 — AI POST reference model third application instance: cumulative 29 handlers across 11 files (UPDATED v2.29 §5.27)
+
+CP3 D4 (PROMOTE shape, 2 handlers) + CP4 D1 (ADD shape, 13 handlers) + CP5 D1 (ADD shape, 12 handlers) = **29 handlers cumulative at uniform requireAuth + aiRateLimiter pattern across 11 files**. Reference model now extends across:
+
+- worldEvents.js: 4 (CP3)
+- episodeBriefRoutes.js: 4 (preserved CP1)
+- episodes.js: 2 (preserved CP2)
+- episodeOrchestrationRoute.js: 1 (CP2 D3)
+- sceneProposeRoute.js: 1 (CP4 D1 — ADD)
+- sceneSetRoutes.js: 12 (CP4 D1 — ADD)
+- wardrobe.js: 8 (CP5 D1 — ADD)
+- wardrobeLibrary.js: 1 (CP5 D1 — ADD)
+- wardrobeBrands.js: 1 (CP5 D1 — ADD)
+- hairLibraryRoutes.js: 1 (CP5 D1 — ADD)
+- makeupLibraryRoutes.js: 1 (CP5 D1 — ADD)
+- press.js: 4 deferred to CP10
+
+Reference model application shape distribution: PROMOTE shape (had aiRateLimiter): 2 handlers; ADD shape (had neither): 26 handlers.
+
+CP6-CP11 surface reports identify any AI-cost POSTs in CP zone files; apply ADD or PROMOTE shape per current handler state.
+
+##### §5.44 — Frontend ideal state at 2nd consecutive CP (UPDATED v2.29 §5.36)
+
+CP4 was the first instance of frontend ideal state. CP5 confirms repeatability for Wardrobe cluster.
+
+**Pattern reliable across multiple production-tooling clusters (LOCKED v2.29 §5.36 amendment). When Track 6 frontend migration is complete + service-module pattern is in place + apiClient interceptor handles Bearer token attachment, backend Tier 1 promotion lands cleanly with NO regression window. Ideal state is the default shape for production-tooling clusters in this codebase.**
+
+Cumulative ideal-state observations:
+
+- CP4 Scene cluster: 55 service-module apiClient calls + 0 raw fetch
+- CP5 Wardrobe cluster: 9 service-module apiClient calls + 0 raw fetch
+- Retroactive CP2 verification (Episodes + shows): episodeService.js + showService.js exist; 0 raw fetch
+- CP3 World cluster: WorldStudio.jsx (anomalous case) used raw fetch — Track 7 mini-CP required
+
+**Track 7 mini-CP scope (LOCKED v2.29 §5.36 amendment). Track 7 mini-CPs are exception-class work, not default-class. Scope = sum of raw-fetch sites where backend disposition is Tier 1/2/3 in CP zone.**
+
+**AUDIT-GAP CALLOUT (NEW v2.29 §5.36 amendment — important architectural note). v2.27 §5.29 + v2.28 §5.36 ideal-state characteristic locks specified "service modules + apiClient + Bearer token attachment" as sufficient. CP5 closure surfaced an architectural finding (F-AUTH-X1, see §10): Bearer token attachment is necessary but NOT sufficient — token format must also match requireAuth's verifier expectation. F-AUTH-1's requireAuth uses CognitoJwtVerifier (RS256 only); frontend's actual login flow issues HS256 tokens. Bearer token IS attached + IS HS256 + IS rejected by Cognito-only verifier. v2.29 §5.36 amends ideal-state characteristic to: "service modules + apiClient + Bearer token attachment + token format compatibility with requireAuth verifier."**
+
+##### §5.45 — Pure Tier 1 sweep at 2nd consecutive CP (UPDATED v2.29 §5.22)
+
+CP4 (Scene) + CP5 (Wardrobe) both pure Tier 1 sweeps. Both creator-owned production tooling clusters.
+
+**Pure Tier 1 sweep as default disposition shape (LOCKED v2.29 §5.22 amendment). Pure Tier 1 sweep is the default disposition shape for creator-owned production tooling clusters without genuinely public catalogs. CP3's mixed disposition was the exception (worldStudio.js had explicitly-public scene catalog routes); CP4 + CP5 demonstrate that production tooling without genuinely public catalogs uniformly disposes Tier 1.**
+
+CP6-CP11 default expectation: pure Tier 1 sweep unless surface reveals genuinely public catalog routes (Tier 4) or admin-only workflow (Tier 2).
+
+##### §5.46 — Surface-correction 19-data-point validation (UPDATED v2.29 §5.17 / §5.24)
+
+v2.28 §5.38 graduated to 14 cumulative. CP5 contributes 5 more, **graduating to 19 cumulative data points across CP15 + CP1 + CP2 + CP3 + Track 7 mini-CP + CP4 + CP5**:
+
+- Data points 1-14 (per v2.28 §5.38)
+- Data point 15 (CP5): file count correction — forecast 7; surface 7 (matches; first CP with no file-count correction since CP1)
+- Data point 16 (CP5): handler count — forecast ~80; surface 86 (+7.5%; smallest delta)
+- Data point 17 (CP5): wardrobe.js anchor handler count — forecast ~25; surface 34 (+36%; largest single-file correction to date)
+- Data point 18 (CP5): lazy-noop count — planning §A.7 didn't enumerate Wardrobe-zone; actual 3 files
+- Data point 19 (CP5): AI POST count — not in planning; surface 12 ADD-shape candidates
+
+**Surface-correction pattern formal lock graduates (LOCKED v2.29 §5.17 / §5.24). 19 cumulative data points across two phases. Pattern density: ~2-3 per CP. CP4 + CP5 tied at 5 each (highest single-CP correction count).**
+
+##### §5.47 — Step 3 pacing fifth backend data point (UPDATED v2.29, supersedes v2.28 §5.39)
+
+Step 3 pacing model now has five backend data points + one frontend data point:
+
+- CP1 (architectural): ~5 handlers / 75 min
+- CP2 (mechanical): 227 handlers / 90 min
+- CP3 (mixed-disposition): 120 handlers / 75 min
+- Track 7 mini-CP (frontend): 15 sites / 45 min
+- CP4 (pure Tier 1 + AI POST): 126 handlers / 80 min
+- CP5 (pure Tier 1 + lazy-noop + Item 16 + audit closure + AI POST): 86 handlers / 95 min
+
+Backend pacing convergence (five data points): **~83 min ±15 min mean per backend CP** (CP1 75 / CP2 90 / CP3 75 / CP4 80 / CP5 95). Conservative bias 2x→1x sessions confirmed for fifth consecutive CP.
+
+CP5 is the slowest backend CP to date (95 min vs ~80 min mean). Cause: WP1 lazy-noop removal at 3 files + Item 16 closure + outfitSets §4.1(b) closure + 12 AI POST applications across 5 files. Per-handler cost ~66 sec vs ~38 sec at CP3/CP4 reflects additional architectural lock items.
+
+Total Step 3 + Track 7 estimate update: 5 backend CPs + 1 Track 7 = 6 sessions used. ~6 backend CPs remaining + ~0-2 Track 7 mini-CPs = ~6-8 remaining. Total trajectory: ~12-14 sessions vs original v2.23 §5.4 lock of ~20-22 = **~35-45% under original forecast** at this trajectory. Plus F-AUTH-X1 + F-SOCKET-1 separate work streams (see §10).
+
+##### §10 — NEW MAJOR FINDINGS surfaced during CP5 closure (NOT in F-AUTH-1 scope; separate work streams)
+
+CP5 closure conversation surfaced two architectural findings outside F-AUTH-1's original scope. Both are filed as separate work streams; do not affect F-AUTH-1's CP cadence or scope.
+
+##### §10.1 — F-AUTH-X1 (parallel HS256 JWT track — Cognito requireAuth verifier rejects HS256 tokens)
+
+Surface trigger: dev environment login redirect-loop. User reports successful login at dev.primepisodes.com followed by immediate bounce back to login page. Network panel investigation revealed:
+
+- Frontend POST to /api/v1/auth/login succeeds (200)
+- Token issued (Bearer JWT, HS256-signed: alg=HS256, typ=JWT)
+- Frontend stores token in localStorage.authToken
+- apiClient interceptor attaches Authorization: Bearer <HS256 JWT>
+- Backend requireAuth middleware (uses CognitoJwtVerifier — RS256 only) rejects HS256 with 401
+- Frontend treats 401 as session-invalid → redirects → loop
+
+**Architectural diagnosis (LOCKED v2.29 §10.1). Two independent auth systems coexist in the codebase: Cognito track (F-AUTH-1's target — middleware/auth.js requireAuth/optionalAuth use CognitoJwtVerifier RS256) and Local HS256 JWT track (pre-existing, untouched by F-AUTH-1 — middleware/jwtAuth.js + services/tokenService.js + routes/auth.js:41 POST /login + frontend localStorage). F-AUTH-1's Tier 1 promotions (491+ handlers across CP1-CP5) silently broke real user activity in dev environment because frontend issues HS256 tokens; Cognito-only verifier rejects them.**
+
+Three architectural options:
+
+- Option A — Migrate frontend to Cognito (long-term target). Replace custom login flow with Cognito SDK; replace routes/auth.js:41 POST /login issuance with Cognito-direct flow; deprecate services/tokenService.js + middleware/jwtAuth.js entirely. Multi-week effort.
+- Option B — Dual-verifier in requireAuth (short-term unblock). middleware/auth.js requireAuth tries Cognito verifier first; on failure, falls back to local HS256 verification using JWT_SECRET. ~1-2 day effort. Unblocks dev environment immediately. Architectural debt.
+- Option C — Remove custom JWT track entirely. Same as A in target state.
+
+**Recommendation (LOCKED v2.29 §10.1). Option B short-term (this week, unblock dev environment) + Option A long-term (after F-AUTH-1 closes, multi-week project). F-AUTH-1 CP6-CP11 cadence continues normally — Tier 1 promotions still apply correctly to both token types under dual-verifier.**
+
+Audit gap explanation. F-AUTH-1's premise was "codebase-wide auth bypass on writes via optionalAuth → requireAuth migration." The premise assumed requireAuth was the right gate. It is — for routes whose callers send Cognito tokens. The gap: nobody asked "what auth system does the frontend actually use?" Track 7 frontend correspondence audit at v2.27 §5.29 + v2.28 §5.36 verified Bearer token attachment, not token format compatibility. v2.29 §5.36 amends ideal-state characteristic to include token format compatibility check.
+
+F-AUTH-X1 work stream scope:
+
+- Phase 1 (this week): Option B implementation. Modify middleware/auth.js requireAuth to try Cognito verifier first, fall back to local HS256 verification. Verify dev environment login works post-fix.
+- Phase 2 (post-F-AUTH-1): Option A planning. Frontend migration to Cognito SDK. Multi-week effort.
+- Phase 3 (post-A): Option C cleanup. Deprecate services/tokenService.js + middleware/jwtAuth.js + routes/auth.js:41 POST /login custom issuance.
+
+##### §10.2 — F-SOCKET-1 (P0 hardcoded JWT_SECRET fallback)
+
+Surface trigger: same conversation as F-AUTH-X1. Backend grep revealed:
+
+- src/services/SocketService.js:19 — `const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';`
+- Implication: if JWT_SECRET environment variable is unset, the literal string `'your-secret-key'` becomes the active HMAC signing/verification secret.
+- Production exposure: anyone reading the public source repository can forge HS256 tokens that pass Socket auth verification.
+
+**P0 production exposure (LOCKED v2.29 §10.2). F-SOCKET-1 is a critical production-grade security issue orthogonal to F-AUTH-1. Same-day hotfix required.**
+
+F-SOCKET-1 work stream scope:
+
+- Same-day fix: remove `|| 'your-secret-key'` fallback at SocketService.js:19. Throw on missing JWT_SECRET in production env (NODE_ENV !== 'test' && !process.env.JWT_SECRET).
+- Audit any other `|| '<literal>'` JWT_SECRET fallback patterns in tokenService.js (lines 21, 48, 57, 91, 100 per Claude Code grep output).
+- Apply consistently: production environments must throw on missing secrets; never silently fall back to literal strings.
+
+F-SOCKET-1 lands directly on dev branch (not on feature/f-auth-1). Bypasses Step 3 CP cadence entirely. Independent of F-AUTH-X1 architectural decision.
+
+##### §10.3 — Audit gap callout (UPDATED v2.29 §5.36 + new §10.3)
+
+CP1-CP5 frontend correspondence audits verified service-module pattern + apiClient + Bearer token attachment shape. Audit method: comprehensive grep for raw fetch() calls to backend paths in CP zone; categorize by current frontend pattern (raw fetch vs apiClient).
+
+**Audit gap (LOCKED v2.29 §10.3). Audit method verified Bearer token IS attached but did NOT verify token FORMAT matches requireAuth verifier expectation. The "ideal state" lock at v2.27 §5.29 + v2.28 §5.36 is technically correct (service modules + apiClient + Bearer attachment IS the right shape) but incomplete (token format compatibility is also required for the attached Bearer to actually authenticate).**
+
+Audit method amendment (LOCKED v2.29 §5.36 + §10.3): when verifying frontend correspondence ideal state, additional check required:
+
+- Verify Bearer token attachment via apiClient interceptor (existing check)
+- Verify token format matches requireAuth verifier expectation (NEW check). Specifically: decode JWT header from frontend localStorage / token storage; verify `alg` claim matches verifier algorithm (e.g., RS256 for Cognito, HS256 for local HMAC).
+- Document any token format mismatches as architectural findings (not as Track 7 mini-CP scope; route to F-AUTH-X1-class work stream).
+
+Retroactive audit application: the F-AUTH-X1 finding existed since CP2 landed on origin/dev. v2.29 §10.3 amendment ensures CP6-CP11 surface reports include token format check; if frontend uses Cognito-incompatible tokens (HS256), surface flags as F-AUTH-X1-class concern (not Track 7).
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -2353,7 +2550,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — TRACK 6 CLOSED + STEP 3 CP1+CP2+CP3+CP4 + TRACK 7 MINI-CP COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**. **Step 3 CP4 COMPLETE through commit `5c13531e`**; Scene cluster — 6 files / 126 handlers / 61 new tests / 1 session / ~80 min. Three architectural firsts: first WP1 NO-OP CP (zero lazy-noop in zone), first NO-Track-7-coordination CP (frontend ideal state via service modules + apiClient), first pure Tier 1 sweep CP (no Tier 2/3/4/5 candidates). 13 AI POSTs ADDed requireAuth + aiRateLimiter (second worldEvents reference model application instance — ADD shape vs CP3 D4 PROMOTE shape). Mount-collision distinct-mounts third topology variant locked. Surface-correction graduates to 14 cumulative data points. Backend test suite: 1550 → 1611 passing (+61 tests, +1 suite, 0 regressions). Backed up at `5c13531e` on `claude/f-auth-1-backup`. Step 3 CP5 (next cluster per v2.23 §5.4) kicks off next, fresh session after v2.28 lands on dev. NO Track 7 mini-CP coordination needed at CP4 (frontend ideal state).
+- **Step 6b — TRACK 6 CLOSED + STEP 3 CP1+CP2+CP3+CP4+CP5 + TRACK 7 MINI-CP COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**. **Step 3 CP4 COMPLETE through commit `5c13531e`**. **Step 3 CP5 COMPLETE through commit `1a2d433d`**; Wardrobe cluster — 7 files / 86 handlers / 69 new tests / 1 session / ~95 min. 2nd consecutive pure Tier 1 sweep + 2nd consecutive NO-Track-7-coordination CP. Item 16 closure ESCALATED to requireAuth (architectural improvement on original v1.x lock). outfitSets §4.1(b) FULL audit Sweep b closure (combined with CP2 D5 episodes.js half). 12 AI POSTs ADDed requireAuth + aiRateLimiter (third reference-model application — ADD shape; cumulative 29 across 11 files at uniform pattern). 3 lazy-noop files cleaned (back to non-NO-OP after CP4 first NO-OP). Surface-correction graduates to 19 cumulative data points. Backend test suite: 1611 → 1680 passing (+69 tests, +1 suite, 0 regressions). MAJOR FINDINGS surfaced during CP5 closure (NOT in F-AUTH-1 scope, separate work streams): F-AUTH-X1 (parallel HS256 JWT track — Cognito requireAuth verifier rejects HS256 tokens issued by routes/auth.js + tokenService.js; manifest as dev-environment login redirect-loop). F-SOCKET-1 (P0 hardcoded JWT_SECRET fallback at SocketService.js:19). Backed up at `1a2d433d` on `claude/f-auth-1-backup`. Step 3 CP6 (Character cluster + universe Q13 per v2.23 §5.4) kicks off next, fresh session after v2.29 lands on dev. NO Track 7 mini-CP coordination needed at CP5 (frontend ideal state — 2nd consecutive).
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
