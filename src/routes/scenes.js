@@ -4,7 +4,7 @@ const sceneController = require('../controllers/sceneController');
 const sceneStudioController = require('../controllers/sceneStudioController');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateUUIDParam } = require('../middleware/requestValidation');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 console.log('🔵 SCENES ROUTES FILE LOADING... [TIMESTAMP:', new Date().toISOString(), ']');
 console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:id LAST');
@@ -24,16 +24,16 @@ console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:
  */
 
 // GET /api/v1/scenes - List all scenes with filters
-router.get('/', asyncHandler(sceneController.listScenes));
+router.get('/', requireAuth, asyncHandler(sceneController.listScenes));
 
 // ULTRA SIMPLE TEST - No validation, no async, nothing
-router.get('/ultra-test', (req, res) => {
+router.get('/ultra-test', requireAuth, (req, res) => {
   console.log('🚨 ULTRA-TEST HIT!');
   res.json({ success: true, message: 'ULTRA TEST WORKS', timestamp: new Date().toISOString() });
 });
 
 // DATABASE CONNECTIVITY TEST - Check what database we're actually connected to
-router.get('/db-test', asyncHandler(async (req, res) => {
+router.get('/db-test', requireAuth, asyncHandler(async (req, res) => {
   console.log('🧪 DB-TEST HIT!');
   const { sequelize } = require('../models');
   
@@ -83,7 +83,7 @@ router.get('/db-test', asyncHandler(async (req, res) => {
 }));
 
 // TEST ROUTE - Inline handler to verify route registration
-router.get('/test-direct/:id', asyncHandler(async (req, res) => {
+router.get('/test-direct/:id', requireAuth, asyncHandler(async (req, res) => {
   console.log('🧪 TEST-DIRECT ROUTE HIT! ID:', req.params.id);
   const { sequelize } = require('../models');
   const { QueryTypes } = require('sequelize');
@@ -114,7 +114,7 @@ router.get('/test-direct/:id', asyncHandler(async (req, res) => {
 // POST /api/v1/scenes - Create new scene
 router.post(
   '/',
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.createScene)
 );
 
@@ -122,7 +122,7 @@ router.post(
 router.post(
   '/:id/duplicate',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.duplicateScene)
 );
 
@@ -134,7 +134,7 @@ router.post(
 router.put(
   '/:id/status',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.updateSceneStatus)
 );
 
@@ -142,7 +142,7 @@ router.put(
 router.post(
   '/:id/characters',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.addCharacter)
 );
 
@@ -150,7 +150,7 @@ router.post(
 router.delete(
   '/:id/characters/:characterName',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.removeCharacter)
 );
 
@@ -158,7 +158,7 @@ router.delete(
 router.put(
   '/:id/thumbnail',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.setSceneThumbnail)
 );
 
@@ -166,7 +166,7 @@ router.put(
 router.put(
   '/:id/assets',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.updateSceneAssets)
 );
 
@@ -175,13 +175,13 @@ router.put(
  */
 
 // GET /api/v1/scenes/:id/assets - Get all assets for a scene
-router.get('/:id/assets', validateUUIDParam('id'), asyncHandler(sceneController.getSceneAssets));
+router.get('/:id/assets', validateUUIDParam('id'), requireAuth, asyncHandler(sceneController.getSceneAssets));
 
 // POST /api/v1/scenes/:id/assets - Link asset(s) to scene
 router.post(
   '/:id/assets',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.addSceneAsset)
 );
 
@@ -190,7 +190,7 @@ router.delete(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   validateUUIDParam('assetId'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.removeSceneAsset)
 );
 
@@ -199,7 +199,7 @@ router.patch(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   validateUUIDParam('assetId'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.updateSceneAsset)
 );
 
@@ -211,6 +211,7 @@ router.patch(
 router.get(
   '/:id/canvas',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(sceneStudioController.getCanvas)
 );
 
@@ -218,7 +219,7 @@ router.get(
 router.put(
   '/:id/canvas',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.saveCanvas)
 );
 
@@ -226,7 +227,7 @@ router.put(
 router.post(
   '/:id/generate-object',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.generateObject)
 );
 
@@ -234,7 +235,7 @@ router.post(
 router.post(
   '/:id/transform-object',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.transformObject)
 );
 
@@ -242,7 +243,7 @@ router.post(
 router.post(
   '/:id/regenerate-background',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.regenerateBackground)
 );
 
@@ -250,7 +251,7 @@ router.post(
 router.post(
   '/:id/suggest-objects',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.suggestObjects)
 );
 
@@ -258,7 +259,7 @@ router.post(
 router.post(
   '/:id/inpaint',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.inpaint)
 );
 
@@ -266,7 +267,7 @@ router.post(
 router.post(
   '/:id/segment',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.segmentObject)
 );
 
@@ -274,7 +275,7 @@ router.post(
 router.post(
   '/:id/animate',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.animateScene)
 );
 
@@ -282,7 +283,7 @@ router.post(
 router.post(
   '/:id/generate-depth',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.generateDepth)
 );
 
@@ -290,6 +291,7 @@ router.post(
 router.get(
   '/:id/depth-map',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(sceneStudioController.proxyDepthMap)
 );
 
@@ -297,7 +299,7 @@ router.get(
 router.post(
   '/:id/objects',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.addObject)
 );
 
@@ -306,7 +308,7 @@ router.patch(
   '/:id/objects/:objectId',
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.updateObject)
 );
 
@@ -315,7 +317,7 @@ router.delete(
   '/:id/objects/:objectId',
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.deleteObject)
 );
 
@@ -324,7 +326,7 @@ router.post(
   '/:id/objects/:objectId/duplicate',
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.duplicateObject)
 );
 
@@ -333,7 +335,7 @@ router.post(
   '/:id/objects/:objectId/variants',
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.createVariant)
 );
 
@@ -342,7 +344,7 @@ router.patch(
   '/:id/variant-groups/:groupId/activate',
   validateUUIDParam('id'),
   validateUUIDParam('groupId'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneStudioController.activateVariant)
 );
 
@@ -351,6 +353,7 @@ router.get(
   '/:id/variant-groups/:groupId',
   validateUUIDParam('id'),
   validateUUIDParam('groupId'),
+  requireAuth,
   asyncHandler(sceneStudioController.getVariantGroup)
 );
 
@@ -358,7 +361,7 @@ router.get(
 router.put(
   '/:id',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.updateScene)
 );
 
@@ -366,13 +369,13 @@ router.put(
 router.delete(
   '/:id',
   validateUUIDParam('id'),
-  optionalAuth,
+  requireAuth,
   asyncHandler(sceneController.deleteScene)
 );
 
 // ⚠️ GET /api/v1/scenes/:id - MUST BE REGISTERED LAST!
 // This catches any path like /scenes/<anything> so it blocks specific routes if placed earlier
-router.get('/:id', (req, res, next) => {
+router.get('/:id', requireAuth, (req, res, next) => {
   console.log('🟢 GET /scenes/:id HIT! ID:', req.params.id);
   next();
 }, validateUUIDParam('id'), asyncHandler(sceneController.getScene));

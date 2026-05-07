@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { SceneFootageLink, Scene, ScriptMetadata } = require('../models');
+const { requireAuth } = require('../middleware/auth');
 
 // Create scene-footage link
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const { sceneId, footageId, matchType = 'manual', confidenceScore, notes, createdBy } = req.body;
 
@@ -44,7 +45,7 @@ router.post('/', async (req, res) => {
 });
 
 // Get all links for an episode
-router.get('/episode/:episodeId', async (req, res) => {
+router.get('/episode/:episodeId', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
 
@@ -72,7 +73,7 @@ router.get('/episode/:episodeId', async (req, res) => {
 });
 
 // Delete scene-footage link
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -90,7 +91,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Auto-match footage to scenes
-router.post('/auto-match', async (req, res) => {
+router.post('/auto-match', requireAuth, async (req, res) => {
   try {
     const { episodeId, scriptId } = req.body;
 

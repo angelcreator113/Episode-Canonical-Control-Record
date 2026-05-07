@@ -9,7 +9,8 @@
 const express = require('express');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
 
@@ -199,7 +200,7 @@ async function readCharacterContext(registryId) {
 // ROUTE 1: propose-scene
 // The system reads everything and proposes the next scene
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/propose-scene', optionalAuth, async (req, res) => {
+router.post('/propose-scene', requireAuth, aiRateLimiter, async (req, res) => {
   const { chapter_id, registry_id, force_scene_type, author_note } = req.body;
 
   // Resolve book_id — must be a valid UUID or null
@@ -372,7 +373,7 @@ Respond ONLY in valid JSON. No markdown. No backticks. No explanation outside th
 // ROUTE 2: adjust proposal
 // Author edits the brief or swaps characters before accepting
 // ─────────────────────────────────────────────────────────────────────────────
-router.patch('/scene-proposals/:id', optionalAuth, async (req, res) => {
+router.patch('/scene-proposals/:id', requireAuth, async (req, res) => {
   const { scene_brief, characters, tone, author_note } = req.body;
   try {
     const proposal = await db.SceneProposal.findByPk(req.params.id);
@@ -402,7 +403,7 @@ router.patch('/scene-proposals/:id', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // ROUTE 3: accept proposal — fires into story engine
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/scene-proposals/:id/accept', optionalAuth, async (req, res) => {
+router.post('/scene-proposals/:id/accept', requireAuth, async (req, res) => {
   const { tone_override } = req.body;
   try {
     const proposal = await db.SceneProposal.findByPk(req.params.id);
@@ -439,7 +440,7 @@ router.post('/scene-proposals/:id/accept', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // ROUTE 4: list proposals
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/scene-proposals', optionalAuth, async (req, res) => {
+router.get('/scene-proposals', requireAuth, async (req, res) => {
   const { book_id, status, limit = 10 } = req.query;
   try {
     const where = {};
@@ -461,7 +462,7 @@ router.get('/scene-proposals', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // ROUTE 5: dismiss proposal
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/scene-proposals/:id/dismiss', optionalAuth, async (req, res) => {
+router.post('/scene-proposals/:id/dismiss', requireAuth, async (req, res) => {
   try {
     const proposal = await db.SceneProposal.findByPk(req.params.id);
     if (!proposal) return res.status(404).json({ error: 'Proposal not found' });
@@ -475,7 +476,7 @@ router.post('/scene-proposals/:id/dismiss', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // ROUTE 6: recalculate arc stage
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/arc-stage', optionalAuth, async (req, res) => {
+router.post('/arc-stage', requireAuth, async (req, res) => {
   const { book_id } = req.body;
   if (!book_id) return res.status(400).json({ error: 'book_id required' });
   try {
