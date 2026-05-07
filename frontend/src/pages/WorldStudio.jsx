@@ -742,13 +742,9 @@ export default function WorldStudio() {
   const generatePreview = async () => {
     setGenerating(true);
     try {
-      const r = await fetch(`${API}/world/generate-ecosystem-preview`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ world_tag: worldTag }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) flash(d.error || `Generation failed (${r.status})`, 'error');
-      else if (d.characters?.length) {
+      const r = await apiClient.post('/api/v1/world/generate-ecosystem-preview', { world_tag: worldTag });
+      const d = r.data || {};
+      if (d.characters?.length) {
         setPreviewChars(d.characters);
         setPreviewNotes(d.generation_notes || '');
         setPreviewSel(new Set(d.characters.map((_, i) => i)));
@@ -758,7 +754,11 @@ export default function WorldStudio() {
           new Notification('Ecosystem Generated', { body: `${d.characters.length} characters ready for review`, icon: '/favicon.ico' });
         }
       } else flash('Generation returned no characters', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      const msg = e.response?.data?.error || e.message;
+      const status = e.response?.status;
+      flash(status ? `${msg} (${status})` : msg, 'error');
+    }
     finally { setGenerating(false); }
   };
 
@@ -767,65 +767,68 @@ export default function WorldStudio() {
     if (!selected.length) { flash('Select at least one character', 'error'); return; }
     setConfirming(true);
     try {
-      const r = await fetch(`${API}/world/generate-ecosystem-confirm`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ characters: selected, generation_notes: previewNotes, world_tag: worldTag, preview_id: previewId }),
+      const r = await apiClient.post('/api/v1/world/generate-ecosystem-confirm', {
+        characters: selected, generation_notes: previewNotes, world_tag: worldTag, preview_id: previewId,
       });
-      const d = await r.json();
+      const d = r.data;
       if (d.characters) {
         flash(`${d.count} characters committed · ${d.inter_relationships || 0} relationships seeded`);
         setShowPreview(false);
         setPreviewId(null);
         loadCharacters();
       } else flash(d.error || 'Confirm failed', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      flash(e.response?.data?.error || e.message, 'error');
+    }
     finally { setConfirming(false); }
   };
 
   /* ── Character actions ─────────────────────────────────────────────── */
   const activateChar = async (id) => {
     try {
-      const r = await fetch(`${API}/world/characters/${id}/activate`, { method: 'POST' });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); flash(d.error || 'Activate failed', 'error'); return; }
+      await apiClient.post(`/api/v1/world/characters/${id}/activate`);
       flash('Character activated');
       loadCharacters();
       if (selectedChar === id) loadCharDetail(id);
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      flash(e.response?.data?.error || e.message || 'Activate failed', 'error');
+    }
   };
 
   const archiveChar = async (id) => {
     try {
-      const r = await fetch(`${API}/world/characters/${id}/archive`, { method: 'POST' });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); flash(d.error || 'Archive failed', 'error'); return; }
+      await apiClient.post(`/api/v1/world/characters/${id}/archive`);
       flash('Character archived');
       setSelectedChar(null); setCharDetail(null); loadCharacters();
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      flash(e.response?.data?.error || e.message || 'Archive failed', 'error');
+    }
   };
 
   const deleteChar = async (id) => {
     if (!window.confirm('Delete this character permanently?')) return;
     try {
-      const r = await fetch(`${API}/world/characters/${id}`, { method: 'DELETE' });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); flash(d.error || 'Delete failed', 'error'); return; }
+      await apiClient.delete(`/api/v1/world/characters/${id}`);
       flash('Character deleted');
       setSelectedChar(null); setCharDetail(null); loadCharacters();
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      flash(e.response?.data?.error || e.message || 'Delete failed', 'error');
+    }
   };
 
   const saveCharEdit = async () => {
     if (!selectedChar) return;
     setSaving(true);
     try {
-      const r = await fetch(`${API}/world/characters/${selectedChar}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm),
-      });
-      const d = await r.json();
+      const r = await apiClient.put(`/api/v1/world/characters/${selectedChar}`, editForm);
+      const d = r.data;
       if (d.character) {
         flash('Saved'); setEditMode(false);
         loadCharDetail(selectedChar); loadCharacters();
       } else flash(d.error || 'Save failed', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      flash(e.response?.data?.error || e.message, 'error');
+    }
     finally { setSaving(false); }
   };
 
@@ -834,7 +837,7 @@ export default function WorldStudio() {
     if (!drafts.length) { flash('No drafts to activate', 'error'); return; }
     setBulkActivating(true);
     for (const c of drafts) {
-      await fetch(`${API}/world/characters/${c.id}/activate`, { method: 'POST' }).catch(() => {});
+      await apiClient.post(`/api/v1/world/characters/${c.id}/activate`).catch(() => {});
     }
     flash(`${drafts.length} characters activated`);
     loadCharacters();
@@ -847,27 +850,27 @@ export default function WorldStudio() {
     if (!selectedChar) return;
     setSavingRel(true);
     try {
-      const r = await fetch(`${API}/world/characters/${selectedChar}/relationships`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(relForm),
-      });
-      const d = await r.json();
+      const r = await apiClient.post(`/api/v1/world/characters/${selectedChar}/relationships`, relForm);
+      const d = r.data;
       if (d.graph) {
         flash('Relationship added');
         setShowAddRel(false);
         loadCharDetail(selectedChar);
       } else flash(d.error || 'Add failed', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      flash(e.response?.data?.error || e.message, 'error');
+    }
     finally { setSavingRel(false); }
   };
 
   const deleteRelationship = async (relId) => {
     try {
-      const r = await fetch(`${API}/world/characters/${selectedChar}/relationships/${relId}`, { method: 'DELETE' });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); flash(d.error || 'Delete failed', 'error'); return; }
+      await apiClient.delete(`/api/v1/world/characters/${selectedChar}/relationships/${relId}`);
       flash('Relationship removed');
       loadCharDetail(selectedChar);
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      flash(e.response?.data?.error || e.message || 'Delete failed', 'error');
+    }
   };
 
   /* ── Scene loaders & actions ──────────────────────────────────────── */
@@ -882,32 +885,33 @@ export default function WorldStudio() {
   const generateScene = async (charAId) => {
     setSceneGen(p => ({ ...p, loading: true }));
     try {
-      const r = await fetch(`${API}/world/scenes/generate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ character_a_id: charAId }),
-      });
-      const d = await r.json();
+      const r = await apiClient.post('/api/v1/world/scenes/generate', { character_a_id: charAId });
+      const d = r.data;
       if (d.scene) { setActiveScene(d.scene); flash('Scene generated'); loadCharScenes(charAId); }
       else flash(d.error || 'Scene generation failed', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      flash(e.response?.data?.error || e.message, 'error');
+    }
     finally { setSceneGen(p => ({ ...p, loading: false })); }
   };
 
   const approveScene = async (sceneId) => {
     try {
-      const r = await fetch(`${API}/world/scenes/${sceneId}/approve`, { method: 'POST' });
-      const d = await r.json();
+      const r = await apiClient.post(`/api/v1/world/scenes/${sceneId}/approve`);
+      const d = r.data;
       if (d.approved) {
         flash('Scene approved & written to StoryTeller');
         if (activeScene?.id === sceneId) setActiveScene({ ...activeScene, status: 'approved' });
         if (selectedChar) loadCharScenes(selectedChar);
       } else flash(d.error || 'Approve failed', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      flash(e.response?.data?.error || e.message, 'error');
+    }
   };
 
   const deleteScene = async (sceneId) => {
     if (!window.confirm('Delete this scene draft?')) return;
-    await fetch(`${API}/world/scenes/${sceneId}`, { method: 'DELETE' });
+    await apiClient.delete(`/api/v1/world/scenes/${sceneId}`).catch(() => {});
     flash('Scene deleted'); setActiveScene(null);
     if (selectedChar) loadCharScenes(selectedChar);
   };
@@ -949,7 +953,7 @@ export default function WorldStudio() {
   };
 
   const discardPreview = async (pid) => {
-    await fetch(`${API}/world/previews/${pid}`, { method: 'DELETE' });
+    await apiClient.delete(`/api/v1/world/previews/${pid}`).catch(() => {});
     flash('Preview discarded');
     loadSavedPreviews();
   };
@@ -966,11 +970,13 @@ export default function WorldStudio() {
   const deepenCharacter = async (charId) => {
     setDeepening(true);
     try {
-      const r = await fetch(`${API}/world/characters/${charId}/deepen`, { method: 'POST' });
-      const d = await r.json();
+      const r = await apiClient.post(`/api/v1/world/characters/${charId}/deepen`);
+      const d = r.data;
       if (d.character) { flash('Character deepened with AI'); loadCharDetail(charId); }
       else flash(d.error || 'Deepening failed', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) {
+      flash(e.response?.data?.error || e.message, 'error');
+    }
     finally { setDeepening(false); }
   };
 
@@ -987,11 +993,10 @@ export default function WorldStudio() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const r = await fetch(`${API}/world/generate-ecosystem-confirm`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ characters: [data], world_tag: worldTag, generation_notes: `Imported from ${file.name}` }),
+      const r = await apiClient.post('/api/v1/world/generate-ecosystem-confirm', {
+        characters: [data], world_tag: worldTag, generation_notes: `Imported from ${file.name}`,
       });
-      const d = await r.json();
+      const d = r.data;
       if (d.characters) { flash(`Imported ${data.name || 'character'}`); loadCharacters(); }
       else flash(d.error || 'Import failed', 'error');
     } catch (e) { flash('Invalid JSON file', 'error'); }
