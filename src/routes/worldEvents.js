@@ -20,22 +20,8 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
-let optionalAuth;
-let requireAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-  requireAuth = authModule.requireAuth || authModule.authenticateToken || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-  requireAuth = (req, res, next) => next();
-}
-let aiRateLimiter;
-try {
-  aiRateLimiter = require('../middleware/aiRateLimiter').aiRateLimiter;
-} catch {
-  aiRateLimiter = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { return null; }
@@ -46,7 +32,7 @@ async function getModels() {
 // GET /api/v1/world/:showId/events
 // ═══════════════════════════════════════════
 
-router.get('/world/:showId/events', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { status, event_type, sort = 'created_at', order = 'DESC' } = req.query;
@@ -132,7 +118,7 @@ router.get('/world/:showId/events', optionalAuth, async (req, res) => {
 // POST /api/v1/world/:showId/events
 // ═══════════════════════════════════════════
 
-router.post('/world/:showId/events', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const {
@@ -295,7 +281,7 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
 // PUT /api/v1/world/:showId/events/:eventId
 // ═══════════════════════════════════════════
 
-router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), optionalAuth, async (req, res) => {
+router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     if (!req.body || typeof req.body !== 'object') {
@@ -567,7 +553,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), opt
 // DELETE /api/v1/world/:showId/events/:eventId
 // ═══════════════════════════════════════════
 
-router.delete('/world/:showId/events/:eventId', optionalAuth, async (req, res) => {
+router.delete('/world/:showId/events/:eventId', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
@@ -599,7 +585,7 @@ router.delete('/world/:showId/events/:eventId', optionalAuth, async (req, res) =
 // Inject an event into an episode's script as [EVENT:] tag
 // ═══════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const { episode_id } = req.body;
@@ -839,7 +825,7 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
 // Seed multiple events at once (for initial setup)
 // ═══════════════════════════════════════════
 
-router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/bulk-seed', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { events } = req.body;
@@ -909,7 +895,7 @@ router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) =>
 });
 
 // AI event diversification suggestions
-router.post('/world/:showId/events/ai-fix', express.json({ limit: '2mb' }), optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/ai-fix', express.json({ limit: '2mb' }), requireAuth, async (req, res) => {
   try {
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({
@@ -1052,7 +1038,7 @@ Guidelines:
 // INVITATION GENERATOR
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/generate-invitation', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-invitation', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
 
@@ -1087,7 +1073,7 @@ router.post('/world/:showId/events/:eventId/generate-invitation', optionalAuth, 
 });
 
 // GET /world/:showId/events/:eventId/invitation-text — Get editable invitation text
-router.get('/world/:showId/events/:eventId/invitation-text', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/invitation-text', requireAuth, async (req, res) => {
   try {
     const { eventId } = req.params;
     const models = await getModels();
@@ -1104,7 +1090,7 @@ router.get('/world/:showId/events/:eventId/invitation-text', optionalAuth, async
 });
 
 // POST /world/:showId/events/:eventId/re-render-invitation — Re-render with edited text
-router.post('/world/:showId/events/:eventId/re-render-invitation', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/re-render-invitation', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const { invitation_text } = req.body;
@@ -1175,7 +1161,7 @@ router.post('/world/:showId/events/:eventId/re-render-invitation', optionalAuth,
   }
 });
 
-router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/invitation', requireAuth, async (req, res) => {
   try {
     const { eventId } = req.params;
     const models = await getModels();
@@ -1207,7 +1193,7 @@ router.get('/world/:showId/events/:eventId/invitation', optionalAuth, async (req
 
 // ── APPROVE INVITATION ─────────────────────────────────────────────────────
 
-router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/approve-invitation', requireAuth, async (req, res) => {
   try {
     const { eventId } = req.params;
     const { assetId } = req.body;
@@ -1282,7 +1268,7 @@ router.post('/world/:showId/events/:eventId/approve-invitation', optionalAuth, a
 
 // ── REJECT INVITATION ──────────────────────────────────────────────────────
 
-router.post('/world/:showId/events/:eventId/reject-invitation', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/reject-invitation', requireAuth, async (req, res) => {
   try {
     const { assetId } = req.body;
     if (!assetId) return res.status(400).json({ success: false, error: 'assetId is required' });
@@ -1312,7 +1298,7 @@ router.post('/world/:showId/events/:eventId/reject-invitation', optionalAuth, as
 
 // ── INVITATION VERSION HISTORY ───────────────────────────────────────────────
 
-router.get('/world/:showId/events/:eventId/invitation-history', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/invitation-history', requireAuth, async (req, res) => {
   try {
     const { eventId } = req.params;
     const models = await getModels();
@@ -1341,7 +1327,7 @@ router.get('/world/:showId/events/:eventId/invitation-history', optionalAuth, as
 
 // ── BATCH GENERATE INVITATIONS ───────────────────────────────────────────────
 
-router.post('/world/:showId/events/batch-generate-invitations', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/batch-generate-invitations', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { eventIds } = req.body;
@@ -1402,7 +1388,7 @@ router.post('/world/:showId/events/batch-generate-invitations', optionalAuth, as
 
 // ── PDF EXPORT ───────────────────────────────────────────────────────────────
 
-router.get('/world/:showId/events/:eventId/invitation-pdf', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/invitation-pdf', requireAuth, async (req, res) => {
   try {
     const { eventId } = req.params;
     const models = await getModels();
@@ -1422,7 +1408,7 @@ router.get('/world/:showId/events/:eventId/invitation-pdf', optionalAuth, async 
 
 // ── ANIMATED INVITATION (Runway image_to_video) ─────────────────────────────
 
-router.post('/world/:showId/events/:eventId/animate-invitation', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/animate-invitation', requireAuth, async (req, res) => {
   try {
     const { eventId } = req.params;
 
@@ -1488,7 +1474,7 @@ router.post('/world/:showId/events/:eventId/animate-invitation', optionalAuth, a
 
 // ── POLL ANIMATION JOB ──────────────────────────────────────────────────────
 
-router.get('/world/:showId/events/:eventId/animate-invitation/:jobId', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/animate-invitation/:jobId', requireAuth, async (req, res) => {
   try {
     const { jobId } = req.params;
 
@@ -1521,7 +1507,7 @@ router.get('/world/:showId/events/:eventId/animate-invitation/:jobId', optionalA
 
 // ── EDIT INVITATION TEXT (re-render without DALL-E) ──────────────────────────
 
-router.post('/world/:showId/events/:eventId/edit-invitation-text', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/edit-invitation-text', requireAuth, async (req, res) => {
   try {
     const { eventId } = req.params;
     const { assetId, opening, body, closing } = req.body;
@@ -1616,7 +1602,7 @@ router.post('/world/:showId/events/:eventId/edit-invitation-text', optionalAuth,
 
 // ── UNLINK INVITATION FROM EPISODE ───────────────────────────────────────────
 
-router.post('/world/:showId/events/:eventId/unlink-invitation', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/unlink-invitation', requireAuth, async (req, res) => {
   try {
     const { assetId } = req.body;
     if (!assetId) return res.status(400).json({ success: false, error: 'assetId is required' });
@@ -1638,7 +1624,7 @@ router.post('/world/:showId/events/:eventId/unlink-invitation', optionalAuth, as
 
 // ── DELETE INVITATION ASSET ──────────────────────────────────────────────────
 
-router.delete('/world/:showId/events/:eventId/invitation/:assetId', optionalAuth, async (req, res) => {
+router.delete('/world/:showId/events/:eventId/invitation/:assetId', requireAuth, async (req, res) => {
   try {
     const { eventId, assetId } = req.params;
     const models = await getModels();
@@ -1698,7 +1684,7 @@ router.delete('/world/:showId/events/:eventId/invitation/:assetId', optionalAuth
 // Auto-generate a complete episode from an event
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/generate-episode', optionalAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     // Optional: when draft_script is true, also kick the script skeleton
@@ -1900,7 +1886,7 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
 // episode first. Useful when the event has been edited (new outfit,
 // stakes, etc.) and the creator wants the episode to reflect those
 // changes without losing their place.
-router.post('/world/:showId/events/:eventId/regenerate-episode', optionalAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
@@ -1957,7 +1943,7 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', optionalAuth, a
 });
 
 // POST /world/:showId/events/bulk-delete — Delete multiple events at once
-router.post('/world/:showId/events/bulk-delete', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/bulk-delete', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { ids, delete_all_drafts, delete_all } = req.body;
@@ -1999,7 +1985,7 @@ router.post('/world/:showId/events/bulk-delete', optionalAuth, async (req, res) 
 });
 
 // POST /world/:showId/events/from-profile — Create event from a feed profile
-router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { profile_id, event_template } = req.body;
@@ -2230,7 +2216,7 @@ router.post('/world/:showId/events/from-profile', optionalAuth, async (req, res)
 // ─── FINANCIAL PRESSURE ENDPOINTS ────────────────────────────────────────────
 
 // GET /world/:showId/events/:eventId/affordability — Can Lala afford this event?
-router.get('/world/:showId/events/:eventId/affordability', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/affordability', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
@@ -2263,7 +2249,7 @@ router.get('/world/:showId/events/:eventId/affordability', optionalAuth, async (
 });
 
 // POST /world/:showId/events/:eventId/decline — Decline event and track as missed opportunity
-router.post('/world/:showId/events/:eventId/decline', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/decline', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const { reason } = req.body;
@@ -2289,7 +2275,7 @@ router.post('/world/:showId/events/:eventId/decline', optionalAuth, async (req, 
 });
 
 // GET /world/:showId/financial-pressure — Get financial pressure context for script writing
-router.get('/world/:showId/financial-pressure', optionalAuth, async (req, res) => {
+router.get('/world/:showId/financial-pressure', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const models = await getModels();
@@ -2363,7 +2349,7 @@ router.get('/world/:showId/financial-pressure', optionalAuth, async (req, res) =
 // estimate so the UI isn't blank on a fresh event. The Show's live balance
 // + goal ladder are included so the frontend can render a single combined
 // "can she afford this, and does this push her toward her next goal" view.
-router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
@@ -2571,7 +2557,7 @@ router.get('/world/:showId/events/:eventId/financial-forecast', optionalAuth, as
 // even if the event already has a scene_set_id attached. Otherwise it skips
 // and returns the existing scene set so the "Mark Ready" flow doesn't clobber
 // a venue the user deliberately picked.
-router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const force = req.body?.force === true;
@@ -2637,7 +2623,7 @@ router.post('/world/:showId/events/:eventId/generate-venue', optionalAuth, async
 });
 
 // POST /world/:showId/events/:eventId/generate-social-checklist
-router.post('/world/:showId/events/:eventId/generate-social-checklist', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-social-checklist', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const force = req.body?.force === true;
@@ -2686,7 +2672,7 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', optional
 // ═══════════════════════════════════════════════════════════════════════
 
 // GET /world/:showId/events/:eventId/outfit — get current outfit + score
-router.get('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
@@ -2708,7 +2694,7 @@ router.get('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, re
 });
 
 // PUT /world/:showId/events/:eventId/outfit — save selected outfit pieces + auto-score
-router.put('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, res) => {
+router.put('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const { wardrobe_ids } = req.body;
@@ -2787,7 +2773,7 @@ router.put('/world/:showId/events/:eventId/outfit', optionalAuth, async (req, re
 });
 
 // GET /world/:showId/events/:eventId/wardrobe-options — all closet pieces with match info
-router.get('/world/:showId/events/:eventId/wardrobe-options', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/wardrobe-options', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
@@ -2847,7 +2833,7 @@ router.get('/world/:showId/events/:eventId/wardrobe-options', optionalAuth, asyn
 });
 
 // GET /world/:showId/events/:eventId/feed-activity — get post-event feed posts
-router.get('/world/:showId/events/:eventId/feed-activity', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/feed-activity', requireAuth, async (req, res) => {
   try {
     const { eventId } = req.params;
     const models = await getModels();
@@ -2889,7 +2875,7 @@ router.get('/world/:showId/events/:eventId/feed-activity', optionalAuth, async (
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/events/:eventId/generate-overlay/:overlayType
-router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', requireAuth, async (req, res) => {
   try {
     const { showId, eventId, overlayType } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3052,7 +3038,7 @@ router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', opti
 });
 
 // POST /world/:showId/events/:eventId/approve-overlay
-router.post('/world/:showId/events/:eventId/approve-overlay', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/approve-overlay', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const { assetId } = req.body;
@@ -3143,7 +3129,7 @@ router.post('/world/:showId/events/:eventId/approve-overlay', optionalAuth, asyn
 });
 
 // POST /world/:showId/events/:eventId/reject-overlay
-router.post('/world/:showId/events/:eventId/reject-overlay', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/reject-overlay', requireAuth, async (req, res) => {
   try {
     const { assetId } = req.body;
     if (!assetId) return res.status(400).json({ success: false, error: 'assetId required' });
@@ -3168,7 +3154,7 @@ router.post('/world/:showId/events/:eventId/reject-overlay', optionalAuth, async
 });
 
 // POST /world/:showId/events/:eventId/re-render-overlay
-router.post('/world/:showId/events/:eventId/re-render-overlay', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/re-render-overlay', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const { tasks, overlayType } = req.body;
@@ -3247,7 +3233,7 @@ router.post('/world/:showId/events/:eventId/re-render-overlay', optionalAuth, as
 });
 
 // GET /world/:showId/events/:eventId/overlay-tasks/:overlayType
-router.get('/world/:showId/events/:eventId/overlay-tasks/:overlayType', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/overlay-tasks/:overlayType', requireAuth, async (req, res) => {
   try {
     const { showId, eventId, overlayType } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3289,7 +3275,7 @@ router.get('/world/:showId/events/:eventId/overlay-tasks/:overlayType', optional
 });
 
 // GET /world/:showId/events/:eventId/overlay-history/:overlayType
-router.get('/world/:showId/events/:eventId/overlay-history/:overlayType', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/overlay-history/:overlayType', requireAuth, async (req, res) => {
   try {
     const { eventId, overlayType } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3327,7 +3313,7 @@ router.get('/world/:showId/events/:eventId/overlay-history/:overlayType', option
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/generate-title-overlay
-router.post('/world/:showId/episodes/:episodeId/generate-title-overlay', optionalAuth, async (req, res) => {
+router.post('/world/:showId/episodes/:episodeId/generate-title-overlay', requireAuth, async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3422,7 +3408,7 @@ router.post('/world/:showId/episodes/:episodeId/generate-title-overlay', optiona
 // ═══════════════════════════════════════════════════════════════════════
 
 // GET /world/:showId/events/:eventId/overlay-suggestions
-router.get('/world/:showId/events/:eventId/overlay-suggestions', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/:eventId/overlay-suggestions', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3470,7 +3456,7 @@ router.get('/world/:showId/events/:eventId/overlay-suggestions', optionalAuth, a
 });
 
 // PUT /world/:showId/events/:eventId/overlay-selections — save selected overlays
-router.put('/world/:showId/events/:eventId/overlay-selections', optionalAuth, async (req, res) => {
+router.put('/world/:showId/events/:eventId/overlay-selections', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const { selected_overlays } = req.body;
@@ -3492,7 +3478,7 @@ router.put('/world/:showId/events/:eventId/overlay-selections', optionalAuth, as
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/generate-story
-router.post('/world/:showId/episodes/:episodeId/generate-story', optionalAuth, async (req, res) => {
+router.post('/world/:showId/episodes/:episodeId/generate-story', requireAuth, async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const { format = 'short_story', povCharacter = 'lala' } = req.body;
@@ -3513,7 +3499,7 @@ router.post('/world/:showId/episodes/:episodeId/generate-story', optionalAuth, a
 });
 
 // GET /world/:showId/stories — list all stories for a show
-router.get('/world/:showId/stories', optionalAuth, async (req, res) => {
+router.get('/world/:showId/stories', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { episode_id, format, status, limit = 50 } = req.query;
@@ -3531,7 +3517,7 @@ router.get('/world/:showId/stories', optionalAuth, async (req, res) => {
 });
 
 // GET /world/:showId/stories/:storyId — get a single story with full content
-router.get('/world/:showId/stories/:storyId', optionalAuth, async (req, res) => {
+router.get('/world/:showId/stories/:storyId', requireAuth, async (req, res) => {
   try {
     const { storyId } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3549,7 +3535,7 @@ router.get('/world/:showId/stories/:storyId', optionalAuth, async (req, res) => 
 });
 
 // PUT /world/:showId/stories/:storyId — update story content (editing)
-router.put('/world/:showId/stories/:storyId', optionalAuth, async (req, res) => {
+router.put('/world/:showId/stories/:storyId', requireAuth, async (req, res) => {
   try {
     const { storyId } = req.params;
     const { content, title, status } = req.body;
@@ -3575,7 +3561,7 @@ router.put('/world/:showId/stories/:storyId', optionalAuth, async (req, res) => 
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/generate-distribution
-router.post('/world/:showId/episodes/:episodeId/generate-distribution', optionalAuth, async (req, res) => {
+router.post('/world/:showId/episodes/:episodeId/generate-distribution', requireAuth, async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const { platforms } = req.body; // optional: ['youtube', 'tiktok', 'instagram', 'facebook']
@@ -3596,7 +3582,7 @@ router.post('/world/:showId/episodes/:episodeId/generate-distribution', optional
 });
 
 // GET /world/:showId/episodes/:episodeId/distribution
-router.get('/world/:showId/episodes/:episodeId/distribution', optionalAuth, async (req, res) => {
+router.get('/world/:showId/episodes/:episodeId/distribution', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3616,7 +3602,7 @@ router.get('/world/:showId/episodes/:episodeId/distribution', optionalAuth, asyn
 });
 
 // PUT /world/:showId/episodes/:episodeId/distribution
-router.put('/world/:showId/episodes/:episodeId/distribution', optionalAuth, async (req, res) => {
+router.put('/world/:showId/episodes/:episodeId/distribution', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { distribution_metadata } = req.body;
@@ -3634,7 +3620,7 @@ router.put('/world/:showId/episodes/:episodeId/distribution', optionalAuth, asyn
 });
 
 // PUT /world/:showId/distribution-defaults — save show-level platform config
-router.put('/world/:showId/distribution-defaults', optionalAuth, async (req, res) => {
+router.put('/world/:showId/distribution-defaults', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { distribution_defaults } = req.body;
@@ -3649,7 +3635,7 @@ router.put('/world/:showId/distribution-defaults', optionalAuth, async (req, res
 });
 
 // GET /world/:showId/distribution-defaults
-router.get('/world/:showId/distribution-defaults', optionalAuth, async (req, res) => {
+router.get('/world/:showId/distribution-defaults', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3673,7 +3659,7 @@ router.get('/world/:showId/distribution-defaults', optionalAuth, async (req, res
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/complete
-router.post('/world/:showId/episodes/:episodeId/complete', optionalAuth, async (req, res) => {
+router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3699,7 +3685,7 @@ router.post('/world/:showId/episodes/:episodeId/complete', optionalAuth, async (
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/finalize-financials
-router.post('/world/:showId/episodes/:episodeId/finalize-financials', optionalAuth, async (req, res) => {
+router.post('/world/:showId/episodes/:episodeId/finalize-financials', requireAuth, async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3721,7 +3707,7 @@ router.post('/world/:showId/episodes/:episodeId/finalize-financials', optionalAu
 });
 
 // GET /world/:showId/financial-ledger — running ledger across all episodes
-router.get('/world/:showId/financial-ledger', optionalAuth, async (req, res) => {
+router.get('/world/:showId/financial-ledger', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { episode_id, limit = 100 } = req.query;
@@ -3741,7 +3727,7 @@ router.get('/world/:showId/financial-ledger', optionalAuth, async (req, res) => 
 });
 
 // GET /world/:showId/balance — current coin balance
-router.get('/world/:showId/balance', optionalAuth, async (req, res) => {
+router.get('/world/:showId/balance', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const models = req.app?.get?.('models') || require('../models');
@@ -3767,7 +3753,7 @@ router.get('/world/:showId/balance', optionalAuth, async (req, res) => {
 });
 
 // POST /world/:showId/events/:eventId/generate-lists — generate wardrobe + career lists from event
-router.post('/world/:showId/events/:eventId/generate-lists', optionalAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-lists', requireAuth, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const { listType = 'both' } = req.body; // 'wardrobe', 'career', or 'both'
@@ -3836,7 +3822,7 @@ router.post('/world/:showId/events/:eventId/generate-lists', optionalAuth, async
 const COINS_PRESSURE = 250;
 const COINS_CRITICAL = 100;
 
-router.get('/world/:showId/events/next-suggestions', optionalAuth, async (req, res) => {
+router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { from_episode_id: fromEpisodeId } = req.query;
