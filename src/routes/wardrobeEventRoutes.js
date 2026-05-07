@@ -10,7 +10,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // ── DRESS CODE → AESTHETIC TAG MAPPING ───────────────────────────────────────
 const DRESS_CODE_TAGS = {
@@ -39,7 +39,7 @@ const TIER_BUDGET = {
 // ── FILTER WARDROBE FOR EVENT ────────────────────────────────────────────────
 // GET /api/v1/wardrobe-events/:showId/filter
 // Query: event_id, dress_code, budget, prestige, character
-router.get('/:showId/filter', optionalAuth, async (req, res) => {
+router.get('/:showId/filter', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { event_id, dress_code, budget, prestige, character } = req.query;
@@ -179,7 +179,7 @@ router.get('/:showId/filter', optionalAuth, async (req, res) => {
 // ── SUGGEST OUTFIT FOR EVENT ─────────────────────────────────────────────────
 // POST /api/v1/wardrobe-events/:showId/suggest
 // Body: { event_id, episodeId }
-router.post('/:showId/suggest', optionalAuth, async (req, res) => {
+router.post('/:showId/suggest', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { event_id, episodeId } = req.body;
@@ -267,7 +267,7 @@ Return ONLY the JSON.`;
 // ── LOCK OUTFIT FOR EPISODE ──────────────────────────────────────────────────
 // POST /api/v1/wardrobe-events/:episodeId/lock-outfit
 // Body: { wardrobe_ids: [...] }
-router.post('/:episodeId/lock-outfit', optionalAuth, async (req, res) => {
+router.post('/:episodeId/lock-outfit', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { wardrobe_ids } = req.body;

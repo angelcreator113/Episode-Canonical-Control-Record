@@ -12,12 +12,13 @@
  */
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const Anthropic = require('@anthropic-ai/sdk');
 const client = new Anthropic();
 
 // ── GET /api/v1/makeup-library ────────────────────────────────────────────
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   const db = require('../models');
   const { show_id, event_type, mood, is_active } = req.query;
   if (!show_id) return res.status(400).json({ error: 'show_id required' });
@@ -43,7 +44,7 @@ router.get('/', optionalAuth, async (req, res) => {
 });
 
 // ── GET /api/v1/makeup-library/:id ───────────────────────────────────────
-router.get('/:id', optionalAuth, async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   const db = require('../models');
   try {
     const item = await db.MakeupLibrary.findByPk(req.params.id);
@@ -55,7 +56,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 });
 
 // ── POST /api/v1/makeup-library ───────────────────────────────────────────
-router.post('/', optionalAuth, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const db = require('../models');
   const {
     show_id, name, description,
@@ -92,7 +93,7 @@ router.post('/', optionalAuth, async (req, res) => {
 });
 
 // ── PUT /api/v1/makeup-library/:id ────────────────────────────────────────
-router.put('/:id', optionalAuth, async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   const db = require('../models');
   try {
     const item = await db.MakeupLibrary.findByPk(req.params.id);
@@ -116,7 +117,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
 });
 
 // ── DELETE /api/v1/makeup-library/:id ────────────────────────────────────
-router.delete('/:id', optionalAuth, async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   const db = require('../models');
   try {
     const item = await db.MakeupLibrary.findByPk(req.params.id);
@@ -131,7 +132,7 @@ router.delete('/:id', optionalAuth, async (req, res) => {
 // ── POST /api/v1/makeup-library/generate ─────────────────────────────────
 // Claude-powered generation of Lala's full makeup library
 // Body: { show_id, count?: 7, replace_existing?: false }
-router.post('/generate', optionalAuth, async (req, res) => {
+router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   const db = require('../models');
   const { show_id, count = 7, replace_existing = false } = req.body;
   if (!show_id) return res.status(400).json({ error: 'show_id required' });

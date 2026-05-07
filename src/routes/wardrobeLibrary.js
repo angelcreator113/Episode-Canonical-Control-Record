@@ -1,26 +1,9 @@
 const router = require('express').Router();
 const multer = require('multer');
 const controller = require('../controllers/wardrobeLibraryController');
-const { authenticate } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const notifications = require('../services/notifications');
-
-// Optional auth — pass-through if auth unavailable
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
-
-// Development: Skip auth if in development mode
-const isDevelopment = process.env.NODE_ENV === 'development';
-const authMiddleware = isDevelopment
-  ? (req, res, next) => {
-      req.user = { id: 'dev-user', email: 'dev@example.com', name: 'Dev User' };
-      next();
-    }
-  : authenticate;
 
 const FAKE_BRAND_PREFIXES = [
   'Maison', 'Atelier', 'House of', 'Studio', 'Velour', 'Aurelia', 'Lunette', 'Noveau',
@@ -86,19 +69,19 @@ router.use((req, res, next) => {
 });
 
 // Advanced search and analytics (must be before :id routes)
-router.get('/stats', controller.getStats);
-router.get('/advanced-search', controller.advancedSearch);
-router.get('/suggestions', controller.getSuggestions);
-router.get('/check-duplicates', controller.duplicateDetection);
-router.get('/analytics/most-used', controller.getMostUsedItems);
-router.get('/analytics/never-used', controller.getNeverUsedItems);
+router.get('/stats', requireAuth, controller.getStats);
+router.get('/advanced-search', requireAuth, controller.advancedSearch);
+router.get('/suggestions', requireAuth, controller.getSuggestions);
+router.get('/check-duplicates', requireAuth, controller.duplicateDetection);
+router.get('/analytics/most-used', requireAuth, controller.getMostUsedItems);
+router.get('/analytics/never-used', requireAuth, controller.getNeverUsedItems);
 
 // Bulk operations
-router.post('/bulk-assign', controller.bulkAssign);
+router.post('/bulk-assign', requireAuth, controller.bulkAssign);
 
 // ── GET /for-chapter/:chapterId ───────────────────────────────────────
 // All wardrobe pieces in a chapter — for NI, Continuity Guard, Chapter Brief
-router.get('/for-chapter/:chapterId', optionalAuth, async (req, res) => {
+router.get('/for-chapter/:chapterId', requireAuth, async (req, res) => {
   try {
     const { chapterId } = req.params;
     const models        = req.app.get('models') || require('../models');
@@ -154,7 +137,7 @@ router.get('/for-chapter/:chapterId', optionalAuth, async (req, res) => {
 // passed in the form data. Gameplay mode pulls recent tier mix + the episode's
 // event so Claude can propose context-appropriate coin_cost, lock_type, era,
 // event_types, and Lala reaction blurbs.
-router.post('/analyze-image', optionalAuth, upload.single('image'), async (req, res) => {
+router.post('/analyze-image', requireAuth, aiRateLimiter, upload.single('image'), async (req, res) => {
   try {
     if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
@@ -353,30 +336,30 @@ Return ONLY the JSON.`;
 });
 
 // Library CRUD operations
-router.post('/', upload.single('image'), controller.uploadToLibrary);
-router.get('/', controller.listLibrary);
-router.get('/:id', controller.getLibraryItem);
-router.put('/:id', upload.single('image'), controller.updateLibraryItem);
-router.delete('/:id', controller.deleteLibraryItem);
+router.post('/', requireAuth, upload.single('image'), controller.uploadToLibrary);
+router.get('/', requireAuth, controller.listLibrary);
+router.get('/:id', requireAuth, controller.getLibraryItem);
+router.put('/:id', requireAuth, upload.single('image'), controller.updateLibraryItem);
+router.delete('/:id', requireAuth, controller.deleteLibraryItem);
 
 // Outfit set management (Phase 3)
-router.get('/:id/items', controller.getOutfitItems);
-router.post('/:id/items', controller.addItemsToOutfit);
-router.delete('/:setId/items/:itemId', controller.removeItemFromOutfit);
+router.get('/:id/items', requireAuth, controller.getOutfitItems);
+router.post('/:id/items', requireAuth, controller.addItemsToOutfit);
+router.delete('/:setId/items/:itemId', requireAuth, controller.removeItemFromOutfit);
 
 // Episode assignment
-router.post('/:id/assign', controller.assignToEpisode);
+router.post('/:id/assign', requireAuth, controller.assignToEpisode);
 
 // Usage tracking and analytics (Phase 5)
-router.get('/:id/usage', authMiddleware, controller.getUsageHistory);
-router.get('/:id/usage/shows', authMiddleware, controller.getCrossShowUsage);
-router.get('/:id/usage/timeline', authMiddleware, controller.getUsageTimeline);
-router.post('/:id/track-view', authMiddleware, controller.trackView);
-router.post('/:id/track-selection', authMiddleware, controller.trackSelection);
+router.get('/:id/usage', requireAuth, controller.getUsageHistory);
+router.get('/:id/usage/shows', requireAuth, controller.getCrossShowUsage);
+router.get('/:id/usage/timeline', requireAuth, controller.getUsageTimeline);
+router.post('/:id/track-view', requireAuth, controller.trackView);
+router.post('/:id/track-selection', requireAuth, controller.trackSelection);
 
 // ── POST /:id/assign-content ─────────────────────────────────────────
 // Assign a library item to any content type
-router.post('/:id/assign-content', optionalAuth, async (req, res) => {
+router.post('/:id/assign-content', requireAuth, async (req, res) => {
   try {
     const library_item_id = parseInt(req.params.id, 10);
     const {
@@ -452,7 +435,7 @@ router.post('/:id/assign-content', optionalAuth, async (req, res) => {
 
 // ── GET /:id/assignments ──────────────────────────────────────────────
 // All places this library item has been assigned — across all content types
-router.get('/:id/assignments', optionalAuth, async (req, res) => {
+router.get('/:id/assignments', requireAuth, async (req, res) => {
   try {
     const library_item_id = parseInt(req.params.id, 10);
     const models          = req.app.get('models') || require('../models');

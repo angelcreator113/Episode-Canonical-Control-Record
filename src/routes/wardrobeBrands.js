@@ -28,11 +28,8 @@ function getModels() {
   return _models;
 }
 
-let optionalAuth;
-try {
-  const m = require('../middleware/auth');
-  optionalAuth = m.optionalAuth || m.authenticate || ((q,r,n)=>n());
-} catch { optionalAuth = (q,r,n) => n(); }
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 let anthropic;
 try {
@@ -135,7 +132,7 @@ function getPressReadyForCategory(category) {
 
 // -- ROUTE 1: POST /seed-brands --
 
-router.post('/seed-brands', optionalAuth, async (req, res) => {
+router.post('/seed-brands', requireAuth, async (req, res) => {
   try {
     const models  = getModels();
     const seeded  = [];
@@ -158,7 +155,7 @@ router.post('/seed-brands', optionalAuth, async (req, res) => {
 
 // -- ROUTE 2: GET /brands --
 
-router.get('/brands', optionalAuth, async (req, res) => {
+router.get('/brands', requireAuth, async (req, res) => {
   try {
     const models = getModels();
     const brands = await models.LalaverseBrand.findAll({
@@ -188,7 +185,7 @@ router.get('/brands', optionalAuth, async (req, res) => {
 
 // -- ROUTE 3: POST /brands --
 
-router.post('/brands', optionalAuth, async (req, res) => {
+router.post('/brands', requireAuth, async (req, res) => {
   try {
     const {
       name, type = 'lalaverse', category, description,
@@ -220,7 +217,7 @@ router.post('/brands', optionalAuth, async (req, res) => {
 
 // -- ROUTE 4: POST /tag-piece --
 
-router.post('/tag-piece', optionalAuth, async (req, res) => {
+router.post('/tag-piece', requireAuth, async (req, res) => {
   try {
     const {
       wardrobe_item_id,
@@ -295,7 +292,7 @@ router.post('/tag-piece', optionalAuth, async (req, res) => {
 
 // -- ROUTE 5: GET /pieces/uncovered --
 
-router.get('/pieces/uncovered', optionalAuth, async (req, res) => {
+router.get('/pieces/uncovered', requireAuth, async (req, res) => {
   try {
     const { show_id } = req.query;
     const models = getModels();
@@ -332,7 +329,7 @@ router.get('/pieces/uncovered', optionalAuth, async (req, res) => {
 
 // -- ROUTE 6: POST /generate-coverage --
 
-router.post('/generate-coverage', optionalAuth, async (req, res) => {
+router.post('/generate-coverage', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       tag_id,
@@ -447,7 +444,7 @@ Write only the post. Start immediately. No preamble.`;
 
 // -- ROUTE 7: POST /mark-published --
 
-router.post('/mark-published', optionalAuth, async (req, res) => {
+router.post('/mark-published', requireAuth, async (req, res) => {
   try {
     const { tag_id, publish_url } = req.body;
     const models = getModels();
