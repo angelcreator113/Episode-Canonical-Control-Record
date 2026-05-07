@@ -4,7 +4,7 @@ const multer = require('multer');
 const sceneLibraryController = require('../controllers/sceneLibraryController');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateUUIDParam } = require('../middleware/requestValidation');
-const { authenticateToken } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // Configure multer for file uploads (memory storage for direct S3 upload)
 const upload = multer({
@@ -50,14 +50,14 @@ const upload = multer({
  * @access  Public (temp)
  * @query   showId, search, tags, processingStatus, sortBy, limit, offset
  */
-router.get('/', asyncHandler(sceneLibraryController.listLibraryScenes));
+router.get('/', requireAuth, asyncHandler(sceneLibraryController.listLibraryScenes));
 
 /**
  * @route   GET /api/scene-library/:id
  * @desc    Get single scene library clip
  * @access  Public (temp)
  */
-router.get('/:id', validateUUIDParam('id'), asyncHandler(sceneLibraryController.getLibraryScene));
+router.get('/:id', validateUUIDParam('id'), requireAuth, asyncHandler(sceneLibraryController.getLibraryScene));
 
 /**
  * @route   POST /api/scene-library/upload
@@ -67,7 +67,7 @@ router.get('/:id', validateUUIDParam('id'), asyncHandler(sceneLibraryController.
  */
 router.post(
   '/upload',
-  authenticateToken,
+  requireAuth,
   upload.single('file'),
   asyncHandler(sceneLibraryController.uploadSceneClip)
 );
@@ -80,7 +80,7 @@ router.post(
 router.put(
   '/:id',
   validateUUIDParam('id'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(sceneLibraryController.updateLibraryScene)
 );
 
@@ -92,7 +92,7 @@ router.put(
 router.delete(
   '/:id',
   validateUUIDParam('id'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(sceneLibraryController.deleteLibraryScene)
 );
 
