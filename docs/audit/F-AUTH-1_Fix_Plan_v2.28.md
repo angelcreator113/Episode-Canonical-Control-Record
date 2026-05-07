@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.27 — Track 7 mini-CP (WorldStudio.jsx 15 mutation sites — apiClient migration / 32 new tests / 1 session / ~45 min) approved at commit `3e447814`. CP3 regression window CLOSED — backend Tier 1 + Tier 3 mutations now properly authed via apiClient Bearer token interceptor. First Track 7 in-cycle execution since v2.0 Option C lock. Tier 3 → apiClient frontend migration discipline (NEW v2.27 §9.11 lock; extension of v2.26 §5.23): backend Tier 1 OR Tier 3 + frontend raw fetch triggers Track 7 mini-CP; Tier 4 alone does NOT trigger. Per-site structural assertion methodology (NEW v2.27 §5.26 amendment): third methodology variant alongside per-handler-FLOOR and aggregate-counter; ~1.0x at-forecast accuracy for in-place frontend migrations. Frontend pacing first data point: 15 sites / 45 min = ~3 min/site for uniform Pattern A. Surface-correction graduates to 9 cumulative data points (first frontend-phase correction: apiClient local name + per-category site count vs CP3 closing report §7 estimate). Track 7 mini-CP first-execution discipline established (NEW v2.27 §9.11 lock; template for future Track 7 mini-CPs at CP6/CP8/CP10 if backend Tier 1 OR Tier 3 + raw fetch surfaces). PE-9 filed (3 path-bug WorldStudio.jsx sites at lines 1099/1118/1704). Frontend test suite: 813 → 845 passing (+32, 0 regressions). Step 3 CP4 (Scene cluster — 8 files / ~140 handlers / 2 sessions per v2.23 §5.4) is next.
+**Document version:** v2.28 — Step 3 CP4 (Scene cluster — 6 files / 126 handlers / 61 new tests / 1 session / ~80 min) approved at commit `5c13531e`. Three architectural firsts in single CP: (1) first WP1 NO-OP CP (zero lazy-noop in zone — v2.24 §5.8 universal discipline holds at zero-removal state); (2) first NO-Track-7-coordination CP (frontend ideal state — service modules using apiClient cover all Scene cluster API calls; 0 raw fetch in frontend pages); (3) first pure Tier 1 sweep CP (no Tier 2/3/4/5 candidates surface). Mount-collision third topology variant: distinct-mounts (NEW v2.28 §5.13 amendment; CP2-shape + CP3-shape + distinct-mounts cumulative). AI POST reference model second application instance: ADD shape (CP4 D1) vs PROMOTE shape (CP3 D4); 13 handlers across sceneProposeRoute + sceneSetRoutes ADDed requireAuth + aiRateLimiter (NEW v2.28 §5.27 amendment). Frontend ideal state characteristics (NEW v2.28 §5.29 amendment): service-module pattern as architectural target; CP5-CP11 surface checks for this state. Surface-discovery methodology refinement (NEW v2.28 §5.30 amendment + PE-12): per-handler-block analysis preferred over fixed-line-window for bare-handler identification. Surface-correction graduates to 14 cumulative data points across CP15 + CP1 + CP2 + CP3 + Track 7 mini-CP + CP4. Step 3 pacing fourth backend data point: CP4 80min/on-forecast (CP1 75 / CP2 90 / CP3 75 / CP4 80 = ~80min ±15min mean). Backend test suite: 1550 → 1611 passing (+61, 0 regressions). Step 3 CP5 (next cluster per v2.23 §5.4) is next — NO Track 7 coordination needed (CP4 closes cleanly).
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** **TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 + CP3 + TRACK 7 MINI-CP COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. Pattern G locked: 6 sites (UNCHANGED). **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**; WorldStudio.jsx 15 mutation sites migrated to apiClient (14 canonical + 1 Tier 3 per D2) + 32 new structural assertions. CP3 regression window CLOSED — backend Tier 1 + Tier 3 mutations now properly authed via apiClient Bearer token interceptor. Tier 3 → apiClient frontend migration discipline established (NEW v2.27 §9.11 lock; extension of v2.26 §5.23). Per-site structural assertion methodology established (NEW v2.27 §5.26 amendment; ~1.0x at-forecast). Frontend pacing first data point (15 sites / 45 min). Frontend test suite: 813 → 845 passing (+32 tests, 0 regressions). Backed up at `3e447814` on `claude/f-auth-1-backup`. Step 3 CP4 (Scene cluster — 8 files / ~140 handlers / 2 sessions per v2.23 §5.4) kicks off next, fresh session after v2.27 lands on dev.
+**Status:** **TRACK 6 CLOSED + STEP 3 CP1+CP2+CP3+CP4 + TRACK 7 MINI-CP COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**. **Step 3 CP4 COMPLETE through commit `5c13531e`**; Scene cluster — 6 files / 126 handlers / 61 new tests. Three architectural firsts: first WP1 NO-OP CP, first NO-Track-7-coordination CP, first pure Tier 1 sweep CP. 13 AI POSTs ADDed requireAuth + aiRateLimiter (second worldEvents reference model application instance — ADD shape vs CP3 D4 PROMOTE shape). Mount-collision distinct-mounts third topology variant locked. Surface-correction graduates to 14 cumulative data points. Backend test suite: 1550 → 1611 passing (+61 tests, +1 suite, 0 regressions). Backed up at `5c13531e` on `claude/f-auth-1-backup`. Step 3 CP5 (next cluster per v2.23 §5.4) kicks off next, fresh session after v2.28 lands on dev. NO Track 7 mini-CP coordination needed at CP4 (frontend ideal state).
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -1806,6 +1806,137 @@ Future Track 7 mini-CP candidates (per v2.23 §5.4 + v2.27 §5.29 tier-trigger m
 - CP8 Social-feeds cluster: likely candidate (multiple frontend pages — SocialProfile.jsx, SocialFeed.jsx, etc.; multiple raw fetch sites likely)
 - CP10 Admin-internal cluster: possible candidate depending on admin-tooling frontend correspondence
 
+##### §5.33 — Step 3 CP4 architectural findings (LOCKED v2.28, COMPLETE — Scene cluster, three architectural firsts)
+
+CP4 completed at commit `5c13531e` (single squashed commit, 7 file-boundary WIPs collapsed; single session, ~80 min actual vs forecast 100-130 min — **on or under forecast**). Cleanest CP closure in Step 3 backend phase: **three architectural firsts** in single CP. 6 files / 126 handlers / 61 new tests / 0 regressions. WP1 NO-OP (zero lazy-noop in zone — first such CP); WP2 Tier 1 promotion sweep at 113 handlers; WP3 AI POST reference model application at 13 handlers (sceneProposeRoute × 1 + sceneSetRoutes × 12 — ADD requireAuth + aiRateLimiter); WP4 aggregate-counter test methodology (61 tests passing — 1.07x at-forecast). Backend test suite: 1550 → 1611 passing (+61 tests, +1 suite, 0 regressions, 0 failed). Frontend unchanged at 845 (CP4 backend-only sweep; NO Track 7 coordination needed). Backed up at `5c13531e` on `claude/f-auth-1-backup`.
+
+Three architectural firsts at single CP:
+
+- **First WP1 NO-OP CP:** zero lazy-noop in CP4 zone (planning §A.7 forecast 2-4 files); v2.24 §5.8 universal discipline holds at zero-removal state. WP1 phase skipped entirely; direct WP2 → WP3 → WP4 sequence.
+- **First NO-Track-7-coordination CP:** frontend ideal state — Scene cluster API calls flow through 3 service modules (sceneService.js × 46 + sceneLibraryService.js × 5 + sceneLinksService.js × 4 = 55 apiClient calls); 0 raw fetch in frontend pages/components. v2.27 §5.29 tier-trigger matrix: Tier 1 + service-module-apiClient does NOT trigger Track 7 mini-CP. CP4 closes cleanly with NO regression window opened.
+- **First pure Tier 1 sweep CP in Step 3:** all 126 handlers default Tier 1 per v2.26 §5.22 read vs write disposition discipline. No Tier 2/3/4/5 candidates surface. Mixed Tier 1+3+4 within-single-file primitive (v2.26 §5.21) does NOT apply at CP4. Pure Tier 1 + AI POST reference model overlay = cleanest backend CP shape.
+
+Five adjudication decisions executed cleanly:
+
+- **D1 (13 AI POSTs ADD reference model):** All 13 promoted to requireAuth + aiRateLimiter uniformly per worldEvents reference model (v2.26 §5.27). aiRateLimiter import added to sceneProposeRoute.js + sceneSetRoutes.js. ADD shape (had neither requireAuth nor aiRateLimiter pre-CP4) vs CP3 D4 PROMOTE shape (had aiRateLimiter; needed requireAuth). Both shapes apply same reference model — see §5.35 amendment.
+- **D2 (sceneLinks.js mount-path anomaly):** Filed PE-10 in §9.12. Mount path /api/scene-links (no /api/v1/ prefix) preserved at CP4; future polish CP addresses with frontend coordination. Tier 1 promotion at sceneLinks.js applies regardless of mount path.
+- **D3 (sceneTemplates.js Tier 1 default):** 5 bare handlers promoted to Tier 1 per §5.22 read vs write disposition. No public catalog or personalization shape surfaced; default applies.
+- **D4 (Test methodology aggregate-counter):** 61 tests at aggregate-counter methodology per v2.27 §5.30. Forecast 50-60 (FLOOR); actual 61 (1.07x at-forecast). Second aggregate-counter data point (CP3 first at 0.35x deflation; CP4 at 1.07x at-forecast — accuracy varies by aggregation density; see §5.37 amendment).
+- **D5 (scenes.js dev/diagnostic endpoints):** /test-direct/:id, /ultra-test, /db-test promoted to Tier 1 default. PE-11 candidate filed: Tier 5 env-gated mount candidates if execution-time analysis confirms dev-only (no production callers); future polish CP adjudication.
+
+Per-tier handler distribution post-CP4:
+
+- Tier 1 (requireAuth): 113 handlers across 6 files
+- Tier 1 + aiRateLimiter (NEW promotions): 13 handlers (1 sceneProposeRoute + 12 sceneSetRoutes per D1)
+- Tier 2 / Tier 3 / Tier 4 / Tier 5: 0 handlers (Scene cluster is creator-owned production tooling without admin subset, public catalog, or env-gated mounts)
+
+All 5 verification greps pass: (1) degradeOnInfraFailure consumer count 8 → 8 (UNCHANGED — no Tier 3 in CP4); (2) requireAuth consumer count 359 → 491 (+132 = 6 imports + 126 handlers); (3) lazy-noop fallback in CP4 zone = 0 (UNCHANGED — WP1 no-op); (4) authenticateToken active hits in CP4 zone = 0 (was 3 in sceneLibrary.js — eliminated); (5) NEW aiRateLimiter consumers in CP4 zone = +15 (2 imports + 13 handlers; matches D1 lock).
+
+- F-AUTH-4 multi-line grep zero hits in CP4 zone (matches CP3 pattern; no auth-weakening comment blocks).
+- F-AUTH-5 expansion: 10 sites in scene controllers (sceneController.js × 2 + sceneStudioController.js × 8) with `?.id || 'system'` / `?.id || null` fallback chains. Tier 1 promotion at routes renders all 10 fallback chains as defense-in-depth no-ops. v2.26 §5.16 ?.id field-name pattern continues to surface.
+- Cross-mount router observation: sceneProposeRoute at /api/v1/memories shares mount with 6 other routers (memoriesRoutes, scriptFromBook, storyEvaluationRoutes, characterGrowthRoute, episodeOrchestrationRoute [CP2-DONE], eventGeneratorRoute). Sibling path-segment claims distinct from sceneProposeRoute paths (/propose-scene, /scene-proposals/...). No collision; Tier 1 promotion affects only sceneProposeRoute handlers.
+- Surface execution-time discovery: per-handler-block analysis caught 2 additional bare handlers in sceneSetRoutes.js that surface report's 8-line-window grep had not isolated. Methodology refinement filed as PE-12 — see §5.37 amendment.
+- No HTTP method mismatches surfaced. Step 3 zero-method-mismatch streak: 4 consecutive CPs (CP1 + CP2 + CP3 + CP4).
+
+##### §5.34 — Mount-collision third topology variant: distinct-mounts (NEW v2.28 §5.13 amendment)
+
+CP4 surface enumeration revealed a third mount-collision topology variant. v2.25 §5.13 + v2.26 §5.13 amendment locked two variants (CP2-shape + CP3-shape); CP4 contributes the third:
+
+- CP2-shape: multiple routers at SAME mount prefix (e.g. /api/v1/episodes) with distinct path-segment claims. 11 routers at CP2; cross-mount risk + path-collision risk both architectural concerns.
+- CP3-shape: multiple routers at SHARED ROOT prefix (/api/v1) with internal /scenes/... or /world/... path-prefix discrimination at handler level. 3 routers at CP3 (worldRoutes + worldEventRoutes + worldStudioRoutes); same architectural concerns, different shape.
+- Distinct-mounts variant (NEW v2.28): each Scene cluster router has unique mount path (/api/v1/scenes, /api/v1/scene-templates, /api/v1/scene-library, /api/v1/scene-sets, /api/scene-links, /api/v1/memories cross-mount). No same-prefix collision; cross-mount router check applies only when a router shares mount with siblings (CP4: sceneProposeRoute at /api/v1/memories with 6 siblings — verified distinct path-segment claims; no collision).
+
+**Mount-collision discipline (LOCKED v2.28 §5.13 amendment). CP5-CP11 surface reports identify mount-collision topology variant per CP zone: CP2-shape (same-prefix sibling routers), CP3-shape (shared-root with internal path discrimination), or distinct-mounts (each router unique mount). Cross-mount router check applies regardless of variant — any router sharing mount with siblings requires sibling path-segment enumeration.**
+
+##### §5.35 — AI POST reference model second application instance: ADD shape vs PROMOTE shape (NEW v2.28 §5.27 amendment)
+
+v2.26 §5.27 locked the worldEvents reference model uniform state (all 4 AI POSTs at requireAuth + aiRateLimiter post-CP3). CP3 D4 was the first reference-model application instance: PROMOTE shape (handlers had aiRateLimiter; needed requireAuth). CP4 D1 is the second instance: ADD shape (handlers had neither; needed both).
+
+Reference model application shapes (LOCKED v2.28 §5.27 amendment):
+
+- PROMOTE shape (CP3 D4 first instance): handlers have aiRateLimiter present, missing requireAuth. Disposition: optionalAuth → requireAuth (preserve aiRateLimiter). 2 handlers at worldEvents.js promoted CP3 D4.
+- ADD shape (CP4 D1 second instance): handlers have neither requireAuth nor aiRateLimiter. Disposition: ADD both + import aiRateLimiter at file top. 13 handlers across sceneProposeRoute.js + sceneSetRoutes.js ADDed at CP4 D1.
+
+Cumulative AI POST cluster at uniform reference model post-CP4 (~28 handlers):
+
+- worldEvents.js: 4 handlers (CP3 closure)
+- episodeBriefRoutes.js: 4 handlers (preserved at CP1 surface)
+- episodes.js: 2 handlers (preserved at CP2; lines 869 + 1108 post-edit)
+- episodeOrchestrationRoute.js: 1 handler (added at CP2 D3)
+- sceneProposeRoute.js: 1 handler (added at CP4 D1 — ADD shape)
+- sceneSetRoutes.js: 12 handlers (added at CP4 D1 — ADD shape)
+- press.js: 4 handlers deferred to CP10 partial-migration disposition
+
+Reference model now uniform across ~28 AI POSTs in 6 files. CP5-CP10 surface reports identify any AI-cost POSTs in CP zone files; apply ADD or PROMOTE shape per current handler state.
+
+##### §5.36 — Frontend ideal state characteristics (NEW v2.28 §5.29 amendment — first NO-Track-7-coordination CP)
+
+CP4 is the first CP where backend Tier 1 promotion lands cleanly with NO Track 7 mini-CP coordination needed. v2.27 §5.29 locked the tier-trigger matrix: backend Tier 1/2/3 + frontend raw fetch → Track 7 mini-CP REQUIRED; backend Tier 4 + frontend raw fetch → Pattern E equivalent (no coordination). CP4 reveals a third state: **backend Tier 1+ + frontend service-module-apiClient = ideal state, NO coordination needed.**
+
+Frontend ideal state characteristics (LOCKED v2.28 §5.29 amendment):
+
+- Service modules wrap all backend API calls (e.g., sceneService.js + sceneLibraryService.js + sceneLinksService.js for Scene cluster)
+- Service modules use apiClient (Bearer token via Track 1 interceptor)
+- Frontend pages/components route through service modules (no direct fetch to backend paths)
+- Track 7 mini-CP NOT triggered when this state is in place
+
+Architectural target. The cumulative work of Track 1 (apiClient interceptor) + Track 6 frontend migration + service-module pattern compound to produce the ideal state. CP4 demonstrates the target shape; CP5-CP11 surface reports check for this state at frontend correspondence audit.
+
+Frontend correspondence audit decision tree (post-v2.28):
+
+- Backend Tier 1+ + frontend service-module-apiClient → IDEAL STATE; no Track 7 coordination needed (CP4 first instance)
+- Backend Tier 1+ + frontend raw fetch → Track 7 mini-CP REQUIRED (CP3 + WorldStudio.jsx first instance)
+- Backend Tier 4 + frontend raw fetch → Pattern E equivalent; no coordination needed (worldStudio.js GETs at CP3)
+
+Future Track 7 mini-CP candidates per v2.28 §5.36 ideal state evaluation: CP5-CP11 surface reports verify whether frontend correspondence is ideal state or raw-fetch state. Track 7 mini-CP scope = sum of raw-fetch sites where backend disposition is Tier 1/2/3.
+
+##### §5.37 — Surface-discovery methodology refinement (NEW v2.28 §5.30 amendment + PE-12)
+
+CP4 execution surfaced a methodology divergence: surface report's 8-line-window Python grep for bare handlers identified 1 bare handler in sceneSetRoutes.js, but execution-time per-handler-block analysis caught 3 inline bare GETs (`/:id/spec`, `/:id/canvas`, `/:id/angles/:angleId/depth-map`). Window-based grep missed handlers when they were tightly clustered in 8-line span.
+
+**Surface-discovery methodology refinement (LOCKED v2.28 §5.30 amendment + PE-12). CP5-CP11 surface reports default to per-handler-block analysis (using `router.<verb>` next-line as block boundary) over fixed-line-window grep for bare-handler identification. Per-handler-block scan more rigorous; catches tightly-clustered handlers that window-based grep may miss.**
+
+Methodology comparison:
+
+- Fixed-line-window grep (CP1-CP3 surface methodology): grep with -A8 or similar; window-bounded; may miss tightly-clustered handlers
+- Per-handler-block analysis (CP4 execution + LOCKED v2.28 §5.30): identify each `router.<verb>(...` as block start; next `router.<verb>(...` is block end; analyze middleware within each block independently
+
+CP5-CP11 surface reports apply per-handler-block analysis as default; fixed-line-window grep available as fallback for cross-handler aggregate counts.
+
+##### §5.38 — Surface-correction 14-data-point validation (UPDATED v2.28 §5.17 / §5.24)
+
+v2.27 §5.24 graduated surface-correction pattern to 9 cumulative data points across CP15 + CP1 + CP2 + CP3 + Track 7 mini-CP. CP4 contributes 5 more, **graduating the pattern to 14 cumulative data points across CP15 + CP1 + CP2 + CP3 + Track 7 mini-CP + CP4**:
+
+- Data points 1-9 (per v2.27 §5.24): WorldSetupGuide reclassification + press.js scope + file count + handler count + mount-collision count + Grep 1 baseline + handler count + AI POST count + worldTemperatureRoutes anomaly + apiClient local name + per-category site count
+- Data point 10 (CP4): file count correction — planning forecast 8; surface counted 6 (-25%)
+- Data point 11 (CP4): handler count correction — planning forecast ~140; surface counted 126 (-10%)
+- Data point 12 (CP4): lazy-noop count correction — planning §A.7 forecast 2-4 files; actual 0 (first WP1 NO-OP CP)
+- Data point 13 (CP4): AI POST count finding — not in planning forecast; surface enumerated 13 candidates (D1 promoted all uniformly)
+- Data point 14 (CP4): F-AUTH-5 controller site count — not enumerated in planning; surface counted 10 sites (sceneController × 2 + sceneStudioController × 8)
+
+**Surface-correction pattern formal lock graduates (LOCKED v2.28 §5.17 / §5.24). 14 cumulative data points across two phases (Track 6 CP15 + Step 3 CP1/CP2/CP3 + Track 7 mini-CP + CP4). Empirical surface-time inspection consistently catches what fix-plan revisions and planning phase miss.** Pattern density: ~2-3 corrections per CP. CP3 highest at 4; CP4 at 5 (highest single-CP correction count to date). CP5-CP11 surface reports apply rigorous empirical verification: per-handler-block analysis (per §5.30); custom-router-variable detection; AI POST enumeration; F-AUTH-5 site cataloguing.
+
+##### §5.39 — Step 3 pacing fourth backend data point (UPDATED v2.28, supersedes v2.26 §5.25 + v2.27 §5.31)
+
+Step 3 pacing model now has four backend data points + one frontend data point:
+
+- CP1 (backend, architectural): ~5 handlers in 75 min = ~15 min/handler
+- CP2 (backend, mechanical): 227 handlers in 90 min = ~24 sec/handler
+- CP3 (backend, mixed-disposition): 120 handlers in 75 min = ~38 sec/handler
+- Track 7 mini-CP (frontend, uniform Pattern A): 15 sites in 45 min = ~3 min/site
+- CP4 (backend, pure Tier 1 + AI POST overlay): 126 handlers in 80 min = ~38 sec/handler
+
+Backend pacing convergence (four data points): **~80 min ±15 min mean per backend CP** (CP1 75 / CP2 90 / CP3 75 / CP4 80). v2.23 §5.4 forecast all backend CPs at "1-2 sessions"; actual all 1 session for first 4 backend CPs in a row. Conservative bias 2x→1x sessions confirmed for fourth consecutive CP.
+
+Total Step 3 + Track 7 estimate update post-CP4: 4 backend CPs + 1 Track 7 mini-CP = 5 sessions used. ~7 backend CPs remaining (CP5-CP11) + estimated 0-3 Track 7 mini-CPs (depending on per-CP frontend correspondence audit) = ~7-10 sessions remaining at conservative bias. Total Step 3 + Track 7 trajectory: ~12-15 sessions estimate vs original v2.23 §5.4 lock of ~20-22 sessions = **~30-45% under original forecast** at this trajectory.
+
+Backend cost-per-handler analysis (post-v2.28):
+
+- Architectural overhead CPs (CP1 shape): ~15 min/handler (small handler count, refactor work dominates)
+- Mechanical-edit dominant CPs (CP2 shape): ~24 sec/handler (large handler count, sed-bulk efficiency)
+- Mixed-disposition CPs (CP3 shape): ~38 sec/handler (per-handler tier classification + adjudication overhead)
+- Pure Tier 1 + AI POST overlay CPs (CP4 shape): ~38 sec/handler (uniform sweep + 13 AI POST overlay)
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -2222,7 +2353,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 + CP3 + TRACK 7 MINI-CP COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. Pattern G locked: 6 sites (UNCHANGED throughout CP12-CP15). **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**; WorldStudio.jsx 15 mutation sites migrated to apiClient (14 canonical + 1 Tier 3 per D2) + 32 new structural assertions. CP3 regression window CLOSED — backend Tier 1 + Tier 3 mutations now properly authed via apiClient Bearer token interceptor. Tier 3 → apiClient frontend migration discipline established (NEW v2.27 §9.11 lock; extension of v2.26 §5.23). Per-site structural assertion methodology established (NEW v2.27 §5.26 amendment; ~1.0x at-forecast). Frontend pacing first data point (15 sites / 45 min). Frontend test suite: 813 → 845 passing (+32 tests, 0 regressions). Backed up at `3e447814` on `claude/f-auth-1-backup`. Step 3 CP4 (Scene cluster — 8 files / ~140 handlers / 2 sessions per v2.23 §5.4) kicks off next, fresh session after v2.27 lands on dev.
+- **Step 6b — TRACK 6 CLOSED + STEP 3 CP1+CP2+CP3+CP4 + TRACK 7 MINI-CP COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**. **Step 3 CP4 COMPLETE through commit `5c13531e`**; Scene cluster — 6 files / 126 handlers / 61 new tests / 1 session / ~80 min. Three architectural firsts: first WP1 NO-OP CP (zero lazy-noop in zone), first NO-Track-7-coordination CP (frontend ideal state via service modules + apiClient), first pure Tier 1 sweep CP (no Tier 2/3/4/5 candidates). 13 AI POSTs ADDed requireAuth + aiRateLimiter (second worldEvents reference model application instance — ADD shape vs CP3 D4 PROMOTE shape). Mount-collision distinct-mounts third topology variant locked. Surface-correction graduates to 14 cumulative data points. Backend test suite: 1550 → 1611 passing (+61 tests, +1 suite, 0 regressions). Backed up at `5c13531e` on `claude/f-auth-1-backup`. Step 3 CP5 (next cluster per v2.23 §5.4) kicks off next, fresh session after v2.28 lands on dev. NO Track 7 mini-CP coordination needed at CP4 (frontend ideal state).
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
