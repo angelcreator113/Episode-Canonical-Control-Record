@@ -17,7 +17,8 @@
 const express = require('express');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const client = new Anthropic();
 
@@ -128,7 +129,7 @@ async function getWardrobePool(show_id, event) {
 
 // ── Main route ────────────────────────────────────────────────────────────
 
-router.post('/generate-episode-orchestration', optionalAuth, async (req, res) => {
+router.post('/generate-episode-orchestration', requireAuth, aiRateLimiter, async (req, res) => {
   const {
     show_id,
     episode_id,

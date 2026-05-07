@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const db = require('../models');
 
 /**
  * Generate Lala-style script from formula
  * POST /api/v1/episodes/:episodeId/generate-lala-script
  */
-router.post('/:episodeId/generate-lala-script', optionalAuth, async (req, res) => {
+router.post('/:episodeId/generate-lala-script', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { formula } = req.body;

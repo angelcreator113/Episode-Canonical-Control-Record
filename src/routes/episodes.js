@@ -11,7 +11,7 @@ const outfitSetsController = require('../controllers/outfitSetsController');
 const episodeAssetsController = require('../controllers/episodeAssetsController');
 const timelinePlacementsController = require('../controllers/timelinePlacementsController');
 const videoCompositionController = require('../controllers/videoCompositionController');
-const { authenticateToken, optionalAuth, requireAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { requirePermission: _requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -25,6 +25,7 @@ const { validateEpisodeQuery, validateUUIDParam } = require('../middleware/reque
 // Test endpoint to verify basic functionality
 router.get(
   '/test-create',
+  requireAuth,
   asyncHandler(async (req, res) => {
     const { models } = require('../models');
     const { Episode } = models;
@@ -55,7 +56,7 @@ router.get(
 );
 
 // List episodes
-router.get('/', validateEpisodeQuery, asyncHandler(episodeController.listEpisodes));
+router.get('/', validateEpisodeQuery, requireAuth, asyncHandler(episodeController.listEpisodes));
 
 // ==================== WARDROBE ROUTES ====================
 // These must come BEFORE /:id route to avoid being caught by it
@@ -64,6 +65,7 @@ router.get('/', validateEpisodeQuery, asyncHandler(episodeController.listEpisode
 router.get(
   '/:id/wardrobe',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(wardrobeController.getEpisodeWardrobe)
 );
 
@@ -71,7 +73,7 @@ router.get(
 router.post(
   '/:id/wardrobe/:wardrobeId',
   validateUUIDParam('id'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(wardrobeController.linkWardrobeToEpisode)
 );
 
@@ -79,7 +81,7 @@ router.post(
 router.patch(
   '/:id/wardrobe/:wardrobeId/favorite',
   validateUUIDParam('id'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(wardrobeController.toggleEpisodeFavorite)
 );
 
@@ -87,7 +89,7 @@ router.patch(
 router.delete(
   '/:id/wardrobe/:wardrobeId',
   validateUUIDParam('id'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(wardrobeController.unlinkWardrobeFromEpisode)
 );
 
@@ -98,6 +100,7 @@ router.delete(
 router.get(
   '/:id/outfits',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(outfitSetsController.getEpisodeOutfits)
 );
 
@@ -105,7 +108,7 @@ router.get(
 router.post(
   '/:id/outfits',
   validateUUIDParam('id'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(outfitSetsController.createEpisodeOutfit)
 );
 
@@ -113,7 +116,7 @@ router.post(
 router.delete(
   '/:episodeId/outfits/:outfitId',
   validateUUIDParam('episodeId'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(outfitSetsController.deleteEpisodeOutfit)
 );
 
@@ -124,6 +127,7 @@ router.delete(
 router.get(
   '/:id/assets',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(episodeController.getEpisodeAssets)
 );
 
@@ -131,7 +135,7 @@ router.get(
 router.post(
   '/:id/assets',
   validateUUIDParam('id'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(episodeController.addEpisodeAsset)
 );
 
@@ -139,7 +143,7 @@ router.post(
 router.delete(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(episodeController.removeEpisodeAsset)
 );
 
@@ -147,7 +151,7 @@ router.delete(
 router.patch(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(episodeController.updateEpisodeAsset)
 );
 
@@ -157,6 +161,7 @@ router.patch(
 router.get(
   '/:id/platform',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(async (req, res) => {
     const { Episode } = require('../models');
     const episode = await Episode.findByPk(req.params.id, {
@@ -176,7 +181,7 @@ router.get(
 router.put(
   '/:id/platform',
   validateUUIDParam('id'),
-  authenticateToken,
+  requireAuth,
   asyncHandler(async (req, res) => {
     const { Episode } = require('../models');
     const episode = await Episode.findByPk(req.params.id);
@@ -203,6 +208,7 @@ router.put(
 router.post(
   '/:id/save',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(async (req, res) => {
     const { Episode, Scene, TimelineData } = require('../models');
     const { id } = req.params;
@@ -291,28 +297,22 @@ router.post(
 );
 
 // ==================== STANDARD EPISODE ROUTES ====================
-router.get('/:id/status', asyncHandler(episodeController.getEpisodeStatus));
+router.get('/:id/status', requireAuth, asyncHandler(episodeController.getEpisodeStatus));
 
 // Get single episode
-router.get('/:id', validateUUIDParam('id'), asyncHandler(episodeController.getEpisode));
+router.get('/:id', validateUUIDParam('id'), requireAuth, asyncHandler(episodeController.getEpisode));
 
 // CREATE EPISODE
 router.post(
   '/',
-  authenticateToken,
+  requireAuth,
   asyncHandler(episodeController.createEpisode)
 );
 
 // UPDATE EPISODE
-// Uses optionalAuth to match the rest of the write endpoints in this
-// codebase (world events, generate-episode, scene-sets, etc.). The
-// previous strict authenticateToken caused a hard redirect to /login
-// every time a creator's token expired even though every other write
-// path tolerates a missing token. The controller already handles
-// req.user?.id with optional chaining and an 'unknown' fallback.
 router.put(
   '/:id',
-  optionalAuth,
+  requireAuth,
   asyncHandler(episodeController.updateEpisode)
 );
 
@@ -328,6 +328,7 @@ const thumbnailUpload = multer({
 
 router.post(
   '/:id/thumbnail',
+  requireAuth,
   thumbnailUpload.single('thumbnail'),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -371,14 +372,14 @@ router.post(
 // DELETE EPISODE
 router.delete(
   '/:id',
-  optionalAuth,
+  requireAuth,
   asyncHandler(episodeController.deleteEpisode)
 );
 
 // Enqueue episode for processing
 router.post(
   '/:id/enqueue',
-  authenticateToken,
+  requireAuth,
   asyncHandler(episodeController.enqueueEpisode)
 );
 
@@ -390,6 +391,7 @@ router.post(
 router.get(
   '/:episodeId/scenes',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(sceneController.getEpisodeScenes)
 );
 
@@ -397,7 +399,7 @@ router.get(
 router.put(
   '/:episodeId/scenes/reorder',
   validateUUIDParam('episodeId'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  requireAuth,
   asyncHandler(sceneController.reorderScenes)
 );
 
@@ -405,6 +407,7 @@ router.put(
 router.get(
   '/:episodeId/scenes/stats',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(sceneController.getSceneStats)
 );
 
@@ -416,42 +419,49 @@ router.get(
 router.post(
   '/:episodeId/scenes',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(sceneController.createScene)
 );
 
 // POST /api/v1/scenes/:scene_id/calculate-duration - Auto-calculate scene duration
 router.post(
   '/scenes/:scene_id/calculate-duration',
+  requireAuth,
   asyncHandler(sceneController.calculateDuration)
 );
 
 // GET /api/v1/scenes/:scene_id/completeness - Check scene completeness
 router.get(
   '/scenes/:scene_id/completeness',
+  requireAuth,
   asyncHandler(sceneController.checkCompleteness)
 );
 
 // POST /api/v1/scenes/:scene_id/assets - Add asset to scene
 router.post(
   '/scenes/:scene_id/assets',
+  requireAuth,
   asyncHandler(sceneController.addAssetToScene)
 );
 
 // GET /api/v1/scenes/:scene_id/assets - List scene assets
 router.get(
   '/scenes/:scene_id/assets',
+  requireAuth,
   asyncHandler(sceneController.listSceneAssets)
 );
 
 // PUT /api/v1/scenes/:scene_id/assets/:scene_asset_id - Update scene asset
 router.put(
   '/scenes/:scene_id/assets/:scene_asset_id',
+  requireAuth,
   asyncHandler(sceneController.updateSceneAsset)
 );
 
 // DELETE /api/v1/scenes/:scene_id/assets/:scene_asset_id - Remove asset from scene
 router.delete(
   '/scenes/:scene_id/assets/:scene_asset_id',
+  requireAuth,
   asyncHandler(sceneController.removeAssetFromScene)
 );
 
@@ -463,6 +473,7 @@ router.delete(
 router.get(
   '/:episodeId/scripts',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(scriptsController.getScriptsByEpisode)
 );
 
@@ -470,8 +481,7 @@ router.get(
 router.post(
   '/:episodeId/scripts',
   validateUUIDParam('episodeId'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
-  // requireAdmin,
+  requireAuth,
   asyncHandler(scriptsController.createScript)
 );
 
@@ -479,6 +489,7 @@ router.post(
 router.get(
   '/:episodeId/scripts/:scriptType/versions',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(scriptsController.getScriptVersions)
 );
 
@@ -491,6 +502,7 @@ router.get(
 router.get(
   '/:id/library-scenes',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(episodeController.listEpisodeScenes)
 );
 
@@ -498,6 +510,7 @@ router.get(
 router.post(
   '/:id/library-scenes',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(episodeController.addSceneToEpisode)
 );
 
@@ -505,6 +518,7 @@ router.post(
 router.put(
   '/:id/library-scenes/:sceneId',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(episodeController.updateEpisodeScene)
 );
 
@@ -512,6 +526,7 @@ router.put(
 router.delete(
   '/:id/library-scenes/:sceneId',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(episodeController.removeSceneFromEpisode)
 );
 
@@ -524,6 +539,7 @@ router.delete(
 router.get(
   '/:id/library-assets',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(require('../controllers/episodeAssetsController').listEpisodeAssets)
 );
 
@@ -531,6 +547,7 @@ router.get(
 router.post(
   '/:id/library-assets',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(require('../controllers/episodeAssetsController').addAssetToEpisode)
 );
 
@@ -538,6 +555,7 @@ router.post(
 router.patch(
   '/:id/library-assets/:assetId',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(require('../controllers/episodeAssetsController').updateEpisodeAsset)
 );
 
@@ -545,6 +563,7 @@ router.patch(
 router.delete(
   '/:id/library-assets/:assetId',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(require('../controllers/episodeAssetsController').removeAssetFromEpisode)
 );
 
@@ -557,6 +576,7 @@ router.delete(
 router.get(
   '/:id/timeline/placements',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(require('../controllers/timelinePlacementsController').listPlacements)
 );
 
@@ -564,6 +584,7 @@ router.get(
 router.post(
   '/:id/timeline/placements',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(require('../controllers/timelinePlacementsController').createPlacement)
 );
 
@@ -571,6 +592,7 @@ router.post(
 router.patch(
   '/:id/timeline/placements/:placementId',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(require('../controllers/timelinePlacementsController').updatePlacement)
 );
 
@@ -578,6 +600,7 @@ router.patch(
 router.delete(
   '/:id/timeline/placements/:placementId',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(require('../controllers/timelinePlacementsController').deletePlacement)
 );
 
@@ -585,6 +608,7 @@ router.delete(
 router.get(
   '/:id/timeline/wardrobe/current',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(require('../controllers/timelinePlacementsController').getCurrentWardrobe)
 );
 
@@ -592,6 +616,7 @@ router.get(
 router.put(
   '/:id/sequence-items/reorder',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(episodeController.reorderSequenceItems)
 );
 
@@ -599,6 +624,7 @@ router.put(
 router.post(
   '/:id/sequence-items/note',
   validateUUIDParam('id'),
+  requireAuth,
   asyncHandler(episodeController.addNoteToEpisode)
 );
 
@@ -610,6 +636,7 @@ router.post(
 router.get(
   '/:episodeId/library-assets',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(episodeAssetsController.listEpisodeAssets)
 );
 
@@ -617,6 +644,7 @@ router.get(
 router.get(
   '/:episodeId/library-assets/folders',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(episodeAssetsController.getAssetFolders)
 );
 
@@ -624,6 +652,7 @@ router.get(
 router.post(
   '/:episodeId/library-assets',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(episodeAssetsController.addAssetToEpisode)
 );
 
@@ -632,6 +661,7 @@ router.patch(
   '/:episodeId/library-assets/:assetId',
   validateUUIDParam('episodeId'),
   validateUUIDParam('assetId'),
+  requireAuth,
   asyncHandler(episodeAssetsController.updateEpisodeAsset)
 );
 
@@ -640,6 +670,7 @@ router.delete(
   '/:episodeId/library-assets/:assetId',
   validateUUIDParam('episodeId'),
   validateUUIDParam('assetId'),
+  requireAuth,
   asyncHandler(episodeAssetsController.removeAssetFromEpisode)
 );
 
@@ -651,6 +682,7 @@ router.delete(
 router.get(
   '/:episodeId/timeline/placements',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(timelinePlacementsController.listPlacements)
 );
 
@@ -658,6 +690,7 @@ router.get(
 router.post(
   '/:episodeId/timeline/placements',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(timelinePlacementsController.createPlacement)
 );
 
@@ -665,6 +698,7 @@ router.post(
 router.patch(
   '/:episodeId/timeline/placements/:placementId',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(timelinePlacementsController.updatePlacement)
 );
 
@@ -672,6 +706,7 @@ router.patch(
 router.delete(
   '/:episodeId/timeline/placements/:placementId',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(timelinePlacementsController.deletePlacement)
 );
 
@@ -679,6 +714,7 @@ router.delete(
 router.get(
   '/:episodeId/timeline/wardrobe/current',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(timelinePlacementsController.getCurrentWardrobe)
 );
 
@@ -693,6 +729,7 @@ router.get(
 router.get(
   '/:episodeId/video-compositions',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(videoCompositionController.list)
 );
 
@@ -700,6 +737,7 @@ router.get(
 router.post(
   '/:episodeId/video-compositions',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(videoCompositionController.create)
 );
 
@@ -707,6 +745,7 @@ router.post(
 router.post(
   '/:episodeId/video-compositions/:id/duplicate',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(videoCompositionController.duplicate)
 );
 
@@ -714,6 +753,7 @@ router.post(
 router.get(
   '/:episodeId/video-compositions/:id',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(videoCompositionController.get)
 );
 
@@ -721,6 +761,7 @@ router.get(
 router.put(
   '/:episodeId/video-compositions/:id',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(videoCompositionController.update)
 );
 
@@ -728,6 +769,7 @@ router.put(
 router.delete(
   '/:episodeId/video-compositions/:id',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(videoCompositionController.remove)
 );
 
@@ -737,7 +779,7 @@ router.delete(
  * GET /api/v1/episodes/:id/wardrobe-defaults
  * Get episode wardrobe defaults for all characters
  */
-router.get('/:id/wardrobe-defaults', async (req, res) => {
+router.get('/:id/wardrobe-defaults', requireAuth, async (req, res) => {
   try {
     const { EpisodeWardrobeDefault, Asset } = require('../models');
 
@@ -773,7 +815,7 @@ router.get('/:id/wardrobe-defaults', async (req, res) => {
  * POST /api/v1/episodes/:id/wardrobe-defaults
  * Set/update default outfit for a character in an episode
  */
-router.post('/:id/wardrobe-defaults', async (req, res) => {
+router.post('/:id/wardrobe-defaults', requireAuth, async (req, res) => {
   try {
     const { EpisodeWardrobeDefault, Asset } = require('../models');
     const { character_name, outfit_asset_id } = req.body;
@@ -833,7 +875,7 @@ router.post('/:id/wardrobe-defaults', async (req, res) => {
  * DELETE /api/v1/episodes/:id/wardrobe-defaults/:character
  * Remove default outfit for a character
  */
-router.delete('/:id/wardrobe-defaults/:character', async (req, res) => {
+router.delete('/:id/wardrobe-defaults/:character', requireAuth, async (req, res) => {
   try {
     const { EpisodeWardrobeDefault } = require('../models');
 
@@ -999,6 +1041,7 @@ router.post('/:id/generate-beats', requireAuth, aiRateLimiter, asyncHandler(asyn
 router.get(
   '/:episodeId/scene-sets',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(async (req, res) => {
     const { models } = require('../models');
     const { Episode, SceneSet, SceneAngle, SceneSetEpisode } = models;
@@ -1043,6 +1086,7 @@ router.get(
 router.post(
   '/:episodeId/scene-sets',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(async (req, res) => {
     const { models } = require('../models');
     const { Episode, SceneSetEpisode } = models;
@@ -1089,6 +1133,7 @@ router.post(
 router.delete(
   '/:episodeId/scene-sets/:setId',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(async (req, res) => {
     const { models } = require('../models');
     const { SceneSetEpisode } = models;
@@ -1239,6 +1284,7 @@ router.post(
 router.patch(
   '/:episodeId/scene-sets/reorder',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(async (req, res) => {
     const { models } = require('../models');
     const { SceneSetEpisode } = models;
@@ -1263,6 +1309,7 @@ router.patch(
 router.post(
   '/:episodeId/scenes/from-angle',
   validateUUIDParam('episodeId'),
+  requireAuth,
   asyncHandler(async (req, res) => {
     const { models } = require('../models');
     const { Episode, Scene, SceneSet, SceneAngle } = models;

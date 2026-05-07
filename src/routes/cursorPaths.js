@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const cursorPathController = require('../controllers/cursorPathController');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // ============================================================================
 // CURSOR PATH GENERATION
@@ -18,7 +18,7 @@ const { optionalAuth } = require('../middleware/auth');
  */
 router.post(
   '/:episodeId/cursor-paths/generate',
-  optionalAuth,
+  requireAuth,
   cursorPathController.generateCursorPaths
 );
 
@@ -28,7 +28,7 @@ router.post(
  */
 router.post(
   '/:episodeId/cursor-paths/regenerate',
-  optionalAuth,
+  requireAuth,
   cursorPathController.regenerateCursorPaths
 );
 
@@ -42,7 +42,7 @@ router.post(
  */
 router.get(
   '/:episodeId/cursor-paths',
-  optionalAuth,
+  requireAuth,
   cursorPathController.listCursorPaths
 );
 
@@ -52,7 +52,7 @@ router.get(
  */
 router.get(
   '/:episodeId/cursor-paths/:pathId',
-  optionalAuth,
+  requireAuth,
   cursorPathController.getCursorPath
 );
 
@@ -62,7 +62,7 @@ router.get(
  */
 router.post(
   '/:episodeId/cursor-paths',
-  optionalAuth,
+  requireAuth,
   cursorPathController.createCursorPath
 );
 
@@ -72,7 +72,7 @@ router.post(
  */
 router.put(
   '/:episodeId/cursor-paths/:pathId',
-  optionalAuth,
+  requireAuth,
   cursorPathController.updateCursorPath
 );
 
@@ -82,7 +82,7 @@ router.put(
  */
 router.delete(
   '/:episodeId/cursor-paths/:pathId',
-  optionalAuth,
+  requireAuth,
   cursorPathController.deleteCursorPath
 );
 
@@ -96,7 +96,7 @@ router.delete(
  */
 router.post(
   '/:episodeId/cursor-paths/:pathId/approve',
-  optionalAuth,
+  requireAuth,
   cursorPathController.approveCursorPath
 );
 
@@ -106,7 +106,7 @@ router.post(
  */
 router.post(
   '/:episodeId/cursor-paths/:pathId/reject',
-  optionalAuth,
+  requireAuth,
   cursorPathController.rejectCursorPath
 );
 
@@ -116,7 +116,7 @@ router.post(
  */
 router.post(
   '/:episodeId/cursor-paths/approve-all',
-  optionalAuth,
+  requireAuth,
   cursorPathController.approveAllCursorPaths
 );
 
@@ -130,7 +130,7 @@ router.post(
  */
 router.get(
   '/:episodeId/cursor-paths/export',
-  optionalAuth,
+  requireAuth,
   cursorPathController.exportCursorPaths
 );
 

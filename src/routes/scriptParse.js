@@ -24,14 +24,7 @@ const express = require('express');
 const router = express.Router();
 const { parseScript } = require('../utils/scriptBeatParser');
 
-// Optional auth — allow unauthenticated for dev
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
 
 /**
  * POST /api/v1/scripts/parse
@@ -42,7 +35,7 @@ try {
  * Body: { content: "## BEAT: OPENING...", title?: "Episode Title" }
  * Returns: Scene Plan JSON
  */
-router.post('/parse', optionalAuth, async (req, res) => {
+router.post('/parse', requireAuth, async (req, res) => {
   try {
     const { content, title } = req.body;
 
@@ -86,7 +79,7 @@ router.post('/parse', optionalAuth, async (req, res) => {
  * 
  * Returns: Scene Plan JSON
  */
-router.post('/:id/parse-script', optionalAuth, async (req, res) => {
+router.post('/:id/parse-script', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -178,7 +171,7 @@ router.post('/:id/parse-script', optionalAuth, async (req, res) => {
  * 
  * Returns: Created scenes + Scene Plan metadata
  */
-router.post('/:id/apply-scene-plan', optionalAuth, async (req, res) => {
+router.post('/:id/apply-scene-plan', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { content: bodyContent, clearExisting = false } = req.body;

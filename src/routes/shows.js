@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const sharp = require('sharp');
+const { requireAuth } = require('../middleware/auth');
 
 // Lazy load Show model to avoid circular dependencies
 let Show = null;
@@ -54,7 +55,7 @@ const BUCKET_NAME = process.env.AWS_S3_BUCKET || 'episode-metadata-assets-dev';
  * POST /api/v1/shows/:id/cover-image
  * Upload cover image for a show (portrait 2:3 ratio)
  */
-router.post('/:id/cover-image', upload.single('image'), async (req, res) => {
+router.post('/:id/cover-image', requireAuth, upload.single('image'), async (req, res) => {
   try {
     const Show = getShow();
     const { id } = req.params;
@@ -123,7 +124,7 @@ router.post('/:id/cover-image', upload.single('image'), async (req, res) => {
  * GET /api/v1/shows
  * Get all shows
  */
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
 
@@ -213,7 +214,7 @@ router.get('/', async (req, res) => {
  * Falls back to auto-creating a minimal show record if episodes exist for this show_id
  * Includes raw SQL fallback if Sequelize model query fails
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const { id } = req.params;
@@ -299,7 +300,7 @@ router.get('/:id', async (req, res) => {
  * POST /api/v1/shows
  * Create a new show
  */
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const { name, description, icon, color, status, coverImageUrl, genre, metadata, tagline } = req.body;
@@ -400,7 +401,7 @@ router.post('/', async (req, res) => {
  * triggered_at timestamps) alongside the current live balance. Frontend
  * uses this to render the milestones widget + progress bar.
  */
-router.get('/:id/financial-config', async (req, res) => {
+router.get('/:id/financial-config', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -438,7 +439,7 @@ router.get('/:id/financial-config', async (req, res) => {
  * Persists onto Show.metadata. Non-destructive: preserves other metadata keys.
  * After updating starting_balance, call the seed endpoint to write the tx.
  */
-router.put('/:id/financial-config', async (req, res) => {
+router.put('/:id/financial-config', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -474,7 +475,7 @@ router.put('/:id/financial-config', async (req, res) => {
  * Everything derives from financial_transactions + episodes. Zero new
  * schema. Runs in one or two roundtrips; fine for a ~250-episode show.
  */
-router.get('/:id/financial-summary', async (req, res) => {
+router.get('/:id/financial-summary', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -617,7 +618,7 @@ router.get('/:id/financial-summary', async (req, res) => {
  *  - icon:   asset_type=UI_OVERLAY, asset_group=FINANCE,
  *      metadata.overlay_type='finance_<app>_icon'
  */
-router.post('/:id/seed-finance-apps', async (req, res) => {
+router.post('/:id/seed-finance-apps', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -866,7 +867,7 @@ router.post('/:id/seed-finance-apps', async (req, res) => {
  * finance app. Preserves all content_zones + screen_links — only the image
  * asset changes. Same "Regenerate" pattern as event invitations.
  */
-router.post('/:id/redecorate-finance-app', async (req, res) => {
+router.post('/:id/redecorate-finance-app', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -914,7 +915,7 @@ router.post('/:id/redecorate-finance-app', async (req, res) => {
  * category, plus a closet-value snapshot (total cost of owned pieces,
  * dream piece, biggest unowned). All read-only, cheap queries.
  */
-router.get('/:id/financial-breakdowns', async (req, res) => {
+router.get('/:id/financial-breakdowns', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -1026,7 +1027,7 @@ router.get('/:id/financial-breakdowns', async (req, res) => {
  *   ("your most expensive unowned piece is 4,500 coins").
  * - reward_coins defaults to 10% of threshold rounded to nearest 50.
  */
-router.get('/:id/financial-suggestions', async (req, res) => {
+router.get('/:id/financial-suggestions', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -1187,7 +1188,7 @@ router.get('/:id/financial-suggestions', async (req, res) => {
  * the ledger reflects the new amount. Non-seed transactions are left
  * untouched, so history from prior play sessions is preserved.
  */
-router.post('/:id/seed-balance', async (req, res) => {
+router.post('/:id/seed-balance', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -1224,7 +1225,7 @@ router.post('/:id/seed-balance', async (req, res) => {
  * this via worldEvents.js to mark missing slots as required. Non-destructive:
  * preserves any other metadata keys the show already has.
  */
-router.put('/:id/wardrobe-config', async (req, res) => {
+router.put('/:id/wardrobe-config', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const { id } = req.params;
@@ -1248,7 +1249,7 @@ router.put('/:id/wardrobe-config', async (req, res) => {
  * PUT /api/v1/shows/:id
  * Update a show
  */
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const { id } = req.params;
@@ -1278,7 +1279,7 @@ router.put('/:id', async (req, res) => {
  * DELETE /api/v1/shows/:id
  * Delete a show
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const { id } = req.params;
@@ -1307,7 +1308,7 @@ router.delete('/:id', async (req, res) => {
  * GET /api/v1/shows/:id/config
  * Get show configuration (for script generator)
  */
-router.get('/:id/config', async (req, res) => {
+router.get('/:id/config', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const { id } = req.params;
@@ -1349,7 +1350,7 @@ router.get('/:id/config', async (req, res) => {
  * GET /api/v1/shows/:id/template
  * Get default script template for a show
  */
-router.get('/:id/template', async (req, res) => {
+router.get('/:id/template', requireAuth, async (req, res) => {
   try {
     const Show = getShow();
     const { id } = req.params;
@@ -1434,7 +1435,7 @@ router.get('/:id/template', async (req, res) => {
  * GET /api/v1/shows/:id/wardrobe
  * Get all wardrobe items belonging to a show
  */
-router.get('/:id/wardrobe', async (req, res) => {
+router.get('/:id/wardrobe', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { character, category } = req.query;
