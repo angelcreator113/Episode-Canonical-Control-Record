@@ -5,13 +5,8 @@ const { v4: uuidv4 } = require('uuid');
 const wardrobeController = require('../controllers/wardrobeController');
 const { asyncHandler } = require('../middleware/errorHandler');
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { return null; }
@@ -39,7 +34,7 @@ const upload = multer({
  */
 
 // Get staging items (unassigned wardrobe items)
-router.get('/staging', asyncHandler(wardrobeController.getStagingItems));
+router.get('/staging', requireAuth, asyncHandler(wardrobeController.getStagingItems));
 
 // ═══════════════════════════════════════════
 // GET /api/v1/wardrobe/categories-audit
@@ -48,7 +43,7 @@ router.get('/staging', asyncHandler(wardrobeController.getStagingItems));
 // fall outside the 5-slot taxonomy. Call with ?show_id=... to scope.
 // Used by the Wardrobe tab to render the "Unassigned (N)" warning card.
 // ═══════════════════════════════════════════
-router.get('/categories-audit', optionalAuth, async (req, res) => {
+router.get('/categories-audit', requireAuth, async (req, res) => {
   try {
     const { show_id } = req.query;
     const models = await getModels();
@@ -91,7 +86,7 @@ router.get('/categories-audit', optionalAuth, async (req, res) => {
 // GET /api/v1/wardrobe/outfit/:episode_id
 // Returns wardrobe items linked (locked) to an episode
 // ═══════════════════════════════════════════
-router.get('/outfit/:episode_id', optionalAuth, async (req, res) => {
+router.get('/outfit/:episode_id', requireAuth, async (req, res) => {
   try {
     const { episode_id } = req.params;
     if (!episode_id) return res.status(400).json({ error: 'episode_id is required' });
@@ -154,7 +149,7 @@ router.get('/outfit/:episode_id', optionalAuth, async (req, res) => {
 // GET /api/v1/wardrobe/outfit-score/:episodeId
 // Returns synergy score for the locked outfit
 // ═══════════════════════════════════════════
-router.get('/outfit-score/:episodeId', optionalAuth, async (req, res) => {
+router.get('/outfit-score/:episodeId', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const models = await getModels();
@@ -190,71 +185,71 @@ router.get('/outfit-score/:episodeId', optionalAuth, async (req, res) => {
 });
 
 // List all wardrobe items
-router.get('/', asyncHandler(wardrobeController.listWardrobeItems));
+router.get('/', requireAuth, asyncHandler(wardrobeController.listWardrobeItems));
 
 // Create new wardrobe item
-router.post('/', upload.single('image'), asyncHandler(wardrobeController.createWardrobeItem));
+router.post('/', requireAuth, upload.single('image'), asyncHandler(wardrobeController.createWardrobeItem));
 
 // Get item usage across shows/episodes
-router.get('/:id/usage', asyncHandler(wardrobeController.getItemUsage));
+router.get('/:id/usage', requireAuth, asyncHandler(wardrobeController.getItemUsage));
 
 // Get single wardrobe item
-router.get('/:id', asyncHandler(wardrobeController.getWardrobeItem));
+router.get('/:id', requireAuth, asyncHandler(wardrobeController.getWardrobeItem));
 
 // Update wardrobe item
-router.put('/:id', upload.single('image'), asyncHandler(wardrobeController.updateWardrobeItem));
+router.put('/:id', requireAuth, upload.single('image'), asyncHandler(wardrobeController.updateWardrobeItem));
 
 // Process background removal for wardrobe item
-router.post('/:id/process-background', asyncHandler(wardrobeController.processBackgroundRemoval));
+router.post('/:id/process-background', requireAuth, asyncHandler(wardrobeController.processBackgroundRemoval));
 
 // AI-regenerate as a studio product shot (Flux Kontext img2img)
-router.post('/:id/regenerate-product-shot', asyncHandler(wardrobeController.regenerateProductShot));
+router.post('/:id/regenerate-product-shot', requireAuth, aiRateLimiter, asyncHandler(wardrobeController.regenerateProductShot));
 
 // Set which image variant (original | processed | regenerated | null=auto)
 // the grid card should show for this item
-router.patch('/:id/primary-variant', asyncHandler(wardrobeController.setPrimaryImageVariant));
+router.patch('/:id/primary-variant', requireAuth, asyncHandler(wardrobeController.setPrimaryImageVariant));
 
 // Promote a colored-backdrop variant of this item to a phone screen
 // (creates an Asset row with overlay_type='wardrobe_detail')
-router.post('/:id/send-to-phone', asyncHandler(wardrobeController.sendToPhone));
+router.post('/:id/send-to-phone', requireAuth, asyncHandler(wardrobeController.sendToPhone));
 
 // AI upscale wardrobe image (4x via Real-ESRGAN)
-router.post('/:id/upscale', asyncHandler(wardrobeController.aiUpscaleItem));
+router.post('/:id/upscale', requireAuth, asyncHandler(wardrobeController.aiUpscaleItem));
 
 // Regenerate thumbnail for existing item
-router.post('/:id/regenerate-thumbnail', asyncHandler(wardrobeController.regenerateThumbnail));
+router.post('/:id/regenerate-thumbnail', requireAuth, aiRateLimiter, asyncHandler(wardrobeController.regenerateThumbnail));
 
 // Premium enhancement pipeline (all enhancements combined)
-router.post('/:id/premium-enhance', asyncHandler(wardrobeController.premiumEnhance));
+router.post('/:id/premium-enhance', requireAuth, aiRateLimiter, asyncHandler(wardrobeController.premiumEnhance));
 
 // Add drop shadow to transparent PNG
-router.post('/:id/add-shadow', asyncHandler(wardrobeController.addDropShadow));
+router.post('/:id/add-shadow', requireAuth, asyncHandler(wardrobeController.addDropShadow));
 
 // AI analysis (colors + tags) using Claude Vision
-router.post('/:id/analyze', asyncHandler(wardrobeController.analyzeItem));
+router.post('/:id/analyze', requireAuth, aiRateLimiter, asyncHandler(wardrobeController.analyzeItem));
 
 // ═══════════════════════════════════════════
 // BULK OPERATIONS
 // ═══════════════════════════════════════════
 
 // Bulk enhance multiple wardrobe items
-router.post('/bulk/enhance', asyncHandler(wardrobeController.bulkEnhance));
+router.post('/bulk/enhance', requireAuth, aiRateLimiter, asyncHandler(wardrobeController.bulkEnhance));
 
 // Bulk AI upscale multiple items (limit 10)
-router.post('/bulk/upscale', asyncHandler(wardrobeController.bulkUpscale));
+router.post('/bulk/upscale', requireAuth, asyncHandler(wardrobeController.bulkUpscale));
 
 // Bulk AI analysis (colors + tags)
-router.post('/bulk/analyze', asyncHandler(wardrobeController.bulkAnalyze));
+router.post('/bulk/analyze', requireAuth, aiRateLimiter, asyncHandler(wardrobeController.bulkAnalyze));
 
 // Bulk regenerate missing thumbnails
-router.post('/bulk/regenerate-thumbnails', asyncHandler(wardrobeController.bulkRegenerateThumbnails));
+router.post('/bulk/regenerate-thumbnails', requireAuth, aiRateLimiter, asyncHandler(wardrobeController.bulkRegenerateThumbnails));
 
 // POST /api/v1/wardrobe/bulk/sync-coin-costs?show_id=<id>
 // One-shot backfill: sets coin_cost = price × USD_TO_COINS for rows where
 // price is non-null but coin_cost is null or 0 and the item isn't already
 // manually customised. Returns { updated, skipped } so the UI can toast a
 // result. Use after enabling the POST/PUT auto-sync to heal historical data.
-router.post('/bulk/sync-coin-costs', optionalAuth, async (req, res) => {
+router.post('/bulk/sync-coin-costs', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not available' });
@@ -287,7 +282,7 @@ router.post('/bulk/sync-coin-costs', optionalAuth, async (req, res) => {
 });
 
 // Delete wardrobe item (with safeguards)
-router.delete('/:id', asyncHandler(wardrobeController.deleteWardrobeItem));
+router.delete('/:id', requireAuth, asyncHandler(wardrobeController.deleteWardrobeItem));
 
 
 // ═══════════════════════════════════════════
@@ -840,7 +835,7 @@ const SEED_WARDROBE = [
 // POST /api/v1/wardrobe/seed
 // ═══════════════════════════════════════════
 
-router.post('/seed', optionalAuth, async (req, res) => {
+router.post('/seed', requireAuth, async (req, res) => {
   try {
     const { show_id, clear_existing = false } = req.body;
     if (!show_id) return res.status(400).json({ error: 'show_id is required' });
@@ -948,7 +943,7 @@ function parseJSON(val, fallback) {
 // POST /api/v1/wardrobe/browse-pool
 // ═══════════════════════════════════════════
 
-router.post('/browse-pool', optionalAuth, async (req, res) => {
+router.post('/browse-pool', requireAuth, async (req, res) => {
   try {
     const { show_id, episode_id, character_state = {} } = req.body;
 
@@ -1212,7 +1207,7 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
 // POST /api/v1/wardrobe/select
 // ═══════════════════════════════════════════
 
-router.post('/select', optionalAuth, async (req, res) => {
+router.post('/select', requireAuth, async (req, res) => {
   try {
     const { episode_id, wardrobe_id, show_id } = req.body;
     if (!episode_id || !wardrobe_id) {
@@ -1322,7 +1317,7 @@ router.post('/select', optionalAuth, async (req, res) => {
 // POST /api/v1/wardrobe/purchase  (FIXED)
 // ═══════════════════════════════════════════
 
-router.post('/purchase', optionalAuth, async (req, res) => {
+router.post('/purchase', requireAuth, async (req, res) => {
   try {
     const { wardrobe_id, show_id } = req.body;
     if (!wardrobe_id || !show_id) {
@@ -1575,7 +1570,7 @@ async function getOutfitScore(models, episodeId, event = {}, characterState = nu
 // GET /api/v1/wardrobe/outfit-history/:showId
 // Returns outfit history across all episodes for a show
 // ═══════════════════════════════════════════
-router.get('/outfit-history/:showId', optionalAuth, async (req, res) => {
+router.get('/outfit-history/:showId', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const models = await getModels();
@@ -1637,7 +1632,7 @@ router.get('/outfit-history/:showId', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 
 // GET /api/v1/wardrobe/:id/pieces — list attachment pieces for an item
-router.get('/:id/pieces', optionalAuth, async (req, res) => {
+router.get('/:id/pieces', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.json({ success: true, pieces: [] });
@@ -1653,7 +1648,7 @@ router.get('/:id/pieces', optionalAuth, async (req, res) => {
 });
 
 // POST /api/v1/wardrobe/:id/pieces — add an attachment piece to an item
-router.post('/:id/pieces', optionalAuth, async (req, res) => {
+router.post('/:id/pieces', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -1708,7 +1703,7 @@ router.post('/:id/pieces', optionalAuth, async (req, res) => {
 });
 
 // DELETE /api/v1/wardrobe/:id/pieces/:pieceId — detach a piece (soft-delete or unlink)
-router.delete('/:id/pieces/:pieceId', optionalAuth, async (req, res) => {
+router.delete('/:id/pieces/:pieceId', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -1736,7 +1731,7 @@ router.delete('/:id/pieces/:pieceId', optionalAuth, async (req, res) => {
 });
 
 // PUT /api/v1/wardrobe/:id/set — mark an item as a matching set (jewelry set, dress ensemble)
-router.put('/:id/set', optionalAuth, async (req, res) => {
+router.put('/:id/set', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -1771,7 +1766,7 @@ router.put('/:id/set', optionalAuth, async (req, res) => {
 //   { items: [{ id, name, current: [...], suggested: [...], added: [...] }],
 //     changed_count, total }
 // ═══════════════════════════════════════════
-router.post('/:showId/auto-tag-event-types', optionalAuth, async (req, res) => {
+router.post('/:showId/auto-tag-event-types', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { showId } = req.params;
     const dryRun = req.body.dry_run !== false;
