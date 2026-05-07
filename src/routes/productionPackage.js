@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const productionPackageController = require('../controllers/productionPackageController');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // ============================================================================
 // PACKAGE GENERATION
@@ -18,7 +18,7 @@ const { optionalAuth } = require('../middleware/auth');
  */
 router.post(
   '/:episodeId/production-package/generate',
-  optionalAuth,
+  requireAuth,
   productionPackageController.generateProductionPackage
 );
 
@@ -28,7 +28,7 @@ router.post(
  */
 router.get(
   '/:episodeId/production-package/latest',
-  optionalAuth,
+  requireAuth,
   productionPackageController.getLatestPackage
 );
 
@@ -38,7 +38,7 @@ router.get(
  */
 router.get(
   '/:episodeId/production-package/versions',
-  optionalAuth,
+  requireAuth,
   productionPackageController.listPackageVersions
 );
 
@@ -48,7 +48,7 @@ router.get(
  */
 router.get(
   '/:episodeId/production-package/:packageId',
-  optionalAuth,
+  requireAuth,
   productionPackageController.getPackage
 );
 
@@ -58,7 +58,7 @@ router.get(
  */
 router.get(
   '/:episodeId/production-package/:packageId/download',
-  optionalAuth,
+  requireAuth,
   productionPackageController.downloadPackage
 );
 
@@ -68,7 +68,7 @@ router.get(
  */
 router.delete(
   '/:episodeId/production-package/:packageId',
-  optionalAuth,
+  requireAuth,
   productionPackageController.deletePackage
 );
 

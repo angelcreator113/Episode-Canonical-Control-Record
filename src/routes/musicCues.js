@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const musicCueController = require('../controllers/musicCueController');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // ============================================================================
 // MUSIC CUE GENERATION
@@ -18,7 +18,7 @@ const { optionalAuth } = require('../middleware/auth');
  */
 router.post(
   '/:episodeId/music-cues/generate',
-  optionalAuth,
+  requireAuth,
   musicCueController.generateMusicCues
 );
 
@@ -32,7 +32,7 @@ router.post(
  */
 router.get(
   '/:episodeId/music-cues',
-  optionalAuth,
+  requireAuth,
   musicCueController.listMusicCues
 );
 
@@ -42,7 +42,7 @@ router.get(
  */
 router.get(
   '/:episodeId/music-cues/:cueId',
-  optionalAuth,
+  requireAuth,
   musicCueController.getMusicCue
 );
 
@@ -52,7 +52,7 @@ router.get(
  */
 router.post(
   '/:episodeId/music-cues',
-  optionalAuth,
+  requireAuth,
   musicCueController.createMusicCue
 );
 
@@ -62,7 +62,7 @@ router.post(
  */
 router.put(
   '/:episodeId/music-cues/:cueId',
-  optionalAuth,
+  requireAuth,
   musicCueController.updateMusicCue
 );
 
@@ -72,7 +72,7 @@ router.put(
  */
 router.delete(
   '/:episodeId/music-cues/:cueId',
-  optionalAuth,
+  requireAuth,
   musicCueController.deleteMusicCue
 );
 
@@ -86,7 +86,7 @@ router.delete(
  */
 router.post(
   '/:episodeId/music-cues/:cueId/approve',
-  optionalAuth,
+  requireAuth,
   musicCueController.approveMusicCue
 );
 
@@ -96,7 +96,7 @@ router.post(
  */
 router.post(
   '/:episodeId/music-cues/approve-all',
-  optionalAuth,
+  requireAuth,
   musicCueController.approveAllMusicCues
 );
 
@@ -110,7 +110,7 @@ router.post(
  */
 router.get(
   '/:episodeId/music-cues/export',
-  optionalAuth,
+  requireAuth,
   musicCueController.exportMusicCues
 );
 

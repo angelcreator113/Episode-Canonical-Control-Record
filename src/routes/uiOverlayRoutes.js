@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -21,7 +21,7 @@ const generationStatus = {};
 //   a Camera override placed on episode 5 swaps out the show's default
 //   Camera screen only when episode 5 is the active context.
 //   When omitted, only show-level rows are returned (the default phone).
-router.get('/:showId', optionalAuth, async (req, res) => {
+router.get('/:showId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getAllOverlayTypes } = require('../services/uiOverlayService');
@@ -157,7 +157,7 @@ router.get('/:showId', optionalAuth, async (req, res) => {
 });
 
 // POST /api/v1/ui-overlays/:showId/generate-all — start generating all missing overlays (async)
-router.post('/:showId/generate-all', optionalAuth, async (req, res) => {
+router.post('/:showId/generate-all', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { generateAllOverlays } = require('../services/uiOverlayService');
@@ -216,7 +216,7 @@ router.post('/:showId/generate-all', optionalAuth, async (req, res) => {
 });
 
 // GET /api/v1/ui-overlays/:showId/debug — diagnose why overlays might not be showing
-router.get('/:showId/debug', optionalAuth, async (req, res) => {
+router.get('/:showId/debug', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const showId = req.params.showId;
@@ -287,7 +287,7 @@ router.get('/:showId/debug', optionalAuth, async (req, res) => {
 });
 
 // POST /api/v1/ui-overlays/:showId/generate/:overlayType — generate (or regenerate) single overlay
-router.post('/:showId/generate/:overlayType', optionalAuth, async (req, res) => {
+router.post('/:showId/generate/:overlayType', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { generateOverlay, getAllOverlayTypes } = require('../services/uiOverlayService');
@@ -340,7 +340,7 @@ router.post('/:showId/generate/:overlayType', optionalAuth, async (req, res) => 
 });
 
 // POST /api/v1/ui-overlays/:showId/remove-bg/:assetId — remove background from existing overlay
-router.post('/:showId/remove-bg/:assetId', optionalAuth, async (req, res) => {
+router.post('/:showId/remove-bg/:assetId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { removeBackgroundFromAsset } = require('../services/uiOverlayService');
@@ -358,7 +358,7 @@ router.post('/:showId/remove-bg/:assetId', optionalAuth, async (req, res) => {
 
 // POST /api/v1/ui-overlays/:showId/upload/:overlayType — upload custom image for an overlay
 // Optional body field: variant_label (e.g. "Locked", "Unlocked") — defaults to replacing the single asset
-router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image'), async (req, res) => {
+router.post('/:showId/upload/:overlayType', requireAuth, upload.single('image'), async (req, res) => {
   try {
     const models = require('../models');
     const { getAllOverlayTypes, uploadOverlayToS3 } = require('../services/uiOverlayService');
@@ -426,7 +426,7 @@ router.post('/:showId/upload/:overlayType', optionalAuth, upload.single('image')
 // ── PHONE FRAME (custom device frame image) ────────────────────────────────
 
 // POST /api/v1/ui-overlays/:showId/frame — upload a custom phone frame image
-router.post('/:showId/frame', optionalAuth, upload.single('frame'), async (req, res) => {
+router.post('/:showId/frame', requireAuth, upload.single('frame'), async (req, res) => {
   try {
     const models = require('../models');
     const { uploadOverlayToS3 } = require('../services/uiOverlayService');
@@ -452,7 +452,7 @@ router.post('/:showId/frame', optionalAuth, upload.single('frame'), async (req, 
 });
 
 // GET /api/v1/ui-overlays/:showId/frame — get saved phone frame URL + global fit
-router.get('/:showId/frame', optionalAuth, async (req, res) => {
+router.get('/:showId/frame', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const showId = req.params.showId;
@@ -476,7 +476,7 @@ router.get('/:showId/frame', optionalAuth, async (req, res) => {
 });
 
 // DELETE /api/v1/ui-overlays/:showId/frame — remove custom phone frame, revert to built-in
-router.delete('/:showId/frame', optionalAuth, async (req, res) => {
+router.delete('/:showId/frame', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const showId = req.params.showId;
@@ -493,7 +493,7 @@ router.delete('/:showId/frame', optionalAuth, async (req, res) => {
 });
 
 // PUT /api/v1/ui-overlays/:showId/global-fit — save global image fit settings for all screens
-router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
+router.put('/:showId/global-fit', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const showId = req.params.showId;
@@ -516,7 +516,7 @@ router.put('/:showId/global-fit', optionalAuth, async (req, res) => {
 // ── STYLE PREFIX (per-show design language for AI generation) ────────────
 
 // GET /api/v1/ui-overlays/:showId/style-prefix — get show's style prefix
-router.get('/:showId/style-prefix', optionalAuth, async (req, res) => {
+router.get('/:showId/style-prefix', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getStylePrefix, DEFAULT_STYLE_PREFIX } = require('../services/uiOverlayService');
@@ -528,7 +528,7 @@ router.get('/:showId/style-prefix', optionalAuth, async (req, res) => {
 });
 
 // PUT /api/v1/ui-overlays/:showId/style-prefix — set show's style prefix
-router.put('/:showId/style-prefix', optionalAuth, async (req, res) => {
+router.put('/:showId/style-prefix', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { style_prefix } = req.body;
@@ -547,7 +547,7 @@ router.put('/:showId/style-prefix', optionalAuth, async (req, res) => {
 // ── CATEGORY OVERRIDE (screen vs icon for built-in types) ───────────────
 
 // PUT /api/v1/ui-overlays/:showId/category/:assetId — set category on asset metadata
-router.put('/:showId/category/:assetId', optionalAuth, async (req, res) => {
+router.put('/:showId/category/:assetId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { category, name } = req.body;
@@ -582,7 +582,7 @@ router.put('/:showId/category/:assetId', optionalAuth, async (req, res) => {
 // ── IMAGE FIT (resize/position settings) ────────────────────────────────
 
 // PUT /api/v1/ui-overlays/:showId/image-fit/:assetId — save image fit settings
-router.put('/:showId/image-fit/:assetId', optionalAuth, async (req, res) => {
+router.put('/:showId/image-fit/:assetId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { image_fit } = req.body;
@@ -613,7 +613,7 @@ router.put('/:showId/image-fit/:assetId', optionalAuth, async (req, res) => {
 // ── SCREEN LINKS (tap zones with icon overlays) ───────────────────────────
 
 // PUT /api/v1/ui-overlays/:showId/screen-links/:assetId — save screen links for an overlay
-router.put('/:showId/screen-links/:assetId', optionalAuth, async (req, res) => {
+router.put('/:showId/screen-links/:assetId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { validateScreenLinks } = require('../services/phoneConditionSchema');
@@ -652,7 +652,7 @@ router.put('/:showId/screen-links/:assetId', optionalAuth, async (req, res) => {
 });
 
 // GET /api/v1/ui-overlays/:showId/screen-links/:assetId — get screen links for an overlay
-router.get('/:showId/screen-links/:assetId', optionalAuth, async (req, res) => {
+router.get('/:showId/screen-links/:assetId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
 
@@ -674,7 +674,7 @@ router.get('/:showId/screen-links/:assetId', optionalAuth, async (req, res) => {
 });
 
 // POST /api/v1/ui-overlays/:showId/screen-links/:assetId/icon — upload icon image for a link zone
-router.post('/:showId/screen-links/:assetId/icon', optionalAuth, upload.single('icon'), async (req, res) => {
+router.post('/:showId/screen-links/:assetId/icon', requireAuth, upload.single('icon'), async (req, res) => {
   try {
     const models = require('../models');
     const { uploadOverlayToS3 } = require('../services/uiOverlayService');
@@ -726,7 +726,7 @@ router.post('/:showId/screen-links/:assetId/icon', optionalAuth, upload.single('
 // ── CONTENT ZONES (Live data rendering on templates) ────────────────────────
 
 // PUT /api/v1/ui-overlays/:showId/content-zones/:assetId — save content zones for an overlay
-router.put('/:showId/content-zones/:assetId', optionalAuth, async (req, res) => {
+router.put('/:showId/content-zones/:assetId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { content_zones } = req.body;
@@ -754,7 +754,7 @@ router.put('/:showId/content-zones/:assetId', optionalAuth, async (req, res) => 
 });
 
 // GET /api/v1/ui-overlays/:showId/content-zones/:assetId — get content zones for an overlay
-router.get('/:showId/content-zones/:assetId', optionalAuth, async (req, res) => {
+router.get('/:showId/content-zones/:assetId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
 
@@ -778,7 +778,7 @@ router.get('/:showId/content-zones/:assetId', optionalAuth, async (req, res) => 
 // ── SUGGEST LINKED SCREENS ─────────────────────────────────────────────────
 
 // GET /api/v1/ui-overlays/:showId/types/suggest-links/:iconName — suggest screens for an icon to link to
-router.get('/:showId/types/suggest-links/:iconName', optionalAuth, async (req, res) => {
+router.get('/:showId/types/suggest-links/:iconName', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { suggestLinkedScreens } = require('../services/uiOverlayService');
@@ -792,7 +792,7 @@ router.get('/:showId/types/suggest-links/:iconName', optionalAuth, async (req, r
 // ── OVERLAY TYPE CRUD ─────────────────────────────────────────────────────
 
 // POST /api/v1/ui-overlays/:showId/types — create an overlay type
-router.post('/:showId/types', optionalAuth, async (req, res) => {
+router.post('/:showId/types', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { v4: uuidv4 } = require('uuid');
@@ -866,7 +866,7 @@ router.post('/:showId/types', optionalAuth, async (req, res) => {
 });
 
 // PUT /api/v1/ui-overlays/:showId/types/:typeId — update a custom overlay type
-router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
+router.put('/:showId/types/:typeId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { name, category, beat, description, prompt, sort_order, opens_screen, is_home } = req.body;
@@ -922,7 +922,7 @@ router.put('/:showId/types/:typeId', optionalAuth, async (req, res) => {
 });
 
 // DELETE /api/v1/ui-overlays/:showId/types/:typeId — soft-delete a custom overlay type
-router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
+router.delete('/:showId/types/:typeId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const showId = req.params.showId;
@@ -953,7 +953,7 @@ router.delete('/:showId/types/:typeId', optionalAuth, async (req, res) => {
 });
 
 // DELETE /api/v1/ui-overlays/:showId/asset/:assetId — soft-delete an overlay asset
-router.delete('/:showId/asset/:assetId', optionalAuth, async (req, res) => {
+router.delete('/:showId/asset/:assetId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { showId, assetId } = req.params;

@@ -13,7 +13,7 @@
  */
 const express = require('express');
 const router = express.Router({ mergeParams: true });
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const Anthropic = require('@anthropic-ai/sdk').default || require('@anthropic-ai/sdk').Anthropic;
 const { buildPhoneContext } = require('../services/phoneContextBuilder');
 const { validateScreenLinks } = require('../services/phoneConditionSchema');
@@ -72,7 +72,7 @@ function clampZone(z) {
 // POST /api/v1/ui-overlays/:showId/ai/add-zones
 // Body: { asset_id, prompt_hint?, episode_id? }
 // Returns: { success, proposal: { zones: [...] }, context_summary: { ... } }
-router.post('/add-zones', optionalAuth, async (req, res) => {
+router.post('/add-zones', requireAuth, async (req, res) => {
   try {
     const { asset_id, prompt_hint, episode_id } = req.body || {};
     if (!asset_id) return res.status(400).json({ success: false, error: 'asset_id is required' });
@@ -182,7 +182,7 @@ Rules:
   character as sender for a DM thread based on their relationship).
 - Respond with ONLY the JSON. No prose, no markdown fences.`;
 
-router.post('/fill-content-zone', optionalAuth, async (req, res) => {
+router.post('/fill-content-zone', requireAuth, async (req, res) => {
   try {
     const { asset_id, zone_id, prompt_hint, episode_id } = req.body || {};
     if (!asset_id || !zone_id) {

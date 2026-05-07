@@ -12,15 +12,9 @@
 const express = require('express');
 const router = express.Router();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
 
-router.post('/episodes/:episodeId/todo/generate', optionalAuth, async (req, res) => {
+router.post('/episodes/:episodeId/todo/generate', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { showId } = req.body;
@@ -41,7 +35,7 @@ router.post('/episodes/:episodeId/todo/generate', optionalAuth, async (req, res)
 });
 
 // POST /episodes/:episodeId/todo/generate-career — Generate career to-do list
-router.post('/episodes/:episodeId/todo/generate-career', optionalAuth, async (req, res) => {
+router.post('/episodes/:episodeId/todo/generate-career', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { showId } = req.body;
@@ -61,7 +55,7 @@ router.post('/episodes/:episodeId/todo/generate-career', optionalAuth, async (re
   }
 });
 
-router.get('/episodes/:episodeId/todo', optionalAuth, async (req, res) => {
+router.get('/episodes/:episodeId/todo', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const models = req.app.get('models') || require('../models');
@@ -78,7 +72,7 @@ router.get('/episodes/:episodeId/todo', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/episodes/:episodeId/todo/complete/:slot', optionalAuth, async (req, res) => {
+router.post('/episodes/:episodeId/todo/complete/:slot', requireAuth, async (req, res) => {
   try {
     const { episodeId, slot } = req.params;
     const { completed = true } = req.body;
@@ -133,7 +127,7 @@ router.post('/episodes/:episodeId/todo/complete/:slot', optionalAuth, async (req
 
 // ── SAVE TASK SELECTION (include/exclude tasks) ──────────────────────────────
 
-router.post('/episodes/:episodeId/todo/save-selection', optionalAuth, async (req, res) => {
+router.post('/episodes/:episodeId/todo/save-selection', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { tasks } = req.body;
@@ -154,7 +148,7 @@ router.post('/episodes/:episodeId/todo/save-selection', optionalAuth, async (req
 
 // ── LOCK CHECKLIST (finalize selection + regenerate asset) ───────────────────
 
-router.post('/episodes/:episodeId/todo/lock', optionalAuth, async (req, res) => {
+router.post('/episodes/:episodeId/todo/lock', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { sequelize } = req.app.get('models') || require('../models');
@@ -274,7 +268,7 @@ router.post('/episodes/:episodeId/todo/lock', optionalAuth, async (req, res) => 
 
 // ── UNLOCK CHECKLIST ────────────────────────────────────────────────────────
 
-router.post('/episodes/:episodeId/todo/unlock', optionalAuth, async (req, res) => {
+router.post('/episodes/:episodeId/todo/unlock', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { sequelize } = req.app.get('models') || require('../models');
@@ -291,7 +285,7 @@ router.post('/episodes/:episodeId/todo/unlock', optionalAuth, async (req, res) =
 });
 
 // POST /episodes/:episodeId/todo/complete-social/:slot — Mark a social task as complete
-router.post('/episodes/:episodeId/todo/complete-social/:slot', optionalAuth, async (req, res) => {
+router.post('/episodes/:episodeId/todo/complete-social/:slot', requireAuth, async (req, res) => {
   try {
     const { episodeId, slot } = req.params;
     const { completed = true } = req.body;
@@ -331,7 +325,7 @@ router.post('/episodes/:episodeId/todo/complete-social/:slot', optionalAuth, asy
 });
 
 // GET /episodes/:episodeId/todo/social — Get social tasks with completion status
-router.get('/episodes/:episodeId/todo/social', optionalAuth, async (req, res) => {
+router.get('/episodes/:episodeId/todo/social', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { sequelize } = req.app.get('models') || require('../models');

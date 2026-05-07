@@ -10,11 +10,11 @@
 
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // ── GENERATE SCRIPT ──────────────────────────────────────────────────────────
 // POST /api/v1/episode-scripts/:episodeId/generate
-router.post('/:episodeId/generate', optionalAuth, async (req, res) => {
+router.post('/:episodeId/generate', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { showId } = req.body;
@@ -47,7 +47,7 @@ router.post('/:episodeId/generate', optionalAuth, async (req, res) => {
 
 // ── LIST SCRIPT VERSIONS ─────────────────────────────────────────────────────
 // GET /api/v1/episode-scripts/:episodeId
-router.get('/:episodeId', optionalAuth, async (req, res) => {
+router.get('/:episodeId', requireAuth, async (req, res) => {
   try {
     const { EpisodeScript } = require('../models');
     const scripts = await EpisodeScript.findAll({
@@ -66,7 +66,7 @@ router.get('/:episodeId', optionalAuth, async (req, res) => {
 
 // ── GET SPECIFIC VERSION ─────────────────────────────────────────────────────
 // GET /api/v1/episode-scripts/:episodeId/version/:version
-router.get('/:episodeId/version/:version', optionalAuth, async (req, res) => {
+router.get('/:episodeId/version/:version', requireAuth, async (req, res) => {
   try {
     const { EpisodeScript } = require('../models');
     const script = await EpisodeScript.findOne({
@@ -85,7 +85,7 @@ router.get('/:episodeId/version/:version', optionalAuth, async (req, res) => {
 
 // ── GET LATEST VERSION ───────────────────────────────────────────────────────
 // GET /api/v1/episode-scripts/:episodeId/latest
-router.get('/:episodeId/latest', optionalAuth, async (req, res) => {
+router.get('/:episodeId/latest', requireAuth, async (req, res) => {
   try {
     const { EpisodeScript } = require('../models');
     const script = await EpisodeScript.findOne({
@@ -101,7 +101,7 @@ router.get('/:episodeId/latest', optionalAuth, async (req, res) => {
 
 // ── UPDATE SCRIPT (edit text, notes, status) ─────────────────────────────────
 // PUT /api/v1/episode-scripts/:scriptId
-router.put('/:scriptId', optionalAuth, async (req, res) => {
+router.put('/:scriptId', requireAuth, async (req, res) => {
   try {
     const { EpisodeScript } = require('../models');
     const script = await EpisodeScript.findByPk(req.params.scriptId);
@@ -132,7 +132,7 @@ router.put('/:scriptId', optionalAuth, async (req, res) => {
 
 // ── LOCK SCRIPT ──────────────────────────────────────────────────────────────
 // POST /api/v1/episode-scripts/:scriptId/lock
-router.post('/:scriptId/lock', optionalAuth, async (req, res) => {
+router.post('/:scriptId/lock', requireAuth, async (req, res) => {
   try {
     const { EpisodeScript } = require('../models');
     const script = await EpisodeScript.findByPk(req.params.scriptId);
@@ -157,7 +157,7 @@ router.post('/:scriptId/lock', optionalAuth, async (req, res) => {
 
 // ── GET GENERATION CONTEXT (preview what will feed the AI) ───────────────────
 // GET /api/v1/episode-scripts/:episodeId/context
-router.get('/:episodeId/context', optionalAuth, async (req, res) => {
+router.get('/:episodeId/context', requireAuth, async (req, res) => {
   try {
     const { showId } = req.query;
     if (!showId) return res.status(400).json({ error: 'showId query param required' });

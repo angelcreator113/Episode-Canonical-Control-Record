@@ -12,7 +12,7 @@
 const express = require('express');
 const router = express.Router();
 const iconCueController = require('../controllers/iconCueController');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // ============================================================================
 // ICON CUE GENERATION
@@ -24,7 +24,7 @@ const { optionalAuth } = require('../middleware/auth');
  */
 router.post(
   '/:episodeId/icon-cues/generate',
-  optionalAuth,
+  requireAuth,
   iconCueController.generateIconCues
 );
 
@@ -34,7 +34,7 @@ router.post(
  */
 router.post(
   '/:episodeId/icon-cues/regenerate',
-  optionalAuth,
+  requireAuth,
   iconCueController.regenerateIconCues
 );
 
@@ -49,7 +49,7 @@ router.post(
  */
 router.get(
   '/:episodeId/icon-cues',
-  optionalAuth,
+  requireAuth,
   iconCueController.listIconCues
 );
 
@@ -59,7 +59,7 @@ router.get(
  */
 router.get(
   '/:episodeId/icon-cues/:cueId',
-  optionalAuth,
+  requireAuth,
   iconCueController.getIconCue
 );
 
@@ -69,7 +69,7 @@ router.get(
  */
 router.post(
   '/:episodeId/icon-cues',
-  optionalAuth,
+  requireAuth,
   iconCueController.createIconCue
 );
 
@@ -79,7 +79,7 @@ router.post(
  */
 router.put(
   '/:episodeId/icon-cues/:cueId',
-  optionalAuth,
+  requireAuth,
   iconCueController.updateIconCue
 );
 
@@ -89,7 +89,7 @@ router.put(
  */
 router.delete(
   '/:episodeId/icon-cues/:cueId',
-  optionalAuth,
+  requireAuth,
   iconCueController.deleteIconCue
 );
 
@@ -103,7 +103,7 @@ router.delete(
  */
 router.post(
   '/:episodeId/icon-cues/:cueId/approve',
-  optionalAuth,
+  requireAuth,
   iconCueController.approveIconCue
 );
 
@@ -113,7 +113,7 @@ router.post(
  */
 router.post(
   '/:episodeId/icon-cues/:cueId/reject',
-  optionalAuth,
+  requireAuth,
   iconCueController.rejectIconCue
 );
 
@@ -123,7 +123,7 @@ router.post(
  */
 router.post(
   '/:episodeId/icon-cues/approve-all',
-  optionalAuth,
+  requireAuth,
   iconCueController.approveAllIconCues
 );
 
@@ -133,7 +133,7 @@ router.post(
  */
 router.post(
   '/:episodeId/icon-cues/reject-all',
-  optionalAuth,
+  requireAuth,
   iconCueController.rejectAllIconCues
 );
 
@@ -147,7 +147,7 @@ router.post(
  */
 router.get(
   '/:episodeId/icon-cues/anchors',
-  optionalAuth,
+  requireAuth,
   iconCueController.listAnchors
 );
 
@@ -157,7 +157,7 @@ router.get(
  */
 router.post(
   '/:episodeId/icon-cues/:cueId/set-anchor',
-  optionalAuth,
+  requireAuth,
   iconCueController.setAnchor
 );
 
@@ -167,7 +167,7 @@ router.post(
  */
 router.delete(
   '/:episodeId/icon-cues/:cueId/remove-anchor',
-  optionalAuth,
+  requireAuth,
   iconCueController.removeAnchor
 );
 
@@ -182,7 +182,7 @@ router.delete(
  */
 router.get(
   '/:episodeId/icon-cues/export',
-  optionalAuth,
+  requireAuth,
   iconCueController.exportIconCues
 );
 

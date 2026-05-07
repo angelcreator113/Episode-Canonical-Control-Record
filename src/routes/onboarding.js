@@ -11,13 +11,7 @@
 
 const router = require('express').Router();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
 
 // ─── The seven beats Claude moves through ────────────────────────────────────
 const BEATS = {
@@ -131,7 +125,7 @@ Return ONLY valid JSON:
 }
 
 // ─── POST /start ──────────────────────────────────────────────────────────────
-router.post('/start', optionalAuth, async (req, res) => {
+router.post('/start', requireAuth, async (req, res) => {
   try {
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -182,7 +176,7 @@ router.post('/start', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /respond ────────────────────────────────────────────────────────────
-router.post('/respond', optionalAuth, async (req, res) => {
+router.post('/respond', requireAuth, async (req, res) => {
   const {
     creator_message,
     current_beat,
@@ -243,7 +237,7 @@ router.post('/respond', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /confirm ────────────────────────────────────────────────────────────
-router.post('/confirm', optionalAuth, async (req, res) => {
+router.post('/confirm', requireAuth, async (req, res) => {
   const { extracted, show_id, registry_id } = req.body;
 
   if (!extracted) return res.status(400).json({ error: 'extracted data required' });
@@ -395,7 +389,7 @@ router.post('/confirm', optionalAuth, async (req, res) => {
 });
 
 // ─── GET /status/:showId ──────────────────────────────────────────────────────
-router.get('/status/:showId', optionalAuth, async (req, res) => {
+router.get('/status/:showId', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { showId } = req.params;
 
@@ -502,7 +496,7 @@ router.get('/status/:showId', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /session-state ──────────────────────────────────────────────────────
-router.post('/session-state', optionalAuth, async (req, res) => {
+router.post('/session-state', requireAuth, async (req, res) => {
   const { show_id } = req.body;
   const db = req.app.locals.db || require('../models');
 

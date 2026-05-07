@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { asyncHandler } = require('../middleware/errorHandler');
+const { requireAuth } = require('../middleware/auth');
 
 /**
  * Timeline Data Routes
@@ -12,7 +13,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 
 // GET /api/v1/episodes/:episodeId/timeline-data
 // Returns timeline data for an episode (creates default if none exists)
-router.get('/:episodeId/timeline-data', asyncHandler(async (req, res) => {
+router.get('/:episodeId/timeline-data', requireAuth, asyncHandler(async (req, res) => {
   const { episodeId } = req.params;
   const { TimelineData } = require('../models');
 
@@ -36,7 +37,7 @@ router.get('/:episodeId/timeline-data', asyncHandler(async (req, res) => {
 
 // PUT /api/v1/episodes/:episodeId/timeline-data
 // Update timeline data (upsert)
-router.put('/:episodeId/timeline-data', asyncHandler(async (req, res) => {
+router.put('/:episodeId/timeline-data', requireAuth, asyncHandler(async (req, res) => {
   const { episodeId } = req.params;
   const { beats, markers, audio_clips, audioClips, character_clips, characterClips, keyframes } = req.body;
   const { TimelineData } = require('../models');
