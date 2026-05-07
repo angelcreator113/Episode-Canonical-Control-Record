@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.25 — Step 3 CP2 (Episodes cluster — 22 files / 227 handlers / 91 new tests / 1 session / ~90 min) approved at commit `d73599f8`. Mount-collision discipline (NEW v2.25 §9.11 lock): 11 routers at /api/v1/episodes (NOT 9 as v2.24 §5.5 stated); per-router enumeration + cross-mount awareness + path-segment claim verification — template propagates to CP6/CP8/CP10. Cross-mount router pattern (NEW v2.25 §9.11): files mounted at multiple prefixes (gameShows.js + scriptParse.js); Tier promotion at file affects all URL surfaces. F-AUTH-4 obsolescence inversion (NEW v2.25 §9.11): line 307 was consistency-with-codebase argument, not token-expiry; F-AUTH-1 itself inverts the consistency baseline. F-AUTH-5 ?.id field-name expansion (NEW v2.25 §9.11): catalogue undercounted by ~16+; episodeController.js alone has 16 sites. Surface-correction four-data-point validation (CP15 + CP1 + CP2 × 3): file count + handler count + mount-collision count + grep baseline. Tests-FLOOR-not-ceiling four-data-point: CP1 forecast 7 → actual 15; CP2 forecast 30-50 → actual 91. Step 3 pacing second data point: CP1 75min/1.4-1.7x bias, CP2 90min/3-4x bias. Backend test suite: 1417 → 1508 passing (+91, 0 regressions). Step 3 CP3 (World cluster) is next.
+**Document version:** v2.26 — Step 3 CP3 (World cluster — 4 files / 120 handlers / 42 new tests / 1 session / ~75 min) approved at commit `61f8a658`. Mixed Tier 1+3+4 within single file (NEW v2.26 §9.11 architectural primitive): worldStudio.js — 1 Tier 3 + 18 Tier 4 GETs + 34 Tier 1 mutations. Read vs write disposition discipline (NEW v2.26 §9.11 + §5.2 amendment): req.user-consumption matrix is read-only adjudication; mutations default Tier 1 unless domain owner explicit adjudication. Track 7 in-cycle coordination requirement (NEW v2.26 §9.11): when backend Tier 1 lands AND frontend correspondent uses raw fetch, Track 7 mini-CP must follow same backup-push cycle. Anomaly 5 amendment (v2.25 §5.5 supersession): worldTemperatureRoutes.js has 2 handlers (NOT 0); custom router var hid them from standard grep. WorldEvents reference model uniform state: 4 AI POSTs all requireAuth + aiRateLimiter post-CP3 (was 2 + 2 partial). Surface-correction graduates to 8 cumulative data points across CP15 + CP1 + CP2 + CP3. Tests-FLOOR methodology amendment: aggregate-counter methodology valid alternative to per-handler-implies-1-test (CP3 first BELOW-FLOOR: 120 forecast, 42 actual). Step 3 pacing third data point: CP3 75min/on-forecast. Backend test suite: 1508 → 1550 passing (+42, 0 regressions). Track 7 mini-CP for WorldStudio.jsx ~11 mutation sites is next (closes CP3 regression window); then Step 3 CP4 (Scene cluster).
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** **TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. Pattern G locked: 6 sites (UNCHANGED). **Step 3 CP1 COMPLETE through commit `05cd536d`**; F-AUTH-2 lazy-init refactor + F-AUTH-3 5-handler migration + lazy-noop fallback removal. **Step 3 CP2 COMPLETE through commit `d73599f8`**; Episodes cluster — 22 files / 227 handlers / 91 new tests. Mount-collision discipline established; cross-mount router pattern locked; F-AUTH-5 4-site resolution + ?.id field-name expansion finding. Backend test suite: 1417 → 1508 passing (+91 tests, +1 suite, 0 regressions). Backed up at `d73599f8` on `claude/f-auth-1-backup`. Step 3 CP3 (World cluster — 4 files / ~85 handlers / WorldStudio Tier 3/Tier 4 split per Item 15) kicks off next, fresh session.
+**Status:** **TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 + CP3 COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. Pattern G locked: 6 sites (UNCHANGED). **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**; World cluster — 4 files / 120 handlers / 42 new tests. First mixed Tier 1+3+4 within single file (worldStudio.js); read vs write disposition discipline established; Track 7 in-cycle coordination requirement locked; Anomaly 5 amendment locked; WorldEvents reference model uniform (4 AI POSTs all requireAuth + aiRateLimiter). Backend test suite: 1508 → 1550 passing (+42 tests, +1 suite, 0 regressions). Backed up at `61f8a658` on `claude/f-auth-1-backup`. Track 7 mini-CP for WorldStudio.jsx ~11 mutation sites kicks off next (closes CP3 regression window); then Step 3 CP4 (Scene cluster).
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -1572,6 +1572,134 @@ v2.24 §9.11 locked the "tests anticipated count is FLOOR not ceiling" pattern a
 
 CP3-CP11 surface reports forecast tests with explicit "FLOOR" label; closure reports record actual vs forecast for ongoing pattern validation.
 
+##### §5.20 — Step 3 CP3 architectural findings (LOCKED v2.26, COMPLETE — World cluster sweep)
+
+CP3 completed at commit `61f8a658` (single squashed commit, 5 file-boundary WIPs collapsed; single session, ~75 min actual vs 1-session forecast — **on-forecast** for mixed-disposition CP cadence). Smaller than CP2 by file count (4 vs 22) but architecturally distinct: 4 files / 120 handlers / 42 new tests / 0 regressions. **First mixed Tier 1+3+4 within single file in F-AUTH-1 program** (worldStudio.js). WP1 lazy-noop removal at 3 files (world.js, worldEvents.js with unique double-fallback covering BOTH optionalAuth + requireAuth, worldStudio.js); WP2 Tier 1 promotion sweep at 67 handlers (4 world.js + 59 worldEvents.js + 2 worldEvents partial-AI promoted + 2 worldTemperatureRoutes); WP3 worldStudio.js mixed Tier 1+3+4 split (1 Tier 3 line 2483 + 18 Tier 4 GETs + 34 Tier 1 mutations); WP4 structural test file (42 tests passing — first BELOW-FLOOR data point at 0.35x; methodology divergence per §5.26). Strict execution sequence WP1 → WP2 → WP3 → WP4 followed. Backend test suite: 1508 → 1550 passing (+42 tests, +1 suite, 0 regressions, 0 failed). Backed up at `61f8a658` on `claude/f-auth-1-backup`.
+
+Five adjudication decisions executed cleanly:
+
+- **D1 WorldStudio mixed disposition (REVISED FROM STRICT MATRIX):** 1 Tier 3 (line 2483 generate-ecosystem-preview — req.user consumed for ownership tagging) + 17 Tier 4 GETs (read-only published catalog) + 34 mutation handlers Tier 1 (22 POST + 6 PUT + 6 DELETE; mutations require auth regardless of req.user-consumption matrix). Read vs write disposition discipline established — see §5.22.
+- **D2 PUBLIC comment text:** Group-level rationale per surface §4 categorization (e.g., "World character catalog; published-only data; no creator attribution"). Per Item 15 lock: brief rationale required on every PUBLIC marking; group rationale satisfies. 19 PUBLIC comments total in worldStudio.js post-CP3.
+- **D3 worldTemperatureRoutes Tier 1 default:** Both handlers (lines 15 GET + 33 POST) promoted to requireAuth. No "public data" justification surfaced; default applies.
+- **D4 worldEvents partial-aiRateLimiter promotion:** Lines 1701 + 1903 (pre-edit; post-edit 1687 + 1889) promoted from optionalAuth + aiRateLimiter to requireAuth + aiRateLimiter. Uniform AI cost gating across all 4 worldEvents AI POSTs. Reference model state (post-CP3): all 4 AI POSTs at requireAuth + aiRateLimiter — see §5.27.
+- **D5 Anomaly 5 amendment:** worldTemperatureRoutes.js has 2 handlers (NOT 0 as v2.25 §5.5 stated). Custom router var (worldTempRouter) hid handlers from standard `^router.<verb>` grep. v2.26 §5.5 records amendment.
+
+Per-tier handler distribution post-CP3:
+
+- Tier 1 (requireAuth): 101 handlers across 4 files (84.2% of CP3 zone; 4 world.js + 59 worldEvents.js + 34 worldStudio.js mutations + 2 worldTemperatureRoutes + 2 worldEvents partial-AI promoted to requireAuth + aiRateLimiter)
+- Tier 1 + aiRateLimiter: 4 handlers (2 preserved verbatim at worldEvents.js:748 + 1779 post-edit; 2 promoted at worldEvents.js:1687 + 1889 post-edit per D4)
+- Tier 3 (optionalAuth + degradeOnInfraFailure): 1 handler (worldStudio.js:2483 generate-ecosystem-preview per D1)
+- Tier 4 (plain optionalAuth + PUBLIC): 18 handlers (all worldStudio.js GETs per D1)
+- Tier 2 / Tier 5: 0 handlers (no admin tooling or env-gated mounts in CP3 zone)
+
+All 5 verification greps pass: (1) degradeOnInfraFailure consumer count 7 → 8 (added 1 Tier 3 at worldStudio.js:2483); (2) requireAuth consumer count 259 → 359 (+100, matches CP3 zone Tier 1 promotion + 4 imports); (3) lazy-noop fallback in CP3 zone = 0 (was 3); (4) authenticateToken active hits in CP3 zone = 0 (was 0; planning's "1 hit" confirmed false positive on lazy-noop fallback); (5) NEW PUBLIC comments in CP3 zone = 19 (1 Tier 3 + 18 Tier 4).
+
+- F-AUTH-4 multi-line grep: zero auth-weakening comment blocks in CP3 zone. All hits in surface §8 confirmed false positives at execution (DB schema tolerance, cache TTL "expires", lazy-noop fallback string). No D5-style comment removal needed (unlike CP2 episodes.js:307-312).
+- F-AUTH-5 ?.id resolution at CP3 zone: 1 site (worldStudio.js:2624 within Tier 3 handler at line 2483). req.user?.id resolved when token present after Tier 3 factory invocation; req.ip fallback preserved as defense-in-depth (intended Tier 3 contract).
+- Cross-mount router check (per v2.25 §5.14): 0 cross-mount routers in CP3 zone. World cluster mount topology simpler than Episodes — 3 routers share /api/v1 with /world/... internal path conventions, but no exact-path collisions; worldTemperatureRoutes uses distinct /api/v1/world-temperature mount. Different shape than CP2 — see §5.13 amendment.
+- Mount-collision shape variant (NEW v2.26 §5.13 amendment): CP2 = multiple routers at SAME mount prefix with distinct path-segment claims; CP3 = multiple routers at SHARED ROOT prefix (/api/v1) with internal path-prefix discrimination at the handler level. Same architectural concern (silent-shadowing risk), different shape. v2.25 §5.13 lock applies to both shapes; surface report enumerates the topology variant.
+- No HTTP method mismatches surfaced. CP3 didn't change any methods (Step 3 backend method corrections deferred to CP11). Step 3 zero-method-mismatch streak: 3 consecutive CPs (CP1 + CP2 + CP3).
+
+##### §5.21 — Mixed Tier 1+3+4 within single file (NEW v2.26 §9.11 architectural primitive)
+
+CP3 establishes the first single-file mixed Tier 1+3+4 disposition in F-AUTH-1 program. **worldStudio.js architectural precedent**: 53 handlers split across three Tiers within one file:
+
+- 1 Tier 3 (line 2483 POST /world/generate-ecosystem-preview): optionalAuth({ degradeOnInfraFailure: true }) + specific PUBLIC comment with rationale citing audience-growth use case
+- 18 Tier 4 (all worldStudio.js GET handlers): plain optionalAuth + group-level PUBLIC comments per categorization (world character catalog, world scene catalog, preview reads, ecosystem reads, etc.)
+- 34 Tier 1 (22 POST + 6 PUT + 6 DELETE, excluding line 2483): requireAuth (mutations require auth regardless of req.user-consumption matrix per §5.22 read vs write disposition discipline)
+
+**Mixed Tier 1+3+4 architectural primitive (LOCKED v2.26 §9.11). When a file has mixed disposition spanning Tier 1 + Tier 3 + Tier 4, per-handler adjudication required at surface; PUBLIC comments with group-level rationale (per Item 15 lock); commit message enumerates per-handler tier assignment. The pattern combines: (1) per-route req.user consumption analysis for read disposition (Tier 3 vs Tier 4 split); (2) write disposition default to Tier 1 (per §5.22); (3) group-level PUBLIC comments for Tier 4 cohort cohesion.**
+
+Future Step 3 CPs requiring this primitive: CP4-CP11 surface reports flag any file with mixed Tier 1/3/4 disposition; the discipline is established at CP3 and carries forward. Most Step 3 files have uniform tier disposition (CP1 + CP2 dominantly Tier 1); mixed disposition is the exception when a file mixes published-data reads + creator-data writes within the same router (worldStudio.js precedent).
+
+##### §5.22 — Read vs write disposition discipline (NEW v2.26 §9.11 lock + §5.2 amendment)
+
+CP3 D1 adjudication established a discipline that the v2.25 §5.2 disposition tier matrix didn't make explicit: **the req.user-consumption matrix (Tier 3 vs Tier 4 split) applies to READ disposition only. WRITE disposition defaults to Tier 1 (requireAuth) unless the domain owner explicitly adjudicates a different disposition (e.g., Tier 2 admin-tooling write, Tier 3 + degradeOnInfraFailure write).**
+
+Rationale: a handler that mutates state but does not consume req.user is a handler with a missing creator-attribution implementation, NOT a handler that is intentionally public-mutation. Strict req.user-consumption matrix application to mutations would create security regressions: cascading DELETE, no-ownership-check DELETE, S3 writes without rate limit, state mutations without creator attribution become un-authenticated by design — none of which match domain owner intent.
+
+CP3 D1 reclassified 34 worldStudio.js mutation handlers (22 POST + 6 PUT + 6 DELETE, excluding line 2483 Tier 3) from Tier 4 (strict matrix) to Tier 1 (read vs write discipline). Surface report had marked all 53 worldStudio handlers as Tier 4 candidates per strict req.user-consumption matrix; D1 lock corrected the disposition framework.
+
+**Read vs write disposition discipline (LOCKED v2.26 §9.11 + §5.2 amendment). Future CPs apply the discipline at surface: per-route classification for mutations defaults Tier 1 unless explicit domain-owner adjudication; per-route classification for reads applies the req.user-consumption matrix.**
+
+##### §5.23 — Track 7 in-cycle coordination requirement (NEW v2.26 §9.11 lock)
+
+Track 7 was locked Option C (hybrid — separate execution from Step 3 backend) at v2.0. CP3 reveals an edge case requiring tighter coordination: **when backend Tier 1 disposition lands AND frontend correspondent uses raw fetch() (no auth headers), the frontend correspondent will start 401-ing at backend backup-push.**
+
+CP3 + WorldStudio.jsx is the first such instance. CP3 backend sweep promoted 34 worldStudio mutation handlers to Tier 1 (requireAuth). WorldStudio.jsx contains 29 raw fetch() calls; ~11 are mutation calls that will start 401-ing post-CP3 backup push. The backend has changed the contract; frontend hasn't caught up yet.
+
+**Track 7 in-cycle coordination requirement (LOCKED v2.26 §9.11). When backend disposition shift is Tier 1+ (requireAuth) AND frontend correspondent uses raw fetch (no auth headers), Track 7 mini-CP for the frontend correspondent must follow IMMEDIATELY after the backend backup-push (separate commit, same backup-push cycle). For backend Tier 3/Tier 4 dispositions, no Track 7 coordination required (frontend raw fetch continues to work because backend tolerates anonymous).**
+
+CP3 disposition: file Track 7 mini-CP for WorldStudio.jsx ~11 mutation sites as IMMEDIATE follow-up after CP3 backup-push. Scope: ~11 raw fetch() → apiClient migration (Bearer token) + corresponding test scaffolding. Separate commit on feature/f-auth-1; backup-push to claude/f-auth-1-backup overwrites CP3 squash. v2.27 captures Track 7 mini-CP closure.
+
+Future CPs apply the coordination requirement at surface: per-CP frontend-correspondent audit (raw fetch vs apiClient); per-CP Track 7 mini-CP scope estimate; backup-push cycle plan (CP backend + Track 7 mini-CP same cycle when Tier 1+ + raw fetch present).
+
+##### §5.24 — Surface-correction eight-data-point validation (UPDATED v2.26 §5.17)
+
+v2.25 §5.17 locked the surface-correction pattern at four data points (CP15 + CP1 + CP2 × 3). CP3 contributes four more corrections, **graduating the pattern to eight cumulative data points across CP15 + CP1 + CP2 + CP3**:
+
+- Data points 1-4 (per v2.25 §5.17): CP15 WorldSetupGuide reclassification + CP1 press.js scope + CP2 file count + CP2 handler count + CP2 mount-collision + CP2 grep baseline = 5 corrections (correction count amended; v2.25 §5.17 had 4 listed, 5 actual when grep baseline counted separately)
+- Data point 5 (CP3): handler count correction — planning forecast ~85; surface counted 120 (+41% over forecast)
+- Data point 6 (CP3): worldEvents AI POST count correction — planning said 5 already on requireAuth; surface revealed 4 total (2 already correct + 2 partial needing promotion). v2.25 §A.7 wording superseded
+- Data point 7 (CP3): authenticateToken in CP3 zone — planning said 1 hit in worldEvents.js; surface confirmed at execution that hit was lazy-noop fallback false positive; actual = 0
+- Data point 8 (CP3): worldTemperatureRoutes anomaly — v2.25 §5.5 Anomaly 5 said 0 handlers; surface counted 2 (custom router var hid handlers from standard grep). Anomaly 5 amendment locked
+
+**Surface-correction pattern formal lock graduates (LOCKED v2.26 §5.17). Eight cumulative data points across two phases (Track 6 CP15 + Step 3 CP1/CP2/CP3). Empirical surface-time inspection consistently catches what fix-plan revisions and planning phase miss. CP3 alone contributed 4 corrections — highest single-CP correction count to date.** CP4-CP11 surface reports apply the discipline rigorously: empirical handler enumeration (don't trust planning forecast); empirical middleware classification (verify lazy-noop false positives); empirical mount-collision counts (don't trust v2.x §5.5 anomaly numbers without re-verification); custom-router-variable detection (use file-content-search, not pattern-restricted grep).
+
+##### §5.25 — Step 3 pacing model third data point (UPDATED v2.26, supersedes v2.25 §5.18)
+
+CP1 first data point: 1 session, ~75 min actual vs ~105-130 min forecast = 1.4-1.7x conservative bias.
+
+CP2 second data point: 1 session, ~90 min actual vs 4-6 hour forecast = ~3-4x conservative bias for largest-CP backend cadence.
+
+CP3 third data point: 1 session, ~75 min actual vs 1-session forecast (~120 min equivalent) = **on-forecast** for mixed-disposition CP cadence.
+
+Per-CP cost-per-handler analysis (three data points):
+
+- CP1: ~5 handlers in 75 min = ~15 min/handler (high architectural overhead — lazy-init refactor + lazy-noop removal + 4-decision adjudication absorbed disproportionately)
+- CP2: 227 handlers in 90 min = ~24 sec/handler (mechanical-edit dominance — single-line middleware swap × 222 + 6 adjudication-driven edits absorbed in margin)
+- CP3: 120 handlers in 75 min = ~38 sec/handler (mixed-disposition adjudication overhead — 5 D-decisions + per-handler tier classification at worldStudio.js + group PUBLIC comments + lazy-noop removal at 3 files)
+
+Step 3 pacing characteristics (three data points):
+
+- Conservative bias holds at all three data points; backend cadence consistently bias-under-forecast or on-forecast (CP1: 1.4-1.7x; CP2: ~3-4x; CP3: on-forecast).
+- Per-handler cost diverges by CP shape (15 min vs 24 sec vs 38 sec): small architectural CPs at minutes-per-handler; large mechanical CPs at seconds-per-handler; mixed-disposition CPs at ~30-40 sec/handler.
+- Total Step 3 estimate stays at ~20-22 sessions across 11 CPs. CP1 + CP2 + CP3 = 3 sessions actual = ~14% of estimate; ~8 CPs remaining at ~17-19 sessions estimate.
+- WIP-and-resume protocol available but unused at CP1 + CP2 + CP3 (single-session execution at all three). Available for CP4-CP11 if mid-flow cost overrun signals; mixed-disposition CPs (potential CP6/CP8/CP10 candidates) most likely to need it.
+
+##### §5.26 — Tests-FLOOR methodology amendment (UPDATED v2.26 §5.19)
+
+v2.25 §5.19 locked the "tests anticipated count is FLOOR not ceiling" pattern at four data points. CP3 contributes the **first BELOW-FLOOR data point in 4 backend-CP cycles** — surface forecast 120, actual 42, multiplier 0.35x. Methodology divergence: CP3 test design used aggregate-counter assertions instead of per-handler-implies-1-test. Test COVERAGE preserved (aggregate-count assertions catch deviation in any single handler) but test COUNT 3-5x lower.
+
+**Tests-FLOOR methodology amendment (LOCKED v2.26 §5.19). FLOOR pattern applies to per-handler-implies-1-test methodology only. Aggregate-counter methodology is acceptable when test coverage is preserved. CP3 establishes aggregate-counter as a valid alternative; future CPs can choose either methodology based on what makes the tests most maintainable.**
+
+Updated forecast inflation factor (post-CP3 four+ data points):
+
+- Per-handler methodology: 1.8-3.0x inflation factor confirmed at CP1 (2.1x) + CP2 (1.8x) + Track 6 CP12-CP15 (1.5x average)
+- Aggregate-counter methodology: 0.3-0.4x deflation factor at CP3 (0.35x) — first data point; pattern requires more data points to formally lock
+
+CP4-CP11 surface reports specify chosen methodology + label forecast accordingly (FLOOR for per-handler; AGGREGATE for aggregate-counter). Closure reports record actual vs forecast for ongoing pattern validation across both methodologies.
+
+##### §5.27 — WorldEvents reference model status update (NEW v2.26)
+
+worldEvents.js was the v2.23 §5.4 CP3 description's "5 AI POSTs already on requireAuth" reference model. CP3 surface revealed the actual state: **4 AI POSTs total (NOT 5), split 2 already correct + 2 partial needing promotion**. CP3 D4 promoted the 2 partials to uniform requireAuth + aiRateLimiter.
+
+WorldEvents reference model state post-CP3 (LOCKED v2.26 §5.27): **all 4 AI POSTs uniformly use requireAuth + aiRateLimiter pattern.**
+
+- worldEvents.js:748 (post-edit) POST /events/:eventId/generate-script: requireAuth + aiRateLimiter (preserved verbatim — was already correct pre-CP3)
+- worldEvents.js:1687 (post-edit) POST /events/:eventId/generate-episode: requireAuth + aiRateLimiter (PROMOTED at CP3 D4)
+- worldEvents.js:1779 (post-edit) POST /events/generate-episode-from-many: requireAuth + aiRateLimiter (preserved verbatim — was already correct pre-CP3)
+- worldEvents.js:1889 (post-edit) POST /events/:eventId/regenerate-episode: requireAuth + aiRateLimiter (PROMOTED at CP3 D4)
+
+Architectural inconsistency eliminated: anonymous bypass of aiRateLimiter via optionalAuth no longer possible. Reference model now uniform — future Step 3 CPs reference the post-CP3 state of worldEvents.js when making AI cost gating disposition decisions.
+
+Cross-CP correspondences:
+
+- CP1 referenced worldEvents reference model in adjudication of episodeBriefRoutes 4 AI POSTs (already requireAuth + aiRateLimiter — preserved at CP1)
+- CP2 referenced worldEvents reference model for D3 adjudication of episodeOrchestrationRoute (Tier 1 + aiRateLimiter; joins worldEvents AI POSTs as aiRateLimiter consumer)
+- CP3 closes the inconsistency at the reference model itself: worldEvents 4 AI POSTs uniformly correct
+- CP4-CP10 surface reports identify any AI-cost POSTs in CP zone files; apply the worldEvents post-CP3 uniform reference model (requireAuth + aiRateLimiter)
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -1988,7 +2116,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. Pattern G locked: 6 sites (UNCHANGED throughout CP12-CP15). **Step 3 CP1 COMPLETE through commit `05cd536d`**; F-AUTH-2 lazy-init refactor + F-AUTH-3 5-handler migration + lazy-noop fallback removal. **Step 3 CP2 COMPLETE through commit `d73599f8`**; Episodes cluster — 22 files / 227 handlers / 91 new tests / 1 session / ~90 min. Mount-collision discipline established (11 routers at /api/v1/episodes); cross-mount router pattern locked; F-AUTH-5 4-site resolution + ?.id field-name expansion finding. Backend test suite: 1417 → 1508 passing (+91 tests, +1 suite, 0 regressions). Backed up at `d73599f8` on `claude/f-auth-1-backup`. Step 3 CP3 (World cluster — 4 files / ~85 handlers / WorldStudio Tier 3/Tier 4 split per Item 15) kicks off next, fresh session after v2.25 lands on dev.
+- **Step 6b — TRACK 6 IMPLEMENTATION CLOSED + STEP 3 CP1 + CP2 + CP3 COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. Pattern G locked: 6 sites (UNCHANGED throughout CP12-CP15). **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**; World cluster — 4 files / 120 handlers / 42 new tests / 1 session / ~75 min. First mixed Tier 1+3+4 within single file (worldStudio.js): 1 Tier 3 + 18 Tier 4 GETs + 34 Tier 1 mutations. Read vs write disposition discipline (NEW v2.26 §9.11 lock + §5.2 amendment) established. Track 7 in-cycle coordination requirement (NEW v2.26 §9.11 lock) — backend Tier 1 + frontend raw fetch correspondence triggers Track 7 mini-CP same backup-push cycle. WorldEvents reference model uniform: 4 AI POSTs all requireAuth + aiRateLimiter post-CP3. Anomaly 5 amendment locked (worldTemperatureRoutes 2 handlers, NOT 0). Backend test suite: 1508 → 1550 passing (+42 tests, +1 suite, 0 regressions). Backed up at `61f8a658` on `claude/f-auth-1-backup`. Track 7 mini-CP for WorldStudio.jsx ~11 mutation sites kicks off next (closes CP3 regression window); then Step 3 CP4 (Scene cluster).
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
