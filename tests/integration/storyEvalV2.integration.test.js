@@ -7,42 +7,40 @@ const request = require('supertest');
 const app = require('../../src/app');
 
 describe('Character Spark Routes', () => {
+  // Step 3 CP6: characterSparkRoute promoted to Tier 1. Anonymous requests now
+  // produce 401 AUTH_REQUIRED before reaching the handler body. These tests
+  // remain as route-mount sanity checks rather than handler-body coverage.
   describe('GET /api/v1/character-registry/sparks', () => {
-    it('should return a list or graceful error', async () => {
+    it('should require auth (Tier 1 — returns 401 for anonymous)', async () => {
       const res = await request(app).get('/api/v1/character-registry/sparks');
-      // 200 if table exists, 500 if not (CI may lack migration)
-      expect([200, 500]).toContain(res.status);
-      if (res.status === 200) {
-        expect(Array.isArray(res.body.sparks)).toBe(true);
-      }
+      expect(res.status).toBe(401);
     });
   });
 
   describe('POST /api/v1/character-registry/sparks', () => {
-    it('should reject when name is missing', async () => {
+    it('should require auth before reaching validation (returns 401 for anonymous)', async () => {
       const res = await request(app)
         .post('/api/v1/character-registry/sparks')
         .send({ desire_line: 'wants freedom' });
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
+      expect(res.status).toBe(401);
     });
   });
 
   describe('GET /api/v1/character-registry/sparks/:id', () => {
-    it('should 404 or 500 for non-existent spark', async () => {
+    it('should require auth (returns 401 for anonymous)', async () => {
       const res = await request(app).get(
         '/api/v1/character-registry/sparks/00000000-0000-0000-0000-000000000000'
       );
-      expect([404, 500]).toContain(res.status);
+      expect(res.status).toBe(401);
     });
   });
 
   describe('PATCH /api/v1/character-registry/sparks/:id', () => {
-    it('should 404 or 500 for non-existent spark', async () => {
+    it('should require auth (returns 401 for anonymous)', async () => {
       const res = await request(app)
         .patch('/api/v1/character-registry/sparks/00000000-0000-0000-0000-000000000000')
         .send({ name: 'Updated' });
-      expect([404, 500]).toContain(res.status);
+      expect(res.status).toBe(401);
     });
   });
 });

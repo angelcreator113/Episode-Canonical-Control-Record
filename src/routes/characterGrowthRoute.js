@@ -7,7 +7,8 @@
 const express = require('express');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 
 const client = new Anthropic();
@@ -58,7 +59,7 @@ Respond ONLY in valid JSON. No markdown. No backticks.`;
 // ROUTE 1: character-growth
 // Fires after an approved scene — reads the scene, evolves the characters
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/character-growth', optionalAuth, async (req, res) => {
+router.post('/character-growth', requireAuth, aiRateLimiter, async (req, res) => {
   const { story_id, scene_proposal_id } = req.body;
 
   if (!story_id) return res.status(400).json({ error: 'story_id required' });
@@ -253,7 +254,7 @@ Respond with this exact JSON structure:
 // ROUTE 2: flagged contradictions
 // Author reviews only what actually contradicts the registry
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/character-growth/flagged', optionalAuth, async (req, res) => {
+router.get('/character-growth/flagged', requireAuth, async (req, res) => {
   try {
     const flags = await db.CharacterGrowthLog.findAll({
       where: {
@@ -280,7 +281,7 @@ router.get('/character-growth/flagged', optionalAuth, async (req, res) => {
 // ROUTE 3: review a flagged contradiction
 // Author accepts / reverts / modifies
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/character-growth/:id/review', optionalAuth, async (req, res) => {
+router.post('/character-growth/:id/review', requireAuth, async (req, res) => {
   const { decision, modified_value, author_note } = req.body;
   // decision: 'accepted' | 'reverted' | 'modified'
 
@@ -332,7 +333,7 @@ router.post('/character-growth/:id/review', optionalAuth, async (req, res) => {
 // ROUTE 4: character growth history
 // Full evolution timeline for a character
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/character-growth/history/:characterId', optionalAuth, async (req, res) => {
+router.get('/character-growth/history/:characterId', requireAuth, async (req, res) => {
   try {
     const logs = await db.CharacterGrowthLog.findAll({
       where: { character_id: req.params.characterId },

@@ -14,13 +14,8 @@
 const express = require('express');
 const router = express.Router();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ─── Role type definitions (registry role types) ─────────────────────────────
 const ROLE_TYPES = ['pressure', 'mirror', 'support', 'shadow', 'special'];
@@ -550,7 +545,7 @@ const _PAIN_CATEGORIES = [
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ─── GET /ecosystem ──────────────────────────────────────────────────────────
-router.get('/ecosystem', optionalAuth, async (req, res) => {
+router.get('/ecosystem', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
 
   try {
@@ -636,7 +631,7 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /propose-seeds ─────────────────────────────────────────────────────
-router.post('/propose-seeds', optionalAuth, async (req, res) => {
+router.post('/propose-seeds', requireAuth, aiRateLimiter, async (req, res) => {
   const {
     world,
     count: seedCount,
@@ -745,7 +740,7 @@ Return ONLY valid JSON — no preamble, no markdown:
 });
 
 // ─── POST /generate-batch (v5.3) ────────────────────────────────────────────
-router.post('/generate-batch', optionalAuth, async (req, res) => {
+router.post('/generate-batch', requireAuth, aiRateLimiter, async (req, res) => {
   const {
     batch_size = 5,
     protagonist_focus = null,
@@ -804,7 +799,7 @@ router.post('/generate-batch', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /check-staging ─────────────────────────────────────────────────────
-router.post('/check-staging', optionalAuth, async (req, res) => {
+router.post('/check-staging', requireAuth, async (req, res) => {
   try {
     const { character, existingCharacters, ecosystemStats } = req.body;
 
@@ -878,7 +873,7 @@ router.post('/check-staging', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /commit (v5.3 — flat character format) ─────────────────────────────
-router.post('/commit', optionalAuth, async (req, res) => {
+router.post('/commit', requireAuth, async (req, res) => {
   const { character, registryId } = req.body;
   // Support legacy format too
   const c = character || req.body.profile;
@@ -1097,7 +1092,7 @@ router.post('/commit', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /seed-relationships (v5.3 — 42 pairing rules) ─────────────────────
-router.post('/seed-relationships', optionalAuth, async (req, res) => {
+router.post('/seed-relationships', requireAuth, async (req, res) => {
   const { character_ids, registryId } = req.body;
   if (!character_ids?.length || !registryId) {
     return res.status(400).json({ error: 'character_ids array and registryId required' });
@@ -1200,7 +1195,7 @@ router.post('/seed-relationships', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /rewrite-field ─────────────────────────────────────────────────────
-router.post('/rewrite-field', optionalAuth, async (req, res) => {
+router.post('/rewrite-field', requireAuth, aiRateLimiter, async (req, res) => {
   const { fieldPath, currentValue, characterContext } = req.body;
   if (!fieldPath || !currentValue) {
     return res.status(400).json({ error: 'fieldPath and currentValue required' });

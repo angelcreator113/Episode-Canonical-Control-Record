@@ -1,8 +1,9 @@
 const router = require('express').Router();
 const { Character } = require('../models');
+const { requireAuth } = require('../middleware/auth');
 
 // GET /api/v1/characters?show_id=xxx
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const where = {};
     if (req.query.show_id) where.show_id = req.query.show_id;
@@ -16,7 +17,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/v1/characters/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const character = await Character.findByPk(req.params.id);
     if (!character) return res.status(404).json({ success: false, message: 'Character not found' });

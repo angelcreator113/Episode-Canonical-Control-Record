@@ -21,13 +21,13 @@
 const express = require('express');
 const router  = express.Router();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+// F-AUTH-1 Step 3 CP6: mixed Tier 1+4 within single file (per v2.30 §5.21,
+// 2nd cumulative instance after worldStudio.js at CP3). Writes (POST/PUT/
+// DELETE) require authentication (Tier 1); GETs are public catalog reads
+// with no req.user consumption (Tier 4) and retain plain optionalAuth so
+// upstream loggers still see req.user when present, but the GETs do not
+// gate on auth status.
+const { optionalAuth, requireAuth } = require('../middleware/auth');
 
 const db = require('../models');
 const { Universe, BookSeries } = db;
@@ -43,7 +43,7 @@ router.get('/', optionalAuth, async (req, res) => {
 });
 
 // ── Create universe ────────────────────────────────────────────────────────
-router.post('/', optionalAuth, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const { name, slug, description, core_themes, world_rules, pnos_beliefs, narrative_economy } = req.body;
     const universe = await Universe.create({
@@ -73,7 +73,7 @@ router.get('/series', optionalAuth, async (req, res) => {
 });
 
 // ── Create book series ─────────────────────────────────────────────────────
-router.post('/series', optionalAuth, async (req, res) => {
+router.post('/series', requireAuth, async (req, res) => {
   try {
     const { universe_id, show_id, name, description, order_index } = req.body;
     const series = await BookSeries.create({ universe_id, show_id, name, description, order_index });
@@ -84,7 +84,7 @@ router.post('/series', optionalAuth, async (req, res) => {
 });
 
 // ── Update book series ─────────────────────────────────────────────────────
-router.put('/series/:id', optionalAuth, async (req, res) => {
+router.put('/series/:id', requireAuth, async (req, res) => {
   try {
     const series = await BookSeries.findByPk(req.params.id);
     if (!series) return res.status(404).json({ error: 'Series not found' });
@@ -96,7 +96,7 @@ router.put('/series/:id', optionalAuth, async (req, res) => {
 });
 
 // ── Delete book series ─────────────────────────────────────────────────────
-router.delete('/series/:id', optionalAuth, async (req, res) => {
+router.delete('/series/:id', requireAuth, async (req, res) => {
   try {
     const series = await BookSeries.findByPk(req.params.id);
     if (!series) return res.status(404).json({ error: 'Series not found' });
@@ -121,7 +121,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 });
 
 // ── Update universe ────────────────────────────────────────────────────────
-router.put('/:id', optionalAuth, async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   try {
     const universe = await Universe.findByPk(req.params.id);
     if (!universe) return res.status(404).json({ error: 'Universe not found' });
