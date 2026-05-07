@@ -1,12 +1,69 @@
 const { CognitoJwtVerifier } = require('aws-jwt-verify');
-const { verifyToken: verifyTestToken } = require('../services/tokenService');
+const { verifyToken: verifyHs256Token } = require('../services/tokenService');
 
 /**
  * Authentication Middleware
- * Validates AWS Cognito JWT tokens and extracts user information
- * Uses aws-jwt-verify for proper signature verification
- * In test environment, falls back to tokenService for simple JWT tokens
+ * Validates JWT tokens and extracts user information.
+ *   RS256 (Cognito) tokens — verified via aws-jwt-verify against Cognito JWKS.
+ *   HS256 (local) tokens   — verified via tokenService against JWT_SECRET.
+ * See F-AUTH-X1 block below for routing semantics.
  */
+
+// ============================================================================
+// F-AUTH-X1 — Dual-verifier routing (Phase 2, Option B)
+// ============================================================================
+//
+// verifyToken uses a JWT `alg` discriminator to route tokens to one of two
+// verifiers:
+//
+//   RS256 → AWS Cognito (lazy verifiers — see F-AUTH-2 block below)
+//   HS256 → tokenService (jsonwebtoken HS256, JWT_SECRET-backed)
+//
+// Pre F-AUTH-X1: tokenService was wired in only when NODE_ENV === 'test'.
+// Post F-AUTH-X1: tokenService is operational in ALL environments. This
+// activates the existing local-HS256 login flow (POST /api/auth/login →
+// generateTokenPair) for production traffic that was previously verifier-
+// rejected by the Cognito-only path.
+//
+// ARCHITECTURAL DEBT (deliberately deferred to Track 8 — Option A migration):
+//
+//   1. Two trust roots exist concurrently. Cognito tokens are verified
+//      against a public-key JWKS fetched from AWS; HS256 tokens are
+//      verified against a single shared symmetric secret (JWT_SECRET).
+//      A compromise of JWT_SECRET is sufficient to mint tokens that the
+//      backend accepts as valid, with NO downstream check that distinguishes
+//      "Cognito-issued" from "locally-issued" identities.
+//
+//   2. The `req.user.source` field ('cognito' | 'local-hs256') is
+//      OBSERVABILITY ONLY — it exists so log lines and metrics can attribute
+//      authenticated traffic to its verifier. It is NOT a security boundary.
+//      Both verifiers produce equally-trusted req.user; do NOT use the
+//      source field for trust-level discrimination, RBAC, or access-control
+//      decisions in route handlers.
+//
+//   3. degradeOnInfraFailure (F-Auth-3 optionalAuth flag) NATURALLY
+//      CONTRACTS to RS256-only traffic under this design. The flag exists
+//      to keep public read-paths usable when Cognito/JWKS is unreachable;
+//      it has no analogue for HS256 verification because tokenService has
+//      no external dependency that can fail. HS256 traffic that fails
+//      verification follows the standard token-rejection path (Case 2 of
+//      the F-Auth-3 classifier).
+//
+//   4. Routing fallback: if `alg` cannot be parsed from the JWT header
+//      (malformed token, missing header, etc.), the request routes to
+//      tokenService in test environments (preserves auth-gaps.test.js
+//      fixture compat) and to Cognito in non-test environments
+//      (preserves AUTH_CONFIG_MISSING propagation contract). This compat
+//      layer disappears once Track 8 (Option A — single-verifier
+//      consolidation) lands and the dual path is removed.
+//
+// Track 8 will migrate to a single verifier (Option A) and delete this
+// dual-verifier code path. Until then, the surface area MUST remain
+// minimal: the only observable difference at the application boundary
+// is req.user.source.
+//
+// Test coverage: tests/unit/middleware/f-auth-x1-dual-verifier.test.js
+// ============================================================================
 
 // F-AUTH-2 fix (Step 3 CP1): lazy-initialized verifiers.
 // Pre-fix: CognitoJwtVerifier.create() ran at module-load time with
@@ -61,37 +118,84 @@ const wrapVerifierError = (original) => {
   return wrapped;
 };
 
-const verifyToken = async (token) => {
-  // In test environment, use simple JWT verification
-  if (process.env.NODE_ENV === 'test') {
-    try {
-      return verifyTestToken(token);
-    } catch (error) {
-      throw wrapVerifierError(error);
-    }
-  }
-
+// F-AUTH-X1: parse the JWT header and return the alg field if it's one we route
+// on. Returns 'RS256' | 'HS256' | null. Never throws — a malformed token simply
+// returns null and the caller applies the routing fallback (see Q4 §4 above).
+// Reads ONLY the header — never decodes the payload, never validates signature.
+const detectTokenAlgorithm = (token) => {
+  if (typeof token !== 'string' || token.length === 0) return null;
+  const dot = token.indexOf('.');
+  if (dot < 1) return null;
+  const headerB64 = token.slice(0, dot);
   try {
-    // Try to verify as ID token first (contains user info).
-    // Lazy verifier getters throw AUTH_CONFIG_MISSING if env vars are absent —
-    // wrapped via wrapVerifierError below so callers see a normal verifier
-    // error path (no module-load crash).
+    const normalized = headerB64.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+    const headerJson = Buffer.from(padded, 'base64').toString('utf8');
+    const header = JSON.parse(headerJson);
+    if (header && typeof header.alg === 'string') {
+      const alg = header.alg.toUpperCase();
+      if (alg === 'RS256' || alg === 'HS256') return alg;
+    }
+  } catch (_err) {
+    /* fallthrough → null */
+  }
+  return null;
+};
+
+// F-AUTH-X1: gated debug log emitted on successful verification. Logs ONLY
+// path/verifier/alg/sub — never the token, the Authorization header, or the
+// full decoded payload (see Q5 above + D5 decision).
+const maybeAuthDebug = (req, source, alg, sub) => {
+  if (process.env.AUTH_DEBUG !== 'true') return;
+  console.debug('[F-AUTH-X1] verified', {
+    path: req && req.path,
+    verifier: source,
+    alg,
+    sub,
+  });
+};
+
+// F-AUTH-X1: Cognito (RS256) verifier path. Preserves the existing id-token-
+// then-access-token fallback so token_use:'access' tokens still verify.
+const verifyViaCognito = async (token) => {
+  try {
     try {
       const payload = await getIdTokenVerifier().verify(token);
-      return payload;
+      return { payload, source: 'cognito', alg: 'RS256' };
     } catch (idError) {
-      // If ID token verification fails, try as access token
       try {
         const payload = await getAccessTokenVerifier().verify(token);
-        return payload;
-      } catch (accessError) {
-        // If both fail, throw the original ID token error
+        return { payload, source: 'cognito', alg: 'RS256' };
+      } catch (_accessError) {
         throw idError;
       }
     }
   } catch (error) {
     throw wrapVerifierError(error);
   }
+};
+
+// F-AUTH-X1: tokenService (HS256) verifier path. The same code path that has
+// run under NODE_ENV === 'test' since the F-Auth-3 era — now active in all
+// environments per the Phase 2 surface §Q4 routing decision.
+const verifyViaHs256 = (token) => {
+  try {
+    const payload = verifyHs256Token(token);
+    return { payload, source: 'local-hs256', alg: 'HS256' };
+  } catch (error) {
+    throw wrapVerifierError(error);
+  }
+};
+
+const verifyToken = async (token) => {
+  const alg = detectTokenAlgorithm(token);
+
+  if (alg === 'RS256') return verifyViaCognito(token);
+  if (alg === 'HS256') return verifyViaHs256(token);
+
+  // Routing fallback for unparseable/missing alg. See Q8 §4 above.
+  if (process.env.NODE_ENV === 'test') return verifyViaHs256(token);
+  return verifyViaCognito(token);
 };
 
 /**
@@ -125,19 +229,22 @@ const authenticateToken = async (req, res, next) => {
 
     try {
       // Verify token
-      const decoded = await verifyToken(token);
+      const { payload: decoded, source, alg } = await verifyToken(token);
 
       // Attach user info to request
       req.user = {
-        id: decoded.sub, // Cognito subject ID
+        id: decoded.sub, // Cognito subject ID (or HS256 sub)
         email: decoded.email,
         name: decoded.name,
         groups: decoded['cognito:groups'] || decoded.groups || [],
         tokenUse: decoded.token_use, // 'access' or 'id'
         issuedAt: decoded.iat,
         expiresAt: decoded.exp,
+        source, // F-AUTH-X1: 'cognito' | 'local-hs256' — observability only
         raw: decoded,
       };
+
+      maybeAuthDebug(req, source, alg, decoded && decoded.sub);
 
       // Continue to next middleware
       next();
@@ -228,7 +335,7 @@ const buildOptionalAuthMiddleware = (options = {}) => {
     const token = parts[1];
 
     try {
-      const decoded = await verifyToken(token);
+      const { payload: decoded, source, alg } = await verifyToken(token);
       req.user = {
         id: decoded.sub,
         email: decoded.email,
@@ -237,8 +344,10 @@ const buildOptionalAuthMiddleware = (options = {}) => {
         tokenUse: decoded.token_use,
         issuedAt: decoded.iat,
         expiresAt: decoded.exp,
+        source, // F-AUTH-X1: 'cognito' | 'local-hs256' — observability only
         raw: decoded,
       };
+      maybeAuthDebug(req, source, alg, decoded && decoded.sub);
       return next();
     } catch (error) {
       const infraCause = findCognitoInfraCause(error);
@@ -397,7 +506,7 @@ const requireAuth = async (req, res, next) => {
     });
   }
   try {
-    const decoded = await verifyToken(parts[1]);
+    const { payload: decoded, source, alg } = await verifyToken(parts[1]);
     req.user = {
       id: decoded.sub,
       email: decoded.email,
@@ -406,8 +515,10 @@ const requireAuth = async (req, res, next) => {
       tokenUse: decoded.token_use,
       issuedAt: decoded.iat,
       expiresAt: decoded.exp,
+      source, // F-AUTH-X1: 'cognito' | 'local-hs256' — observability only
       raw: decoded,
     };
+    maybeAuthDebug(req, source, alg, decoded && decoded.sub);
     return next();
   } catch (error) {
     const infraCause = findCognitoInfraCause(error);
