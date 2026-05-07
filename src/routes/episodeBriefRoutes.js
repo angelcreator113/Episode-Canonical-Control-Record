@@ -7,14 +7,14 @@
 
 const express = require('express');
 const router = express.Router();
-const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { EpisodeBrief, ScenePlan, Episode, SceneSet } = require('../models');
 const { generateScenePlan, getScenePlanForScriptGenerator } = require('../services/scenePlannerService');
 
 // ── GET / CREATE BRIEF ────────────────────────────────────────────────────────
 
-router.get('/:episodeId', optionalAuth, async (req, res) => {
+router.get('/:episodeId', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
 
@@ -42,7 +42,7 @@ router.get('/:episodeId', optionalAuth, async (req, res) => {
 
 // ── UPDATE BRIEF ──────────────────────────────────────────────────────────────
 
-router.put('/:episodeId', optionalAuth, async (req, res) => {
+router.put('/:episodeId', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
 
@@ -74,7 +74,7 @@ router.put('/:episodeId', optionalAuth, async (req, res) => {
 
 // ── LOCK BRIEF ────────────────────────────────────────────────────────────────
 
-router.post('/:episodeId/lock', optionalAuth, async (req, res) => {
+router.post('/:episodeId/lock', requireAuth, async (req, res) => {
   try {
     const brief = await EpisodeBrief.findOne({ where: { episode_id: req.params.episodeId } });
     if (!brief) return res.status(404).json({ error: 'Brief not found' });
@@ -119,7 +119,7 @@ router.post('/:episodeId/generate-plan', requireAuth, aiRateLimiter, async (req,
 
 // ── GET SCENE PLAN ────────────────────────────────────────────────────────────
 
-router.get('/:episodeId/plan', optionalAuth, async (req, res) => {
+router.get('/:episodeId/plan', requireAuth, async (req, res) => {
   try {
     const plans = await ScenePlan.findAll({
       where: { episode_id: req.params.episodeId, deleted_at: null },
@@ -140,7 +140,7 @@ router.get('/:episodeId/plan', optionalAuth, async (req, res) => {
 
 // ── UPDATE SINGLE BEAT ────────────────────────────────────────────────────────
 
-router.put('/:episodeId/plan/:beatNumber', optionalAuth, async (req, res) => {
+router.put('/:episodeId/plan/:beatNumber', requireAuth, async (req, res) => {
   try {
     const { episodeId, beatNumber } = req.params;
 
@@ -172,7 +172,7 @@ router.put('/:episodeId/plan/:beatNumber', optionalAuth, async (req, res) => {
 
 // ── LOCK BEAT (toggle) ────────────────────────────────────────────────────────
 
-router.post('/:episodeId/plan/:beatNumber/lock', optionalAuth, async (req, res) => {
+router.post('/:episodeId/plan/:beatNumber/lock', requireAuth, async (req, res) => {
   try {
     const plan = await ScenePlan.findOne({
       where: { episode_id: req.params.episodeId, beat_number: parseInt(req.params.beatNumber, 10) },
@@ -188,7 +188,7 @@ router.post('/:episodeId/plan/:beatNumber/lock', optionalAuth, async (req, res) 
 
 // ── LOCK ALL BEATS ────────────────────────────────────────────────────────────
 
-router.post('/:episodeId/plan/lock-all', optionalAuth, async (req, res) => {
+router.post('/:episodeId/plan/lock-all', requireAuth, async (req, res) => {
   try {
     await ScenePlan.update({ locked: true }, { where: { episode_id: req.params.episodeId } });
     return res.json({ success: true, message: 'All beats locked — ready for script generation.' });
@@ -300,7 +300,7 @@ Return ONLY the rewritten dialogue. No speaker prefix, no quotes, no explanation
 
 // ── SCRIPT CONTEXT (for script generator) ─────────────────────────────────────
 
-router.get('/:episodeId/script-context', optionalAuth, async (req, res) => {
+router.get('/:episodeId/script-context', requireAuth, async (req, res) => {
   try {
     const context = await getScenePlanForScriptGenerator(req.params.episodeId);
     return res.json({

@@ -11,11 +11,11 @@
  */
 const express = require('express');
 const router = express.Router({ mergeParams: true });
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { validateMissionPayload } = require('../services/phoneConditionSchema');
 
 // GET /api/v1/ui-overlays/:showId/missions?episode_id=...
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     // Fail soft if the table hasn't been migrated yet on this environment
@@ -60,7 +60,7 @@ function missingColumnError(err) {
 }
 
 // POST /api/v1/ui-overlays/:showId/missions
-router.post('/', optionalAuth, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { error, value } = validateMissionPayload(req.body);
@@ -80,7 +80,7 @@ router.post('/', optionalAuth, async (req, res) => {
 });
 
 // PUT /api/v1/ui-overlays/:showId/missions/:id
-router.put('/:id', optionalAuth, async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const mission = await models.PhoneMission.findOne({
@@ -103,7 +103,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
 });
 
 // DELETE /api/v1/ui-overlays/:showId/missions/:id — soft delete
-router.delete('/:id', optionalAuth, async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const mission = await models.PhoneMission.findOne({

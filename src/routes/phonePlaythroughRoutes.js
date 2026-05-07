@@ -2,7 +2,7 @@
  * phonePlaythroughRoutes — reader-facing, episode-scoped playable phone runtime.
  *
  * Mounted under `/api/v1/episodes/:episodeId/phone-state`. All routes require an
- * authenticated user (Cognito Bearer token via `authenticate` middleware) so
+ * authenticated user (Cognito Bearer token via `requireAuth` middleware) so
  * playthroughs can't leak across sessions.
  *
  * The server runs the SAME phoneRuntime evaluator the editor preview uses, so a
@@ -18,7 +18,7 @@
  */
 const express = require('express');
 const router = express.Router({ mergeParams: true });
-const { authenticate } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const runtime = require('../services/phoneRuntime');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ function serializeState(state) {
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 // GET /api/v1/episodes/:episodeId/phone-state
-router.get('/', authenticate, async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { state, error } = await loadOrCreateState(models, {
@@ -116,7 +116,7 @@ router.get('/', authenticate, async (req, res) => {
 // Body: { zone_id, screen_id? }
 // Runs the zone's actions through the central evaluator, persists state changes,
 // and returns { state, effects } so the client can navigate / show toasts.
-router.post('/tap', authenticate, async (req, res) => {
+router.post('/tap', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { zone_id, screen_id } = req.body || {};
@@ -218,7 +218,7 @@ router.post('/tap', authenticate, async (req, res) => {
 });
 
 // POST /api/v1/episodes/:episodeId/phone-state/reset
-router.post('/reset', authenticate, async (req, res) => {
+router.post('/reset', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { state, error } = await loadOrCreateState(models, {
@@ -241,7 +241,7 @@ router.post('/reset', authenticate, async (req, res) => {
 });
 
 // POST /api/v1/episodes/:episodeId/phone-state/complete
-router.post('/complete', authenticate, async (req, res) => {
+router.post('/complete', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { state, error } = await loadOrCreateState(models, {

@@ -100,18 +100,12 @@ async function logLalaEmergence(db, params) {
 
 // ── 2. Routes ──────────────────────────────────────────────────────────────
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
 
 /**
  * GET /api/v1/lala-scenes/book/:bookId
  */
-router.get('/book/:bookId', optionalAuth, async (req, res) => {
+router.get('/book/:bookId', requireAuth, async (req, res) => {
   try {
     const db  = req.app.get('db') || require('../models');
     const { LalaEmergenceScene } = db;
@@ -136,7 +130,7 @@ router.get('/book/:bookId', optionalAuth, async (req, res) => {
 /**
  * PUT /api/v1/lala-scenes/:sceneId
  */
-router.put('/:sceneId', optionalAuth, async (req, res) => {
+router.put('/:sceneId', requireAuth, async (req, res) => {
   try {
     const db  = req.app.get('db') || require('../models');
     const { LalaEmergenceScene } = db;
@@ -164,7 +158,7 @@ router.put('/:sceneId', optionalAuth, async (req, res) => {
 /**
  * POST /api/v1/lala-scenes/backfill/:bookId
  */
-router.post('/backfill/:bookId', optionalAuth, async (req, res) => {
+router.post('/backfill/:bookId', requireAuth, async (req, res) => {
   try {
     const db = req.app.get('db') || require('../models');
     const {

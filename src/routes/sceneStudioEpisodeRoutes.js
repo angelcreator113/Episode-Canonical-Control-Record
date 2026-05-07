@@ -10,13 +10,13 @@
 
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { ScenePlan, SceneSet, SceneAngle, SceneSetEpisode } = require('../models');
 
 // ── GET VISUAL SEQUENCE FOR EPISODE ──────────────────────────────────────────
 // Returns all 14 beats with their scene set images and angles
 // GET /api/v1/scene-studio-episodes/:episodeId/visual-sequence
-router.get('/:episodeId/visual-sequence', optionalAuth, async (req, res) => {
+router.get('/:episodeId/visual-sequence', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
 
@@ -119,7 +119,7 @@ router.get('/:episodeId/visual-sequence', optionalAuth, async (req, res) => {
 // ── CHANGE ANGLE FOR BEAT ────────────────────────────────────────────────────
 // PUT /api/v1/scene-studio-episodes/:episodeId/beat/:beatNumber/angle
 // Body: { angle_id }
-router.put('/:episodeId/beat/:beatNumber/angle', optionalAuth, async (req, res) => {
+router.put('/:episodeId/beat/:beatNumber/angle', requireAuth, async (req, res) => {
   try {
     const { episodeId, beatNumber } = req.params;
     const { angle_id } = req.body;
@@ -169,7 +169,7 @@ router.put('/:episodeId/beat/:beatNumber/angle', optionalAuth, async (req, res) 
 // ── CHANGE SCENE SET FOR BEAT ────────────────────────────────────────────────
 // PUT /api/v1/scene-studio-episodes/:episodeId/beat/:beatNumber/scene-set
 // Body: { scene_set_id }
-router.put('/:episodeId/beat/:beatNumber/scene-set', optionalAuth, async (req, res) => {
+router.put('/:episodeId/beat/:beatNumber/scene-set', requireAuth, async (req, res) => {
   try {
     const { episodeId, beatNumber } = req.params;
     const { scene_set_id } = req.body;
@@ -240,7 +240,7 @@ router.put('/:episodeId/beat/:beatNumber/scene-set', optionalAuth, async (req, r
 
 // ── GET AVAILABLE SCENE SETS FOR EPISODE ─────────────────────────────────────
 // GET /api/v1/scene-studio-episodes/:showId/available-sets
-router.get('/:showId/available-sets', optionalAuth, async (req, res) => {
+router.get('/:showId/available-sets', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { scene_type } = req.query;
@@ -293,7 +293,7 @@ router.get('/:showId/available-sets', optionalAuth, async (req, res) => {
 
 // ── EPISODE SCENE SETS SUMMARY ───────────────────────────────────────────────
 // GET /api/v1/scene-studio-episodes/:episodeId/sets
-router.get('/:episodeId/sets', optionalAuth, async (req, res) => {
+router.get('/:episodeId/sets', requireAuth, async (req, res) => {
   try {
     const links = await SceneSetEpisode.findAll({
       where: { episode_id: req.params.episodeId },

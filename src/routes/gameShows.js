@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const db = require('../models');
 
 /**
  * Get episode phases
  * GET /api/v1/episodes/:episodeId/phases
  */
-router.get('/:episodeId/phases', optionalAuth, async (req, res) => {
+router.get('/:episodeId/phases', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     
@@ -34,7 +34,7 @@ router.get('/:episodeId/phases', optionalAuth, async (req, res) => {
  * Create phases in bulk
  * POST /api/v1/episodes/:episodeId/phases/bulk
  */
-router.post('/:episodeId/phases/bulk', optionalAuth, async (req, res) => {
+router.post('/:episodeId/phases/bulk', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { phases } = req.body;
@@ -72,7 +72,7 @@ router.post('/:episodeId/phases/bulk', optionalAuth, async (req, res) => {
  * Get layout templates for show
  * GET /api/v1/shows/:showId/layouts
  */
-router.get('/:showId/layouts', optionalAuth, async (req, res) => {
+router.get('/:showId/layouts', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     
@@ -92,7 +92,7 @@ router.get('/:showId/layouts', optionalAuth, async (req, res) => {
  * Create layout template
  * POST /api/v1/shows/:showId/layouts
  */
-router.post('/:showId/layouts', optionalAuth, async (req, res) => {
+router.post('/:showId/layouts', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { name, layout_type, regions, transition_in, transition_out } = req.body;
@@ -118,7 +118,7 @@ router.post('/:showId/layouts', optionalAuth, async (req, res) => {
  * Get interactive elements for episode
  * GET /api/v1/episodes/:episodeId/interactive
  */
-router.get('/:episodeId/interactive', optionalAuth, async (req, res) => {
+router.get('/:episodeId/interactive', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     
@@ -139,7 +139,7 @@ router.get('/:episodeId/interactive', optionalAuth, async (req, res) => {
  * Add interactive element
  * POST /api/v1/episodes/:episodeId/interactive
  */
-router.post('/:episodeId/interactive', optionalAuth, async (req, res) => {
+router.post('/:episodeId/interactive', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const elementData = req.body;
