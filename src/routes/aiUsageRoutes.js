@@ -11,6 +11,7 @@
 
 const express = require('express');
 const { Op } = require('sequelize');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ function getDaysFilter(req) {
 }
 
 // ─── GET /summary ──────────────────────────────────────────────
-router.get('/summary', async (req, res) => {
+router.get('/summary', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const _where = getDaysFilter(req);
@@ -78,7 +79,7 @@ router.get('/summary', async (req, res) => {
 });
 
 // ─── GET /by-model ─────────────────────────────────────────────
-router.get('/by-model', async (req, res) => {
+router.get('/by-model', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const rows = await db.sequelize.query(`
@@ -115,7 +116,7 @@ router.get('/by-model', async (req, res) => {
 });
 
 // ─── GET /by-route ─────────────────────────────────────────────
-router.get('/by-route', async (req, res) => {
+router.get('/by-route', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const rows = await db.sequelize.query(`
@@ -144,7 +145,7 @@ router.get('/by-route', async (req, res) => {
 });
 
 // ─── GET /daily ────────────────────────────────────────────────
-router.get('/daily', async (req, res) => {
+router.get('/daily', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const rows = await db.sequelize.query(`
@@ -171,7 +172,7 @@ router.get('/daily', async (req, res) => {
 });
 
 // ─── GET /recent ───────────────────────────────────────────────
-router.get('/recent', async (req, res) => {
+router.get('/recent', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
@@ -187,7 +188,7 @@ router.get('/recent', async (req, res) => {
 });
 
 // ─── GET /optimizations ────────────────────────────────────────
-router.get('/optimizations', async (req, res) => {
+router.get('/optimizations', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const tips = [];
@@ -291,7 +292,7 @@ router.get('/optimizations', async (req, res) => {
 });
 
 // ── GET /cache-stats — AI response cache hit/miss stats ──────────────────────
-router.get('/cache-stats', async (_req, res) => {
+router.get('/cache-stats', requireAuth, async (_req, res) => {
   try {
     const { getCacheStats, CACHE_ENABLED } = require('../services/aiResponseCache');
     const stats = getCacheStats();
