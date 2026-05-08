@@ -19,9 +19,9 @@
 const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
-router.use(optionalAuth);
+router.use(requireAuth);
 
 function getModels(req) {
   return req.app.get('models') || require('../models');

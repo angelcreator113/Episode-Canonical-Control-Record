@@ -12,9 +12,10 @@
  */
 const express = require('express');
 const router  = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
-router.use(optionalAuth);
+router.use(requireAuth);
 
 function getModels(req) {
   return req.app.get('models') || require('../models');
@@ -34,7 +35,7 @@ const DIMENSION_LABELS = {
 };
 
 // POST /:id/mirror/propose
-router.post('/:id/mirror/propose', async (req, res) => {
+router.post('/:id/mirror/propose', aiRateLimiter, async (req, res) => {
   const { SocialProfile } = getModels(req);
   try {
     const profile = await SocialProfile.findByPk(req.params.id);

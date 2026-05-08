@@ -16,9 +16,10 @@
 const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
-router.use(optionalAuth);
+router.use(requireAuth);
 
 function getModels(req) {
   return req.app.get('models') || require('../models');
@@ -195,7 +196,7 @@ const SPR_TO_FEED = {
 };
 
 // POST /auto-generate — create feed relationships from SocialProfileRelationship + shared entanglements
-router.post('/auto-generate', async (req, res) => {
+router.post('/auto-generate', aiRateLimiter, async (req, res) => {
   const models = getModels(req);
   const { FeedProfileRelationship, SocialProfileRelationship, CharacterEntanglement } = models;
   try {
@@ -296,7 +297,7 @@ router.get('/profiles', async (req, res) => {
 });
 
 // POST /:id/generate-ripples — caught-in-middle flags for beef/former_friends
-router.post('/:id/generate-ripples', async (req, res) => {
+router.post('/:id/generate-ripples', aiRateLimiter, async (req, res) => {
   const models = getModels(req);
   const { FeedProfileRelationship, CharacterEntanglement, RegistryCharacter, SocialProfile } = models;
   try {

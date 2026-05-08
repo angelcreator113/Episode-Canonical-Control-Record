@@ -2,11 +2,12 @@
 
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // POST /api/v1/feed-pipeline/:showId/generate-opportunities
 // Scan feed profiles and auto-generate opportunities
-router.post('/:showId/generate-opportunities', optionalAuth, async (req, res) => {
+router.post('/:showId/generate-opportunities', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const models = require('../models');
     const { generateOpportunitiesFromFeed } = require('../services/feedEventPipelineService');
@@ -19,7 +20,7 @@ router.post('/:showId/generate-opportunities', optionalAuth, async (req, res) =>
 
 // POST /api/v1/feed-pipeline/:showId/schedule/:opportunityId
 // One-click: opportunity → fully-formed event
-router.post('/:showId/schedule/:opportunityId', optionalAuth, async (req, res) => {
+router.post('/:showId/schedule/:opportunityId', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { scheduleOpportunityAsEvent } = require('../services/feedEventPipelineService');
@@ -32,7 +33,7 @@ router.post('/:showId/schedule/:opportunityId', optionalAuth, async (req, res) =
 
 // GET /api/v1/feed-pipeline/:showId/suggestions
 // AI-driven event suggestions based on narrative state
-router.get('/:showId/suggestions', optionalAuth, async (req, res) => {
+router.get('/:showId/suggestions', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { suggestNextEvents } = require('../services/feedEventPipelineService');

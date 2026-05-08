@@ -54,6 +54,40 @@ jest.mock('@anthropic-ai/sdk', () => {
   }));
 });
 
+// F-AUTH-1 Step 3 CP8: socialProfileRoutes was promoted from optionalAuth (with
+// lazy-noop fallback) to requireAuth. The pre-CP8 lazy-noop fallback implicitly
+// bypassed auth in test runs; post-CP8 the real requireAuth fires and rejects
+// anonymous requests with 401. Mock middleware/auth to set req.user and
+// pass-through so handler-body assertions remain valid.
+//
+// optionalAuth is polymorphic: callable as middleware (req, res, next) OR as a
+// factory `optionalAuth({ degradeOnInfraFailure: true })` returning middleware.
+// Detection by arg shape — must match the F-Auth-3 polymorphic export.
+jest.mock('../../../src/middleware/auth', () => {
+  const passUser = (req, res, next) => {
+    if (req && typeof req === 'object' && req.headers !== undefined && typeof next === 'function') {
+      req.user = { id: 'test-user', email: 'test@test.com', source: 'local-hs256' };
+      return next();
+    }
+    // Factory mode: returned a middleware
+    return passUser;
+  };
+  return {
+    requireAuth: passUser,
+    optionalAuth: passUser,
+    authenticate: passUser,
+    authenticateToken: passUser,
+    authorize: () => passUser,
+    authorizeRole: () => passUser,
+    verifyToken: jest.fn().mockResolvedValue({ sub: 'test-user', email: 'test@test.com' }),
+    verifyGroup: () => passUser,
+  };
+});
+
+jest.mock('../../../src/middleware/aiRateLimiter', () => ({
+  aiRateLimiter: (req, res, next) => next(),
+}));
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const request = require('supertest');

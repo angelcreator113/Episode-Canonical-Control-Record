@@ -21,13 +21,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const { buildGenerationPrompt, autoAssignAllFollowers } = require('./socialProfileRoutes');
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -196,7 +191,7 @@ async function runWithConcurrency(tasks, concurrency) {
 }
 
 // ── POST /parse-paste ────────────────────────────────────────────────────────
-router.post('/parse-paste', optionalAuth, async (req, res) => {
+router.post('/parse-paste', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { text } = req.body;
     if (!text || !text.trim()) return res.status(400).json({ error: 'No text provided' });
@@ -274,7 +269,7 @@ ${text.slice(0, 20000)}`,
 });
 
 // ── POST /parse-csv — CSV/TSV spreadsheet import (#3) ────────────────────────
-router.post('/parse-csv', optionalAuth, async (req, res) => {
+router.post('/parse-csv', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { text, column_map } = req.body;
     if (!text || !text.trim()) return res.status(400).json({ error: 'No CSV data provided' });
@@ -342,7 +337,7 @@ router.post('/parse-csv', optionalAuth, async (req, res) => {
 });
 
 // ── POST /parse-file ─────────────────────────────────────────────────────────
-router.post('/parse-file', optionalAuth, upload.single('file'), async (req, res) => {
+router.post('/parse-file', requireAuth, aiRateLimiter, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -495,7 +490,7 @@ ${chunks[i]}`,
 });
 
 // ── POST /generate — Sync with parallel concurrency (#2, #4) ─────────────────
-router.post('/generate', optionalAuth, async (req, res) => {
+router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { creators, series_id, character_context, character_key, feed_layer, concurrency } = req.body;
     if (!Array.isArray(creators) || creators.length === 0) {
@@ -546,7 +541,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
 
 // ── POST /generate-job ───────────────────────────────────────────────────────
 // Create a background job for bulk generation — returns immediately
-router.post('/generate-job', optionalAuth, async (req, res) => {
+router.post('/generate-job', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { creators, series_id, character_context, character_key, feed_layer, concurrency } = req.body;
     if (!Array.isArray(creators) || creators.length === 0) {
@@ -589,7 +584,7 @@ router.post('/generate-job', optionalAuth, async (req, res) => {
 
 // ── GET /jobs ────────────────────────────────────────────────────────────────
 // List recent import jobs
-router.get('/jobs', optionalAuth, async (req, res) => {
+router.get('/jobs', requireAuth, async (req, res) => {
   try {
     const db = getModels();
     if (!db || !db.BulkImportJob) {
@@ -608,7 +603,7 @@ router.get('/jobs', optionalAuth, async (req, res) => {
 
 // ── GET /jobs/:id ────────────────────────────────────────────────────────────
 // Get progress for a specific job
-router.get('/jobs/:id', optionalAuth, async (req, res) => {
+router.get('/jobs/:id', requireAuth, async (req, res) => {
   try {
     const db = getModels();
     if (!db || !db.BulkImportJob) {
@@ -623,7 +618,7 @@ router.get('/jobs/:id', optionalAuth, async (req, res) => {
 });
 
 // ── GET /jobs/:id/stream — SSE endpoint for real-time progress (#1) ──────────
-router.get('/jobs/:id/stream', optionalAuth, (req, res) => {
+router.get('/jobs/:id/stream', requireAuth, (req, res) => {
   const jobId = String(req.params.id);
 
   res.writeHead(200, {
@@ -660,7 +655,7 @@ router.get('/jobs/:id/stream', optionalAuth, (req, res) => {
 });
 
 // ── POST /jobs/:id/cancel — Cancel a running job (#5) ───────────────────────
-router.post('/jobs/:id/cancel', optionalAuth, async (req, res) => {
+router.post('/jobs/:id/cancel', requireAuth, async (req, res) => {
   try {
     const db = getModels();
     if (!db || !db.BulkImportJob) {
