@@ -4,13 +4,8 @@ const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 
 // Auth middleware
-let optionalAuth;
-try {
-  const authModule = require('../../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../../middleware/auth');
+const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
 const { StorytellerLine, RegistryCharacter } = db;
@@ -69,7 +64,7 @@ KEY RULES:
 - First person. Vary sentence rhythm. Short when doubt peaks, longer when something opens.
 - Do not give her clarity she hasn't yet earned.`;
 
-router.post('/voice-to-story', optionalAuth, async (req, res) => {
+router.post('/voice-to-story', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       spoken,
@@ -272,7 +267,7 @@ Respond with ONLY the prose. No preamble. No explanation. No quotes around it.`;
 // Author says what's wrong → returns revised prose
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/story-edit', optionalAuth, async (req, res) => {
+router.post('/story-edit', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       current_prose,
@@ -379,7 +374,7 @@ The complete revised version from start to finish.`;
 // AI writes the next 2–4 paragraphs continuing from where the author left off
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/story-continue', optionalAuth, async (req, res) => {
+router.post('/story-continue', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       current_prose  = '',
@@ -585,7 +580,7 @@ Start exactly where they left off.`;
 // Takes the last paragraph and adds emotional/sensory depth
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/story-deepen', optionalAuth, async (req, res) => {
+router.post('/story-deepen', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       current_prose  = '',
@@ -717,7 +712,7 @@ The paragraph should feel like the same paragraph, just more alive.`;
 // Suggests what could happen next — a creative prompt, not prose
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/story-nudge', optionalAuth, async (req, res) => {
+router.post('/story-nudge', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       current_prose  = '',
@@ -886,7 +881,7 @@ async function safeAIWithTemp(systemPrompt, userPrompt, maxTokens = 800, tempera
 // Called by: CharacterDilemmaEngine.jsx
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/character-dilemma', optionalAuth, async (req, res) => {
+router.post('/character-dilemma', requireAuth, async (req, res) => {
   try {
     const {
       character_id,
@@ -1043,7 +1038,7 @@ Generate 5 dilemmas that will reveal who this character actually is.`;
 // Called by: VoiceAttributionButton in StoryTeller chapter header
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/attribute-voices', optionalAuth, async (req, res) => {
+router.post('/attribute-voices', requireAuth, async (req, res) => {
   try {
     const { chapter_id, lines, book_context } = req.body;
 
@@ -1150,7 +1145,7 @@ Attribute each line's voice. Return the JSON array.`;
 // Author confirms or overrides a voice attribution for a single line
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/confirm-voice', optionalAuth, async (req, res) => {
+router.post('/confirm-voice', requireAuth, async (req, res) => {
   try {
     const { line_id, voice_type } = req.body;
 
@@ -1174,7 +1169,7 @@ router.post('/confirm-voice', optionalAuth, async (req, res) => {
 // Used by WriteModeAIWriter component
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/ai-writer-action', optionalAuth, async (req, res) => {
+router.post('/ai-writer-action', requireAuth, async (req, res) => {
   try {
     const {
       character,       // { name, type, role, belief_pressured, emotional_function, writer_notes }

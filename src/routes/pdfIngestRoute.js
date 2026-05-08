@@ -20,7 +20,8 @@ const multer   = require('multer');
 const Anthropic = require('@anthropic-ai/sdk');
 const router   = express.Router();
 const db       = require('../models');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // Polyfill DOMMatrix for Node.js — required by pdfjs-dist used inside pdf-parse
 if (typeof globalThis.DOMMatrix === 'undefined') {
@@ -86,7 +87,8 @@ Respond ONLY in valid JSON with no preamble or markdown fences.`;
 // ─────────────────────────────────────────────────────────────────────────────
 router.post(
   '/ingest-pdf',
-  optionalAuth,
+  requireAuth,
+  aiRateLimiter,
   upload.single('file'),
   async (req, res) => {
     if (!req.file) {

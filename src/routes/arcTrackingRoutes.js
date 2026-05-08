@@ -5,15 +5,10 @@ const router = express.Router();
 const { buildArcContext, updateArcTracking } = require('../services/arcTrackingService');
 const { checkSceneEligibility } = require('../services/sceneEligibilityService');
 
-let optionalAuth;
-try {
-  optionalAuth = require('../middleware/optionalAuth');
-} catch {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
 
 // ── GET /arc-tracking/:characterKey — Full arc tracking data ─────────
-router.get('/arc-tracking/:characterKey', optionalAuth, async (req, res) => {
+router.get('/arc-tracking/:characterKey', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const characterKey = req.params.characterKey;
@@ -60,7 +55,7 @@ router.get('/arc-tracking/:characterKey', optionalAuth, async (req, res) => {
 });
 
 // ── POST /arc-tracking/update — Update arc after story approval ──────
-router.post('/arc-tracking/update', optionalAuth, async (req, res) => {
+router.post('/arc-tracking/update', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const { character_key, story_number, story_type, phase, phone_appeared } = req.body;
@@ -81,7 +76,7 @@ router.post('/arc-tracking/update', optionalAuth, async (req, res) => {
 });
 
 // ── POST /world/scenes/check-eligibility — Scene eligibility check ───
-router.post('/world/scenes/check-eligibility', optionalAuth, async (req, res) => {
+router.post('/world/scenes/check-eligibility', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const { story_id, character_key, story_text, story_type, story_number, characters_present } = req.body;

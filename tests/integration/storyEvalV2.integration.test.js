@@ -46,62 +46,61 @@ describe('Character Spark Routes', () => {
 });
 
 describe('Story Evaluation v2 Routes', () => {
+  // Step 3 CP7: storyEvaluationRoutes promoted to Tier 1. Anonymous requests
+  // now produce 401 AUTH_REQUIRED before reaching the handler body. These
+  // assertions previously expected 400/404/500 from validation/lookup paths;
+  // post-promotion auth fires first.
   describe('POST /api/v1/memories/generate-story-multi', () => {
-    it('should reject when scene_brief is missing', async () => {
+    it('should require auth (returns 401 for anonymous)', async () => {
       const res = await request(app)
         .post('/api/v1/memories/generate-story-multi')
         .send({});
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
+      expect(res.status).toBe(401);
     });
   });
 
   describe('POST /api/v1/memories/evaluate-stories', () => {
-    it('should reject when story_id is missing', async () => {
+    it('should require auth (returns 401 for anonymous)', async () => {
       const res = await request(app)
         .post('/api/v1/memories/evaluate-stories')
         .send({});
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
+      expect(res.status).toBe(401);
     });
   });
 
   describe('POST /api/v1/memories/propose-memory', () => {
-    it('should reject when story_id is missing', async () => {
+    it('should require auth (returns 401 for anonymous)', async () => {
       const res = await request(app)
         .post('/api/v1/memories/propose-memory')
         .send({});
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
+      expect(res.status).toBe(401);
     });
   });
 
   describe('POST /api/v1/memories/propose-registry-update', () => {
-    it('should reject when story_id is missing', async () => {
+    it('should require auth (returns 401 for anonymous)', async () => {
       const res = await request(app)
         .post('/api/v1/memories/propose-registry-update')
         .send({});
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
+      expect(res.status).toBe(401);
     });
   });
 
   describe('POST /api/v1/memories/write-back', () => {
-    it('should reject when story_id is missing', async () => {
+    it('should require auth (returns 401 for anonymous)', async () => {
       const res = await request(app)
         .post('/api/v1/memories/write-back')
         .send({});
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
+      expect(res.status).toBe(401);
     });
   });
 
   describe('GET /api/v1/memories/eval-stories/:storyId', () => {
-    it('should 404 or 500 for non-existent story', async () => {
+    it('should require auth (returns 401 for anonymous)', async () => {
       const res = await request(app).get(
         '/api/v1/memories/eval-stories/00000000-0000-0000-0000-000000000000'
       );
-      expect([404, 500]).toContain(res.status);
+      expect(res.status).toBe(401);
     });
   });
 });

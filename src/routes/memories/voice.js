@@ -4,13 +4,8 @@ const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 
 // Auth middleware
-let optionalAuth;
-try {
-  const authModule = require('../../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../../middleware/auth');
+const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook: _StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
@@ -30,7 +25,7 @@ const anthropic = new Anthropic();
  * - 'voice'   — deep session, character plays itself, unlimited exchanges
  * - 'checkin' — pre-writing warm-up, 5 exchanges, chapter-context aware
  */
-router.post('/character-voice-session', optionalAuth, async (req, res) => {
+router.post('/character-voice-session', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       character_id: _character_id,
@@ -194,7 +189,7 @@ Respond ONLY with valid JSON:
  * Uses Claude to generate what a pain point becomes in JustAWoman's world
  * and how Lala encounters it in Series 2.
  */
-router.post('/generate-career-echo', optionalAuth, async (req, res) => {
+router.post('/generate-career-echo', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { memory_id, book_id } = req.body;
     if (!memory_id) return res.status(400).json({ error: 'memory_id required' });
@@ -274,7 +269,7 @@ IMPORTANT:
  * Saves a confirmed career echo to the memory record.
  * Once confirmed, the echo is canon — it will appear in Series 2.
  */
-router.post('/add-career-echo', optionalAuth, async (req, res) => {
+router.post('/add-career-echo', requireAuth, async (req, res) => {
   try {
     const { memory_id, content_type, title, description, lala_impact } = req.body;
     if (!memory_id) return res.status(400).json({ error: 'memory_id required' });
@@ -310,7 +305,7 @@ router.post('/add-career-echo', optionalAuth, async (req, res) => {
  *
  * Returns lines as pending — author reviews, edits, approves each one.
  */
-router.post('/generate-chapter-draft', optionalAuth, async (req, res) => {
+router.post('/generate-chapter-draft', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       book_id,

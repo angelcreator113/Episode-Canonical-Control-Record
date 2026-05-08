@@ -17,13 +17,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { return null; }
@@ -34,7 +28,7 @@ async function getModels() {
 // GET /api/v1/world/:showId/goals
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-router.get('/world/:showId/goals', optionalAuth, async (req, res) => {
+router.get('/world/:showId/goals', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { status, type } = req.query;
@@ -73,7 +67,7 @@ router.get('/world/:showId/goals', optionalAuth, async (req, res) => {
 // Seed 24 career goals from the show bible
 // ═══════════════════════════════════════════
 
-router.post('/world/:showId/goals/seed', optionalAuth, async (req, res) => {
+router.post('/world/:showId/goals/seed', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { activate_tier = 1 } = req.body;
@@ -354,7 +348,7 @@ router.post('/world/:showId/goals/seed', optionalAuth, async (req, res) => {
 // POST /api/v1/world/:showId/goals
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-router.post('/world/:showId/goals', optionalAuth, async (req, res) => {
+router.post('/world/:showId/goals', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const {
@@ -449,7 +443,7 @@ router.post('/world/:showId/goals', optionalAuth, async (req, res) => {
 // PUT /api/v1/world/:showId/goals/:goalId
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-router.put('/world/:showId/goals/:goalId', optionalAuth, async (req, res) => {
+router.put('/world/:showId/goals/:goalId', requireAuth, async (req, res) => {
   try {
     const { showId, goalId } = req.params;
     const updates = req.body;
@@ -502,7 +496,7 @@ router.put('/world/:showId/goals/:goalId', optionalAuth, async (req, res) => {
 // DELETE /api/v1/world/:showId/goals/:goalId
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-router.delete('/world/:showId/goals/:goalId', optionalAuth, async (req, res) => {
+router.delete('/world/:showId/goals/:goalId', requireAuth, async (req, res) => {
   try {
     const { showId, goalId } = req.params;
     const models = await getModels();
@@ -525,7 +519,7 @@ router.delete('/world/:showId/goals/:goalId', optionalAuth, async (req, res) => 
 // Sync goal current_value from character state
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-router.post('/world/:showId/goals/sync', optionalAuth, async (req, res) => {
+router.post('/world/:showId/goals/sync', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const models = await getModels();
@@ -596,7 +590,7 @@ router.post('/world/:showId/goals/sync', optionalAuth, async (req, res) => {
 // Suggest events from library based on active goals
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-router.get('/world/:showId/suggest-events', optionalAuth, async (req, res) => {
+router.get('/world/:showId/suggest-events', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { limit = 3 } = req.query;

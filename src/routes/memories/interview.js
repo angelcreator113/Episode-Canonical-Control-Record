@@ -4,13 +4,8 @@ const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 
 // Auth middleware
-let optionalAuth;
-try {
-  const authModule = require('../../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../../middleware/auth');
+const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
 const { RegistryCharacter } = db;
@@ -27,7 +22,7 @@ const { loadWriteModeContext, buildWriteModeContextBlock } = require('./engine')
 // Takes 7 scene interview answers → Claude generates a structured scene brief
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/scene-interview', optionalAuth, async (req, res) => {
+router.post('/scene-interview', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       book_id,
@@ -173,7 +168,7 @@ Respond with ONLY valid JSON. No preamble. No markdown.
 // returns a contextual writing suggestion
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/narrative-intelligence', optionalAuth, async (req, res) => {
+router.post('/narrative-intelligence', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       book_id,
@@ -395,7 +390,7 @@ Respond with ONLY valid JSON. No preamble. No markdown.
 // POST /continuity-check — Detect contradictions, jumps, disconnects
 // ══════════════════════════════════════════════════════════════════════════
 
-router.post('/continuity-check', optionalAuth, async (req, res) => {
+router.post('/continuity-check', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       book_id,
@@ -497,7 +492,7 @@ If no issues found: { "issues": [] }`;
 // POST /rewrite-options — 3 alternative rewrites for a single line
 // ══════════════════════════════════════════════════════════════════════════
 
-router.post('/rewrite-options', optionalAuth, async (req, res) => {
+router.post('/rewrite-options', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       book_id,
@@ -633,7 +628,7 @@ Respond ONLY with valid JSON. No preamble. No markdown.
  * GET /character-interview-progress/:character_id
  * Load saved interview progress (stored in extra_fields.interview_progress)
  */
-router.get('/character-interview-progress/:character_id', optionalAuth, async (req, res) => {
+router.get('/character-interview-progress/:character_id', requireAuth, async (req, res) => {
   try {
     const character = await RegistryCharacter.findByPk(req.params.character_id);
     if (!character) return res.status(404).json({ error: 'Character not found' });
@@ -652,7 +647,7 @@ router.get('/character-interview-progress/:character_id', optionalAuth, async (r
  * Auto-save interview state after every answer so users can resume later.
  * Stores in extra_fields.interview_progress on the RegistryCharacter.
  */
-router.post('/character-interview-save-progress', optionalAuth, async (req, res) => {
+router.post('/character-interview-save-progress', requireAuth, async (req, res) => {
   try {
     const {
       character_id,
@@ -727,7 +722,7 @@ router.post('/character-interview-save-progress', optionalAuth, async (req, res)
  * ─ New character detection
  * ─ Plot thread detection
  */
-router.post('/character-interview-next', optionalAuth, async (req, res) => {
+router.post('/character-interview-next', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       book_id,
@@ -1056,7 +1051,7 @@ Respond with ONLY valid JSON. No preamble. No markdown fences.
  * Called when the author confirms a newly detected character during an interview.
  * Creates a draft RegistryCharacter with what Claude inferred.
  */
-router.post('/character-interview-create-character', optionalAuth, async (req, res) => {
+router.post('/character-interview-create-character', requireAuth, async (req, res) => {
   try {
     const { registry_id, character, discovered_during } = req.body;
     if (!registry_id || !character?.name) {
@@ -1120,7 +1115,7 @@ router.post('/character-interview-create-character', optionalAuth, async (req, r
  *   They get their own section in the profile view.
  * ─ Prompt rewritten to use the author's own words more aggressively
  */
-router.post('/character-interview-complete', optionalAuth, async (req, res) => {
+router.post('/character-interview-complete', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       book_id,

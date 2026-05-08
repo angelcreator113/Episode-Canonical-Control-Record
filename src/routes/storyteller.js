@@ -43,14 +43,8 @@ try {
   registrySync = require('../services/registrySync');
 } catch { registrySync = null; }
 
-// Optional auth
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { return null; }
@@ -60,7 +54,7 @@ async function getModels() {
 // ═══════════════════════════════════════════
 // GET /books — List all books
 // ═══════════════════════════════════════════
-router.get('/books', optionalAuth, async (req, res) => {
+router.get('/books', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerBook) return res.status(500).json({ error: 'Models not loaded' });
@@ -124,7 +118,7 @@ router.get('/books', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // POST /books — Create a book
 // ═══════════════════════════════════════════
-router.post('/books', optionalAuth, async (req, res) => {
+router.post('/books', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerBook) return res.status(500).json({ error: 'Models not loaded' });
@@ -220,7 +214,7 @@ router.post('/books', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /books/:id — Get book with all chapters and lines
 // ═══════════════════════════════════════════
-router.get('/books/:id', optionalAuth, async (req, res) => {
+router.get('/books/:id', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerBook) return res.status(500).json({ error: 'Models not loaded' });
@@ -249,7 +243,7 @@ router.get('/books/:id', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // PUT /books/:id — Update book metadata
 // ═══════════════════════════════════════════
-router.put('/books/:id', optionalAuth, async (req, res) => {
+router.put('/books/:id', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerBook) return res.status(500).json({ error: 'Models not loaded' });
@@ -275,7 +269,7 @@ router.put('/books/:id', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // DELETE /books/:id — Delete a book
 // ═══════════════════════════════════════════
-router.delete('/books/:id', optionalAuth, async (req, res) => {
+router.delete('/books/:id', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerBook) return res.status(500).json({ error: 'Models not loaded' });
@@ -295,7 +289,7 @@ router.delete('/books/:id', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // POST /books/:id/chapters — Add a chapter
 // ═══════════════════════════════════════════
-router.post('/books/:id/chapters', optionalAuth, async (req, res) => {
+router.post('/books/:id/chapters', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerChapter) return res.status(500).json({ error: 'Models not loaded' });
@@ -350,7 +344,7 @@ router.post('/books/:id/chapters', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // PUT /chapters/:id — Update a chapter
 // ═══════════════════════════════════════════
-router.put('/chapters/:id', optionalAuth, async (req, res) => {
+router.put('/chapters/:id', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerChapter) return res.status(500).json({ error: 'Models not loaded' });
@@ -382,7 +376,7 @@ router.put('/chapters/:id', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // DELETE /chapters/:id — Delete a chapter
 // ═══════════════════════════════════════════
-router.delete('/chapters/:id', optionalAuth, async (req, res) => {
+router.delete('/chapters/:id', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerChapter) return res.status(500).json({ error: 'Models not loaded' });
@@ -402,7 +396,7 @@ router.delete('/chapters/:id', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // POST /chapters/:id/lines — Add a line
 // ═══════════════════════════════════════════
-router.post('/chapters/:id/lines', optionalAuth, async (req, res) => {
+router.post('/chapters/:id/lines', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerLine) return res.status(500).json({ error: 'Models not loaded' });
@@ -767,7 +761,7 @@ Return ONLY JSON:
 // ═══════════════════════════════════════════
 // PUT /lines/:id — Update a line
 // ═══════════════════════════════════════════
-router.put('/lines/:id', optionalAuth, async (req, res) => {
+router.put('/lines/:id', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerLine) return res.status(500).json({ error: 'Models not loaded' });
@@ -884,7 +878,7 @@ router.put('/lines/:id', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // DELETE /chapters/:id/lines — Clear all lines from a chapter
 // ═══════════════════════════════════════════
-router.delete('/chapters/:id/lines', optionalAuth, async (req, res) => {
+router.delete('/chapters/:id/lines', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerLine || !models?.StorytellerChapter) return res.status(500).json({ error: 'Models not loaded' });
@@ -904,7 +898,7 @@ router.delete('/chapters/:id/lines', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // DELETE /lines/:id — Reject/remove a line
 // ═══════════════════════════════════════════
-router.delete('/lines/:id', optionalAuth, async (req, res) => {
+router.delete('/lines/:id', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerLine) return res.status(500).json({ error: 'Models not loaded' });
@@ -924,7 +918,7 @@ router.delete('/lines/:id', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // POST /books/:id/approve-all — Approve all pending lines
 // ═══════════════════════════════════════════
-router.post('/books/:id/approve-all', optionalAuth, async (req, res) => {
+router.post('/books/:id/approve-all', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerBook) return res.status(500).json({ error: 'Models not loaded' });
@@ -975,7 +969,7 @@ router.post('/books/:id/approve-all', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // POST /chapters/:chapterId/import — Bulk import lines from LINE-marked draft
 // ═══════════════════════════════════════════
-router.post('/chapters/:chapterId/import', optionalAuth, async (req, res) => {
+router.post('/chapters/:chapterId/import', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerLine || !models?.StorytellerChapter) {
@@ -1095,7 +1089,7 @@ function parseImportText(rawText) {
 // ═══════════════════════════════════════════════════════
 
 // POST /echoes — Plant an echo
-router.post('/echoes', optionalAuth, async (req, res) => {
+router.post('/echoes', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db?.StorytellerEcho) return res.status(500).json({ error: 'Echo model not loaded' });
@@ -1124,7 +1118,7 @@ router.post('/echoes', optionalAuth, async (req, res) => {
 });
 
 // GET /echoes?book_id=...&target_chapter_id=... — Get echoes for a book (optionally filtered by target chapter)
-router.get('/echoes', optionalAuth, async (req, res) => {
+router.get('/echoes', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db?.StorytellerEcho) return res.status(500).json({ error: 'Echo model not loaded' });
@@ -1147,7 +1141,7 @@ router.get('/echoes', optionalAuth, async (req, res) => {
 });
 
 // PUT /echoes/:echoId — Update an echo (e.g., mark as landed)
-router.put('/echoes/:echoId', optionalAuth, async (req, res) => {
+router.put('/echoes/:echoId', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db?.StorytellerEcho) return res.status(500).json({ error: 'Echo model not loaded' });
@@ -1169,7 +1163,7 @@ router.put('/echoes/:echoId', optionalAuth, async (req, res) => {
 });
 
 // DELETE /echoes/:echoId — Delete an echo
-router.delete('/echoes/:echoId', optionalAuth, async (req, res) => {
+router.delete('/echoes/:echoId', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db?.StorytellerEcho) return res.status(500).json({ error: 'Echo model not loaded' });
@@ -1189,7 +1183,7 @@ router.delete('/echoes/:echoId', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // POST /chapters/:chapterId/save-draft — Save draft prose without splitting into lines
 // ═══════════════════════════════════════════
-router.post('/chapters/:chapterId/save-draft', optionalAuth, async (req, res) => {
+router.post('/chapters/:chapterId/save-draft', requireAuth, async (req, res) => {
   try {
     const { chapterId } = req.params;
     const { draft_prose } = req.body;
@@ -1224,7 +1218,7 @@ router.post('/chapters/:chapterId/save-draft', optionalAuth, async (req, res) =>
 // The system reads what happened to the character in the scene
 // and shifts their emotional state accordingly.
 // If thresholds cross — the character knocks. You get the email.
-router.post('/chapters/:id/emotional-impact', optionalAuth, async (req, res) => {
+router.post('/chapters/:id/emotional-impact', requireAuth, async (req, res) => {
   try {
     const { prose, character_id } = req.body;
     const chapterId = req.params.id;
@@ -1256,7 +1250,7 @@ router.post('/chapters/:id/emotional-impact', optionalAuth, async (req, res) => 
 // GET /chapters/:id/scene-intelligence — Get scene intelligence state
 // Returns: emotional temperature, pending memory proposals, recent voice signals
 // ═══════════════════════════════════════════
-router.get('/chapters/:id/scene-intelligence', optionalAuth, async (req, res) => {
+router.get('/chapters/:id/scene-intelligence', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     const chapterId = req.params.id;
@@ -1320,7 +1314,7 @@ router.get('/chapters/:id/scene-intelligence', optionalAuth, async (req, res) =>
 // ═══════════════════════════════════════════
 // GET /chapters — List all chapters
 // ═══════════════════════════════════════════
-router.get('/chapters', optionalAuth, async (req, res) => {
+router.get('/chapters', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerChapter) return res.json({ chapters: [] });
@@ -1339,7 +1333,7 @@ router.get('/chapters', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /memories/pending — Unconfirmed memories
 // ═══════════════════════════════════════════
-router.get('/memories/pending', optionalAuth, async (req, res) => {
+router.get('/memories/pending', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerMemory) return res.json({ memories: [] });
@@ -1358,7 +1352,7 @@ router.get('/memories/pending', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // PATCH /memories/:id/confirm — Confirm a memory
 // ═══════════════════════════════════════════
-router.patch('/memories/:id/confirm', optionalAuth, async (req, res) => {
+router.patch('/memories/:id/confirm', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerMemory) return res.status(404).json({ error: 'Model not available' });
@@ -1375,7 +1369,7 @@ router.patch('/memories/:id/confirm', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // PATCH /memories/:id/reject — Delete/reject an unconfirmed memory
 // ═══════════════════════════════════════════
-router.patch('/memories/:id/reject', optionalAuth, async (req, res) => {
+router.patch('/memories/:id/reject', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerMemory) return res.status(404).json({ error: 'Model not available' });
@@ -1392,7 +1386,7 @@ router.patch('/memories/:id/reject', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // PATCH /memories/:id — Update memory statement/type
 // ═══════════════════════════════════════════
-router.patch('/memories/:id', optionalAuth, async (req, res) => {
+router.patch('/memories/:id', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StorytellerMemory) return res.status(404).json({ error: 'Model not available' });
@@ -1413,7 +1407,7 @@ router.patch('/memories/:id', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /voice-signals — Voice pattern signals
 // ═══════════════════════════════════════════
-router.get('/voice-signals', optionalAuth, async (req, res) => {
+router.get('/voice-signals', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.VoiceSignal) return res.json({ signals: [] });
@@ -1432,7 +1426,7 @@ router.get('/voice-signals', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /voice-rules — Voice rules
 // ═══════════════════════════════════════════
-router.get('/voice-rules', optionalAuth, async (req, res) => {
+router.get('/voice-rules', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.VoiceRule) return res.json({ rules: [] });
@@ -1450,7 +1444,7 @@ router.get('/voice-rules', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /threads — Story threads
 // ═══════════════════════════════════════════
-router.get('/threads', optionalAuth, async (req, res) => {
+router.get('/threads', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StoryThread) return res.json({ threads: [] });
@@ -1472,7 +1466,7 @@ router.get('/threads', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // POST /threads — Create story thread
 // ═══════════════════════════════════════════
-router.post('/threads', optionalAuth, async (req, res) => {
+router.post('/threads', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StoryThread) return res.status(404).json({ error: 'Model not available' });
@@ -1496,7 +1490,7 @@ router.post('/threads', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // PATCH /threads/:id — Update story thread
 // ═══════════════════════════════════════════
-router.patch('/threads/:id', optionalAuth, async (req, res) => {
+router.patch('/threads/:id', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StoryThread) return res.status(404).json({ error: 'Model not available' });
@@ -1518,7 +1512,7 @@ router.patch('/threads/:id', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // DELETE /threads/:id — Delete story thread
 // ═══════════════════════════════════════════
-router.delete('/threads/:id', optionalAuth, async (req, res) => {
+router.delete('/threads/:id', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StoryThread) return res.status(404).json({ error: 'Model not available' });
@@ -1535,7 +1529,7 @@ router.delete('/threads/:id', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /threads/dangling — Threads not referenced in many chapters
 // ═══════════════════════════════════════════
-router.get('/threads/dangling', optionalAuth, async (req, res) => {
+router.get('/threads/dangling', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StoryThread) return res.json({ threads: [] });
@@ -1557,7 +1551,7 @@ router.get('/threads/dangling', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /calendar/events — Story calendar events
 // ═══════════════════════════════════════════
-router.get('/calendar/events', optionalAuth, async (req, res) => {
+router.get('/calendar/events', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StoryCalendarEvent) return res.json({ events: [] });
@@ -1579,7 +1573,7 @@ router.get('/calendar/events', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // POST /calendar/events — Create calendar event
 // ═══════════════════════════════════════════
-router.post('/calendar/events', optionalAuth, async (req, res) => {
+router.post('/calendar/events', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StoryCalendarEvent) return res.status(404).json({ error: 'Model not available' });
@@ -1605,7 +1599,7 @@ router.post('/calendar/events', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /calendar/markers — Story clock markers (timeline positions)
 // ═══════════════════════════════════════════
-router.get('/calendar/markers', optionalAuth, async (req, res) => {
+router.get('/calendar/markers', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models?.StoryClockMarker) return res.json({ markers: [] });
@@ -1623,7 +1617,7 @@ router.get('/calendar/markers', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 // GET /continuity/issues — Continuity problems across threads
 // ═══════════════════════════════════════════
-router.get('/continuity/issues', optionalAuth, async (req, res) => {
+router.get('/continuity/issues', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     const issues = [];

@@ -24,13 +24,8 @@ const anthropic = new Anthropic();
 const { buildArcContext, buildArcContextPromptSection } = require('../services/arcTrackingService');
 const { enrichAfterWriteBack } = require('../services/storyEnrichmentService');
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── Voice system prompts for blind 3-agent generation ─────────────────────
 const VOICE_SYSTEM_BASE = {
@@ -1123,7 +1118,7 @@ async function loadSocialFeedContext(characterKeys, registryId) {
 }
 
 // ── POST /generate-story-multi ────────────────────────────────────────────
-router.post('/generate-story-multi', optionalAuth, async (req, res) => {
+router.post('/generate-story-multi', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { chapter_id, book_id, scene_brief, characters_in_scene, registry_id, tone_dial, must_include, never_include } = req.body;
     if (!scene_brief) {
@@ -1282,7 +1277,7 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
 });
 
 // ── POST /evaluate-stories ────────────────────────────────────────────────
-router.post('/evaluate-stories', optionalAuth, async (req, res) => {
+router.post('/evaluate-stories', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { story_id } = req.body;
     if (!story_id) return res.status(400).json({ error: 'story_id is required' });
@@ -1387,7 +1382,7 @@ router.post('/evaluate-stories', optionalAuth, async (req, res) => {
 });
 
 // ── POST /propose-memory ──────────────────────────────────────────────────
-router.post('/propose-memory', optionalAuth, async (req, res) => {
+router.post('/propose-memory', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { story_id } = req.body;
     if (!story_id) return res.status(400).json({ error: 'story_id is required' });
@@ -1461,7 +1456,7 @@ router.post('/propose-memory', optionalAuth, async (req, res) => {
 });
 
 // ── POST /propose-registry-update ─────────────────────────────────────────
-router.post('/propose-registry-update', optionalAuth, async (req, res) => {
+router.post('/propose-registry-update', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { story_id } = req.body;
     if (!story_id) return res.status(400).json({ error: 'story_id is required' });
@@ -1524,7 +1519,7 @@ router.post('/propose-registry-update', optionalAuth, async (req, res) => {
 });
 
 // ── POST /write-back ──────────────────────────────────────────────────────
-router.post('/write-back', optionalAuth, async (req, res) => {
+router.post('/write-back', requireAuth, async (req, res) => {
   const { story_id, chapter_id, confirmed_memories, confirmed_registry_updates } = req.body;
   if (!story_id || !chapter_id) {
     return res.status(400).json({ error: 'story_id and chapter_id are required' });
@@ -1635,7 +1630,7 @@ router.post('/write-back', optionalAuth, async (req, res) => {
 });
 
 // ── GET /eval-stories/:storyId — fetch story with all evaluation data ─────
-router.get('/eval-stories/:storyId', optionalAuth, async (req, res) => {
+router.get('/eval-stories/:storyId', requireAuth, async (req, res) => {
   try {
     const story = await db.StorytellerStory.findByPk(req.params.storyId);
     if (!story) return res.status(404).json({ error: 'Story not found' });
@@ -1647,7 +1642,7 @@ router.get('/eval-stories/:storyId', optionalAuth, async (req, res) => {
 });
 
 // ── GET /eval-stories/:storyId/enrichment — enrichment status ────────────
-router.get('/eval-stories/:storyId/enrichment', optionalAuth, async (req, res) => {
+router.get('/eval-stories/:storyId/enrichment', requireAuth, async (req, res) => {
   try {
     const story = await db.StorytellerStory.findByPk(req.params.storyId, {
       attributes: ['id', 'status', 'enrichment_status'],
@@ -1670,7 +1665,7 @@ router.get('/eval-stories/:storyId/enrichment', optionalAuth, async (req, res) =
  * Body: { scene_text, characters_in_scene: [character_key], registry_id }
  * Returns: { revelations: { [character_key]: proposed_deep_profile_additions } }
  */
-router.post('/scene-revelation', optionalAuth, async (req, res) => {
+router.post('/scene-revelation', requireAuth, aiRateLimiter, async (req, res) => {
   const { scene_text, characters_in_scene, registry_id } = req.body;
 
   if (!scene_text || !characters_in_scene?.length || !registry_id) {
