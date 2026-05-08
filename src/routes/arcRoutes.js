@@ -16,16 +16,10 @@
 const express = require('express');
 const router = express.Router();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
 
 // GET /world/:showId/arc — active arc
-router.get('/world/:showId/arc', optionalAuth, async (req, res) => {
+router.get('/world/:showId/arc', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { showId } = req.params;
@@ -64,7 +58,7 @@ router.get('/world/:showId/arc', optionalAuth, async (req, res) => {
 });
 
 // POST /world/:showId/arc/seed — seed Arc 1
-router.post('/world/:showId/arc/seed', optionalAuth, async (req, res) => {
+router.post('/world/:showId/arc/seed', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { seedArc } = require('../services/arcProgressionService');
@@ -86,7 +80,7 @@ router.post('/world/:showId/arc/seed', optionalAuth, async (req, res) => {
 });
 
 // POST /world/:showId/arc/advance — manual advance (returns warning if needed)
-router.post('/world/:showId/arc/advance', optionalAuth, async (req, res) => {
+router.post('/world/:showId/arc/advance', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { advancePhase } = require('../services/arcProgressionService');
@@ -105,7 +99,7 @@ router.post('/world/:showId/arc/advance', optionalAuth, async (req, res) => {
 });
 
 // POST /world/:showId/arc/advance/confirm — force advance after warning
-router.post('/world/:showId/arc/advance/confirm', optionalAuth, async (req, res) => {
+router.post('/world/:showId/arc/advance/confirm', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { advancePhase } = require('../services/arcProgressionService');
@@ -124,7 +118,7 @@ router.post('/world/:showId/arc/advance/confirm', optionalAuth, async (req, res)
 });
 
 // GET /world/:showId/arc/context — for AI prompt injection
-router.get('/world/:showId/arc/context', optionalAuth, async (req, res) => {
+router.get('/world/:showId/arc/context', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { getArcContext } = require('../services/arcProgressionService');
@@ -136,7 +130,7 @@ router.get('/world/:showId/arc/context', optionalAuth, async (req, res) => {
 });
 
 // PUT /world/:showId/arc/phase/:phase — override phase settings
-router.put('/world/:showId/arc/phase/:phase', optionalAuth, async (req, res) => {
+router.put('/world/:showId/arc/phase/:phase', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { showId } = req.params;
@@ -172,7 +166,7 @@ router.put('/world/:showId/arc/phase/:phase', optionalAuth, async (req, res) => 
 });
 
 // POST /world/:showId/arc/extend — extend current phase by N episodes
-router.post('/world/:showId/arc/extend', optionalAuth, async (req, res) => {
+router.post('/world/:showId/arc/extend', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
     const { showId } = req.params;

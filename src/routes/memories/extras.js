@@ -5,13 +5,9 @@ const router = require('express').Router();
 const Anthropic = require('@anthropic-ai/sdk');
 const { v4: uuidv4 } = require('uuid');
 
-let optionalAuth;
-try {
-  const authModule = require('../../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+// Auth middleware
+const { requireAuth } = require('../../middleware/auth');
+const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
 const { StorytellerMemory, StorytellerLine: _StorytellerLine, StorytellerBook: _StorytellerBook, StorytellerChapter: _StorytellerChapter, RegistryCharacter: _RegistryCharacter } = db;
@@ -26,7 +22,7 @@ const seProseStyleCache = new Map();
 
 // ─── POST /prose-style-anchor ────────────────────────────────────────────────
 // Save a prose style sample for a character/world to guide story voice matching.
-router.post('/prose-style-anchor', optionalAuth, async (req, res) => {
+router.post('/prose-style-anchor', requireAuth, async (req, res) => {
   const { characterKey, proseSample } = req.body;
 
   if (!characterKey || !proseSample?.trim()) {
@@ -66,7 +62,7 @@ router.post('/prose-style-anchor', optionalAuth, async (req, res) => {
 });
 
 // ─── GET /prose-style-anchor/:characterKey ───────────────────────────────────
-router.get('/prose-style-anchor/:characterKey', optionalAuth, async (req, res) => {
+router.get('/prose-style-anchor/:characterKey', requireAuth, async (req, res) => {
   try {
     const anchor = await StorytellerMemory.findOne({
       where: { type: 'prose_style_anchor', source_ref: req.params.characterKey },
@@ -79,7 +75,7 @@ router.get('/prose-style-anchor/:characterKey', optionalAuth, async (req, res) =
 
 // ─── GET /dramatic-irony/:characterKey ───────────────────────────────────────
 // Get all dramatic irony, open mysteries, and foreshadowing seeds for a character.
-router.get('/dramatic-irony/:characterKey', optionalAuth, async (req, res) => {
+router.get('/dramatic-irony/:characterKey', requireAuth, async (req, res) => {
   try {
     const { characterKey } = req.params;
     const items = await StorytellerMemory.findAll({
@@ -109,7 +105,7 @@ router.get('/dramatic-irony/:characterKey', optionalAuth, async (req, res) => {
 
 // ─── POST /dramatic-irony/resolve ────────────────────────────────────────────
 // Mark a mystery as resolved or a foreshadowing seed as paid off.
-router.post('/dramatic-irony/resolve', optionalAuth, async (req, res) => {
+router.post('/dramatic-irony/resolve', requireAuth, async (req, res) => {
   const { memoryId, resolvedInStory, resolutionNote } = req.body;
 
   if (!memoryId) {
@@ -161,7 +157,7 @@ function intimateCareerVoiceNote(careerStage) {
   }
 }
 
-router.post('/generate-intimate-scene', optionalAuth, async (req, res) => {
+router.post('/generate-intimate-scene', requireAuth, aiRateLimiter, async (req, res) => {
   const {
     chapter_id,
     character_id,
@@ -351,7 +347,7 @@ Be emotionally specific. No grand revelations. Just one real moment — somethin
 // Used by Scene Studio GenerateTab for DALL-E object generation
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/ai/enhance-prompt', optionalAuth, async (req, res) => {
+router.post('/ai/enhance-prompt', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt, context = 'scene_studio_object' } = req.body;
 

@@ -4,13 +4,8 @@ const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 
 // Auth middleware
-let optionalAuth;
-try {
-  const authModule = require('../../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../../middleware/auth');
+const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
@@ -33,7 +28,7 @@ const { buildExtractionPrompt, buildScenesPrompt } = require('./helpers');
  * narrative_economy, core_themes.
  * Does NOT save anything — returns structured data for review.
  */
-router.post('/structure-universe', optionalAuth, async (req, res) => {
+router.post('/structure-universe', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { raw_text } = req.body;
     if (!raw_text?.trim()) {
@@ -101,7 +96,7 @@ Respond with ONLY valid JSON. No preamble, no markdown fences.
  * Returns all memories (confirmed + inferred) for a given line.
  * Used to show the memory card inline in the Book Editor when a line is approved.
  */
-router.get('/lines/:lineId/memories', optionalAuth, async (req, res) => {
+router.get('/lines/:lineId/memories', requireAuth, async (req, res) => {
   try {
     const { lineId } = req.params;
 
@@ -134,7 +129,7 @@ router.get('/lines/:lineId/memories', optionalAuth, async (req, res) => {
  *
  * Body: { character_context?: string }  — optional extra context to ground extraction
  */
-router.post('/lines/:lineId/extract', optionalAuth, async (req, res) => {
+router.post('/lines/:lineId/extract', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { lineId } = req.params;
     const { character_context } = req.body;
@@ -241,7 +236,7 @@ router.post('/lines/:lineId/extract', optionalAuth, async (req, res) => {
  *
  * Idempotent: lines that already have memories are skipped.
  */
-router.post('/books/:bookId/extract-all', optionalAuth, async (req, res) => {
+router.post('/books/:bookId/extract-all', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { bookId } = req.params;
 
@@ -375,7 +370,7 @@ router.post('/books/:bookId/extract-all', optionalAuth, async (req, res) => {
  *   statement?: string  — optional override (if user edited statement in the confirm card)
  * }
  */
-router.post('/memories/:memoryId/confirm', optionalAuth, async (req, res) => {
+router.post('/memories/:memoryId/confirm', requireAuth, async (req, res) => {
   try {
     const { memoryId } = req.params;
     const { character_id, statement } = req.body;
@@ -461,7 +456,7 @@ router.post('/memories/:memoryId/confirm', optionalAuth, async (req, res) => {
  * Dismisses an unconfirmed memory — removes it from the pending queue.
  * Hard-deletes the row. Does not affect the source line.
  */
-router.post('/memories/:memoryId/dismiss', optionalAuth, async (req, res) => {
+router.post('/memories/:memoryId/dismiss', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { memoryId } = req.params;
 
@@ -492,7 +487,7 @@ router.post('/memories/:memoryId/dismiss', optionalAuth, async (req, res) => {
  *
  * Body: { statement?, type?, tags?, character_id? }
  */
-router.put('/memories/:memoryId', optionalAuth, async (req, res) => {
+router.put('/memories/:memoryId', requireAuth, async (req, res) => {
   try {
     const { memoryId } = req.params;
     const { statement, type, tags, character_id } = req.body;
@@ -523,7 +518,7 @@ router.put('/memories/:memoryId', optionalAuth, async (req, res) => {
  * Returns all confirmed memories for a character.
  * Used to populate the Character Registry detail view with memory history.
  */
-router.get('/characters/:charId/memories', optionalAuth, async (req, res) => {
+router.get('/characters/:charId/memories', requireAuth, async (req, res) => {
   try {
     const { charId } = req.params;
 
@@ -551,7 +546,7 @@ router.get('/characters/:charId/memories', optionalAuth, async (req, res) => {
  *
  * Query: ?confirmed=true|false|all  (default: all)
  */
-router.get('/books/:bookId/memories/pending', optionalAuth, async (req, res) => {
+router.get('/books/:bookId/memories/pending', requireAuth, async (req, res) => {
   try {
     const { bookId } = req.params;
     const { confirmed } = req.query; // 'true' | 'false' | 'all'
@@ -627,7 +622,7 @@ router.get('/books/:bookId/memories/pending', optionalAuth, async (req, res) => 
 // Results are NOT stored — generated fresh on each request.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/books/:bookId/scenes', optionalAuth, async (req, res) => {
+router.get('/books/:bookId/scenes', requireAuth, async (req, res) => {
   try {
     const { bookId } = req.params;
 
