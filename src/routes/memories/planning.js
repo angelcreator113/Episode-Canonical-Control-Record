@@ -4,13 +4,8 @@ const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 
 // Auth middleware
-let optionalAuth;
-try {
-  const authModule = require('../../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../../middleware/auth');
+const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
 // Models accessed via db.* as needed
@@ -28,7 +23,7 @@ const { safeAIWithTemp } = require('./stories');
 // AI feedback on how the current prose reads — voice, rhythm, tension
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/prose-critique', optionalAuth, async (req, res) => {
+router.post('/prose-critique', requireAuth, async (req, res) => {
   try {
     const { character_id, prose } = req.body;
     if (!prose?.trim()) {
@@ -64,7 +59,7 @@ Give your editorial read. What works? What drifts? Where could it go deeper?`;
 // AI-generated 2-3 sentence synopsis of the current chapter prose
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/chapter-synopsis', optionalAuth, async (req, res) => {
+router.post('/chapter-synopsis', requireAuth, async (req, res) => {
   try {
     const { character_id, prose, chapter_title } = req.body;
     if (!prose?.trim()) {
@@ -101,7 +96,7 @@ Write a 2-3 sentence synopsis.`;
 // AI-generated prose transition between two adjacent scenes
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/scene-transition', optionalAuth, async (req, res) => {
+router.post('/scene-transition', requireAuth, async (req, res) => {
   try {
     const { character_id, scene_a_end, scene_b_start, chapter_title, theme } = req.body;
     if (!scene_a_end?.trim() || !scene_b_start?.trim()) {
@@ -145,7 +140,7 @@ Write a transition that connects these two moments. 2-4 paragraphs. Match the vo
 // purpose, and emotional arcs.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/scene-planner', optionalAuth, async (req, res) => {
+router.post('/scene-planner', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       book_id,
@@ -295,7 +290,7 @@ Respond with ONLY a valid JSON array. No preamble, no markdown fences.
    structured outline: Parts → Chapters → Sections with scene goals,
    emotional arcs, and character beats.
    ═══════════════════════════════════════════════════════════════════════════ */
-router.post('/story-outline', optionalAuth, async (req, res) => {
+router.post('/story-outline', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       book_id,
@@ -477,7 +472,7 @@ ${mode === 'full' ? `{
 // Called by: StoryPlannerConversational.jsx
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/story-planner-chat', optionalAuth, async (req, res) => {
+router.post('/story-planner-chat', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { message, history = [], book, plan, characters = [], approvalStatus, healthReport } = req.body;
 

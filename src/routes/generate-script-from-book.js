@@ -23,13 +23,8 @@ const router   = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 
 // ── Auth — mirrors existing PNOS routes (no auth) ────────────────────────
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── Models ────────────────────────────────────────────────────────────────
 const db = require('../models');
@@ -251,7 +246,7 @@ Just the script — speaker tags, lines, and directions.`;
 
 // ── Route ─────────────────────────────────────────────────────────────────
 
-router.post('/generate-script-from-book', optionalAuth, async (req, res) => {
+router.post('/generate-script-from-book', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       book_id,

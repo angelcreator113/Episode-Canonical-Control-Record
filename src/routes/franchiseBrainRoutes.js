@@ -14,7 +14,12 @@
 const express = require('express');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
-const { optionalAuth, authenticateToken } = require('../middleware/auth');
+// F-AUTH-1 Step 3 CP7: mixed Tier 1+4 within single file (per v2.31 §5.21,
+// 3rd cumulative instance after worldStudio.js at CP3 + universe.js at CP6).
+// Writes require authentication (Tier 1); GETs are public catalog reads with
+// no req.user consumption (Tier 4). /multi-product/all also Tier 4 PUBLIC.
+const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
 
@@ -46,7 +51,7 @@ router.get('/franchise-brain/entries', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // SEED SHOW BRAIN — run all franchise knowledge seeders
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/franchise-brain/seed', optionalAuth, async (req, res) => {
+router.post('/franchise-brain/seed', requireAuth, async (req, res) => {
   try {
     const { force = false } = req.body;
     const path = require('path');
@@ -130,7 +135,7 @@ router.post('/franchise-brain/seed', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // CREATE ENTRY
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/franchise-brain/entries', optionalAuth, async (req, res) => {
+router.post('/franchise-brain/entries', requireAuth, async (req, res) => {
   const { title, content, category, severity, always_inject, applies_to, source_document } = req.body;
 
   if (!title?.trim() || !content?.trim()) {
@@ -160,7 +165,7 @@ router.post('/franchise-brain/entries', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // ACTIVATE ENTRY
 // ─────────────────────────────────────────────────────────────────────────────
-router.patch('/franchise-brain/entries/:id/activate', optionalAuth, async (req, res) => {
+router.patch('/franchise-brain/entries/:id/activate', requireAuth, async (req, res) => {
   try {
     const entry = await db.FranchiseKnowledge.findByPk(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
@@ -176,7 +181,7 @@ router.patch('/franchise-brain/entries/:id/activate', optionalAuth, async (req, 
 // ─────────────────────────────────────────────────────────────────────────────
 // BULK ACTIVATE ALL PENDING ENTRIES
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/franchise-brain/activate-all', optionalAuth, async (req, res) => {
+router.post('/franchise-brain/activate-all', requireAuth, async (req, res) => {
   try {
     const [, count] = await db.sequelize.query(
       `UPDATE franchise_knowledge SET status = 'active', updated_at = NOW() WHERE status = 'pending_review'`
@@ -191,7 +196,7 @@ router.post('/franchise-brain/activate-all', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // UPDATE ENTRY — edit title, content, category, severity, always_inject
 // ─────────────────────────────────────────────────────────────────────────────
-router.patch('/franchise-brain/entries/:id', optionalAuth, async (req, res) => {
+router.patch('/franchise-brain/entries/:id', requireAuth, async (req, res) => {
   const { title, content, category, severity, always_inject } = req.body;
   try {
     const entry = await db.FranchiseKnowledge.findByPk(req.params.id);
@@ -215,7 +220,7 @@ router.patch('/franchise-brain/entries/:id', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // DELETE ENTRY
 // ─────────────────────────────────────────────────────────────────────────────
-router.delete('/franchise-brain/entries/:id', optionalAuth, async (req, res) => {
+router.delete('/franchise-brain/entries/:id', requireAuth, async (req, res) => {
   try {
     const entry = await db.FranchiseKnowledge.findByPk(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
@@ -231,7 +236,7 @@ router.delete('/franchise-brain/entries/:id', optionalAuth, async (req, res) => 
 // ─────────────────────────────────────────────────────────────────────────────
 // ARCHIVE ENTRY
 // ─────────────────────────────────────────────────────────────────────────────
-router.patch('/franchise-brain/entries/:id/archive', optionalAuth, async (req, res) => {
+router.patch('/franchise-brain/entries/:id/archive', requireAuth, async (req, res) => {
   try {
     const entry = await db.FranchiseKnowledge.findByPk(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
@@ -247,7 +252,7 @@ router.patch('/franchise-brain/entries/:id/archive', optionalAuth, async (req, r
 // ─────────────────────────────────────────────────────────────────────────────
 // UNARCHIVE ENTRY — restore archived entry back to active
 // ─────────────────────────────────────────────────────────────────────────────
-router.patch('/franchise-brain/entries/:id/unarchive', optionalAuth, async (req, res) => {
+router.patch('/franchise-brain/entries/:id/unarchive', requireAuth, async (req, res) => {
   try {
     const entry = await db.FranchiseKnowledge.findByPk(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
@@ -337,7 +342,7 @@ router.get('/franchise-brain/amber-activity', optionalAuth, async (req, res) => 
 // ─────────────────────────────────────────────────────────────────────────────
 // INGEST DOCUMENT — AI extracts knowledge entries from pasted text
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/franchise-brain/ingest-document', optionalAuth, async (req, res) => {
+router.post('/franchise-brain/ingest-document', requireAuth, aiRateLimiter, async (req, res) => {
   const { document_text, source_name } = req.body;
 
   if (!document_text?.trim()) {
@@ -477,7 +482,7 @@ router.get('/franchise-brain/documents/:id', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GUARD — pre-generation franchise check
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/franchise-brain/guard', optionalAuth, async (req, res) => {
+router.post('/franchise-brain/guard', requireAuth, async (req, res) => {
   const { scene_brief, characters_in_scene, scene_type, tone } = req.body;
 
   if (!scene_brief) {
@@ -557,7 +562,7 @@ const PAGE_SOURCE_MAP = {
   character_depth_engine:     'character-depth-engine-v1.0',
 };
 
-router.post('/franchise-brain/push-from-page', authenticateToken, async (req, res) => {
+router.post('/franchise-brain/push-from-page', requireAuth, aiRateLimiter, async (req, res) => {
   const { page_name, page_data } = req.body;
 
   if (!page_name || !PAGE_SOURCE_MAP[page_name]) {

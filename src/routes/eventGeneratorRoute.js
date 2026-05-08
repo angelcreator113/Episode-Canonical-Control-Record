@@ -14,14 +14,15 @@
 const express = require('express');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const client = new Anthropic();
 
 const MODELS = ['claude-sonnet-4-6'];
 
 // POST /generate-events
-router.post('/generate-events', optionalAuth, async (req, res) => {
+router.post('/generate-events', requireAuth, aiRateLimiter, async (req, res) => {
   const { show_id, replace_existing = false } = req.body;
 
   if (!show_id) {

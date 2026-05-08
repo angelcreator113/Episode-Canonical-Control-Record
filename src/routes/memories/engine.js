@@ -5,13 +5,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { v4: _uuidv4 } = require('uuid');
 
 // Auth middleware
-let optionalAuth;
-try {
-  const authModule = require('../../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../../middleware/auth');
+const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
@@ -34,7 +29,7 @@ require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
 const anthropic = new Anthropic();
 
 
-router.post('/generate-living-state', optionalAuth, async (req, res) => {
+router.post('/generate-living-state', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     // Accept both snake_case and camelCase params
     const characterId   = req.body.character_id   || req.body.characterId;
@@ -160,7 +155,7 @@ Return ONLY valid JSON. No markdown fences.`;
 // POST /memories/generate-character-arc
 // ══════════════════════════════════════════════════════════════════════════════
 
-router.post('/generate-character-arc', optionalAuth, async (req, res) => {
+router.post('/generate-character-arc', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const characterId   = req.body.character_id   || req.body.characterId;
     const characterName = req.body.character_name  || req.body.characterName;
@@ -478,7 +473,7 @@ const BOOK1_EDGES = [
 ];
 
 // ─── GET /relationship-map — dynamically built from registry_characters ──────
-router.get('/relationship-map', optionalAuth, async (req, res) => {
+router.get('/relationship-map', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../../models');
 
   try {
@@ -679,7 +674,7 @@ router.get('/relationship-map', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /generate-relationship-web — Claude enriches from manuscript ────────
-router.post('/generate-relationship-web', optionalAuth, async (req, res) => {
+router.post('/generate-relationship-web', requireAuth, aiRateLimiter, async (req, res) => {
   const { registryId: _registryId } = req.body;
   const db = req.app.locals.db || require('../../models');
 
@@ -772,7 +767,7 @@ No preamble, no markdown.`,
 // ─── GET /story-engine-characters ─────────────────────────────────────────────
 // Returns all accepted/finalized registry characters grouped by world (book_tag)
 // so the Story Engine UI can dynamically populate its character selector.
-router.get('/story-engine-characters', optionalAuth, async (req, res) => {
+router.get('/story-engine-characters', requireAuth, async (req, res) => {
   try {
     const { Op } = require('sequelize');
     const { CharacterRegistry, RegistryCharacter } = require('../../models');
@@ -880,7 +875,7 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
 
 // ─── POST /story-engine-add-character ─────────────────────────────────────────
 // Add a new character introduced in a story to the character registry.
-router.post('/story-engine-add-character', optionalAuth, async (req, res) => {
+router.post('/story-engine-add-character', requireAuth, async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = require('../../models');
     const { character_name, character_role, world, story_number, story_title } = req.body;
@@ -2426,7 +2421,7 @@ const seTaskArcCache = new Map();
 
 // ─── GET /story-engine-tasks/:characterKey ─────────────────────────────────────
 // Returns cached task arc if available; falls back to DB, then to empty.
-router.get('/story-engine-tasks/:characterKey', optionalAuth, async (req, res) => {
+router.get('/story-engine-tasks/:characterKey', requireAuth, async (req, res) => {
   const { characterKey } = req.params;
 
   // 1. In-memory cache (fastest)
@@ -3026,7 +3021,7 @@ async function buildArcGenerationContext(characterKey) {
 
 // ─── POST /generate-story-tasks ───────────────────────────────────────────────
 // Generates 50 chapter briefs for a character before stories are written.
-router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
+router.post('/generate-story-tasks', requireAuth, aiRateLimiter, async (req, res) => {
   // Extend request timeout — this endpoint calls Claude with max_tokens: 16000
   // which can take 60-90s. Default proxy timeouts (30-60s) cause 504s.
   if (req.setTimeout) req.setTimeout(300000); // 5 minutes
@@ -3208,7 +3203,7 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
 // ─── SSE Arc Generation — real-time progress ─────────────────────────────────
 // Streams step-by-step progress events as the arc is built.
 // Steps: loading_dna → loading_context → building_arc → parsing → saving → done
-router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
+router.post('/generate-story-tasks-stream', requireAuth, aiRateLimiter, async (req, res) => {
   // Extend timeouts — arc generation calls Claude with max_tokens: 16000
   // which can take 60-120s. Default proxy timeouts (30-60s) cause 502s.
   if (req.setTimeout) req.setTimeout(300000);
@@ -3499,7 +3494,7 @@ router.post('/generate-story-tasks-stream', optionalAuth, async (req, res) => {
 // ─── POST /generate-next-chapter ──────────────────────────────────────────────
 // Generates a SINGLE next chapter brief based on previously approved chapters.
 // Called automatically after chapter approval or manually for the first chapter.
-router.post('/generate-next-chapter', optionalAuth, async (req, res) => {
+router.post('/generate-next-chapter', requireAuth, aiRateLimiter, async (req, res) => {
   if (req.setTimeout) req.setTimeout(120000);
   if (res.setTimeout) res.setTimeout(120000);
 
@@ -3859,7 +3854,7 @@ ${selectedEnding}`;
 
 // ─── POST /generate-story ─────────────────────────────────────────────────────
 // Generates one complete short story (3300-4800 words) from a task brief.
-router.post('/generate-story', optionalAuth, async (req, res) => {
+router.post('/generate-story', requireAuth, aiRateLimiter, async (req, res) => {
   const {
     characterKey,
     storyNumber,
@@ -4560,7 +4555,7 @@ Return ONLY valid JSON:
 
 // ─── POST /revise-story ──────────────────────────────────────────────────────
 // Takes a generated story + editorial notes and produces a tightened revision.
-router.post('/revise-story', optionalAuth, async (req, res) => {
+router.post('/revise-story', requireAuth, aiRateLimiter, async (req, res) => {
   const { characterKey, storyNumber, storyText, editorialNotes, qualityReport } = req.body;
 
   if (!storyText || !editorialNotes) {
@@ -4773,7 +4768,7 @@ async function runPipeline({ characterKey, storyNumber, taskBrief, previousStori
 // ─── POST /pipeline-generate ──────────────────────────────────────────────────
 // Automated pipeline: generate → quality gate → auto-revise if needed → return.
 // Handles a single story through the full quality pipeline without manual steps.
-router.post('/pipeline-generate', optionalAuth, async (req, res) => {
+router.post('/pipeline-generate', requireAuth, async (req, res) => {
   const { characterKey, storyNumber, taskBrief, previousStories, useMultiVoice } = req.body;
 
   if (!characterKey || !storyNumber || !taskBrief) {
@@ -4813,7 +4808,7 @@ setInterval(() => {
 
 // ─── POST /pipeline-generate-background ──────────────────────────────────────
 // Starts generation as a background job. Returns a jobId for polling.
-router.post('/pipeline-generate-background', optionalAuth, async (req, res) => {
+router.post('/pipeline-generate-background', requireAuth, async (req, res) => {
   const { characterKey, storyNumber, taskBrief, previousStories, useMultiVoice } = req.body;
 
   if (!characterKey || !storyNumber || !taskBrief) {
@@ -4857,7 +4852,7 @@ router.post('/pipeline-generate-background', optionalAuth, async (req, res) => {
 
 // ─── GET /pipeline-generate-status/:jobId ────────────────────────────────────
 // Poll for background generation status.
-router.get('/pipeline-generate-status/:jobId', optionalAuth, (req, res) => {
+router.get('/pipeline-generate-status/:jobId', requireAuth, (req, res) => {
   const job = backgroundJobs.get(req.params.jobId);
   if (!job) {
     return res.status(404).json({ error: 'Job not found' });
@@ -4878,7 +4873,7 @@ router.get('/pipeline-generate-status/:jobId', optionalAuth, (req, res) => {
 // ─── POST /batch-generate ────────────────────────────────────────────────────
 // Generates multiple stories sequentially through the quality pipeline.
 // Uses SSE (Server-Sent Events) to stream progress to the frontend.
-router.post('/batch-generate', optionalAuth, async (req, res) => {
+router.post('/batch-generate', requireAuth, async (req, res) => {
   const { characterKey, taskBriefs, previousStories: initialPrevious } = req.body;
 
   if (!characterKey || !taskBriefs?.length) {
@@ -4975,7 +4970,7 @@ router.post('/batch-generate', optionalAuth, async (req, res) => {
 // ─── POST /batch-generate-background ──────────────────────────────────────────
 // Starts batch generation as a background job. Returns a jobId for polling.
 // Each story is generated sequentially, results accumulate in the job store.
-router.post('/batch-generate-background', optionalAuth, async (req, res) => {
+router.post('/batch-generate-background', requireAuth, async (req, res) => {
   const { characterKey, taskBriefs, previousStories: initialPrevious } = req.body;
 
   if (!characterKey || !taskBriefs?.length) {
@@ -5055,7 +5050,7 @@ router.post('/batch-generate-background', optionalAuth, async (req, res) => {
 
 // ─── GET /batch-generate-status/:jobId ────────────────────────────────────────
 // Poll for background batch generation status.
-router.get('/batch-generate-status/:jobId', optionalAuth, (req, res) => {
+router.get('/batch-generate-status/:jobId', requireAuth, (req, res) => {
   const job = backgroundJobs.get(req.params.jobId);
   if (!job) {
     return res.status(404).json({ error: 'Job not found' });
@@ -5082,7 +5077,7 @@ router.get('/batch-generate-status/:jobId', optionalAuth, (req, res) => {
 
 // ─── GET /batch-generate-story/:jobId/:storyNumber ────────────────────────────
 // Fetch a single completed story from a running/completed batch job.
-router.get('/batch-generate-story/:jobId/:storyNumber', optionalAuth, (req, res) => {
+router.get('/batch-generate-story/:jobId/:storyNumber', requireAuth, (req, res) => {
   const job = backgroundJobs.get(req.params.jobId);
   if (!job) {
     return res.status(404).json({ error: 'Job not found' });
@@ -5096,7 +5091,7 @@ router.get('/batch-generate-story/:jobId/:storyNumber', optionalAuth, (req, res)
 
 // ─── POST /check-story-consistency ───────────────────────────────────────────
 // When a story is edited, check for cascading contradictions in later stories.
-router.post('/check-story-consistency', optionalAuth, async (req, res) => {
+router.post('/check-story-consistency', requireAuth, aiRateLimiter, async (req, res) => {
   const { characterKey, editedStoryNumber, editedStoryText, existingStories } = req.body;
 
   if (!characterKey || !editedStoryNumber || !editedStoryText) {
@@ -5167,7 +5162,7 @@ Return ONLY valid JSON:
 
 // ─── POST /extract-story-memories ────────────────────────────────────────────
 // After a story is approved, extract pain points and feed them to therapy room.
-router.post('/extract-story-memories', optionalAuth, async (req, res) => {
+router.post('/extract-story-memories', requireAuth, aiRateLimiter, async (req, res) => {
   const { characterId, characterKey, storyNumber, storyTitle, storyText } = req.body;
 
   if (!characterId || !storyText) {
@@ -5311,7 +5306,7 @@ Return ONLY valid JSON:
 // After story approval + memory extraction, use Claude to determine what
 // registry fields should be updated based on story events and belief shifts.
 // This closes the feedback loop: story → memories → registry evolution.
-router.post('/story-engine-update-registry', optionalAuth, async (req, res) => {
+router.post('/story-engine-update-registry', requireAuth, aiRateLimiter, async (req, res) => {
   const { characterKey, storyNumber, storyTitle, storyText, extractedMemories } = req.body;
 
   if (!characterKey || !storyText) {
@@ -5465,7 +5460,7 @@ Set any field to null if it should NOT be updated.`;
 
 // ─── GET /story-memories/:characterId ────────────────────────────────────────
 // Fetch all story-extracted memories for a character (used by Therapy Room).
-router.get('/story-memories/:characterId', optionalAuth, async (req, res) => {
+router.get('/story-memories/:characterId', requireAuth, async (req, res) => {
   try {
     const { characterId } = req.params;
     const memories = await StorytellerMemory.findAll({

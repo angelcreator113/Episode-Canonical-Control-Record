@@ -5,13 +5,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const rateLimit = require('express-rate-limit');
 
 // Auth middleware
-let optionalAuth;
-try {
-  const authModule = require('../../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../../middleware/auth');
+const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
 // Models and universeContext available via db if needed
@@ -43,7 +38,7 @@ const assistantLimiter = rateLimit({
   message: { error: 'Too many requests — slow down and try again in a moment.' },
 });
 
-router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, res) => {
+router.post('/assistant-command', requireAuth, aiRateLimiter, assistantLimiter, async (req, res) => {
   const { message, history = [], context = {} } = req.body;
 
   if (!message?.trim()) {
@@ -293,7 +288,7 @@ router.post('/assistant-command', optionalAuth, assistantLimiter, async (req, re
 // After streaming completes, sends a final `done` event with action/navigate/etc.
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.post('/assistant-command-stream', optionalAuth, assistantLimiter, async (req, res) => {
+router.post('/assistant-command-stream', requireAuth, aiRateLimiter, assistantLimiter, async (req, res) => {
   const { message, history = [], context = {} } = req.body;
 
   if (!message?.trim()) {
@@ -1590,7 +1585,7 @@ Return ONLY valid JSON:
 
 // ── RECYCLE BIN — List deleted items ────────────────────────────────────────
 
-router.get('/recycle-bin', optionalAuth, async (req, res) => {
+router.get('/recycle-bin', requireAuth, async (req, res) => {
   const sequelize = db.sequelize;
 
   try {
@@ -1643,7 +1638,7 @@ router.get('/recycle-bin', optionalAuth, async (req, res) => {
 
 // ── RECYCLE BIN — Restore item ──────────────────────────────────────────────
 
-router.post('/recycle-bin/restore', optionalAuth, async (req, res) => {
+router.post('/recycle-bin/restore', requireAuth, async (req, res) => {
   const { type, id } = req.body;
   const sequelize = db.sequelize;
 
@@ -1675,7 +1670,7 @@ router.post('/recycle-bin/restore', optionalAuth, async (req, res) => {
 
 // ── RECYCLE BIN — Permanent delete (manual only) ────────────────────────────
 
-router.delete('/recycle-bin/:type/:id', optionalAuth, async (req, res) => {
+router.delete('/recycle-bin/:type/:id', requireAuth, async (req, res) => {
   const { type, id } = req.params;
   const sequelize = db.sequelize;
 
