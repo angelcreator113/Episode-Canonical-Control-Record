@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const processingController = require('../controllers/processingController');
-const { authenticateToken } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -19,30 +19,30 @@ const { asyncHandler } = require('../middleware/errorHandler');
  */
 
 // List all jobs (viewer permission)
-router.get('/', asyncHandler(processingController.listJobs));
+router.get('/', requireAuth, asyncHandler(processingController.listJobs));
 
 // Get job statistics (viewer permission)
-router.get('/stats', asyncHandler(processingController.getStats));
+router.get('/stats', requireAuth, asyncHandler(processingController.getStats));
 
 // Get pending jobs (viewer permission)
-router.get('/pending', asyncHandler(processingController.getPendingJobs));
+router.get('/pending', requireAuth, asyncHandler(processingController.getPendingJobs));
 
 // Get failed jobs (viewer permission)
-router.get('/failed', asyncHandler(processingController.getFailedJobs));
+router.get('/failed', requireAuth, asyncHandler(processingController.getFailedJobs));
 
 // Get retryable jobs (viewer permission)
-router.get('/retryable', asyncHandler(processingController.getRetryableJobs));
+router.get('/retryable', requireAuth, asyncHandler(processingController.getRetryableJobs));
 
 // Get single job (viewer permission)
-router.get('/:id', asyncHandler(processingController.getJob));
+router.get('/:id', requireAuth, asyncHandler(processingController.getJob));
 
 // Get jobs for specific episode (viewer permission)
-router.get('/episode/:episodeId', asyncHandler(processingController.getEpisodeJobs));
+router.get('/episode/:episodeId', requireAuth, asyncHandler(processingController.getEpisodeJobs));
 
 // Create job (requires authentication + editor role)
 router.post(
   '/',
-  authenticateToken,
+  requireAuth,
   requirePermission('processing', 'create'),
   asyncHandler(processingController.createJob)
 );
@@ -50,7 +50,7 @@ router.post(
 // Update job status (requires authentication + editor role)
 router.put(
   '/:id',
-  authenticateToken,
+  requireAuth,
   requirePermission('processing', 'edit'),
   asyncHandler(processingController.updateJob)
 );
@@ -58,7 +58,7 @@ router.put(
 // Retry job (requires authentication + editor role)
 router.post(
   '/:id/retry',
-  authenticateToken,
+  requireAuth,
   requirePermission('processing', 'edit'),
   asyncHandler(processingController.retryJob)
 );
@@ -66,7 +66,7 @@ router.post(
 // Cancel job (requires authentication + admin role)
 router.delete(
   '/:id',
-  authenticateToken,
+  requireAuth,
   requirePermission('processing', 'delete'),
   asyncHandler(processingController.cancelJob)
 );

@@ -7,6 +7,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { models } = require('../models');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -162,7 +163,7 @@ const testTemplates = [
  * Create test episodes
  * WARNING: This is for development only!
  */
-router.post('/episodes', async (req, res) => {
+router.post('/episodes', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     // Check if episodes already exist
     const existingCount = await models.Episode.count();
@@ -203,7 +204,7 @@ router.post('/episodes', async (req, res) => {
  * Create test templates
  * WARNING: This is for development only!
  */
-router.post('/templates', async (req, res) => {
+router.post('/templates', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     // Check if templates already exist
     const existingCount = await models.EpisodeTemplate.count();
@@ -245,7 +246,7 @@ router.post('/templates', async (req, res) => {
  * Seed both episodes and templates
  * WARNING: This is for development only!
  */
-router.post('/all', async (req, res) => {
+router.post('/all', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const results = {
       episodes: null,

@@ -4,7 +4,7 @@
  */
 const express = require('express');
 const multer = require('multer');
-const { authenticateToken } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const uploadValidation = require('../middleware/uploadValidation');
 const fileController = require('../controllers/fileController');
 
@@ -26,7 +26,7 @@ const upload = multer({
 const uploadHandler = (req, res) => fileController.uploadFile(req, res);
 router.post(
   '/:episodeId/upload',
-  authenticateToken,
+  requireAuth,
   upload.single('file'),
   uploadValidation,
   uploadHandler
@@ -37,27 +37,27 @@ router.post(
  * Get pre-signed download URL
  */
 const downloadHandler = (req, res) => fileController.getPreSignedUrl(req, res);
-router.get('/:episodeId/:fileId/download', authenticateToken, downloadHandler);
+router.get('/:episodeId/:fileId/download', requireAuth, downloadHandler);
 
 /**
  * DELETE /api/files/:episodeId/:fileId
  * Delete file
  */
 const deleteHandler = (req, res) => fileController.deleteFile(req, res);
-router.delete('/:episodeId/:fileId', authenticateToken, deleteHandler);
+router.delete('/:episodeId/:fileId', requireAuth, deleteHandler);
 
 /**
  * GET /api/files/:episodeId
  * List episode files
  */
 const listHandler = (req, res) => fileController.listEpisodeFiles(req, res);
-router.get('/:episodeId', authenticateToken, listHandler);
+router.get('/:episodeId', requireAuth, listHandler);
 
 /**
  * GET /api/files/:episodeId/:fileId
  * Get file metadata
  */
 const metadataHandler = (req, res) => fileController.getFileMetadata(req, res);
-router.get('/:episodeId/:fileId', authenticateToken, metadataHandler);
+router.get('/:episodeId/:fileId', requireAuth, metadataHandler);
 
 module.exports = router;

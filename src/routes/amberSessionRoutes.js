@@ -15,7 +15,7 @@ const express    = require('express');
 const router     = express.Router();
 const Anthropic  = require('@anthropic-ai/sdk');
 const rateLimit  = require('express-rate-limit');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const db = require('../models');
 
 const client = new Anthropic();
@@ -284,7 +284,7 @@ async function synthesizeSpeech(text) {
 // Returns Amber's contextual greeting for the current page
 // Query: ?page=dashboard (optional, defaults to dashboard)
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/greeting', optionalAuth, async (req, res) => {
+router.get('/greeting', requireAuth, async (req, res) => {
   const page = req.query.page || 'dashboard';
   try {
     const state    = await readSystemState(req.user?.id);
@@ -306,7 +306,7 @@ router.get('/greeting', optionalAuth, async (req, res) => {
 // Body: { text: "..." }
 // Protected: requires auth + rate-limited to 20 req/hr
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/speak', optionalAuth, speakLimiter, async (req, res) => {
+router.post('/speak', requireAuth, speakLimiter, async (req, res) => {
   const { text } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'text required' });
 
@@ -352,7 +352,7 @@ const readStoryLimiter = rateLimit({
 // ElevenLabs, concatenates audio buffers, returns single audio/mpeg.
 // Body: { text: "...", voice_id?: "..." }
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/read-story', optionalAuth, readStoryLimiter, async (req, res) => {
+router.post('/read-story', requireAuth, readStoryLimiter, async (req, res) => {
   const { text, voice_id } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'text required' });
   if (!ELEVENLABS_API_KEY) return res.status(503).json({ error: 'ElevenLabs not configured' });
@@ -430,7 +430,7 @@ router.post('/read-story', optionalAuth, readStoryLimiter, async (req, res) => {
 // GET /api/v1/amber/status
 // Quick health check — what is Amber currently aware of
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/status', optionalAuth, async (req, res) => {
+router.get('/status', requireAuth, async (req, res) => {
   try {
     const state = await readSystemState(req.user?.id);
     return res.json(state);
