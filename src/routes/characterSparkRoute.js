@@ -20,16 +20,11 @@ const db = require('../models');
 
 const anthropic = new Anthropic();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── POST /sparks — create a new spark ─────────────────────────────────────
-router.post('/sparks', optionalAuth, async (req, res) => {
+router.post('/sparks', requireAuth, async (req, res) => {
   try {
     const { name, desire_line, wound, registry_id } = req.body;
     if (!name || !desire_line || !wound) {
@@ -52,7 +47,7 @@ router.post('/sparks', optionalAuth, async (req, res) => {
 });
 
 // ── GET /sparks — list all sparks ─────────────────────────────────────────
-router.get('/sparks', optionalAuth, async (req, res) => {
+router.get('/sparks', requireAuth, async (req, res) => {
   try {
     const { registry_id, status } = req.query;
     const where = {};
@@ -71,7 +66,7 @@ router.get('/sparks', optionalAuth, async (req, res) => {
 });
 
 // ── GET /sparks/:id — get single spark ────────────────────────────────────
-router.get('/sparks/:id', optionalAuth, async (req, res) => {
+router.get('/sparks/:id', requireAuth, async (req, res) => {
   try {
     const spark = await db.CharacterSpark.findByPk(req.params.id);
     if (!spark) return res.status(404).json({ error: 'Spark not found' });
@@ -83,7 +78,7 @@ router.get('/sparks/:id', optionalAuth, async (req, res) => {
 });
 
 // ── PATCH /sparks/:id — update spark fields ───────────────────────────────
-router.patch('/sparks/:id', optionalAuth, async (req, res) => {
+router.patch('/sparks/:id', requireAuth, async (req, res) => {
   try {
     const spark = await db.CharacterSpark.findByPk(req.params.id);
     if (!spark) return res.status(404).json({ error: 'Spark not found' });
@@ -101,7 +96,7 @@ router.patch('/sparks/:id', optionalAuth, async (req, res) => {
 });
 
 // ── POST /sparks/:id/prefill — Claude Opus 4.5 pre-fill expansion ────────
-router.post('/sparks/:id/prefill', optionalAuth, async (req, res) => {
+router.post('/sparks/:id/prefill', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const spark = await db.CharacterSpark.findByPk(req.params.id);
     if (!spark) return res.status(404).json({ error: 'Spark not found' });

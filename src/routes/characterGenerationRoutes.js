@@ -23,13 +23,14 @@
  */
 const express = require('express');
 const router  = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const {
   generateFullCharacter,
   calculateDepthLevel,
 } = require('../services/characterGenerationService');
 
-router.use(optionalAuth);
+router.use(requireAuth);
 
 function getModels(req) {
   return req.app.get('models') || require('../models');
@@ -40,7 +41,7 @@ function getModels(req) {
 // Takes a spark and returns a complete proposed interior architecture.
 // Nothing is written to DB. Author reviews the proposal first.
 // ────────────────────────────────────────────────────────────────────────────
-router.post('/generate', async (req, res) => {
+router.post('/generate', aiRateLimiter, async (req, res) => {
   const { spark, world_id, book_id } = req.body;
 
   if (!spark?.name || !spark?.vibe) {

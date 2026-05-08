@@ -19,13 +19,8 @@ const router  = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 
 // ── Auth middleware ──
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── Models ──
 const db = require('../models');
@@ -205,7 +200,7 @@ function parseJSON(text) {
 /* ═══════════════════════════════════════════════════════════════════════════════
    GET /:charId — Get all depth dimensions for a character
    ═══════════════════════════════════════════════════════════════════════════════ */
-router.get('/:charId', optionalAuth, async (req, res) => {
+router.get('/:charId', requireAuth, async (req, res) => {
   try {
     const character = await RegistryCharacter.findByPk(req.params.charId);
     if (!character) {
@@ -239,7 +234,7 @@ router.get('/:charId', optionalAuth, async (req, res) => {
 /* ═══════════════════════════════════════════════════════════════════════════════
    PUT /:charId — Update depth dimensions
    ═══════════════════════════════════════════════════════════════════════════════ */
-router.put('/:charId', optionalAuth, async (req, res) => {
+router.put('/:charId', requireAuth, async (req, res) => {
   try {
     const character = await RegistryCharacter.findByPk(req.params.charId);
     if (!character) {
@@ -289,7 +284,7 @@ router.put('/:charId', optionalAuth, async (req, res) => {
 /* ═══════════════════════════════════════════════════════════════════════════════
    POST /:charId/generate — Generate all 10 dimensions via Claude
    ═══════════════════════════════════════════════════════════════════════════════ */
-router.post('/:charId/generate', optionalAuth, async (req, res) => {
+router.post('/:charId/generate', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const character = await RegistryCharacter.findByPk(req.params.charId, {
       include: [{ model: CharacterRegistry, as: 'registry' }],
@@ -330,7 +325,7 @@ router.post('/:charId/generate', optionalAuth, async (req, res) => {
 /* ═══════════════════════════════════════════════════════════════════════════════
    POST /:charId/generate/:dimension — Generate a single dimension
    ═══════════════════════════════════════════════════════════════════════════════ */
-router.post('/:charId/generate/:dimension', optionalAuth, async (req, res) => {
+router.post('/:charId/generate/:dimension', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { charId, dimension } = req.params;
     const fields = DIMENSION_FIELDS[dimension];
@@ -381,7 +376,7 @@ router.post('/:charId/generate/:dimension', optionalAuth, async (req, res) => {
 /* ═══════════════════════════════════════════════════════════════════════════════
    POST /:charId/confirm — Accept proposed values and write to DB
    ═══════════════════════════════════════════════════════════════════════════════ */
-router.post('/:charId/confirm', optionalAuth, async (req, res) => {
+router.post('/:charId/confirm', requireAuth, async (req, res) => {
   try {
     const character = await RegistryCharacter.findByPk(req.params.charId);
     if (!character) {
