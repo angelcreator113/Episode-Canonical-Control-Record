@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const db = require('../models');
 
 /**
  * Get or create show configuration
  * GET /api/v1/shows/:showId/config
  */
-router.get('/:showId/config', optionalAuth, async (req, res) => {
+router.get('/:showId/config', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
 
@@ -39,7 +39,7 @@ router.get('/:showId/config', optionalAuth, async (req, res) => {
  * Update show configuration
  * PUT /api/v1/shows/:showId/config
  */
-router.put('/:showId/config', optionalAuth, async (req, res) => {
+router.put('/:showId/config', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const updates = req.body;
@@ -63,7 +63,7 @@ router.put('/:showId/config', optionalAuth, async (req, res) => {
  * Get show template
  * GET /api/v1/shows/:showId/template
  */
-router.get('/:showId/template', optionalAuth, async (req, res) => {
+router.get('/:showId/template', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
 
@@ -87,7 +87,7 @@ router.get('/:showId/template', optionalAuth, async (req, res) => {
  * Create or update script template
  * POST /api/v1/shows/:showId/template
  */
-router.post('/:showId/template', optionalAuth, async (req, res) => {
+router.post('/:showId/template', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { name, template_content, variables, scene_structure } = req.body;
@@ -112,7 +112,7 @@ router.post('/:showId/template', optionalAuth, async (req, res) => {
  * Generate AI suggestions for episode
  * POST /api/v1/episodes/:episodeId/script-suggestions
  */
-router.post('/:episodeId/script-suggestions', optionalAuth, async (req, res) => {
+router.post('/:episodeId/script-suggestions', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { template_id } = req.body;
@@ -203,7 +203,7 @@ router.post('/:episodeId/script-suggestions', optionalAuth, async (req, res) => 
  * Generate script from template
  * POST /api/v1/templates/:templateId/generate
  */
-router.post('/:templateId/generate', optionalAuth, async (req, res) => {
+router.post('/:templateId/generate', requireAuth, async (req, res) => {
   try {
     const { templateId } = req.params;
     const { episode_id: _episode_id, variables } = req.body;
@@ -245,7 +245,7 @@ router.post('/:templateId/generate', optionalAuth, async (req, res) => {
  * Parse scenes from script content
  * POST /api/v1/scripts/:scriptId/parse-scenes
  */
-router.post('/:scriptId/parse-scenes', optionalAuth, async (req, res) => {
+router.post('/:scriptId/parse-scenes', requireAuth, async (req, res) => {
   try {
     const { scriptId } = req.params;
     const { parseScriptScenes } = require('../utils/scriptParser');
