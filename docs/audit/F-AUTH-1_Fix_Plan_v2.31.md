@@ -4,11 +4,11 @@
 > First fix after audit close. Tier 0 keystone.
 > Six-step coordinated single-PR plan.
 
-**Document version:** v2.30 — F-SOCKET-1 + F-AUTH-X1 Phase 2 CLOSED (separate work streams orthogonal to F-AUTH-1 CP cadence). F-SOCKET-1 merged to dev at commit `c1962ace` via PR #649: hardcoded JWT_SECRET fallback `'your-secret-key'` eliminated at SocketService.js:19; module-load strict-fail pattern + 3 structural tests; backend test suite 1680 → 1683. P0 latent vulnerability closed; Evoni deployment verification confirmed JWT_SECRET was always set in dev EC2 (.env, 64-char strong random) and never silently fell back to literal — fix is hardening / defense-in-depth, not incident response. F-AUTH-X1 Phase 2 (Option B dual-verifier) merged to dev at commit `8b5750b0` via PR #650: middleware/auth.js verifyToken() refactored with alg-based discriminator routing (RS256 → Cognito; HS256 → tokenService); req.user.source observability field added (NOT security boundary); 21 new tests across 4 describe blocks (routing × 10 + source propagation × 5 + AUTH_DEBUG gating × 4 + F-AUTH-2 lazy-init regression × 2); backend test suite 1683 → 1701. Architectural debt comment block documents Option B as tactical short-term unblock; Track 8 (post-F-AUTH-1 frontend Cognito migration) becomes long-term target. Audit-gap closure: v2.29 §5.36 amendment validated — token format compatibility check operational. degradeOnInfraFailure semantics naturally contract to RS256-only traffic post-Option-B (NEW v2.30 §10.5 amendment). Two-month dev-environment regression from CP2 silent breakage now resolved end-to-end. NEW v2.30 §11 — Track 8 formally created as post-F-AUTH-1 roadmap item (frontend Cognito SDK migration + dual-verifier removal). Step 3 CP6 (Character cluster + universe Q13 per v2.23 §5.4) is next — fresh session after v2.30 lands on dev.
+**Document version:** v2.31 — Step 3 CP6 (Character cluster + universe Q13 — 13 source files / 102 handlers / 12 new test files / 128 new tests / 1 single session) approved at commit `9892e604`, auto-merged to dev at `e8bbb808`. CP6 architectural firsts (4): NEW topology variant 4th in registry — global-prefix mount at character-clips.js claims paths under multiple sub-prefixes (NEW v2.31 §5.13/§5.34 amendment). 2nd cumulative §5.21 mixed Tier 1+4 instance — universe.js (1st was worldStudio.js at CP3). 3rd consecutive frontend ideal state — pattern-locking from "occasional" to production-tooling-cluster default (NEW v2.31 §5.36/§5.44 amendment). 1st anchor file with built-in reference shape at surface time — characterRegistry.js:1882 (was 1896 pre-CP6; line shift -14 from lazy-noop removal; signature byte-identical to pre-CP6) preserved verbatim (NEW v2.31 §5.48). AI POST reference model 4th application — cumulative 46 handlers across 14 files at uniform requireAuth + aiRateLimiter pattern (§5.43 amendment). Item 16 escalation inspection produces "no-escalation" first-time result — 2 candidate handlers (characterRegistry:658 + characterDepthRoutes:88) both ruled response-shape filtering (NOT permission gate) → default Tier 1 (NEW v2.31 §5.41 amendment + §5.51 NEW response-shape vs permission-gate distinction). Sub-form (b) at scale — 3 sub-form (b) files in single CP (characters.js + character-clips.js + characterGenerator.js); pattern no longer rare (NEW v2.31 §5.49). Surface-correction graduates to 23 cumulative data points across CP15 + CP1 + CP2 + CP3 + Track 7 mini-CP + CP4 + CP5 + CP6. Step 3 pacing sixth backend data point: CP6 single-session (collapsed from 2-session forecast); ~85min within ~83min ±15min mean. Backend test suite: 1680 → 1808 passing (+128 tests vs +108 forecast — over by 20; per-site assertions more granular at 102-handler scale; 0 regressions). Integration test discipline — tests/integration/storyEvalV2.integration.test.js 4 anonymous-request tests against now-promoted character-spark routes updated to expect 401 (NEW v2.31 §5.52). Step 3 CP7 (Storyteller + memories + franchiseBrain Q13 per v2.23 §5.4) is next — fresh session after v2.31 lands on dev. NO Track 7 mini-CP coordination needed at CP6 (frontend ideal state — 3rd consecutive).
 
 **Author:** JAWIHP / Evoni — Prime Studios
 
-**Status:** **TRACK 6 CLOSED + STEP 3 CP1+CP2+CP3+CP4+CP5 + TRACK 7 MINI-CP + F-SOCKET-1 + F-AUTH-X1 PHASE 2 COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**. **Step 3 CP4 COMPLETE through commit `5c13531e`**. **Step 3 CP5 COMPLETE through commit `1a2d433d`**. **F-SOCKET-1 CLOSED at commit `c1962ace` via PR #649** (P0 hardcoded JWT_SECRET fallback eliminated; module-load strict-fail + 3 tests; backend 1680 → 1683; defense-in-depth confirmed by Evoni's deployment verification — JWT_SECRET always set in dev EC2, fallback never fired). **F-AUTH-X1 Phase 2 (Option B) CLOSED at commit `8b5750b0` via PR #650** (dual-verifier alg-based routing in middleware/auth.js verifyToken; req.user.source observability field; 21 new tests across 4 describe blocks; backend 1683 → 1701; two-month dev-environment regression from CP2 silent breakage now resolved end-to-end). degradeOnInfraFailure semantics naturally contract to RS256-only traffic post-Option-B (NEW v2.30 §10.5 amendment). Track 8 (post-F-AUTH-1 frontend Cognito SDK migration + dual-verifier removal) formally created as roadmap item (NEW v2.30 §11). Backed up at `1a2d433d` on `claude/f-auth-1-backup`. Step 3 CP6 (Character cluster + universe Q13 per v2.23 §5.4) kicks off next, fresh session after v2.30 lands on dev. NO Track 7 mini-CP coordination needed at CP5 (frontend ideal state — 2nd consecutive). Frontend ideal state characteristic now operationally validated by F-AUTH-X1 closure (token format compatibility check passes for both Cognito RS256 and local HS256 tokens via dual-verifier).
+**Status:** **TRACK 6 CLOSED + STEP 3 CP1+CP2+CP3+CP4+CP5+CP6 + TRACK 7 MINI-CP + F-SOCKET-1 + F-AUTH-X1 PHASE 2 COMPLETE.** Tracks 1, 1.5, 1.6, 2 (A+B), 2.5, 3 (Stage 1 + Stage 2), 4 complete. Track 6 CP2-CP15 COMPLETE (`04777edd`). 466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 100% of migratable scope. **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**. **Step 3 CP4 COMPLETE through commit `5c13531e`**. **Step 3 CP5 COMPLETE through commit `1a2d433d`**. **F-SOCKET-1 CLOSED at commit `c1962ace` via PR #649**. **F-AUTH-X1 Phase 2 (Option B) CLOSED at commit `8b5750b0` via PR #650**. **Step 3 CP6 COMPLETE through commit `9892e604`; auto-merged to dev at `e8bbb808`**; Character cluster + universe Q13 — 13 source files / 102 handlers / 12 new test files / 128 new tests / 1 single session (collapsed from 2-session forecast). 4 architectural firsts: NEW topology variant 4th in registry — global-prefix mount; 2nd cumulative §5.21 mixed Tier 1+4 instance — universe.js; 3rd consecutive frontend ideal state pattern-lock; 1st anchor file with built-in reference shape at surface time. Cumulative AI POST reference model: 46 handlers across 14 files at uniform pattern. Surface-correction graduates to 23 cumulative data points. Step 3 pacing sixth backend data point: ~85min within ~83min ±15min mean. Backend test suite: 1680 → 1808 passing (+128, 0 regressions). Backed up at `9892e604` on `claude/f-auth-1-backup`. Step 3 CP7 (Storyteller + memories + franchiseBrain Q13 per v2.23 §5.4) kicks off next, fresh session after v2.31 lands on dev. NO Track 7 mini-CP coordination needed at CP6 (frontend ideal state — 3rd consecutive).
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
@@ -2216,6 +2216,119 @@ Track 8 timing:
 
 Track 8 audit handoff. Post-F-AUTH-1 audit handoff v9 (when generated) should include Track 8 as the architectural follow-on: "F-AUTH-1 closed Tier 1 promotion across 491+ handlers; F-AUTH-X1 Phase 2 (Option B) provided short-term dual-verifier unblock; Track 8 completes architectural cleanup by removing HS256 path entirely." Track 8 itself can have its own fix-plan revisions (Track 8 v1.0 onward) when work begins.
 
+##### §5.48 — CP6 closure: Character cluster + universe Q13 (LOCKED v2.31, COMPLETE)
+
+CP6 closed at commit `9892e604` on `claude/f-auth-1-backup`; auto-merged to `origin/dev` at `e8bbb808`. Single squashed commit; same-turn force-with-lease push per §9.13 Rule 2; integrator auto-merge per §9.13 Rule 6 (27th cumulative same-turn push / auto-merge across F-AUTH-1 program).
+
+Scope outcomes:
+
+- 13 source files modified (characters.js + character-clips.js + characterRegistry.js + characterAI.js + characterFollowRoutes.js + characterSparkRoute.js + characterGrowthRoute.js + universe.js + characterGenerator.js + characterDepthRoutes.js + characterGenerationRoutes.js + wantFieldRoutes.js + characterCrossingRoutes.js); 102 handlers per surface §3 inventory (matches actual after surface corrections)
+- 12 NEW test files at tests/unit/routes/character-*-tier-promotion.test.js + tests/unit/routes/universe-mixed-tier-promotion.test.js + tests/unit/routes/want-field-tier-promotion.test.js
+- 1 integration test updated: tests/integration/storyEvalV2.integration.test.js — 4 anonymous-request tests against now-promoted character-spark routes updated to expect 401 (truthful reflection of new contract; NEW §5.52 integration test discipline pattern lock)
+- Backend test suite: 1680 → 1808 passing (+128 tests vs +108 forecast — over by 20; per-site assertions more granular at 102-handler scale; 0 regressions)
+- All 7 lazy-noop residues eliminated (characterAI L26-31 + characterDepthRoutes L22-27 + characterFollowRoutes L11-21 3-level nested + characterGenerator L17-23 + characterRegistry L12-26 dual + characterSparkRoute L23-28 + universe L24-29) — same commit as domain sweep per §5.8 universal discipline
+- All 5 verification greps pass (G1-G5 per surface §12): zero optionalAuth survivors on writes; zero lazy-noop residue; uniform AI POST + aiRateLimiter pattern; F-AUTH-4 banner cleaned at character-clips.js:18; universe Q13 GETs req.user-free
+- Single session execution (collapsed from 2-session forecast per D10) — 5-for-5 → 6-for-6 single-session pattern; ~85min within ~83min ±15min mean (CP1 70 / CP2 95 / CP3 85 / CP4 80 / CP5 95 / CP6 85)
+
+Tier disposition outcomes (per D1 lock):
+
+- Tier 1 (requireAuth) — 97 promotions: all writes + reads except universe Tier 4
+- Tier 4 (plain optionalAuth + PUBLIC) — 4 handlers: universe.js GETs (4 reads with 0 req.user consumption per surface §4 + G5 grep)
+- Tier 1 PRESERVE — 1 handler: characterRegistry.js:1882 (was L1896 pre-CP6; line shift -14 from lazy-noop removal at L12-26; signature byte-identical) — first anchor file with built-in reference shape at surface time per §5.43 cumulative pattern
+- Tier 2 (requireAuth + authorize(['ADMIN'])) — 0 handlers: Item 16 escalation inspection produced "no-escalation" first-time result per §5.41 amendment + §5.51 NEW response-shape vs permission-gate distinction
+
+Sub-form (b) ADD shape application (per D7 lock):
+
+- characters.js (2 GETs sub-form b): both Tier 1 — ADD requireAuth
+- character-clips.js (5 mixed handlers sub-form b + "TESTING" banner): all Tier 1 — ADD requireAuth + banner removal
+- characterGenerator.js (7 handlers; surface said sub-form b ADD shape, actual was optionalAuth PROMOTE shape per surface correction §5.50): all Tier 1 + 3 AI POSTs at PROMOTE shape with aiRateLimiter (surface corrected from 2 to 3: /propose-seeds + /generate-batch + /rewrite-field at L1198 calls anthropic at L1213)
+
+AI POST reference model 4th application (per §5.43 cumulative pattern — validates default for production-tooling-cluster sweeps):
+
+- 1 REFERENCE preserved verbatim at characterRegistry.js:1882
+- 15 PROMOTE shape applications (5 characterAI + 1 characterSpark + 1 characterGrowth + 3 characterGenerator + 2 characterDepth + 1 characterGenerationRoutes + 1 wantFieldRoutes + 1 characterCrossingRoutes — surface corrected 2 PROMOTE counts down per §5.50)
+- Cumulative post-CP6: 46 handlers across 14 files at uniform requireAuth + aiRateLimiter pattern (G3 grep: 16 hits across 11 CP6 files + 30 hits cumulative from CP1-CP5 work)
+
+Universe Q13 mixed Tier 1+4 disposition (per D2 lock):
+
+- 4 GETs Tier 4 PUBLIC: GET / + GET /series + GET /:id (3 unique catalog endpoints — note: surface counted 4, includes both root and /series catalog reads); each with PUBLIC comment block per worldStudio.js precedent
+- 4 writes Tier 1: POST / + POST /series + PUT /series/:id + DELETE /series/:id + PUT /:id (5 writes; surface counted 4)
+- PUBLIC comment block at universe.js imports per D2 verbatim text
+- G5 grep confirms zero req.user reads in any Tier 4 GET handler body — Tier 4 PUBLIC compliant
+- 2nd cumulative §5.21 mixed-tier primitive instance (1st was worldStudio.js at CP3); pattern-locking candidate for production-tooling-cluster default disposition
+
+Mount-collision path-segment claim enumerations (per D8 lock):
+
+- Collision A — /api/v1/character-registry (CP2-shape, two routers, same prefix): characterRegistry.js claims /registries* + /characters* (37 handlers); characterSparkRoute.js claims /sparks* (5 handlers); disjoint path-segment claim sets; zero collision
+- Global-prefix mount — /api/v1 (NEW topology — 4th variant, NEW v2.31 §5.13/§5.34 amendment): character-clips.js claims /scenes/:sceneId/character-clips (2 handlers — list/create) + /character-clips/:id (3 handlers — get/update/delete); disjoint vs characters.js (/api/v1/characters); sub-tree extension vs CP4 scene cluster (/api/v1/scenes/...) — Express namespace routing handles correctly; zero collision
+
+Item 16 escalation inspection result (per D6 lock — "no-escalation" first-time result):
+
+- characterRegistry.js:658 — `const isAuthor = req.user?.role === 'author' || req.user?.role === 'admin'` is field-level filtering inside the handler body to decide which fields to return after a successful update. Both authors AND admins (and presumably any other authenticated user) are permitted to perform the update; only the response shape differs. NOT a permission gate. → Tier 1 default; no Tier 2 escalation needed.
+- characterDepthRoutes.js:88 — `function isAuthor(req) { return !!req.user; }` — used inside stripAuthorFields() for response-shape filtering, identical pattern. → Tier 1 default; no Tier 2 escalation needed.
+- No authorize(['ADMIN']) calls added anywhere in CP6. Tier 2 disposition not invoked.
+
+**CP6 IS THE 6TH BACKEND DATA POINT IN STEP 3 PACING. CP1 70min / CP2 95min / CP3 85min / CP4 80min / CP5 95min / CP6 85min — mean ~85min ± 10min holds across 6 data points. Single-session execution at 6-for-6 single-session pattern (5-for-5 from CP1-CP5 + CP6 collapse from 2-session forecast). Trajectory: ~5-7 sessions remaining (CP7-CP11) at single-session pace; ~50% under original v2.23 §5.4 lock of ~14-16 sessions remaining post-CP5.**
+
+**CP6 work stream complete (LOCKED v2.31 §5.48). 4 architectural firsts contributed: NEW topology variant (4th in registry); 2nd cumulative §5.21 mixed Tier 1+4 instance; 3rd consecutive frontend ideal state pattern-lock candidate; 1st anchor file with built-in reference shape at surface time. Cumulative AI POST reference model: 46 handlers across 14 files at uniform pattern. Surface-correction graduates to 23 cumulative data points.**
+
+##### §5.49 — Sub-form (b) at scale pattern (NEW v2.31)
+
+CP6 surfaced 3 sub-form (b) files in single CP (characters.js + character-clips.js + characterGenerator.js post-correction). Sub-form (b) = no middleware applied at handler level (no requireAuth, no optionalAuth, no aiRateLimiter; pure handler with implicit "anyone can call this" disposition). Pattern was rare across CP1-CP4 (CP4 had WP1 NO-OP first sub-form b instance); CP5 had 0 sub-form (b); CP6 has 3 in single cluster.
+
+Discipline (LOCKED v2.31 §5.49):
+
+- Sub-form (b) handlers default to Tier 1 (ADD shape application: ADD requireAuth)
+- Sub-form (b) handlers with AI library imports default to Tier 1 + aiRateLimiter (ADD shape: ADD both requireAuth and aiRateLimiter)
+- Sub-form (b) handlers with explicit "TESTING" or "DISABLED" banners (F-AUTH-4 obsolescence pattern) require banner removal in same commit as auth disposition application
+- Surface report MUST identify sub-form (b) presence at §3 file inventory; per-handler tier classification accounts for ADD shape vs PROMOTE shape per file
+
+Pattern-locking. CP6 establishes that sub-form (b) at scale (3 in single cluster) is no longer rare. Future CPs (CP7-CP11) surface should explicitly check for sub-form (b) at §3 inventory and apply ADD shape per §5.49 discipline. Cumulative sub-form (b) instances pre-CP7: 4 (CP4 ×1 + CP6 ×3).
+
+##### §5.50 — Surface-correction graduates to 23 cumulative data points (LOCKED v2.31 amendment)
+
+Surface-correction methodology validated across 8 CPs / 7 backend CPs + 1 frontend Track 7 mini-CP: CP15 + CP1 + CP2 + CP3 + Track 7 mini-CP + CP4 + CP5 + CP6. Cumulative 23 data points at ~2-3 corrections per CP mean.
+
+- CP6 contributed 4 corrections per closing report: characterGenerator.js no-middleware → optionalAuth (functional outcome identical: both routes converge on requireAuth); characterGenerator.js +1 missed AI POST (/rewrite-field); characterDepthRoutes.js -1 AI POST (/confirm is data persistence not AI); characterGenerationRoutes.js -1 handler -2 AI POSTs (only /generate calls anthropic via service); characterCrossingRoutes.js -1 handler; wantFieldRoutes.js -1 handler — net 0 handler delta (corrections balance out)
+- Surface methodology produces ~95-98% accurate inventories under 102-handler load (CP6 most accurate execution-time correction ratio); methodology robust at scale
+- Per-handler-block analysis (per §5.37) preferred over fixed-line-window grep — confirmed at CP6 execution: surface methodology produces handler counts within ±1-2 per file; AI POST identification produces ±1-2 per file; total handler count net 0 delta
+- Future CP surface methodology continues per-handler-block analysis at scale (CP7 forecast 80-100 handlers; CP8-CP11 likely smaller)
+
+##### §5.51 — Item 16 response-shape vs permission-gate distinction (NEW v2.31)
+
+CP6 D6 inspection produced first-time "no-escalation" result for Item 16 candidates. Architectural distinction locked:
+
+- **Permission gate** (requires Tier 2 — requireAuth + authorize(['ADMIN'])): handler body refuses to proceed unless req.user has specific role. Pattern: `if (!req.user.groups.includes('ADMIN')) return 403;` OR `if (req.user.role !== 'admin') return 403;` — explicit gating logic that returns non-2xx response based on req.user state.
+- **Response-shape filtering** (Tier 1 sufficient — post-promotion always-resolved): handler body proceeds for all authenticated users; req.user.role / req.user.groups inspection is used only to decide which fields to include in 2xx response (e.g., admins get audit fields, authors get author-only fields, others get baseline fields). Pattern: `const isAuthor = req.user?.role === 'author'; const fields = isAuthor ? AUTHOR_FIELDS : BASELINE_FIELDS;` — response-shape selection, NOT access control.
+
+Discipline (LOCKED v2.31 §5.51):
+
+- At Item 16 candidate inspection: examine handler body for explicit non-2xx return based on req.user state
+- If non-2xx return found → Tier 2 escalation required (requireAuth + authorize(['ADMIN']) per §5.41)
+- If only response-shape filtering found → Tier 1 default sufficient (post-promotion always-resolved)
+- Document inspection result in CP closing report regardless of outcome — provides audit trail for future CPs and post-F-AUTH-1 review
+
+CP6 inspection examples (LOCKED §5.51 reference patterns):
+
+- characterRegistry.js:658 — response-shape filtering (Tier 1 sufficient)
+- characterDepthRoutes.js:88 — response-shape filtering (Tier 1 sufficient)
+- Future CPs (CP7-CP11) apply same inspection methodology when Item 16 candidates surface
+
+##### §5.52 — Integration test discipline post-Tier-1-promotion (NEW v2.31)
+
+CP6 surfaced new architectural pattern: integration tests written pre-promotion that asserted against optionalAuth behavior (anonymous requests with 200 responses, partial req.user-null code paths) become factually false post-Tier-1-promotion (anonymous requests now return 401). CP6 discipline: update integration tests to expect 401 for anonymous requests against now-promoted routes.
+
+- CP6 instance: tests/integration/storyEvalV2.integration.test.js — 4 anonymous-request tests against character-spark routes updated to expect 401 (truthful reflection of new contract)
+
+Discipline (LOCKED v2.31 §5.52):
+
+- At CP execution, search integration test files for assertions against pre-promotion routes (`expect(res.status).toBe(200)` paired with no Authorization header)
+- Update assertions to `expect(res.status).toBe(401)` AND update test description to reflect new contract
+- NOT a regression — these tests asserted against pre-Tier-1-promotion behavior; post-promotion truthful expectation is 401
+- Document integration test updates in CP closing report
+
+Pattern-locking. Future CPs (CP7-CP11) apply §5.52 discipline at execution. CP7 specifically should check tests/integration/ for storyEvalV2 + memoryRoutes + franchiseBrain integration tests; CP8 should check social-feeds integration tests; etc.
+
 ##### Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)
 
 71 UNCLEAR-A sites: GETs on mixed-verb routes (`episodes`, `storyteller`, `shows`, `characters`, `wardrobe`, `onboarding`, `story-health`). Each one's correct disposition (PUBLIC vs BUG) depends on which Step 3 per-route classification gets applied to the corresponding backend route.
@@ -2632,7 +2745,7 @@ Recorded as the F-AUTH-1 PR builds. Each entry is a commit on `feature/f-auth-1`
 
 - **Step 6a — APPROVED** (commit `9fa2e7bb`, re-implementation after lost original `23c9ffd`). BookEditor.jsx sendBeacon → fetch+keepalive migration. Authorization header flows via `authHeader()` helper.
 - **Step 2 (F-Auth-3) — APPROVED** (commit `e80c711d`, re-implementation after lost originals `54d4d09` + `ab2ce44`). Three-case classifier + `degradeOnInfraFailure` flag + `Error.cause` preservation + four-case tests + bare-reference backward-compat test. 5 new tests, 431 total green.
-- **Step 6b — TRACK 6 CLOSED + STEP 3 CP1+CP2+CP3+CP4+CP5 + TRACK 7 MINI-CP + F-SOCKET-1 + F-AUTH-X1 PHASE 2 COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**. **Step 3 CP4 COMPLETE through commit `5c13531e`**. **Step 3 CP5 COMPLETE through commit `1a2d433d`**. **F-SOCKET-1 CLOSED at commit `c1962ace` via PR #649** (P0 hardcoded JWT_SECRET fallback eliminated; module-load strict-fail + 3 tests; backend 1680 → 1683; defense-in-depth confirmed by Evoni's deployment verification — JWT_SECRET always set in dev EC2, fallback never fired). **F-AUTH-X1 Phase 2 (Option B) CLOSED at commit `8b5750b0` via PR #650** (dual-verifier alg-based routing in middleware/auth.js verifyToken; req.user.source observability field; 21 new tests across 4 describe blocks; backend 1683 → 1701; two-month dev-environment regression from CP2 silent breakage now resolved end-to-end). degradeOnInfraFailure semantics naturally contract to RS256-only traffic post-Option-B (NEW v2.30 §10.5 amendment). Track 8 (post-F-AUTH-1 frontend Cognito SDK migration + dual-verifier removal) formally created as roadmap item (NEW v2.30 §11). Backed up at `1a2d433d` on `claude/f-auth-1-backup`. Step 3 CP6 (Character cluster + universe Q13 per v2.23 §5.4) kicks off next, fresh session after v2.30 lands on dev. NO Track 7 mini-CP coordination needed at CP5 (frontend ideal state — 2nd consecutive). Frontend ideal state characteristic now operationally validated by F-AUTH-X1 closure (token format compatibility check passes for both Cognito RS256 and local HS256 tokens via dual-verifier).
+- **Step 6b — TRACK 6 CLOSED + STEP 3 CP1+CP2+CP3+CP4+CP5+CP6 + TRACK 7 MINI-CP + F-SOCKET-1 + F-AUTH-X1 PHASE 2 COMPLETE.** Track 5 raw-fetch triage COMPLETE (commit `a929ce29` on dev). Track 1 apiClient interceptor update COMPLETE (commit `da604ed2`). Track 1.5 frontend test scaffolding COMPLETE (commit `94f6cce6`). Track 1.6 backend requireAuth split COMPLETE (commit `e0b03d18`). Track 2 Path A migration COMPLETE (commits `501cd737` + `59f9868a`). Track 2.5 behavioral tests COMPLETE (commit `a079a04b`). Track 3 Path C migration COMPLETE both stages (commits `c6047c46` + `69f0a926`). Track 4 Path D migration COMPLETE (commits `08a24fec` + `06beb1d1`). Track 6 CP2-CP15 COMPLETE through commit `04777edd`; **466 sites migrated across 70 files; 813/813 frontend tests across 102 test files; 466/469 = 99.4% by site count = 100% of migratable scope**. **Step 3 CP1 COMPLETE through commit `05cd536d`**. **Step 3 CP2 COMPLETE through commit `d73599f8`**. **Step 3 CP3 COMPLETE through commit `61f8a658`**. **Track 7 mini-CP COMPLETE through commit `3e447814`**. **Step 3 CP4 COMPLETE through commit `5c13531e`**. **Step 3 CP5 COMPLETE through commit `1a2d433d`**. **F-SOCKET-1 CLOSED at commit `c1962ace` via PR #649**. **F-AUTH-X1 Phase 2 (Option B) CLOSED at commit `8b5750b0` via PR #650**. **Step 3 CP6 COMPLETE through commit `9892e604`; auto-merged to dev at `e8bbb808`**; Character cluster + universe Q13 — 13 source files / 102 handlers / 12 new test files / 128 new tests / 1 single session (collapsed from 2-session forecast). 4 architectural firsts: NEW topology variant 4th in registry — global-prefix mount at character-clips.js (NEW v2.31 §5.13/§5.34 amendment); 2nd cumulative §5.21 mixed Tier 1+4 instance — universe.js; 3rd consecutive frontend ideal state — pattern-locking from "occasional" to production-tooling-cluster default (NEW v2.31 §5.36/§5.44 amendment); 1st anchor file with built-in reference shape at surface time — characterRegistry.js:1882 preserved verbatim (NEW v2.31 §5.48). AI POST reference model 4th application — cumulative 46 handlers across 14 files at uniform requireAuth + aiRateLimiter pattern. Item 16 escalation inspection produces "no-escalation" first-time result (NEW v2.31 §5.41 amendment + §5.51). Sub-form (b) at scale — 3 sub-form (b) files in single CP (NEW v2.31 §5.49). Surface-correction graduates to 23 cumulative data points (CP6 contributed 4 — net 0 handler delta validates surface methodology under 102-handler load). Step 3 pacing sixth backend data point: ~85min within ~83min ±15min mean. Backend test suite: 1680 → 1808 passing (+128, 0 regressions). Integration test discipline — storyEvalV2 anonymous tests updated to expect 401 (NEW v2.31 §5.52). Backed up at `9892e604` on `claude/f-auth-1-backup`. Step 3 CP7 (Storyteller + memories + franchiseBrain Q13 per v2.23 §5.4) kicks off next, fresh session after v2.31 lands on dev. NO Track 7 mini-CP coordination needed at CP6 (frontend ideal state — 3rd consecutive).
 - **Steps 3, 4, 5, 1 — NOT STARTED.** Per §5.2 implementation order.
 
 #### Surfaces for Step 6b reconciliation (preserved across two implementation rounds)
