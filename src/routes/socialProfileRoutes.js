@@ -15,13 +15,14 @@ const express   = require('express');
 const router    = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+// F-AUTH-1 Step 3 CP8: mixed Tier 1+4 within single file (per v2.32 §5.21,
+// 4th cumulative instance after worldStudio.js @ CP3 + universe.js @ CP6 +
+// franchiseBrainRoutes.js @ CP7). 3 GETs are public catalog reads (no req.user
+// consumption); 36 handlers are Tier 1. Custom middlewares preserved per
+// §5.55: guardJustAWomanRecord (8 handlers — record-content gate);
+// generateRateLimits (POST /generate — IP-rate-limit alongside aiRateLimiter).
+const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -292,7 +293,7 @@ function checkRateLimit(req, res) {
 // ── POST /generate ───────────────────────────────────────────────────────────
 // Three inputs + optional advanced context → full profile generated
 // Supports feed_layer: 'real_world' (default) or 'lalaverse'
-router.post('/generate', optionalAuth, async (req, res) => {
+router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   if (!checkRateLimit(req, res)) return;
   const {
     handle, platform, vibe_sentence, series_id,
@@ -1158,7 +1159,7 @@ router.get('/', optionalAuth, async (req, res) => {
 
 // ── POST /bulk/finalize ──────────────────────────────────────────────────────
 // Finalize multiple profiles at once
-router.post('/bulk/finalize', optionalAuth, async (req, res) => {
+router.post('/bulk/finalize', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -1182,7 +1183,7 @@ router.post('/bulk/finalize', optionalAuth, async (req, res) => {
 
 // ── POST /bulk/cross ─────────────────────────────────────────────────────────
 // Cross (promote) multiple finalized profiles at once
-router.post('/bulk/cross', optionalAuth, async (req, res) => {
+router.post('/bulk/cross', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -1206,7 +1207,7 @@ router.post('/bulk/cross', optionalAuth, async (req, res) => {
 
 // ── POST /bulk/archive ───────────────────────────────────────────────────────
 // Archive multiple profiles at once
-router.post('/bulk/archive', optionalAuth, async (req, res) => {
+router.post('/bulk/archive', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -1230,7 +1231,7 @@ router.post('/bulk/archive', optionalAuth, async (req, res) => {
 
 // ── POST /bulk/delete ────────────────────────────────────────────────────────
 // Delete multiple profiles at once
-router.post('/bulk/delete', optionalAuth, async (req, res) => {
+router.post('/bulk/delete', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -1252,7 +1253,7 @@ router.post('/bulk/delete', optionalAuth, async (req, res) => {
 
 // ── GET /export ──────────────────────────────────────────────────────────
 // Export profiles as JSON or CSV (must be before /:id to avoid route conflict)
-router.get('/export', optionalAuth, async (req, res) => {
+router.get('/export', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { format, feed_layer, status } = req.query;
   try {
@@ -1302,7 +1303,7 @@ router.get('/:id/followers', optionalAuth, async (req, res) => {
 
 // ── POST /:id/followers ──────────────────────────────────────────────────────
 // Add or update a character following this profile
-router.post('/:id/followers', optionalAuth, async (req, res) => {
+router.post('/:id/followers', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { character_key, character_name, follow_context, emotional_reaction, influence_type, influence_level } = req.body;
   if (!character_key || !character_name) {
@@ -1328,7 +1329,7 @@ router.post('/:id/followers', optionalAuth, async (req, res) => {
 
 // ── DELETE /:id/followers/:characterKey ───────────────────────────────────────
 // Remove a character from following this profile
-router.delete('/:id/followers/:characterKey', optionalAuth, async (req, res) => {
+router.delete('/:id/followers/:characterKey', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileFollower) return res.status(501).json({ error: 'SocialProfileFollower model not available' });
   try {
@@ -1342,7 +1343,7 @@ router.delete('/:id/followers/:characterKey', optionalAuth, async (req, res) => 
 });
 
 // ── POST /:id/finalize ──────────────────────────────────────────────────────
-router.post('/:id/finalize', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+router.post('/:id/finalize', requireAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -1356,7 +1357,7 @@ router.post('/:id/finalize', optionalAuth, guardJustAWomanRecord, async (req, re
 
 // ── POST /:id/cross ─────────────────────────────────────────────────────────
 // Promotes a social profile into a world character — auto-creates RegistryCharacter
-router.post('/:id/cross', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+router.post('/:id/cross', requireAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { crossing_note, registry_id } = req.body;
   try {
@@ -1443,7 +1444,7 @@ router.post('/:id/cross', optionalAuth, guardJustAWomanRecord, async (req, res) 
 
 // ── PUT /:id ─────────────────────────────────────────────────────────────────
 // Update editable fields on a profile
-router.put('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+router.put('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -1489,7 +1490,7 @@ router.put('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
 });
 
 // PATCH /:id — partial update (same logic as PUT, supports frontend PATCH calls)
-router.patch('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+router.patch('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -1536,7 +1537,7 @@ router.patch('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
 
 // ── POST /:id/regenerate ──────────────────────────────────────────────────
 // Re-generate a profile using the same handle/platform/vibe (or overrides)
-router.post('/:id/regenerate', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+router.post('/:id/regenerate', requireAuth, aiRateLimiter, guardJustAWomanRecord, async (req, res) => {
   if (!checkRateLimit(req, res)) return;
   const db = req.app.locals.db || require('../models');
   try {
@@ -1643,7 +1644,7 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
 
 // ── POST /:id/crossing-preview ───────────────────────────────────────────
 // Preview what the crossing would create without actually creating it
-router.post('/:id/crossing-preview', optionalAuth, async (req, res) => {
+router.post('/:id/crossing-preview', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -1683,7 +1684,7 @@ router.post('/:id/crossing-preview', optionalAuth, async (req, res) => {
 
 // ── DELETE /:id ──────────────────────────────────────────────────────────────
 // Permanently delete a profile
-router.delete('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+router.delete('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -1697,7 +1698,7 @@ router.delete('/:id', optionalAuth, guardJustAWomanRecord, async (req, res) => {
 
 // ── POST /:id/add-moment ─────────────────────────────────────────────────────
 // Add a new encounter moment to the moment log
-router.post('/:id/add-moment', optionalAuth, async (req, res) => {
+router.post('/:id/add-moment', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
@@ -1720,7 +1721,7 @@ router.post('/:id/add-moment', optionalAuth, async (req, res) => {
 // justawoman_mirror, mirror_proposed_by_amber) are withheld here.
 // Those fields are available only to the evaluation agent via storyEvaluationRoutes.
 // See DEV-030: author-knowledge injection split.
-router.get('/:id/scene-context', optionalAuth, async (req, res) => {
+router.get('/:id/scene-context', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const p = await db.SocialProfile.findByPk(req.params.id);
@@ -1793,7 +1794,7 @@ ${(p.sample_captions || []).map((c, i) => `${i + 1}. ${c}`).join('\n')}
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /follow-engine/evaluate/:id — evaluate follow probability for a profile ─
-router.get('/follow-engine/evaluate/:id', optionalAuth, async (req, res) => {
+router.get('/follow-engine/evaluate/:id', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(parseInt(req.params.id));
@@ -1836,7 +1837,7 @@ router.get('/follow-engine/evaluate/:id', optionalAuth, async (req, res) => {
 });
 
 // ── POST /follow-engine/run — re-evaluate and auto-follow for ALL existing profiles ─
-router.post('/follow-engine/run', optionalAuth, async (req, res) => {
+router.post('/follow-engine/run', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileFollower) return res.status(404).json({ error: 'Follower model not available' });
 
@@ -1900,7 +1901,7 @@ router.post('/follow-engine/run', optionalAuth, async (req, res) => {
 });
 
 // ── GET /follow-engine/stats — follow analytics summary ─────────────────────
-router.get('/follow-engine/stats', optionalAuth, async (req, res) => {
+router.get('/follow-engine/stats', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileFollower) return res.json({ stats: {} });
   const { fn, col } = require('sequelize');
@@ -1997,7 +1998,7 @@ router.get('/follow-engine/stats', optionalAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /network — full creator relationship graph ──────────────────────────
-router.get('/network', optionalAuth, async (req, res) => {
+router.get('/network', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileRelationship) return res.json({ nodes: [], edges: [] });
 
@@ -2056,7 +2057,7 @@ router.get('/network', optionalAuth, async (req, res) => {
 });
 
 // ── GET /network/clusters — geographic cluster summary ──────────────────────
-router.get('/network/clusters', optionalAuth, async (req, res) => {
+router.get('/network/clusters', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profiles = await db.SocialProfile.findAll({
@@ -2073,7 +2074,7 @@ router.get('/network/clusters', optionalAuth, async (req, res) => {
 });
 
 // ── GET /network/drama — highest drama relationships ────────────────────────
-router.get('/network/drama', optionalAuth, async (req, res) => {
+router.get('/network/drama', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileRelationship) return res.json({ relationships: [] });
 
@@ -2095,7 +2096,7 @@ router.get('/network/drama', optionalAuth, async (req, res) => {
 });
 
 // ── GET /:id/relationships — relationships for a specific profile ───────────
-router.get('/:id/relationships', optionalAuth, async (req, res) => {
+router.get('/:id/relationships', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileRelationship) return res.json({ relationships: [] });
   const { Op } = require('sequelize');
@@ -2122,7 +2123,7 @@ router.get('/:id/relationships', optionalAuth, async (req, res) => {
 });
 
 // ── POST /:id/relationships — manually add a relationship ───────────────────
-router.post('/:id/relationships', optionalAuth, async (req, res) => {
+router.post('/:id/relationships', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileRelationship) return res.status(404).json({ error: 'Relationship model not available' });
 
@@ -2166,7 +2167,7 @@ router.post('/:id/relationships', optionalAuth, async (req, res) => {
 });
 
 // ── DELETE /relationships/:relId — remove a relationship ────────────────────
-router.delete('/relationships/:relId', optionalAuth, async (req, res) => {
+router.delete('/relationships/:relId', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileRelationship) return res.status(404).json({ error: 'Relationship model not available' });
 
@@ -2186,7 +2187,7 @@ router.delete('/relationships/:relId', optionalAuth, async (req, res) => {
 
 // ── GET /analytics/composition ──────────────────────────────────────────────
 // Returns aggregated breakdown of feed composition for diversity dashboard
-router.get('/analytics/composition', optionalAuth, async (req, res) => {
+router.get('/analytics/composition', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { Op } = require('sequelize');
   const { feed_layer } = req.query;
@@ -2301,7 +2302,7 @@ router.get('/analytics/composition', optionalAuth, async (req, res) => {
 
 // ── POST /:id/approve ──────────────────────────────────────────────────────
 // Approve a finalized profile for crossing (adds approval gate before cross)
-router.post('/:id/approve', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+router.post('/:id/approve', requireAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { approval_notes } = req.body;
 
@@ -2329,7 +2330,7 @@ router.post('/:id/approve', optionalAuth, guardJustAWomanRecord, async (req, res
 
 // ── POST /:id/reject-crossing ──────────────────────────────────────────────
 // Reject a profile from crossing (clears approval, adds notes)
-router.post('/:id/reject-crossing', optionalAuth, guardJustAWomanRecord, async (req, res) => {
+router.post('/:id/reject-crossing', requireAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { rejection_reason } = req.body;
 
@@ -2357,7 +2358,7 @@ router.post('/:id/reject-crossing', optionalAuth, guardJustAWomanRecord, async (
 
 // ── GET /moments/timeline ──────────────────────────────────────────────────
 // Aggregates moment_log entries across all profiles into a unified timeline
-router.get('/moments/timeline', optionalAuth, async (req, res) => {
+router.get('/moments/timeline', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { feed_layer, limit: queryLimit, moment_type, lala_seeds_only } = req.query;
 
@@ -2423,7 +2424,7 @@ router.get('/moments/timeline', optionalAuth, async (req, res) => {
 // Templates stored in DB when SocialProfileTemplate model is available, otherwise in-memory fallback
 const _profileTemplates = []; // fallback
 
-router.get('/templates', optionalAuth, async (req, res) => {
+router.get('/templates', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (db.SocialProfileTemplate) {
     try {
@@ -2436,7 +2437,7 @@ router.get('/templates', optionalAuth, async (req, res) => {
 
 // ── POST /templates ─────────────────────────────────────────────────────────
 // Save a profile as a reusable template
-router.post('/templates', optionalAuth, async (req, res) => {
+router.post('/templates', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { profile_id, name, description } = req.body;
 
@@ -2496,7 +2497,7 @@ router.post('/templates', optionalAuth, async (req, res) => {
 
 // ── POST /templates/:templateId/apply ───────────────────────────────────────
 // Generate a new profile using a template's settings as starting context
-router.post('/templates/:templateId/apply', optionalAuth, async (req, res) => {
+router.post('/templates/:templateId/apply', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const templateId = req.params.templateId;
   let template;
@@ -2527,7 +2528,7 @@ router.post('/templates/:templateId/apply', optionalAuth, async (req, res) => {
 });
 
 // ── DELETE /templates/:templateId ───────────────────────────────────────────
-router.delete('/templates/:templateId', optionalAuth, async (req, res) => {
+router.delete('/templates/:templateId', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const templateId = req.params.templateId;
 
@@ -2550,7 +2551,7 @@ router.delete('/templates/:templateId', optionalAuth, async (req, res) => {
 
 // ── GET /relationships/suggestions ──────────────────────────────────────────
 // Suggest potential relationships between profiles based on shared attributes
-router.get('/relationships/suggestions', optionalAuth, async (req, res) => {
+router.get('/relationships/suggestions', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { Op } = require('sequelize');
   const { feed_layer, limit: queryLimit } = req.query;
@@ -2643,7 +2644,7 @@ router.get('/relationships/suggestions', optionalAuth, async (req, res) => {
 
 // ── POST /relationships/suggestions/accept ──────────────────────────────────
 // Accept a relationship suggestion and create the relationship
-router.post('/relationships/suggestions/accept', optionalAuth, async (req, res) => {
+router.post('/relationships/suggestions/accept', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { source_id, target_id, relationship_type, description } = req.body;
 

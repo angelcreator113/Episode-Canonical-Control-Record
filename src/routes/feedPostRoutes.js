@@ -9,7 +9,12 @@
 
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+// F-AUTH-1 Step 3 CP8: mixed Tier 1+4 within single file (per v2.32 §5.21,
+// 5th cumulative instance after worldStudio.js @ CP3 + universe.js @ CP6 +
+// franchiseBrainRoutes.js @ CP7 + socialProfileRoutes.js @ CP8). 3 GETs are
+// timeline catalog reads (no req.user consumption); 3 handlers are Tier 1.
+const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── GET FEED TIMELINE (QUERY COMPAT) ────────────────────────────────────────
 // GET /api/v1/feed-posts?show_id=...&episode_id=...&limit=...&offset=...
@@ -57,7 +62,7 @@ router.get('/', optionalAuth, async (req, res) => {
 
 // ── GENERATE FEED POSTS FOR EPISODE ──────────────────────────────────────────
 // POST /api/v1/feed-posts/:episodeId/generate
-router.post('/:episodeId/generate', optionalAuth, async (req, res) => {
+router.post('/:episodeId/generate', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { showId } = req.body;
@@ -161,7 +166,7 @@ router.get('/episode/:episodeId', optionalAuth, async (req, res) => {
 
 // ── UPDATE POST ──────────────────────────────────────────────────────────────
 // PUT /api/v1/feed-posts/:postId
-router.put('/:postId', optionalAuth, async (req, res) => {
+router.put('/:postId', requireAuth, async (req, res) => {
   try {
     const { FeedPost } = require('../models');
     const post = await FeedPost.findByPk(req.params.postId);
@@ -187,7 +192,7 @@ router.put('/:postId', optionalAuth, async (req, res) => {
 
 // ── DELETE POST ──────────────────────────────────────────────────────────────
 // DELETE /api/v1/feed-posts/:postId
-router.delete('/:postId', optionalAuth, async (req, res) => {
+router.delete('/:postId', requireAuth, async (req, res) => {
   try {
     const { FeedPost } = require('../models');
     const post = await FeedPost.findByPk(req.params.postId);

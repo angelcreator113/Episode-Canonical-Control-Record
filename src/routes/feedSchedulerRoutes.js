@@ -21,13 +21,8 @@
 const express = require('express');
 const router  = express.Router();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 const {
   startScheduler,
@@ -47,13 +42,13 @@ const {
 } = require('../services/feedScheduler');
 
 // ── GET /status ─────────────────────────────────────────────────────────────
-router.get('/status', optionalAuth, (req, res) => {
+router.get('/status', requireAuth, (req, res) => {
   res.json(getSchedulerStatus());
 });
 
 // ── GET /events ─────────────────────────────────────────────────────────────
 // SSE stream for real-time scheduler status updates
-router.get('/events', optionalAuth, (req, res) => {
+router.get('/events', requireAuth, (req, res) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -66,25 +61,25 @@ router.get('/events', optionalAuth, (req, res) => {
 });
 
 // ── GET /history ────────────────────────────────────────────────────────────
-router.get('/history', optionalAuth, (req, res) => {
+router.get('/history', requireAuth, (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
   const history = getHistory();
   res.json({ history: history.slice(0, limit), total: history.length });
 });
 
 // ── GET /config ─────────────────────────────────────────────────────────────
-router.get('/config', optionalAuth, (req, res) => {
+router.get('/config', requireAuth, (req, res) => {
   res.json(getConfig());
 });
 
 // ── PUT /config ─────────────────────────────────────────────────────────────
-router.put('/config', optionalAuth, (req, res) => {
+router.put('/config', requireAuth, (req, res) => {
   const updated = updateConfig(req.body);
   res.json({ config: updated, message: 'Configuration updated' });
 });
 
 // ── POST /start ─────────────────────────────────────────────────────────────
-router.post('/start', optionalAuth, (req, res) => {
+router.post('/start', requireAuth, (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   const intervalHours = req.body.interval_hours || null;
   startScheduler(intervalHours, db);
@@ -92,13 +87,13 @@ router.post('/start', optionalAuth, (req, res) => {
 });
 
 // ── POST /stop ──────────────────────────────────────────────────────────────
-router.post('/stop', optionalAuth, (req, res) => {
+router.post('/stop', requireAuth, (req, res) => {
   stopScheduler();
   res.json({ message: 'Feed scheduler stopped', status: getSchedulerStatus() });
 });
 
 // ── POST /run-now ───────────────────────────────────────────────────────────
-router.post('/run-now', optionalAuth, async (req, res) => {
+router.post('/run-now', requireAuth, async (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   setDb(db);
 
@@ -113,7 +108,7 @@ router.post('/run-now', optionalAuth, async (req, res) => {
 
 // ── POST /fill-one ──────────────────────────────────────────────────────────
 // Generate a single auto-filled profile (useful for testing)
-router.post('/fill-one', optionalAuth, async (req, res) => {
+router.post('/fill-one', requireAuth, async (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   const layer = req.body.feed_layer || 'real_world';
 
@@ -132,7 +127,7 @@ router.post('/fill-one', optionalAuth, async (req, res) => {
 });
 
 // ── GET /layer-status ───────────────────────────────────────────────────────
-router.get('/layer-status', optionalAuth, async (req, res) => {
+router.get('/layer-status', requireAuth, async (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
 
   try {
@@ -161,7 +156,7 @@ router.get('/layer-status', optionalAuth, async (req, res) => {
 // ── POST /auto-generate ─────────────────────────────────────────────────────
 // Fully automated batch generation — AI creates the sparks AND the profiles.
 // No manual input needed. This replaces the manual "New Creator Spark" form.
-router.post('/auto-generate', optionalAuth, async (req, res) => {
+router.post('/auto-generate', requireAuth, aiRateLimiter, async (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   const layer = req.body.feed_layer || 'real_world';
   const count = Math.min(parseInt(req.body.count) || 5, 20); // max 20 per request
@@ -217,7 +212,7 @@ router.post('/auto-generate', optionalAuth, async (req, res) => {
 // Background auto-generation — returns immediately with a job ID so the user
 // can navigate away and generation continues server-side.
 // Progress is tracked via the existing bulk-job SSE infrastructure.
-router.post('/auto-generate-job', optionalAuth, async (req, res) => {
+router.post('/auto-generate-job', requireAuth, aiRateLimiter, async (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   const layer = req.body.feed_layer || 'real_world';
   const count = Math.min(parseInt(req.body.count) || 5, 20);
@@ -397,7 +392,7 @@ function processAutoGenInBackground(jobId, db, layer, count) {
 
 // ── POST /preview-sparks ────────────────────────────────────────────────────
 // Preview what the AI would generate without actually creating profiles.
-router.post('/preview-sparks', optionalAuth, async (req, res) => {
+router.post('/preview-sparks', requireAuth, aiRateLimiter, async (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   const layer = req.body.feed_layer || 'real_world';
   const count = Math.min(parseInt(req.body.count) || 5, 20);
