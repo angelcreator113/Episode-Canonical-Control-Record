@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { Layer, LayerAsset, Asset, Episode } = require('../models');
-const { optionalAuth } = require('../middleware/auth');
+// F-AUTH-1 Step 3 CP9: mixed Tier 1+4 within single file (per v2.33 §5.21,
+// 7th cumulative instance). 2 GETs are public layer-catalog reads (no req.user
+// consumption); 7 writes are Tier 1.
+const { optionalAuth, requireAuth } = require('../middleware/auth');
 
 /**
  * GET /api/v1/layers
@@ -91,7 +94,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
  * POST /api/v1/layers
  * Create a new layer
  */
-router.post('/', optionalAuth, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const {
       episode_id,
@@ -153,7 +156,7 @@ router.post('/', optionalAuth, async (req, res) => {
  * PUT /api/v1/layers/:id
  * Update a layer
  */
-router.put('/:id', optionalAuth, async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -205,7 +208,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
  * DELETE /api/v1/layers/:id
  * Delete a layer (soft delete)
  */
-router.delete('/:id', optionalAuth, async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -236,7 +239,7 @@ router.delete('/:id', optionalAuth, async (req, res) => {
  * POST /api/v1/layers/:id/assets
  * Add an asset to a layer
  */
-router.post('/:id/assets', optionalAuth, async (req, res) => {
+router.post('/:id/assets', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -323,7 +326,7 @@ router.post('/:id/assets', optionalAuth, async (req, res) => {
  * PUT /api/v1/layers/assets/:assetId
  * Update a layer asset
  */
-router.put('/assets/:assetId', optionalAuth, async (req, res) => {
+router.put('/assets/:assetId', requireAuth, async (req, res) => {
   try {
     const { assetId } = req.params;
     const {
@@ -389,7 +392,7 @@ router.put('/assets/:assetId', optionalAuth, async (req, res) => {
  * DELETE /api/v1/layers/assets/:assetId
  * Remove an asset from a layer
  */
-router.delete('/assets/:assetId', optionalAuth, async (req, res) => {
+router.delete('/assets/:assetId', requireAuth, async (req, res) => {
   try {
     const { assetId } = req.params;
 
@@ -420,7 +423,7 @@ router.delete('/assets/:assetId', optionalAuth, async (req, res) => {
  * POST /api/v1/layers/bulk-create
  * Create multiple layers at once (useful for initializing episode layers)
  */
-router.post('/bulk-create', optionalAuth, async (req, res) => {
+router.post('/bulk-create', requireAuth, async (req, res) => {
   try {
     const { episode_id, layers } = req.body;
 

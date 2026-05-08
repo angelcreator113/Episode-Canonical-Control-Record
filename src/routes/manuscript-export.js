@@ -26,6 +26,15 @@ const _path    = require('path');
 // CP1 WP3: lazy-noop fallback removed. F-AUTH-2 fix (lazy-init in
 // middleware/auth.js) makes require() boot-safe — direct destructuring
 // import is now correct.
+//
+// F-AUTH-1 Step 3 CP9 (D12): manuscript-export.js disposition is Tier 4 PUBLIC
+// throughout. Per v2.33 §5.21, 9th cumulative instance after worldStudio.js
+// @ CP3 + universe.js @ CP6 + franchiseBrainRoutes.js @ CP7 + socialProfileRoutes.js
+// + feedPostRoutes.js @ CP8 + scripts.js + layers.js + textureLayerRoutes.js
+// @ CP9. F-Auth-3 polymorphic factory `optionalAuth({ degradeOnInfraFailure:
+// true })` preserved verbatim per §5.45 polymorphic factory preservation
+// (graceful degradation on Cognito infra failure). 3 GETs are public manuscript-
+// rendering endpoints; no req.user consumption.
 const { optionalAuth } = require('../middleware/auth');
 
 // ── Helpers ────────────────────────────────────────────────────────────────

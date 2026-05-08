@@ -6,6 +6,12 @@ const db = require('../models');
 const { ScriptMetadata } = db;
 const claudeService = require('../services/claudeService');
 const { Pool } = require('pg');
+// F-AUTH-1 Step 3 CP9: sub-form (b) ADD shape per v2.31 §5.49 (3 ZERO-middleware
+// handlers were unprotected pre-CP9). Service-mediated AI POST classification per
+// v2.32 §5.58: claudeService.analyzeScript wraps Anthropic — POST /:scriptId/analyze
+// gets requireAuth + aiRateLimiter; remaining handlers get plain requireAuth.
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // Create pool for raw SQL queries (scripts use raw SQL, not Sequelize)
 const sslConfig = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false;
@@ -26,7 +32,7 @@ const pool = connStr
  * POST /api/scripts/:scriptId/analyze
  * Run AI analysis on a script
  */
-router.post('/:scriptId/analyze', async (req, res) => {
+router.post('/:scriptId/analyze', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { scriptId } = req.params;
     const { targetDuration, pacing } = req.body;
@@ -118,7 +124,7 @@ router.post('/:scriptId/analyze', async (req, res) => {
  * GET /api/scripts/:scriptId/metadata
  * Get analysis results for a script
  */
-router.get('/:scriptId/metadata', async (req, res) => {
+router.get('/:scriptId/metadata', requireAuth, async (req, res) => {
   try {
     const { scriptId } = req.params;
 
@@ -143,7 +149,7 @@ router.get('/:scriptId/metadata', async (req, res) => {
  * PUT /api/scripts/:scriptId/ai-analysis
  * Enable/disable AI analysis for a script
  */
-router.put('/:scriptId/ai-analysis', async (req, res) => {
+router.put('/:scriptId/ai-analysis', requireAuth, async (req, res) => {
   try {
     console.log('🔵 Toggle AI analysis request:', { scriptId: req.params.scriptId, body: req.body });
     const { scriptId } = req.params;

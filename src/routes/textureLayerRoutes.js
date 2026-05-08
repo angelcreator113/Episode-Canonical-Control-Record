@@ -5,9 +5,17 @@ const router  = express.Router();
 const db      = require('../models');
 const { generateTextureLayer } = require('../services/textureLayerService');
 const { updateArcTracking }    = require('../services/arcTrackingService');
+// F-AUTH-1 Step 3 CP9: sub-form (b) ADD shape per v2.31 §5.49 (5 ZERO-middleware
+// handlers were unprotected pre-CP9) + mixed Tier 1+4 within single file (per
+// v2.33 §5.21, 8th cumulative instance). 2 GETs are character-keyed catalog
+// reads (Tier 4 PUBLIC); 2 AI POSTs (generate + regenerate) get aiRateLimiter
+// per §5.58 service-mediated classification (textureLayerService.generateTextureLayer
+// wraps Anthropic); 1 non-AI POST (confirm) gets plain requireAuth.
+const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── Generate texture for a story ──────────────────────────────────────
-router.post('/generate', async (req, res) => {
+router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   const {
     story,
     character_key,
@@ -93,7 +101,7 @@ const VALID_CONFIRM_FIELDS = [
   'mom_tone_confirmed', 'aftermath_confirmed', 'memory_proposal_confirmed',
 ];
 
-router.post('/confirm/:storyNumber', async (req, res) => {
+router.post('/confirm/:storyNumber', requireAuth, async (req, res) => {
   const { character_key, fields } = req.body;
 
   try {
@@ -156,7 +164,7 @@ router.post('/confirm/:storyNumber', async (req, res) => {
 });
 
 // ── Reject and regenerate a single layer ─────────────────────────────
-router.post('/regenerate/:storyNumber/:layer', async (req, res) => {
+router.post('/regenerate/:storyNumber/:layer', requireAuth, aiRateLimiter, async (req, res) => {
   const { character_key } = req.body;
   const { storyNumber, layer } = req.params;
 
@@ -195,7 +203,7 @@ router.post('/regenerate/:storyNumber/:layer', async (req, res) => {
 });
 
 // ── Get texture for a story ─────────────────────────────────────────
-router.get('/:characterKey/:storyNumber', async (req, res) => {
+router.get('/:characterKey/:storyNumber', optionalAuth, async (req, res) => {
   try {
     const texture = await db.StoryTexture.findOne({
       where: {
@@ -211,7 +219,7 @@ router.get('/:characterKey/:storyNumber', async (req, res) => {
 });
 
 // ── Get all texture for a character (summary) ───────────────────────
-router.get('/:characterKey', async (req, res) => {
+router.get('/:characterKey', optionalAuth, async (req, res) => {
   try {
     const textures = await db.StoryTexture.findAll({
       where: { character_key: req.params.characterKey },
