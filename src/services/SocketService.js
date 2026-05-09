@@ -9,6 +9,15 @@
 
 const logger = require('./Logger');
 
+// F-SOCKET-1: strict-fail at module load if JWT_SECRET unset outside test env.
+// Replaces hardcoded `'your-secret-key'` fallback that was a P0 production
+// exposure: in any deployed environment with JWT_SECRET missing, anyone
+// reading the public source could forge HS256 tokens. Per F-AUTH-1 fix plan
+// v2.29 §10.2.
+if (!process.env.JWT_SECRET && process.env.NODE_ENV !== 'test') {
+  throw new Error('JWT_SECRET environment variable must be set');
+}
+
 class SocketService {
   constructor() {
     this.io = null;
@@ -16,7 +25,7 @@ class SocketService {
     this.userSockets = new Map();
     this.rooms = new Map();
     this.namespaces = new Map();
-    this.JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+    this.JWT_SECRET = process.env.JWT_SECRET;
     this.maxConnections = parseInt(process.env.MAX_SOCKET_CONNECTIONS || '500');
     this.connectionCount = 0;
     this.initialized = false;
