@@ -3,10 +3,11 @@
  */
 const express = require('express');
 const router = express.Router();
+const { requireAuth, authorize } = require('../middleware/auth');
 const { runFullAudit, runSubAgent, getHistory, getSchedulerStatus, startScheduler, stopScheduler, getBudget, setBudget } = require('../services/cfoAgent');
 
 // GET /api/v1/cfo/audit — Run full audit (all 5 sub-agents)
-router.get('/audit', async (req, res) => {
+router.get('/audit', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const report = await runFullAudit();
     res.json(report);
@@ -17,7 +18,7 @@ router.get('/audit', async (req, res) => {
 });
 
 // GET /api/v1/cfo/agent/:name — Run a single sub-agent
-router.get('/agent/:name', async (req, res) => {
+router.get('/agent/:name', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const validAgents = ['cost_watchdog', 'dependency_audit', 'resource_monitor', 'lights_off', 'health_patrol'];
   const { name } = req.params;
 
@@ -35,7 +36,7 @@ router.get('/agent/:name', async (req, res) => {
 });
 
 // GET /api/v1/cfo/quick — Lightweight health score only (no expensive scans)
-router.get('/quick', async (req, res) => {
+router.get('/quick', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = require('../models');
 
@@ -100,17 +101,17 @@ router.get('/quick', async (req, res) => {
 });
 
 // GET /api/v1/cfo/history — Past audit reports
-router.get('/history', (req, res) => {
+router.get('/history', requireAuth, authorize(['ADMIN']), (req, res) => {
   res.json(getHistory());
 });
 
 // GET /api/v1/cfo/scheduler — Scheduler status
-router.get('/scheduler', (req, res) => {
+router.get('/scheduler', requireAuth, authorize(['ADMIN']), (req, res) => {
   res.json(getSchedulerStatus());
 });
 
 // POST /api/v1/cfo/scheduler/start — Start automated audits
-router.post('/scheduler/start', (req, res) => {
+router.post('/scheduler/start', requireAuth, authorize(['ADMIN']), (req, res) => {
   const hours = Number(req.body?.interval_hours);
   const interval = hours > 0 ? hours : undefined;
   startScheduler(interval);
@@ -118,18 +119,18 @@ router.post('/scheduler/start', (req, res) => {
 });
 
 // POST /api/v1/cfo/scheduler/stop — Stop automated audits
-router.post('/scheduler/stop', (req, res) => {
+router.post('/scheduler/stop', requireAuth, authorize(['ADMIN']), (req, res) => {
   stopScheduler();
   res.json(getSchedulerStatus());
 });
 
 // GET /api/v1/cfo/budget — Get current budget configuration
-router.get('/budget', (req, res) => {
+router.get('/budget', requireAuth, authorize(['ADMIN']), (req, res) => {
   res.json(getBudget());
 });
 
 // PUT /api/v1/cfo/budget — Update budget limits
-router.put('/budget', (req, res) => {
+router.put('/budget', requireAuth, authorize(['ADMIN']), (req, res) => {
   const { daily_limit, monthly_limit, warn_pct } = req.body || {};
   const updated = setBudget({ daily_limit, monthly_limit, warn_pct });
   res.json(updated);

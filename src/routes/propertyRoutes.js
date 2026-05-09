@@ -21,6 +21,7 @@
 
 const express = require('express');
 const router = express.Router();
+const { requireAuth } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 const propertyService = require('../services/propertyService');
 
@@ -34,14 +35,14 @@ function getModels() {
 // ─── TEMPLATES & PRESETS ─────────────────────────────────────────────────────
 
 // GET /api/v1/properties/templates — list room layout templates
-router.get('/templates', (req, res) => {
+router.get('/templates', requireAuth, (req, res) => {
   const roomType = req.query.room_type || null;
   const templates = propertyService.listTemplates(roomType);
   res.json({ success: true, data: templates });
 });
 
 // GET /api/v1/properties/style-presets — list style guide presets
-router.get('/style-presets', (req, res) => {
+router.get('/style-presets', requireAuth, (req, res) => {
   const presets = propertyService.listStylePresets();
   res.json({ success: true, data: presets });
 });
@@ -49,7 +50,7 @@ router.get('/style-presets', (req, res) => {
 // ─── PROPERTIES ──────────────────────────────────────────────────────────────
 
 // GET /api/v1/properties — list all properties
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const { WorldLocation, SceneSet, SceneAngle } = getModels();
     const properties = await WorldLocation.findAll({
@@ -78,7 +79,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/v1/properties — create a property
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const { WorldLocation } = getModels();
     const { name, description, property_type, style_preset_id, style_guide, universe_id } = req.body;
@@ -114,7 +115,7 @@ router.post('/', async (req, res) => {
 });
 
 // GET /api/v1/properties/:id — get property with rooms + scene sets
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const { WorldLocation, SceneSet, SceneAngle } = getModels();
     const property = await WorldLocation.findByPk(req.params.id, {
@@ -145,7 +146,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // PATCH /api/v1/properties/:id — update property (name, style_guide, floor_plan)
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireAuth, async (req, res) => {
   try {
     const { WorldLocation } = getModels();
     const property = await WorldLocation.findByPk(req.params.id);
@@ -174,7 +175,7 @@ router.patch('/:id', async (req, res) => {
 // ─── ROOMS ───────────────────────────────────────────────────────────────────
 
 // POST /api/v1/properties/:id/rooms — add a room to property
-router.post('/:id/rooms', async (req, res) => {
+router.post('/:id/rooms', requireAuth, async (req, res) => {
   try {
     const { WorldLocation, SceneSet } = getModels();
     const property = await WorldLocation.findByPk(req.params.id);
@@ -230,7 +231,7 @@ router.post('/:id/rooms', async (req, res) => {
 });
 
 // PATCH /api/v1/properties/:id/rooms/:roomId — update room
-router.patch('/:id/rooms/:roomId', async (req, res) => {
+router.patch('/:id/rooms/:roomId', requireAuth, async (req, res) => {
   try {
     const { WorldLocation } = getModels();
     const room = await WorldLocation.findOne({
@@ -253,7 +254,7 @@ router.patch('/:id/rooms/:roomId', async (req, res) => {
 });
 
 // POST /api/v1/properties/:id/rooms/:roomId/generate-empty — generate empty room from template
-router.post('/:id/rooms/:roomId/generate-empty', async (req, res) => {
+router.post('/:id/rooms/:roomId/generate-empty', requireAuth, async (req, res) => {
   try {
     const { WorldLocation, SceneSet } = getModels();
     const property = await WorldLocation.findByPk(req.params.id);

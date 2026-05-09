@@ -6,7 +6,7 @@
 
 const express = require('express');
 const { models } = require('../models');
-const { authenticate, authorize } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const _AuditLogger = require('../services/AuditLogger');
 
 const router = express.Router();
@@ -15,7 +15,7 @@ const router = express.Router();
  * GET /api/v1/audit-logs
  * Fetch audit logs with filtering
  */
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { limit = 100, offset = 0, actionType, resourceType, startDate, endDate } = req.query;
     const where = {};
@@ -61,7 +61,7 @@ router.get('/', async (req, res) => {
  * GET /api/v1/audit-logs/stats
  * Get audit log statistics
  */
-router.get('/stats', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.get('/stats', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const where = {};
@@ -125,7 +125,7 @@ router.get('/stats', authenticate, authorize(['ADMIN']), async (req, res) => {
  * GET /api/v1/audit-logs/user/:userId
  * Get logs for specific user
  */
-router.get('/user/:userId', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.get('/user/:userId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { userId } = req.params;
     const { limit = 100, offset = 0 } = req.query;

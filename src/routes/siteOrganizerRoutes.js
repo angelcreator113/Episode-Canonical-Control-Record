@@ -7,9 +7,10 @@
  */
 const express = require('express');
 const router = express.Router();
+const { requireAuth, authorize } = require('../middleware/auth');
 const { runFullScan, runSubAgent, quickSummary } = require('../services/siteOrganizerAgent');
 
-router.get('/scan', (_req, res) => {
+router.get('/scan', requireAuth, authorize(['ADMIN']), (_req, res) => {
   try {
     const report = runFullScan();
     res.json(report);
@@ -19,7 +20,7 @@ router.get('/scan', (_req, res) => {
   }
 });
 
-router.get('/agent/:name', (req, res) => {
+router.get('/agent/:name', requireAuth, authorize(['ADMIN']), (req, res) => {
   try {
     const result = runSubAgent(req.params.name);
     res.json(result);
@@ -29,7 +30,7 @@ router.get('/agent/:name', (req, res) => {
   }
 });
 
-router.get('/quick', (_req, res) => {
+router.get('/quick', requireAuth, authorize(['ADMIN']), (_req, res) => {
   try {
     res.json(quickSummary());
   } catch (err) {

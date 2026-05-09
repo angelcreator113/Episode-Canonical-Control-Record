@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getPool } = require('../config/database');
-const { authenticateToken, authorize } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const rateLimit = require('express-rate-limit');
 
 const queryLimiter = rateLimit({
@@ -17,7 +17,7 @@ async function getModels() {
 // ═══════════════════════════════════════════
 // POST /query  — Run a read-only SQL query (admin only)
 // ═══════════════════════════════════════════
-router.post('/query', authenticateToken, authorize(['admin']), queryLimiter, async (req, res) => {
+router.post('/query', requireAuth, authorize(['admin']), queryLimiter, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
@@ -45,7 +45,7 @@ router.post('/query', authenticateToken, authorize(['admin']), queryLimiter, asy
 });
 
 // Test route to create video_compositions table
-router.get('/create-video-compositions-table', authenticateToken, authorize(['admin']), async (req, res) => {
+router.get('/create-video-compositions-table', requireAuth, authorize(['admin']), async (req, res) => {
   const pool = getPool();
   
   try {

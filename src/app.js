@@ -323,7 +323,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // ============================================================================
 const { attachRBAC } = require('./middleware/rbac');
 const { captureResponseData } = require('./middleware/auditLog');
-const { optionalAuth } = require('./middleware/auth');
+const { optionalAuth, requireAuth, authorize } = require('./middleware/auth');
 
 // Optional auth for all routes (user info attached if valid token provided)
 // Real Cognito authentication enabled
@@ -1022,8 +1022,11 @@ try {
   console.error('✗ Failed to load youtube routes:', e.message);
 }
 
-// Development seed routes
-app.use('/api/v1/seed', seedRoutes);
+// Development seed routes — F-AUTH-1 Step 3 CP10 Item 7: Tier 5 env-gated mount
+// (combined with Tier 2 inside seed.js handlers per locked plan).
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/v1/seed', seedRoutes);
+}
 
 // Icon Cue Timeline System routes (Week 4 - Production System)
 app.use('/api/v1/episodes', iconCueRoutes);
@@ -1253,7 +1256,10 @@ try {
 let queueMonitorRoutes;
 try {
   queueMonitorRoutes = require('./routes/queue-monitor');
-  app.use('/admin/queues', queueMonitorRoutes);
+  // F-AUTH-1 Step 3 CP10 Item 8 (Tier 2 at MOUNT LINE per V6 admin-prefix):
+  // Bull Board sub-router bypasses Express-route-level auth; auth applied at
+  // mount line covers entire /admin/queues namespace including UI dashboard.
+  app.use('/admin/queues', requireAuth, authorize(['ADMIN']), queueMonitorRoutes);
   console.log('✓ Queue Monitor routes loaded at /admin/queues');
 } catch (e) {
   console.error('✗ Failed to load Queue Monitor routes:', e.message);

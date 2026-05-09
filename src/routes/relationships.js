@@ -4,14 +4,8 @@ const express = require('express');
 const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
-// ── Auth (match existing optionalAuth pattern) ─────────────────────────
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── Lazy-load models / sequelize ───────────────────────────────────────
 let _db = null;
@@ -76,7 +70,7 @@ const CHAR_SELECT_B = `
 // GET /api/v1/relationships
 // All confirmed relationships, optionally filtered by ?character_id=
 // ════════════════════════════════════════════════════════════════════════
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const { character_id } = req.query;
@@ -107,7 +101,7 @@ router.get('/', optionalAuth, async (req, res) => {
 // GET /api/v1/relationships/pending
 // Unconfirmed AI-generated candidates
 // ════════════════════════════════════════════════════════════════════════
-router.get('/pending', optionalAuth, async (req, res) => {
+router.get('/pending', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const rows = await db.sequelize.query(
@@ -129,7 +123,7 @@ router.get('/pending', optionalAuth, async (req, res) => {
 // GET /api/v1/relationships/character/:charId
 // All relationships (confirmed + pending) for a single character
 // ════════════════════════════════════════════════════════════════════════
-router.get('/character/:charId', optionalAuth, async (req, res) => {
+router.get('/character/:charId', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const { charId } = req.params;
@@ -154,7 +148,7 @@ router.get('/character/:charId', optionalAuth, async (req, res) => {
 // Full tree payload for the SVG three-layer visualization
 // Returns characters grouped by role_type + all relationships
 // ════════════════════════════════════════════════════════════════════════
-router.get('/tree/:registryId', optionalAuth, async (req, res) => {
+router.get('/tree/:registryId', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const { registryId } = req.params;
@@ -216,7 +210,7 @@ router.get('/tree/:registryId', optionalAuth, async (req, res) => {
 // POST /api/v1/relationships
 // Manually create a confirmed relationship
 // ════════════════════════════════════════════════════════════════════════
-router.post('/', optionalAuth, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const {
@@ -332,7 +326,7 @@ router.post('/', optionalAuth, async (req, res) => {
 // POST /api/v1/relationships/generate
 // Use Claude AI to generate 3-5 candidate relationships
 // ════════════════════════════════════════════════════════════════════════
-router.post('/generate', optionalAuth, async (req, res) => {
+router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const db   = getDb();
     const { registry_id, focus_character_id } = req.body;
@@ -534,7 +528,7 @@ No markdown fences, no explanation.`,
 // POST /api/v1/relationships/confirm/:relationshipId
 // Approve an AI-generated candidate → confirmed = true
 // ════════════════════════════════════════════════════════════════════════
-router.post('/confirm/:relationshipId', optionalAuth, async (req, res) => {
+router.post('/confirm/:relationshipId', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const { relationshipId } = req.params;
@@ -586,7 +580,7 @@ router.post('/confirm/:relationshipId', optionalAuth, async (req, res) => {
 // DELETE /api/v1/relationships/dismiss/:relationshipId
 // Dismiss (delete) an unconfirmed candidate
 // ════════════════════════════════════════════════════════════════════════
-router.delete('/dismiss/:relationshipId', optionalAuth, async (req, res) => {
+router.delete('/dismiss/:relationshipId', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const { relationshipId } = req.params;
@@ -617,7 +611,7 @@ router.delete('/dismiss/:relationshipId', optionalAuth, async (req, res) => {
 // PUT /api/v1/relationships/:relId
 // Update mutable fields on a relationship
 // ════════════════════════════════════════════════════════════════════════
-router.put('/:relId', optionalAuth, async (req, res) => {
+router.put('/:relId', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const { relId } = req.params;
@@ -678,7 +672,7 @@ router.put('/:relId', optionalAuth, async (req, res) => {
 // DELETE /api/v1/relationships/:relId
 // Permanently remove a relationship
 // ════════════════════════════════════════════════════════════════════════
-router.delete('/:relId', optionalAuth, async (req, res) => {
+router.delete('/:relId', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     await db.sequelize.query(
@@ -697,7 +691,7 @@ router.delete('/:relId', optionalAuth, async (req, res) => {
 // Family tree — returns only family + romantic relationships with
 // character nodes laid out for a tree visualization
 // ════════════════════════════════════════════════════════════════════════
-router.get('/family-tree/:registryId', optionalAuth, async (req, res) => {
+router.get('/family-tree/:registryId', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const { registryId } = req.params;
@@ -757,7 +751,7 @@ router.get('/family-tree/:registryId', optionalAuth, async (req, res) => {
 // PUT /api/v1/relationships/:relId/family
 // Set family role + blood relation flag on an existing relationship
 // ════════════════════════════════════════════════════════════════════════
-router.put('/:relId/family', optionalAuth, async (req, res) => {
+router.put('/:relId/family', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const { relId } = req.params;
@@ -802,7 +796,7 @@ router.put('/:relId/family', optionalAuth, async (req, res) => {
 // POST /api/v1/relationships/generate-family
 // Use AI to auto-generate family relationships for a registry
 // ════════════════════════════════════════════════════════════════════════
-router.post('/generate-family', optionalAuth, async (req, res) => {
+router.post('/generate-family', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const db = getDb();
     const { registry_id } = req.body;

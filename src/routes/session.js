@@ -7,9 +7,10 @@
 
 const express = require('express');
 const router = express.Router();
+const { requireAuth } = require('../middleware/auth');
 const { Op } = require('sequelize');
 
-router.get('/brief', async (req, res) => {
+router.get('/brief', requireAuth, async (req, res) => {
   try {
     const db = require('../models');
     const { StorytellerBook, StorytellerChapter, StorytellerLine } = db;

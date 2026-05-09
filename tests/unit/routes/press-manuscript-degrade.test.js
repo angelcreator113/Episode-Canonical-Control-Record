@@ -38,18 +38,15 @@ describe('Step 3 CP1 — F-AUTH-3 Tier 3 handler disposition', () => {
       );
     });
 
-    test('press.js POSTs (4 handlers) remain on plain optionalAuth — deferred to CP10', () => {
-      // Decision 1 LOCKED: 4 POSTs deferred to CP10 with Tier 1 (requireAuth).
-      // CP1 must NOT touch these handlers.
-      const postLines = [
-        /router\.post\(['"]\/seed-characters['"],\s*optionalAuth,/,
-        /router\.post\(['"]\/advance-career['"],\s*optionalAuth,/,
-        /router\.post\(['"]\/generate-post['"],\s*optionalAuth,/,
-        /router\.post\(['"]\/generate-scene['"],\s*optionalAuth,/,
-      ];
-      postLines.forEach((re) => {
-        expect(pressSource).toMatch(re);
-      });
+    test('press.js POSTs (4 handlers) — CP12 migration to requireAuth (Tier 1) with D3-verified aiRateLimiter', () => {
+      // CP12 §5.21 10th instance: Tier 1 + Tier 3 mix. The 4 POSTs (deferred from CP1)
+      // are now requireAuth (Tier 1). D3-verified AI invocations: /generate-post and
+      // /generate-scene call safeAI() — they get aiRateLimiter overlay per §5.43.
+      // /seed-characters and /advance-career are Tier 1 only (no AI).
+      expect(pressSource).toMatch(/router\.post\(['"]\/seed-characters['"],\s*requireAuth,/);
+      expect(pressSource).toMatch(/router\.post\(['"]\/advance-career['"],\s*requireAuth,/);
+      expect(pressSource).toMatch(/router\.post\(['"]\/generate-post['"],\s*requireAuth,\s*aiRateLimiter,/);
+      expect(pressSource).toMatch(/router\.post\(['"]\/generate-scene['"],\s*requireAuth,\s*aiRateLimiter,/);
     });
   });
 

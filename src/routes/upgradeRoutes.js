@@ -21,7 +21,8 @@
 const express = require('express');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
 
@@ -39,7 +40,7 @@ function extractAIText(response) {
 // UPGRADE 1: SESSION BRIEF
 // Reads tech knowledge + story state → gives the assistant full context on entry
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/session/brief', optionalAuth, async (req, res) => {
+router.post('/session/brief', requireAuth, aiRateLimiter, async (req, res) => {
   const { book_id } = req.body;
 
   try {
@@ -145,7 +146,7 @@ Keep it tight. This brief should take 30 seconds to read and give the assistant 
   }
 });
 
-router.get('/session/brief/latest', optionalAuth, async (req, res) => {
+router.get('/session/brief/latest', requireAuth, async (req, res) => {
   try {
     if (!db.SessionBrief) return res.json({ brief: null });
     const brief = await db.SessionBrief.findOne({ order: [['created_at', 'DESC']] });
@@ -161,7 +162,7 @@ router.get('/session/brief/latest', optionalAuth, async (req, res) => {
 // UPGRADE 2: POST-GENERATION REVIEW
 // Reads approved scene output against franchise laws — catches what guard misses
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/reviews/post-generation', optionalAuth, async (req, res) => {
+router.post('/reviews/post-generation', requireAuth, aiRateLimiter, async (req, res) => {
   const { story_id } = req.body;
   if (!story_id) return res.status(400).json({ error: 'story_id required' });
 
@@ -261,7 +262,7 @@ Respond ONLY in valid JSON:
   }
 });
 
-router.post('/reviews/:id/acknowledge', optionalAuth, async (req, res) => {
+router.post('/reviews/:id/acknowledge', requireAuth, async (req, res) => {
   try {
     const review = await db.PostGenerationReview.findByPk(req.params.id);
     if (!review) return res.status(404).json({ error: 'Review not found' });
@@ -272,7 +273,7 @@ router.post('/reviews/:id/acknowledge', optionalAuth, async (req, res) => {
   }
 });
 
-router.get('/reviews/unacknowledged', optionalAuth, async (req, res) => {
+router.get('/reviews/unacknowledged', requireAuth, async (req, res) => {
   try {
     const reviews = await db.PostGenerationReview.findAll({
       where: { author_acknowledged: false },
@@ -287,7 +288,7 @@ router.get('/reviews/unacknowledged', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // UPGRADE 3: WRITING RHYTHM
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/writing-rhythm/log', optionalAuth, async (req, res) => {
+router.post('/writing-rhythm/log', requireAuth, async (req, res) => {
   const { scenes_proposed = 0, scenes_generated = 0, scenes_approved = 0, words_written = 0, arc_stage, session_note } = req.body;
 
   try {
@@ -314,7 +315,7 @@ router.post('/writing-rhythm/log', optionalAuth, async (req, res) => {
   }
 });
 
-router.get('/writing-rhythm/stats', optionalAuth, async (req, res) => {
+router.get('/writing-rhythm/stats', requireAuth, async (req, res) => {
   try {
     const goal = await db.WritingGoal.findOne({ where: { active: true } });
 
@@ -379,7 +380,7 @@ router.get('/writing-rhythm/stats', optionalAuth, async (req, res) => {
   }
 });
 
-router.patch('/writing-rhythm/goal', optionalAuth, async (req, res) => {
+router.patch('/writing-rhythm/goal', requireAuth, async (req, res) => {
   try {
     await db.WritingGoal.update({ active: false }, { where: { active: true } });
     const goal = await db.WritingGoal.create({ ...req.body, active: true });
@@ -395,7 +396,7 @@ router.patch('/writing-rhythm/goal', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // GET all multi-product content (must be before :storyId param route)
-router.get('/multi-product/all', optionalAuth, async (req, res) => {
+router.get('/multi-product/all', requireAuth, async (req, res) => {
   try {
     const content = await db.MultiProductContent.findAll({
       order: [['created_at', 'DESC']],
@@ -407,7 +408,7 @@ router.get('/multi-product/all', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/multi-product/:storyId/generate', optionalAuth, async (req, res) => {
+router.post('/multi-product/:storyId/generate', requireAuth, aiRateLimiter, async (req, res) => {
   const { storyId } = req.params;
 
   try {
@@ -506,7 +507,7 @@ Generate content for all five formats. Respond ONLY in valid JSON:
   }
 });
 
-router.get('/multi-product/:storyId', optionalAuth, async (req, res) => {
+router.get('/multi-product/:storyId', requireAuth, async (req, res) => {
   try {
     const content = await db.MultiProductContent.findAll({
       where: { story_id: req.params.storyId },
@@ -518,7 +519,7 @@ router.get('/multi-product/:storyId', optionalAuth, async (req, res) => {
   }
 });
 
-router.patch('/multi-product/:contentId/status', optionalAuth, async (req, res) => {
+router.patch('/multi-product/:contentId/status', requireAuth, async (req, res) => {
   const { status, author_note } = req.body;
   try {
     const item = await db.MultiProductContent.findByPk(req.params.contentId);
@@ -540,7 +541,7 @@ Extract only technical decisions: what is deployed, what routes exist, what tabl
 
 Respond ONLY in valid JSON.`;
 
-router.post('/tech-knowledge/entries', optionalAuth, async (req, res) => {
+router.post('/tech-knowledge/entries', requireAuth, async (req, res) => {
   const { title, content, category, severity, applies_to, source_document } = req.body;
   if (!title || !content) return res.status(400).json({ error: 'title and content required' });
   try {
@@ -559,7 +560,7 @@ router.post('/tech-knowledge/entries', optionalAuth, async (req, res) => {
   }
 });
 
-router.get('/tech-knowledge/entries', optionalAuth, async (req, res) => {
+router.get('/tech-knowledge/entries', requireAuth, async (req, res) => {
   const { category, status, search } = req.query;
   try {
     const where = {};
@@ -579,7 +580,7 @@ router.get('/tech-knowledge/entries', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/tech-knowledge/ingest-document', optionalAuth, async (req, res) => {
+router.post('/tech-knowledge/ingest-document', requireAuth, aiRateLimiter, async (req, res) => {
   const { document_text, source_document, source_version } = req.body;
   if (!document_text || !source_document) return res.status(400).json({ error: 'document_text and source_document required' });
 
@@ -619,7 +620,7 @@ router.post('/tech-knowledge/ingest-document', optionalAuth, async (req, res) =>
   }
 });
 
-router.post('/tech-knowledge/extract-conversation', optionalAuth, async (req, res) => {
+router.post('/tech-knowledge/extract-conversation', requireAuth, aiRateLimiter, async (req, res) => {
   const { conversation_text } = req.body;
   if (!conversation_text) return res.status(400).json({ error: 'conversation_text required' });
 

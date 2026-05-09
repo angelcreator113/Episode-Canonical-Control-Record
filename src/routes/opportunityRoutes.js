@@ -16,13 +16,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
 
 async function getModels(req) {
   return req?.app?.get('models') || req?.app?.locals?.db || require('../models');
@@ -60,7 +54,7 @@ const TYPE_DEFAULTS = {
 // GET /opportunities/:showId — List
 // ═══════════════════════════════════════════
 
-router.get('/opportunities/:showId', optionalAuth, async (req, res) => {
+router.get('/opportunities/:showId', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { status, type } = req.query;
@@ -90,7 +84,7 @@ router.get('/opportunities/:showId', optionalAuth, async (req, res) => {
 // POST /opportunities/:showId — Create
 // ═══════════════════════════════════════════
 
-router.post('/opportunities/:showId', optionalAuth, async (req, res) => {
+router.post('/opportunities/:showId', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const models = await getModels(req);
@@ -137,7 +131,7 @@ router.post('/opportunities/:showId', optionalAuth, async (req, res) => {
 // PUT /opportunities/:showId/:id — Update
 // ═══════════════════════════════════════════
 
-router.put('/opportunities/:showId/:id', optionalAuth, async (req, res) => {
+router.put('/opportunities/:showId/:id', requireAuth, async (req, res) => {
   try {
     const { showId, id } = req.params;
     const models = await getModels(req);
@@ -167,7 +161,7 @@ router.put('/opportunities/:showId/:id', optionalAuth, async (req, res) => {
 // POST /opportunities/:showId/:id/advance — Advance pipeline
 // ═══════════════════════════════════════════
 
-router.post('/opportunities/:showId/:id/advance', optionalAuth, async (req, res) => {
+router.post('/opportunities/:showId/:id/advance', requireAuth, async (req, res) => {
   try {
     const { showId, id } = req.params;
     const { to_status, note } = req.body;
@@ -233,7 +227,7 @@ router.post('/opportunities/:showId/:id/advance', optionalAuth, async (req, res)
 // POST /opportunities/:showId/:id/to-event — Convert to world event
 // ═══════════════════════════════════════════
 
-router.post('/opportunities/:showId/:id/to-event', optionalAuth, async (req, res) => {
+router.post('/opportunities/:showId/:id/to-event', requireAuth, async (req, res) => {
   try {
     const { showId, id } = req.params;
     const models = await getModels(req);
@@ -253,7 +247,7 @@ router.post('/opportunities/:showId/:id/to-event', optionalAuth, async (req, res
 // DELETE /opportunities/:showId/:id
 // ═══════════════════════════════════════════
 
-router.delete('/opportunities/:showId/:id', optionalAuth, async (req, res) => {
+router.delete('/opportunities/:showId/:id', requireAuth, async (req, res) => {
   try {
     const { showId, id } = req.params;
     const models = await getModels(req);
@@ -275,7 +269,7 @@ router.delete('/opportunities/:showId/:id', optionalAuth, async (req, res) => {
 // GET /opportunities/:showId/stats — Pipeline stats
 // ═══════════════════════════════════════════
 
-router.get('/opportunities/:showId/stats', optionalAuth, async (req, res) => {
+router.get('/opportunities/:showId/stats', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const models = await getModels(req);
@@ -305,7 +299,7 @@ router.get('/opportunities/:showId/stats', optionalAuth, async (req, res) => {
 // POST /opportunities/:showId/episode-complete/:episodeId — Trigger career pipeline on episode completion
 // ═══════════════════════════════════════════
 
-router.post('/opportunities/:showId/episode-complete/:episodeId', optionalAuth, async (req, res) => {
+router.post('/opportunities/:showId/episode-complete/:episodeId', requireAuth, async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const models = await getModels(req);
@@ -328,7 +322,7 @@ router.post('/opportunities/:showId/episode-complete/:episodeId', optionalAuth, 
 // GET /opportunities/:showId/career-tier — Get accessible career tier
 // ═══════════════════════════════════════════
 
-router.get('/opportunities/:showId/career-tier', optionalAuth, async (req, res) => {
+router.get('/opportunities/:showId/career-tier', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const models = await getModels(req);

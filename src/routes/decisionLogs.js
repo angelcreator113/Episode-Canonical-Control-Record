@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { DecisionLog } = require('../models');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // Create decision log
-router.post('/', optionalAuth, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const {
       episode_id,
@@ -41,7 +41,7 @@ router.post('/', optionalAuth, async (req, res) => {
 });
 
 // Get decision logs for episode (for AI analysis)
-router.get('/episode/:episodeId', optionalAuth, async (req, res) => {
+router.get('/episode/:episodeId', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { action_type, limit = 100 } = req.query;
@@ -69,7 +69,7 @@ router.get('/episode/:episodeId', optionalAuth, async (req, res) => {
 });
 
 // Get decision logs for scene
-router.get('/scene/:sceneId', optionalAuth, async (req, res) => {
+router.get('/scene/:sceneId', requireAuth, async (req, res) => {
   try {
     const { sceneId } = req.params;
 

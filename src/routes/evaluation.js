@@ -29,14 +29,7 @@ const {
   TIER_ORDER: _TIER_ORDER,
 } = require('../utils/evaluationFormula');
 
-// Optional auth
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth, authorize } = require('../middleware/auth');
 
 
 // ─── HELPERS ───
@@ -133,7 +126,7 @@ function parseIntentTag(scriptContent) {
 // One-time admin endpoint: reset Lala's stats + clear evaluations
 // ═══════════════════════════════════════════
 
-router.post('/admin/reset-character-stats', async (req, res) => {
+router.post('/admin/reset-character-stats', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
@@ -209,7 +202,7 @@ router.post('/admin/reset-character-stats', async (req, res) => {
 // GET /api/v1/characters/:key/state
 // ═══════════════════════════════════════════
 
-router.get('/characters/:key/state', optionalAuth, async (req, res) => {
+router.get('/characters/:key/state', requireAuth, async (req, res) => {
   try {
     const { key } = req.params;
     const { show_id, season_id, scope = 'season' } = req.query;
@@ -262,7 +255,7 @@ router.get('/characters/:key/state', optionalAuth, async (req, res) => {
 
 // DEPRECATED: Use POST /world/:showId/episodes/:episodeId/complete instead
 // (episodeCompletionService.js merges evaluation + financials + social + wardrobe in one call)
-router.post('/episodes/:id/evaluate', optionalAuth, async (req, res) => {
+router.post('/episodes/:id/evaluate', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -427,7 +420,7 @@ router.post('/episodes/:id/evaluate', optionalAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 
 // DEPRECATED: Use POST /world/:showId/episodes/:episodeId/complete instead
-router.post('/episodes/:id/override', optionalAuth, async (req, res) => {
+router.post('/episodes/:id/override', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -544,7 +537,7 @@ router.post('/episodes/:id/override', optionalAuth, async (req, res) => {
 
 // DEPRECATED: Proxies to unified completeEpisode pipeline.
 // Use POST /world/:showId/episodes/:episodeId/complete instead.
-router.post('/episodes/:id/accept', optionalAuth, async (req, res) => {
+router.post('/episodes/:id/accept', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -584,7 +577,7 @@ router.post('/episodes/:id/accept', optionalAuth, async (req, res) => {
 // Manual stat edit from World Admin Characters tab
 // ═══════════════════════════════════════════
 
-router.post('/characters/:key/state/update', optionalAuth, async (req, res) => {
+router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
   try {
     const { key } = req.params;
     const { show_id, coins, reputation, brand_trust, influence, stress, source: _source = 'manual', notes } = req.body;

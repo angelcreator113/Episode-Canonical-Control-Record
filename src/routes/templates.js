@@ -10,7 +10,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { models } = require('../models');
-const { authenticate, authorize } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -18,7 +18,7 @@ const router = express.Router();
  * GET /api/v1/templates
  * List all available templates
  */
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const templates = await models.EpisodeTemplate.findAll({
       order: [['createdAt', 'DESC']],
@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
  * GET /api/v1/templates/:id
  * Get template by ID
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
     const template = await models.EpisodeTemplate.findByPk(id);
@@ -70,7 +70,7 @@ router.get('/:id', async (req, res) => {
  * POST /api/v1/templates
  * Create new template
  */
-router.post('/', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { name, description, defaultStatus, defaultCategories, config } = req.body;
 
@@ -114,7 +114,7 @@ router.post('/', authenticate, authorize(['ADMIN']), async (req, res) => {
  * PUT /api/v1/templates/:id
  * Update template
  */
-router.put('/:id', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.put('/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description, defaultStatus, defaultCategories, config, isActive } = req.body;
@@ -154,7 +154,7 @@ router.put('/:id', authenticate, authorize(['ADMIN']), async (req, res) => {
  * DELETE /api/v1/templates/:id
  * Delete template
  */
-router.delete('/:id', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.delete('/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
     const template = await models.EpisodeTemplate.findByPk(id);
