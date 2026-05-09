@@ -3,7 +3,7 @@
 
 **Document version**
 
-v2.35 — Step 3 CP10 (Admin/internal — 20 source files / ~120 handlers / ~85 Tier 1 + 23 Tier 2 ['ADMIN'] + 2 Tier 2 ['admin'] preserved + 4 Tier 2-equivalent (requireAuth + requirePermission) + 3 Tier 5+Tier 2 (env-gated mount) + 3 Tier 2 mount-line + 6 AI POST overlay (D3-verified) + 7 PRESERVE / 20 new test files / 94 new tests / 0 new integration test updates / 0 pre-existing unit test fixes (§5.60 PRE-FLIGHT clean — zero supertest tests in zone) / 1 single session — 10-for-10 single-session pattern; CP7 outlier confirmed isolated for 3rd consecutive CP) approved at commit b0a404e7, force-with-lease push #34 cumulative; auto-merge to dev pending integrator. CP10 was §5.56 outlier candidate (forecast 75 → actual ~120 handlers = 1.6x) but ACCEPTED Option A (single squashed commit) per CP7 precedent + admin/internal coherent-domain framing; single-session execution preserved despite outlier classification — validates §5.56 refinement amendment (handler-count alone insufficient as outlier criterion; execution-feasibility weighted equally). CP10 architectural firsts (11): first primary Tier 2 at-scale CP (cumulative Tier 2 across all CPs: 0 pre-CP10 → ~32 post-CP10); V6 NEW topology variant — admin-prefix non-versioned mount (queue-monitor.js /admin/queues per app.js:1262; D13 lock; NEW v2.35 §5.13/§5.34 amendment — 6-variant matrix); first Tier 5 + Tier 2 combined gate (seed.js — env-gated mount in app.js wrapped in NODE_ENV !== 'production' + Tier 2 inside per Item 7 lock); first Tier 2 at MOUNT LINE (queue-monitor.js — auth in app.js mount-line, NOT inside router; Bull-board sub-router bypass per Item 8 lock); largest legacy alias conversion in any single Step 3 CP — 33 instances (28 authenticateToken + 5 authenticate → requireAuth canonical per §5.41); cumulative 39 conversions post-CP10 = 6.5x prior peak (CP9 5; NEW v2.35 §5.53 amendment); NEW custom-middleware classification — user-permission gate (processing.js requirePermission(resource, verb) at 4 mutate handlers) extends three-way classification to four-way (NEW v2.35 §5.55/§5.59 amendment); first §5.51 inspection resolving to Tier 2 ESCALATION based on domain semantics (cfoAgent — financial dashboard / budget mutation / scheduler control; §5.51 methodology extended; NEW v2.35 §5.51 amendment); first §5.4 candidate-annotation resolving to Tier 1 (aiUsageRoutes.js — distinguishes §5.3 pre-locked Tier 2 from §5.4 Tier 2 candidate annotation; NEW v2.35 §5.4 amendment); 4-CP zero-Item-16-candidate streak BREAKS at CP10 by design — 5 pre-locked Items + 2 non-pre-locked permission-gates (admin + processing) + 1 domain-semantic (cfoAgent) = 8 Tier 2 candidate files; streak break is canonical, not anomalous; methodology generality lock DEFERRED — admin-internal as canonical Tier 2 context now established; first §5.21 cluster with zero mixed-tier instances post-pattern-lock — admin-internal cluster confirms pattern-lock is production-tooling + social-feeds specific, NOT universal (cumulative §5.21 count remains 9 post-CP10; NEW v2.35 §5.21 amendment); final lazy-noop elimination CP — 1 file residue (opportunityRoutes.js) closes pattern; cumulative pattern-elimination across CP4-CP10: 25 files; pattern fully retired post-Step-3 (NEW v2.35 §5.8 closure marker); WP4 admin.js Cognito-group casing gate Option (c) inconclusive — preserve verbatim per default; PE candidate filed (NEW v2.35 §5.51 WP4-gate methodology amendment); WP7 §5.58 D3 execution-time verification produced largest forecast-correction — 25-35 forecast → 6 actual AI POSTs (4-7x overestimate at surface; resolved cleanly at execution via per-handler service-trace inspection; cfoAgent + designAgent + siteOrganizer naming pattern misleading — services confirmed non-Anthropic; PE candidate filed for naming-vs-implementation drift); 10th backend Step 3 data point — pacing remains stable at ~85 min mean ± 10 min across 10 data points (CP1 70 / CP2 95 / CP3 85 / CP4 80 / CP5 95 / CP6 85 / CP7 ~85 raw / CP8 ~85 / CP9 ~85 / CP10 ~85; CP7 1.85x scope outlier confirmed isolated for 3rd consecutive CP; NEW v2.35 §5.10 pacing-lock amendment); test-count forecast methodology amendment — 94 new tests vs 150-250 forecast (below floor); per-site structural-assertion density (~0.78 tests/handler at CP10) distinguishes from aggregate-counter density (~2-3 tests/handler at prior CPs); CP10 canonical per-site instance (NEW v2.35 §5.49 amendment); test filename collision discipline — jest testPathIgnorePatterns substring-match collision risk surfaced at WP9 (cp10-jobs/files/search filtered by exclusion patterns); -tier suffix discipline locked for future CPs (NEW v2.35 §5.60 amendment). Surface-correction graduates to 39 cumulative data points (CP10 contributed 4: handler-count surface estimate ~108 → actual ~120 enumeration delta; WP3 Python regex misses at sync handlers + non-async signatures patched; WP4 regex misses at bare (req, res) + sync handlers patched; WP9 filename-collision discovery). Backend test suite: 2128 → 2222 passing (+94 tests vs +150-250 forecast — below floor; per-site methodology density correction; 0 regressions). Mount-collision topology: V6 admin-prefix mount registered for queue-monitor.js. Out-of-scope concerns confirmed not touched at CP10: canonical_description stale copies + scene_sets drift + Career Goals parallel writers + uiOverlayRoutes single-instance state + hardcoded JS constants + Show Bible disconnect + goal_summary stale + archetype taxonomy drift + decision_log triple parallel — none affect auth disposition. Step 3 CP11 (Cleanup CP per v2.23 §5.4) is next — fresh session after v2.35 lands on dev. NO Track 7 mini-CP coordination needed at CP10 (frontend ideal state — 7th consecutive PATTERN LOCK extends through admin-internal). PE candidates carried to Track 8: 6 cumulative (admin.js Cognito-group casing canonicalization; processing.js requirePermission RBAC unification; aiUsageRoutes.js naming clarity rename; seed.js pre-existing missing NODE_ENV check documented; feedRelationshipRoutes.js planning-phase listing duplication — process improvement; cfoAgent + designAgent + siteOrganizerAgent naming-vs-implementation drift). v2.35 amendments (15 items): §5.4 ×2, §5.3, §5.13/§5.34 (V6), §5.21, §5.41, §5.51 ×2, §5.53, §5.55/§5.59, §5.8, §5.49, §5.56, §5.60, §5.10.
+v2.36 — Step 3 CP11 (Cleanup CP — 3 source files / 17 handlers / 17 Tier 1 (sub-form b ADD: beats 5 + markers 7 + audio-clips 5) + 0 Tier 2 + 0 Tier 3 + 0 Tier 4 + 0 Tier 5 + 0 AI POST overlay + 0 PRESERVE / 3 new test files / 23 new tests / 0 new integration test updates / 0 pre-existing unit test fixes (§5.60 PRE-FLIGHT clean — zero supertest tests in zone) / 1 single session — 11-for-11 single-session pattern; CP7 outlier confirmed isolated for 4th consecutive CP) approved at commit acc172f7, force-with-lease push #35 cumulative; auto-merge to dev pending integrator. CP11 was the FASTEST CP in F-AUTH-1 program (~35 min execution vs ~85 min CP-zone mean) — true cleanup scope per v2.34 §5.4 framing. CP11 architectural firsts (3): first true cleanup CP at single-session pace (smallest by handler count: 17 vs ~75-150 prior CPs); first CP discovering v2.x amendment retraction at surface phase (§5.8 v2.35 closure marker contradicted by 6-file program-wide lazy-noop residue grep — v2.36 retraction confirmed); first CP triggering NEW CP addition at adjudication boundary (CP12 added per Option B at CP11 surface §P; converts F-AUTH-1 from 11 backend CPs to 12; v2.36 §5.4 amendment). CP11 closed 3 AUTH-TEMPORARILY-DISABLED-FOR-TESTING banners (beats.js L17 + markers.js L15 + audio-clips.js L18); G4 program-wide grep returns 0 true positives post-CP11 (down from 3 pre-CP11). CP11 documented program-wide G1-G6 verification greps for CP12 reference: G1 88 hits / 16 files cross-domain optionalAuth-on-writes (CP12 scope); G2 6 files lazy-noop residue program-wide (relationships, consciousness, storyHealth, therapy, tierFeatures, evaluation — CP12 scope; v2.35 §5.8 closure marker RETRACTED per v2.36 amendment); G3 122 handlers AI POST aiRateLimiter (CP10 baseline +0 CP11 delta); G4 0 AUTH-DISABLED banners post-CP11 ✓; G5 22 PUBLIC markers across worldStudio + scripts with rationale comments per Item 15 + §5.45 ✓; G6 26 authenticateToken residue across 4 cross-domain files (stories 9 + thumbnails 8 + metadata 6 + pageContent 3 — CP12 scope; +4 surface-correction vs CP11 surface estimate of 22, within §5.50 noise band). 5 HTTP method corrections from Track 6 CP2/CP7/CP9 frontend surfaces verified ALREADY MATCH backend declarations (zero backend method changes needed; setCoverAngleApi PATCH at sceneSetRoutes:1537 + reorderAnglesApi PATCH at sceneSetRoutes:1410 + getAiCameraDirectionApi POST at sceneSetRoutes:845 + CFOAgent setBudget PUT at cfoAgentRoutes:133 + multi-product status PATCH at upgradeRoutes:522). Pacing data point #11 (LOCKED v2.36 §5.66): CP1 70 / CP2 95 / CP3 85 / CP4 80 / CP5 95 / CP6 85 / CP7 ~85 raw / CP8 ~85 / CP9 ~85 / CP10 ~85 / CP11 ~35 — mean ~78 min ± 18 min across 11 data points (CP11 cleanup-CP variance widens band; CP7 outlier confirmed isolated for 4 consecutive CPs CP8 + CP9 + CP10 + CP11). Test count overshoot at CP11: 23 vs 17 forecast (+35%); per-site density 1.35 tests/handler within v2.36 §5.63 refinement band (0.78-1.5). Console.log boot-line cleanup at WP1-WP3 banner removal: removed 🟠/🟢/🟣 boot logs alongside AUTH-DISABLED banners (cleanup-adjacent in-scope work; no PE candidate filing). CP12 (NEW 12th CP per v2.36 §5.4 amendment) is next — fresh session after v2.36 lands on dev; cross-domain sweep ~22 files / ~130 handlers / 1-2 sessions per §5.66; F-AUTH-1 keystone closure shifts from CP11 to CP12. PE candidates carried to Track 8: 8 cumulative (CP10 6 + CP11 2 NEW; PE #7 §5.43 reference model gap RECLASSIFIED CP12 in-scope per CP11 surface Q2 lock — removed from Track 8 roster). Surface-correction graduates to 43 cumulative data points (CP11 contributed 4: G6 +4 instance program-wide vs surface estimate; banner-line removal scope inclusion; console.log scope inclusion; v2.35 §5.8 closure marker contradiction discovery). Backend test suite: 2222 → 2245 passing (+23 tests vs +17 forecast; 0 regressions). Mount-collision topology: V1-V6 6-variant matrix HOLDS program-wide per CP11 surface §E (no V7 candidate detected); v2.35 §5.13/§5.34 lock confirmed final-form. Out-of-scope concerns confirmed not touched at CP11: canonical_description stale copies + scene_sets drift + Career Goals parallel writers + uiOverlayRoutes single-instance state + hardcoded JS constants + Show Bible disconnect + goal_summary stale + archetype taxonomy drift + decision_log triple parallel — none affect auth disposition. v2.36 amendments (10 items): §5.4, §5.8 retraction, §5.41 baseline update, §5.43 PE reclassification, §5.55/§5.59 cumulative tally, §5.10/§5.66 pacing 11-data-point lock, §5.56 outlier-vs-purpose-built distinction, §5.69 NEW (CP planning methodology), §5.63 density variance band refinement, §5.50 surface-correction 43-data-point cumulative.
 
 **Author**
 
@@ -1774,6 +1774,23 @@ Domain partitions per Item 13 lock. Each CP = 1 commit, 1-2 sessions (CP10 forec
 (3) **§5.3 pre-locked Tier 2 vs §5.4 candidate annotation distinction.** v2.34 §5.4 CP10 paragraph used "Tier 2" annotations on aiUsageRoutes.js + cfoAgentRoutes.js as planning-phase predictions. CP10 surface phase distinguished §5.3 PRE-LOCKED Tier 2 (Items 3, 4, 5, 6, 7, 8 — disposition adjudicated and locked at planning) from §5.4 candidate annotations (planning-phase predictions resolved at surface time). aiUsageRoutes.js resolved to Tier 1 per §5.51 inspection (DB-tracking only, no permission gate). cfoAgentRoutes.js resolved to Tier 2 per §5.51 v2.35 domain-semantic amendment (financial dashboard / budget mutation / scheduler control). v2.35 §5.4 distinguishes: **§5.3 pre-locked Tier 2** = locked dispositions for application; **§5.4 candidate annotations** = planning-phase predictions, resolved per §5.51 inspection at surface time. |
 | --- |
 
+| **§5.4 v2.36 amendment — CP12 added (NEW 12th CP) per Option B lock at CP11 surface (LOCKED v2.36)** CP11 surface phase program-wide G1-G6 sweep revealed ~22 files / ~130 handlers of cross-domain edge case scope never enumerated in CP1-CP10 (per CP11 surface §C). Adjudication at CP11 surface §P locked Option B: CP11 stays "true cleanup" per v2.34 §5.4 framing (~17 handlers single session); cross-domain sweep absorbed into NEW 12th CP.
+
+**CP12 — Cross-domain sweep (NEW v2.36).** Files in scope (per CP11 surface §C):
+- G1 optionalAuth-on-writes (16 files / 88 handlers): tierFeatures.js, calendarRoutes.js, relationships.js, novelIntelligenceRoutes.js, therapy.js, consciousness.js, stories.js, press.js, evaluation.js, youtube.js, editMaps.js, worldStudio.js (1 residue handler — verify Tier 4 PUBLIC vs Tier 1 escalation per Q6), storyHealth.js, imageProcessing.js, decisionLogs.js, assets.js
+- G2 lazy-noop residue (6 files; subset of G1): relationships, consciousness, storyHealth, therapy, tierFeatures, evaluation
+- G6 authenticateToken residue (4 files / 26 instances): metadata.js (6) + pageContent.js (3) + thumbnails.js (8) + stories.js (9) — note: stories.js is in BOTH G1 and G6 zones
+- §5.59 4-way preservation (10 requirePermission instances; subset of G6): metadata 5 + thumbnails 5 (Tier 2-equivalent per §5.59 4-way classification)
+- §5.45 polymorphic factory preservation (subset of G1): press.js 2 GETs at L455+L501 (Tier 3 verbatim per CP1 §5.7 disposition; press.js becomes 10th §5.21 instance — NEW Tier 1+3 mix shape per CP11 surface Q4 lock)
+- §5.43 reference model gap (3 CP-audited files): phoneAIRoutes.js ×2 + episodeScriptWriterRoutes.js ×1 — IN-SCOPE at CP12 per CP11 surface Q2 lock (RECLASSIFIED from Track 8 PE candidate per v2.36 §5.43 amendment)
+
+**CP12 forecast**: 22 files / ~130 handlers / 1-2 sessions per §5.66. F-AUTH-1 keystone closure shifts from CP11 to CP12.
+
+**Total Step 3 CP count: 11 → 12.** Original v2.23 §5.4 lock was ~20-22 sessions across 11 CPs. v2.36 cumulative trajectory post-CP11: 11 sessions actual + 1 Track 7 mini-CP + CP12 forecast 1-2 sessions = ~13-14 sessions for CP1-CP12 + Track 7. Trajectory remains ~35-40% under original v2.23 forecast at CP12 close.
+
+**Process improvement (v2.36 §5.69 NEW):** Future fix-plan revisions require program-wide G1+G2+G6 sweep at CP1 surface phase as starting inventory baseline. CP11 cleanup-discovery of cross-domain scope (~22 files / ~130 handlers never enumerated) was avoidable with a CP1-phase program-wide grep. v2.36 §5.69 amendment formalizes the discipline. |
+| --- |
+
 -   **CP11 — Cleanup CP.** HTTP method corrections (5 routes from CP2/CP7/CP9 frontend surfaces — verify backend route declarations match) + cross-domain edge cases + verification grep + post-sweep audit. Small, focused. 1 session.
 
 Total Step 3 estimate: **11 CPs / ~20-22 sessions**. Conservative bias applied (1.5-2.0x per CP12-CP15 trajectory). Backend sweep CPs may run faster than frontend (mechanical middleware swap is ~5 LOC per handler vs ~15-30 LOC per frontend migration), but per-route adjudication overhead is higher (each route needs Tier 1-5 classification check).
@@ -1886,6 +1903,21 @@ Per-CP discipline: surface report at each CP MUST re-grep for lazy-noop fallback
 **Cumulative: 25 files. Pattern fully retired post-Step-3.**
 
 CP11 (cleanup) does NOT need lazy-noop re-grep; G2 verification grep at CP10 close confirmed zero residue codebase-wide. v2.35 §5.8 closure marker locks the discipline: future CPs (Track 8 onward) do not encounter lazy-noop pattern; if any new occurrence surfaces in post-Step-3 work, treat as P1 architectural regression and file PE per §9.12. |
+| --- |
+
+| **§5.8 v2.36 RETRACTION of v2.35 closure marker (LOCKED v2.36)** v2.35 §5.8 closure marker stated "lazy-noop pattern fully retired post-Step-3 (CP10)." This was premature.
+
+CP10 closing G2 verification grep was IN-CP10-ZONE only (3 files: opportunityRoutes.js + auditLog assertions + ~1 ancillary). The grep correctly returned 0 in CP10 zone — but CP10 zone is NOT program-wide.
+
+CP11 surface phase ran G2 program-wide for the first time and revealed 6 files with active lazy-noop residue: relationships.js, consciousness.js, storyHealth.js, therapy.js, tierFeatures.js, evaluation.js. All 6 carry the canonical `let optionalAuth; try { require('../middleware/auth') } catch { ... }` pattern.
+
+**v2.36 RETRACTS v2.35 §5.8 closure marker.** Lazy-noop pattern is NOT fully retired post-CP10; closure slips to CP12 (program-wide level).
+
+CP12 cross-domain sweep closes the 6 remaining lazy-noop residue files in same commit as the cross-domain optionalAuth → requireAuth migration (§5.8 universal discipline carry-forward from CP1 lock; not a new methodology).
+
+**Cumulative pattern-elimination forecast post-CP12: 25 + 6 = 31 files.** v2.36 §5.8 closure marker is the canonical closure for F-AUTH-1 program — re-locked at CP12 program-wide level.
+
+This is the first v2.x amendment retraction in the F-AUTH-1 program. PE-candidate filing per CP11 surface §M item 8 carries the methodology lesson forward: future closure markers require program-wide verification before lock, not in-CP-zone verification. v2.36 §5.69 amendment formalizes the discipline. |
 | --- |
 
 ### **§5.9 — Module-load safety test pattern (NEW v2.24 §9.11 lock — Step 3 testing primitive)**
@@ -2632,6 +2664,15 @@ CP10 converted 33 instances (28 authenticateToken + 5 authenticate → requireAu
 CP10 is canonical "universal §5.41 application + D20 preservation" instance. |
 | --- |
 
+| **§5.41 v2.36 cumulative baseline amendment (LOCKED v2.36)** Post-CP11 cumulative legacy alias conversions: 39 (CP7 1 + CP9 5 + CP10 33). CP11 contributed 0 conversions (cleanup CP did not touch legacy alias residue; CP12 scope per Option B lock).
+
+CP12 forecast: +26 conversions (G6 program-wide grep at CP11 surface §D = 26 instances across 4 files: metadata.js 6 + pageContent.js 3 + thumbnails.js 8 + stories.js 9). Note: this is +4 vs CP11 surface §C original estimate of 22, within §5.50 surface-correction noise band.
+
+**Post-CP12 forecast cumulative: 39 + 26 = 65 conversions.** Largest cumulative legacy alias cleanup in F-AUTH-1 program. CP12 closing report locks final cumulative count.
+
+authenticateJWT preservation per D20 holds program-wide. CP11 surface §G6 confirmed: auth.js (3 instances) + compositions.js (8 instances; D20 jwtAuth subset OUT-of-scope) — preserved verbatim. Track 8 frontend Cognito SDK migration eventually deprecates jwtAuth.js per §11. |
+| --- |
+
 Net effect at wardrobeLibrary.js: dev-mode auth-bypass eliminated. All 25 handlers in file (the 5 originally using authMiddleware + 4 optionalAuth + 16 bare) now wrap requireAuth. The dev-user injection (`req.user = { id: 'dev-user', email: 'dev@example.com', name: 'Dev User' }`) that the env-conditional installed is gone. Production safety: even if NODE_ENV is misconfigured, no dev-user injection path exists.
 
 Pattern for future lock escalations (LOCKED v2.29 §5.5 amendment): when v1.x or v2.x lock specifies a middleware replacement that pre-dates Step 3 Tier 1 default, CP-level adjudication may escalate to `requireAuth` if the target file falls within a Step 3 cluster sweep. Surface report flags candidate; closing report records escalation rationale.
@@ -2651,6 +2692,17 @@ Combined closure (LOCKED v2.29 §4 amendment). **Audit §4.1(b) Sweep b is FULLY
 Pattern for future multi-CP audit closures (LOCKED v2.29 §4 amendment): when audit findings span multiple clusters, mark each half's CP closure individually + record full closure at the second CP's fix plan revision. Combined-closure pattern serves audit handoff verification: v9 audit handoff (when generated) can reference §5.42 for §4.1(b) Sweep b resolution.
 
 ### **§5.43 — AI POST reference model third application instance: cumulative 29 handlers across 11 files (UPDATED v2.29 §5.27)**
+
+| **§5.43 v2.36 cumulative + PE reclassification amendment (LOCKED v2.36)** Post-CP11 cumulative AI POST reference model: 122 handlers carrying `requireAuth + aiRateLimiter` per CP11 surface §G3 program-wide grep. CP11 contributed 0 (cleanup CP did not modify AI POSTs).
+
+**CP12 §5.43 reference model gap closure (RECLASSIFIED from Track 8 PE candidate to CP12 in-scope per CP11 surface Q2 lock).** v2.34 §5.61 + v2.35 §11 PE roster carried 3 CP-audited files with §5.43 reference model gap as Track 8 candidates: phoneAIRoutes.js ×2 (direct anthropic AI POSTs missing aiRateLimiter) + episodeScriptWriterRoutes.js ×1 (service-mediated AI POST missing aiRateLimiter). These predate §5.27 reference model lock at CP4-CP5; original disposition was "NOT touch CP-audited files per §9.13 Rule 6 → file as Track 8 PE candidate."
+
+CP11 surface adjudication Q2 reclassified: CP12 cross-domain sweep is the natural closure home for these 3 files (architecturally adjacent to G1 optionalAuth-on-writes scope; same per-file pattern; same §9.13 Rule 6 boundary now relaxed because CP12 IS the closure CP, not a future cleanup CP).
+
+**v2.36 §5.43 amendment: PE candidate #7 RECLASSIFIED from Track 8 → CP12 in-scope.** Track 8 PE roster reduces from 9 → 8 candidates. CP12 closes §5.43 reference model coverage at uniform pattern across all AI POST handlers in F-AUTH-1 scope.
+
+**CP12 forecast §5.43 delta**: +3 retroactive aiRateLimiter ADDs (the 3 PE files) + per-handler D3 verification for cross-domain AI POSTs (novelIntelligenceRoutes, relationships, press, etc. per CP11 surface §G). Cumulative post-CP12 forecast: ~125-130 handlers across ~40-42 files at uniform requireAuth + aiRateLimiter pattern. CP12 closing report locks final cumulative count. |
+| --- |
 
 CP3 D4 (PROMOTE shape, 2 handlers in worldEvents.js) + CP4 D1 (ADD shape, 13 handlers in sceneProposeRoute + sceneSetRoutes) + CP5 D1 (ADD shape, 12 handlers across 5 wardrobe files) = **29 handlers cumulative at uniform requireAuth + aiRateLimiter pattern across 11 files**. Reference model now extends across:
 
@@ -2961,6 +3013,23 @@ Track 8 audit handoff. Post-F-AUTH-1 audit handoff v9 (when generated) should in
 Cumulative PE candidates carried to Track 8 across F-AUTH-1 program: ~15+ (CP7 §5.43 reference model gap + CP8 + CP9 §5.43 retroactive sweep candidates + CP10 6 above + others throughout program). Track 8 v1.0 fix plan (when generated) consolidates the full PE roster. |
 | --- |
 
+| **§11 v2.36 amendment — CP11 PE-candidate roster update (LOCKED v2.36)** CP11 surface phase contributed 2 NEW PE candidates and reclassified 1 prior candidate. Cumulative Track 8 PE roster post-CP11: 8 candidates (down from 9 due to PE #7 reclassification).
+
+**Removed (reclassified to CP12 in-scope per CP11 surface Q2 lock):**
+
+- PE #7 (was) — §5.43 reference model gap in 3 CP-audited files (phoneAIRoutes ×2 + episodeScriptWriterRoutes ×1). RECLASSIFIED CP12 in-scope per v2.36 §5.43 amendment. CP12 closes §5.43 reference model coverage uniformly across all AI POST handlers in F-AUTH-1 scope.
+
+**NEW from CP11 surface (2 candidates):**
+
+(7) **§5.8 v2.35 closure marker amendment retraction** (now resolved at v2.36 §5.8 amendment; carry forward as documentation lesson for Track 8 / future fix-plan-revision discipline). CP10 closing G2 verification grep was IN-CP-ZONE only; missed program-wide residue. v2.36 §5.69 amendment formalizes the program-wide sweep discipline at CP1 surface phase. Track 8 inherits the methodology.
+
+(8) **CP planning methodology improvement** — program-wide G1+G2+G6 sweep at CP1 surface phase as starting inventory baseline (NOT at CP11 cleanup discovery). v2.36 §5.69 amendment formalizes the discipline. Track 8 v1.0 fix plan applies this discipline at its own CP1 surface phase.
+
+**Cumulative Track 8 PE roster post-CP11: 8 candidates** (CP10 6 + CP11 2 NEW; CP9 PE #7 removed via reclassification). Track 8 v1.0 fix plan (when generated post-CP12 closure) consolidates the full PE roster.
+
+The Track 8 frontend Cognito SDK migration scope per v2.30 §11 is unchanged; the PE roster amendment only updates the cumulative count + scope of architectural follow-on items. |
+| --- |
+
 ### **§5.48 — CP6 closure: Character cluster + universe Q13 (LOCKED v2.31, COMPLETE)**
 
 CP6 closed at commit 9892e604 on claude/f-auth-1-backup; auto-merged to origin/dev at e8bbb808. Single squashed commit; same-turn force-with-lease push per §9.13 Rule 2; integrator auto-merge per §9.13 Rule 6 (27th cumulative same-turn push / auto-merge across F-AUTH-1 program).
@@ -3064,6 +3133,20 @@ Surface-correction methodology validated across 8 CPs / 7 backend CPs + 1 fronte
 - Per-handler-block analysis (per §5.37) preferred over fixed-line-window grep — confirmed at CP6 execution: surface methodology produces handler counts within ±1-2 per file; AI POST identification produces ±1-2 per file; total handler count net 0 delta
 
 - Future CP surface methodology continues per-handler-block analysis at scale (CP7 forecast 80-100 handlers; CP8-CP11 likely smaller)
+
+
+| **§5.50 v2.36 surface-correction 43-data-point amendment (LOCKED v2.36)** Cumulative surface-correction data points post-CP11: 43 (v2.34 §5.61 graduated to 35 post-CP9; CP10 contributed 4 → 39; CP11 contributed 4 → 43).
+
+CP11 contributed 4 surface-correction data points:
+- G6 +4 instance program-wide grep delta (surface §C estimate 22 → execution program-wide 26; per-file deltas: stories 8→9, thumbnails 7→8, metadata 5→6, pageContent 2→3)
+- WP1-WP3 banner-line removal scope inclusion (banners removed alongside Tier 1 ADD; cleanup-adjacent in-scope work)
+- WP1-WP3 console.log boot-line removal scope inclusion (🟠/🟢/🟣 boot logs alongside banner removal; cleanup-adjacent in-scope work)
+- v2.35 §5.8 closure marker contradiction discovery (program-wide G2 grep at CP11 surface revealed 6 files lazy-noop residue; v2.36 retraction)
+
+Methodology validation: 43-data-point baseline confirms surface-correction is REGULAR not exceptional. CP-zone work consistently produces ~3-5 corrections per CP at execution time vs surface phase estimates. The pattern is robust across all CP shapes (large CP7, medium CP10, small CP11).
+
+CP12 surface-correction forecast: ~3-5 corrections expected at execution time; cumulative post-CP12 forecast: 46-48 data points. |
+| --- |
 
 ### **§5.51 — Item 16 response-shape vs permission-gate distinction (NEW v2.31)**
 
@@ -3430,6 +3513,19 @@ Discipline (LOCKED v2.35 §5.59 4-way):
 - Future CPs (CP11 only remaining) apply 4-way classification at surface time |
 | --- |
 
+| **§5.55/§5.59 v2.36 cumulative 4-way tally amendment (LOCKED v2.36)** v2.35 §5.55/§5.59 amendment forecast "CP11 only remaining"; CP11 cleanup CP did NOT add custom middleware instances. CP12 (NEW 12th CP per v2.36 §5.4) is the actual final 4-way classification application.
+
+Cumulative 4-way tally pre-CP12:
+- (1) User-role gate `authorize(['ADMIN'])` — ~25 handlers (all CP10)
+- (2) User-permission gate `requirePermission(resource, verb)` — 4 handlers (CP10 processing.js)
+- (3) Content-protection gate (data-state) — 8 handlers (CP8 socialProfile guardJustAWomanRecord)
+- (4) Rate-limiter / orthogonal — 8 middlewares cumulative (assistantLimiter, generateRateLimits, queryLimiter, speakLimiter, readStoryLimiter, loginLimiter, refreshLimiter, uploadValidation)
+
+CP12 forecast adds: +10 user-permission gate instances (metadata.js 5 + thumbnails.js 5 — preserve verbatim per §5.59 v2.35 4-way classification; matches CP10 processing.js precedent). Other categories: 0 forecast adds.
+
+**Post-CP12 forecast cumulative: 25 + 14 + 8 + 8 = 55 4-way-classified handlers/middlewares across all categories.** User-permission gate becomes 2nd-largest category post-CP12 (14 handlers across 3 files: processing + metadata + thumbnails); v2.36 amendment registers metadata + thumbnails as additional canonical user-permission gate instances per §5.59. |
+| --- |
+
 ### **§5.60 — Pre-existing unit-test auth-mock methodology (NEW v2.33)**
 
 CP8 surfaced first instance of pre-existing supertest unit tests requiring auth-mock fixes post-CP-promotion. socialProfileRoutes.test.js (32 pre-existing tests) failed during CP8 execution with 25 transient regressions because (1) the test file claimed to mock auth middleware but lacked actual jest.mock declaration, (2) pre-CP8 lazy-noop fallback at module-load time created a no-op optionalAuth function that implicitly bypassed auth in test runs, (3) post-CP8 lazy-noop removal eliminated the implicit bypass and anonymous test requests began correctly receiving 401, (4) the auth-mock fix had to be polymorphic because middleware/auth.js exports optionalAuth as both factory (called as optionalAuth({degradeOnInfraFailure:true}) at worldStudio.js:2483) AND plain middleware function (called as optionalAuth at most other sites).
@@ -3732,6 +3828,29 @@ Discipline (LOCKED v2.35 §5.63):
 
 - CP10 is canonical per-site instance; CP11 (cleanup) declares methodology at surface phase per discipline
 
+| **§5.63 v2.36 density variance band refinement amendment (LOCKED v2.36)** CP11 produced 23 new tests vs 17 forecast (+35% overshoot). Per-site density 23/17 = 1.35 tests/handler — between CP10 baseline (0.78) and aggregate-counter-CP4-CP9 baseline (~2-3).
+
+Per-file analysis at CP11:
+- beats.js: 5 handlers / ~7 tests = 1.4 tests/handler
+- markers.js: 7 handlers / ~9 tests = 1.29 tests/handler
+- audio-clips.js: 5 handlers / ~7 tests = 1.4 tests/handler
+
+CP11 cleanup-CP test categories explicitly include: per-handler middleware chain assertion + AUTH-DISABLED banner absence + requireAuth import line presence. Three categories per file = ~7-9 tests for files with 5-7 handlers. Aggregate-counter density would have produced 10-15 tests/file (~2-3 tests/handler), still within forecast. Per-site density at CP11 lands at 1.35 because banner-absence + import-line categories add per-file fixed overhead independent of handler count.
+
+v2.36 amendment refines the per-site density variance band:
+
+- **CP10 baseline (0.78 tests/handler)**: pure middleware-chain-only assertions. Lower bound of band.
+- **CP11 baseline (1.35 tests/handler)**: middleware chain + banner + import categories. Upper bound for cleanup-CP shape.
+- **Variance band: 0.78-1.5 tests/handler** for per-site structural assertion methodology, depending on per-file complexity (number of test categories needed per file).
+
+Discipline (LOCKED v2.36 §5.63):
+
+- Per-site forecast formula refines to: `N handlers × ~0.78 + per-file overhead × N files` where per-file overhead is ~2-4 tests (banner / import / file-level assertions)
+- For CP-zone work without banner-removal scope: lower-bound 0.78 applies
+- For cleanup-CPs with banner / import / file-level scope: upper-bound 1.35-1.5 applies
+- CP11 is canonical upper-bound instance; CP10 is canonical lower-bound instance |
+| --- |
+
 ### **§5.64 — §5.56 outlier threshold refinement amendment (NEW v2.35)**
 
 CP10 forecast 75 handlers, actual ~120 = 1.6x overage = §5.56 outlier candidate. Adjudicated Option A (single squashed commit) per CP7 precedent. Single-session execution preserved (~85min within mean).
@@ -3755,6 +3874,22 @@ Discipline (LOCKED v2.35 §5.64):
 - Surface-phase report documents both dimensions at adjudication
 
 - CP10 is canonical "ACCEPTED outlier with single-session feasibility" instance; CP7 remains canonical "outlier with multi-session feasibility" precedent
+
+| **§5.56 v2.36 outlier-vs-purpose-built distinction amendment (LOCKED v2.36)** CP11 + CP12 (NEW 12th CP per v2.36 §5.4 amendment) both fall outside the v2.35 §5.64 outlier framework for different reasons:
+
+**CP11 — purpose-built cleanup (NON-outlier).** v2.35 §5.64 outlier classification considered handler-count overage > 25% as criterion (a). CP11 is UNDERAGE not overage: forecast 17 handlers, actual 17 handlers, 0% variance. NOT outlier in either direction. The "small focused" framing per v2.34 §5.4 was honored at execution.
+
+**CP12 — purpose-built cross-domain sweep (NON-outlier).** CP12 forecast at v2.36 §5.4 amendment is 22 files / ~130 handlers — purpose-built for the cross-domain scope discovered at CP11 surface. CP12 is NOT classified as outlier despite ~130 handlers because the forecast IS the scope (not an overage of a smaller forecast). v2.35 §5.64 outlier classification applies when handler-count overage exceeds a forecast; when scope IS the forecast, outlier classification doesn't apply.
+
+v2.36 amendment formalizes the distinction:
+
+- **§5.56 outlier** = forecast variance > 25% (handler-count actual exceeds forecast). CP7 1.85x and CP10 1.6x are canonical outlier instances.
+- **Purpose-built CP** = forecast IS the scope (no prior smaller forecast existed). CP11 (forecast 17 = actual 17) and CP12 (forecast 130 = scope-built 130) are canonical purpose-built instances.
+- **Outlier criterion (a) handler-count overage** applies only when comparing actual against a smaller forecast.
+- **Outlier criterion (b) execution-feasibility** still applies to all CPs as second-order classification (single-session vs multi-session).
+
+CP11 + CP12 are the canonical purpose-built CP instances; CP7 + CP10 remain canonical §5.56 outlier instances. The two classifications are independent dimensions. |
+| --- |
 
 ### **§5.65 — Test filename collision discipline (NEW v2.35 §5.60 amendment)**
 
@@ -3799,6 +3934,35 @@ Discipline (LOCKED v2.35 §5.66):
 
 - Trajectory: ~50% under original v2.23 §5.4 forecast (~10-12 sessions remaining post-CP6 → ~1 session remaining post-CP10) confirmed at CP10 close
 
+| **§5.66 v2.36 pacing model 11-data-point amendment (LOCKED v2.36)** CP11 contributes 11th backend Step 3 pacing data point at ~35 min execution time — fastest CP in F-AUTH-1 program (vs prior fastest CP1 at ~70 min). True cleanup-CP scope (~17 handlers vs ~75-150 prior CPs).
+
+Updated cumulative:
+
+```
+CP1  70min  / CP2  95min  / CP3  85min  / CP4  80min  / CP5  95min
+CP6  85min  / CP7 ~85min* / CP8 ~85min  / CP9 ~85min  / CP10 ~85min
+CP11 ~35min
+```
+
+(* CP7 1.85x scope outlier per §5.56; pacing held due to single-session ceiling enforcement)
+
+Statistical lock (11-data-point):
+
+- **Mean: ~78 min ± 18 min** across 11 data points (vs v2.35 §5.66 10-data-point mean of ~85 min ± 10 min — CP11 cleanup-CP shifts mean down 7 min, widens variance band 8 min)
+
+- **CP7 outlier confirmed isolated for 4 consecutive CPs** (CP8 + CP9 + CP10 + CP11 all within 50 min of each other; CP11 below by 50 min reflects cleanup scope, not outlier)
+
+- **Cleanup-CP variance note**: CP11 sits below the prior 70-95 min CP-zone range. The variance widens because CP11 is the only CP at "true cleanup" scope. Post-CP12 (1-2 sessions forecast at typical 60-90 min/session) the band may tighten back to ~80 min ± 12 min depending on CP12 session count.
+
+Discipline (LOCKED v2.36 §5.66):
+
+- Step 3 backend CP pacing forecast = ~78 min ± 18 min per CP (single squashed commit; single session) for backend-zone CPs
+- Cleanup-CP variance: ~30-50 min for purpose-built cleanup scope (CP11 canonical instance)
+- Outlier signal: execution time > 130 min OR < 25 min triggers post-hoc methodology review at closing report
+- 11-for-11 single-session pattern locked through CP11; CP12 forecast 1-2 sessions (depends on cross-domain handler count empirical at CP12 surface)
+- Trajectory: ~35-40% under original v2.23 §5.4 forecast (~13-14 sessions for CP1-CP12 + Track 7 vs ~20-22 original) confirmed at CP11 close |
+| --- |
+
 ### **§5.67 — Naming-vs-implementation drift PE pattern (NEW v2.35)**
 
 CP10 WP7 D3 verification surfaced naming-vs-implementation drift across 3 admin-internal route files: cfoAgentRoutes.js + designAgentRoutes.js + siteOrganizerRoutes.js. Filenames imply AI agents; D3 service-trace verification confirmed services are pure orchestration with zero Anthropic calls.
@@ -3822,6 +3986,81 @@ CP10 instances filed as PE candidates:
 - aiUsageRoutes.js → potential rename to `usageTrackingRoutes.js` (DB tracking, not AI)
 
 All 4 files filed for Track 8 unification work; not CP10 scope.
+
+### **§5.68 — CP11 closure: Cleanup CP (LOCKED v2.36, COMPLETE)**
+
+CP11 closed at commit acc172f7 on claude/f-auth-1-backup; auto-merge to origin/dev pending integrator. Single squashed commit; same-turn force-with-lease push per §9.13 Rule 2; cumulative push #35 across F-AUTH-1 program.
+
+Scope outcomes (purpose-built cleanup CP per §5.56 v2.36 amendment; NON-outlier classification):
+
+- 3 source files modified (beats.js + markers.js + audio-clips.js — all sub-form b AUTH-DISABLED files with parallels to CP6 character-clips.js)
+
+- 17 handlers Tier 1 ADD (beats 5 + markers 7 + audio-clips 5) — all currently zero-middleware sub-form b instances; full-file Tier 1 ADD per §5.41 universal canonical
+
+- 0 Tier 2 / Tier 3 / Tier 4 / Tier 5 / AI POST overlay / PRESERVE — pure cleanup CP scope
+
+- 3 NEW test files at tests/unit/routes/* (cp11-beats-tier + cp11-markers-tier + cp11-audio-clips-tier) per §5.65 v2.35 -tier suffix discipline
+
+- 23 new tests vs 17 forecast (+35% overshoot; per-site density 1.35 tests/handler — within v2.36 §5.63 refined variance band 0.78-1.5)
+
+- 0 new integration test updates needed per §5.52 — 4th consecutive CP at zero (CP8 + CP9 + CP10 + CP11)
+
+- Backend test suite: 2222 → 2245 passing (+23 tests; 0 regressions)
+
+- 3 AUTH-TEMPORARILY-DISABLED-FOR-TESTING banners removed (beats.js L17 + markers.js L15 + audio-clips.js L18); G4 program-wide grep returns 0 true positives post-CP11 (down from 3 pre-CP11)
+
+- Console.log boot-line cleanup-adjacent: removed 🟠/🟢/🟣 boot logs alongside banner removal (cleanup-adjacent in-scope work; no PE candidate filing)
+
+- All 6 verification greps documented program-wide for CP12 reference (per WP5 documentation pass): G1 88 hits / 16 files cross-domain optionalAuth-on-writes (CP12 scope); G2 6 files lazy-noop residue program-wide (v2.35 §5.8 closure marker RETRACTED per v2.36 amendment; CP12 closure); G3 122 handlers AI POST aiRateLimiter (CP10 baseline +0 CP11 delta); G4 0 AUTH-DISABLED banners post-CP11 ✓; G5 22 PUBLIC markers (worldStudio 19 + scripts 3 with rationale comments); G6 26 authenticateToken residue across 4 cross-domain files (+4 surface-correction within §5.50 noise band; CP12 scope)
+
+- Single session execution; 11-for-11 single-session pattern; ~35min — fastest CP in F-AUTH-1 program (vs ~85min CP-zone mean; cleanup-CP variance per v2.36 §5.66)
+
+CP11 ARCHITECTURAL FIRSTS — 3 contributing to v2.36 amendments:
+
+- 1. First true cleanup CP at single-session pace (~35 min — fastest CP in F-AUTH-1 program; smallest by handler count: 17 vs ~75-150 prior CPs)
+
+- 2. First CP discovering v2.x amendment retraction at surface phase — §5.8 v2.35 closure marker contradicted by 6-file program-wide lazy-noop residue grep; v2.36 retraction confirmed
+
+- 3. First CP triggering NEW CP addition at adjudication boundary — CP12 added per Option B at CP11 surface §P; converts F-AUTH-1 from 11 backend CPs to 12; v2.36 §5.4 amendment
+
+5 HTTP method corrections from Track 6 frontend surfaces verified ALREADY MATCH backend declarations:
+
+- setCoverAngleApi PATCH at sceneSetRoutes.js:1537 (Track 6 CP2)
+- reorderAnglesApi PATCH at sceneSetRoutes.js:1410 (Track 6 CP2)
+- getAiCameraDirectionApi POST at sceneSetRoutes.js:845 (Track 6 CP2)
+- CFOAgent setBudget PUT at cfoAgentRoutes.js:133 (Track 6 CP7)
+- multi-product status PATCH at upgradeRoutes.js:522 (Track 6 CP9)
+
+Zero backend method changes needed; Track 6 migrations correctly fixed FRONTEND-side wrong methods. Backend was always correct. Test impact: zero (no tests asserted wrong methods).
+
+**CP11 IS THE 11TH BACKEND DATA POINT IN STEP 3 PACING. CP1 70min / CP2 95min / CP3 85min / CP4 80min / CP5 95min / CP6 85min / CP7 ~85 raw / CP8 ~85min / CP9 ~85min / CP10 ~85min / CP11 ~35min — mean ~78min ± 18min holds across 11 data points (CP11 cleanup-CP shifts mean down 7min, widens variance band 8min). Single-session execution at 11-for-11 single-session pattern. CP7 1.85x scope-expansion outlier confirmed isolated for 4 consecutive CPs. Trajectory: 1-2 sessions remaining (CP12 cross-domain sweep) at single-session pace; ~35-40% under original v2.23 §5.4 lock at CP11 close.**
+
+**CP11 work stream complete (LOCKED v2.36 §5.68). 3 architectural firsts contributed: first true cleanup CP at single-session pace, first v2.x amendment retraction discovery (§5.8 v2.35 closure), first NEW CP addition at adjudication boundary (CP12).**
+
+### **§5.69 — CP planning methodology process improvement (NEW v2.36)**
+
+CP11 surface phase discovered ~22 files / ~130 handlers of cross-domain edge case scope never enumerated in CP1-CP10. The discovery was avoidable: a program-wide G1+G2+G6 sweep at CP1 surface phase as starting inventory baseline would have surfaced these files at the planning phase, before CP1 execution.
+
+Root cause: v2.23 §5.4 inventory at planning phase enumerated by domain cluster (Episodes / World / Scene / Wardrobe / Character / Storyteller / Social-feeds / Production-tooling / Admin/internal). Files that don't fit cleanly into a single domain cluster (cross-domain edge cases) fell through the enumeration gaps.
+
+Discipline (LOCKED v2.36 §5.69):
+
+- Future fix-plan revisions require program-wide G1+G2+G6 sweep at CP1 surface phase as starting inventory baseline
+
+- Three greps at planning phase (NOT cleanup phase):
+  - **G1 program-wide**: `grep -rn "optionalAuth" src/routes/ | grep -E "router\.(post|put|patch|delete)"` → enumerate ALL writes currently using optionalAuth
+  - **G2 program-wide**: `grep -rn "let optionalAuth\|let requireAuth\|try.*require.*middleware/auth" src/routes/` → enumerate ALL lazy-noop residue files
+  - **G6 program-wide**: `grep -rn "authenticateToken" src/routes/ | grep -v authenticateJWT` → enumerate ALL legacy alias residue (excluding D20 jwtAuth subset)
+
+- Enumeration output is the canonical CP1 inventory baseline
+
+- Per-CP scope assignment then partitions the baseline by domain cluster + cross-domain edge case bucket
+
+- Cross-domain edge case bucket assigned to a dedicated cleanup-CP at planning phase, NOT discovered at execution time
+
+CP11 PE candidate #9 (CP planning methodology improvement) is the root-cause documentation for this discipline. Future Step 3-shaped programs (Track 8 onward) inherit the §5.69 discipline.
+
+CP12 NOTE: CP12 scope was discovered at CP11 surface time (NOT planning phase). v2.36 §5.69 amendment formalizes the discipline going forward; CP12 itself is the closure CP for the gap that motivated the amendment.
 
 ### **Track 7 — UNCLEAR-A reconciliation (NEW v2.0, runs in parallel with Step 3)**
 
