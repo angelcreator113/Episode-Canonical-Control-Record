@@ -11,10 +11,11 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── GENERATE SCRIPT ──────────────────────────────────────────────────────────
 // POST /api/v1/episode-scripts/:episodeId/generate
-router.post('/:episodeId/generate', requireAuth, async (req, res) => {
+router.post('/:episodeId/generate', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { showId } = req.body;

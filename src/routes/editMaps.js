@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const db = require('../models');
 const AWS = require('aws-sdk');
 
@@ -11,7 +11,7 @@ const QUEUE_URL = process.env.ANALYSIS_QUEUE_URL;
  * Trigger AI analysis for raw footage
  * POST /api/v1/raw-footage/:id/analyze
  */
-router.post('/:id/analyze', optionalAuth, async (req, res) => {
+router.post('/:id/analyze', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -65,7 +65,7 @@ router.post('/:id/analyze', optionalAuth, async (req, res) => {
  * Get edit map for footage
  * GET /api/v1/raw-footage/:id/edit-map
  */
-router.get('/:id/edit-map', optionalAuth, async (req, res) => {
+router.get('/:id/edit-map', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -90,7 +90,8 @@ router.get('/:id/edit-map', optionalAuth, async (req, res) => {
  * Update edit map (called by Lambda)
  * PUT /api/v1/edit-maps/:id
  */
-router.put('/:id', async (req, res) => {
+// Lambda-callback: requires service-account JWT issued for Lambda exec context (PE #9 candidate per CP12 §5.59 5-way)
+router.put('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -114,7 +115,7 @@ router.put('/:id', async (req, res) => {
  * Get character profiles for show
  * GET /api/v1/shows/:showId/characters
  */
-router.get('/shows/:showId/characters', optionalAuth, async (req, res) => {
+router.get('/shows/:showId/characters', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     
@@ -134,7 +135,7 @@ router.get('/shows/:showId/characters', optionalAuth, async (req, res) => {
  * Create/update character profile
  * POST /api/v1/shows/:showId/characters
  */
-router.post('/shows/:showId/characters', optionalAuth, async (req, res) => {
+router.post('/shows/:showId/characters', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { character_name, editing_style } = req.body;
@@ -161,7 +162,8 @@ router.post('/shows/:showId/characters', optionalAuth, async (req, res) => {
  * Patch edit map status (lightweight updates)
  * PATCH /api/v1/edit-maps/:id
  */
-router.patch('/:id', async (req, res) => {
+// Lambda-callback: requires service-account JWT issued for Lambda exec context (PE #9 candidate per CP12 §5.59 5-way)
+router.patch('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;

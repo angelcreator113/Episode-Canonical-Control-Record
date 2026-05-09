@@ -16,13 +16,8 @@
 const express = require('express');
 const router  = express.Router();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch (e) {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ─── The six consciousness fields ────────────────────────────────────────────
 const CONSCIOUSNESS_FIELDS = {
@@ -257,7 +252,7 @@ Return ONLY valid JSON:
 }
 
 // ─── POST /generate ───────────────────────────────────────────────────────────
-router.post('/generate', optionalAuth, async (req, res) => {
+router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   const { character, psychology, world } = req.body;
 
   if (!character) return res.status(400).json({ error: 'character required' });
@@ -292,7 +287,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /generate-lala ──────────────────────────────────────────────────────
-router.post('/generate-lala', optionalAuth, async (req, res) => {
+router.post('/generate-lala', requireAuth, aiRateLimiter, async (req, res) => {
   const { lala_character: _lala_character, justawoman_consciousness, justawoman_psychology } = req.body;
 
   try {
@@ -325,7 +320,7 @@ router.post('/generate-lala', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /save ───────────────────────────────────────────────────────────────
-router.post('/save', optionalAuth, async (req, res) => {
+router.post('/save', requireAuth, async (req, res) => {
   const { character_id, profile, is_lala_profile } = req.body;
 
   if (!character_id || !profile) {
@@ -358,7 +353,7 @@ router.post('/save', optionalAuth, async (req, res) => {
 });
 
 // ─── GET /:characterId ────────────────────────────────────────────────────────
-router.get('/:characterId', optionalAuth, async (req, res) => {
+router.get('/:characterId', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
 
   try {
@@ -392,7 +387,7 @@ router.get('/:characterId', optionalAuth, async (req, res) => {
 });
 
 // ─── POST /dilemma-triggers ───────────────────────────────────────────────────
-router.post('/dilemma-triggers', optionalAuth, async (req, res) => {
+router.post('/dilemma-triggers', requireAuth, aiRateLimiter, async (req, res) => {
   const { character, dilemmas, consciousness } = req.body;
 
   if (!character || !dilemmas) return res.status(400).json({ error: 'character and dilemmas required' });
@@ -481,7 +476,7 @@ Return ONLY valid JSON:
 });
 
 // ─── POST /interview ──────────────────────────────────────────────────────────
-router.post('/interview', optionalAuth, async (req, res) => {
+router.post('/interview', requireAuth, async (req, res) => {
   try {
     const { character, psychology: _psychology } = req.body;
 
@@ -509,7 +504,7 @@ ${firstField[1].questions[0]}`;
 });
 
 // ─── POST /interview-next ─────────────────────────────────────────────────────
-router.post('/interview-next', optionalAuth, async (req, res) => {
+router.post('/interview-next', requireAuth, aiRateLimiter, async (req, res) => {
   const {
     character,
     psychology,

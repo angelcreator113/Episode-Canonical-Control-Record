@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const metadataController = require('../controllers/metadataController');
-const { authenticateToken } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -18,6 +18,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
  * - delete: Admin only
  */
 
+// PUBLIC: metadata catalog reads are Tier 4 (no req.user consumption); 5 bare GETs below per CP12 §5.21 14th instance
 // List metadata (viewer permission)
 router.get('/', asyncHandler(metadataController.listMetadata));
 
@@ -36,7 +37,7 @@ router.get('/episode/:episodeId', asyncHandler(metadataController.getMetadataFor
 // Create or update metadata (requires authentication + editor role)
 router.post(
   '/',
-  authenticateToken,
+  requireAuth,
   requirePermission('metadata', 'create'),
   asyncHandler(metadataController.createOrUpdateMetadata)
 );
@@ -44,7 +45,7 @@ router.post(
 // Update metadata (requires authentication + editor role)
 router.put(
   '/:id',
-  authenticateToken,
+  requireAuth,
   requirePermission('metadata', 'edit'),
   asyncHandler(metadataController.updateMetadata)
 );
@@ -52,7 +53,7 @@ router.put(
 // Add tags to metadata (requires authentication + editor role)
 router.post(
   '/:id/add-tags',
-  authenticateToken,
+  requireAuth,
   requirePermission('metadata', 'edit'),
   asyncHandler(metadataController.addTags)
 );
@@ -60,7 +61,7 @@ router.post(
 // Set detected scenes (requires authentication + editor role)
 router.post(
   '/:id/set-scenes',
-  authenticateToken,
+  requireAuth,
   requirePermission('metadata', 'edit'),
   asyncHandler(metadataController.setDetectedScenes)
 );
@@ -68,7 +69,7 @@ router.post(
 // Delete metadata (requires authentication + admin role)
 router.delete(
   '/:id',
-  authenticateToken,
+  requireAuth,
   requirePermission('metadata', 'delete'),
   asyncHandler(metadataController.deleteMetadata)
 );

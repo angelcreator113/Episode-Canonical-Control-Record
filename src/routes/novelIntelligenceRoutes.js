@@ -9,7 +9,8 @@ const crypto    = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const router    = express.Router();
 const db        = require('../models');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { Op }    = require('sequelize');
 
 const client = new Anthropic();
@@ -45,7 +46,7 @@ async function getVoiceRules(seriesId) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // POST /api/v1/novel/signal
-router.post('/signal', optionalAuth, async (req, res) => {
+router.post('/signal', requireAuth, aiRateLimiter, async (req, res) => {
   const { line_id, original_text, edited_text, book_id, chapter_id, series_id, scene_context } = req.body;
 
   if (!original_text || !edited_text) return res.status(400).json({ error: 'original_text and edited_text required' });
@@ -150,7 +151,7 @@ Analyze what the author changed and why. Respond ONLY in JSON:
 });
 
 // GET /api/v1/novel/voice-rules/proposed
-router.get('/voice-rules/proposed', optionalAuth, async (req, res) => {
+router.get('/voice-rules/proposed', requireAuth, async (req, res) => {
   const { series_id } = req.query;
   try {
     const rules = await db.VoiceRule.findAll({
@@ -167,7 +168,7 @@ router.get('/voice-rules/proposed', optionalAuth, async (req, res) => {
 });
 
 // POST /api/v1/novel/voice-rules/:id/confirm
-router.post('/voice-rules/:id/confirm', optionalAuth, async (req, res) => {
+router.post('/voice-rules/:id/confirm', requireAuth, async (req, res) => {
   try {
     const rule = await db.VoiceRule.findByPk(req.params.id);
     if (!rule) return res.status(404).json({ error: 'Rule not found' });
@@ -179,7 +180,7 @@ router.post('/voice-rules/:id/confirm', optionalAuth, async (req, res) => {
 });
 
 // POST /api/v1/novel/voice-rules/:id/dismiss
-router.post('/voice-rules/:id/dismiss', optionalAuth, async (req, res) => {
+router.post('/voice-rules/:id/dismiss', requireAuth, async (req, res) => {
   try {
     const rule = await db.VoiceRule.findByPk(req.params.id);
     if (!rule) return res.status(404).json({ error: 'Rule not found' });
@@ -191,7 +192,7 @@ router.post('/voice-rules/:id/dismiss', optionalAuth, async (req, res) => {
 });
 
 // GET /api/v1/novel/voice-rules/active
-router.get('/voice-rules/active', optionalAuth, async (req, res) => {
+router.get('/voice-rules/active', requireAuth, async (req, res) => {
   const { series_id } = req.query;
   try {
     const where = {
@@ -219,7 +220,7 @@ router.get('/voice-rules/active', optionalAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // POST /api/v1/novel/manuscript/cascade
-router.post('/manuscript/cascade', optionalAuth, async (req, res) => {
+router.post('/manuscript/cascade', requireAuth, aiRateLimiter, async (req, res) => {
   const { book_id, series_id } = req.body;
   if (!book_id) return res.status(400).json({ error: 'book_id required' });
 
@@ -347,7 +348,7 @@ Generate the full manuscript metadata. Respond ONLY in valid JSON:
 });
 
 // GET /api/v1/novel/manuscript/metadata/:book_id
-router.get('/manuscript/metadata/:book_id', optionalAuth, async (req, res) => {
+router.get('/manuscript/metadata/:book_id', requireAuth, async (req, res) => {
   try {
     const metadata = await db.ManuscriptMetadata.findOne({
       where: { book_id: req.params.book_id },
@@ -360,7 +361,7 @@ router.get('/manuscript/metadata/:book_id', optionalAuth, async (req, res) => {
 });
 
 // PATCH /api/v1/novel/manuscript/metadata/:id/override
-router.patch('/manuscript/metadata/:id/override', optionalAuth, async (req, res) => {
+router.patch('/manuscript/metadata/:id/override', requireAuth, async (req, res) => {
   try {
     const record = await db.ManuscriptMetadata.findByPk(req.params.id);
     if (!record) return res.status(404).json({ error: 'Not found' });
@@ -377,7 +378,7 @@ router.patch('/manuscript/metadata/:id/override', optionalAuth, async (req, res)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // POST /api/v1/novel/brain/check-duplicate
-router.post('/brain/check-duplicate', optionalAuth, async (req, res) => {
+router.post('/brain/check-duplicate', requireAuth, async (req, res) => {
   const { content, title, brain_type = 'story', series_id: _series_id, source_document, source_version } = req.body;
   if (!content) return res.status(400).json({ error: 'content required' });
 
@@ -429,7 +430,7 @@ router.post('/brain/check-duplicate', optionalAuth, async (req, res) => {
 });
 
 // POST /api/v1/novel/brain/register-fingerprint
-router.post('/brain/register-fingerprint', optionalAuth, async (req, res) => {
+router.post('/brain/register-fingerprint', requireAuth, async (req, res) => {
   const { entry_id, content, title, brain_type = 'story', series_id, source_document, source_version } = req.body;
   if (!entry_id || !content) return res.status(400).json({ error: 'entry_id and content required' });
 
@@ -451,7 +452,7 @@ router.post('/brain/register-fingerprint', optionalAuth, async (req, res) => {
 });
 
 // POST /api/v1/novel/brain/supersede-version
-router.post('/brain/supersede-version', optionalAuth, async (req, res) => {
+router.post('/brain/supersede-version', requireAuth, async (req, res) => {
   const { brain_type, source_document, old_version, series_id } = req.body;
   if (!brain_type || !source_document || !old_version) {
     return res.status(400).json({ error: 'brain_type, source_document, old_version required' });

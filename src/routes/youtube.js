@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const youtubeService = require('../services/youtubeService');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { sequelize, AITrainingData } = require('../models');
 
 /**
  * POST /api/youtube/analyze
  * Analyze a YouTube video and save to training data
  */
-router.post('/analyze', optionalAuth, async (req, res) => {
+router.post('/analyze', requireAuth, async (req, res) => {
   try {
     const { url, detect_scenes = false } = req.body;
 
@@ -72,7 +72,7 @@ router.post('/analyze', optionalAuth, async (req, res) => {
  * GET /api/youtube/metadata
  * Get metadata only (quick, no download)
  */
-router.get('/metadata', optionalAuth, async (req, res) => {
+router.get('/metadata', requireAuth, async (req, res) => {
   try {
     const { url } = req.query;
 
@@ -110,7 +110,7 @@ router.get('/metadata', optionalAuth, async (req, res) => {
  * GET /api/youtube/library
  * Get all training videos
  */
-router.get('/library', optionalAuth, async (req, res) => {
+router.get('/library', requireAuth, async (req, res) => {
   try {
     const videos = await youtubeService.getTrainingVideos();
 
@@ -133,7 +133,7 @@ router.get('/library', optionalAuth, async (req, res) => {
  * GET /api/youtube/:id/scenes
  * Get all scenes for a training video
  */
-router.get('/:id/scenes', optionalAuth, async (req, res) => {
+router.get('/:id/scenes', requireAuth, async (req, res) => {
   try {
     const [scenes] = await sequelize.query(`
       SELECT 
@@ -176,7 +176,7 @@ router.get('/:id/scenes', optionalAuth, async (req, res) => {
  * GET /api/youtube/:id
  * Get single training video
  */
-router.get('/:id', optionalAuth, async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const video = await youtubeService.getTrainingVideo(req.params.id);
 
@@ -205,7 +205,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
  * DELETE /api/youtube/:id
  * Delete training video
  */
-router.delete('/:id', optionalAuth, async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
     await youtubeService.deleteTrainingVideo(req.params.id);
 
@@ -227,7 +227,7 @@ router.delete('/:id', optionalAuth, async (req, res) => {
  * POST /api/youtube/:id/detect-scenes
  * Re-analyze existing video to detect scenes
  */
-router.post('/:id/detect-scenes', optionalAuth, async (req, res) => {
+router.post('/:id/detect-scenes', requireAuth, async (req, res) => {
   try {
     const videoId = req.params.id;
     

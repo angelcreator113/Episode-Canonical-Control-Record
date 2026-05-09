@@ -34,7 +34,8 @@ function getModels() {
 // CP1 WP3: lazy-noop fallback removed. F-AUTH-2 fix (lazy-init in
 // middleware/auth.js) makes require() boot-safe — direct destructuring
 // import is now correct.
-const { optionalAuth } = require('../middleware/auth');
+const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 let anthropic;
 try {
@@ -358,7 +359,7 @@ function isLalaStageReached(character, careerData) {
 // ROUTE 1: POST /seed-characters
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/seed-characters', optionalAuth, async (req, res) => {
+router.post('/seed-characters', requireAuth, async (req, res) => {
   try {
     let { show_id, registry_id } = req.body || {}; // eslint-disable-line prefer-const
     const models = getModels();
@@ -528,7 +529,7 @@ router.get('/characters/:slug', optionalAuth({ degradeOnInfraFailure: true }), a
 // ROUTE 4: POST /advance-career
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/advance-career', optionalAuth, async (req, res) => {
+router.post('/advance-career', requireAuth, async (req, res) => {
   try {
     const { character_slug, trigger_event, chapter_id } = req.body;
 
@@ -604,7 +605,7 @@ router.post('/advance-career', optionalAuth, async (req, res) => {
 // ROUTE 5: POST /generate-post
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/generate-post', optionalAuth, async (req, res) => {
+router.post('/generate-post', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_slug, topic, hook, format = 'newsletter', lala_reference } = req.body;
 
@@ -693,7 +694,7 @@ Write only the post. No preamble. No explanation. Start immediately with the con
 // ROUTE 6: POST /generate-scene
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/generate-scene', optionalAuth, async (req, res) => {
+router.post('/generate-scene', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       character_slug,
