@@ -34,9 +34,10 @@
 const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
-router.use(optionalAuth);
+router.use(requireAuth);
 
 function getModels(req) {
   return req.app.get('models') || require('../models');
@@ -83,7 +84,7 @@ router.get('/markers', async (req, res) => {
 });
 
 // POST /markers
-router.post('/markers', optionalAuth, async (req, res) => {
+router.post('/markers', requireAuth, async (req, res) => {
   const models = getModels(req);
   const { StoryClockMarker } = models;
   try {
@@ -119,7 +120,7 @@ router.post('/markers', optionalAuth, async (req, res) => {
 });
 
 // PUT /markers/:id/set-present
-router.put('/markers/:id/set-present', optionalAuth, async (req, res) => {
+router.put('/markers/:id/set-present', requireAuth, async (req, res) => {
   const models = getModels(req);
   const { StoryClockMarker } = models;
   try {
@@ -179,7 +180,7 @@ router.get('/events', async (req, res) => {
 });
 
 // POST /events
-router.post('/events', optionalAuth, async (req, res) => {
+router.post('/events', requireAuth, async (req, res) => {
   const { StoryCalendarEvent } = getModels(req);
   try {
     const {
@@ -224,7 +225,7 @@ router.post('/events', optionalAuth, async (req, res) => {
 });
 
 // PUT /events/:id
-router.put('/events/:id', optionalAuth, async (req, res) => {
+router.put('/events/:id', requireAuth, async (req, res) => {
   const { StoryCalendarEvent } = getModels(req);
   try {
     const event = await StoryCalendarEvent.findByPk(req.params.id);
@@ -238,7 +239,7 @@ router.put('/events/:id', optionalAuth, async (req, res) => {
 });
 
 // DELETE /events/:id
-router.delete('/events/:id', optionalAuth, async (req, res) => {
+router.delete('/events/:id', requireAuth, async (req, res) => {
   const { StoryCalendarEvent } = getModels(req);
   try {
     const event = await StoryCalendarEvent.findByPk(req.params.id);
@@ -275,7 +276,7 @@ router.get('/events/:id/attendees', async (req, res) => {
 });
 
 // POST /events/:id/attendees
-router.post('/events/:id/attendees', optionalAuth, async (req, res) => {
+router.post('/events/:id/attendees', requireAuth, async (req, res) => {
   const { CalendarEventAttendee, StoryCalendarEvent } = getModels(req);
   try {
     const event = await StoryCalendarEvent.findByPk(req.params.id);
@@ -302,7 +303,7 @@ router.post('/events/:id/attendees', optionalAuth, async (req, res) => {
 });
 
 // PUT /events/:id/attendees/:attendeeId
-router.put('/events/:id/attendees/:attendeeId', optionalAuth, async (req, res) => {
+router.put('/events/:id/attendees/:attendeeId', requireAuth, async (req, res) => {
   const { CalendarEventAttendee } = getModels(req);
   try {
     const attendee = await CalendarEventAttendee.findOne({
@@ -322,7 +323,7 @@ router.put('/events/:id/attendees/:attendeeId', optionalAuth, async (req, res) =
 // ────────────────────────────────────────────────────────────────────────────
 
 // POST /events/:id/ripples/generate — Amber generates ripple threads via Claude
-router.post('/events/:id/ripples/generate', optionalAuth, async (req, res) => {
+router.post('/events/:id/ripples/generate', requireAuth, aiRateLimiter, async (req, res) => {
   const models = getModels(req);
   const { StoryCalendarEvent, CalendarEventAttendee, CalendarEventRipple, RegistryCharacter } = models;
   try {
@@ -402,7 +403,7 @@ Generate ripple proposals for characters who may be affected — consider who wa
 });
 
 // PUT /ripples/:id/confirm
-router.put('/ripples/:id/confirm', optionalAuth, async (req, res) => {
+router.put('/ripples/:id/confirm', requireAuth, async (req, res) => {
   const { CalendarEventRipple } = getModels(req);
   try {
     const ripple = await CalendarEventRipple.findByPk(req.params.id);
@@ -453,7 +454,7 @@ router.get('/simultaneous', async (req, res) => {
 });
 
 // POST /auto-detect — Claude scans text for temporal markers, proposes event
-router.post('/auto-detect', optionalAuth, async (req, res) => {
+router.post('/auto-detect', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { line_text, series_id } = req.body;
     if (!line_text) return res.status(400).json({ error: 'line_text required' });
@@ -499,7 +500,7 @@ The story is set in year 8385. Use real months/days but year 8385.`,
 // POST /events/:id/spawn-world-event — Create a world event from a calendar event
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/events/:id/spawn-world-event', optionalAuth, async (req, res) => {
+router.post('/events/:id/spawn-world-event', requireAuth, async (req, res) => {
   try {
     const models = getModels(req);
     const { StoryCalendarEvent, WorldEvent, WorldLocation } = models;
@@ -595,7 +596,7 @@ router.post('/events/:id/spawn-world-event', optionalAuth, async (req, res) => {
 // GET /events/:id/spawned — List world events spawned from a calendar event
 // ═══════════════════════════════════════════════════════════════════════
 
-router.get('/events/:id/spawned', optionalAuth, async (req, res) => {
+router.get('/events/:id/spawned', requireAuth, async (req, res) => {
   try {
     const models = getModels(req);
     if (models.WorldEvent) {
@@ -621,7 +622,7 @@ router.get('/events/:id/spawned', optionalAuth, async (req, res) => {
 // Uses AI matching: picks host from feed, venue from locations, builds guest list
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/events/:id/auto-spawn', optionalAuth, async (req, res) => {
+router.post('/events/:id/auto-spawn', requireAuth, async (req, res) => {
   try {
     const models = getModels(req);
     const { StoryCalendarEvent } = models;
@@ -695,7 +696,7 @@ router.post('/events/:id/auto-spawn', optionalAuth, async (req, res) => {
 // POST /events/generate-seasonal — Auto-generate seasonal events for a month
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/events/generate-seasonal', optionalAuth, async (req, res) => {
+router.post('/events/generate-seasonal', requireAuth, async (req, res) => {
   try {
     const { month, count = 4, year = 2026, show_id } = req.body;
     if (month === undefined || month < 0 || month > 11) {

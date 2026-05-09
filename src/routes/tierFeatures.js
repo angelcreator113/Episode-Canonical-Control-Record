@@ -37,13 +37,8 @@ const db = require('../models');
 
 const anthropic = new Anthropic();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TIER 1.1 — ENHANCED MEMORY INJECTION (already in storyEvaluationRoutes)
@@ -51,7 +46,7 @@ try {
 //   This route provides the deep memory context endpoint for debugging/preview
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.get('/deep-memory-context/:registryId', optionalAuth, async (req, res) => {
+router.get('/deep-memory-context/:registryId', requireAuth, async (req, res) => {
   try {
     const { registryId } = req.params;
     const { characters } = req.query; // comma-separated character_keys
@@ -119,7 +114,7 @@ router.get('/deep-memory-context/:registryId', optionalAuth, async (req, res) =>
 // TIER 1.2 — STORY CONTINUITY CHECKER
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/continuity-check', optionalAuth, async (req, res) => {
+router.post('/continuity-check', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { book_id: _book_id, chapter_id: _chapter_id, scene_text, characters_in_scene, registry_id } = req.body;
     if (!scene_text || !characters_in_scene?.length) {
@@ -203,7 +198,7 @@ router.post('/continuity-check', optionalAuth, async (req, res) => {
 // TIER 1.3 — RELATIONSHIP EVENT TIMELINE
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.get('/relationship-events/:relationshipId', optionalAuth, async (req, res) => {
+router.get('/relationship-events/:relationshipId', requireAuth, async (req, res) => {
   try {
     const events = await db.RelationshipEvent.findAll({
       where: { relationship_id: req.params.relationshipId },
@@ -215,7 +210,7 @@ router.get('/relationship-events/:relationshipId', optionalAuth, async (req, res
   }
 });
 
-router.post('/relationship-events', optionalAuth, async (req, res) => {
+router.post('/relationship-events', requireAuth, async (req, res) => {
   try {
     const event = await db.RelationshipEvent.create(req.body);
 
@@ -233,7 +228,7 @@ router.post('/relationship-events', optionalAuth, async (req, res) => {
   }
 });
 
-router.put('/relationship-events/:eventId', optionalAuth, async (req, res) => {
+router.put('/relationship-events/:eventId', requireAuth, async (req, res) => {
   try {
     const event = await db.RelationshipEvent.findByPk(req.params.eventId);
     if (!event) return res.status(404).json({ error: 'Event not found' });
@@ -244,7 +239,7 @@ router.put('/relationship-events/:eventId', optionalAuth, async (req, res) => {
   }
 });
 
-router.delete('/relationship-events/:eventId', optionalAuth, async (req, res) => {
+router.delete('/relationship-events/:eventId', requireAuth, async (req, res) => {
   try {
     await db.RelationshipEvent.destroy({ where: { id: req.params.eventId } });
     return res.json({ success: true });
@@ -257,7 +252,7 @@ router.delete('/relationship-events/:eventId', optionalAuth, async (req, res) =>
 // TIER 1.4 — CHARACTER ARC VISUALIZATION
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.get('/character-arc/:charId', optionalAuth, async (req, res) => {
+router.get('/character-arc/:charId', requireAuth, async (req, res) => {
   try {
     const { charId } = req.params;
 
@@ -348,7 +343,7 @@ router.get('/character-arc/:charId', optionalAuth, async (req, res) => {
 // TIER 2.1 — WORLD TIMELINE / CALENDAR
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.get('/world-timeline', optionalAuth, async (req, res) => {
+router.get('/world-timeline', requireAuth, async (req, res) => {
   try {
     const { universe_id, book_id, event_type } = req.query;
     const where = {};
@@ -366,7 +361,7 @@ router.get('/world-timeline', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/world-timeline', optionalAuth, async (req, res) => {
+router.post('/world-timeline', requireAuth, async (req, res) => {
   try {
     const event = await db.WorldTimelineEvent.create(req.body);
     return res.json({ success: true, event });
@@ -375,7 +370,7 @@ router.post('/world-timeline', optionalAuth, async (req, res) => {
   }
 });
 
-router.put('/world-timeline/:eventId', optionalAuth, async (req, res) => {
+router.put('/world-timeline/:eventId', requireAuth, async (req, res) => {
   try {
     const event = await db.WorldTimelineEvent.findByPk(req.params.eventId);
     if (!event) return res.status(404).json({ error: 'Event not found' });
@@ -386,7 +381,7 @@ router.put('/world-timeline/:eventId', optionalAuth, async (req, res) => {
   }
 });
 
-router.delete('/world-timeline/:eventId', optionalAuth, async (req, res) => {
+router.delete('/world-timeline/:eventId', requireAuth, async (req, res) => {
   try {
     await db.WorldTimelineEvent.destroy({ where: { id: req.params.eventId } });
     return res.json({ success: true });
@@ -399,7 +394,7 @@ router.delete('/world-timeline/:eventId', optionalAuth, async (req, res) => {
 // TIER 2.2 — LOCATION DATABASE
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.get('/world-locations', optionalAuth, async (req, res) => {
+router.get('/world-locations', requireAuth, async (req, res) => {
   try {
     const { universe_id, location_type } = req.query;
     const where = {};
@@ -417,7 +412,7 @@ router.get('/world-locations', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/world-locations', optionalAuth, async (req, res) => {
+router.post('/world-locations', requireAuth, async (req, res) => {
   try {
     if (req.body.name && !req.body.slug) {
       req.body.slug = req.body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -429,7 +424,7 @@ router.post('/world-locations', optionalAuth, async (req, res) => {
   }
 });
 
-router.put('/world-locations/:locationId', optionalAuth, async (req, res) => {
+router.put('/world-locations/:locationId', requireAuth, async (req, res) => {
   try {
     const location = await db.WorldLocation.findByPk(req.params.locationId);
     if (!location) return res.status(404).json({ error: 'Location not found' });
@@ -440,7 +435,7 @@ router.put('/world-locations/:locationId', optionalAuth, async (req, res) => {
   }
 });
 
-router.delete('/world-locations/:locationId', optionalAuth, async (req, res) => {
+router.delete('/world-locations/:locationId', requireAuth, async (req, res) => {
   try {
     await db.WorldLocation.destroy({ where: { id: req.params.locationId } });
     return res.json({ success: true });
@@ -453,7 +448,7 @@ router.delete('/world-locations/:locationId', optionalAuth, async (req, res) => 
 // TIER 2.3 — WORLD-STATE SNAPSHOTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.get('/world-snapshots', optionalAuth, async (req, res) => {
+router.get('/world-snapshots', requireAuth, async (req, res) => {
   try {
     const { book_id, universe_id } = req.query;
     const where = {};
@@ -470,7 +465,7 @@ router.get('/world-snapshots', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/world-snapshots', optionalAuth, async (req, res) => {
+router.post('/world-snapshots', requireAuth, async (req, res) => {
   try {
     const snapshot = await db.WorldStateSnapshot.create(req.body);
     return res.json({ success: true, snapshot });
@@ -480,7 +475,7 @@ router.post('/world-snapshots', optionalAuth, async (req, res) => {
 });
 
 // Auto-generate snapshot from chapter state
-router.post('/world-snapshots/generate', optionalAuth, async (req, res) => {
+router.post('/world-snapshots/generate', requireAuth, async (req, res) => {
   try {
     const { book_id, chapter_id, registry_id } = req.body;
     if (!chapter_id) return res.status(400).json({ error: 'chapter_id required' });
@@ -542,7 +537,7 @@ router.post('/world-snapshots/generate', optionalAuth, async (req, res) => {
   }
 });
 
-router.delete('/world-snapshots/:snapshotId', optionalAuth, async (req, res) => {
+router.delete('/world-snapshots/:snapshotId', requireAuth, async (req, res) => {
   try {
     await db.WorldStateSnapshot.destroy({ where: { id: req.params.snapshotId } });
     return res.json({ success: true });
@@ -555,7 +550,7 @@ router.delete('/world-snapshots/:snapshotId', optionalAuth, async (req, res) => 
 // TIER 2.4 — FRANCHISE GUARD INTEGRATION
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/franchise-guard-check', optionalAuth, async (req, res) => {
+router.post('/franchise-guard-check', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { story_id, scene_text } = req.body;
     if (!scene_text) return res.status(400).json({ error: 'scene_text required' });
@@ -615,7 +610,7 @@ router.post('/franchise-guard-check', optionalAuth, async (req, res) => {
 // TIER 3.1 — PIPELINE STATUS DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.get('/pipeline', optionalAuth, async (req, res) => {
+router.get('/pipeline', requireAuth, async (req, res) => {
   try {
     const { book_id, current_step } = req.query;
     const where = {};
@@ -650,7 +645,7 @@ router.get('/pipeline', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/pipeline', optionalAuth, async (req, res) => {
+router.post('/pipeline', requireAuth, async (req, res) => {
   try {
     const { story_id } = req.body;
 
@@ -668,7 +663,7 @@ router.post('/pipeline', optionalAuth, async (req, res) => {
   }
 });
 
-router.put('/pipeline/:pipelineId', optionalAuth, async (req, res) => {
+router.put('/pipeline/:pipelineId', requireAuth, async (req, res) => {
   try {
     const pipeline = await db.PipelineTracking.findByPk(req.params.pipelineId);
     if (!pipeline) return res.status(404).json({ error: 'Pipeline not found' });
@@ -689,7 +684,7 @@ router.put('/pipeline/:pipelineId', optionalAuth, async (req, res) => {
 // TIER 3.2 — REVISION HISTORY
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.get('/story-revisions/:storyId', optionalAuth, async (req, res) => {
+router.get('/story-revisions/:storyId', requireAuth, async (req, res) => {
   try {
     const revisions = await db.StoryRevision.findAll({
       where: { story_id: req.params.storyId },
@@ -701,7 +696,7 @@ router.get('/story-revisions/:storyId', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/story-revisions', optionalAuth, async (req, res) => {
+router.post('/story-revisions', requireAuth, async (req, res) => {
   try {
     const { story_id, text, revision_type, revision_source, change_summary } = req.body;
     if (!story_id || !text) return res.status(400).json({ error: 'story_id and text required' });
@@ -733,7 +728,7 @@ router.post('/story-revisions', optionalAuth, async (req, res) => {
 // TIER 3.3 — PLOT HOLE DETECTION
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/plot-hole-detection', optionalAuth, async (req, res) => {
+router.post('/plot-hole-detection', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { book_id, registry_id } = req.body;
     if (!book_id) return res.status(400).json({ error: 'book_id required' });
@@ -812,7 +807,7 @@ router.post('/plot-hole-detection', optionalAuth, async (req, res) => {
 // TIER 3.4 — STORY THREADS & DEAD THREAD DETECTION
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.get('/story-threads', optionalAuth, async (req, res) => {
+router.get('/story-threads', requireAuth, async (req, res) => {
   try {
     const { book_id, status } = req.query;
     const where = {};
@@ -829,7 +824,7 @@ router.get('/story-threads', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/story-threads', optionalAuth, async (req, res) => {
+router.post('/story-threads', requireAuth, async (req, res) => {
   try {
     const thread = await db.StoryThread.create(req.body);
     return res.json({ success: true, thread });
@@ -838,7 +833,7 @@ router.post('/story-threads', optionalAuth, async (req, res) => {
   }
 });
 
-router.put('/story-threads/:threadId', optionalAuth, async (req, res) => {
+router.put('/story-threads/:threadId', requireAuth, async (req, res) => {
   try {
     const thread = await db.StoryThread.findByPk(req.params.threadId);
     if (!thread) return res.status(404).json({ error: 'Thread not found' });
@@ -849,7 +844,7 @@ router.put('/story-threads/:threadId', optionalAuth, async (req, res) => {
   }
 });
 
-router.delete('/story-threads/:threadId', optionalAuth, async (req, res) => {
+router.delete('/story-threads/:threadId', requireAuth, async (req, res) => {
   try {
     await db.StoryThread.destroy({ where: { id: req.params.threadId } });
     return res.json({ success: true });
@@ -859,7 +854,7 @@ router.delete('/story-threads/:threadId', optionalAuth, async (req, res) => {
 });
 
 // Dead thread detection via AI analysis
-router.post('/dead-thread-detection', optionalAuth, async (req, res) => {
+router.post('/dead-thread-detection', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { book_id, registry_id: _registry_id } = req.body;
     if (!book_id) return res.status(400).json({ error: 'book_id required' });
@@ -935,7 +930,7 @@ router.post('/dead-thread-detection', optionalAuth, async (req, res) => {
 // turning point, climax, resolution, etc.
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.post('/generate-chapter-beats', optionalAuth, async (req, res) => {
+router.post('/generate-chapter-beats', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { chapter_id, book_id, registry_id, chapter_number, chapter_title, scene_context } = req.body;
     if (!book_id) return res.status(400).json({ error: 'book_id required' });
@@ -1054,7 +1049,7 @@ Return JSON:
 });
 
 // Generate full book beat outline (macro arc)
-router.post('/generate-book-outline', optionalAuth, async (req, res) => {
+router.post('/generate-book-outline', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { book_id, registry_id, target_chapters } = req.body;
     if (!book_id) return res.status(400).json({ error: 'book_id required' });

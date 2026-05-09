@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const thumbnailController = require('../controllers/thumbnailController');
-const { authenticateToken } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -16,6 +16,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
  * - delete: Admin only
  */
 
+// PUBLIC: thumbnail catalog reads are Tier 4 (no req.user consumption); 7 bare GETs below per CP12 §5.21 13th instance
 // List thumbnails (viewer permission)
 router.get('/', asyncHandler(thumbnailController.listThumbnails));
 
@@ -31,7 +32,7 @@ router.get('/:id/download', asyncHandler(thumbnailController.prepareThumbnailDow
 // Create thumbnail (requires authentication + editor role)
 router.post(
   '/',
-  authenticateToken,
+  requireAuth,
   requirePermission('thumbnails', 'create'),
   asyncHandler(thumbnailController.createThumbnail)
 );
@@ -39,7 +40,7 @@ router.post(
 // Update thumbnail (requires authentication + editor role)
 router.put(
   '/:id',
-  authenticateToken,
+  requireAuth,
   requirePermission('thumbnails', 'edit'),
   asyncHandler(thumbnailController.updateThumbnail)
 );
@@ -47,7 +48,7 @@ router.put(
 // Rate thumbnail quality (requires authentication + editor role)
 router.post(
   '/:id/rate-quality',
-  authenticateToken,
+  requireAuth,
   requirePermission('thumbnails', 'edit'),
   asyncHandler(thumbnailController.rateThumbnailQuality)
 );
@@ -55,7 +56,7 @@ router.post(
 // Delete thumbnail (requires authentication + admin role)
 router.delete(
   '/:id',
-  authenticateToken,
+  requireAuth,
   requirePermission('thumbnails', 'delete'),
   asyncHandler(thumbnailController.deleteThumbnail)
 );
@@ -73,7 +74,7 @@ router.get('/episode/:episodeId/primary', asyncHandler(thumbnailController.getPr
 // Publish thumbnail
 router.post(
   '/:id/publish',
-  authenticateToken,
+  requireAuth,
   asyncHandler(async (req, res) => {
     try {
       const ThumbnailService = require('../services/ThumbnailService');
@@ -94,7 +95,7 @@ router.post(
 // Unpublish thumbnail
 router.post(
   '/:id/unpublish',
-  authenticateToken,
+  requireAuth,
   asyncHandler(async (req, res) => {
     try {
       const ThumbnailService = require('../services/ThumbnailService');
@@ -114,7 +115,7 @@ router.post(
 // Set as primary thumbnail
 router.post(
   '/:id/set-primary',
-  authenticateToken,
+  requireAuth,
   asyncHandler(async (req, res) => {
     try {
       const ThumbnailService = require('../services/ThumbnailService');

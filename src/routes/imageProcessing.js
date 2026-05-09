@@ -15,7 +15,7 @@ const FormData = require('form-data');
 const fetch = require('node-fetch');
 const { models } = require('../models');
 const s3Service = require('../services/S3Service');
-const { authenticate, optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 /**
  * POST /api/v1/assets/:id/remove-background
@@ -23,7 +23,7 @@ const { authenticate, optionalAuth } = require('../middleware/auth');
  *
  * @returns {Object} { status, message, data: { asset_id, url, original_url, cached? } }
  */
-router.post('/:id/remove-background', optionalAuth, async (req, res) => {
+router.post('/:id/remove-background', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -195,7 +195,7 @@ router.post('/:id/remove-background', optionalAuth, async (req, res) => {
  * @body {Object} settings - Enhancement settings (skin_smooth, saturation, vibrance, contrast, sharpen)
  * @returns {Object} { status, message, data: { asset_id, url, original_url, settings, cached? } }
  */
-router.post('/:id/enhance', authenticate, async (req, res) => {
+router.post('/:id/enhance', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -364,7 +364,7 @@ router.post('/:id/enhance', authenticate, async (req, res) => {
  *
  * @returns {Object} { status, data: { asset_id, processing_status, has_bg_removed, has_enhanced, metadata } }
  */
-router.get('/:id/processing-status', async (req, res) => {
+router.get('/:id/processing-status', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -411,7 +411,7 @@ router.get('/:id/processing-status', async (req, res) => {
  * @body {string} reset_type - 'all', 'bg_removal', or 'enhancement'
  * @returns {Object} { status, message, data: { asset_id } }
  */
-router.post('/:id/reset-processing', authenticate, async (req, res) => {
+router.post('/:id/reset-processing', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { reset_type = 'all' } = req.body;

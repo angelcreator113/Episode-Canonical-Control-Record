@@ -16,11 +16,8 @@
 const express = require('express');
 const router  = express.Router();
 
-let optionalAuth;
-try {
-  const m = require('../middleware/auth');
-  optionalAuth = m.optionalAuth || m.authenticate || ((q,r,n)=>n());
-} catch { optionalAuth = (q,r,n) => n(); }
+const { requireAuth } = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 let anthropic;
 try {
@@ -253,7 +250,7 @@ CRITICAL RULES:
 // ROUTE 1: POST /session-open
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/session-open', optionalAuth, async (req, res) => {
+router.post('/session-open', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { event, ...rest } = req.body;
     const archetypeKey = rest.archetype?.toLowerCase().replace(/\s+/g,'_').replace(/the_/,'');
@@ -330,7 +327,7 @@ Their defense mechanism shapes how they present this \u2014 not raw emotion, pro
 // ROUTE 2: POST /session-respond
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/session-respond', optionalAuth, async (req, res) => {
+router.post('/session-respond', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       author_response,
@@ -442,7 +439,7 @@ Exchange: Author said "${author_response.slice(0,100)}" / Character responded "$
 // ROUTE 3: POST /reveal
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/reveal', optionalAuth, async (req, res) => {
+router.post('/reveal', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const {
       reveal_content,
@@ -550,7 +547,7 @@ Character response only. No explanation. No preamble.`;
 // ROUTE 4: POST /session-close
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/session-close', optionalAuth, async (req, res) => {
+router.post('/session-close', requireAuth, async (req, res) => {
   try {
     const {
       character_id,
@@ -631,7 +628,7 @@ router.post('/session-close', optionalAuth, async (req, res) => {
 // ROUTE 5: GET /profile/:charId
 // ════════════════════════════════════════════════════════════════════════
 
-router.get('/profile/:charId', optionalAuth, async (req, res) => {
+router.get('/profile/:charId', requireAuth, async (req, res) => {
   try {
     const { charId } = req.params;
     const models = req.app.get('models');
@@ -656,7 +653,7 @@ router.get('/profile/:charId', optionalAuth, async (req, res) => {
 // ROUTE 6: GET /waiting  — characters waiting outside the therapy door
 // ════════════════════════════════════════════════════════════════════════
 
-router.get('/waiting', optionalAuth, async (req, res) => {
+router.get('/waiting', requireAuth, async (req, res) => {
   try {
     if (!thresholdDetection) return res.json([]);
     const models = req.app.get('models');
@@ -672,7 +669,7 @@ router.get('/waiting', optionalAuth, async (req, res) => {
 // ROUTE 7: POST /clear-waiting/:id  — clear waiting when session opens
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/clear-waiting/:id', optionalAuth, async (req, res) => {
+router.post('/clear-waiting/:id', requireAuth, async (req, res) => {
   try {
     if (!thresholdDetection) return res.json({ ok: true });
     const models = req.app.get('models');
@@ -688,7 +685,7 @@ router.post('/clear-waiting/:id', optionalAuth, async (req, res) => {
 // ROUTE 8: GET /dilemmas — generate dilemmas for a character
 // ════════════════════════════════════════════════════════════════════════
 
-router.get('/dilemmas', optionalAuth, async (req, res) => {
+router.get('/dilemmas', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_id, count = 5 } = req.query;
     const models = req.app.get('models');
@@ -752,7 +749,7 @@ Return ONLY a JSON array — no markdown, no preamble:
 // ROUTE 9: POST /dilemma-profile — compile profile from dilemma choices
 // ════════════════════════════════════════════════════════════════════════
 
-router.post('/dilemma-profile', optionalAuth, async (req, res) => {
+router.post('/dilemma-profile', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { character_id, character_name, wound, choices } = req.body;
     if (!Array.isArray(choices) || choices.length === 0) {

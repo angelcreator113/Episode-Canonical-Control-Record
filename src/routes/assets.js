@@ -13,7 +13,7 @@ const express = require('express');
 const multer = require('multer');
 const AssetService = require('../services/AssetService');
 const { models } = require('../models');
-const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { validateAssetUpload, validateUUIDParam } = require('../middleware/requestValidation');
 
 const router = express.Router();
@@ -68,6 +68,7 @@ const VALID_ASSET_TYPES = [
   // backgrounds come from Scene Sets (locations), not assets
 ];
 
+// PUBLIC: asset catalog reads are Tier 4 (no req.user consumption); 10 bare GETs below per CP12 §5.21 12th instance (3-TIER architectural first)
 /**
  * GET /api/v1/assets
  * List all assets (with optional filters)
@@ -539,7 +540,7 @@ router.get('/labels', async (req, res) => {
  * POST /api/v1/assets/labels
  * Create new label (admin only)
  */
-router.post('/labels', authenticate, async (req, res) => {
+router.post('/labels', requireAuth, async (req, res) => {
   try {
     const { name, color, description } = req.body;
 
@@ -572,7 +573,7 @@ router.post('/labels', authenticate, async (req, res) => {
  * POST /api/v1/assets/bulk/delete
  * Bulk delete assets
  */
-router.post('/bulk/delete', authenticate, async (req, res) => {
+router.post('/bulk/delete', requireAuth, async (req, res) => {
   try {
     const { assetIds } = req.body;
 
@@ -603,7 +604,7 @@ router.post('/bulk/delete', authenticate, async (req, res) => {
  * POST /api/v1/assets/bulk/process-background
  * Bulk background removal
  */
-router.post('/bulk/process-background', authenticate, async (req, res) => {
+router.post('/bulk/process-background', requireAuth, async (req, res) => {
   try {
     const { assetIds } = req.body;
 
@@ -634,7 +635,7 @@ router.post('/bulk/process-background', authenticate, async (req, res) => {
  * POST /api/v1/assets/bulk/add-labels
  * Bulk add labels to assets
  */
-router.post('/bulk/add-labels', authenticate, async (req, res) => {
+router.post('/bulk/add-labels', requireAuth, async (req, res) => {
   try {
     const { assetIds, labelIds } = req.body;
 
@@ -672,7 +673,7 @@ router.post('/bulk/add-labels', authenticate, async (req, res) => {
  * POST /api/v1/assets/bulk/change-type
  * Bulk change asset type
  */
-router.post('/bulk/change-type', authenticate, async (req, res) => {
+router.post('/bulk/change-type', requireAuth, async (req, res) => {
   try {
     const { assetIds, assetType } = req.body;
 
@@ -712,7 +713,7 @@ router.post('/bulk/change-type', authenticate, async (req, res) => {
  * POST /api/v1/assets/search
  * Search assets with advanced filters
  */
-router.post('/search', async (req, res) => {
+router.post('/search', requireAuth, async (req, res) => {
   try {
     const filters = req.body;
     const assets = await AssetService.searchAssets(filters);
@@ -768,7 +769,7 @@ router.get('/:id', validateUUIDParam('id'), async (req, res) => {
  * POST /api/v1/assets
  * Upload new asset
  */
-router.post('/', upload.single('file'), optionalAuth, validateAssetUpload, async (req, res) => {
+router.post('/', upload.single('file'), requireAuth, validateAssetUpload, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -930,7 +931,7 @@ router.post('/', upload.single('file'), optionalAuth, validateAssetUpload, async
  * PUT /api/v1/assets/:id/approve
  * Approve asset (admin only)
  */
-router.put('/:id/approve', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.put('/:id/approve', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await AssetService.approveAsset(id, req.user?.id);
@@ -962,7 +963,7 @@ router.put('/:id/approve', authenticate, authorize(['ADMIN']), async (req, res) 
  * PUT /api/v1/assets/:id/reject
  * Reject asset (admin only)
  */
-router.put('/:id/reject', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.put('/:id/reject', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -996,7 +997,7 @@ router.put('/:id/reject', authenticate, authorize(['ADMIN']), async (req, res) =
  * PUT /api/v1/assets/:id/process
  * Process asset background removal
  */
-router.put('/:id/process', authenticate, async (req, res) => {
+router.put('/:id/process', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1029,7 +1030,7 @@ router.put('/:id/process', authenticate, async (req, res) => {
  * POST /api/v1/assets/:id/process-background
  * On-demand background removal
  */
-router.post('/:id/process-background', validateUUIDParam('id'), authenticate, async (req, res) => {
+router.post('/:id/process-background', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await AssetService.processAssetBackgroundRemoval(id);
@@ -1052,7 +1053,7 @@ router.post('/:id/process-background', validateUUIDParam('id'), authenticate, as
  * PUT /api/v1/assets/:id
  * Update asset metadata
  */
-router.put('/:id', validateUUIDParam('id'), authenticate, async (req, res) => {
+router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -1077,7 +1078,7 @@ router.put('/:id', validateUUIDParam('id'), authenticate, async (req, res) => {
  * DELETE /api/v1/assets/:id
  * Delete asset
  */
-router.delete('/:id', validateUUIDParam('id'), authenticate, async (req, res) => {
+router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     await AssetService.bulkDeleteAssets([id]);
@@ -1099,7 +1100,7 @@ router.delete('/:id', validateUUIDParam('id'), authenticate, async (req, res) =>
  * POST /api/v1/assets/:id/labels
  * Add labels to asset
  */
-router.post('/:id/labels', validateUUIDParam('id'), authenticate, async (req, res) => {
+router.post('/:id/labels', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { labelIds } = req.body;
@@ -1131,7 +1132,7 @@ router.post('/:id/labels', validateUUIDParam('id'), authenticate, async (req, re
  * DELETE /api/v1/assets/:id/labels/:labelId
  * Remove label from asset
  */
-router.delete('/:id/labels/:labelId', validateUUIDParam('id'), authenticate, async (req, res) => {
+router.delete('/:id/labels/:labelId', validateUUIDParam('id'), requireAuth, async (req, res) => {
   try {
     const { id, labelId } = req.params;
     const asset = await AssetService.removeLabelFromAsset(id, labelId);
@@ -1214,7 +1215,7 @@ router.get('/:id/download/:type', validateUUIDParam('id'), async (req, res) => {
  * Process an asset with transformations (background removal, enhancement, etc.)
  * Body: { asset_id, template_id, processing: { removeBackground, smoothSkin, autoEnhance }, provider }
  */
-router.post('/process', authenticate, async (req, res) => {
+router.post('/process', requireAuth, async (req, res) => {
   try {
     const { asset_id, template_id, processing = {}, provider = 'runway' } = req.body;
 

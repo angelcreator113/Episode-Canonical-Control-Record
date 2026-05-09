@@ -25,13 +25,7 @@
 const express = require('express');
 const router = express.Router();
 
-let optionalAuth;
-try {
-  const authModule = require('../middleware/auth');
-  optionalAuth = authModule.optionalAuth || authModule.authenticate || ((req, res, next) => next());
-} catch {
-  optionalAuth = (req, res, next) => next();
-}
+const { requireAuth } = require('../middleware/auth');
 
 async function getModels() {
   try { return require('../models'); } catch { return null; }
@@ -41,7 +35,7 @@ async function getModels() {
 // STORY HEALTH DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/dashboard', optionalAuth, async (req, res) => {
+router.get('/dashboard', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db) return res.json({ error: 'Models not loaded' });
@@ -148,7 +142,7 @@ router.get('/dashboard', optionalAuth, async (req, res) => {
 // CROSS-SYSTEM SEARCH
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/search', optionalAuth, async (req, res) => {
+router.get('/search', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db) return res.json({ results: [] });
@@ -239,7 +233,7 @@ router.get('/search', optionalAuth, async (req, res) => {
 // VERSION HISTORY — Chapter version snapshots
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/versions/chapter/:chapterId', optionalAuth, async (req, res) => {
+router.get('/versions/chapter/:chapterId', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db) return res.json({ versions: [] });
@@ -272,7 +266,7 @@ router.get('/versions/chapter/:chapterId', optionalAuth, async (req, res) => {
   }
 });
 
-router.post('/versions/chapter/:chapterId', optionalAuth, async (req, res) => {
+router.post('/versions/chapter/:chapterId', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db) return res.status(500).json({ error: 'Models not loaded' });
@@ -314,7 +308,7 @@ router.post('/versions/chapter/:chapterId', optionalAuth, async (req, res) => {
   }
 });
 
-router.get('/versions/:versionId/content', optionalAuth, async (req, res) => {
+router.get('/versions/:versionId/content', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db) return res.status(500).json({ error: 'Models not loaded' });
@@ -336,7 +330,7 @@ router.get('/versions/:versionId/content', optionalAuth, async (req, res) => {
 // THERAPY STORY SUGGESTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/therapy-suggestions/:characterKey', optionalAuth, async (req, res) => {
+router.get('/therapy-suggestions/:characterKey', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db) return res.json({ suggestions: [] });
@@ -472,7 +466,7 @@ router.get('/therapy-suggestions/:characterKey', optionalAuth, async (req, res) 
 // THREAD AWARENESS — Which threads a story advances
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/threads-for-story/:storyNumber', optionalAuth, async (req, res) => {
+router.get('/threads-for-story/:storyNumber', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db) return res.json({ threads: [] });
@@ -505,7 +499,7 @@ router.get('/threads-for-story/:storyNumber', optionalAuth, async (req, res) => 
 // STORY SUGGESTIONS (AI sparks)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/story-sparks/:characterKey', optionalAuth, async (req, res) => {
+router.get('/story-sparks/:characterKey', requireAuth, async (req, res) => {
   try {
     const db = await getModels();
     if (!db) return res.json({ sparks: [] });
