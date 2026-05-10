@@ -410,9 +410,11 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            console.log('✅ PRODUCTION deployment completed successfully!')
-            console.log('Reason: ${{ github.event.inputs.reason }}')
-            console.log('By: ${{ github.actor }}')
+            const reason = ${{ toJson(github.event.inputs.reason) }};
+            const actor = ${{ toJson(github.actor) }};
+            console.log('✅ PRODUCTION deployment completed successfully!');
+            console.log('Reason:', reason);
+            console.log('By:', actor);
 
       - name: Notify on failure
         if: failure()
