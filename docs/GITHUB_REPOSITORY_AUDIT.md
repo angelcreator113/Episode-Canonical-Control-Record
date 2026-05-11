@@ -32,7 +32,7 @@ This audit identified **multiple critical security issues** and organizational p
 - Files are now removed from tracking but remain in Git history
 
 **Files Affected**:
-- `.env.development` - Database password: `Ayanna123!!`
+- `.env.development` - Database password: `<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>`
 - `.env.aws-staging` - Database password and AWS Account ID
 - `.env.staging` - OpenSearch credentials
 - `.env.phase2` - Various AWS credentials
@@ -88,7 +88,7 @@ Or use AWS Secrets Manager.
 **Impact**: MEDIUM-HIGH - Weak password security
 
 **Details**:
-- Development database password: `Ayanna123!!` (exposed in Git)
+- Development database password: `<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>` (exposed in Git)
 - Pattern suggests possible personal information
 - Now publicly known
 

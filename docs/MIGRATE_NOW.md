@@ -25,7 +25,7 @@ const pool = new pg.Pool({
   port: 5432,
   database: 'episode_metadata',
   user: 'postgres',
-  password: 'EpisodeControl2024!Dev'
+  password: '<REDACTED — see GitHub Actions secret DEV_DB_PASSWORD>'
 });
 pool.query('SELECT version()', (err, res) => {
   if (err) console.log('ERROR:', err.message);
@@ -97,7 +97,7 @@ Expected: All 400+ tests pass with real PostgreSQL connection
 | **Port** | 5432 |
 | **Database** | episode_metadata |
 | **Username** | postgres |
-| **Password** | EpisodeControl2024!Dev |
+ | **Password** | <REDACTED — see GitHub Actions secret DEV_DB_PASSWORD> |
 | **Engine** | PostgreSQL 14.7 |
 
 ---

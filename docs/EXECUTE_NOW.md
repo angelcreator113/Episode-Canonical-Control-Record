@@ -82,7 +82,7 @@ psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
 ```
 Database: episode_metadata
 User: postgres
-Password: EpisodeControl2024!Dev
+Password: <REDACTED — see GitHub Actions secret DEV_DB_PASSWORD>
 Host: episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com
 Port: 5432
 ```

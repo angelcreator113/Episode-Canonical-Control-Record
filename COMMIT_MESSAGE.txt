@@ -1,0 +1,20 @@
+docs: redact plaintext credentials from documentation
+
+Removes plaintext database master passwords from documentation 
+files. Credentials were rotated 2026-05-10 and 2026-05-11; rotated 
+values are stored only in GitHub Actions secrets and password 
+manager.
+
+Historical commits retain old plaintext values, but those credentials 
+are now INVALID post-rotation. Production runs against new values 
+exclusively. Old AWS IAM key, old RDS master passwords, old JWT 
+secret, and all 7 third-party API keys have been revoked or 
+deactivated.
+
+Filed via PE #23 (amended scope), PE #25, PE #26, PE #28.
+
+Scope of this PR: docs/ files only. Scripts containing hardcoded 
+credentials (PR B) and CI workflow inspection (PR C) are tracked 
+separately.
+
+Files affected: docs/CLOUDSHELL_MIGRATION_GUIDE.md, docs/COGNITO_USER_POOL_SETTINGS.md, docs/DEPLOYMENT_CONTROL_GUIDE.md, docs/DEPLOYMENT_QUICK_REFERENCE.md, docs/EXECUTE_NOW.md, docs/GITHUB_REPOSITORY_AUDIT.md, docs/HANDOFF_SUMMARY.md, docs/MIGRATE_NOW.md, docs/RDS_READY_FOR_MIGRATIONS.md, docs/README_AUDIT_FEBRUARY_2026.md, docs/SECURITY_AUDIT_FINDINGS.md, docs/SECURITY_GROUP_CHECKLIST.md, docs/deploy-package/DEPLOYMENT_README.md
