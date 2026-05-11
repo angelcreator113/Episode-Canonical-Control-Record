@@ -33,7 +33,7 @@ Go to your repository settings and set up protection rules:
    - Requires at least 1 approval before deployment
 3. Add environment URL: `https://staging.episodes.primestudios.dev`
 4. **Environment secrets:**
-   - `STAGING_DATABASE_URL` = `postgresql://postgres:Ayanna123!!@episode-control-staging.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata`
+   - `STAGING_DATABASE_URL` = `postgresql://postgres:<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>@episode-control-staging.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata`
 
 ### 4. Production Environment (Manual Approval + Protection)
 1. Click **"New environment"** → Name: `production`
@@ -45,7 +45,7 @@ Go to your repository settings and set up protection rules:
 4. Enable **"Deployment branches"** → Select `main` only
 5. Add environment URL: `https://www.primepisodes.com`
 6. **Environment secrets:**
-   - `PRODUCTION_DATABASE_URL` = `postgresql://postgres:Ayanna123!!@episode-control-prod.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata`
+   - `PRODUCTION_DATABASE_URL` = `postgresql://postgres:<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>@episode-control-prod.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata`
 
 ## 🔑 Required GitHub Secrets
 

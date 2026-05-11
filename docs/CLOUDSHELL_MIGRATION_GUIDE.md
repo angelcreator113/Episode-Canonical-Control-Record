@@ -81,7 +81,7 @@ DB_HOST=episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com
 DB_PORT=5432
 DB_NAME=episode_metadata
 DB_USER=postgres
-DB_PASSWORD=EpisodeControl2024!Dev
+DB_PASSWORD=<REDACTED — see GitHub Actions secret DEV_DB_PASSWORD>
 ```
 
 **RDS Status:**

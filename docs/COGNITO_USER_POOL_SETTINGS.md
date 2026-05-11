@@ -19,10 +19,10 @@ PROD Pool ID:    us-east-1_643pfiGql
 ### Test Users (All Environments)
 ```
 Username: episode-control-prod
-Password: Ayanna123!!
+Password: <REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>
 
 Username: episode-control-dev
-Password: Ayanna123!!
+Password: <REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>
 ```
 
 ### Standard Test Users (Created by Setup Script)
@@ -78,7 +78,7 @@ All three pools (dev, staging, prod) use the same password policy:
 
 ### Valid Password Examples:
 ```
-✅ Ayanna123!!       (12 chars, upper, lower, number, symbol)
+✅ <REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>       (12 chars, upper, lower, number, symbol)
 ✅ TempPass123!      (12 chars, upper, lower, number, symbol)
 ✅ MyP@ssw0rd123     (13 chars, upper, lower, number, symbol)
 ✅ SecureKey#789     (13 chars, upper, lower, number, symbol)
@@ -343,7 +343,7 @@ $auth = aws cognito-idp admin-initiate-auth `
   --user-pool-id us-east-1_mFVU52978 `
   --client-id <CLIENT_ID> `
   --auth-flow ADMIN_NO_SRP_AUTH `
-  --auth-parameters USERNAME=episode-control-dev,PASSWORD=Ayanna123!! `
+  --auth-parameters USERNAME=episode-control-dev,PASSWORD=<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD> `
   --region us-east-1 | ConvertFrom-Json
 
 $token = $auth.AuthenticationResult.IdToken
@@ -361,7 +361,7 @@ TOKEN=$(aws cognito-idp admin-initiate-auth \
   --user-pool-id us-east-1_mFVU52978 \
   --client-id <CLIENT_ID> \
   --auth-flow ADMIN_NO_SRP_AUTH \
-  --auth-parameters USERNAME=episode-control-dev,PASSWORD=Ayanna123!! \
+  --auth-parameters USERNAME=episode-control-dev,PASSWORD=<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD> \
   --region us-east-1 \
   --query 'AuthenticationResult.IdToken' \
   --output text)

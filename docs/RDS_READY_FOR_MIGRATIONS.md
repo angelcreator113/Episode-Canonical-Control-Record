@@ -57,7 +57,7 @@ DB_HOST=episode-control-dev.XXXXXXXXX.us-east-1.rds.amazonaws.com
 DB_PORT=5432
 DB_NAME=episode_metadata
 DB_USER=postgres
-DB_PASSWORD=EpisodeControl2024!Dev
+DB_PASSWORD=<REDACTED — see GitHub Actions secret DEV_DB_PASSWORD>
 NODE_ENV=development
 ```
 
@@ -94,7 +94,7 @@ All 400+ tests should now connect to real PostgreSQL database.
 
 When ready, use this format for connections:
 ```
-postgresql://postgres:EpisodeControl2024!Dev@episode-control-dev.XXXXXXXXX.us-east-1.rds.amazonaws.com:5432/episode_metadata
+postgresql://postgres:<REDACTED — see GitHub Actions secret DEV_DB_PASSWORD>@episode-control-dev.XXXXXXXXX.us-east-1.rds.amazonaws.com:5432/episode_metadata
 ```
 
 ---

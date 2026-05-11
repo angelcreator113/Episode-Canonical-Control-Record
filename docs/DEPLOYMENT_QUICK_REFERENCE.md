@@ -17,7 +17,7 @@ Go to: `https://github.com/YOUR_USERNAME/Episode-Canonical-Control-Record-1/sett
 - URL: `https://staging.episodes.primestudios.dev`
 - Secret: `STAGING_DATABASE_URL` = 
   ```
-  postgresql://postgres:Ayanna123!!@episode-control-staging.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata
+  postgresql://postgres:<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>@episode-control-staging.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata
   ```
 
 **3. production**
@@ -28,7 +28,7 @@ Go to: `https://github.com/YOUR_USERNAME/Episode-Canonical-Control-Record-1/sett
 - URL: `https://www.primepisodes.com`
 - Secret: `PRODUCTION_DATABASE_URL` = 
   ```
-  postgresql://postgres:Ayanna123!!@episode-control-prod.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata
+  postgresql://postgres:<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>@episode-control-prod.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata
   ```
 
 ### Step 2: Add Repository Secrets
