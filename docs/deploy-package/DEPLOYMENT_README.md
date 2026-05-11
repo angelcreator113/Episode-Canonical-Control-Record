@@ -59,7 +59,7 @@ nano .env.production
 
 # Required variables:
 # - DB_HOST=episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com
-# - DB_PASSWORD=Ayanna123!!
+# - DB_PASSWORD=<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>
 # - AWS_ACCESS_KEY_ID
 # - AWS_SECRET_ACCESS_KEY
 # - COGNITO_USER_POOL_ID
@@ -181,7 +181,7 @@ DB_HOST=episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com
 DB_PORT=5432
 DB_NAME=episode_metadata
 DB_USER=postgres
-DB_PASSWORD=Ayanna123!!
+DB_PASSWORD=<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>
 
 # AWS (FILL IN)
 AWS_REGION=us-east-1

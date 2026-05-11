@@ -43,7 +43,7 @@ node test-all-databases.js
 
 ## RDS Credentials
 - **Master Username:** postgres
-- **Master Password:** Ayanna123!!
+- **Master Password:** <REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>
 - **Database Name:** episode_metadata
 
 ## Optional: Rename Staging Database
