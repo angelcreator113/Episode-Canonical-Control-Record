@@ -5,11 +5,10 @@
 
 // Setup test environment
 process.env.NODE_ENV = 'test';
-// Ensure TEST_DATABASE_URL is set for the test sequelize config
-if (!process.env.TEST_DATABASE_URL && process.env.DATABASE_URL) {
-  process.env.TEST_DATABASE_URL = process.env.DATABASE_URL;
+if (!process.env.TEST_DATABASE_URL) {
+  throw new Error('Tests require TEST_DATABASE_URL to be set. Set it to a postgres URL pointing at a local or CI test database, e.g. postgresql://postgres:test@localhost:5432/episode_metadata_test');
 }
-process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://postgres:Ayanna123@localhost:5432/episode_metadata_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 process.env.LOG_LEVEL = 'error';
 process.env.AWS_REGION = 'us-east-1';
 process.env.COGNITO_USER_POOL_ID = 'us-east-1_test123';
