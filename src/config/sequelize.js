@@ -138,37 +138,6 @@ const test = {
 };
 
 /**
- * Staging Configuration
- */
-const staging = {
-  ...baseConfig,
-  ...(parseDatabaseUrl(process.env.DATABASE_URL) || {
-    username: process.env.DB_USER || process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || process.env.DB_DATABASE,
-    host: process.env.DB_HOST,
-    port: parseInt(process.env.DB_PORT || '5432'),
-  }),
-  logging: false,
-  pool: {
-    max: 20,
-    min: 5,
-    acquire: 30000,
-    idle: 10000,
-  },
-  dialectOptions: {
-    ...baseConfig.dialectOptions,
-    ssl:
-      process.env.DB_SSL === 'true'
-        ? {
-            require: true,
-            rejectUnauthorized: false,
-          }
-        : false,
-  },
-};
-
-/**
  * Production configuration uses discrete DB_* env vars only. DATABASE_URL is intentionally NOT consulted here
  * because our production deployment uses AWS RDS with discrete env vars passed via PM2's ecosystem.config.js.
  * Removing the DATABASE_URL pathway eliminates a class of drift where a stale or incorrect URL in .env
@@ -229,7 +198,6 @@ if (process.env.DB_READ_REPLICA_HOST) {
 module.exports = {
   development,
   test,
-  staging,
   production,
 };
 
@@ -243,7 +211,7 @@ module.exports.default = module.exports[env];
 // Validate configuration on load
 if (!module.exports[env]) {
   throw new Error(
-    `Invalid NODE_ENV: ${env}. Must be one of: development, test, staging, production`
+    `Invalid NODE_ENV: ${env}. Must be one of: development, test, production`
   );
 }
 

@@ -137,7 +137,7 @@ PostgreSQL is automatically started via Docker Compose:
 - Username: postgres
 - Password: postgres
 
-### AWS (Staging & Production)
+### AWS (Production)
 Database connections configured via `DATABASE_URL` environment variable.
 
 ---
@@ -204,12 +204,6 @@ Load seed data: `npm run seed`
 - AWS: Local credentials
 - Debug: Verbose logging
 
-### Staging (AWS)
-- Deployed via: develop branch
-- Database: RDS db.t3.small
-- Auto-deployment: Yes
-- Load testing: Enabled
-
 ### Production (AWS)
 - Deployed via: main branch
 - Database: RDS db.t3.medium with Multi-AZ
@@ -220,20 +214,21 @@ Load seed data: `npm run seed`
 
 ## 📝 Deployment
 
-### Local → Staging
+### Local → Dev
 1. Create feature branch: `git checkout -b feature/xyz`
 2. Make changes and commit
 3. Push to GitHub: `git push origin feature/xyz`
-4. Create Pull Request to `develop` branch
-5. After review, merge to `develop`
-6. Automatic deployment to staging
+4. Open a pull request to the `dev` branch
+5. After review, merge to `dev`
+6. Automatic deployment to dev.primepisodes.com via deploy-dev.yml
 
-### Staging → Production
-1. Create Pull Request from `develop` to `main`
-2. After testing in staging, get approval
-3. Merge to `main` branch
-4. Manual approval in GitHub Actions
-5. Automatic deployment to production
+### Dev → Production
+1. Once dev is stable, open a pull request from `dev` to `main`
+2. After review, merge to `main`
+3. Manually trigger the "Deploy to Production" workflow via GitHub Actions
+4. Enter the confirmation phrase `DEPLOY TO PRODUCTION` and provide a deployment reason
+5. Workflow validates, tests, builds, deploys, and runs smoke checks
+6. Verify production health at https://primepisodes.com/health
 
 ---
 

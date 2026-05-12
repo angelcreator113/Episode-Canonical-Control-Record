@@ -10,15 +10,11 @@ yarn-error.log*
 .env.*.local
 .env.development
 .env.development.local
-.env.staging
-.env.staging.local
 .env.production
 .env.production.local
 .env.*.secrets
 .env.*.secret
 .env.phase2
-.env.aws-staging
-.env.staging.aws-backup
 .env.image-processing-template
 credentials.json
 secrets/
