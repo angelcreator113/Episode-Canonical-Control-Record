@@ -18,41 +18,41 @@
 ### Local Development Setup
 
 1. **Clone the repository**
-   \`\`\`bash
+   ```bash
    git clone https://github.com/angelcreator113/Episode-Canonical-Control-Record.git
    cd Episode-Canonical-Control-Record
-   \`\`\`
+   ```
 
 2. **Install dependencies**
-   \`\`\`bash
+   ```bash
    npm install
-   \`\`\`
+   ```
 
 3. **Setup environment variables**
-   \`\`\`bash
+   ```bash
    cp .env.example .env
    # Edit .env with your development values
-   \`\`\`
+   ```
 
 4. **Start Docker services (PostgreSQL + Redis)**
-   \`\`\`bash
+   ```bash
    docker-compose up -d
-   \`\`\`
+   ```
 
 5. **Run migrations**
-   \`\`\`bash
+   ```bash
    npm run migrate:up
-   \`\`\`
+   ```
 
 6. **Seed sample data**
-   \`\`\`bash
+   ```bash
    npm run seed
-   \`\`\`
+   ```
 
 7. **Start development server**
-   \`\`\`bash
+   ```bash
    npm run dev
-   \`\`\`
+   ```
 
    API will be available at: http://localhost:3000
 
@@ -60,7 +60,7 @@
 
 ## 📁 Project Structure
 
-\`\`\`
+```
 episode-metadata-api/
 ├── src/
 │   ├── app.js                 # Express app initialization
@@ -88,42 +88,42 @@ episode-metadata-api/
 ├── package.json               # Dependencies & scripts
 ├── .env.example               # Environment template
 └── README.md                  # This file
-\`\`\`
+```
 
 ---
 
 ## 🚀 Available Commands
 
 ### Development
-\`\`\`bash
+```bash
 npm run dev              # Start development server with hot reload
 npm run lint            # Check code quality with ESLint
 npm run lint:fix        # Fix linting issues automatically
 npm run format          # Format code with Prettier
-\`\`\`
+```
 
 ### Testing
-\`\`\`bash
+```bash
 npm test                # Run all tests with coverage
 npm run test:unit       # Run unit tests only
 npm run test:integration # Run integration tests only
 npm run test:watch      # Run tests in watch mode
-\`\`\`
+```
 
 ### Database
-\`\`\`bash
+```bash
 npm run migrate:up      # Run pending migrations
 npm run migrate:down    # Rollback last migration
 npm run migrate:create <name>  # Create new migration
 npm run seed            # Seed sample data
-\`\`\`
+```
 
 ### Production
-\`\`\`bash
+```bash
 npm start               # Start production server
 npm run docker:build    # Build Docker image
 npm run docker:run      # Run Docker container
-\`\`\`
+```
 
 ---
 
@@ -138,7 +138,7 @@ PostgreSQL is automatically started via Docker Compose:
 - Password: postgres
 
 ### AWS (Staging & Production)
-Database connections configured via \`DATABASE_URL\` environment variable.
+Database connections configured via `DATABASE_URL` environment variable.
 
 ---
 
@@ -167,32 +167,32 @@ The system comes with sample data for testing:
 - **UI Elements**: 5 sample UI components
 - **Backgrounds**: 3 sample backgrounds
 
-Load seed data: \`npm run seed\`
+Load seed data: `npm run seed`
 
 ---
 
 ## 🔄 API Endpoints (Coming Phase 1-2)
 
 ### Episodes
-- \`GET /api/v1/episodes\` - List all episodes
-- \`POST /api/v1/episodes\` - Create episode
-- \`GET /api/v1/episodes/:id\` - Get episode details
-- \`PUT /api/v1/episodes/:id\` - Update episode
-- \`DELETE /api/v1/episodes/:id\` - Delete episode
+- `GET /api/v1/episodes` - List all episodes
+- `POST /api/v1/episodes` - Create episode
+- `GET /api/v1/episodes/:id` - Get episode details
+- `PUT /api/v1/episodes/:id` - Update episode
+- `DELETE /api/v1/episodes/:id` - Delete episode
 
 ### Scripts
-- \`GET /api/v1/episodes/:id/scripts\` - Get episode script
-- \`POST /api/v1/episodes/:id/scripts\` - Upload script
+- `GET /api/v1/episodes/:id/scripts` - Get episode script
+- `POST /api/v1/episodes/:id/scripts` - Upload script
 
 ### Clips
-- \`GET /api/v1/clips\` - List all clips
-- \`POST /api/v1/clips\` - Create clip
-- \`GET /api/v1/clips/:id\` - Get clip details
+- `GET /api/v1/clips` - List all clips
+- `POST /api/v1/clips` - Create clip
+- `GET /api/v1/clips/:id` - Get clip details
 
 ### Outfits
-- \`GET /api/v1/outfits\` - List all outfits
-- \`POST /api/v1/outfits\` - Create outfit
-- \`GET /api/v1/outfits/:id\` - Get outfit details
+- `GET /api/v1/outfits` - List all outfits
+- `POST /api/v1/outfits` - Create outfit
+- `GET /api/v1/outfits/:id` - Get outfit details
 
 ---
 
@@ -221,17 +221,17 @@ Load seed data: \`npm run seed\`
 ## 📝 Deployment
 
 ### Local → Staging
-1. Create feature branch: \`git checkout -b feature/xyz\`
+1. Create feature branch: `git checkout -b feature/xyz`
 2. Make changes and commit
-3. Push to GitHub: \`git push origin feature/xyz\`
-4. Create Pull Request to \`develop\` branch
-5. After review, merge to \`develop\`
+3. Push to GitHub: `git push origin feature/xyz`
+4. Create Pull Request to `develop` branch
+5. After review, merge to `develop`
 6. Automatic deployment to staging
 
 ### Staging → Production
-1. Create Pull Request from \`develop\` to \`main\`
+1. Create Pull Request from `develop` to `main`
 2. After testing in staging, get approval
-3. Merge to \`main\` branch
+3. Merge to `main` branch
 4. Manual approval in GitHub Actions
 5. Automatic deployment to production
 
@@ -240,31 +240,31 @@ Load seed data: \`npm run seed\`
 ## 🐛 Troubleshooting
 
 ### Database Connection Errors
-\`\`\`bash
+```bash
 # Check if PostgreSQL is running
 docker ps | grep postgres
 
 # View database logs
 docker logs episode-metadata-postgres-dev
-\`\`\`
+```
 
 ### Port Already in Use
-\`\`\`bash
+```bash
 # Change port in .env
 PORT=3001
 
 # Or kill process on port 3000
 lsof -i :3000 | grep -v PID | awk '{print $2}' | xargs kill -9
-\`\`\`
+```
 
 ### Test Failures
-\`\`\`bash
+```bash
 # Run tests with verbose output
 npm test -- --verbose
 
 # Run specific test file
 npm test -- tests/unit/services/episode.test.js
-\`\`\`
+```
 
 ---
 
@@ -279,7 +279,7 @@ npm test -- tests/unit/services/episode.test.js
 
 ## 🤝 Contributing
 
-1. Create a feature branch from \`develop\`
+1. Create a feature branch from `develop`
 2. Follow ESLint & Prettier rules
 3. Write tests for new features
 4. Submit PR with description
