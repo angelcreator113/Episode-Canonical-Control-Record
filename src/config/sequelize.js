@@ -169,18 +169,19 @@ const staging = {
 };
 
 /**
- * Production Configuration
- * Includes read replica support and enhanced security
+ * Production configuration uses discrete DB_* env vars only. DATABASE_URL is intentionally NOT consulted here
+ * because our production deployment uses AWS RDS with discrete env vars passed via PM2's ecosystem.config.js.
+ * Removing the DATABASE_URL pathway eliminates a class of drift where a stale or incorrect URL in .env
+ * could silently override the correct RDS connection.
+ * Also includes read-replica support when DB_READ_REPLICA_HOST is configured.
  */
 const production = {
   ...baseConfig,
-  ...(parseDatabaseUrl(process.env.DATABASE_URL) || {
-    username: process.env.DB_USER || process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || process.env.DB_DATABASE,
-    host: process.env.DB_HOST,
-    port: parseInt(process.env.DB_PORT || '5432'),
-  }),
+  username: process.env.DB_USER || process.env.DB_USERNAME,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME || process.env.DB_DATABASE,
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT || '5432'),
   logging: false,
   pool: {
     max: 30,
