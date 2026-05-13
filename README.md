@@ -103,12 +103,17 @@ npm run format          # Format code with Prettier
 ```
 
 ### Testing
+
+Tests require local PostgreSQL and Redis services running. If you completed the Local Development Setup above (using `docker-compose up -d`), these are already running. The test runner also requires the `TEST_DATABASE_URL` environment variable to be set explicitly, typically `postgresql://postgres:postgres@localhost:5432/episode_metadata_test` for local development.
+
 ```bash
 npm test                # Run all tests with coverage
 npm run test:unit       # Run unit tests only
 npm run test:integration # Run integration tests only
 npm run test:watch      # Run tests in watch mode
 ```
+
+If tests fail with connection errors or a `TEST_DATABASE_URL` error, see the Troubleshooting section below.
 
 ### Database
 ```bash
@@ -253,6 +258,28 @@ lsof -i :3000 | grep -v PID | awk '{print $2}' | xargs kill -9
 ```
 
 ### Test Failures
+
+**`TEST_DATABASE_URL` not set:**
+Error: Tests require `TEST_DATABASE_URL` to be set
+Set the environment variable:
+
+Bash:
+```bash
+export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+```
+PowerShell:
+```powershell
+$env:TEST_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/episode_metadata_test"
+```
+
+**Redis connection refused on port 6379:**
+Error: connect ECONNREFUSED 127.0.0.1:6379
+Run `docker-compose up -d` from the repository root to start Redis and PostgreSQL services.
+
+**Postgres connection refused on port 5432:**
+Error: connect ECONNREFUSED 127.0.0.1:5432
+Run `docker-compose up -d`. If services were running but recently stopped, check their state with `docker ps -a`.
+
 ```bash
 # Run tests with verbose output
 npm test -- --verbose
