@@ -150,6 +150,7 @@ let FeedMoment; // Persisted phone-screen moments from episodes
 let ShowArc; // Narrative arc with phases, debt, progression
 let Opportunity; // Career opportunity pipeline
 let CareerGoal; // Multi-goal career tension system
+let CharacterState; // F-Stats-1 keystone: stats consolidation (Phase A G2)
 
 try {
   // Core models
@@ -412,6 +413,7 @@ try {
   ShowArc = require('./ShowArc')(sequelize);
   Opportunity = require('./Opportunity')(sequelize, DataTypes);
   CareerGoal = require('./CareerGoal')(sequelize);
+  CharacterState = require('./CharacterState')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -569,6 +571,7 @@ const requiredModels = {
   ShowArc,
   Opportunity,
   CareerGoal,
+  CharacterState,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -2066,3 +2069,4 @@ module.exports.FeedMoment = FeedMoment;
 module.exports.ShowArc = ShowArc;
 module.exports.Opportunity = Opportunity;
 module.exports.CareerGoal = CareerGoal;
+module.exports.CharacterState = CharacterState;
