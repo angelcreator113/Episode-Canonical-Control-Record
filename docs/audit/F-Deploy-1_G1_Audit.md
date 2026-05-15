@@ -58,9 +58,113 @@ Each event is a real production-affecting incident that surfaced over the past w
 
 **TODO** - the 525-byte workflow that fires on `pull_request: [opened, synchronize]` and runs `gh pr merge --squash --auto`. Suspected source of the auto-merge behavior in §2.3 and §2.4. Verify trigger conditions.
 
-### §3.3 `deploy-dev.yml`
+### §3.3 `deploy-dev.yml` - full step-by-step trace
 
-**TODO** - the 20,588-byte deploy workflow that runs on push to `dev`. Full step-by-step trace. Identify the steps that failed in §2.1, §2.2, §2.6.
+**File size:** 20,588 bytes (per `ls .github/workflows/`).
+**Trigger conditions:** Two - `push` to `dev` branch, and manual `workflow_dispatch`.
+**Concurrency:** `group: deploy-dev`, `cancel-in-progress: false` - runs are serialized, not interrupted.
+**Permissions:** `contents: read`.
+**Jobs:** Three sequential jobs - `test` -> `build` -> `deploy`.
+
+#### §3.3.1 `test` job (lines 18-66)
+
+Spins up a Postgres 15 service container, runs the test suite. Standard CI shape.
+
+- Drops and recreates `episode_metadata_test` database
+- Runs `npm run migrate:up` against the test DB
+- Runs `npm test -- --coverage`
+
+**Failure mode:** None identified specific to §2.1/§2.2/§2.6. Test job is well-isolated.
+
+#### §3.3.2 `build` job (lines 68-130)
+
+Runs after `test` (with `if: always() && (... 'success' || ... 'failure')` - meaning **build runs even when tests fail**). Builds the deployable artifact:
+
+1. `npm ci --production` + `npm install --no-save sequelize-cli`
+2. Prunes `node_modules` (removes `.md`, `.d.ts`, `LICENSE*`, test/doc directories) - significant disk-space optimization
+3. `cd frontend && npm ci && npm run build`
+4. Bundles `src/`, `scripts/`, `frontend/dist/`, `nginx/`, `package.json`, `package-lock.json`, `ecosystem.config.js`, `.sequelizerc`, and the pre-built `node_modules/` into `deploy/`
+5. Tars to `episode-metadata-${{ github.sha }}.tar.gz`
+6. Uploads as workflow artifact
+
+**Finding F-Deploy-G1-A:** Build runs on test failure. Implies a broken-test commit can still produce a deployable artifact and progress to the `deploy` job. The `deploy` job has no gate against this - it just downloads whatever artifact `build` produced.
+
+**Finding F-Deploy-G1-B:** Pre-built `node_modules` from CI is shipped to EC2 (line 124-125: `mv node_modules deploy/`). This is the source of the lunch incident's IPv6 failure (PE #41). The CI runner installs whatever `express-rate-limit` version `package.json` resolves to *at CI time*. The prod EC2 had been running an older locally-installed `node_modules` that pre-dated the stricter `express-rate-limit` version. The CI-shipped `node_modules` brought in the newer version, which now boot-blocks. This is environment drift via dependency resolution timing, not just config.
+
+#### §3.3.3 `deploy` job (lines 132-end)
+
+Runs after `build`. Two-step structure: Preflight + Deploy to EC2. Targets the `development` environment (`https://dev.primepisodes.com`).
+
+##### Preflight step
+
+Validates SSH reachability and disk space before spending build time on the real deploy. Skips when `EC2_HOST` or `EC2_SSH_KEY` secrets are unset (early exit).
+
+The Preflight step also includes a runner-network diagnostic block (curl to api.ipify.org for runner IP, raw TCP probe to port 22) before the SSH retry loop. That's defensive instrumentation added by a previous editor - not in scope as a finding, but worth noting the workflow has thoughtful operational care alongside the structural problems §3.3 identifies.
+
+##### Deploy to EC2 step
+
+The main work block. Single SSH session that:
+
+1. Cleans up disk on EC2 (`pm2 stop all`, remove old node_modules/src/scripts, npm cache clean, journal vacuum, apt-get clean)
+2. SCPs the artifact tarball to `/tmp/dev-deploy.tar.gz`
+3. SSHs in and runs `set -eo pipefail`, sources `.nvm`, installs `pm2` if not present
+4. Extracts frontend (dist + nginx config), updates `/var/www/html`, reloads nginx
+5. Extracts backend (src + scripts + node_modules + package files + ecosystem.config.js + .sequelizerc) into `~/episode-metadata`
+6. Exports DB env vars and API keys
+7. Persists API keys to `~/episode-metadata/.env` for PM2 resurrect survival
+8. Runs `node scripts/bootstrap-sequelize-meta.js` (bootstraps SequelizeMeta for databases created by `sequelize.sync()`)
+9. Runs `npx sequelize-cli db:migrate --env development` - **migration failure is captured into `MIGRATION_FAILED=true` but does NOT exit the script**
+10. `pm2 delete all`, `sleep 2`, `fuser -k 3002/tcp` (kill anything on port 3002), `sleep 1`
+11. `pm2 start ecosystem.config.js --only episode-api,episode-worker --env development`
+12. `pm2 save`
+13. Health check on `http://localhost:3002/health` - retries 6 times with 5s sleep
+14. Route verification on `/api/v1/shows` and `/api/v1/episodes` - logs status but does NOT exit on failure
+15. Cleanup tarball, final exit logic checks `MIGRATION_FAILED` and presumably exits 1
+
+**Finding F-Deploy-G1-C - Migration failure is non-fatal mid-deploy.** Line ~290-292:
+
+```bash
+if ! npx sequelize-cli db:migrate --env development 2>&1 | tail -20; then
+	echo '⚠️ Migration failed - will still restart PM2 so site stays up'
+	MIGRATION_FAILED=true
+fi
+```
+
+The comment "will still restart PM2 so site stays up" is a deliberate design choice. The intent is to avoid a complete site outage when one migration fails - the previous version of the app keeps running. But in practice this produces the **worst-of-both-worlds** outcome we saw at lunch: schema is half-migrated, new code is deployed expecting the new schema, PM2 boots the new code, routes fail because the schema mismatch breaks ORM queries. The "site stays up" goal is not achieved when the code/schema drift is the actual failure source.
+
+This is the §2.6 lunch incident's primary cause.
+
+**Finding F-Deploy-G1-D - Port 3002 collision recovery via `fuser -k`.** Line ~298:
+
+```bash
+fuser -k 3002/tcp 2>/dev/null || true
+```
+
+This kills whatever holds port 3002 before PM2 starts. It implies there's been an observed pattern of stuck-port issues - likely the §2.2 / §12.19 incident class where PM2 came up on the wrong port.
+
+**Finding F-Deploy-G1-E - Hardcoded port 3002 throughout.** The dev workflow targets port 3002 (`http://localhost:3002/health`, `fuser -k 3002/tcp`, `/api/v1/shows` etc on `:3002`). Prod targets port 3000 (per F-Stats-1 plan v1.2 §12.19 and morning soak verification). This is the port-collision risk surface: prod runs on `:3000`, dev runs on `:3002`, both on the *same EC2 instance*. If PM2 starts a dev process under the prod ecosystem config (or vice versa), the port assumption inverts and `fuser -k` may kill the wrong process.
+
+**Finding F-Deploy-G1-F - Backend health check passes before route verification.** Line ~310-322:
+
+The health endpoint check (`/health`) passes as long as the app boots and responds. **The actual route verification** (`/api/v1/shows`, `/api/v1/episodes`) is logged but **does not gate deploy success** - it just dumps PM2 error logs if routes fail. The workflow continues to cleanup and final exit regardless.
+
+This means: a deploy can "succeed" with PM2 online and `/health` returning 200, while the actual API routes are 404 because of module-load failures (PE #40 Template Studio, PE #41 aiRateLimiter). The dev-deploy workflow's notion of "success" is weaker than "the app actually works."
+
+**Finding F-Deploy-G1-G - Same EC2 instance for dev and prod.** Cross-cutting observation. The `Free disk space on EC2 before uploading` step runs `pm2 stop all` - which stops BOTH dev and prod PM2 processes on this instance. This is the §2.1 / §12.15 root cause: a dev-deploy stopped the prod processes, then the deploy failed before restarting them, leaving prod down for 50 minutes.
+
+The architectural assumption underlying the entire workflow is "this EC2 instance only runs one app." That assumption is violated in practice - prod and dev share the instance.
+
+#### §3.3.4 Summary of failure-mode findings
+
+The findings A-H above map to the §2 failure events as follows:
+
+| §2 Event | Primary file:line cause |
+|---|---|
+| §2.1 F-App-1 outage | F-Deploy-G1-G (pm2 stop all on shared EC2) |
+| §2.2 F-Stats-1 G2 outage | F-Deploy-G1-E (port collision dev:3002 vs prod:3000), F-Deploy-G1-D (`fuser -k` band-aid) |
+| §2.6 Dev deploy lunch | F-Deploy-G1-C (migration non-fatal), F-Deploy-G1-B (CI-shipped node_modules brings new express-rate-limit), F-Deploy-G1-F (route check non-fatal) |
+
+§2.3, §2.4, §2.5 (auto-merge mechanism, TySteamTest identity) are not caused by `deploy-dev.yml` and trace to other files (§3.2 `auto-merge.yml`, §3.7 local-tooling identity).
 
 ### §3.4 `deploy-production.yml`
 
