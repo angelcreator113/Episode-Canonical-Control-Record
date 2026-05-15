@@ -278,6 +278,113 @@ Phase B execution. Triage by EOW 2026-05-21.
 
 ---
 
+### PE #43 — Thumbnail.episodeId vs episode_id JOIN failure (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during F-Stats-1 Phase A G6 soak verification)
+**Severity:** P1 (feature broken, endpoint returns 500, no runtime instability)
+**Status:** OPEN
+
+The `GET /thumbnails` list endpoint fails with:
+column Thumbnail.episodeId does not exist
+HINT: Perhaps you meant to reference the column "Thumbnail.episode_id".
+
+**Frequency:** 16 occurrences in the last 500 episode-api log lines (2026-05-15 soak window). Recurring on every request to the affected endpoint. Not a hot loop (no retry behavior), but every request to list thumbnails fails.
+
+**Surface:** `thumbnailController.js` (file referenced in error logs; exact line TBD). The Thumbnail Sequelize model defines `episodeId` in camelCase, but the actual `thumbnails` table column on prod RDS is `episode_id` in snake_case. The model-table mismatch surfaces on every JOIN.
+
+**Pre-existing status:** Confirmed pre-existing. Error log timestamps from 2026-05-15 02:32 UTC onward; pattern matches Pattern 40b schema-source drift catalogued under F-Ward-1 keystone (audit handoff v8 §6.12).
+
+**Root cause class:** Same pattern family as F-Ward-1 — schema drift between Sequelize model definitions and production RDS table schemas. The model was written assuming Sequelize's camelCase auto-conversion would map to snake_case columns; either the auto-conversion was disabled later, or the prod table was created via different migration than the dev environment.
+
+**Defer:** Out of F-Stats-1 scope. Covered by F-Ward-1 keystone scope (schema-source drift, Pattern 40b). When F-Ward-1 lands its migration captures, the Thumbnail-episode JOIN should resolve as part of that sweep.
+
+---
+
+### PE #44 — shows.distribution_defaults column missing on prod RDS (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during F-Stats-1 Phase A G6 soak verification)
+**Severity:** P1 (feature degraded via fallback path; no user-facing breakage)
+**Status:** OPEN
+
+The `GET /shows` endpoint logs:
+[GET /shows] Sequelize findAll failed, trying raw SQL fallback: column "distribution_defaults" does not exist
+
+**Surface:**
+- `Show.js:96` — model declares `distribution_defaults` column
+- `distributionService.js:80` — raw-SQL SELECT on the column (works because raw SQL routes around model)
+- `distributionService.js:305` — raw-SQL UPDATE on the column
+
+**Pre-existing status:** Confirmed pre-existing. Defensive raw-SQL fallback pattern indicates the developer who wrote `distributionService.js` already knew the column was missing on prod and worked around it.
+
+**Pattern:** F-Ward-1 / F-App-1 schema drift. The fallback pattern is the same one audit §12.7 documents at `wardrobe.js:1291` and `WorldEvent.js:57` ("Defensive schema coding around character_state_history continues").
+
+**Defer:** Out of F-Stats-1 scope. F-Ward-1 keystone territory.
+
+---
+
+### PE #45 — WorldEvent.source_profile_id column missing on prod RDS (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during F-Stats-1 Phase A G6 soak verification)
+**Severity:** P1 (feature degraded via include-fallback path)
+**Status:** OPEN
+
+The WorldEvents listing fails its eager-loading JOIN:
+[WorldEvents] Includes failed, trying without: column WorldEvent.source_profile_id does not exist
+
+**Surface:**
+- `WorldEvent.js:76` — model declares `source_profile_id` column
+- `WorldEvent.js:293` — model declares the SocialProfile association via foreign key
+- `SocialProfile.js:15` — inverse association
+- `feedScheduler.js:830, 832, 960, 962, 989` — service code reads/writes the column
+
+**Pre-existing status:** Confirmed pre-existing. The "try includes, fall back to no includes" pattern indicates the developer worked around the missing column at runtime.
+
+**Pattern:** Same F-Ward-1 schema-drift family as PE #44.
+
+**Defer:** Out of F-Stats-1 scope. F-Ward-1 keystone territory.
+
+---
+
+### PE #46 — Wardrobe.s3_key_regenerated column missing on prod RDS (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during F-Stats-1 Phase A G6 soak verification)
+**Severity:** P1 (specific column on Wardrobe model; surface symptom TBD)
+**Status:** OPEN
+
+Error referenced in the morning soak logs; specific consumer not yet traced.
+
+**Surface:** `Wardrobe.js:69` — model declares `s3_key_regenerated` column. Likely consumer surfaces in wardrobe routes; specific file:line refs to be added when triaged.
+
+**Pre-existing status:** Pre-existing. Cross-references audit Memory #29 (defensive schema coding indicates production migration drift).
+
+**Pattern:** F-Ward-1 keystone family. Wardrobe model is the canonical F-Ward-1 surface (audit v8 §6.12).
+
+**Defer:** Out of F-Stats-1 scope. F-Ward-1 keystone territory; almost certainly resolves as part of F-Ward-1's migration capture.
+
+---
+
+### PE #47 — ui_overlay_types relation drift (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during F-Stats-1 Phase A G6 soak verification)
+**Severity:** P1
+**Status:** OPEN
+
+Soak logs surfaced "missing relations like `ui_overlay_types`." Different shape from PE #43-#46: those are missing columns on existing tables; this is a missing table/relation.
+
+**Surface:**
+- `uiOverlayService.js:6` — comment documenting the table's purpose (per-show overlay types)
+- `uiOverlayService.js:43` — raw-SQL SELECT from `ui_overlay_types`
+- `timelinePlacementService.js:95, 120` — additional read sites
+- `episodeGeneratorService.js:593` — comment referencing the table
+
+**Pre-existing status:** Pre-existing. The OVERLAY_TYPES migration (per audit user memory: "migrations/20260725000000 already removed hardcoded OVERLAY_TYPES JS constants and moved them into ui_overlay_types DB table") may have run on dev but not prod, OR the migration ran but the table was later dropped, OR the migration was never run on prod RDS.
+
+**Pattern:** Missing-table variant of F-Ward-1 schema drift. Worth distinguishing from PE #43-#46 because the fix path is different — column adds vs. table creation.
+
+**Defer:** Out of F-Stats-1 scope. F-Ward-1 keystone territory, but flagging the missing-table variant explicitly because it requires migration ordering work (create table → populate → wire consumers) that's different from "add missing column to existing table."
+
+---
+
 ## Closed findings
 
 *(none yet — first close will document resolution date and brief
