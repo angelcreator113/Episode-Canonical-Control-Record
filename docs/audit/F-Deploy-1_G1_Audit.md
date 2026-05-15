@@ -634,7 +634,66 @@ The findings H-J above sharpen the §2.2 / §12.19 picture and add context to §
 
 ### §3.6 Branch protection state on `main`
 
-**TODO** - current state per `gh api repos/...`. Per May 12 session resume: "0 required reviewers on main per gh api inspection" - meaning admin-bypass is implicit, no PR review required. Confirm current state and document.
+**Method:** `gh api repos/angelcreator113/Episode-Canonical-Control-Record/branches/main/protection` returned 200 with a full protection-rule JSON object. The branch IS protected - but in a configuration where nearly every protection setting is opted out.
+
+#### §3.6.1 - Current configuration (2026-05-15)
+
+**Settings that DO restrict pushes to main:**
+
+| Setting | Value | Effect |
+|---|---|---|
+| `allow_force_pushes` | `false` | Force-push to main is rejected |
+| `allow_deletions` | `false` | The `main` branch cannot be deleted |
+
+**Settings that exist but allow everything through:**
+
+| Setting | Value | Effect |
+|---|---|---|
+| `required_approving_review_count` | `0` | PRs require zero approvals to merge |
+| `dismiss_stale_reviews` | `false` | Stale reviews kept (moot at 0 required) |
+| `require_code_owner_reviews` | `false` | No CODEOWNERS gate |
+| `require_last_push_approval` | `false` | New pushes don't invalidate approval |
+| `required_signatures.enabled` | `false` | Unsigned commits accepted |
+| `enforce_admins.enabled` | `false` | Admins bypass all rules |
+| `required_linear_history.enabled` | `false` | Merge commits allowed |
+| `required_conversation_resolution.enabled` | `false` | Unresolved PR comments don't block merge |
+| `lock_branch.enabled` | `false` | Branch is writable |
+
+**Notably absent from the response:** `required_status_checks`. No required CI checks are configured. Any merge attempt finds zero blocking conditions.
+
+#### §3.6.2 - Findings
+
+**Finding F-Deploy-G1-V - Branch protection exists but is effectively a no-op.** Every gating setting is opted out: 0 required reviews, no required checks, no signature requirement, no conversation-resolution requirement, no admin enforcement, no linear history. The only enforced rules are "no force pushes" and "no deletion of main" - useful but they don't prevent unwanted merges or pushes via standard merge paths.
+
+The "branch protection: enabled" status this configuration produces is misleading. A user glancing at the repo settings sees branch protection active and assumes there's a gate against unreviewed merges. There isn't.
+
+**Finding F-Deploy-G1-W - Zero required checks is the mechanical cause of the §2.4 auto-merge chain.** When `auto-merge.yml` runs `gh pr merge --squash --auto` on a newly-opened PR (PRs #688, #689 from backup branches), the `--auto` flag queues the merge until "required checks pass." With zero required checks configured, the condition is satisfied immediately - the merge fires within seconds, as observed in §2.4.
+
+**Finding F-Deploy-G1-X - Admin enforcement is disabled.** `enforce_admins: false` means that even if the protection settings were tightened, the repo owner (Evoni, who is the sole admin) would still bypass them. For a single-developer repo this is the pragmatic default - it lets the owner unblock themselves in emergencies. But it also means any tightening of `required_approving_review_count` or `required_status_checks` is ignored for admin merges. The tightening would only affect *non-admin* contributors, of which this repo has none.
+
+#### §3.6.3 - Implications for F-Deploy-1 fix plan
+
+The F-Deploy-1 fix plan (§5 of this audit, still TODO) will need to address the autonomous-merge mechanism. Three architectural options:
+
+**Option A - Tighten branch protection.** Set `required_status_checks` to require specific CI workflows (Validate, tests). Set `required_approving_review_count: 1` if working with anyone else (currently 0 because solo dev). Enable `enforce_admins` if the goal is hard prevention even for the owner. **Trade-off:** raises friction on every PR, including legitimate solo-dev work; might force `--admin` flag usage to bypass for emergencies, defeating the purpose.
+
+**Option B - Disable `auto-merge.yml`.** Remove or restrict the workflow that fires `gh pr merge --auto` on every PR. **Trade-off:** removes the convenience of auto-merge for legitimate draft->ready promotions, requires manual click to merge.
+
+**Option C - Combination.** Add minimal required checks (e.g., `test` workflow must pass) AND filter `auto-merge.yml` to only run on PRs that meet specific criteria (e.g., a label like `auto-merge` applied manually). **Trade-off:** more complexity, but preserves auto-merge as opt-in instead of opt-out.
+
+These options are not decided here; they go to §5 fix-plan structure.
+
+#### §3.6.4 Summary - relationship to §2 events and other findings
+
+| §2 Event | Cause from §3.6 |
+|---|---|
+| §2.3 May 14 evening - PR #685 auto-merge | F-Deploy-G1-W (zero required checks) |
+| §2.4 May 14 night - PRs #688, #689 from backup branches | F-Deploy-G1-W + F-Deploy-G1-V (no real gate against autonomous merges) |
+
+**Cross-section findings:**
+- F-Deploy-G1-V + F-Deploy-G1-K (auto-merge.yml unconditional) together create the autonomous-merge mechanism. Both must change for the mechanism to be contained.
+- F-Deploy-G1-W (zero required checks) means F-Deploy-G1-M (`--auto` out-of-band timing) fires immediately rather than after CI. This is what made PR #688/#689 merge within seconds rather than waiting for any verification.
+- F-Deploy-G1-X (admin enforcement disabled) means *tightening* branch protection alone won't stop admin-driven merges. The owner-as-admin pattern is its own surface.
 
 ### §3.7 Local git/tooling identity environment
 
