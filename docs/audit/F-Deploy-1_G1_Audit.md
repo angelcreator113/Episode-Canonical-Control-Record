@@ -47,7 +47,26 @@ Each event is a real production-affecting incident that surfaced over the past w
 
 ### §2.6 May 15 ~12:30 UTC - Dev deploy failure
 
-**TODO** - Deploy-to-Development workflow failed with two distinct errors: (a) migration `20260718000000-create-episode-scripts-and-feed-posts` failed with `ERROR: column "version" does not exist`; (b) `episode-api` boot threw `ERR_ERL_KEY_GEN_IPV6` ValidationError from `express-rate-limit`. PM2 status showed "online" but route verification failed. PE #41 reclassified P2->P0, PE #48 filed.
+**Event reconstruction:** A `deploy-dev.yml` run reached EC2, stopped both PM2 processes (`pm2 stop all`), cleaned disk, extracted frontend/backend, and attempted migrations. The migration step failed at `20260718000000-create-episode-scripts-and-feed-posts` with `ERROR: column "version" does not exist`. Despite that failure, the workflow followed its non-fatal migration path (`MIGRATION_FAILED=true`) and continued to restart PM2.
+
+PM2 then reported both processes online (`episode-api` cluster mode, `episode-worker` fork mode), and `/health` passed on attempt 1. However, functional route checks immediately failed (`Shows route: false`, `Episodes route: false`). PM2 error logs showed runtime boot failure signals, most prominently `ERR_ERL_KEY_GEN_IPV6` from `express-rate-limit` key-generator validation, plus a Template Studio route-load error (`The "url" argument must be of type string. Received undefined`). The workflow exited with code 1 only at the end, after restart and failed route verification.
+
+**Recovery path observed in-run:**
+1. Migration failed.
+2. Workflow intentionally continued and restarted PM2.
+3. Health endpoint passed; critical API routes failed.
+4. Logs were dumped for diagnosis.
+5. Workflow returned failure (`exit code 1`).
+
+**Root cause class:** code/schema/runtime drift under non-atomic deploy semantics. The pipeline allows migration failure to be non-fatal mid-run, then starts new code anyway. Combined with dependency/runtime behavior changes (`express-rate-limit` IPv6 validator), this produced a service state where PM2 looked healthy while real API behavior was broken.
+
+**Primary mapping to findings:**
+- F-Deploy-G1-C: non-fatal migration handling is the central control-flow failure.
+- F-Deploy-G1-F: health-check success did not imply route-level correctness.
+- F-Deploy-G1-B: dependency/runtime delta likely contributed to boot-time validator failure.
+- F-Deploy-G1-G: shared-instance PM2 stop/start pattern remains a high-risk context for these failures.
+
+**Incident handling classification:** PE #41 reclassified P2 -> P0; PE #48 filed for migration-path remediation.
 
 ---
 
