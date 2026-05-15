@@ -205,11 +205,11 @@ and identify which Node API call receives `undefined`.
 
 ---
 
-### PE #41 — aiRateLimiter.js IPv6 key generation degraded (P2, OPEN, NEW 2026-05-14)
+### PE #41 — aiRateLimiter.js IPv6 key generation is boot-blocking on fresh installs (P0, OPEN, RECLASSIFIED 2026-05-15)
 
 **Date filed:** 2026-05-14 (surfaced during F-Stats-1 G6 soak
 verification)
-**Severity:** P2
+**Severity:** P0 (reclassified from P2 on 2026-05-15)
 **Status:** OPEN
 
 At PM2 boot, `episode-api` logs:
@@ -218,7 +218,9 @@ At PM2 boot, `episode-api` logs:
 ERR_ERL_KEY_GEN_IPV6
 ```
 
-warning from `express-rate-limit` regarding `aiRateLimiter.js`.
+and throws a `ValidationError` from `express-rate-limit` during
+limiter initialization when using a custom key generator that reads
+the request IP directly without `ipKeyGenerator`.
 
 **Cause:** `aiRateLimiter.js` uses the bare client IP as the
 rate-limit key. `express-rate-limit` requires IPv6 keys to go through
@@ -226,18 +228,56 @@ the `ipKeyGenerator` helper to avoid keying on partial v6 addresses
 (otherwise multiple addresses in the same /64 may collapse to one
 bucket, or the limiter may fail-open).
 
-**Impact:** IPv6 clients are not correctly rate-limited. IPv4 clients
-are unaffected. App boots and runs normally. No restart risk; no
-security implication at current traffic levels (Prime Studios is
-single-user during pre-launch).
+**Impact:** Dev deploy shows this now as a boot-time blocker on fresh
+`node_modules` installs: app process appears online under PM2 but route
+verification fails and API routes do not initialize cleanly. This is no
+longer a degraded-warning class issue; it is deployment-blocking for
+environments that install the stricter `express-rate-limit` behavior.
 
 **Resolution path:** Update `aiRateLimiter.js` to import and use
-`ipKeyGenerator` from `express-rate-limit`'s utility module. ~10 LOC
-change. Add an IPv6 rate-limit test if test infrastructure supports
-simulating IPv6 requests.
+`ipKeyGenerator` from `express-rate-limit`'s utility module. Add an
+integration boot test that fails if limiter initialization throws, and
+an IPv6 rate-limit test if infrastructure supports IPv6 simulation.
 
-**Defer:** Future hardening pass; bundle with other rate-limit
-hygiene. Not blocking any current fix plan.
+**Defer:** None. Treat as urgent pipeline blocker before Phase B G2
+execution.
+
+---
+
+### PE #48 — Dev migration fails: missing `version` column in `20260718000000-create-episode-scripts-and-feed-posts` (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during Deploy-to-Development
+workflow failure review)
+**Severity:** P1 (pipeline-blocking schema drift)
+**Status:** OPEN
+
+Deploy-to-Development run failed migration
+`20260718000000-create-episode-scripts-and-feed-posts` with:
+
+```
+ERROR: column "version" does not exist
+```
+
+**Impact:** Dev pipeline cannot complete migration set; deploy leaves an
+inconsistent runtime state (PM2 online but backend routes not verified).
+This blocks safe Phase B G2 execution and is additional evidence of
+cross-environment schema drift.
+
+**Likely root cause classes:**
+
+1. Dev DB schema drift vs prod
+2. Migration dependency drift (referenced column removed/renamed)
+3. Migration file changed after earlier successful environment run
+
+**Resolution path:**
+
+1. Inspect migration SQL and dependency tables for `version` reference
+2. Diff dev/prod schema for affected tables
+3. Decide canonical schema source and add corrective migration (no
+  editing executed migrations in place)
+
+**Defer:** Out of current F-Stats-1 documentation patch scope; hand off
+to F-Ward-1/F-Deploy-1 execution track for remediation planning.
 
 ---
 
