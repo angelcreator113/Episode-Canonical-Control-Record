@@ -172,7 +172,97 @@ The findings A-H above map to the §2 failure events as follows:
 
 ### §3.5 PM2 ecosystem config (`ecosystem.config.js`)
 
-**TODO** - read the ecosystem file. Document the `env_*` blocks, the port configuration (3000 vs 3002), the cluster vs fork modes, and any per-environment differences.
+**File size:** ~150 lines. Lives at repo root, copied into `deploy/` artifact, deployed to `/home/ubuntu/episode-metadata/ecosystem.config.js` on EC2.
+
+**Structure:** Module exports an `apps` array with **four PM2 application definitions**:
+
+1. `episode-api` - production HTTP API (port 3000 in `env_production`, port 3002 in default `env`)
+2. `episode-worker` - production background worker (fork mode, no port)
+3. `episode-api-dev` - dev HTTP API (port 3002, no `env_production` block)
+4. `episode-worker-dev` - dev background worker (fork mode, no `env_production` block)
+
+**Shared:** A `sharedEnv` object spread into every app's `env` block - contains 30+ environment variables for DB, AWS, Cognito, JWT, Redis, Anthropic, ElevenLabs, RunwayML, Replicate, fal.ai, remove.bg. All sourced from `process.env` with empty-string defaults.
+
+#### §3.5.1 - The PORT defaults are inverted
+
+The default `env` block on `episode-api` sets:
+
+```javascript
+env: {
+	...sharedEnv,
+	PORT: 3002,    // <-- dev's port
+	HOST: '0.0.0.0',
+	APP_NAME: 'Episode Metadata API (Development)',
+	ALLOWED_ORIGINS: 'https://dev.episodes.primestudios.dev,...,https://dev.primepisodes.com',
+}
+```
+
+And `env_production` overrides with:
+
+```javascript
+env_production: {
+	...sharedEnv,
+	PORT: 3000,    // <-- prod's port
+	HOST: '0.0.0.0',
+	NODE_ENV: 'production',
+	APP_NAME: 'Episode Metadata API (Production)',
+	ALLOWED_ORIGINS: 'https://primepisodes.com,https://www.primepisodes.com',
+}
+```
+
+**Finding F-Deploy-G1-H - The default env block on `episode-api` configures it as DEV.** Port 3002, app name says "Development," CORS origins include `localhost` and `dev.primepisodes.com`. The `env_production` override is required to get production port and CORS.
+
+**Consequence:** When PM2 starts `episode-api` without `--env production`, the app comes up:
+- Bound to port 3002 instead of port 3000 (the ALB cannot route to it)
+- Identifying itself as "Episode Metadata API (Development)"
+- Accepting CORS from dev origins but not from `primepisodes.com`
+
+This is the §12.19 incident's mechanical root cause. The deploy command missed `--env production`, PM2 started the prod app with the default `env` block (which is dev-shaped), and the prod API came up on port 3002. The ALB health checks failed because nothing was listening on port 3000.
+
+#### §3.5.2 - The dev-named apps are unused
+
+`episode-api-dev` and `episode-worker-dev` are defined in the config but **never started by any workflow**:
+
+- `deploy-dev.yml` starts `episode-api` and `episode-worker` with `--env development`
+- `deploy-production.yml` starts `episode-api` and `episode-worker` with `--env production` (presumably; needs §3.4 verification)
+
+The `*-dev` named apps appear to be a leftover from an earlier architectural attempt (side-by-side dev and prod processes on the same EC2 instance). They're dead config: defined but unreferenced.
+
+**Finding F-Deploy-G1-I - Dead PM2 app definitions.** `episode-api-dev` and `episode-worker-dev` are not started by any workflow but remain in `ecosystem.config.js`. They take up no resources (PM2 doesn't auto-start unreferenced apps) but they create cognitive overhead for future readers and the false impression that prod/dev are isolated. Either remove them or wire the deploy workflows to use them.
+
+#### §3.5.3 - Single-instance both processes
+
+Both `episode-api` and `episode-worker` use `instances: 1` and no explicit `exec_mode` for the API (worker is explicitly `exec_mode: 'fork'`). The PM2 default for `exec_mode` when omitted is `fork`, not `cluster`.
+
+**However**, the morning soak output showed `episode-api` in `cluster` mode with `mode: cluster`. That means either:
+- PM2 was started with a runtime override that promoted episode-api to cluster mode
+- A prior version of the config used cluster mode and PM2 retained that setting via `pm2 save` / `pm2 resurrect`
+- PM2 cluster mode interprets `instances: 1` differently than I'm assuming
+
+Worth verification but not a finding-level concern - single-instance cluster mode is functionally equivalent to fork mode for our purposes.
+
+#### §3.5.4 - Logs colocate dev and prod on shared EC2
+
+Log file paths on the prod-named apps:
+- `episode-api`: `/home/ubuntu/episode-metadata/logs/error.log` and `out.log`
+- `episode-worker`: `/home/ubuntu/episode-metadata/logs/worker-error.log` and `worker-out.log`
+
+On the dev-named apps:
+- `episode-api-dev`: `/home/ubuntu/episode-metadata/logs/dev-error.log` and `dev-out.log`
+- `episode-worker-dev`: `/home/ubuntu/episode-metadata/logs/dev-worker-error.log` and `dev-worker-out.log`
+
+**Implication:** If both prod and dev are ever run side-by-side (using the proper dev-named apps), the logs are separated by filename prefix. But because deploy-dev.yml uses the prod-named apps, **dev deploys write to prod's log files**. The morning soak verification's `error-0.log` content with 16 thumbnail-column errors may include both prod usage AND any dev API hits that happened in the soak window - they share the same log file.
+
+**Finding F-Deploy-G1-J - Dev and prod share log files.** Because deploy-dev.yml reuses prod's PM2 app name, dev deploys write to prod's log files. This conflates two workloads and complicates incident analysis. Any error in `/home/ubuntu/episode-metadata/logs/error.log` could be either deploy's origin.
+
+#### §3.5.5 Summary - relationship to §2 events
+
+The findings H-J above sharpen the §2.2 / §12.19 picture and add context to §2.6:
+
+| §2 Event | Refined cause |
+|---|---|
+| §2.2 F-Stats-1 G2 outage | F-Deploy-G1-H (default env block has dev port; missing `--env production` puts prod on dev's port) |
+| §2.6 Dev deploy lunch | F-Deploy-G1-J (logs conflated, harder to triage; the IPv6 ValidationError surfaced in shared error log) |
 
 ### §3.6 Branch protection state on `main`
 
