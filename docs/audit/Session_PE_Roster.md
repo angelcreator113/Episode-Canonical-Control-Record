@@ -205,11 +205,11 @@ and identify which Node API call receives `undefined`.
 
 ---
 
-### PE #41 — aiRateLimiter.js IPv6 key generation degraded (P2, OPEN, NEW 2026-05-14)
+### PE #41 — aiRateLimiter.js IPv6 key generation is boot-blocking on fresh installs (P0, OPEN, RECLASSIFIED 2026-05-15)
 
 **Date filed:** 2026-05-14 (surfaced during F-Stats-1 G6 soak
 verification)
-**Severity:** P2
+**Severity:** P0 (reclassified from P2 on 2026-05-15)
 **Status:** OPEN
 
 At PM2 boot, `episode-api` logs:
@@ -218,7 +218,9 @@ At PM2 boot, `episode-api` logs:
 ERR_ERL_KEY_GEN_IPV6
 ```
 
-warning from `express-rate-limit` regarding `aiRateLimiter.js`.
+and throws a `ValidationError` from `express-rate-limit` during
+limiter initialization when using a custom key generator that reads
+the request IP directly without `ipKeyGenerator`.
 
 **Cause:** `aiRateLimiter.js` uses the bare client IP as the
 rate-limit key. `express-rate-limit` requires IPv6 keys to go through
@@ -226,18 +228,56 @@ the `ipKeyGenerator` helper to avoid keying on partial v6 addresses
 (otherwise multiple addresses in the same /64 may collapse to one
 bucket, or the limiter may fail-open).
 
-**Impact:** IPv6 clients are not correctly rate-limited. IPv4 clients
-are unaffected. App boots and runs normally. No restart risk; no
-security implication at current traffic levels (Prime Studios is
-single-user during pre-launch).
+**Impact:** Dev deploy shows this now as a boot-time blocker on fresh
+`node_modules` installs: app process appears online under PM2 but route
+verification fails and API routes do not initialize cleanly. This is no
+longer a degraded-warning class issue; it is deployment-blocking for
+environments that install the stricter `express-rate-limit` behavior.
 
 **Resolution path:** Update `aiRateLimiter.js` to import and use
-`ipKeyGenerator` from `express-rate-limit`'s utility module. ~10 LOC
-change. Add an IPv6 rate-limit test if test infrastructure supports
-simulating IPv6 requests.
+`ipKeyGenerator` from `express-rate-limit`'s utility module. Add an
+integration boot test that fails if limiter initialization throws, and
+an IPv6 rate-limit test if infrastructure supports IPv6 simulation.
 
-**Defer:** Future hardening pass; bundle with other rate-limit
-hygiene. Not blocking any current fix plan.
+**Defer:** None. Treat as urgent pipeline blocker before Phase B G2
+execution.
+
+---
+
+### PE #48 — Dev migration fails: missing `version` column in `20260718000000-create-episode-scripts-and-feed-posts` (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during Deploy-to-Development
+workflow failure review)
+**Severity:** P1 (pipeline-blocking schema drift)
+**Status:** OPEN
+
+Deploy-to-Development run failed migration
+`20260718000000-create-episode-scripts-and-feed-posts` with:
+
+```
+ERROR: column "version" does not exist
+```
+
+**Impact:** Dev pipeline cannot complete migration set; deploy leaves an
+inconsistent runtime state (PM2 online but backend routes not verified).
+This blocks safe Phase B G2 execution and is additional evidence of
+cross-environment schema drift.
+
+**Likely root cause classes:**
+
+1. Dev DB schema drift vs prod
+2. Migration dependency drift (referenced column removed/renamed)
+3. Migration file changed after earlier successful environment run
+
+**Resolution path:**
+
+1. Inspect migration SQL and dependency tables for `version` reference
+2. Diff dev/prod schema for affected tables
+3. Decide canonical schema source and add corrective migration (no
+  editing executed migrations in place)
+
+**Defer:** Out of current F-Stats-1 documentation patch scope; hand off
+to F-Ward-1/F-Deploy-1 execution track for remediation planning.
 
 ---
 
@@ -275,6 +315,113 @@ warrant immediate hotfix branches.
 
 **Defer:** Not blocking F-Stats-1 work. Should not stay open through
 Phase B execution. Triage by EOW 2026-05-21.
+
+---
+
+### PE #43 — Thumbnail.episodeId vs episode_id JOIN failure (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during F-Stats-1 Phase A G6 soak verification)
+**Severity:** P1 (feature broken, endpoint returns 500, no runtime instability)
+**Status:** OPEN
+
+The `GET /thumbnails` list endpoint fails with:
+column Thumbnail.episodeId does not exist
+HINT: Perhaps you meant to reference the column "Thumbnail.episode_id".
+
+**Frequency:** 16 occurrences in the last 500 episode-api log lines (2026-05-15 soak window). Recurring on every request to the affected endpoint. Not a hot loop (no retry behavior), but every request to list thumbnails fails.
+
+**Surface:** `thumbnailController.js` (file referenced in error logs; exact line TBD). The Thumbnail Sequelize model defines `episodeId` in camelCase, but the actual `thumbnails` table column on prod RDS is `episode_id` in snake_case. The model-table mismatch surfaces on every JOIN.
+
+**Pre-existing status:** Confirmed pre-existing. Error log timestamps from 2026-05-15 02:32 UTC onward; pattern matches Pattern 40b schema-source drift catalogued under F-Ward-1 keystone (audit handoff v8 §6.12).
+
+**Root cause class:** Same pattern family as F-Ward-1 — schema drift between Sequelize model definitions and production RDS table schemas. The model was written assuming Sequelize's camelCase auto-conversion would map to snake_case columns; either the auto-conversion was disabled later, or the prod table was created via different migration than the dev environment.
+
+**Defer:** Out of F-Stats-1 scope. Covered by F-Ward-1 keystone scope (schema-source drift, Pattern 40b). When F-Ward-1 lands its migration captures, the Thumbnail-episode JOIN should resolve as part of that sweep.
+
+---
+
+### PE #44 — shows.distribution_defaults column missing on prod RDS (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during F-Stats-1 Phase A G6 soak verification)
+**Severity:** P1 (feature degraded via fallback path; no user-facing breakage)
+**Status:** OPEN
+
+The `GET /shows` endpoint logs:
+[GET /shows] Sequelize findAll failed, trying raw SQL fallback: column "distribution_defaults" does not exist
+
+**Surface:**
+- `Show.js:96` — model declares `distribution_defaults` column
+- `distributionService.js:80` — raw-SQL SELECT on the column (works because raw SQL routes around model)
+- `distributionService.js:305` — raw-SQL UPDATE on the column
+
+**Pre-existing status:** Confirmed pre-existing. Defensive raw-SQL fallback pattern indicates the developer who wrote `distributionService.js` already knew the column was missing on prod and worked around it.
+
+**Pattern:** F-Ward-1 / F-App-1 schema drift. The fallback pattern is the same one audit §12.7 documents at `wardrobe.js:1291` and `WorldEvent.js:57` ("Defensive schema coding around character_state_history continues").
+
+**Defer:** Out of F-Stats-1 scope. F-Ward-1 keystone territory.
+
+---
+
+### PE #45 — WorldEvent.source_profile_id column missing on prod RDS (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during F-Stats-1 Phase A G6 soak verification)
+**Severity:** P1 (feature degraded via include-fallback path)
+**Status:** OPEN
+
+The WorldEvents listing fails its eager-loading JOIN:
+[WorldEvents] Includes failed, trying without: column WorldEvent.source_profile_id does not exist
+
+**Surface:**
+- `WorldEvent.js:76` — model declares `source_profile_id` column
+- `WorldEvent.js:293` — model declares the SocialProfile association via foreign key
+- `SocialProfile.js:15` — inverse association
+- `feedScheduler.js:830, 832, 960, 962, 989` — service code reads/writes the column
+
+**Pre-existing status:** Confirmed pre-existing. The "try includes, fall back to no includes" pattern indicates the developer worked around the missing column at runtime.
+
+**Pattern:** Same F-Ward-1 schema-drift family as PE #44.
+
+**Defer:** Out of F-Stats-1 scope. F-Ward-1 keystone territory.
+
+---
+
+### PE #46 — Wardrobe.s3_key_regenerated column missing on prod RDS (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during F-Stats-1 Phase A G6 soak verification)
+**Severity:** P1 (specific column on Wardrobe model; surface symptom TBD)
+**Status:** OPEN
+
+Error referenced in the morning soak logs; specific consumer not yet traced.
+
+**Surface:** `Wardrobe.js:69` — model declares `s3_key_regenerated` column. Likely consumer surfaces in wardrobe routes; specific file:line refs to be added when triaged.
+
+**Pre-existing status:** Pre-existing. Cross-references audit Memory #29 (defensive schema coding indicates production migration drift).
+
+**Pattern:** F-Ward-1 keystone family. Wardrobe model is the canonical F-Ward-1 surface (audit v8 §6.12).
+
+**Defer:** Out of F-Stats-1 scope. F-Ward-1 keystone territory; almost certainly resolves as part of F-Ward-1's migration capture.
+
+---
+
+### PE #47 — ui_overlay_types relation drift (P1, OPEN, NEW 2026-05-15)
+
+**Date filed:** 2026-05-15 (surfaced during F-Stats-1 Phase A G6 soak verification)
+**Severity:** P1
+**Status:** OPEN
+
+Soak logs surfaced "missing relations like `ui_overlay_types`." Different shape from PE #43-#46: those are missing columns on existing tables; this is a missing table/relation.
+
+**Surface:**
+- `uiOverlayService.js:6` — comment documenting the table's purpose (per-show overlay types)
+- `uiOverlayService.js:43` — raw-SQL SELECT from `ui_overlay_types`
+- `timelinePlacementService.js:95, 120` — additional read sites
+- `episodeGeneratorService.js:593` — comment referencing the table
+
+**Pre-existing status:** Pre-existing. The OVERLAY_TYPES migration (per audit user memory: "migrations/20260725000000 already removed hardcoded OVERLAY_TYPES JS constants and moved them into ui_overlay_types DB table") may have run on dev but not prod, OR the migration ran but the table was later dropped, OR the migration was never run on prod RDS.
+
+**Pattern:** Missing-table variant of F-Ward-1 schema drift. Worth distinguishing from PE #43-#46 because the fix path is different — column adds vs. table creation.
+
+**Defer:** Out of F-Stats-1 scope. F-Ward-1 keystone territory, but flagging the missing-table variant explicitly because it requires migration ordering work (create table → populate → wire consumers) that's different from "add missing column to existing table."
 
 ---
 
