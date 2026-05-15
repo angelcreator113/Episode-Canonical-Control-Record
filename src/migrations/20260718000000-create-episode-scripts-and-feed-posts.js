@@ -70,13 +70,25 @@ module.exports = {
       deleted_at: { type: Sequelize.DATE, allowNull: true },
     });
 
-    await queryInterface.addIndex('episode_scripts', ['episode_id', 'version'], {
-      unique: true,
-      name: 'idx_episode_scripts_episode_version',
-    });
-    await queryInterface.addIndex('episode_scripts', ['status'], {
-      name: 'idx_episode_scripts_status',
-    });
+    // Self-heal for partially-created tables from failed prior attempts.
+    // If `version` is missing, unique (episode_id, version) index creation fails.
+    const scriptColumns = await queryInterface.describeTable('episode_scripts');
+    if (!scriptColumns.version) {
+      await queryInterface.addColumn('episode_scripts', 'version', {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+      });
+    }
+
+    await queryInterface.sequelize.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_episode_scripts_episode_version
+      ON episode_scripts (episode_id, version)
+    `);
+    await queryInterface.sequelize.query(`
+      CREATE INDEX IF NOT EXISTS idx_episode_scripts_status
+      ON episode_scripts (status)
+    `);
 
     // ── Feed Posts ────────────────────────────────────────────────────────
     await queryInterface.createTable('feed_posts', {
@@ -135,10 +147,22 @@ module.exports = {
       deleted_at: { type: Sequelize.DATE, allowNull: true },
     });
 
-    await queryInterface.addIndex('feed_posts', ['episode_id'], { name: 'idx_feed_posts_episode' });
-    await queryInterface.addIndex('feed_posts', ['social_profile_id'], { name: 'idx_feed_posts_profile' });
-    await queryInterface.addIndex('feed_posts', ['show_id', 'posted_at'], { name: 'idx_feed_posts_timeline' });
-    await queryInterface.addIndex('feed_posts', ['narrative_function'], { name: 'idx_feed_posts_function' });
+    await queryInterface.sequelize.query(`
+      CREATE INDEX IF NOT EXISTS idx_feed_posts_episode
+      ON feed_posts (episode_id)
+    `);
+    await queryInterface.sequelize.query(`
+      CREATE INDEX IF NOT EXISTS idx_feed_posts_profile
+      ON feed_posts (social_profile_id)
+    `);
+    await queryInterface.sequelize.query(`
+      CREATE INDEX IF NOT EXISTS idx_feed_posts_timeline
+      ON feed_posts (show_id, posted_at)
+    `);
+    await queryInterface.sequelize.query(`
+      CREATE INDEX IF NOT EXISTS idx_feed_posts_function
+      ON feed_posts (narrative_function)
+    `);
   },
 
   async down(queryInterface) {
