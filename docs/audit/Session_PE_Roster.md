@@ -205,12 +205,12 @@ and identify which Node API call receives `undefined`.
 
 ---
 
-### PE #41 — aiRateLimiter.js IPv6 key generation is boot-blocking on fresh installs (P0, OPEN, RECLASSIFIED 2026-05-15)
+### PE #41 — aiRateLimiter.js IPv6 key generation is boot-blocking on fresh installs (P0, RESOLVED 2026-05-15)
 
 **Date filed:** 2026-05-14 (surfaced during F-Stats-1 G6 soak
 verification)
 **Severity:** P0 (reclassified from P2 on 2026-05-15)
-**Status:** OPEN
+**Status:** RESOLVED on main (PR #694, commit `139bbd7a`, 2026-05-15)
 
 At PM2 boot, `episode-api` logs:
 
@@ -242,14 +242,16 @@ an IPv6 rate-limit test if infrastructure supports IPv6 simulation.
 **Defer:** None. Treat as urgent pipeline blocker before Phase B G2
 execution.
 
+**Resolution:** Fixed by PR #694 (squash-merged to main as `139bbd7a`). The fix imports `ipKeyGenerator` from `express-rate-limit` with a safe fallback (`rateLimit.ipKeyGenerator || ((ip) => ip)`) and wraps `req.ip` through it. User keys also namespaced with `user:` prefix to prevent collision with IP literals. Verified working via dev deploy run #25940612415 (2026-05-15 ~17:30 UTC, 3m55s, clean).
+
 ---
 
-### PE #48 — Dev migration fails: missing `version` column in `20260718000000-create-episode-scripts-and-feed-posts` (P1, OPEN, NEW 2026-05-15)
+### PE #48 — Dev migration fails: missing `version` column in `20260718000000-create-episode-scripts-and-feed-posts` (P1, RESOLVED 2026-05-15)
 
 **Date filed:** 2026-05-15 (surfaced during Deploy-to-Development
 workflow failure review)
 **Severity:** P1 (pipeline-blocking schema drift)
-**Status:** OPEN
+**Status:** RESOLVED on main (PR #694, commit `139bbd7a`, 2026-05-15)
 
 Deploy-to-Development run failed migration
 `20260718000000-create-episode-scripts-and-feed-posts` with:
@@ -278,6 +280,8 @@ cross-environment schema drift.
 
 **Defer:** Out of current F-Stats-1 documentation patch scope; hand off
 to F-Ward-1/F-Deploy-1 execution track for remediation planning.
+
+**Resolution:** Fixed by PR #694 (squash-merged to main as `139bbd7a`). The fix applies defensive schema coding inside the migration: `queryInterface.describeTable('episode_scripts')` checks for `version` column existence and adds it via `addColumn` if missing. All `addIndex` calls converted to raw SQL `CREATE INDEX IF NOT EXISTS` for idempotency. **Root cause understood:** Dev's `episode_scripts` table originated from the legacy standalone SQL path (`create-episode-scripts-table.js`) which created the table with `version_number` (not `version`). Later migrations layered the newer `version` column on top, producing a mixed-state schema. The migration fix tolerates that mixed state. **Pattern note:** The defensive-schema-coding pattern matches Pattern 40b in the audit handoff and represents F-Deploy-G1 / F-Ward-1 territory. Worth a follow-up finding in the F-Deploy-1 G1 audit to document `create-episode-scripts-table.js` as a Pattern 40b source.
 
 ---
 
