@@ -4,9 +4,8 @@ on:
   push:
     branches:
       - 'claude/**'
-    branches-ignore:
-      - 'claude/start-f-stats-1-g2'
-      - 'claude/f-stats-1-phase-b-**'
+      - '!claude/start-f-stats-1-g2'
+      - '!claude/f-stats-1-phase-b-**'
 
 concurrency:
   group: auto-merge-dev
