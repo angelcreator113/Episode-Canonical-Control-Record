@@ -11,6 +11,7 @@
  * for every hit.
  */
 const rateLimit = require('express-rate-limit');
+const ipKeyGenerator = rateLimit.ipKeyGenerator || ((ip) => ip);
 
 const aiRateLimiter = rateLimit({
   windowMs: parseInt(process.env.AI_RATE_LIMIT_WINDOW_MS || '300000', 10), // 5 min
@@ -23,8 +24,9 @@ const aiRateLimiter = rateLimit({
     code: 'AI_RATE_LIMITED',
   },
   // Identify by user when authed (so a logged-in creator on a shared
-  // network isn't blocked by a roommate's traffic), fall back to IP.
-  keyGenerator: (req) => req.user?.id || req.ip,
+  // network isn't blocked by a roommate's traffic), fall back to an
+  // IPv6-safe normalized IP key via express-rate-limit helper.
+  keyGenerator: (req) => (req.user?.id ? `user:${req.user.id}` : ipKeyGenerator(req.ip)),
 });
 
 module.exports = { aiRateLimiter };
