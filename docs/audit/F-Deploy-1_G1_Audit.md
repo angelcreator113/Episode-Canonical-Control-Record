@@ -636,9 +636,96 @@ The findings H-J above sharpen the §2.2 / §12.19 picture and add context to §
 
 **TODO** - current state per `gh api repos/...`. Per May 12 session resume: "0 required reviewers on main per gh api inspection" - meaning admin-bypass is implicit, no PR review required. Confirm current state and document.
 
-### §3.7 Local git/tooling identity environment
+### §3.7 Local tooling identity + autonomous PR-opening mechanism
 
-**TODO** - investigate the TySteamTest attribution mystery from §2.5. Check `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL` env vars, VS Code extension settings, Copilot agent configuration. Determine why local tooling commits don't inherit the global `git config` identity.
+**Method:** Finding-focused (vs deep investigation). Documents observed evidence from 2026-05-14 evening through 2026-05-15 evening, identifies what is confirmed vs unknown, and proposes how §5 fix-plan structure addresses the unknowns.
+
+#### §3.7.1 - Confirmed observations
+
+**Observation 1: PRs auto-opened from pushed branches, with no `gh pr create` command run.**
+
+Confirmed instances:
+- **PR #685** (2026-05-14 evening) - opened from `claude/session-pe-roster` against main, auto-merged
+- **PR #688** (2026-05-14 night) - opened from `claude/session-pe-roster-backup` against main, auto-merged
+- **PR #689** (2026-05-14 night) - opened from `claude/f-stats-1-phase-b-g1-planning-backup` against main, auto-merged
+- **PR #692** (2026-05-15 afternoon) - opened from `claude/f-deploy-1-g1-audit` against main, auto-merged
+
+All four PRs were opened with `baseRefName: main` despite the audit working assumption that PRs would target their own integration branches (dev or feature branches). The user (Evoni) did not run `gh pr create` for any of these four PRs.
+
+**Observation 2: Some PRs *were* explicitly opened, and those are distinguishable.**
+
+PR #693 (fix branch -> dev) and PR #694 (fix branch -> main) were both opened by the user explicitly via `gh pr create --base dev` and `gh pr create --base main` respectively. Both opened cleanly without surprises. The difference between PRs #693/#694 and the autonomous-opened PRs is the explicit command invocation.
+
+This rules out: "GitHub auto-opens PRs from any branch push." If that were true, every branch push would create a PR. Most don't.
+
+**Observation 3: TySteamTest identity attribution on some commits.**
+
+Per F-Stats-1 plan v1.2 §12.x context: multiple commits during the May 14 evening session were attributed to `TySteamTest <130309211+TySteamTest@users.noreply.github.com>` despite global `git config user.email "evonifoster@yahoo.com"` being set. The attribution persisted through several attempts to correct the identity via `git config --global`.
+
+After correcting the global config and using per-commit `--author` flags, subsequent commits attributed correctly to `Evoni <evonifoster@yahoo.com>`. Today's commits (2026-05-15) all show the correct identity in `git log -1 --format="%an <%ae>"` verification.
+
+**Observation 4: PRs auto-opened by an unknown actor share characteristics with the user's identity.**
+
+PRs #685, #688, #689, #692 all show `author.login: angelcreator113` (the user's GitHub username) and `author.is_bot: false` in `gh pr view` output. They are *not* from a different GitHub account. They are also not from a bot account.
+
+This means: whatever opened these PRs did so *as Evoni*, using credentials that authenticate as her GitHub user. This narrows the candidate mechanisms significantly.
+
+#### §3.7.2 - Ruled-out candidates
+
+Based on §3.7.1, the following candidate mechanisms can be ruled out:
+
+| Candidate | Why ruled out |
+|---|---|
+| GitHub auto-creates PRs from branch pushes | Doesn't happen for branches the user pushes from explicitly opened branches (would create duplicate PRs); doesn't match `is_bot: false` user identity |
+| A different user/collaborator opening PRs | All auto-opened PRs show `angelcreator113` as author |
+| Bot account opening PRs | All auto-opened PRs show `is_bot: false` |
+| The TySteamTest account opening PRs | TySteamTest pattern was a git identity drift in local commits, not GitHub-level account activity. PR authorship is determined by API token, not git committer identity. |
+
+#### §3.7.3 - Remaining candidate mechanisms
+
+The autonomous PR-opening must originate from a tool that authenticates as `angelcreator113` and runs `gh pr create` (or equivalent GitHub API call) without explicit user invocation. Possibilities:
+
+1. **VS Code GitHub PR extension.** The "GitHub Pull Requests" extension can be configured to suggest PR creation when a branch is pushed, and some configurations may auto-create. If "Create PR on branch push" is enabled, every push creates a PR.
+
+2. **Copilot Workspace agent.** GitHub Copilot's agent mode can act on commits and pushes, including opening PRs to consolidate work. The behavior pattern (PR opened seconds after push) matches an agent watching push events.
+
+3. **A GitHub Action in a *different* repo or organization-level config** that uses Evoni's token to manage PRs across repos. Less likely given the personal-repo context.
+
+4. **A locally-installed CLI tool** (e.g., a git hook, a wrapper around `git push`, a shell alias) that calls `gh pr create` after pushes. The user is not aware of such a tool, but absence of awareness is not absence of presence.
+
+#### §3.7.4 - Findings
+
+**Finding F-Deploy-G1-Y - Autonomous PR-opening mechanism is unidentified but constrained.** The actor authenticates as `angelcreator113`, is `is_bot: false`, runs `gh pr create` (or equivalent API call), and fires on `claude/**` branch pushes. The most likely candidates are VS Code's GitHub PR extension (auto-create-on-push setting) or Copilot Workspace agent. Verification requires checking VS Code settings (`Settings -> Extensions -> GitHub Pull Requests -> "Create On Publish Branch"`), Copilot agent configuration, and any locally-installed git hooks or wrappers.
+
+**Finding F-Deploy-G1-Z - Local git identity drift was resolved during 2026-05-14 night session.** The TySteamTest attribution pattern stopped firing after explicit global config correction + per-commit `--author` flag enforcement. Today's commits all attribute correctly. The drift mechanism is not currently active but could re-emerge if the underlying cause (suspected env var or wrapper) is not identified. Recommended verification: `git config --list --show-origin | Select-String "user"` to inspect all git config sources.
+
+**Finding F-Deploy-G1-AA - The combination of unknown PR-opening + `auto-merge.yml` (now deleted) + `auto-merge-to-dev.yml` (still active) produces unbounded autonomous merge behavior.** With `auto-merge.yml` deleted, autonomous PR opens no longer auto-merge to main. But `auto-merge-to-dev.yml` still merges every `claude/**` branch into dev on push. The autonomous-PR-opening mechanism, if still active, can no longer reach main but continues to affect dev. This is acceptable as a stopgap; long-term, identifying the PR-opening source is needed.
+
+#### §3.7.5 - What §5 fix-plan needs to address
+
+Given §3.7's unknowns, the F-Deploy-1 fix plan (§5, still TODO) should propose:
+
+1. **Diagnostic step** - verify VS Code extension settings and Copilot configuration on Evoni's local machine. Document findings.
+
+2. **Containment step** - if a setting is found that auto-creates PRs, document the setting and either disable it or configure it to require explicit confirmation.
+
+3. **Monitoring step** - add a tripwire (e.g., a workflow that logs PR creation events) so future autonomous-PR-opening is observable in real time, not discovered after the fact.
+
+4. **Identity verification step** - periodic check that `git config user.email` matches expected, possibly via a pre-commit hook that aborts on mismatch.
+
+#### §3.7.6 Summary - relationship to §2 events and other findings
+
+| §2 Event | Cause from §3.7 |
+|---|---|
+| §2.3 May 14 evening - PR #685 auto-merge | F-Deploy-G1-Y (unknown PR-opening mechanism opened the PR) |
+| §2.4 May 14 night - PRs #688, #689 from backup branches | F-Deploy-G1-Y (same mechanism, parallel firing) |
+| §2.5 TySteamTest identity attribution | F-Deploy-G1-Z (drift documented, no longer active) |
+| §2.6 May 15 dev deploy lunch | Indirect - F-Deploy-G1-Y opened PR #692, which triggered the workflow chain that exposed §3.3 findings |
+
+**Cross-section findings:**
+- F-Deploy-G1-Y + F-Deploy-G1-K (auto-merge.yml unconditional, now deleted) together produced the May 14 night cascade. With auto-merge.yml deleted, the K side is contained; Y side remains.
+- F-Deploy-G1-Y + F-Deploy-G1-V (branch protection is no-op) explains why PRs #685/#688/#689/#692 merged within seconds - no required checks to wait on.
+- F-Deploy-G1-AA (combined behavior) is the live state as of 2026-05-15 EOD: PR-opening to main is no longer dangerous (auto-merge.yml gone), PR-opening to dev still flows through (auto-merge-to-dev.yml still active).
 
 ---
 
