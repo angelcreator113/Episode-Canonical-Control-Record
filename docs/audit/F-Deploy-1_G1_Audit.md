@@ -56,7 +56,59 @@ Each event is a real production-affecting incident that surfaced over the past w
 
 ### §3.2 `auto-merge.yml`
 
-**TODO** - the 525-byte workflow that fires on `pull_request: [opened, synchronize]` and runs `gh pr merge --squash --auto`. Suspected source of the auto-merge behavior in §2.3 and §2.4. Verify trigger conditions.
+**File size:** 525 bytes, 19 lines. Extremely small for what it does.
+
+**Trigger:** `pull_request: [opened, synchronize]`. Fires on:
+- PR opened (including draft PRs - GitHub fires `opened` for both regular and draft)
+- Push to an open PR's source branch (`synchronize` event)
+
+**Permissions:** `contents: write`, `pull-requests: write`.
+
+**Action:** Single command per run:
+```yaml
+gh pr merge ${{ github.event.pull_request.number }} --squash --auto || echo "Auto-merge already enabled or PR already merged - skipping"
+```
+
+No conditions, no filters, no exclusions.
+
+#### §3.2.1 - Findings
+
+**Finding F-Deploy-G1-K - Unconditional auto-merge.** The workflow has no filters: no branch pattern, no label requirement, no author check, no draft check, no path filter. Every PR opened against any branch with any content from any author triggers an auto-merge enablement on that PR.
+
+**Finding F-Deploy-G1-L - Draft PRs are not exempt at the workflow level.** The `pull_request: [opened]` trigger fires for both regular and draft PRs. The workflow doesn't check `github.event.pull_request.draft`. What prevents immediate merge of draft PRs is downstream: `gh pr merge --auto` on a draft PR enables auto-merge in a queued state. The moment a draft PR is flipped to ready (`gh pr ready`), auto-merge fires instantly if checks pass.
+
+This is the subtle danger nearly hit with PR #684 on 2026-05-15 morning. When `gh pr ready 684` ran to flip the draft, the auto-merge that had been queued since PR opening would have fired immediately - and only didn't because the CI checks had `FAILURE` status from §12.19's deploy outage. The manual `gh pr merge 684 --squash` we ran was racing the auto-merge that was already enabled and waiting.
+
+**Finding F-Deploy-G1-M - `--auto` flag means merge happens out-of-band from the workflow run.** `gh pr merge --auto` tells GitHub: "merge this when all required checks pass." The merge can fire seconds, minutes, or hours after the workflow completes. The workflow run records success when auto-merge is enabled, not when the merge actually happens. There is no workflow-run-history record of the actual merge event.
+
+This explains the difficulty pinning down PR #688/#689's merge timing on 2026-05-14: the Auto-merge workflow ran when the PRs were opened (enabling auto-merge); the actual merges happened later, asynchronously, with no workflow record.
+
+**Finding F-Deploy-G1-N - Uses `GITHUB_TOKEN`, not a custom App token.** Asymmetric with `auto-merge-to-dev.yml`, which uses `actions/create-github-app-token@v1` with `APP_ID` + `APP_PRIVATE_KEY` to ensure its pushes trigger downstream workflows. `auto-merge.yml` uses default `GITHUB_TOKEN`. Per GitHub's security rule, `GITHUB_TOKEN`-driven commits do not trigger other workflows - so merges performed by this workflow **do not trigger any workflow watching `main`**. May be a feature (no cascade) or an oversight depending on intent.
+
+**Finding F-Deploy-G1-O - No concurrency control.** No `concurrency:` block. If multiple PRs open in rapid succession (e.g., automation opening PR #688 and #689 within seconds), both workflow runs execute in parallel, both enable auto-merge on their respective PRs, both merges fire when checks pass. No serialization. Last night's backup-branch incident matches this pattern exactly.
+
+#### §3.2.2 - Reconstruction of PR #688/#689 merge sequence
+
+With §3.2's findings, the §2.4 event (PRs #688/#689 from backup branches, 2026-05-14 night) reconstructs as:
+
+1. `git push origin claude/session-pe-roster:claude/session-pe-roster-backup --force` - backup branch pushed to origin
+2. **PR #688 opened from `claude/session-pe-roster-backup` to `main`.** *Mechanism still unknown.* `auto-merge.yml` does not open PRs; only merges them. The PR-opening step requires a separate actor: Copilot agent, browser-side automation, manual click via mobile/desktop GitHub UI. This remains the gap for §3.7 investigation.
+3. `auto-merge.yml` fires on the `opened` event
+4. Workflow runs `gh pr merge 688 --squash --auto`
+5. GitHub queues the auto-merge
+6. With no required checks on `main` (no branch protection - see §3.6 TODO), auto-merge fires within seconds
+7. PR #688 squash-merges to main as `c9acc59c`
+8. Same sequence repeats for PR #689 -> `bbca0a87`
+
+The architectural gap is at step 2. Steps 3-8 are mechanical consequences of `auto-merge.yml` once a PR exists.
+
+#### §3.2.3 Summary - relationship to §2 events
+
+| §2 Event | Refined cause |
+|---|---|
+| §2.3 May 14 evening - PR #685 auto-merge | F-Deploy-G1-K (unconditional fire) |
+| §2.4 May 14 night - PRs #688, #689 from backup branches | F-Deploy-G1-K (fire) + F-Deploy-G1-O (parallel runs, no serialization) + unidentified PR-opening mechanism (§3.7) |
+| §2.6 May 15 morning - PR #684 near-miss | F-Deploy-G1-L (draft auto-merge queued, fires on ready), F-Deploy-G1-M (out-of-band timing) |
 
 ### §3.3 `deploy-dev.yml` - full step-by-step trace
 
