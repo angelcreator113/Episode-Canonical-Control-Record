@@ -349,7 +349,175 @@ The findings A-H above map to the §2 failure events as follows:
 
 ### §3.4 `deploy-production.yml`
 
-**TODO** - manual-trigger-only (verified earlier). 16,926 bytes. Document the trigger conditions and the deploy steps. Identify whether the PM2 wrong-port / missing `--env production` patterns from §2.2 also exist in this workflow.
+**File size:** ~330 lines. Lives at `.github/workflows/deploy-production.yml`. Manual-trigger only.
+
+**Critical architectural finding:** Unlike `deploy-dev.yml`, this workflow does **not** invoke PM2 directly. Instead it SCPs a separate script (`.github/scripts/deploy-production.sh`) to EC2 and executes it. The PM2 start command - including whatever `--env` flag is or is not passed - lives in that external script, which §3.4 does not yet cover.
+
+#### §3.4.1 - Trigger conditions
+
+```yaml
+on:
+	workflow_dispatch:
+		inputs:
+			confirm:
+				description: 'Type "DEPLOY TO PRODUCTION" to confirm'
+				required: true
+				default: ''
+			reason:
+				description: 'Deployment reason/ticket number'
+				required: true
+```
+
+Manual only. The first job (`validate`) string-matches the `confirm` input against the literal "DEPLOY TO PRODUCTION" and aborts if it doesn't match exactly. The `reason` input is required but not validated for content.
+
+**No `push` trigger.** Production cannot deploy on a commit to main, only via deliberate workflow_dispatch.
+
+#### §3.4.2 - Job sequence
+
+Four sequential jobs with `needs:` dependencies:
+
+1. `validate` - confirms the "DEPLOY TO PRODUCTION" string
+2. `test` - Postgres service container + full test suite (same as `deploy-dev.yml` test job)
+3. `build` - frontend build + artifact tar (different from dev - see §3.4.4)
+4. `deploy` - SSH to EC2, migrate, run deploy script, smoke test
+
+**Difference from deploy-dev.yml:** `build` does NOT use `if: always() && (... 'success' || ... 'failure')`. Build only runs on test success. **Production cannot deploy with broken tests** - a hard improvement over the dev workflow (F-Deploy-G1-A).
+
+#### §3.4.3 - Migration handling: fatal failure
+
+```bash
+npx sequelize-cli db:migrate --env production
+echo "Migrations completed successfully"
+```
+
+No `if !` wrapper. No `MIGRATION_FAILED=true` flag. If migrations fail, the workflow step fails, and the rest of the deploy does not run.
+
+**Cross-reference to F-Deploy-G1-C (dev migration non-fatal):** The dev workflow's "migrations failed but PM2 restarted anyway" pattern is NOT present in production. Production fails hard on migration failure. The §12.19 incident's `column "version" does not exist` failure (PE #48), if it had occurred in production, would have aborted the deploy before the code+schema mismatch reached the runtime. This is a real safety property.
+
+**However:** Migrations run as a separate workflow step *before* the deploy script. If migrations succeed but the deploy script's PM2 restart fails, the database is ahead of the deployed code, but the previous code keeps running until the next successful deploy. Schema-ahead-of-code state is bounded by the deploy script's outcome, not the migration step alone.
+
+#### §3.4.4 - Artifact composition
+
+```bash
+mkdir -p deploy
+cp -r src deploy/
+cp -r src/migrations deploy/
+cp -r frontend/dist deploy/frontend-dist
+cp package.json deploy/
+cp package-lock.json deploy/
+cp nginx.conf deploy/ || true
+tar -czf episode-metadata-production-${{ github.sha }}.tar.gz deploy/
+```
+
+**Key differences from deploy-dev.yml's artifact:**
+
+1. **No `node_modules` bundled.** Dev ships pre-built `node_modules` from CI (F-Deploy-G1-B); prod re-runs `npm ci` on EC2. Slower deploy, but avoids the dependency-resolution-timing surface that made the lunch IPv6 issue boot-blocking.
+
+2. **No `ecosystem.config.js` bundled.** Production uses whatever `ecosystem.config.js` is already on the EC2 instance. If a prior dev deploy modified that file, or if the file is stale, the production deploy runs against an outdated config.
+
+3. **No `scripts/` bundled.** Prod doesn't ship the helper scripts that dev ships (e.g., `bootstrap-sequelize-meta.js`). The deploy script must either skip those or use the already-installed copies on EC2.
+
+**Finding F-Deploy-G1-S - Production uses whatever `ecosystem.config.js` already exists on the EC2 instance.** Since the dev workflow extracts `ecosystem.config.js` from its artifact and overwrites the EC2 copy on every dev deploy, the file on EC2 at production-deploy-time reflects the most recent dev deploy, not the production branch's intended state. Any drift between repo HEAD's `ecosystem.config.js` and what's actually on EC2 silently affects production deploys.
+
+#### §3.4.5 - PM2 logic lives in a separate script
+
+The deploy step's main work:
+
+```bash
+scp ... .github/scripts/deploy-production.sh $EC2_USER@$EC2_HOST:/tmp/deploy-prod.sh
+ssh ... $EC2_USER@$EC2_HOST "DATABASE_URL='...' chmod +x /tmp/deploy-prod.sh && /tmp/deploy-prod.sh"
+```
+
+The actual PM2 commands, env flag handling, port configuration, log writing - all of that happens inside `.github/scripts/deploy-production.sh`, which §3.4 has not yet examined.
+
+**Finding F-Deploy-G1-T - F-Deploy-G1-H verification deferred.** The §3.5 finding that the default `env` block on `episode-api` is dev-shaped (port 3002) is only dangerous to prod IF the production deploy command omits `--env production`. The deploy-production.yml YAML does not contain the PM2 start command. The verification requires reading `.github/scripts/deploy-production.sh`. **Filed as a §3.4 follow-up item; cannot be resolved from the workflow YAML alone.**
+
+#### §3.4.6 - Smoke tests are blocking
+
+Final step before summary:
+
+```bash
+for url in https://primepisodes.com/health https://www.primepisodes.com/health; do
+	for i in $(seq 1 10); do
+		HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$url" || true)
+		if [ "$HTTP_CODE" = "200" ]; then
+			break
+		fi
+		if [ "$i" -eq "10" ]; then
+			exit 1
+		fi
+		sleep 6
+	done
+done
+```
+
+10 attempts × 6 seconds = 60 seconds per URL. Both must return 200 within the window. **Workflow fails if either fails.**
+
+**Cross-reference to F-Deploy-G1-F (dev route check non-fatal):** Production's smoke test is the inverse - fatal on failure. A bad deploy that fails health check on primepisodes.com cannot quietly succeed.
+
+**But:** This only catches a `/health` failure. Like dev (F-Deploy-G1-F), it does not verify specific routes like `/api/v1/shows` or `/api/v1/episodes`. A production deploy where `/health` works but specific routes 404 would pass smoke tests and complete "successfully." The §12.19 incident's actual symptom (prod on wrong port -> ALB couldn't route -> `/health` failed) would have been caught here. But a more subtle failure (module load error that breaks `/api/v1/episodes` while leaving `/health` intact) would not.
+
+#### §3.4.7 - Retry logic on the deploy script
+
+```bash
+MAX_RETRIES=3
+RETRY_DELAY=30
+
+for i in $(seq 1 $MAX_RETRIES); do
+	if scp ... .github/scripts/deploy-production.sh ...; then
+		if ssh ... "/tmp/deploy-prod.sh"; then
+			echo "Deployment successful on attempt $i"
+			break
+		fi
+	fi
+	if [ $i -lt $MAX_RETRIES ]; then
+		echo "Deployment attempt $i failed, waiting ${RETRY_DELAY}s before retry..."
+		sleep $RETRY_DELAY
+	else
+		exit 1
+	fi
+done
+```
+
+3 attempts. If the deploy script fails, retry after 30s. If all 3 fail, the workflow fails.
+
+**Concern:** A deploy script that *partially succeeds* (e.g., copies files, restarts PM2, but health check fails) - does retry produce idempotent behavior? Without reading the script, this is unknown. A non-idempotent deploy script being retried could pile state changes on each attempt.
+
+**Finding F-Deploy-G1-U - Retry safety depends on deploy script idempotency.** The YAML retries the entire deploy script up to 3 times on failure. If the script is not idempotent (e.g., re-running causes duplicate side effects, or leaves state in an intermediate form), the retry mechanism could compound failures rather than recover from them. Verification requires reading `.github/scripts/deploy-production.sh`.
+
+#### §3.4.8 - `.env` write-loop preserves keys
+
+A small detail worth noting: the workflow writes DB credentials and API keys to `/home/ubuntu/episode-metadata/.env` using a SCP-and-merge pattern that preserves existing keys not in the new set:
+
+```bash
+while IFS= read -r line; do
+	KEY="${line%%=*}"
+	if grep -q "^${KEY}=" "$ENV_FILE"; then
+		grep -v "^${KEY}=" "$ENV_FILE" > "${ENV_FILE}.tmp"
+		echo "$line" >> "${ENV_FILE}.tmp"
+		mv "${ENV_FILE}.tmp" "$ENV_FILE"
+	else
+		echo "$line" >> "$ENV_FILE"
+	fi
+done < /tmp/db_creds.env
+```
+
+This is careful design - adds or updates specific keys without wiping unrelated keys. Worth noting as positive engineering practice, similar to the network-diagnostic block in §3.3 and the `-X ours` rationale in §3.1.
+
+#### §3.4.9 Summary - relationship to §2 events and other findings
+
+| §2 Event | Cause from §3.4 |
+|---|---|
+| §2.2 F-Stats-1 G2 outage | F-Deploy-G1-T (cannot verify from YAML alone whether `--env production` is passed; deferred to deploy-production.sh read) |
+
+**Cross-section findings activated by §3.4:**
+- F-Deploy-G1-S (stale ecosystem.config.js on EC2 from prior dev deploys) - depends on F-Deploy-G1-J (dev/prod log conflation via shared EC2)
+- F-Deploy-G1-T (PM2 start logic deferred to external script) - primary blocker for F-Deploy-G1-H verification
+- F-Deploy-G1-U (retry idempotency) - depends on external script reading
+
+**Open items from §3.4:**
+- Read `.github/scripts/deploy-production.sh` to resolve F-Deploy-G1-T (the §12.19 root cause confirmation)
+- Cross-reference with §3.5 to check if the EC2's `ecosystem.config.js` could be stale relative to the repo
 
 ### §3.5 PM2 ecosystem config (`ecosystem.config.js`)
 
