@@ -4406,6 +4406,8 @@ This section documents F-AUTH-1 backend Step 3 sweep completion at CP12 closure.
 
 **Track 8 ACTIVE roster: 9 candidates** (PE #1-#6 + PE #9 + PE #13 + PE #14; PE #7/#8 closed; PE #10/#11/#12 closed in-scope at CP12 docs).
 
+**Cross-reference:** Session-scoped operational findings are now maintained in `docs/audit/Session_PE_Roster.md` (separate from this Track 8 F-AUTH-1-scoped roster).
+
 **NEXT TRACK SEQUENCE (post-v2.37 lock):**
 
 (1) **G3 self-review** — adjudicator-driven audit pass over CP1-CP12 cumulative work; verify G1-G6 still hold post-merge-resolution + cleanup-delete; production-readiness assessment for G4
