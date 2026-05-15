@@ -52,7 +52,136 @@ Each event is a real production-affecting incident that surfaced over the past w
 
 ### §3.1 `auto-merge-to-dev.yml`
 
-**TODO** - what does this workflow do, what triggers it, what's its full step list, what failure modes are documented or observed. Reference the surgical-fix history (commit `d0a36c6b` then `e0c0a0cc`).
+**File size:** ~125 lines. Lives at `.github/workflows/auto-merge-to-dev.yml`.
+
+**Current canonical state on `main`:** commit `e0c0a0cc` (the bang-syntax surgical fix from 2026-05-14 night, after the broken `branches:` + `branches-ignore:` pair landed via commit `d0a36c6b` and was then corrected). The workflow's role is to merge feature branches (`claude/**`) into `dev` automatically, gated by a build-verification step.
+
+#### §3.1.1 - Trigger conditions
+
+```yaml
+on:
+	push:
+		branches:
+			- 'claude/**'
+			- '!claude/start-f-stats-1-g2'
+			- '!claude/f-stats-1-phase-b-**'
+```
+
+Fires on `push` events to any branch matching the pattern. The bang-prefix entries exclude two F-Stats-1-related branch namespaces from triggering - the F-Stats-1 keystone is in flight and its branches should not auto-merge to dev.
+
+**Surgical-fix history:** The current bang-syntax form is the third iteration of this trigger block within the past 24 hours:
+
+1. **Pre-fix:** Triggered on `branches: - 'claude/**'` only. No exclusions. F-Stats-1 G2 branch (`claude/start-f-stats-1-g2`) pushed -> workflow fired -> merged to dev -> triggered `deploy-dev.yml` -> produced the §12.19 incident.
+2. **Iteration 1 (commit `d0a36c6b`):** Added `branches-ignore:` block alongside `branches:`. This is **invalid GitHub Actions YAML** - the two filters are mutually exclusive. Workflow parse-failed on every run for ~5 hours. The fail-safe outcome ("workflow doesn't fire") was mistaken for "exclusion working as designed."
+3. **Iteration 2 (commit `e0c0a0cc`):** Replaced with bang-syntax entries inside a single `branches:` list. Valid YAML. This is the current canonical form.
+
+**Finding F-Deploy-G1-P - The exclusion list is hardcoded and grows with each F-Stats-1 phase.** When F-Stats-1 Phase B begins, additional branch patterns will need to be added. The list is not maintained by automation; each phase update requires manual edit. No mechanism prevents a forgotten edit from re-introducing the §12.19 incident class.
+
+#### §3.1.2 - Concurrency control
+
+```yaml
+concurrency:
+	group: auto-merge-dev
+	cancel-in-progress: false
+```
+
+Single concurrency group, `cancel-in-progress: false`. Multiple workflow runs serialize against each other; in-progress runs are not cancelled when a new push arrives. Good design - prevents two simultaneous merges from racing on `dev`.
+
+#### §3.1.3 - Authentication asymmetry vs `auto-merge.yml`
+
+The first step generates a custom GitHub App token:
+
+```yaml
+- name: Generate GitHub App token
+	id: app-token
+	uses: actions/create-github-app-token@v1
+	with:
+		app-id: ${{ secrets.APP_ID }}
+		private-key: ${{ secrets.APP_PRIVATE_KEY }}
+```
+
+The checkout step then uses that token explicitly. The inline comment explains why:
+
+> GitHub App token is required so the push to dev triggers deploy-dev.yml. GITHUB_TOKEN pushes do NOT trigger other workflows (GitHub security rule).
+
+**This is intentional cascading.** The workflow's design depends on its `git push origin dev` at the end triggering `deploy-dev.yml`. With `GITHUB_TOKEN` that wouldn't happen; with the App token it does. The asymmetry with `auto-merge.yml` (which uses `GITHUB_TOKEN` and does not cascade) is now visible as a deliberate design split: PR merges to main should not cascade; feature-branch merges to dev should cascade.
+
+#### §3.1.4 - Merge strategy
+
+The "Merge into dev (local)" step runs locally (no push yet) and tries two merge strategies:
+
+**Strategy 1 - Clean three-way merge:**
+```bash
+if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev"; then
+	echo "merge_type=clean"
+	exit 0
+fi
+```
+
+**Strategy 2 - Conflict resolution with `-X ours`:**
+```bash
+git merge --abort
+if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev (resolved conflicts, dev wins)" -X ours; then
+	echo "merge_type=conflicts-resolved"
+else
+	echo "Merge still failed even with -X ours. Manual resolution needed."
+	exit 1
+fi
+```
+
+The `-X ours` strategy means: on conflict, **dev wins**. The branch loses its conflicting changes in favor of whatever is already on dev.
+
+The inline rationale comment is thoughtful and worth quoting at length:
+
+> dev is the shared truth - if two claude/* sessions touch the same file, the one that reaches dev first is already being validated by CI and possibly running in the environment. Silently overwriting it with an older feature-branch view of the world produces broken half-merges (missing declarations for usages that landed earlier in dev). With `-X ours`, the later branch loses *its own* changes in conflicting hunks - which is visible to its author, easy to fix with a rebase+push, and doesn't corrupt the shared branch.
+
+This is real engineering thinking. The design recognizes that "dev wins" is asymmetric on purpose - protecting the shared branch is more valuable than preserving any single feature branch's view.
+
+**Finding F-Deploy-G1-Q - `-X ours` silently drops branch changes on conflict.** The fail-mode behavior is *correct by design* but has a real cost: a feature branch can push, see "auto-merge succeeded," and not realize its changes were partially dropped during conflict resolution. The author has no notification beyond the merge commit message ("resolved conflicts, dev wins"). For F-Stats-1 Phase B execution where multiple branches modify overlapping files (careerGoals, episodes, worldEvents), this is a real surface - Phase B branches should be exempt from this auto-merge to prevent silent change loss.
+
+The current bang-syntax exclusion (`'!claude/f-stats-1-phase-b-**'`) is what protects Phase B from this. Validates the existence of the exclusion.
+
+#### §3.1.5 - Build verification gate
+
+A "Detect frontend changes" step diffs the post-merge HEAD against `pre_merge_sha` for the `frontend/` path:
+
+```bash
+if git diff --quiet "${{ steps.merge.outputs.pre_merge_sha }}" HEAD -- frontend/; then
+	echo "frontend_changed=false"
+else
+	echo "frontend_changed=true"
+fi
+```
+
+If frontend changed, conditional steps fire: Setup Node.js, then `cd frontend && npm ci --prefer-offline && npx vite build`. The build must succeed for the workflow to proceed.
+
+The inline comment explains the rationale:
+
+> Even a "clean" three-way merge can produce broken code when two branches add non-overlapping usages of an identifier that one branch forgot to declare, or touch the same JSX tree in ways that balance per-branch but not together. A post-merge build catches those silent breakages.
+
+**Finding F-Deploy-G1-R - Build verification is frontend-only.** No equivalent check for backend code. A merge that adds an `require()` to a non-existent module, or invokes a function with a wrong signature, would still push to dev. The `deploy-dev.yml` workflow would then encounter the broken backend at deploy time, with the failure modes documented in §3.3. This gap is the bridge between §3.1 and §3.3 - `auto-merge-to-dev.yml`'s build gate doesn't catch backend issues, leaving them to be caught (or missed) by `deploy-dev.yml`'s health check + route verification.
+
+#### §3.1.6 - Push to dev
+
+Final step:
+
+```bash
+git push origin dev
+echo "Pushed verified merge to dev."
+```
+
+Unconditional. Once the merge succeeded (clean or conflicts-resolved) and the build verification passed (or was skipped because frontend was untouched), the merge commit pushes to `dev`. The push triggers `deploy-dev.yml` (because of the App token from §3.1.3).
+
+#### §3.1.7 Summary - relationship to §2 events and other findings
+
+| §2 Event | Cause from §3.1 |
+|---|---|
+| §2.1 F-App-1 outage | Triggered by push to a `claude/**` branch -> `auto-merge-to-dev` ran -> pushed to dev -> `deploy-dev.yml` fired -> §3.3 F-Deploy-G1-G `pm2 stop all` stopped prod processes |
+| §2.2 F-Stats-1 G2 outage | Same chain. §3.1 was the entry point. The exclusion `'!claude/start-f-stats-1-g2'` was added afterwards to prevent recurrence. |
+
+**Cross-section findings activated by §3.1:**
+- F-Deploy-G1-K (auto-merge.yml unconditional) + F-Deploy-G1-Q (auto-merge-to-dev's `-X ours` drops branch changes) together describe the two auto-merge surfaces with different failure modes
+- F-Deploy-G1-R (frontend-only build verification) leaves backend merges to be caught downstream in §3.3
 
 ### §3.2 `auto-merge.yml`
 
