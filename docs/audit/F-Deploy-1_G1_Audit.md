@@ -6,9 +6,12 @@
 |---|---|
 | **Plan reference** | F-Stats-1 Fix Plan v1.2 Decision #8, Decision #9 (F-Deploy-1 promoted post-Phase-A) |
 | **Date started** | 2026-05-15 |
+| **Date last updated** | 2026-05-15 (end of day 1) |
 | **Auditor** | JustAWomanInHerPrime (JAWIHP) / Evoni, with assistant |
 | **Repo HEAD at audit start** | `742c66b6` (F-Stats-1 plan v1.2 §12.20 + Decision #9 commit) |
-| **Status** | IN PROGRESS |
+| **Status** | IN PROGRESS — day 1 complete; 5/7 §3 file-read sections done |
+| **Findings filed** | 21 (A through U) |
+| **Deferred items** | F-Deploy-G1-T (requires reading `.github/scripts/deploy-production.sh`) |
 
 ---
 
@@ -49,6 +52,22 @@ Each event is a real production-affecting incident that surfaced over the past w
 ---
 
 ## §3 Per-File Analysis
+
+**§3 Progress index** (end of day 1):
+
+| Section | File | Status | Commit | Findings |
+|---|---|---|---|---|
+| §3.1 | `auto-merge-to-dev.yml` | ✅ Done | `0759513d` | P, Q, R |
+| §3.2 | `auto-merge.yml` | ✅ Done | `e4601f87` | K, L, M, N, O |
+| §3.3 | `deploy-dev.yml` | ✅ Done | `3195b572` | A, B, C, D, E, F, G |
+| §3.4 | `deploy-production.yml` | ✅ Done | `515e6310` | S, T (deferred), U |
+| §3.5 | `ecosystem.config.js` | ✅ Done | `f6a850e7` | H, I, J |
+| §3.6 | Branch protection state | ⏳ TODO | — | — |
+| §3.7 | Local tooling identity | ⏳ TODO | — | — |
+
+Deferred reading: `.github/scripts/deploy-production.sh` (resolves F-Deploy-G1-T → confirms or refutes F-Deploy-G1-H prod-side mechanism).
+
+---
 
 ### §3.1 `auto-merge-to-dev.yml`
 
@@ -652,19 +671,39 @@ Estimate gates per phase. Identify what unblocks Phase B (per F-Stats-1's gate s
 
 Per F-AUTH-1 / F-Stats-1 G1 closure precedent:
 
-- [ ] All §2 failure events fully reconstructed with file:line references
-- [ ] All §3 files read end-to-end and documented
+- [ ] All §2 failure events fully reconstructed with file:line references (§2.1, §2.2, §2.3, §2.4, §2.5, §2.6 all still TODO; partial reconstructions exist in §3.x summary tables)
+- [⏳] All §3 files read end-to-end and documented (5/7 complete — §3.6, §3.7 TODO)
+- [⏳] Deferred external file read: `.github/scripts/deploy-production.sh` (F-Deploy-G1-T resolver)
 - [ ] §4 sub-form classification complete
 - [ ] §5 fix-plan structure proposed
-- [ ] Audit committed to `docs/audit/F-Deploy-1_G1_Audit.md`
-- [ ] Fix Plan v1.0 authored (separate gate)
+- [⏳] Audit committed to `docs/audit/F-Deploy-1_G1_Audit.md` (6 commits on `claude/f-deploy-1-g1-audit`; not yet pushed to origin or PR'd)
+- [ ] Fix Plan v1.0 authored (separate gate, post-G1-closure)
 
-**Gate A-G1 is incomplete until all checkboxes above are confirmed.**
+**Gate A-G1 is incomplete until all checkboxes above are confirmed.** Day 1 progress: 21 findings filed, deploy + auto-merge surfaces fully documented, port and config mechanism documented, deferred items identified. Tomorrow: §3.6 + §3.7 + §2 + §4 + §5.
 
 ---
 
 ## §7 Next Action
 
-After this stub commits: begin **§3.3 `deploy-dev.yml` full trace.** This file is the highest-value entry point - §2.1, §2.2, and §2.6 all originated from it. Reading it carefully should surface concrete sub-form B scope and reveal whether the PM2 wrong-port pattern (§2.2) is fixed in the post-incident code or still present.
+**End of day 1: cleanup checkpoint committed, audit branch not yet pushed.**
 
-- end of stub -
+Tomorrow's options, in suggested order:
+
+1. **§3.6 — Branch protection state.** Smaller scope than the file-read sections. Run `gh api repos/angelcreator113/Episode-Canonical-Control-Record/branches/main/protection` and document. Confirms or refutes the "no required reviewers / admin-bypass" hypothesis from F-Stats-1 plan v1.2 §12.15. ~15-20 minutes.
+
+2. **§3.7 — Local tooling identity / PR-opening mechanism.** Investigates the unresolved mystery from §3.2: what opens backup-branch PRs autonomously? Requires checking `git config --list`, env vars, VS Code extension state, GitHub repository settings. Larger scope, less predictable. ~45-60 minutes.
+
+3. **Deploy-production.sh read.** Resolves F-Deploy-G1-T. Likely small (the script is presumably ~50-100 lines). Confirms F-Deploy-G1-H prod-side mechanism. ~30 minutes.
+
+4. **§2 failure event narratives.** Mostly summarizable from existing audit knowledge (F-Stats-1 plan v1.2 §12.15, §12.19, Session PE Roster). ~45 minutes for full pass.
+
+5. **§4 sub-form classification + §5 fix-plan structure proposal.** Synthesizes everything before this point. Cannot start until §3 is complete and §2 is at least partially reconstructed.
+
+**Suggested ordering:** 3 (resolves deferred item) → 1 (small, completes §3) → 2 (investigation) → 4 → 5.
+
+Audit branch state at end of day 1: 6 commits, not pushed.
+
+```powershell
+# To push when ready:
+git push origin claude/f-deploy-1-g1-audit
+```
