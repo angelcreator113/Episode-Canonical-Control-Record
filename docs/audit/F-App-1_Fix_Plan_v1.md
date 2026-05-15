@@ -636,6 +636,7 @@ Per integrator inventory at plan preparation. Files marked "verified in this pla
 - `Prime_Studios_Audit_Handoff_v8.docx` §7 Decision #54 — *"Create the CharacterState model before any F-Sec-3 cleanup. F-Stats-1 keystone resolution."*
 - `F-AUTH-1_Fix_Plan_v2.37.docx` — structural template for this plan.
 - `Prime_Studios_Session_Resume_2026-05-12.docx` §5 — integrator-behavior mitigation (draft-PR discipline).
+- `Session_PE_Roster.md` — session-level operational PE registry (separate from the Track 8 F-AUTH-1 program roster).
 
 ---
 
