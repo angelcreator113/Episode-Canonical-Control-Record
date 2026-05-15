@@ -61,6 +61,20 @@ Both incidents share the same root cause: **the dev-deploy workflow runs on the 
 
 **Locked: 2026-05-14.** After F-Stats-1 keystone closes, F-Deploy-1 starts before any other work.
 
+### Decision #9 — F-Deploy-1 keystone work begins before Phase B G2
+
+Reaffirms Decision #8 with additional context from the 2026-05-14 evening session and 2026-05-15 morning soak verification:
+
+1. **Autonomous PR creation pattern (unexplained mechanism):** PRs #688 and #689 were auto-opened against `main` from backup branches `claude/session-pe-roster-backup` and `claude/f-stats-1-phase-b-g1-planning-backup`, then auto-merged via the `Auto-merge` workflow (`gh pr merge --squash --auto`). The PR-opening mechanism remains unknown. Phase B G2 execution would push new code branches; the same mechanism could land code on main bypassing review.
+
+2. **Local git tooling identity drift:** Despite global `git config user.email` correction to `evonifoster@yahoo.com`, commits from local tooling continued to attribute to `TySteamTest` until explicit per-commit `--author` flags were applied. Suggests an environment variable or wrapper layer beyond `git config` is in play.
+
+3. **Deploy pipeline gaps revealed by §12.19 and morning soak:** Two production outages in 12 hours (§12.15 PM2-stopped, §12.19 PM2-wrong-port) and a soak-window error inventory of 5+ pre-existing schema-drift surfaces indicates the deploy + environment-drift class is broader than the surgical fix addresses.
+
+**Phase B G2 execution paused.** F-Deploy-1 keystone fix plan to be authored before any Phase B PR ships. F-Deploy-1 scope must include (at minimum): branch protection on `main` with admin enforcement, investigation of the autonomous PR-creation mechanism, deploy-production workflow PM2 startup hardening, and a strategy for the local-tooling identity drift.
+
+**Locked: 2026-05-15.**
+
 ---
 
 ## §11 Plan Version History (UPDATED)
@@ -161,3 +175,17 @@ Plan v1.2 supersedes v1.1. F-Stats-1 status:
 After F-Stats-1 closes, **F-Deploy-1 starts** per Decision #8 — before F-Sec-3, F-Tx-1, or any other deferred work.
 
 Plan v1.0 (commit `a278a69`), v1.1 (commit `dbd32f13`), and the Phase A G1 audit (commit `6fe0eab`) are preserved in git history. Plan v1.2 (this document) is the canonical plan-of-record going forward.
+
+### §12.20 — Phase A G6 soak verification complete; Phase A closes
+
+**Severity: Milestone (Phase A close).**
+
+On 2026-05-15, F-Stats-1 Phase A G6 soak verification completed clean:
+
+- `episode-api`: 16h uptime, 0 restarts, 143.4MB memory stable
+- `episode-worker`: 16h uptime, 0 restarts, 121.5MB memory stable
+- Log inspection surfaced 5 pre-existing schema-drift errors, all filed as PE #43–#47 in `docs/audit/Session_PE_Roster.md` (PR #690). All map to F-Ward-1 keystone scope (Pattern 40b schema-source drift, audit handoff v8 §6.12). None traceable to G2 commit `178c981`.
+
+The G2 model creation commit was subsequently merged to `main` via PR #684 (squash-merge `30f10fe7`). The CharacterState Sequelize model is now canon at `src/models/CharacterState.js` with the schema specified in plan v1.0 §6.
+
+**Phase A G6 gate closes.** F-Stats-1 keystone advances to Phase B G2 (PR 1: careerGoals + episodes raw-SQL -> ORM conversion), pending F-Deploy-1 keystone landing first per Decision #8 and reaffirmed in Decision #9 below.
