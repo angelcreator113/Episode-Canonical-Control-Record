@@ -1131,39 +1131,39 @@ The fix plan author (whether next-Claude or Evoni directly) should treat §5 as 
 
 Per F-AUTH-1 / F-Stats-1 G1 closure precedent:
 
-- [ ] All §2 failure events fully reconstructed with file:line references (§2.1, §2.2, §2.3, §2.4, §2.5, §2.6 all still TODO; partial reconstructions exist in §3.x summary tables)
-- [⏳] All §3 files read end-to-end and documented (5/7 complete — §3.6, §3.7 TODO)
-- [⏳] Deferred external file read: `.github/scripts/deploy-production.sh` (F-Deploy-G1-T resolver)
-- [ ] §4 sub-form classification complete
-- [ ] §5 fix-plan structure proposed
-- [⏳] Audit committed to `docs/audit/F-Deploy-1_G1_Audit.md` (6 commits on `claude/f-deploy-1-g1-audit`; not yet pushed to origin or PR'd)
+- [x] All §2 failure events fully reconstructed with file:line references (§2.1, §2.2, §2.3, §2.4, §2.5, §2.6 all complete)
+- [x] All §3 files read end-to-end and documented (7/7 complete — §3.1, §3.2, §3.3, §3.4, §3.5, §3.6, §3.7)
+- [⏳] Deferred external file read: `.github/scripts/deploy-production.sh` (F-Deploy-G1-T resolver) — explicitly deferred to Fix Plan v1.0 Phase A scope, not a blocker for G1 closure
+- [x] §4 sub-form classification complete (4 sub-forms: A auto-merge, B deploy-dev safety, C branch protection, D local tooling)
+- [x] §5 fix-plan structure proposed (3 phases A/B/C with 12-14 estimated gates, sub-form ordering documented)
+- [⏳] Audit committed to `docs/audit/F-Deploy-1_G1_Audit.md` (15 commits on `claude/f-deploy-1-g1-audit`; pushed to origin earlier in audit; PR to main not yet opened)
 - [ ] Fix Plan v1.0 authored (separate gate, post-G1-closure)
 
-**Gate A-G1 is incomplete until all checkboxes above are confirmed.** Day 1 progress: 21 findings filed, deploy + auto-merge surfaces fully documented, port and config mechanism documented, deferred items identified. Tomorrow: §3.6 + §3.7 + §2 + §4 + §5.
+**Gate A-G1 is content-complete.** 27 findings (F-Deploy-G1-A through F-Deploy-G1-AA) filed across 4 sub-forms. All §2 events reconstructed with cross-section trace tables to findings. All §3 surfaces audited. §4 classification complete. §5 fix-plan structure proposed. Remaining: open audit PR to main, then Fix Plan v1.0 authoring as separate gate.
 
 ---
 
 ## §7 Next Action
 
-**End of day 1: cleanup checkpoint committed, audit branch not yet pushed.**
+**F-Deploy-1 G1 audit is content-complete as of 2026-05-16.** 15 commits on `claude/f-deploy-1-g1-audit`. All §2 + §3 + §4 + §5 sections written. 27 findings filed.
 
-Tomorrow's options, in suggested order:
+Two remaining gates before F-Deploy-1 keystone work can proceed:
 
-1. **§3.6 — Branch protection state.** Smaller scope than the file-read sections. Run `gh api repos/angelcreator113/Episode-Canonical-Control-Record/branches/main/protection` and document. Confirms or refutes the "no required reviewers / admin-bypass" hypothesis from F-Stats-1 plan v1.2 §12.15. ~15-20 minutes.
+1. **Open audit PR to main.** Branch needs to be pushed (latest §2.x and §4/§5 commits are local-only) and a draft PR opened against main. Once eyeballed and merged, the audit document is canon on main. Following the v9 handoff and onboarding-doc precedent: draft PR -> mark ready -> squash-merge -> delete branch.
 
-2. **§3.7 — Local tooling identity / PR-opening mechanism.** Investigates the unresolved mystery from §3.2: what opens backup-branch PRs autonomously? Requires checking `git config --list`, env vars, VS Code extension state, GitHub repository settings. Larger scope, less predictable. ~45-60 minutes.
+2. **Author F-Deploy-1 Fix Plan v1.0.** Separate document at `docs/audit/F-Deploy-1_Fix_Plan_v1.0.md` per F-Stats-1 precedent. Uses §5's recommended structure as starting frame. The fix plan author must commit to the items §5.5 deliberately deferred (architectural choice for sub-form B, branch protection strictness for sub-form C, sub-form A scope decisions, sub-form D action plan, per-gate verification protocols).
 
-3. **Deploy-production.sh read.** Resolves F-Deploy-G1-T. Likely small (the script is presumably ~50-100 lines). Confirms F-Deploy-G1-H prod-side mechanism. ~30 minutes.
+After Fix Plan v1.0 lands, F-Deploy-1 Phase A begins. Per Decision #9, F-Stats-1 Phase B G2 stays blocked until F-Deploy-1 G1 closure -> Fix Plan v1.0 -> Phase A complete (sub-form A containment + sub-form C branch protection settings + sub-form D diagnostic).
 
-4. **§2 failure event narratives.** Mostly summarizable from existing audit knowledge (F-Stats-1 plan v1.2 §12.15, §12.19, Session PE Roster). ~45 minutes for full pass.
-
-5. **§4 sub-form classification + §5 fix-plan structure proposal.** Synthesizes everything before this point. Cannot start until §3 is complete and §2 is at least partially reconstructed.
-
-**Suggested ordering:** 3 (resolves deferred item) → 1 (small, completes §3) → 2 (investigation) → 4 → 5.
-
-Audit branch state at end of day 1: 6 commits, not pushed.
+**Deferred from G1, picked up in Fix Plan v1.0:**
+- F-Deploy-G1-T resolver (read `.github/scripts/deploy-production.sh`) — fits sub-form B scope
+- The architectural choice in sub-form B (separate EC2 vs shared-but-safe)
+- The diagnostic phase for sub-form D (local-tooling investigation)
 
 ```powershell
-# To push when ready:
+# Push the remaining local commits when ready:
 git push origin claude/f-deploy-1-g1-audit
+
+# Open draft PR to main:
+gh pr create --draft --base main --head claude/f-deploy-1-g1-audit --title "docs(audit): F-Deploy-1 G1 audit (15 commits, 27 findings)" --body "..."
 ```
