@@ -125,7 +125,42 @@ Recovery was significantly faster than §2.1's ~50 minutes because the port-mism
 
 ### §2.4 May 14 night - PRs #688, #689 from backup branches
 
-**TODO** - backup branches `claude/session-pe-roster-backup` and `claude/f-stats-1-phase-b-g1-planning-backup` were pushed, then PRs auto-opened, then auto-merged via `gh pr merge --squash --auto`. The PR-opening mechanism is unknown.
+**Event reconstruction.** During the late-evening 2026-05-14 session, two PRs were auto-opened against `main` in rapid succession:
+
+- **PR #688** from `claude/session-pe-roster-backup` (a backup branch of the Session PE Roster work)
+- **PR #689** from `claude/f-stats-1-phase-b-g1-planning-backup` (a backup branch of the F-Stats-1 Phase B G1 planning work)
+
+Both PRs:
+- Authored by `angelcreator113`, `is_bot: false`
+- Targeted `baseRefName: main`
+- Opened without explicit `gh pr create` from the user - the user did not run any PR-creation command for either
+- Were sourced from **backup branches**, branches the user had not been actively interacting with (in contrast to §2.3's PR #685, which came from an actively-worked branch)
+
+`auto-merge.yml` fired on both PRs in parallel (F-Deploy-G1-O: no `concurrency:` block, no serialization). With zero required checks on main (F-Deploy-G1-W), `gh pr merge --squash --auto` fired immediately on both. Squash-merge sequence:
+
+- PR #688 -> squash-merged to main as `c9acc59c`
+- PR #689 -> squash-merged to main as `bbca0a87`
+
+Full step-by-step reconstruction is in §3.2.2 ("Reconstruction of PR #688/#689 merge sequence").
+
+**Outage profile.** None. Same governance-layer event as §2.3 - main received unreviewed content, no production disruption.
+
+**Why §2.4 is more diagnostically clear than §2.3.** PR #685 (§2.3) came from `claude/session-pe-roster` - a branch the user was actively pushing to. The PR-creation could plausibly have been an explicit-then-forgotten `gh pr create` invocation. PR #688/#689 came from **backup branches**: branches created by some tooling layer as automated backups during the working session, not branches the user was checking out, editing, or pushing to directly. The user has no plausible "I ran `gh pr create` and forgot" explanation for backup-branch PRs. This is the strongest available evidence that an autonomous mechanism is opening PRs.
+
+**Two unresolved questions about the PR-creation source (same as §2.3, sharper here).** F-Deploy-G1-Y documents the autonomous PR-opening mechanism as unidentified but constrained. The actor authenticates as `angelcreator113`, `is_bot: false`, runs `gh pr create` or equivalent API call, opens PRs with `baseRefName: main` from `claude/**` branches. Leading candidates: VS Code GitHub Pull Requests extension ("Create On Publish Branch"), Copilot Workspace agent, locally-installed git hook or wrapper. Verification deferred to §5 fix-plan (diagnostic step: check VS Code settings + Copilot config + local git hooks on Evoni's environment).
+
+**Root cause class.** Same as §2.3 - composable workflow defects with no governance gate. F-Deploy-G1-K + F-Deploy-G1-W + F-Deploy-G1-V together create the auto-merge mechanism. §2.4 adds F-Deploy-G1-O (no concurrency control) as the surface that allowed parallel firing on two PRs without serialization.
+
+**Primary mapping to findings:**
+- F-Deploy-G1-K (`auto-merge.yml` unconditional fire) - primary mechanism.
+- F-Deploy-G1-O (no `concurrency:` block - parallel runs without serialization) - explains why both #688 and #689 merged simultaneously rather than queuing.
+- F-Deploy-G1-W (zero required checks) - mechanical cause of immediate merge.
+- F-Deploy-G1-V (branch protection configured as no-op) - architectural precondition.
+- F-Deploy-G1-Y (autonomous PR-opening, mechanism unidentified) - explains how the PRs were created in the first place. Strongest evidence available for the Y finding because backup-branch PRs cannot be plausibly attributed to user action.
+
+**Containment status (post-incident).** Same as §2.3: `auto-merge.yml` deleted on main 2026-05-15 (commit `1b3a02b3`). The K + W + V chain is broken at K. The Y side remains uncontained (autonomous PR opens can still occur; they no longer auto-merge to main; they still auto-merge to dev via `auto-merge-to-dev.yml`).
+
+**Incident handling classification.** F-Stats-1 plan v1.2 §9 (Decision #9, locked 2026-05-15) cites PRs #688 and #689 as the second incident class informing F-Deploy-1 keystone scope. The incidents are documented in plan v1.2 lines 67-74 as "Autonomous PR creation pattern (unexplained mechanism)" - one of three reasons Phase B G2 execution was paused pending F-Deploy-1 G1 close.
 
 ### §2.5 May 14-15 - TySteamTest identity attribution
 
