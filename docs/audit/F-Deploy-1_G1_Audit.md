@@ -164,7 +164,40 @@ Full step-by-step reconstruction is in §3.2.2 ("Reconstruction of PR #688/#689 
 
 ### §2.5 May 14-15 - TySteamTest identity attribution
 
-**TODO** - commits made by local tooling were attributed to `TySteamTest <130309211+TySteamTest@users.noreply.github.com>` despite global `git config user.email` being set to Evoni's email. Suggests env var or wrapper layer beyond `git config`.
+**Event reconstruction.** During the 2026-05-14 evening session, commits made by local tooling on Evoni's working environment were attributed to `TySteamTest <130309211+TySteamTest@users.noreply.github.com>` rather than to `Evoni <evonifoster@yahoo.com>`. The attribution persisted through several attempts to correct it via the standard mechanism:
+
+1. `git config --global user.email evonifoster@yahoo.com`
+2. `git config --global user.name Evoni`
+3. Verify: `git config --list | Select-String "user"`
+
+After each correction, subsequent commits from local tooling continued to show TySteamTest as the committer/author. This indicates an environment variable or wrapper layer is overriding `git config --global` for commits issued by some tooling channel.
+
+**Outage profile.** None. Identity attribution is a metadata-layer concern, not a service-availability event. The TySteamTest commits are in git history but did not produce production impact, schema drift, or merge gates that misfired.
+
+**Recovery path.** Two-step:
+
+1. **Global config correction** - `git config --global user.email evonifoster@yahoo.com` and `git config --global user.name Evoni`. Necessary but not sufficient - the drift continued for tooling-issued commits.
+2. **Per-commit `--author` flag enforcement** - for the specific commits that continued to drift, explicit `git commit --author="Evoni <evonifoster@yahoo.com>"` overrode the wrapper layer.
+
+After this two-step recovery, subsequent commits (including all 2026-05-15 audit work and the §2.6 dev-deploy fix commits) attributed correctly. Today's commits all show the correct identity in `git log -1 --format="%an <%ae>"` verification.
+
+**Root cause class.** Local-environment identity wrapper, unidentified. The fact that `git config --global` does not control all commit attribution indicates a layer above standard git config is reading author identity from a different source. Possible sources include:
+
+- An environment variable (`GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`) set by a parent process
+- A git hook (`prepare-commit-msg`, `commit-msg`) that rewrites author metadata
+- A VS Code git integration overriding identity per-commit
+- A Copilot or assistant-agent layer using its own identity for tool-issued commits
+
+Available evidence does not distinguish. Verification deferred to F-Deploy-1 §5 fix-plan (diagnostic step: inspect `git config --list --show-origin`, check for `GIT_AUTHOR_*` env vars in shell history, audit local git hooks at `.git/hooks/`).
+
+**Primary mapping to findings:**
+- F-Deploy-G1-Z (local git identity drift documented, no longer active) - sole direct finding. Documented in §3.7.
+
+**Why §2.5 matters despite no outage.** Identity drift is an attribution-integrity issue. In a single-developer repo, the practical consequence is mostly cosmetic: git blame shows the wrong name. But the same mechanism that overrides `git config user.email` for committer identity could also be a layer that opens autonomous PRs (the F-Deploy-G1-Y question). If a wrapper layer can rewrite commit attribution, the same wrapper layer is a candidate for the unidentified PR-opening mechanism. §2.5 and the §3.7 investigation of F-Deploy-G1-Y share the same diagnostic surface.
+
+**Containment status.** The drift is not currently active - recent commits attribute correctly. But the underlying mechanism is not identified, so the drift could re-emerge if conditions change (different terminal, different process invocation chain, different VS Code session state). F-Deploy-G1-Z is documented as "no longer active but could re-emerge."
+
+**Incident handling classification.** F-Stats-1 plan v1.2 §9 (Decision #9) cites this drift pattern as one of three reasons F-Deploy-1 scope must include local-tooling investigation (line 70: "Local git tooling identity drift: Despite global git config user.email correction to evonifoster@yahoo.com, commits from local tooling continued to attribute to TySteamTest until explicit per-commit --author flags were applied. Suggests an environment variable or wrapper layer beyond git config is in play.").
 
 ### §2.6 May 15 ~12:30 UTC - Dev deploy failure
 
