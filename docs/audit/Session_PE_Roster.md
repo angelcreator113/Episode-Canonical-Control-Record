@@ -199,6 +199,13 @@ undefined config var, or `require`/`import` with unset env var.
 history check to date first occurrence vs. F-Stats-1 G2 deploy time
 (2026-05-14 17:30 UTC).
 
+**2026-05-16 confirmation:** Still firing on every `episode-api` boot.
+Confirmed in soak check output 2026-05-16 12:50 UTC — same error text
+("Failed to load Template Studio routes: The 'url' argument must be of
+type string. Received undefined"), same single-occurrence-per-boot
+frequency. 48+ hours unchanged. PE #40 has not regressed and has not
+self-resolved.
+
 **Defer:** Out of F-Stats-1 scope. Filed for separate fix plan when
 triaged. Investigation step 1: locate the Template Studio route file
 and identify which Node API call receives `undefined`.
@@ -317,6 +324,12 @@ triage each entry, file per-vuln sub-PEs as needed. Bundle low-risk
 items into a single dependency-update PR. Critical-class deps may
 warrant immediate hotfix branches.
 
+**2026-05-16 confirmation:** CFO scheduled audit at 2026-05-16 06:46 UTC
+and 2026-05-16 12:46 UTC both report `[dependency_audit] 7 critical/high
+security vulnerabilities found!` — same count, audit score 83/100 both
+runs. 48+ hours unchanged. Enumeration via `npm audit --json` still
+owed.
+
 **Defer:** Not blocking F-Stats-1 work. Should not stay open through
 Phase B execution. Triage by EOW 2026-05-21.
 
@@ -426,6 +439,67 @@ Soak logs surfaced "missing relations like `ui_overlay_types`." Different shape 
 **Pattern:** Missing-table variant of F-Ward-1 schema drift. Worth distinguishing from PE #43-#46 because the fix path is different — column adds vs. table creation.
 
 **Defer:** Out of F-Stats-1 scope. F-Ward-1 keystone territory, but flagging the missing-table variant explicitly because it requires migration ordering work (create table → populate → wire consumers) that's different from "add missing column to existing table."
+
+---
+
+### PE #49 — cost_watchdog: 50% AI call error rate flagged by CFO audit (P1, OPEN, NEW 2026-05-16)
+
+**Date filed:** 2026-05-16 (surfaced during F-Deploy-1 Fix Plan v1.0
+ship session, soak script execution)
+**Severity:** P1 (cost surface, no service-availability impact, no
+security implication)
+**Status:** OPEN
+
+CFO scheduled audit (runs every 6 hours) consistently flags:
+
+```
+[cost_watchdog] 50.0% error rate — failed calls waste money on partial
+token processing
+```
+
+**Frequency:** Confirmed in two consecutive CFO runs (2026-05-16 06:46
+UTC, 2026-05-16 12:46 UTC). Both reports show identical critical-finding
+list and identical audit score (83/100). Pattern suggests a steady-state
+failure mode, not an intermittent issue.
+
+**Surface:** `cost_watchdog` is the CFO audit's name for the
+cost-monitoring subsystem. Underlying code location not yet traced;
+likely `services/cfo*` or `services/costWatchdog*` per `cfoAgentRoutes.js`
+naming convention. Per F-AUTH-1 plan v2.37 §5.66 the cfoAgent itself is
+non-AI orchestration; cost_watchdog inside it appears to monitor AI call
+cost rather than execute AI calls directly.
+
+**Impact:** Half of monitored AI calls are failing in a way that still
+produces token consumption ("partial token processing"). Direct AWS /
+Anthropic / Replicate / RunwayML cost waste at unknown dollar magnitude.
+Severity P1 because cost waste is real but not service-breaking or
+security-affecting.
+
+**Open questions:**
+
+- Which AI provider(s) is the 50% error rate concentrated on?
+  cost_watchdog monitors multiple — Anthropic, OpenAI / DALL-E,
+  RunwayML, Replicate per onboarding doc.
+- Is the "50%" stable (always ~50%) or did it drift to this value?
+- Are the failing calls retryable, or is the wasted token spend per-call
+  irrecoverable?
+
+**Resolution path:**
+
+1. Identify the cost_watchdog code surface and its data source (likely
+   a database table or in-memory store tracking AI call outcomes).
+2. Query for the breakdown by provider + error type to identify the
+   dominant failure mode.
+3. Determine whether the partial-token-processing pattern is fixable at
+   the call-site (retry logic, request validation) or at the AI provider
+   level (different model, different parameters).
+4. Implement the fix; verify the CFO audit score improves and the 50%
+   rate decreases.
+
+**Defer:** Out of F-Deploy-1 scope (cost surface, not deploy-pipeline
+surface). Adjacent to but not the same as the AI surface concerns in
+F-AUTH-1's aiRateLimiter (PR #694). Filed for separate fix plan when
+triaged.
 
 ---
 
