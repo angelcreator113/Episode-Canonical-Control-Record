@@ -27,23 +27,177 @@ Each event is a real production-affecting incident that surfaced over the past w
 
 ### §2.1 F-App-1 May 14 ~06:00 UTC outage - PM2 stopped, ~50min
 
-**TODO** - full event reconstruction from F-Stats-1 plan v1.2 §12.15. Workflow that fired, step that failed, recovery path, root cause class.
+**Event reconstruction.** At approximately 2026-05-14 06:00 UTC, the F-App-1 keystone fix work was in flight. A push to `origin/dev` (described in F-Stats-1 plan v1.2 §12.15 line 136 as from "Unauthorized agent") triggered `auto-merge-to-dev.yml` on the audit branch, which fast-forwarded dev to include audit-branch content. The merged commit on dev then triggered `Deploy to Development` (`deploy-dev.yml`).
+
+`deploy-dev.yml` SSHed into the prod-shared EC2 instance and ran `pm2 stop all` as part of its cleanup-before-redeploy step (see F-Deploy-G1 §3.3 / F-Deploy-G1-G - dev and prod share a single EC2 instance + PM2 process group). `pm2 stop all` therefore stopped BOTH the dev processes AND the prod-serving processes (`episode-api` cluster + `episode-worker` fork). The subsequent `pm2 start` step in the workflow failed before completion (specific failure unrecorded in plan v1.2's reconstruction). The workflow exited with PM2 stopped and not restarted.
+
+**Outage profile.** `primepisodes.com` returned 502 Bad Gateway because nginx had no upstream listening on port 3000. Duration: ~50 minutes.
+
+**Recovery path.**
+
+1. Manual SSH to the prod backend EC2.
+2. `pm2 status` showed all processes stopped.
+3. `pm2 start ecosystem.config.js --env production` restored the prod-serving processes.
+4. `pm2 save` persisted the recovered state to PM2's startup script.
+5. `pm2 status` confirmed processes online.
+6. `curl https://primepisodes.com/api/v1/episodes` returned 401 with F-AUTH-1 headers (the expected unauthenticated response).
+
+Recovery was slower than §2.2's because the failure mode was less obvious. PM2 returning empty status looked like "PM2 not running" rather than "PM2 lost its process list" - the actual cause was harder to diagnose than §2.2's port-mismatch.
+
+**Root cause class.** Shared-instance deploy semantics. `deploy-dev.yml` runs the same PM2 process management commands as `deploy-production.yml`, against the same EC2 instance, with no isolation between dev and prod processes. The `pm2 stop all` step is correct for an isolated-environment deploy and catastrophic for a shared-environment deploy. F-Deploy-G1-G is the explicit finding.
+
+**Primary mapping to findings:**
+- F-Deploy-G1-G (shared dev/prod EC2 instance + PM2 process group) - central architectural cause.
+- F-Deploy-G1-P (auto-merge-to-dev hardcoded exclusion list) + F-Deploy-G1-Y (autonomous PR-opening) - together explain how the audit branch reached dev in the first place.
+- F-Deploy-G1-C (non-fatal migration handling) - not a direct cause here (the failure was at PM2-start, not migration), but the same workflow-resilience anti-pattern.
+
+**Open question.** F-Stats-1 plan v1.2 line 136 attributes the trigger to "Unauthorized agent push to `origin/dev`." The specific actor and mechanism are not identified in available records. Possibilities: (a) the autonomous PR-opening + auto-merge chain documented in §2.3/§2.4 firing on an audit branch and reaching dev via `auto-merge-to-dev.yml`; (b) a direct push to `origin/dev` from a tool with credentials; (c) a manual push later misremembered as "unauthorized" because no PR existed. The F-Deploy-1 fix plan (§5) will need to identify which.
+
+**Incident handling classification.** Decision #7 (F-Stats-1 plan v1.2 §12.15 disposition) - F-Hist-1 OR expanded F-Sec-3 territory. Promoted to F-Deploy-1 territory by Decision #8 (next-keystone-promotion) on the same day. Decision #9 (locked 2026-05-15) reaffirms F-Deploy-1 as the responsible keystone.
 
 ### §2.2 F-Stats-1 G2 May 14 ~17:30 UTC outage - PM2 wrong-port, ~10min
 
-**TODO** - full event reconstruction from F-Stats-1 plan v1.2 §12.19. Same incident class as §2.1 but different failure mode. The `--env production` flag was missing.
+**Event reconstruction.** At approximately 2026-05-14 17:30 UTC, F-Stats-1 Phase A G2 commit `178c981` was pushed to feature branch `claude/start-f-stats-1-g2`. The push triggered `auto-merge-to-dev.yml`, which executed the following chain (per F-Stats-1 plan v1.2 §12.19):
+
+1. ✅ `Validate` workflow (1m 55s) - tests, lint, route validation, cost audit all passed.
+2. ✅ Merge-to-dev job (11s) - commit fast-forwarded into `origin/dev`.
+3. ✅ `Deploy to Development` build job (57s) - artifact tar built.
+4. ✅ `Deploy to Development` test job (1m 56s) - post-build tests passed.
+5. ❌ `Deploy to Development` deploy job (53s elapsed) - PM2 restarted on the shared prod backend EC2 WITHOUT the `--env production` flag.
+
+**The mechanism (per F-Deploy-G1-H in §3.5).** `ecosystem.config.js` has a default `env` block on `episode-api` that configures port 3002 (the dev default). The `env_production` block defines port 3000. Without `--env production`, PM2 starts with the default block. `deploy-dev.yml` (correctly, for a dev deploy) does NOT pass `--env production`. On a dev-only EC2 instance this would be correct. On the shared dev/prod EC2 instance (F-Deploy-G1-G), this restarts the prod-serving `episode-api` on port 3002 instead of 3000.
+
+**Outage profile.** Nginx prod config (`episode-prod`) proxies to port 3000. `episode-api` was listening on 3002. Port mismatch -> 502 Bad Gateway on `primepisodes.com`. Duration: ~10 minutes.
+
+**Recovery path.**
+
+1. Manual SSH to backend EC2.
+2. `pm2 info episode-api` revealed the wrong-port state.
+3. Nginx config inspection confirmed proxy was targeting 3000.
+4. `pm2 start ecosystem.config.js --env production` restarted with correct port.
+5. `pm2 save` persisted the recovered state.
+6. `curl https://primepisodes.com/api/v1/episodes` returned 401 with F-AUTH-1 headers (expected).
+7. F-Stats-1 G2 code verified live in production: `CharacterState.js` at `/home/ubuntu/episode-metadata/src/models/CharacterState.js` (1515 bytes, May 14 17:32 UTC).
+
+Recovery was significantly faster than §2.1's ~50 minutes because the port-mismatch diagnosis was unambiguous: `pm2 info` + nginx config comparison pointed directly at the failure mode. §2.1's PM2-stopped state was harder to read.
+
+**Root cause class.** Same architectural root cause as §2.1 (shared-instance deploy semantics). Different surface failure: §2.1 was "PM2 not running"; §2.2 was "PM2 running on wrong port." Both originate from `deploy-dev.yml` executing PM2 lifecycle commands against a process group that also serves production traffic.
+
+**Primary mapping to findings:**
+- F-Deploy-G1-H (default `env` block on episode-api configures dev port 3002, prod requires `--env production`) - direct mechanism. Documented in §3.5.
+- F-Deploy-G1-G (shared dev/prod EC2 instance + PM2 process group) - architectural precondition.
+- F-Deploy-G1-D (`fuser -k 3002/tcp` band-aid in deploy-dev.yml) - symptom of the same port-conflation pattern.
+- F-Deploy-G1-E (hardcoded port 3002 throughout dev workflow) - adjacent surface, same root.
+
+**Procedural containment.** After recovery, the exclusion `'!claude/start-f-stats-1-g2'` was added to `auto-merge-to-dev.yml` to prevent the F-Stats-1 G2 branch from re-triggering the same chain. F-Deploy-G1-P documents the hardcoded-exclusion-list pattern as fragile; this exclusion is one of the entries.
+
+**Incident handling classification.** F-Stats-1 plan v1.2 §12.19 documented the incident. Decision #8 (locked 2026-05-14, in §9 of plan v1.2) promoted F-Deploy-1 to next-keystone priority immediately on incident discovery - within 24 hours of F-App-1's closure. Decision #9 (locked 2026-05-15) reaffirms F-Deploy-1 G1 must close before F-Stats-1 Phase B G2 ships.
+
+**Code disposition.** F-Stats-1 G2 commit `178c981` was accepted live on prod via Path A discipline (broken-mid-deploy recovery, not revert). G6 soak verification at 2026-05-15 confirmed 16-hour uptime with 0 restarts and the code genuinely live. Phase A subsequently closed with PR #684 squash-merging the G2 commit to main as `30f10fe7`.
 
 ### §2.3 May 14 evening - PR #685 auto-merge
 
-**TODO** - when did PR #685 (the original Session PE Roster PR) merge to main, and what triggered the auto-merge? Was this a workflow firing or a manual click? Needs investigation.
+**Event reconstruction.** During the 2026-05-14 evening Session PE Roster work, PR #685 was created from `claude/session-pe-roster` against `main`, targeting the inclusion of PE entries #36-#40 (Session PE Roster expansion). Within seconds of creation, the `auto-merge.yml` workflow fired `gh pr merge --squash --auto`. With main's branch protection configured as a no-op (zero required approvals, zero required checks - see F-Deploy-G1-V/W in §3.6), the auto-merge condition was satisfied immediately. PR #685 squash-merged to main.
+
+**Outage profile.** None. This was a governance-layer event, not a service-layer outage. Main received unreviewed content but no production disruption occurred.
+
+**Two unresolved questions about §2.3:**
+
+1. **PR creation source.** PR #685 was authored by `angelcreator113` (Evoni's GitHub user) with `is_bot: false`. The user does not recall running `gh pr create` for PR #685. The PR may have been opened:
+	- Autonomously, by the same mechanism documented in F-Deploy-G1-Y (VS Code GitHub PR extension's "Create On Publish Branch", Copilot Workspace agent, or local git hook), OR
+	- Deliberately by the user, with the auto-merge being the surprise.
+
+	Available evidence does not distinguish. Subsequent PRs (#688, #689, #692) more clearly fit the autonomous-opening pattern because they came from backup branches the user had not interacted with. PR #685 from `claude/session-pe-roster` is ambiguous - the user was actively working on that branch.
+
+2. **Auto-merge timing.** `gh pr merge --squash --auto` queues a merge for whenever required-checks pass. With zero required checks (F-Deploy-G1-W), the merge condition is satisfied at PR-creation time. The exact elapsed seconds between PR-open and PR-merge is not in available records, but is consistent with §2.4's pattern of "merged within seconds."
+
+**Root cause class.** Two composable workflow defects with no governance gate. `auto-merge.yml` (deleted 2026-05-15 as containment) ran unconditionally on every PR with no filter for draft state, author, or label. Branch protection on main provided no real gate. The combination meant any PR opened against main - regardless of source - auto-merged.
+
+**Primary mapping to findings:**
+- F-Deploy-G1-K (`auto-merge.yml` unconditional `gh pr merge --auto` on every PR) - direct mechanism.
+- F-Deploy-G1-W (zero required checks on main) - mechanical cause of immediate merge.
+- F-Deploy-G1-V (branch protection configured as no-op) - architectural precondition.
+- F-Deploy-G1-Y (autonomous PR-opening, mechanism unidentified) - possible cause of the PR creation itself; not confirmed for #685 specifically.
+
+**Containment status (post-incident).** `auto-merge.yml` was deleted on main 2026-05-15 (commit `1b3a02b3`), eliminating the K + W + V chain's reach into main. The Y side (PR-opening mechanism) is uncontained - autonomous PR opens can still occur, but no longer auto-merge. `auto-merge-to-dev.yml` remains active for `claude/**` branches.
+
+**Incident handling classification.** Not formally classified at the time. Treated as anomaly until §2.4 demonstrated the pattern wasn't one-off. Formal audit treatment begins at F-Deploy-1 G1 (this document).
 
 ### §2.4 May 14 night - PRs #688, #689 from backup branches
 
-**TODO** - backup branches `claude/session-pe-roster-backup` and `claude/f-stats-1-phase-b-g1-planning-backup` were pushed, then PRs auto-opened, then auto-merged via `gh pr merge --squash --auto`. The PR-opening mechanism is unknown.
+**Event reconstruction.** During the late-evening 2026-05-14 session, two PRs were auto-opened against `main` in rapid succession:
+
+- **PR #688** from `claude/session-pe-roster-backup` (a backup branch of the Session PE Roster work)
+- **PR #689** from `claude/f-stats-1-phase-b-g1-planning-backup` (a backup branch of the F-Stats-1 Phase B G1 planning work)
+
+Both PRs:
+- Authored by `angelcreator113`, `is_bot: false`
+- Targeted `baseRefName: main`
+- Opened without explicit `gh pr create` from the user - the user did not run any PR-creation command for either
+- Were sourced from **backup branches**, branches the user had not been actively interacting with (in contrast to §2.3's PR #685, which came from an actively-worked branch)
+
+`auto-merge.yml` fired on both PRs in parallel (F-Deploy-G1-O: no `concurrency:` block, no serialization). With zero required checks on main (F-Deploy-G1-W), `gh pr merge --squash --auto` fired immediately on both. Squash-merge sequence:
+
+- PR #688 -> squash-merged to main as `c9acc59c`
+- PR #689 -> squash-merged to main as `bbca0a87`
+
+Full step-by-step reconstruction is in §3.2.2 ("Reconstruction of PR #688/#689 merge sequence").
+
+**Outage profile.** None. Same governance-layer event as §2.3 - main received unreviewed content, no production disruption.
+
+**Why §2.4 is more diagnostically clear than §2.3.** PR #685 (§2.3) came from `claude/session-pe-roster` - a branch the user was actively pushing to. The PR-creation could plausibly have been an explicit-then-forgotten `gh pr create` invocation. PR #688/#689 came from **backup branches**: branches created by some tooling layer as automated backups during the working session, not branches the user was checking out, editing, or pushing to directly. The user has no plausible "I ran `gh pr create` and forgot" explanation for backup-branch PRs. This is the strongest available evidence that an autonomous mechanism is opening PRs.
+
+**Two unresolved questions about the PR-creation source (same as §2.3, sharper here).** F-Deploy-G1-Y documents the autonomous PR-opening mechanism as unidentified but constrained. The actor authenticates as `angelcreator113`, `is_bot: false`, runs `gh pr create` or equivalent API call, opens PRs with `baseRefName: main` from `claude/**` branches. Leading candidates: VS Code GitHub Pull Requests extension ("Create On Publish Branch"), Copilot Workspace agent, locally-installed git hook or wrapper. Verification deferred to §5 fix-plan (diagnostic step: check VS Code settings + Copilot config + local git hooks on Evoni's environment).
+
+**Root cause class.** Same as §2.3 - composable workflow defects with no governance gate. F-Deploy-G1-K + F-Deploy-G1-W + F-Deploy-G1-V together create the auto-merge mechanism. §2.4 adds F-Deploy-G1-O (no concurrency control) as the surface that allowed parallel firing on two PRs without serialization.
+
+**Primary mapping to findings:**
+- F-Deploy-G1-K (`auto-merge.yml` unconditional fire) - primary mechanism.
+- F-Deploy-G1-O (no `concurrency:` block - parallel runs without serialization) - explains why both #688 and #689 merged simultaneously rather than queuing.
+- F-Deploy-G1-W (zero required checks) - mechanical cause of immediate merge.
+- F-Deploy-G1-V (branch protection configured as no-op) - architectural precondition.
+- F-Deploy-G1-Y (autonomous PR-opening, mechanism unidentified) - explains how the PRs were created in the first place. Strongest evidence available for the Y finding because backup-branch PRs cannot be plausibly attributed to user action.
+
+**Containment status (post-incident).** Same as §2.3: `auto-merge.yml` deleted on main 2026-05-15 (commit `1b3a02b3`). The K + W + V chain is broken at K. The Y side remains uncontained (autonomous PR opens can still occur; they no longer auto-merge to main; they still auto-merge to dev via `auto-merge-to-dev.yml`).
+
+**Incident handling classification.** F-Stats-1 plan v1.2 §9 (Decision #9, locked 2026-05-15) cites PRs #688 and #689 as the second incident class informing F-Deploy-1 keystone scope. The incidents are documented in plan v1.2 lines 67-74 as "Autonomous PR creation pattern (unexplained mechanism)" - one of three reasons Phase B G2 execution was paused pending F-Deploy-1 G1 close.
 
 ### §2.5 May 14-15 - TySteamTest identity attribution
 
-**TODO** - commits made by local tooling were attributed to `TySteamTest <130309211+TySteamTest@users.noreply.github.com>` despite global `git config user.email` being set to Evoni's email. Suggests env var or wrapper layer beyond `git config`.
+**Event reconstruction.** During the 2026-05-14 evening session, commits made by local tooling on Evoni's working environment were attributed to `TySteamTest <130309211+TySteamTest@users.noreply.github.com>` rather than to `Evoni <evonifoster@yahoo.com>`. The attribution persisted through several attempts to correct it via the standard mechanism:
+
+1. `git config --global user.email evonifoster@yahoo.com`
+2. `git config --global user.name Evoni`
+3. Verify: `git config --list | Select-String "user"`
+
+After each correction, subsequent commits from local tooling continued to show TySteamTest as the committer/author. This indicates an environment variable or wrapper layer is overriding `git config --global` for commits issued by some tooling channel.
+
+**Outage profile.** None. Identity attribution is a metadata-layer concern, not a service-availability event. The TySteamTest commits are in git history but did not produce production impact, schema drift, or merge gates that misfired.
+
+**Recovery path.** Two-step:
+
+1. **Global config correction** - `git config --global user.email evonifoster@yahoo.com` and `git config --global user.name Evoni`. Necessary but not sufficient - the drift continued for tooling-issued commits.
+2. **Per-commit `--author` flag enforcement** - for the specific commits that continued to drift, explicit `git commit --author="Evoni <evonifoster@yahoo.com>"` overrode the wrapper layer.
+
+After this two-step recovery, subsequent commits (including all 2026-05-15 audit work and the §2.6 dev-deploy fix commits) attributed correctly. Today's commits all show the correct identity in `git log -1 --format="%an <%ae>"` verification.
+
+**Root cause class.** Local-environment identity wrapper, unidentified. The fact that `git config --global` does not control all commit attribution indicates a layer above standard git config is reading author identity from a different source. Possible sources include:
+
+- An environment variable (`GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`) set by a parent process
+- A git hook (`prepare-commit-msg`, `commit-msg`) that rewrites author metadata
+- A VS Code git integration overriding identity per-commit
+- A Copilot or assistant-agent layer using its own identity for tool-issued commits
+
+Available evidence does not distinguish. Verification deferred to F-Deploy-1 §5 fix-plan (diagnostic step: inspect `git config --list --show-origin`, check for `GIT_AUTHOR_*` env vars in shell history, audit local git hooks at `.git/hooks/`).
+
+**Primary mapping to findings:**
+- F-Deploy-G1-Z (local git identity drift documented, no longer active) - sole direct finding. Documented in §3.7.
+
+**Why §2.5 matters despite no outage.** Identity drift is an attribution-integrity issue. In a single-developer repo, the practical consequence is mostly cosmetic: git blame shows the wrong name. But the same mechanism that overrides `git config user.email` for committer identity could also be a layer that opens autonomous PRs (the F-Deploy-G1-Y question). If a wrapper layer can rewrite commit attribution, the same wrapper layer is a candidate for the unidentified PR-opening mechanism. §2.5 and the §3.7 investigation of F-Deploy-G1-Y share the same diagnostic surface.
+
+**Containment status.** The drift is not currently active - recent commits attribute correctly. But the underlying mechanism is not identified, so the drift could re-emerge if conditions change (different terminal, different process invocation chain, different VS Code session state). F-Deploy-G1-Z is documented as "no longer active but could re-emerge."
+
+**Incident handling classification.** F-Stats-1 plan v1.2 §9 (Decision #9) cites this drift pattern as one of three reasons F-Deploy-1 scope must include local-tooling investigation (line 70: "Local git tooling identity drift: Despite global git config user.email correction to evonifoster@yahoo.com, commits from local tooling continued to attribute to TySteamTest until explicit per-commit --author flags were applied. Suggests an environment variable or wrapper layer beyond git config is in play.").
 
 ### §2.6 May 15 ~12:30 UTC - Dev deploy failure
 
@@ -731,26 +885,167 @@ Given §3.7's unknowns, the F-Deploy-1 fix plan (§5, still TODO) should propose
 
 ## §4 Sub-form Classification
 
-Group findings from §2-§3 into fixable units. Each sub-form is a coherent piece of work that could be a Phase B PR or its own keystone.
+The 27 findings (F-Deploy-G1-A through F-Deploy-G1-AA) cluster into four coherent sub-forms. Each sub-form is a fixable unit — a piece of work that could be the subject of a single Fix Plan phase or PR sequence. Per Decision #9, the F-Deploy-1 fix plan must address all four before F-Stats-1 Phase B G2 unblocks.
 
-**TODO** - draft sub-forms after §2-§3 are filled in. Initial expectation based on Decision #9:
+The sub-forms are mostly independent but share two crossover findings (F-Deploy-G1-V, F-Deploy-G1-W) that appear in both sub-form A (auto-merge mechanism) and sub-form C (branch protection). This is expected: the auto-merge mechanism's mechanical immediate-merge behavior IS the branch-protection-no-op finding, viewed from a different angle.
 
-- **Sub-form A** - Auto-merge mechanism (workflows + PR-opening behavior)
-- **Sub-form B** - Deploy-dev workflow safety (PM2, migrations, error handling)
-- **Sub-form C** - Branch protection on main + admin-bypass policy
-- **Sub-form D** - Local-tooling identity drift
+### Sub-form A — Auto-merge mechanism
+
+**Surface:** `.github/workflows/auto-merge.yml` (now deleted), `.github/workflows/auto-merge-to-dev.yml` (still active).
+
+**Findings:** F-Deploy-G1-K, L, M, N, O (auto-merge.yml — §3.2), F-Deploy-G1-P, Q, R (auto-merge-to-dev.yml — §3.1), and F-Deploy-G1-V, W shared with sub-form C.
+
+**The mechanism documented:** `auto-merge.yml` ran `gh pr merge --squash --auto` unconditionally on every PR creation, regardless of draft state, author, or content. With main's branch protection configured as a no-op (zero required checks), the `--auto` flag merged immediately. `auto-merge-to-dev.yml` does the same for dev with a hardcoded exclusion list that requires per-branch updates.
+
+**Events caused or activated:** §2.3 PR #685, §2.4 PRs #688/#689. These three PRs would not have auto-merged if the workflow had any filter (draft state, label requirement, author check, required-check gate).
+
+**Containment shipped 2026-05-15:** `auto-merge.yml` deleted on main as commit `1b3a02b3`. The mechanism is broken for main. `auto-merge-to-dev.yml` is still active for `claude/**` branches — dev continues to receive autonomous merges, which is acceptable because failed dev deploys don't reach prod automatically (production deploys are manual-trigger only per F-Deploy-G1-S).
+
+**Fix scope:**
+1. Decide whether to restore an `auto-merge.yml`-style workflow for main with proper filters (draft-state exempt, label-gated, required-checks-gated) or leave it permanently deleted.
+2. Replace `auto-merge-to-dev.yml`'s hardcoded exclusion list (F-Deploy-G1-P) with an opt-in label or branch-naming-convention filter.
+3. Resolve F-Deploy-G1-Q (`-X ours` silently drops branch changes when merging to dev).
+4. Add backend-side build verification to `auto-merge-to-dev.yml` per F-Deploy-G1-R.
+
+### Sub-form B — Deploy-dev workflow safety
+
+**Surface:** `.github/workflows/deploy-dev.yml`, `ecosystem.config.js`, `.github/workflows/deploy-production.yml`.
+
+**Findings:** F-Deploy-G1-A, B, C, D, E, F, G (deploy-dev.yml — §3.3), F-Deploy-G1-H, I, J (ecosystem.config.js — §3.5), F-Deploy-G1-S, T, U (deploy-production.yml — §3.4).
+
+**The mechanism documented:** Deploy-dev.yml runs PM2 lifecycle commands (`pm2 stop all`, `pm2 start`, `fuser -k 3002/tcp`) against the shared dev/prod EC2 instance with no isolation. Migration failures are non-fatal — the workflow continues to restart PM2 even when migrations fail. Health-check success (`/health` 200) is treated as deployment success even when application routes are broken. The `ecosystem.config.js` default `env` block points at dev port 3002, so PM2 restarts without `--env production` flag land the prod-serving process on the wrong port.
+
+**Events caused or activated:** §2.1 F-App-1 morning outage (50 min), §2.2 F-Stats-1 G2 evening outage (10 min), §2.6 May 15 lunch dev deploy failure. All three are the same architectural defect with different surface failures.
+
+**Containment shipped 2026-05-15:** PR #694 / commit `139bbd7a` resolved two findings — F-Deploy-G1-C (migration non-fatal) was partially addressed via defensive `describeTable + addColumn-if-missing` in the specific migration that failed, and PE #41 (IPv6 rate-limit keygen) was fixed via `ipKeyGenerator` import. These are point fixes, not the broader architectural correction.
+
+**Fix scope (large):**
+1. Decide architectural direction: separate dev EC2 from prod EC2 (real isolation), OR make `deploy-dev.yml` idempotent and prod-safe on the shared instance.
+2. Make migration failures fatal in `deploy-dev.yml` — do not restart PM2 if migrations fail.
+3. Replace the boolean `/health` check with route-level verification before declaring deploy success.
+4. Add explicit `--env` flag handling in deploy steps so PM2 cannot restart on the wrong port.
+5. Remove the `fuser -k 3002/tcp` band-aid (F-Deploy-G1-D) once port management is correct.
+6. Resolve F-Deploy-G1-T (deferred read of `.github/scripts/deploy-production.sh`) to confirm or refute F-Deploy-G1-H's prod-side mechanism.
+7. Consider whether `ecosystem.config.js` should default to prod port 3000 (so missing `--env production` causes dev failures, not prod failures).
+
+### Sub-form C — Branch protection on main + admin-bypass policy
+
+**Surface:** GitHub repository settings → branch protection rules → `main`.
+
+**Findings:** F-Deploy-G1-V, W, X (§3.6). Shared with sub-form A.
+
+**The mechanism documented:** Branch protection on main is enabled but every gating setting is opted out — zero required approvals, zero required checks, admin enforcement disabled, signed-commits not required, conversation resolution not required, linear history not enforced. The only enforced rules are force-push protection and deletion protection (both useful, neither prevents merge). The "branch protection: enabled" status is misleading; a glance at the settings page suggests there's a gate against unreviewed merges, but there isn't.
+
+**Events caused or activated:** §2.3 PR #685, §2.4 PRs #688/#689 all merged within seconds because zero required checks meant `--auto` had no conditions to wait on.
+
+**Containment shipped:** None. Branch protection remains in current state. The sub-form A containment (deleting `auto-merge.yml`) makes the protection gap less acute but doesn't fix it.
+
+**Fix scope:**
+1. Decide policy: tighten branch protection (1+ required reviewer, required CI checks) AND keep `enforce_admins: false` so the owner can still unblock emergencies — OR keep current state and rely on `auto-merge.yml` being gone as the practical containment.
+2. If tightening: enable `required_status_checks` requiring `Validate` workflow to pass. Set `required_approving_review_count: 1` (or keep at 0 if solo-developer remains the working pattern).
+3. Document the admin-bypass-as-emergency-escape-hatch policy explicitly so future contributors (or future-Evoni) understand the intent.
+
+### Sub-form D — Local-tooling identity + autonomous PR-opening
+
+**Surface:** Evoni's local working environment (VS Code, Copilot, git config, git hooks, environment variables).
+
+**Findings:** F-Deploy-G1-Y, Z, AA (§3.7).
+
+**The mechanism documented:** Two related but distinct surfaces, both originating from the local environment:
+
+1. **PR-opening (F-Deploy-G1-Y).** PRs #685, #688, #689, #692 were opened from `claude/**` branches against main without the user running `gh pr create`. The actor authenticates as `angelcreator113` (Evoni's GitHub user), `is_bot: false`. Mechanism unidentified. Leading candidates: VS Code GitHub Pull Requests extension ("Create On Publish Branch"), Copilot Workspace agent, locally-installed git hook or wrapper.
+
+2. **Commit identity drift (F-Deploy-G1-Z).** Commits during 2026-05-14 evening attributed to `TySteamTest <130309211+TySteamTest@users.noreply.github.com>` despite `git config --global user.email evonifoster@yahoo.com` being set. Resolved via per-commit `--author` flag enforcement. Not currently active but could re-emerge.
+
+These two surfaces are likely the same wrapper layer. A tooling layer that overrides commit author identity is a strong candidate for the layer that also opens PRs autonomously — both are git/GitHub interactions issued without user invocation, both authenticate as the user, both bypass the surface controls (git config, gh CLI).
+
+**Events caused or activated:** §2.3 PR #685, §2.4 PRs #688/#689, §2.5 TySteamTest identity drift. §2.6 dev deploy lunch failure was triggered by PR #692 (the F-Deploy-1 G1 audit branch PR auto-opened to main) which is the same Y mechanism.
+
+**Containment shipped:**
+- F-Deploy-G1-Z: per-commit `--author` flag enforcement is operational. Subsequent commits attribute correctly.
+- F-Deploy-G1-Y: indirect containment via sub-form A (auto-merge.yml deletion). Autonomous PRs can still be opened but cannot auto-merge to main. They still auto-merge to dev via `auto-merge-to-dev.yml`.
+
+**Fix scope:**
+1. **Diagnostic phase** — identify the mechanism. Inspect `git config --list --show-origin`, check `GIT_AUTHOR_*` and `GIT_COMMITTER_*` environment variables in Evoni's shell, audit `.git/hooks/`, inspect VS Code extension state (GitHub Pull Requests extension settings, "Create On Publish Branch"), inspect Copilot Workspace configuration if present.
+2. **Containment phase** — once mechanism identified, either disable it or configure it to require explicit user confirmation per action.
+3. **Monitoring phase** — add a tripwire (e.g., a GitHub workflow that logs PR-creation events with metadata) so future autonomous activity is observable in real time, not discovered after the fact.
+4. **Identity verification** — periodic check that `git config user.email` matches expected, possibly via a pre-commit hook that aborts on mismatch.
+
+### Sub-form crossover and dependency
+
+The four sub-forms are mostly independent, with two specific cross-dependencies:
+
+| Crossover | Detail |
+|---|---|
+| A ↔ C | F-Deploy-G1-V (branch protection no-op) and F-Deploy-G1-W (zero required checks) appear in both. They're the *same* finding viewed as (a) the mechanism that makes auto-merge fire immediately, and (b) the architectural gap in main's gates. |
+| A ← D | The PR-opening mechanism (sub-form D's Y finding) supplies the PRs that sub-form A's auto-merge mechanism then merges. Sub-form A's containment (auto-merge.yml deletion) is effective against PRs from any source; sub-form D's containment (identifying the PR-opener) is independent. |
+
+**Fix ordering recommendation for §5:**
+1. Sub-form A first (workflows + branch protection). Lowest risk, biggest immediate gain. Containment is mostly shipped.
+2. Sub-form B second (deploy-dev safety). Largest scope. Highest risk of introducing new bugs. Needs architectural decision (separate EC2 vs shared-but-safe).
+3. Sub-form C in parallel with A (branch protection settings are independent of workflow code).
+4. Sub-form D last (diagnostic-first investigation). Requires local-environment access and patient debugging. Lowest priority for production safety but highest for understanding the underlying architecture defect.
 
 ---
 
 ## §5 Recommended Fix-Plan v1.0 Structure
 
-**TODO** - propose the F-Deploy-1 fix plan shape. Likely structure:
+This audit (F-Deploy-1 G1) is the gate that unblocks F-Deploy-1 Fix Plan v1.0 authoring. §5 proposes the *shape* of that fix plan - phase structure, gate sequence, sub-form ordering, closure criteria. The actual Fix Plan v1.0 is a separate document (`docs/audit/F-Deploy-1_Fix_Plan_v1.0.md` per F-Stats-1 precedent) and will commit to specific PR sequences, file lists, and verification steps.
 
-- Phase A: Audit (this doc) + immediate safety fixes
-- Phase B: Per-sub-form execution PRs (analogous to F-Stats-1 Phase B)
-- Phase C: Soak + verification
+### §5.1 Pre-phase work (already complete or in-flight)
 
-Estimate gates per phase. Identify what unblocks Phase B (per F-Stats-1's gate sequence pattern).
+Two pieces of work sit outside the formal phase structure and are already shipped or in progress:
+
+- **G1 audit (this document).** Started 2026-05-15, in progress through 2026-05-16. Documents 27 findings across 6 §2 events and 7 §3 surfaces. Closure criteria in §6.
+
+- **PR #694 tactical fix (commit `139bbd7a`).** Shipped 2026-05-15. Addresses two specific pipeline-blocking findings out of band: F-Deploy-G1-C (migration version-column drift, surface remediation via defensive `describeTable + addColumn-if-missing`) and PE #41 (IPv6 rate-limit keygen validation). Verified working via dev deploy run #25940612415 (3m55s clean). The fix is point-remediation, not architectural correction - F-Deploy-G1-C as a class remains open.
+
+Neither is "Phase A" of the formal plan. Phase A starts when Fix Plan v1.0 is authored.
+
+### §5.2 Recommended phase structure
+
+| Phase | Scope | Gates (estimate) | Sub-forms addressed |
+|---|---|---|---|
+| **Phase A — Containment + safety** | Eliminate remaining auto-merge to main. Tighten branch protection. Diagnose local-tooling identity layer. Low-risk, low-LOC changes. | G1: scope lock. G2: branch protection settings change (sub-form C). G3: diagnostic phase for sub-form D. G4: containment soak (1 week, no recurrence). | A (containment side), C, D (diagnostic) |
+| **Phase B — Deploy-dev architectural correction** | Decide separate-EC2 vs shared-but-safe. Implement chosen architecture. Make migration failures fatal. Replace `/health` boolean check with route-level verification. Largest scope. | G1: architecture decision. G2-G4: implementation PRs (one per sub-finding cluster). G5: integration test. G6: soak. | B (all findings) |
+| **Phase C — Soak + verification** | Run the deploy pipeline through multiple non-trivial PRs without incident. Confirm sub-form D's diagnostic findings hold (no new autonomous-PR events). | G1: 2-week soak. G2: F-Stats-1 Phase B G2 pilot through the hardened pipeline (verification that F-Deploy-1 enables downstream work). | All sub-forms (verification) |
+
+**Total estimated gates: 12-14.** This is comparable to F-Stats-1's gate count (Phase A had G1-G6) but heavier on Phase B because of architectural decisions.
+
+### §5.3 Sub-form ordering rationale
+
+Per §4 closing recommendation:
+
+1. **Sub-form A first** (workflows): containment is mostly shipped (auto-merge.yml deleted). Remaining work is filter-and-restore decisions on auto-merge-to-dev.yml and the question of whether to restore an auto-merge-to-main with proper gates. Low risk, mostly governance.
+
+2. **Sub-form C in parallel with A** (branch protection): branch protection settings are independent of workflow code. Can be tightened separately. Decision points: how strict the required-checks list should be, whether to enable `enforce_admins`, whether to require approvals (likely 0 for solo-dev).
+
+3. **Sub-form B second** (deploy-dev safety): largest scope, highest risk. Architectural decision needed before implementation: separate dev EC2 from prod EC2, or make the shared instance prod-safe? Both have merits. F-Stats-1 plan v1.2 line 52 hints at the choice ("Either separate dev EC2 from prod EC2 (architectural), OR make the shared-EC2 deploy idempotent and prod-safe (procedural)"). The fix plan must commit to one.
+
+4. **Sub-form D last** (local-tooling investigation): diagnostic-first. Requires patient debugging in Evoni's environment. Lower priority for production safety (sub-form A's containment already blocks the merge path) but high priority for understanding the underlying architecture defect. The investigation should ideally happen during a moment of stability, not in parallel with active fixing.
+
+### §5.4 Closure criteria for F-Deploy-1 (full keystone close)
+
+F-Deploy-1 is fully closed when:
+
+1. Sub-form A: `auto-merge-to-dev.yml` either replaced with opt-in-filtered version OR retired with explicit policy doc. Decision documented in Fix Plan §7 Decisions.
+2. Sub-form B: deploy pipeline architectural decision made and implemented. `deploy-dev.yml` cannot disrupt prod under any documented failure mode. Migration failures are fatal. Health check is route-level, not just `/health`.
+3. Sub-form C: branch protection on main has at least one enforced gate (required check, required review, or both). Admin-bypass policy documented.
+4. Sub-form D: PR-opening mechanism identified (or documented as "investigated and unidentifiable, accepted residual risk"). Per-commit identity drift not currently active and unlikely to recur (env vars audited, hooks audited, IDE settings audited).
+5. Phase C soak: 2 weeks with active development through the pipeline (Phase B G2 of F-Stats-1 being the canonical test), zero new incidents in the F-Deploy-G1 finding classes.
+6. Fix Plan v1.x supersedes v1.0 with closure documentation, decisions §X, and post-close verification.
+
+### §5.5 What §5 does NOT commit to
+
+The actual Fix Plan v1.0 will need to commit to specifics that this audit deliberately does not pre-decide:
+
+- **Architectural choice for sub-form B** (separate EC2 vs shared-but-safe). This is the largest unanswered design question in F-Deploy-1. Both have non-trivial cost/risk profiles.
+- **Branch protection strictness for sub-form C**. Required-check list, approval count, admin-bypass policy - each is a policy decision with trade-offs in solo-developer working speed.
+- **Sub-form A scope decisions**. Whether to restore auto-merge-to-main with filters, or retire the workflow permanently. Whether `auto-merge-to-dev.yml` should require opt-in label or branch-naming convention.
+- **Sub-form D action plan**. The diagnostic results inform what containment is needed. May produce no containment beyond what already exists (auto-merge.yml deleted) if the mechanism is acceptable per-action.
+- **Gate-by-gate verification protocols**. Each gate needs specific verification steps; those belong in the fix plan, not in this audit's recommended-structure summary.
+
+The fix plan author (whether next-Claude or Evoni directly) should treat §5 as a starting frame, not as constraints. If the architectural picture clarifies during fix planning and a different phase structure fits better, deviate. Document the deviation in Fix Plan v1.0's Decisions section.
 
 ---
 
@@ -758,39 +1053,39 @@ Estimate gates per phase. Identify what unblocks Phase B (per F-Stats-1's gate s
 
 Per F-AUTH-1 / F-Stats-1 G1 closure precedent:
 
-- [ ] All §2 failure events fully reconstructed with file:line references (§2.1, §2.2, §2.3, §2.4, §2.5, §2.6 all still TODO; partial reconstructions exist in §3.x summary tables)
-- [⏳] All §3 files read end-to-end and documented (5/7 complete — §3.6, §3.7 TODO)
-- [⏳] Deferred external file read: `.github/scripts/deploy-production.sh` (F-Deploy-G1-T resolver)
-- [ ] §4 sub-form classification complete
-- [ ] §5 fix-plan structure proposed
-- [⏳] Audit committed to `docs/audit/F-Deploy-1_G1_Audit.md` (6 commits on `claude/f-deploy-1-g1-audit`; not yet pushed to origin or PR'd)
+- [x] All §2 failure events fully reconstructed with file:line references (§2.1, §2.2, §2.3, §2.4, §2.5, §2.6 all complete)
+- [x] All §3 files read end-to-end and documented (7/7 complete — §3.1, §3.2, §3.3, §3.4, §3.5, §3.6, §3.7)
+- [⏳] Deferred external file read: `.github/scripts/deploy-production.sh` (F-Deploy-G1-T resolver) — explicitly deferred to Fix Plan v1.0 Phase A scope, not a blocker for G1 closure
+- [x] §4 sub-form classification complete (4 sub-forms: A auto-merge, B deploy-dev safety, C branch protection, D local tooling)
+- [x] §5 fix-plan structure proposed (3 phases A/B/C with 12-14 estimated gates, sub-form ordering documented)
+- [⏳] Audit committed to `docs/audit/F-Deploy-1_G1_Audit.md` (15 commits on `claude/f-deploy-1-g1-audit`; pushed to origin earlier in audit; PR to main not yet opened)
 - [ ] Fix Plan v1.0 authored (separate gate, post-G1-closure)
 
-**Gate A-G1 is incomplete until all checkboxes above are confirmed.** Day 1 progress: 21 findings filed, deploy + auto-merge surfaces fully documented, port and config mechanism documented, deferred items identified. Tomorrow: §3.6 + §3.7 + §2 + §4 + §5.
+**Gate A-G1 is content-complete.** 27 findings (F-Deploy-G1-A through F-Deploy-G1-AA) filed across 4 sub-forms. All §2 events reconstructed with cross-section trace tables to findings. All §3 surfaces audited. §4 classification complete. §5 fix-plan structure proposed. Remaining: open audit PR to main, then Fix Plan v1.0 authoring as separate gate.
 
 ---
 
 ## §7 Next Action
 
-**End of day 1: cleanup checkpoint committed, audit branch not yet pushed.**
+**F-Deploy-1 G1 audit is content-complete as of 2026-05-16.** 15 commits on `claude/f-deploy-1-g1-audit`. All §2 + §3 + §4 + §5 sections written. 27 findings filed.
 
-Tomorrow's options, in suggested order:
+Two remaining gates before F-Deploy-1 keystone work can proceed:
 
-1. **§3.6 — Branch protection state.** Smaller scope than the file-read sections. Run `gh api repos/angelcreator113/Episode-Canonical-Control-Record/branches/main/protection` and document. Confirms or refutes the "no required reviewers / admin-bypass" hypothesis from F-Stats-1 plan v1.2 §12.15. ~15-20 minutes.
+1. **Open audit PR to main.** Branch needs to be pushed (latest §2.x and §4/§5 commits are local-only) and a draft PR opened against main. Once eyeballed and merged, the audit document is canon on main. Following the v9 handoff and onboarding-doc precedent: draft PR -> mark ready -> squash-merge -> delete branch.
 
-2. **§3.7 — Local tooling identity / PR-opening mechanism.** Investigates the unresolved mystery from §3.2: what opens backup-branch PRs autonomously? Requires checking `git config --list`, env vars, VS Code extension state, GitHub repository settings. Larger scope, less predictable. ~45-60 minutes.
+2. **Author F-Deploy-1 Fix Plan v1.0.** Separate document at `docs/audit/F-Deploy-1_Fix_Plan_v1.0.md` per F-Stats-1 precedent. Uses §5's recommended structure as starting frame. The fix plan author must commit to the items §5.5 deliberately deferred (architectural choice for sub-form B, branch protection strictness for sub-form C, sub-form A scope decisions, sub-form D action plan, per-gate verification protocols).
 
-3. **Deploy-production.sh read.** Resolves F-Deploy-G1-T. Likely small (the script is presumably ~50-100 lines). Confirms F-Deploy-G1-H prod-side mechanism. ~30 minutes.
+After Fix Plan v1.0 lands, F-Deploy-1 Phase A begins. Per Decision #9, F-Stats-1 Phase B G2 stays blocked until F-Deploy-1 G1 closure -> Fix Plan v1.0 -> Phase A complete (sub-form A containment + sub-form C branch protection settings + sub-form D diagnostic).
 
-4. **§2 failure event narratives.** Mostly summarizable from existing audit knowledge (F-Stats-1 plan v1.2 §12.15, §12.19, Session PE Roster). ~45 minutes for full pass.
-
-5. **§4 sub-form classification + §5 fix-plan structure proposal.** Synthesizes everything before this point. Cannot start until §3 is complete and §2 is at least partially reconstructed.
-
-**Suggested ordering:** 3 (resolves deferred item) → 1 (small, completes §3) → 2 (investigation) → 4 → 5.
-
-Audit branch state at end of day 1: 6 commits, not pushed.
+**Deferred from G1, picked up in Fix Plan v1.0:**
+- F-Deploy-G1-T resolver (read `.github/scripts/deploy-production.sh`) — fits sub-form B scope
+- The architectural choice in sub-form B (separate EC2 vs shared-but-safe)
+- The diagnostic phase for sub-form D (local-tooling investigation)
 
 ```powershell
-# To push when ready:
+# Push the remaining local commits when ready:
 git push origin claude/f-deploy-1-g1-audit
+
+# Open draft PR to main:
+gh pr create --draft --base main --head claude/f-deploy-1-g1-audit --title "docs(audit): F-Deploy-1 G1 audit (15 commits, 27 findings)" --body "..."
 ```
