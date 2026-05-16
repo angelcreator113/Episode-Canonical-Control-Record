@@ -97,7 +97,31 @@ Recovery was significantly faster than §2.1's ~50 minutes because the port-mism
 
 ### §2.3 May 14 evening - PR #685 auto-merge
 
-**TODO** - when did PR #685 (the original Session PE Roster PR) merge to main, and what triggered the auto-merge? Was this a workflow firing or a manual click? Needs investigation.
+**Event reconstruction.** During the 2026-05-14 evening Session PE Roster work, PR #685 was created from `claude/session-pe-roster` against `main`, targeting the inclusion of PE entries #36-#40 (Session PE Roster expansion). Within seconds of creation, the `auto-merge.yml` workflow fired `gh pr merge --squash --auto`. With main's branch protection configured as a no-op (zero required approvals, zero required checks - see F-Deploy-G1-V/W in §3.6), the auto-merge condition was satisfied immediately. PR #685 squash-merged to main.
+
+**Outage profile.** None. This was a governance-layer event, not a service-layer outage. Main received unreviewed content but no production disruption occurred.
+
+**Two unresolved questions about §2.3:**
+
+1. **PR creation source.** PR #685 was authored by `angelcreator113` (Evoni's GitHub user) with `is_bot: false`. The user does not recall running `gh pr create` for PR #685. The PR may have been opened:
+	- Autonomously, by the same mechanism documented in F-Deploy-G1-Y (VS Code GitHub PR extension's "Create On Publish Branch", Copilot Workspace agent, or local git hook), OR
+	- Deliberately by the user, with the auto-merge being the surprise.
+
+	Available evidence does not distinguish. Subsequent PRs (#688, #689, #692) more clearly fit the autonomous-opening pattern because they came from backup branches the user had not interacted with. PR #685 from `claude/session-pe-roster` is ambiguous - the user was actively working on that branch.
+
+2. **Auto-merge timing.** `gh pr merge --squash --auto` queues a merge for whenever required-checks pass. With zero required checks (F-Deploy-G1-W), the merge condition is satisfied at PR-creation time. The exact elapsed seconds between PR-open and PR-merge is not in available records, but is consistent with §2.4's pattern of "merged within seconds."
+
+**Root cause class.** Two composable workflow defects with no governance gate. `auto-merge.yml` (deleted 2026-05-15 as containment) ran unconditionally on every PR with no filter for draft state, author, or label. Branch protection on main provided no real gate. The combination meant any PR opened against main - regardless of source - auto-merged.
+
+**Primary mapping to findings:**
+- F-Deploy-G1-K (`auto-merge.yml` unconditional `gh pr merge --auto` on every PR) - direct mechanism.
+- F-Deploy-G1-W (zero required checks on main) - mechanical cause of immediate merge.
+- F-Deploy-G1-V (branch protection configured as no-op) - architectural precondition.
+- F-Deploy-G1-Y (autonomous PR-opening, mechanism unidentified) - possible cause of the PR creation itself; not confirmed for #685 specifically.
+
+**Containment status (post-incident).** `auto-merge.yml` was deleted on main 2026-05-15 (commit `1b3a02b3`), eliminating the K + W + V chain's reach into main. The Y side (PR-opening mechanism) is uncontained - autonomous PR opens can still occur, but no longer auto-merge. `auto-merge-to-dev.yml` remains active for `claude/**` branches.
+
+**Incident handling classification.** Not formally classified at the time. Treated as anomaly until §2.4 demonstrated the pattern wasn't one-off. Formal audit treatment begins at F-Deploy-1 G1 (this document).
 
 ### §2.4 May 14 night - PRs #688, #689 from backup branches
 
