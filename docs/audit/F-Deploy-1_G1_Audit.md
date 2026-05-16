@@ -27,7 +27,33 @@ Each event is a real production-affecting incident that surfaced over the past w
 
 ### §2.1 F-App-1 May 14 ~06:00 UTC outage - PM2 stopped, ~50min
 
-**TODO** - full event reconstruction from F-Stats-1 plan v1.2 §12.15. Workflow that fired, step that failed, recovery path, root cause class.
+**Event reconstruction.** At approximately 2026-05-14 06:00 UTC, the F-App-1 keystone fix work was in flight. A push to `origin/dev` (described in F-Stats-1 plan v1.2 §12.15 line 136 as from "Unauthorized agent") triggered `auto-merge-to-dev.yml` on the audit branch, which fast-forwarded dev to include audit-branch content. The merged commit on dev then triggered `Deploy to Development` (`deploy-dev.yml`).
+
+`deploy-dev.yml` SSHed into the prod-shared EC2 instance and ran `pm2 stop all` as part of its cleanup-before-redeploy step (see F-Deploy-G1 §3.3 / F-Deploy-G1-G - dev and prod share a single EC2 instance + PM2 process group). `pm2 stop all` therefore stopped BOTH the dev processes AND the prod-serving processes (`episode-api` cluster + `episode-worker` fork). The subsequent `pm2 start` step in the workflow failed before completion (specific failure unrecorded in plan v1.2's reconstruction). The workflow exited with PM2 stopped and not restarted.
+
+**Outage profile.** `primepisodes.com` returned 502 Bad Gateway because nginx had no upstream listening on port 3000. Duration: ~50 minutes.
+
+**Recovery path.**
+
+1. Manual SSH to the prod backend EC2.
+2. `pm2 status` showed all processes stopped.
+3. `pm2 start ecosystem.config.js --env production` restored the prod-serving processes.
+4. `pm2 save` persisted the recovered state to PM2's startup script.
+5. `pm2 status` confirmed processes online.
+6. `curl https://primepisodes.com/api/v1/episodes` returned 401 with F-AUTH-1 headers (the expected unauthenticated response).
+
+Recovery was slower than §2.2's because the failure mode was less obvious. PM2 returning empty status looked like "PM2 not running" rather than "PM2 lost its process list" - the actual cause was harder to diagnose than §2.2's port-mismatch.
+
+**Root cause class.** Shared-instance deploy semantics. `deploy-dev.yml` runs the same PM2 process management commands as `deploy-production.yml`, against the same EC2 instance, with no isolation between dev and prod processes. The `pm2 stop all` step is correct for an isolated-environment deploy and catastrophic for a shared-environment deploy. F-Deploy-G1-G is the explicit finding.
+
+**Primary mapping to findings:**
+- F-Deploy-G1-G (shared dev/prod EC2 instance + PM2 process group) - central architectural cause.
+- F-Deploy-G1-P (auto-merge-to-dev hardcoded exclusion list) + F-Deploy-G1-Y (autonomous PR-opening) - together explain how the audit branch reached dev in the first place.
+- F-Deploy-G1-C (non-fatal migration handling) - not a direct cause here (the failure was at PM2-start, not migration), but the same workflow-resilience anti-pattern.
+
+**Open question.** F-Stats-1 plan v1.2 line 136 attributes the trigger to "Unauthorized agent push to `origin/dev`." The specific actor and mechanism are not identified in available records. Possibilities: (a) the autonomous PR-opening + auto-merge chain documented in §2.3/§2.4 firing on an audit branch and reaching dev via `auto-merge-to-dev.yml`; (b) a direct push to `origin/dev` from a tool with credentials; (c) a manual push later misremembered as "unauthorized" because no PR existed. The F-Deploy-1 fix plan (§5) will need to identify which.
+
+**Incident handling classification.** Decision #7 (F-Stats-1 plan v1.2 §12.15 disposition) - F-Hist-1 OR expanded F-Sec-3 territory. Promoted to F-Deploy-1 territory by Decision #8 (next-keystone-promotion) on the same day. Decision #9 (locked 2026-05-15) reaffirms F-Deploy-1 as the responsible keystone.
 
 ### §2.2 F-Stats-1 G2 May 14 ~17:30 UTC outage - PM2 wrong-port, ~10min
 
