@@ -199,6 +199,13 @@ undefined config var, or `require`/`import` with unset env var.
 history check to date first occurrence vs. F-Stats-1 G2 deploy time
 (2026-05-14 17:30 UTC).
 
+**2026-05-16 confirmation:** Still firing on every `episode-api` boot.
+Confirmed in soak check output 2026-05-16 12:50 UTC — same error text
+("Failed to load Template Studio routes: The 'url' argument must be of
+type string. Received undefined"), same single-occurrence-per-boot
+frequency. 48+ hours unchanged. PE #40 has not regressed and has not
+self-resolved.
+
 **Defer:** Out of F-Stats-1 scope. Filed for separate fix plan when
 triaged. Investigation step 1: locate the Template Studio route file
 and identify which Node API call receives `undefined`.
@@ -316,6 +323,12 @@ dependencies.
 triage each entry, file per-vuln sub-PEs as needed. Bundle low-risk
 items into a single dependency-update PR. Critical-class deps may
 warrant immediate hotfix branches.
+
+**2026-05-16 confirmation:** CFO scheduled audit at 2026-05-16 06:46 UTC
+and 2026-05-16 12:46 UTC both report `[dependency_audit] 7 critical/high
+security vulnerabilities found!` — same count, audit score 83/100 both
+runs. 48+ hours unchanged. Enumeration via `npm audit --json` still
+owed.
 
 **Defer:** Not blocking F-Stats-1 work. Should not stay open through
 Phase B execution. Triage by EOW 2026-05-21.
