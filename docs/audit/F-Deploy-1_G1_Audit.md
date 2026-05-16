@@ -1068,13 +1068,62 @@ The four sub-forms are mostly independent, with two specific cross-dependencies:
 
 ## §5 Recommended Fix-Plan v1.0 Structure
 
-**TODO** - propose the F-Deploy-1 fix plan shape. Likely structure:
+This audit (F-Deploy-1 G1) is the gate that unblocks F-Deploy-1 Fix Plan v1.0 authoring. §5 proposes the *shape* of that fix plan - phase structure, gate sequence, sub-form ordering, closure criteria. The actual Fix Plan v1.0 is a separate document (`docs/audit/F-Deploy-1_Fix_Plan_v1.0.md` per F-Stats-1 precedent) and will commit to specific PR sequences, file lists, and verification steps.
 
-- Phase A: Audit (this doc) + immediate safety fixes
-- Phase B: Per-sub-form execution PRs (analogous to F-Stats-1 Phase B)
-- Phase C: Soak + verification
+### §5.1 Pre-phase work (already complete or in-flight)
 
-Estimate gates per phase. Identify what unblocks Phase B (per F-Stats-1's gate sequence pattern).
+Two pieces of work sit outside the formal phase structure and are already shipped or in progress:
+
+- **G1 audit (this document).** Started 2026-05-15, in progress through 2026-05-16. Documents 27 findings across 6 §2 events and 7 §3 surfaces. Closure criteria in §6.
+
+- **PR #694 tactical fix (commit `139bbd7a`).** Shipped 2026-05-15. Addresses two specific pipeline-blocking findings out of band: F-Deploy-G1-C (migration version-column drift, surface remediation via defensive `describeTable + addColumn-if-missing`) and PE #41 (IPv6 rate-limit keygen validation). Verified working via dev deploy run #25940612415 (3m55s clean). The fix is point-remediation, not architectural correction - F-Deploy-G1-C as a class remains open.
+
+Neither is "Phase A" of the formal plan. Phase A starts when Fix Plan v1.0 is authored.
+
+### §5.2 Recommended phase structure
+
+| Phase | Scope | Gates (estimate) | Sub-forms addressed |
+|---|---|---|---|
+| **Phase A — Containment + safety** | Eliminate remaining auto-merge to main. Tighten branch protection. Diagnose local-tooling identity layer. Low-risk, low-LOC changes. | G1: scope lock. G2: branch protection settings change (sub-form C). G3: diagnostic phase for sub-form D. G4: containment soak (1 week, no recurrence). | A (containment side), C, D (diagnostic) |
+| **Phase B — Deploy-dev architectural correction** | Decide separate-EC2 vs shared-but-safe. Implement chosen architecture. Make migration failures fatal. Replace `/health` boolean check with route-level verification. Largest scope. | G1: architecture decision. G2-G4: implementation PRs (one per sub-finding cluster). G5: integration test. G6: soak. | B (all findings) |
+| **Phase C — Soak + verification** | Run the deploy pipeline through multiple non-trivial PRs without incident. Confirm sub-form D's diagnostic findings hold (no new autonomous-PR events). | G1: 2-week soak. G2: F-Stats-1 Phase B G2 pilot through the hardened pipeline (verification that F-Deploy-1 enables downstream work). | All sub-forms (verification) |
+
+**Total estimated gates: 12-14.** This is comparable to F-Stats-1's gate count (Phase A had G1-G6) but heavier on Phase B because of architectural decisions.
+
+### §5.3 Sub-form ordering rationale
+
+Per §4 closing recommendation:
+
+1. **Sub-form A first** (workflows): containment is mostly shipped (auto-merge.yml deleted). Remaining work is filter-and-restore decisions on auto-merge-to-dev.yml and the question of whether to restore an auto-merge-to-main with proper gates. Low risk, mostly governance.
+
+2. **Sub-form C in parallel with A** (branch protection): branch protection settings are independent of workflow code. Can be tightened separately. Decision points: how strict the required-checks list should be, whether to enable `enforce_admins`, whether to require approvals (likely 0 for solo-dev).
+
+3. **Sub-form B second** (deploy-dev safety): largest scope, highest risk. Architectural decision needed before implementation: separate dev EC2 from prod EC2, or make the shared instance prod-safe? Both have merits. F-Stats-1 plan v1.2 line 52 hints at the choice ("Either separate dev EC2 from prod EC2 (architectural), OR make the shared-EC2 deploy idempotent and prod-safe (procedural)"). The fix plan must commit to one.
+
+4. **Sub-form D last** (local-tooling investigation): diagnostic-first. Requires patient debugging in Evoni's environment. Lower priority for production safety (sub-form A's containment already blocks the merge path) but high priority for understanding the underlying architecture defect. The investigation should ideally happen during a moment of stability, not in parallel with active fixing.
+
+### §5.4 Closure criteria for F-Deploy-1 (full keystone close)
+
+F-Deploy-1 is fully closed when:
+
+1. Sub-form A: `auto-merge-to-dev.yml` either replaced with opt-in-filtered version OR retired with explicit policy doc. Decision documented in Fix Plan §7 Decisions.
+2. Sub-form B: deploy pipeline architectural decision made and implemented. `deploy-dev.yml` cannot disrupt prod under any documented failure mode. Migration failures are fatal. Health check is route-level, not just `/health`.
+3. Sub-form C: branch protection on main has at least one enforced gate (required check, required review, or both). Admin-bypass policy documented.
+4. Sub-form D: PR-opening mechanism identified (or documented as "investigated and unidentifiable, accepted residual risk"). Per-commit identity drift not currently active and unlikely to recur (env vars audited, hooks audited, IDE settings audited).
+5. Phase C soak: 2 weeks with active development through the pipeline (Phase B G2 of F-Stats-1 being the canonical test), zero new incidents in the F-Deploy-G1 finding classes.
+6. Fix Plan v1.x supersedes v1.0 with closure documentation, decisions §X, and post-close verification.
+
+### §5.5 What §5 does NOT commit to
+
+The actual Fix Plan v1.0 will need to commit to specifics that this audit deliberately does not pre-decide:
+
+- **Architectural choice for sub-form B** (separate EC2 vs shared-but-safe). This is the largest unanswered design question in F-Deploy-1. Both have non-trivial cost/risk profiles.
+- **Branch protection strictness for sub-form C**. Required-check list, approval count, admin-bypass policy - each is a policy decision with trade-offs in solo-developer working speed.
+- **Sub-form A scope decisions**. Whether to restore auto-merge-to-main with filters, or retire the workflow permanently. Whether `auto-merge-to-dev.yml` should require opt-in label or branch-naming convention.
+- **Sub-form D action plan**. The diagnostic results inform what containment is needed. May produce no containment beyond what already exists (auto-merge.yml deleted) if the mechanism is acceptable per-action.
+- **Gate-by-gate verification protocols**. Each gate needs specific verification steps; those belong in the fix plan, not in this audit's recommended-structure summary.
+
+The fix plan author (whether next-Claude or Evoni directly) should treat §5 as a starting frame, not as constraints. If the architectural picture clarifies during fix planning and a different phase structure fits better, deviate. Document the deviation in Fix Plan v1.0's Decisions section.
 
 ---
 
