@@ -442,6 +442,67 @@ Soak logs surfaced "missing relations like `ui_overlay_types`." Different shape 
 
 ---
 
+### PE #49 — cost_watchdog: 50% AI call error rate flagged by CFO audit (P1, OPEN, NEW 2026-05-16)
+
+**Date filed:** 2026-05-16 (surfaced during F-Deploy-1 Fix Plan v1.0
+ship session, soak script execution)
+**Severity:** P1 (cost surface, no service-availability impact, no
+security implication)
+**Status:** OPEN
+
+CFO scheduled audit (runs every 6 hours) consistently flags:
+
+```
+[cost_watchdog] 50.0% error rate — failed calls waste money on partial
+token processing
+```
+
+**Frequency:** Confirmed in two consecutive CFO runs (2026-05-16 06:46
+UTC, 2026-05-16 12:46 UTC). Both reports show identical critical-finding
+list and identical audit score (83/100). Pattern suggests a steady-state
+failure mode, not an intermittent issue.
+
+**Surface:** `cost_watchdog` is the CFO audit's name for the
+cost-monitoring subsystem. Underlying code location not yet traced;
+likely `services/cfo*` or `services/costWatchdog*` per `cfoAgentRoutes.js`
+naming convention. Per F-AUTH-1 plan v2.37 §5.66 the cfoAgent itself is
+non-AI orchestration; cost_watchdog inside it appears to monitor AI call
+cost rather than execute AI calls directly.
+
+**Impact:** Half of monitored AI calls are failing in a way that still
+produces token consumption ("partial token processing"). Direct AWS /
+Anthropic / Replicate / RunwayML cost waste at unknown dollar magnitude.
+Severity P1 because cost waste is real but not service-breaking or
+security-affecting.
+
+**Open questions:**
+
+- Which AI provider(s) is the 50% error rate concentrated on?
+  cost_watchdog monitors multiple — Anthropic, OpenAI / DALL-E,
+  RunwayML, Replicate per onboarding doc.
+- Is the "50%" stable (always ~50%) or did it drift to this value?
+- Are the failing calls retryable, or is the wasted token spend per-call
+  irrecoverable?
+
+**Resolution path:**
+
+1. Identify the cost_watchdog code surface and its data source (likely
+   a database table or in-memory store tracking AI call outcomes).
+2. Query for the breakdown by provider + error type to identify the
+   dominant failure mode.
+3. Determine whether the partial-token-processing pattern is fixable at
+   the call-site (retry logic, request validation) or at the AI provider
+   level (different model, different parameters).
+4. Implement the fix; verify the CFO audit score improves and the 50%
+   rate decreases.
+
+**Defer:** Out of F-Deploy-1 scope (cost surface, not deploy-pipeline
+surface). Adjacent to but not the same as the AI surface concerns in
+F-AUTH-1's aiRateLimiter (PR #694). Filed for separate fix plan when
+triaged.
+
+---
+
 ## Closed findings
 
 *(none yet — first close will document resolution date and brief
