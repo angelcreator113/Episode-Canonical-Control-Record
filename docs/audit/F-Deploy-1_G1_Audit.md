@@ -57,7 +57,43 @@ Recovery was slower than §2.2's because the failure mode was less obvious. PM2 
 
 ### §2.2 F-Stats-1 G2 May 14 ~17:30 UTC outage - PM2 wrong-port, ~10min
 
-**TODO** - full event reconstruction from F-Stats-1 plan v1.2 §12.19. Same incident class as §2.1 but different failure mode. The `--env production` flag was missing.
+**Event reconstruction.** At approximately 2026-05-14 17:30 UTC, F-Stats-1 Phase A G2 commit `178c981` was pushed to feature branch `claude/start-f-stats-1-g2`. The push triggered `auto-merge-to-dev.yml`, which executed the following chain (per F-Stats-1 plan v1.2 §12.19):
+
+1. ✅ `Validate` workflow (1m 55s) - tests, lint, route validation, cost audit all passed.
+2. ✅ Merge-to-dev job (11s) - commit fast-forwarded into `origin/dev`.
+3. ✅ `Deploy to Development` build job (57s) - artifact tar built.
+4. ✅ `Deploy to Development` test job (1m 56s) - post-build tests passed.
+5. ❌ `Deploy to Development` deploy job (53s elapsed) - PM2 restarted on the shared prod backend EC2 WITHOUT the `--env production` flag.
+
+**The mechanism (per F-Deploy-G1-H in §3.5).** `ecosystem.config.js` has a default `env` block on `episode-api` that configures port 3002 (the dev default). The `env_production` block defines port 3000. Without `--env production`, PM2 starts with the default block. `deploy-dev.yml` (correctly, for a dev deploy) does NOT pass `--env production`. On a dev-only EC2 instance this would be correct. On the shared dev/prod EC2 instance (F-Deploy-G1-G), this restarts the prod-serving `episode-api` on port 3002 instead of 3000.
+
+**Outage profile.** Nginx prod config (`episode-prod`) proxies to port 3000. `episode-api` was listening on 3002. Port mismatch -> 502 Bad Gateway on `primepisodes.com`. Duration: ~10 minutes.
+
+**Recovery path.**
+
+1. Manual SSH to backend EC2.
+2. `pm2 info episode-api` revealed the wrong-port state.
+3. Nginx config inspection confirmed proxy was targeting 3000.
+4. `pm2 start ecosystem.config.js --env production` restarted with correct port.
+5. `pm2 save` persisted the recovered state.
+6. `curl https://primepisodes.com/api/v1/episodes` returned 401 with F-AUTH-1 headers (expected).
+7. F-Stats-1 G2 code verified live in production: `CharacterState.js` at `/home/ubuntu/episode-metadata/src/models/CharacterState.js` (1515 bytes, May 14 17:32 UTC).
+
+Recovery was significantly faster than §2.1's ~50 minutes because the port-mismatch diagnosis was unambiguous: `pm2 info` + nginx config comparison pointed directly at the failure mode. §2.1's PM2-stopped state was harder to read.
+
+**Root cause class.** Same architectural root cause as §2.1 (shared-instance deploy semantics). Different surface failure: §2.1 was "PM2 not running"; §2.2 was "PM2 running on wrong port." Both originate from `deploy-dev.yml` executing PM2 lifecycle commands against a process group that also serves production traffic.
+
+**Primary mapping to findings:**
+- F-Deploy-G1-H (default `env` block on episode-api configures dev port 3002, prod requires `--env production`) - direct mechanism. Documented in §3.5.
+- F-Deploy-G1-G (shared dev/prod EC2 instance + PM2 process group) - architectural precondition.
+- F-Deploy-G1-D (`fuser -k 3002/tcp` band-aid in deploy-dev.yml) - symptom of the same port-conflation pattern.
+- F-Deploy-G1-E (hardcoded port 3002 throughout dev workflow) - adjacent surface, same root.
+
+**Procedural containment.** After recovery, the exclusion `'!claude/start-f-stats-1-g2'` was added to `auto-merge-to-dev.yml` to prevent the F-Stats-1 G2 branch from re-triggering the same chain. F-Deploy-G1-P documents the hardcoded-exclusion-list pattern as fragile; this exclusion is one of the entries.
+
+**Incident handling classification.** F-Stats-1 plan v1.2 §12.19 documented the incident. Decision #8 (locked 2026-05-14, in §9 of plan v1.2) promoted F-Deploy-1 to next-keystone priority immediately on incident discovery - within 24 hours of F-App-1's closure. Decision #9 (locked 2026-05-15) reaffirms F-Deploy-1 G1 must close before F-Stats-1 Phase B G2 ships.
+
+**Code disposition.** F-Stats-1 G2 commit `178c981` was accepted live on prod via Path A discipline (broken-mid-deploy recovery, not revert). G6 soak verification at 2026-05-15 confirmed 16-hour uptime with 0 restarts and the code genuinely live. Phase A subsequently closed with PR #684 squash-merging the G2 commit to main as `30f10fe7`.
 
 ### §2.3 May 14 evening - PR #685 auto-merge
 
