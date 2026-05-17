@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - 'claude/**'
-      - '!claude/start-f-stats-1-g2'
-      - '!claude/f-stats-1-phase-b-**'
 
 concurrency:
   group: auto-merge-dev
@@ -16,6 +14,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Opt-out mechanism per FD-4 Change A-2.1 / FD-13 (Fix Plan v1.1).
+      # Authors can skip auto-merge by including [skip-automerge] anywhere
+      # in the most recent commit message. Match is case-insensitive.
+      # Replaces the previous hardcoded `branches:` bang-exclusion list,
+      # which required workflow edits per incident class (G1 F-Deploy-G1-P).
+      # Exit 78 neutral-exits the entire job, so subsequent steps do not need
+      # `if:` conditions. Job surfaces as "skipped" (neutral) in the UI, not
+      # success or failure.
+      - name: Check for [skip-automerge] opt-out token
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if echo "$COMMIT_MSG" | grep -qi '\[skip-automerge\]'; then
+            echo "Opt-out token detected in commit message."
+            echo "Branch: ${{ github.ref_name }}"
+            echo "Commit: ${{ github.event.head_commit.id }}"
+            echo "Neutral-exiting job (exit 78)."
+            exit 78
+          fi
+          echo "No opt-out token. Proceeding with auto-merge to dev."
+
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
