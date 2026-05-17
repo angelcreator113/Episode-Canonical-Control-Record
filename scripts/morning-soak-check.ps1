@@ -13,3 +13,4 @@ if (-not (Test-Path $env:PROD_KEY_PATH)) {
 }
 
 ssh -i "$env:PROD_KEY_PATH" ubuntu@54.163.229.144 'pm2 status && pm2 logs episode-api --lines 20 --nostream'
+# F-Deploy-G1-Y diagnostic marker - see PR for context
