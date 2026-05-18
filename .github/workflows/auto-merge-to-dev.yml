@@ -136,6 +136,41 @@ jobs:
           npm ci --prefer-offline --no-audit --no-fund
           npx vite build
           echo "✅ Frontend build passed."
+      # Detect backend changes (mirrors the frontend pattern above).
+      # Skips the syntax verification when the merge only touches frontend
+      # or docs, saving ~3s. Per FD-4 Change A-2.2 / Fix Plan v1.0 §5.1.1.
+      - name: Detect backend changes
+        id: backend-changes
+        run: |
+          if git diff --quiet "${{ steps.merge.outputs.pre_merge_sha }}" HEAD -- src/ package.json package-lock.json; then
+            echo "backend_changed=false" >> "$GITHUB_OUTPUT"
+            echo "📦 No backend changes in merge — skipping backend syntax verification."
+          else
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+            echo "🔨 Backend changed — will verify syntax."
+          fi
+
+      # Setup Node for backend verification. node --check doesn't need
+      # node_modules, so we skip npm cache and dependency install — keeps
+      # this step under 2s vs ~10s if we did npm ci.
+      - name: Setup Node.js for backend
+        if: steps.backend-changes.outputs.backend_changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Verify the merged backend tree parses. node --check runs syntax
+      # validation only, no execution, no side effects. Catches the
+      # most common merge-time failure mode (a file that doesn't parse
+      # as JS post-merge). Does NOT catch missing imports or runtime
+      # errors — those would require a full load test with environment
+      # dependencies (DB, Redis, env vars) that aren't available in CI.
+      - name: Verify backend syntax
+        if: steps.backend-changes.outputs.backend_changed == 'true'
+        run: |
+          echo "🔨 Verifying merged backend tree parses..."
+          find src -name '*.js' -type f -print0 | xargs -0 -n1 node --check
+          echo "✅ Backend syntax check passed."
 
       - name: Push to dev
         run: |
