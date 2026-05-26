@@ -136,8 +136,95 @@ jobs:
           npm ci --prefer-offline --no-audit --no-fund
           npx vite build
           echo "✅ Frontend build passed."
+      # Detect backend changes (mirrors the frontend pattern above).
+      # Skips the syntax verification when the merge only touches frontend
+      # or docs, saving ~3s. Per FD-4 Change A-2.2 / Fix Plan v1.0 §5.1.1.
+      - name: Detect backend changes
+        id: backend-changes
+        run: |
+          if git diff --quiet "${{ steps.merge.outputs.pre_merge_sha }}" HEAD -- src/ package.json package-lock.json; then
+            echo "backend_changed=false" >> "$GITHUB_OUTPUT"
+            echo "📦 No backend changes in merge — skipping backend syntax verification."
+          else
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+            echo "🔨 Backend changed — will verify syntax."
+          fi
+
+      # Setup Node for backend verification. node --check doesn't need
+      # node_modules, so we skip npm cache and dependency install — keeps
+      # this step under 2s vs ~10s if we did npm ci.
+      - name: Setup Node.js for backend
+        if: steps.backend-changes.outputs.backend_changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Verify the merged backend tree parses. node --check runs syntax
+      # validation only, no execution, no side effects. Catches the
+      # most common merge-time failure mode (a file that doesn't parse
+      # as JS post-merge). Does NOT catch missing imports or runtime
+      # errors — those would require a full load test with environment
+      # dependencies (DB, Redis, env vars) that aren't available in CI.
+      - name: Verify backend syntax
+        if: steps.backend-changes.outputs.backend_changed == 'true'
+        run: |
+          echo "🔨 Verifying merged backend tree parses..."
+          find src -name '*.js' -type f -print0 | xargs -0 -n1 node --check
+          echo "✅ Backend syntax check passed."
 
       - name: Push to dev
         run: |
           git push origin dev
           echo "✅ Pushed verified merge to dev."
+      # Per FD-4 Change A-2.3 / Fix Plan v1.0 §5.1.1: when auto-merge resolved
+      # conflicts via -X ours (which silently discards feature-branch hunks
+      # that conflicted with dev), notify the original author by appending a
+      # comment to the running-log tracking issue (#708).
+      #
+      # Issue #708 was opened during A-3 ship as the notification surface. If
+      # reform of the -X ours strategy happens (e.g., switching to abort+notify
+      # rather than silent merge), close #708 and remove this step.
+      - name: Notify on -X ours conflict resolution
+        if: steps.merge.outputs.merge_type == 'conflicts-resolved'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          ISSUE_NUMBER=708
+
+          BRANCH="${{ github.ref_name }}"
+          SOURCE_SHA="${{ github.event.head_commit.id }}"
+          PRE_MERGE_SHA="${{ steps.merge.outputs.pre_merge_sha }}"
+          MERGE_SHA="$(git rev-parse HEAD)"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          # List all files modified in the merge commit. Some or all of these
+          # may have had changes discarded from the source branch. Over-reports
+          # rather than under-reports -- author can investigate specifics via
+          # git diff PRE_MERGE_SHA..MERGE_SHA on the relevant files.
+          MODIFIED_FILES="$(git show --name-only --pretty='' HEAD | sed 's/^/- `/' | sed 's/$/`/')"
+
+          # Build the comment body. Single-quoted heredoc prevents shell from
+          # expanding $VAR references in literal strings; we substitute the
+          # variables we want explicitly with envsubst-style sed below.
+          # Actually simpler: use double-quoted heredoc and escape literal
+          # backticks with \`.
+          COMMENT_BODY=$(cat <<EOF
+          ## Auto-merge \`-X ours\` event
+
+          - **Source branch:** \`$BRANCH\`
+          - **Source SHA:** \`$SOURCE_SHA\`
+          - **Dev SHA before merge:** \`$PRE_MERGE_SHA\`
+          - **Dev SHA after merge:** \`$MERGE_SHA\`
+          - **Files modified in this merge** (some or all may have had changes discarded from source branch):
+          $MODIFIED_FILES
+          - **Workflow run:** $RUN_URL
+
+          The source branch's changes to one or more of the listed files were silently
+          overwritten by dev's version during conflict resolution. To recover, rebase
+          \`$BRANCH\` onto current dev and re-push, or use \`git diff $PRE_MERGE_SHA..$MERGE_SHA -- <file>\`
+          to inspect what was discarded.
+          EOF
+          )
+
+          gh issue comment "$ISSUE_NUMBER" --body "$COMMENT_BODY"
+          echo "✅ Notified tracking issue #$ISSUE_NUMBER of -X ours event on $BRANCH."
