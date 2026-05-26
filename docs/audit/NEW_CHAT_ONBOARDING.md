@@ -169,7 +169,7 @@ If §11 looks more than a few days old, treat it as orientation only and verify 
 
 **Main HEAD at this writing:** `c4304bed`. Goes stale on the next merge — for current head, `git log --oneline -1 main`.
 
-**Active sprint:** F-Deploy-1 Phase A G4 soak.
+**Active sprint:** F-Deploy-1 Phase B G1 — α/β architectural decision.
 - Started 2026-05-19T12:54:47Z, ends 2026-05-26T12:54:47Z (1 week per FD-10).
 - Soak monitoring is **passive** — observe, don't act unless soak criteria break.
 - Soak criteria (Fix Plan v1.0 §5.5): no autonomous merges to main outside the validate.yml-gated PR path; no `-X ours` events that fail to notify Issue #708; no branch protection bypasses; no F-Deploy-G1-Y recurrence.
@@ -178,7 +178,7 @@ If §11 looks more than a few days old, treat it as orientation only and verify 
 - G1 (pre-flight): CLOSED via v1.1 / PR #703.
 - G2 (containment + safety ship): CLOSED via v1.3 / PR #710.
 - G3 (diagnostic): SUPERSEDED by in-line sub-form D work (v1.3 §4.3).
-- G4 (soak): RUNNING.
+- G4 (soak): CLOSED CLEAN 2026-05-26 — all four criteria held byte-for-byte across Day 4 and Day 7 snapshots; see `docs/audit/F-Deploy-1_PhaseA_G4_Close.md`.
 
 **Branch protection on main:** LIVE per FD-5. Required status checks: Cost Exposure Audit, Tests, Route Validation (three job-level names per FD-23). `strict=true` per FD-24. Zero required reviews. `enforce_admins: false`.
 
