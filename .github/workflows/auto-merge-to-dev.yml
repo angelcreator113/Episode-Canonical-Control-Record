@@ -1,5 +1,25 @@
 name: Auto-merge to Dev
 
+# Per FD-29 (F-Deploy-G1-AB): All user-influenceable GitHub context values
+# (commit messages, branch names, etc.) and other ${{ github.* }} or
+# ${{ steps.*.outputs.* }} substitutions referenced inside `run:` blocks
+# MUST be injected via `env:` block on the step, not inlined into the script
+# source via ${{ ... }} template substitution.
+#
+# Rationale: GitHub Actions inline template substitution renders the value
+# literally into the bash script source before bash parses it. A commit
+# message containing a double-quote character will close the surrounding
+# string literal and bash will try to execute the trailing words as commands.
+# This is what broke PR #719 ("peak vs idle: command not found", exit 127).
+#
+# Even for values that appear safe today (branch names, SHAs, GitHub-controlled
+# URLs), the env: pattern is mandatory for defense in depth: anything user-
+# influenceable today, anything that might become user-influenceable tomorrow,
+# anything where the substitution rule is ambiguous -- goes through env:.
+#
+# Reference: F-Deploy-1 Phase B G2 Implementation v1.1 (PR #719) failure;
+# fix landed via this workflow's first FD-29 PR.
+
 on:
   push:
     branches:
@@ -19,29 +39,51 @@ jobs:
       # in the most recent commit message. Match is case-insensitive.
       # Replaces the previous hardcoded `branches:` bang-exclusion list,
       # which required workflow edits per incident class (G1 F-Deploy-G1-P).
-      # Exit 78 neutral-exits the entire job, so subsequent steps do not need
-      # `if:` conditions. Job surfaces as "skipped" (neutral) in the UI, not
-      # success or failure.
+      #
+      # FD-30 (F-Deploy-G1-AC): The historical neutral-exit-78 pattern no
+      # longer surfaces this step as "skipped (neutral)" in the GitHub UI.
+      # GitHub Actions YAML v2 deprecated the exit-78-as-neutral behavior
+      # (it was an HCL v1 feature); the runner now treats any non-zero exit
+      # as failure, marking the step red and failing the whole job. PRs
+      # #705, #707, #709, #717, #718, #719 all used the [skip-automerge]
+      # token and surfaced merge-to-dev as red X failures, not skips. The
+      # red X was harmless (merge-to-dev is not a required check) but the
+      # workflow's claim of "neutral exit" was factually wrong.
+      #
+      # Current pattern: this step sets `skip=true` as a step output and
+      # exits 0 (success). Every downstream step gates on
+      # `if: steps.skip-check.outputs.skip != 'true'` and surfaces as
+      # `skipped` in the UI. Overall job conclusion is `success`. The
+      # `id: skip-check` value below is the anchor for those `if:`
+      # conditions; do not rename without updating every gated step.
       - name: Check for [skip-automerge] opt-out token
+        id: skip-check
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.event.head_commit.id }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
           if echo "$COMMIT_MSG" | grep -qi '\[skip-automerge\]'; then
             echo "Opt-out token detected in commit message."
-            echo "Branch: ${{ github.ref_name }}"
-            echo "Commit: ${{ github.event.head_commit.id }}"
-            echo "Neutral-exiting job (exit 78)."
-            exit 78
+            echo "Branch: $BRANCH_NAME"
+            echo "Commit: $COMMIT_SHA"
+            echo "Skipping auto-merge to dev (downstream steps gated)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "No opt-out token. Proceeding with auto-merge to dev."
 
       - name: Generate GitHub App token
         id: app-token
+        if: steps.skip-check.outputs.skip != 'true'
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Checkout repository
+        if: steps.skip-check.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -50,6 +92,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure git
+        if: steps.skip-check.outputs.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -60,8 +103,11 @@ jobs:
       # on the shared branch and block every downstream claude/* session.
       - name: Merge into dev (local)
         id: merge
+        if: steps.skip-check.outputs.skip != 'true'
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
-          BRANCH="${{ github.ref_name }}"
+          BRANCH="$BRANCH_NAME"
           echo "Merging $BRANCH into dev locally..."
 
           git checkout dev
@@ -104,8 +150,11 @@ jobs:
       # paths, 1 when there are — we invert that to set a boolean output.
       - name: Detect frontend changes
         id: changes
+        if: steps.skip-check.outputs.skip != 'true'
+        env:
+          PRE_MERGE_SHA: ${{ steps.merge.outputs.pre_merge_sha }}
         run: |
-          if git diff --quiet "${{ steps.merge.outputs.pre_merge_sha }}" HEAD -- frontend/; then
+          if git diff --quiet "$PRE_MERGE_SHA" HEAD -- frontend/; then
             echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
             echo "📦 No frontend changes in merge — skipping build verification."
           else
@@ -116,7 +165,7 @@ jobs:
       # Setup Node only when we actually need to build — saves ~5s on
       # backend-only merges and avoids wasting npm cache slots.
       - name: Setup Node.js
-        if: steps.changes.outputs.frontend_changed == 'true'
+        if: steps.skip-check.outputs.skip != 'true' && steps.changes.outputs.frontend_changed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -129,20 +178,24 @@ jobs:
       # declare, or touch the same JSX tree in ways that balance per-branch
       # but not together. A post-merge build catches those silent breakages.
       - name: Verify frontend build
-        if: steps.changes.outputs.frontend_changed == 'true'
+        if: steps.skip-check.outputs.skip != 'true' && steps.changes.outputs.frontend_changed == 'true'
         run: |
           echo "🔨 Verifying merged tree builds..."
           cd frontend
           npm ci --prefer-offline --no-audit --no-fund
           npx vite build
           echo "✅ Frontend build passed."
+
       # Detect backend changes (mirrors the frontend pattern above).
       # Skips the syntax verification when the merge only touches frontend
       # or docs, saving ~3s. Per FD-4 Change A-2.2 / Fix Plan v1.0 §5.1.1.
       - name: Detect backend changes
         id: backend-changes
+        if: steps.skip-check.outputs.skip != 'true'
+        env:
+          PRE_MERGE_SHA: ${{ steps.merge.outputs.pre_merge_sha }}
         run: |
-          if git diff --quiet "${{ steps.merge.outputs.pre_merge_sha }}" HEAD -- src/ package.json package-lock.json; then
+          if git diff --quiet "$PRE_MERGE_SHA" HEAD -- src/ package.json package-lock.json; then
             echo "backend_changed=false" >> "$GITHUB_OUTPUT"
             echo "📦 No backend changes in merge — skipping backend syntax verification."
           else
@@ -154,7 +207,7 @@ jobs:
       # node_modules, so we skip npm cache and dependency install — keeps
       # this step under 2s vs ~10s if we did npm ci.
       - name: Setup Node.js for backend
-        if: steps.backend-changes.outputs.backend_changed == 'true'
+        if: steps.skip-check.outputs.skip != 'true' && steps.backend-changes.outputs.backend_changed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -166,16 +219,18 @@ jobs:
       # errors — those would require a full load test with environment
       # dependencies (DB, Redis, env vars) that aren't available in CI.
       - name: Verify backend syntax
-        if: steps.backend-changes.outputs.backend_changed == 'true'
+        if: steps.skip-check.outputs.skip != 'true' && steps.backend-changes.outputs.backend_changed == 'true'
         run: |
           echo "🔨 Verifying merged backend tree parses..."
           find src -name '*.js' -type f -print0 | xargs -0 -n1 node --check
           echo "✅ Backend syntax check passed."
 
       - name: Push to dev
+        if: steps.skip-check.outputs.skip != 'true'
         run: |
           git push origin dev
           echo "✅ Pushed verified merge to dev."
+
       # Per FD-4 Change A-2.3 / Fix Plan v1.0 §5.1.1: when auto-merge resolved
       # conflicts via -X ours (which silently discards feature-branch hunks
       # that conflicted with dev), notify the original author by appending a
@@ -185,17 +240,22 @@ jobs:
       # reform of the -X ours strategy happens (e.g., switching to abort+notify
       # rather than silent merge), close #708 and remove this step.
       - name: Notify on -X ours conflict resolution
-        if: steps.merge.outputs.merge_type == 'conflicts-resolved'
+        if: steps.skip-check.outputs.skip != 'true' && steps.merge.outputs.merge_type == 'conflicts-resolved'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          SOURCE_SHA: ${{ github.event.head_commit.id }}
+          PRE_MERGE_SHA: ${{ steps.merge.outputs.pre_merge_sha }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           ISSUE_NUMBER=708
 
-          BRANCH="${{ github.ref_name }}"
-          SOURCE_SHA="${{ github.event.head_commit.id }}"
-          PRE_MERGE_SHA="${{ steps.merge.outputs.pre_merge_sha }}"
+          BRANCH="$BRANCH_NAME"
+          # SOURCE_SHA, PRE_MERGE_SHA already in env from env: block above
           MERGE_SHA="$(git rev-parse HEAD)"
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_URL="$SERVER_URL/$REPOSITORY/actions/runs/$RUN_ID"
 
           # List all files modified in the merge commit. Some or all of these
           # may have had changes discarded from the source branch. Over-reports
