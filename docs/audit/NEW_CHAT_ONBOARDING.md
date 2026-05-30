@@ -6,8 +6,13 @@
 
 ---
 
+> [STOP] **PROD HAZARD -- READ BEFORE ANY F-Deploy-1 OR PROD WORK.** Prod box `episode-backend` (`54.163.229.144`) is in a confirmed split-brain: the running process serves the live populated database, the on-disk `.env` points at a verified-empty one. A `pm2 restart` / reboot / deploy / `.env` edit silently swaps prod onto the empty DB -- boots clean, serves nothing, no error. **No restart/reboot/deploy/`.env` edit on that box until gated reconciliation.** Full detail and the do-not list: `F-Deploy-1_PROD_SplitBrain_HAZARD.md` (repo root). If this session is about to propose a restart, an SG change, or an `.env` fix -- stop and read that doc.
+
+---
+
 ## 1. Wake-up sequence (read in order)
 
+0. **If this session touches F-Deploy-1 or prod at all, read `F-Deploy-1_PROD_SplitBrain_HAZARD.md` (repo root) FIRST.** Prod is frozen -- a restart silently destroys prod data. The hazard doc's Sec 3 do-not list is binding before any prod action.
 1. **Read this doc end-to-end.** ~5 minutes. After reading, sanity-check §11 against current state — `git log --oneline -1 main` should match (or be reasonably close to) the main HEAD §11 names. If main has moved significantly past what §11 claims, treat §11 as stale and verify against the canonical docs it points at.
 2. **Read the current audit canonical doc on main.** See §11 for which revision is current. The audit doc is the authoritative state-of-codebase reference; this onboarding doc is orientation only. Allow ~30 minutes for a full first read.
 3. **Read the current F-Deploy-1 Fix Plan revision on main.** See §11 for which revision is current. Fix Plan revisions are additive — later revisions build on earlier ones, which remain on main as historical record.
