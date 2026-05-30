@@ -110,3 +110,17 @@ exports/
 
 # Backfill/migration script state logs
 scripts/state/
+
+# F-Deploy-1 Phase B G2 Sec 4.1 session artifacts (2026-05-28)
+# Runtime IDs and IAM policy source - keep local, never commit
+episode-dev-backend-role-policy.json
+dev-backend-sg-id.txt
+dev-backend-instance-id.txt
+dev-backend-public-ip.txt
+docs/audit/F-Deploy-1_PhaseB_G2_S4.1_ExecutionNotes.md
+trust-policy.json
+user-data.sh
+commit_msg.txt
+pr_body.txt
+
+F-Deploy-1_PhaseB_G2_S4.2_BlockedFinding.md
