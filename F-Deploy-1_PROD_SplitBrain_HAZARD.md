@@ -9,11 +9,19 @@
 > total silent data disappearance. The "wrong-looking" current state IS the safe
 > state. If a fresh session proposes a restart, an SG change, or an `.env` fix,
 > that proposal is wrong -- read this whole doc first.
+>
+> **UPDATE 2026-05-30 -- the freeze was BREACHED by automation.** An untagged
+> `claude/**` PR triggered Auto-merge to Dev -> Deploy to Development, which
+> reaches THIS box via shared-compute wiring and reloaded the frozen process. No
+> data lost (the reload landed on the live DB by luck). Both workflows are now
+> DISABLED. The freeze covers AUTOMATED triggers too, not just manual ones.
+> Re-enabling the workflows is gated behind reconciliation. Full record:
+> `F-Deploy-1_INCIDENT_2026-05-30_prod-autodeploy.md`.
 
 | | |
 |---|---|
 | **Parent keystone** | F-Deploy-1, Phase B G2 |
-| **Status** | ACTIVE HAZARD -- blocks Sec 4.2 memory-profile hard gate |
+| **Status** | ACTIVE HAZARD -- blocks Sec 4.2 memory-profile hard gate. NOTE: box reloaded by the 2026-05-30 incident; now on port 3002 with a route-loading bug. Sec 1's "never restarted" description is pre-incident; see Sec 7. |
 | **Severity** | P0. Confirmed catastrophic-on-restart. |
 | **First surfaced** | 2026-05-29 (read-only inspection), refined 2026-05-30 |
 | **Resolution** | Gated schema-fork reconciliation in its own session; verified `episode-control-dev` backup taken first |
@@ -131,6 +139,11 @@ on-disk config.
 8. Do **not** change SG `sg-0164d0b20fbebacbb` as a "fix" -- AF is logged for the
    post-G2 sweep; touching it now is out-of-band scope and unnecessary (the box
    already reaches `-prod` fine; the only barrier is the password).
+9. Do **not** re-enable the `Deploy to Development` or `Auto-merge to Dev`
+   workflows (both DISABLED 2026-05-30). They reach THIS box via shared compute;
+   an untagged `claude/**` PR auto-deploys to prod. The `[skip-automerge]` commit
+   tag is NOT a sufficient guard -- the disabled workflows are the real guard.
+   Re-enabling is a reconciliation-gated decision. See Sec 7.
 
 ## Sec 4 Register entries (for Fix Plan v1.6)
 
@@ -186,6 +199,35 @@ collision, and the dual-migration-framework history. Hard prerequisite: a
 **verified `episode-control-dev` backup taken first**. This is the next real work,
 done with fresh eyes in its own deliberate session -- not a momentum continuation
 of any investigation, and explicitly not tonight.
+
+## Sec 7 Incident 2026-05-30 -- freeze breached by automation (contained)
+
+On 2026-05-30 the freeze was breached by an automated path that this doc's
+original Sec 3 did not anticipate. An untagged `claude/**` PR (#728) triggered
+Auto-merge to Dev, whose push to the dev branch triggered Deploy to Development,
+which SSHed to THIS box (shared-compute wiring, F-Deploy-G1-G) and ran
+`pm2 delete all` + `pm2 start --env development` + `pm2 save` + a migration step.
+
+Outcome: NO data loss. The reloaded process picked up `DB_HOST` from the deploy's
+`DEV_DB_HOST` secret (= `episode-control-dev`, the live data), not the on-disk
+`.env` (= empty `-prod`). The reload landed on the correct DB by luck, not because
+the freeze held -- had the secret pointed at `-prod`, this would have been the
+silent-empty-DB catastrophe. Raw count post-incident: 72 episodes / 10 shows,
+intact.
+
+Changed state on the box (do NOT "fix" -- any fix is another reload):
+- Process reloaded (new PIDs); `pm2 save` overwrote `dump.pm2` with this state.
+- App now on port 3002 (dev port), not 3000.
+- Route-loading bug ("Template Studio routes failed to load"); `/episodes`,
+   `/shows` not serving.
+- On-disk `.env` STILL points at empty `-prod` (deploy did not rewrite DB_HOST).
+   So the split-brain PERSISTS and the freeze still fully applies: a plain
+   `pm2 restart` would still swap onto empty.
+
+Contained: both workflows disabled (Sec 3 item 9). Cleanup (port, routes, `.env`,
+pm2 state) folds into the gated reconciliation. Full record:
+`F-Deploy-1_INCIDENT_2026-05-30_prod-autodeploy.md`. Candidate finding for this
+path: F-Deploy-G1-AI.
 
 ---
 *Canonical hazard record. Synthesizes the 2026-05-29 read-only inspection
