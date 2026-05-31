@@ -127,6 +127,17 @@ blocker and the count-check belongs at the top of the *redesigned* Phase 0→3 s
 (Also note: the `-dev` master password is not held off-box; the count-check must use
 the credential read from `pm2 env`, not a reset.)
 
+## Sec 6.1 — Final PM2 dump resolution (read-only)
+
+`~/.pm2/dump.pm2` was read directly (no mutation) to settle resurrect behavior:
+
+- Saved app set is **2 apps**: `episode-api`, `episode-worker`.
+- Saved runtime DB target is canon: `DB_HOST=episode-control-dev...` for both apps.
+- Saved runtime port is **3002** for both apps.
+- `episode-api` saved mode is `cluster_mode` with `instances: 1` (single-instance behavior).
+- `env_production.PORT=3000` exists in config/profile, but that is **profile-only**;
+  a plain `pm2 resurrect` restores the saved runtime snapshot (3002/`-dev`), not 3000.
+
 ---
 
 ## Sec 7 — Disposition
