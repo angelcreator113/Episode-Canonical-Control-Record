@@ -12,6 +12,19 @@
 
 ---
 
+> **CORRECTION 2026-05-31 — canary set was wrong for the populated-canon gate.**
+>
+> The five tables `ai_edit_plans`, `raw_footage`, `scene_layer_configuration`,
+> `markers`, `lala_cash_grab_quests` were harvested from the `--schema-only` dump
+> of the EMPTY `-prod` RDS. They are `-prod`-only schema definitions and do NOT
+> exist in `-dev` canon. Querying them against `-dev` returns
+> `relation "..." does not exist` — a guaranteed false-abort.
+>
+> They are useless as a "is `-dev` populated?" probe. The correct Gate 1 canon
+> probe is core tables known to hold canon rows in `-dev`:
+> `character_state`, `shows`, `episodes` (verified 3 / 10 / 72 on 2026-05-31).
+> Use these for any future row-count abort gate, not the five preservation tables.
+
 ## The correction this surfaced (matters more than the block)
 
 The pre-flight plan (Sec 4.3) records the 37 prod-only definitions as preserved

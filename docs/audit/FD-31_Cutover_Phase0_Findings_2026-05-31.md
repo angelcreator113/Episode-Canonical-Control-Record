@@ -138,6 +138,37 @@ the credential read from `pm2 env`, not a reset.)
 - `env_production.PORT=3000` exists in config/profile, but that is **profile-only**;
   a plain `pm2 resurrect` restores the saved runtime snapshot (3002/`-dev`), not 3000.
 
+> **NOTE 2026-05-31 — post-restart health check: curl invocation matters.**
+>
+> During the FD-31 verification restart, `curl -sS http://localhost:3002/health`
+> returned connection-refused while the app was actually serving. The working
+> form was `curl http://127.0.0.1:3002/health` → `200 OK`,
+> `"database":"connected"`, `DB_HOST=episode-control-dev...`. The refusal was a
+> shell-wrapper / `localhost`-resolution artifact, NOT the app being down. Use
+> the `127.0.0.1` form for the post-restart health check to avoid a false abort.
+
+## FD-31 Track A — CLOSED 2026-05-31 (split-brain resolved, verified live)
+
+The on-disk/live-process split-brain is resolved and verified serving on canon.
+
+Final state:
+- `.env` `DB_HOST` → `episode-control-dev...` (canon). Edited in-editor, verified by grep.
+- `/home/ubuntu/.pm2/dump.pm2` → 2-app canon set (`episode-api`, `episode-worker`),
+  saved via `pm2 save` AFTER the `.env` fix.
+- Live `episode-api` (id 0) serving 3002, `200 OK`, `"database":"connected"`,
+  `DB_HOST=episode-control-dev...`.
+- Canon gate held 3 / 10 / 72 throughout (before, during, after) — canon never at risk.
+
+Restart sequence (accurate provenance):
+- `pm2 restart 0` executed; a `curl -sS` false-failure (see curl note) triggered a
+  precautionary `pm2 resurrect`.
+- The CURRENTLY RUNNING processes trace to `pm2 resurrect` (restored from the
+  post-fix dump), not directly to `pm2 restart 0`. Functionally identical — both
+  read the corrected `.env`, both on canon — but provenance is "restored from dump."
+
+Track B (port/3000 migration, de-invert the 4-app naming, true `-prod` adoption)
+remains PARKED as its own project. Not part of Track A closure.
+
 ---
 
 ## Sec 7 — Disposition

@@ -287,6 +287,19 @@ NOT on canon `-dev`):
 `video_processing_jobs`, `lala_cash_grab_quests`, `lala_episode_formulas`,
 `lala_micro_goals`.
 
+> **CORRECTION 2026-05-31 — canary set was wrong for the populated-canon gate.**
+>
+> The five tables `ai_edit_plans`, `raw_footage`, `scene_layer_configuration`,
+> `markers`, `lala_cash_grab_quests` were harvested from the `--schema-only` dump
+> of the EMPTY `-prod` RDS. They are `-prod`-only schema definitions and do NOT
+> exist in `-dev` canon. Querying them against `-dev` returns
+> `relation "..." does not exist` — a guaranteed false-abort.
+>
+> They are useless as a "is `-dev` populated?" probe. The correct Gate 1 canon
+> probe is core tables known to hold canon rows in `-dev`:
+> `character_state`, `shows`, `episodes` (verified 3 / 10 / 72 on 2026-05-31).
+> Use these for any future row-count abort gate, not the five preservation tables.
+
 **Stragglers — prod-only but not obviously editing-feature (flag for rebuild, not
 for cutover):**
 `character_profiles`, `character_clips`, `decision_logs`, `user_decisions`,
