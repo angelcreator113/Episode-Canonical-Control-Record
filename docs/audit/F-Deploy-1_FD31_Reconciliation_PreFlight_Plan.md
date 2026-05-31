@@ -15,8 +15,8 @@
 | **Hazard authority** | `F-Deploy-1_PROD_SplitBrain_HAZARD.md` (repo root) |
 | **Incident context** | `F-Deploy-1_INCIDENT_2026-05-30_prod-autodeploy.md` (repo root) |
 | **Fix Plan lineage** | Inherits v1.7 (FD-1–FD-35); feeds a future revision (v1.8+) |
-| **Status** | DRAFT — prep only, uncommitted, no gate moved |
-| **Drafted** | 2026-05-30, post-snapshot, post-containment-map |
+| **Status** | DRAFT v1.1 — prep only, uncommitted, no gate moved. Sec 4 canon decision RESOLVED 2026-05-30. |
+| **Drafted** | 2026-05-30, post-snapshot, post-containment-map; v1.1 adds resolved canon decision + live `-prod` list |
 | **Freeze state** | Prod box FROZEN + DEGRADED (port 3002, route bug, `.env`→empty `-prod`). Freeze fully in force. |
 
 ---
@@ -62,7 +62,7 @@ are conditions, not a schedule.
 |---|---|---|---|
 | 2.1a | Durable snapshot of `episode-control-dev` exists | ✅ GREEN — `episode-control-dev-prefreeze-insurance-20260530`, `available`, 100% (2026-05-30) | tonight |
 | 2.1b | **Verified** logical dump (table + row counts matched to catalog) | ⬜ PENDING | Sec 3 |
-| 2.2 | Canon decision written and signed off (the 37-table feature call) | ⬜ PENDING | Sec 4 |
+| 2.2 | Canon decision written and signed off (the prod-only schema-fate call) | ✅ GREEN — RESOLVED 2026-05-30 (Sec 4): canon = live `-dev`; prod-only not ported, definitions preserved | tonight |
 | 2.3 | Table-fate matrix populated from live diff and ratified | ⬜ PENDING | Sec 5 |
 | 2.4 | Cutover plan + rollback written in full (not outline) | ⬜ PENDING | Sec 6 |
 | 2.5 | Durable credential location decided (folds in S4.2-C `-dev` password rotation) | ⬜ PENDING | Sec 6.2 |
@@ -176,42 +176,80 @@ exposure — hence the recommendation.
 
 ---
 
-## Sec 4 — Canon decision: the one genuine judgment call (PENDING — Evoni)
+## Sec 4 — Canon decision (RESOLVED 2026-05-30 — Evoni)
 
-Everything else in this plan is mechanical given the data. This is not.
+The one genuine judgment call. **Decided: canon = live `-dev` data; the prod-only
+schemas are NOT ported in the cutover; their definitions are preserved.**
 
-The 37 prod-only tables are a coherent feature schema the live DB never received:
-a **video / editing / script-tooling** cluster —
-`ai_edit_plans`, `edit_maps`, `editing_decisions`, `raw_footage`,
-`scene_footage_links`, `video_processing_jobs`, `layers`/`layer_*`, `audio_clips`,
-`script_metadata` / `script_templates` / `script_suggestions` /
-`script_learning_profiles` / `script_edit_history`,
-`lala_cash_grab_quests` / `lala_micro_goals` / `lala_episode_formulas`,
-`beats`, `interactive_elements`. (As named in the hazard doc — re-pull the full
-authoritative list via Sec 5.1; this is ~20 of the 37.)
+### Sec 4.1 — What the prod-only tables are
 
-This maps to the project's **AI Video Editing** doc set (Deviations Log, Cost
-Analysis, Integration Guide, Implementation Roadmap). The decision:
+The prod-only set is the schema for the **AI Video Editing System** — an approved
+(2026-02-05) 16-week feature for SAL (script enhancement, raw-footage upload,
+YouTube style-learning, layer management, AI edit-plan generation, FFmpeg
+rendering; target launch 2026-06-02). Confirmed by mapping the
+`Implementation_Roadmap_AI_Video_Editing.docx` weekly groupings onto the live
+`-prod` table list pulled 2026-05-30.
 
-- **Is the AI video editing / script-tooling feature going forward?**
-  → carry those schemas onto canon (apply DDL; no data to move — `-prod` is empty).
-- **Is it abandoned / superseded?**
-  → drop them; do not carry forward.
-- **Mixed?** → some go forward, some don't — then Sec 5's matrix is per-table.
+Status of the feature, from evidence:
+- Schema was **built** (tables exist on `-prod`; created via `node-pg-migrate` per
+  Week 1 — likely origin of the `pgmigrations` half of the migration-framework fork).
+- Feature was **never used** — `-prod` content tables verified empty, zero rows.
+- Live system (`-dev`, canon) **never received** these tables.
+- The feature's own `Deviations_Log_AI_Video_Editing.docx` is frozen at the
+  2026-02-05 baseline ("No deviations yet") — no tracked progress.
+- The project pivoted to the Path A audit / keystone fix-cycle.
 
-No default. This is a product/architecture call only you can make, and making it
-*before* the session is the point — so the session ratifies it rather than
-improvising it. Input documents are in the project: read the AI Video Editing set
-against current intent for SAL production.
+### Sec 4.2 — The decision and its reasoning
+
+Evoni's intent: AI video editing **is a real near-term plan** for SAL. The decision
+is nonetheless **do not port the schemas onto canon during reconciliation**, for
+three reasons:
+
+1. **The feature boundary is entangled, not a clean block.** The `-prod` list shows
+   tables that straddle the editing feature and existing live systems —
+   `timeline_data`, `timeline_placements`, `markers`, `scene_layer_configuration` —
+   and `decision_log`/`decision_logs` is messier than the hazard doc framed (see
+   Sec 5.4 correction). Porting risks importing schema that collides with / duplicates
+   live tables — a fresh instance of the parallel-system drift the audit catalogs —
+   during the most fragile operation on the board.
+2. **A never-used schema is not a head start.** The feature should be built against
+   canon deliberately (tables designed to fit the live systems they touch, entanglement
+   resolved on purpose), not resurrected from an empty 4-month-old definition.
+3. **Porting buys nothing the preserved definitions don't give.** The reconciliation
+   does one job — clean canon, box un-frozen, live data only. The feature's future
+   doesn't change what reconciliation does to the database.
+
+This sequencing serves "I want it soon" *better* than porting: reconciliation stays
+simple, canon stays clean, and the feature lands clean as its own post-audit build
+instead of dragging a fork in behind it.
+
+### Sec 4.3 — Recorded decision
+
+- **Canon = the live `episode-control-dev` data.** Settled by data (only populated copy).
+- **Prod-only schemas: NOT ported in the cutover.** Canon stays clean.
+- **Definitions PRESERVED** — captured in the verified dump (Sec 3) AND a parked
+  migration file as the deliberate "coming back for this" marker. Evoni's near-term
+  intent makes preservation a firm requirement, not an optional footnote.
+- **AI video editing rebuilds post-audit as its own effort**, designed against canon
+  with the timeline/marker/scene entanglement resolved on purpose. *How* it revives
+  (fresh build vs. resurrect-and-fix from the preserved definitions) is deferred —
+  the definitions sit safely in the dump either way, so this decision does not lock
+  the rebuild approach.
+
+This collapses the Sec 5 prod-only matrix: every prod-only table → **not ported,
+definition preserved** (Sec 5.2).
 
 ---
 
-## Sec 5 — Table-fate decision matrix (SCAFFOLD — populate from live diff)
+## Sec 5 — Table-fate matrix (COLLAPSED by Sec 4; dev-only + fork still need the diff)
 
-⚠️ **INCOMPLETE BY DESIGN.** The named tables below are from the hazard doc's
-summary (~20 of 37 prod-only; 2 of 9 dev-only). The authoritative full diff must
-be pulled live (Sec 5.1) and dropped into this matrix before ratification. Do not
-treat this scaffold as the complete set.
+The Sec 4 decision collapses the prod-only side of this matrix to a single fate.
+What remains open is (a) the authoritative table lists from the live diff — needed
+to confirm membership, not to decide fate — and (b) the dev-only / migration-fork
+questions in Sec 5.3–5.4, which Sec 4 does not resolve.
+
+**`-prod` table list pulled live 2026-05-30 (171 tables).** `-dev` list still owed
+(Sec 5.1) — generate it off the throwaway during the verified dump to avoid the box.
 
 ### Sec 5.1 — Authoritative diff query (read-only, both DBs — freeze-safe)
 
@@ -231,37 +269,39 @@ SELECT table_name FROM information_schema.tables
 #   dev-only   = in -dev, not in -prod  → the 9  (mostly already-canon, Sec 5.3)
 ```
 
-### Sec 5.2 — Prod-only schemas (fate: PORT / ABANDON / INVESTIGATE)
+### Sec 5.2 — Prod-only schemas: FATE RESOLVED → NOT PORTED, DEFINITION PRESERVED
 
-Fate column is driven by the Sec 4 canon decision. Stub rationale; finalize at
-ratification.
+Per Sec 4, **every** prod-only table takes the same fate — no per-table decision
+remains. The candidate AI-video-editing cluster identified from the live `-prod`
+list (2026-05-30):
 
-| Table (named subset) | Cluster | Proposed fate | Rationale stub |
-|---|---|---|---|
-| ai_edit_plans | editing | (Sec 4) | feature schema |
-| edit_maps | editing | (Sec 4) | feature schema |
-| editing_decisions | editing | (Sec 4) | feature schema |
-| raw_footage | editing | (Sec 4) | feature schema |
-| scene_footage_links | editing | (Sec 4) | feature schema |
-| video_processing_jobs | editing | (Sec 4) | feature schema |
-| layers / layer_* | editing | (Sec 4) | feature schema |
-| audio_clips | editing | (Sec 4) | feature schema |
-| script_metadata | script-tooling | (Sec 4) | feature schema |
-| script_templates | script-tooling | (Sec 4) | feature schema |
-| script_suggestions | script-tooling | (Sec 4) | feature schema |
-| script_learning_profiles | script-tooling | (Sec 4) | feature schema |
-| script_edit_history | script-tooling | (Sec 4) | feature schema |
-| lala_cash_grab_quests | game/economy | (Sec 4) | check vs live career-goal system |
-| lala_micro_goals | game/economy | (Sec 4) | check vs live career-goal system |
-| lala_episode_formulas | game/economy | (Sec 4) | check vs live episode system |
-| beats | production | (Sec 4) | check vs live scenePlanner beats |
-| interactive_elements | production | (Sec 4) | feature schema |
-| *(…remaining ~17 — pull from Sec 5.1)* | | | |
+- **Editing core:** `ai_edit_plans`, `edit_maps`, `editing_decisions`, `raw_footage`,
+  `scene_footage_links`, `video_processing_jobs`, `audio_clips`, `layers`,
+  `layer_assets`, `layer_presets`, `scene_layer_configuration`, `beats`,
+  `interactive_elements`.
+- **Script tooling:** `script_metadata`, `script_templates`, `script_suggestions`,
+  `script_learning_profiles`, `script_edit_history`.
+- **AI learning:** `ai_training_data`, `ai_revisions`, `decision_patterns`.
+- **Game/economy:** `lala_cash_grab_quests`, `lala_micro_goals`, `lala_episode_formulas`.
 
-Note on the `lala_*` and `beats` tables: these may overlap conceptually with live
-systems (career goals, scene-planner beats). For those, "port" risks introducing a
-*second* parallel system — the exact kind of taxonomy/parallel-table drift the
-audit already catalogs elsewhere. Flag for investigate, not auto-port.
+**Two caveats, by design not deferred decisions:**
+
+1. These are **candidates**, not the confirmed prod-only set. Membership is only
+   confirmed by subtracting the `-dev` list (Sec 5.1). Some may also exist on `-dev`.
+   This does **not** change any fate — everything not-on-canon is preserved-not-ported
+   regardless — but the diff is still needed to know the exact set the parked migration
+   file must capture.
+2. The candidate list above (~24) is short of the hazard doc's "37 prod-only." The
+   gap is forked tables not recognizable as editing-feature from names alone — the
+   diff surfaces them. Again: same fate, but the preservation file must capture the
+   *real* set, so the diff is a packaging input, not a decision input.
+
+**Entangled tables** (`timeline_data`, `timeline_placements`, `markers`,
+`scene_layer_configuration`) straddle the feature and live systems. Under the Sec 4
+decision this is moot for the cutover (nothing ports), but it is exactly **why** the
+decision is don't-port: these are the collision risks a blind port would have
+introduced. Record them as the entanglement the *post-audit rebuild* must resolve
+deliberately.
 
 ### Sec 5.3 — Dev-only tables (already on canon)
 
@@ -277,12 +317,14 @@ stale/abandoned and whether the collision needs resolving.
 
 ### Sec 5.4 — Collisions and migration-framework history (DECISION, not mechanical)
 
-- **`decision_log` vs `decision_logs`** — singular (dev) vs plural (prod). If the
-  editing/script feature is abandoned (Sec 4), `decision_logs` never comes onto
-  canon and the collision dissolves. If it ports, decide which name wins and
-  whether they're the same concept. (Audit already notes three parallel
-  decision-logging tables exist — fold this into that known finding rather than
-  treating it fresh.)
+- **`decision_log` vs `decision_logs`** — **CORRECTION from live `-prod` list
+  (2026-05-30):** the hazard doc framed this as dev-singular vs prod-plural, but
+  `-prod` carries **both** `decision_log` AND `decision_logs`. So it is not a clean
+  cross-DB split. Under Sec 4 neither prod-only table ports, so the cutover-time
+  collision dissolves regardless — but the framing correction should land in the
+  hazard doc whenever docs are next touched ("live state wins," per the hazard doc's
+  own provenance rule). Fold into the audit's existing "three parallel
+  decision-logging tables" finding rather than treating it fresh.
 - **Dual migration frameworks** — `-dev` has `pgmigrations` + `SequelizeMeta`;
   `-prod` has only `SequelizeMeta`. Decide: which framework is authoritative going
   forward, and do the two `SequelizeMeta` histories agree (diff them read-only)?
@@ -382,9 +424,12 @@ both confirmed.
   gated session.
 - Does **not** touch, restart, reboot, deploy to, or edit `.env` on the prod box.
 - Does **not** re-enable the disabled workflows.
-- Does **not** finalize the Sec 4 canon decision — that is owed from Evoni.
-- Does **not** claim the Sec 5 matrix is complete — it is a scaffold pending the
-  live diff.
+- Does **not** finalize the rebuild *approach* for AI video editing — the Sec 4
+  canon decision is made (don't port, preserve), but how/when the feature revives
+  post-audit is deliberately deferred.
+- Does **not** claim the Sec 5 prod-only set is complete — fate is resolved for all
+  of it, but the exact membership the preservation file must capture still needs the
+  `-dev` diff.
 - Does **not** move any Fix Plan gate. Sec 4.2 remains BLOCKED on FD-31.
 
 ---
