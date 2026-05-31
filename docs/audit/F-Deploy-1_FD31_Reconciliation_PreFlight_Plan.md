@@ -394,6 +394,14 @@ working `-dev` password exists only in process memory; the on-disk `.env` has th
 
 ### Sec 6.3 — Cutover sequence (outline — expand to full commands before 2.4 GREEN)
 
+> **⚠️ SUPERSEDED 2026-05-31 — DO NOT EXECUTE AS WRITTEN**
+>
+> Retained for history only. Two steps are now invalid:
+> - **Step 4 ("apply ported schemas")** — killed by the Sec 4 don't-port decision. The FD-31 cutover ports nothing.
+> - **Step 6 `--env production` restart** — unsafe per the FD-31 Phase 0 findings (4-app inverted-naming ecosystem; `--env production` does not map to the live 3002 profile).
+>
+> Corrected procedure lives in the FD-31 Phase 0 findings + the pending Phase 3 redesign.
+
 1. Verified dump in hand (Sec 3) + snapshot confirmed (rollback ready).
 2. Rotate `-dev` `postgres` password (API).
 3. Correct on-disk `.env`: `DB_HOST` → canon, `DB_PASSWORD` → new value. **Do not
