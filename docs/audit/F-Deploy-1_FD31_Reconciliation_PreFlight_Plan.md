@@ -15,8 +15,8 @@
 | **Hazard authority** | `F-Deploy-1_PROD_SplitBrain_HAZARD.md` (repo root) |
 | **Incident context** | `F-Deploy-1_INCIDENT_2026-05-30_prod-autodeploy.md` (repo root) |
 | **Fix Plan lineage** | Inherits v1.7 (FD-1–FD-35); feeds a future revision (v1.8+) |
-| **Status** | DRAFT v1.1 — prep only, uncommitted, no gate moved. Sec 4 canon decision RESOLVED 2026-05-30. |
-| **Drafted** | 2026-05-30, post-snapshot, post-containment-map; v1.1 adds resolved canon decision + live `-prod` list |
+| **Status** | DRAFT v1.2 — prep only, uncommitted, no gate moved. Sec 4 canon RESOLVED; 2.1b verified dump + 2.3 diff DONE 2026-05-31. |
+| **Drafted** | 2026-05-30; v1.1 added canon decision; v1.2 adds verified dump + authoritative table diff (2026-05-31) |
 | **Freeze state** | Prod box FROZEN + DEGRADED (port 3002, route bug, `.env`→empty `-prod`). Freeze fully in force. |
 
 ---
@@ -61,9 +61,9 @@ are conditions, not a schedule.
 | # | Gate item | State | Source |
 |---|---|---|---|
 | 2.1a | Durable snapshot of `episode-control-dev` exists | ✅ GREEN — `episode-control-dev-prefreeze-insurance-20260530`, `available`, 100% (2026-05-30) | tonight |
-| 2.1b | **Verified** logical dump (table + row counts matched to catalog) | ⬜ PENDING | Sec 3 |
+| 2.1b | **Verified** logical dump (table + row counts matched to catalog) | ✅ GREEN — DONE 2026-05-31. `episode-control-dev-verified-20260530.dump` (2.83 MB), 143 tables + all 8 row-count fingerprints matched exactly. Snapshot proven good (test-restore). Stored off-repo at `Documents\PrimeStudios-Backups\`. | Sec 3 |
 | 2.2 | Canon decision written and signed off (the prod-only schema-fate call) | ✅ GREEN — RESOLVED 2026-05-30 (Sec 4): canon = live `-dev`; prod-only not ported, definitions preserved | tonight |
-| 2.3 | Table-fate matrix populated from live diff and ratified | ⬜ PENDING | Sec 5 |
+| 2.3 | Table-fate matrix populated from live diff and ratified | ✅ GREEN — DONE 2026-05-31. Authoritative 37 prod-only / 9 dev-only confirmed (Sec 5.2/5.3). Fate uniform: not ported, definitions preserved. | Sec 5 |
 | 2.4 | Cutover plan + rollback written in full (not outline) | ⬜ PENDING | Sec 6 |
 | 2.5 | Durable credential location decided (folds in S4.2-C `-dev` password rotation) | ⬜ PENDING | Sec 6.2 |
 
@@ -241,15 +241,17 @@ definition preserved** (Sec 5.2).
 
 ---
 
-## Sec 5 — Table-fate matrix (COLLAPSED by Sec 4; dev-only + fork still need the diff)
+## Sec 5 — Table-fate matrix (RESOLVED — authoritative diff complete 2026-05-31)
 
-The Sec 4 decision collapses the prod-only side of this matrix to a single fate.
-What remains open is (a) the authoritative table lists from the live diff — needed
-to confirm membership, not to decide fate — and (b) the dev-only / migration-fork
-questions in Sec 5.3–5.4, which Sec 4 does not resolve.
+The Sec 4 decision collapses the prod-only side to a single fate. The authoritative
+live diff is now complete (both lists pulled, see Sec 5.1), so membership is
+confirmed, not estimated. What the diff did NOT resolve and Sec 4 does not touch:
+the dev-only / migration-fork questions (Sec 5.3–5.4).
 
-**`-prod` table list pulled live 2026-05-30 (171 tables).** `-dev` list still owed
-(Sec 5.1) — generate it off the throwaway during the verified dump to avoid the box.
+**Diff performed 2026-05-31** off a snapshot-restored throwaway instance (freeze-safe,
+box never touched; instance + locked SG torn down after). `-dev` = 143 tables,
+`-prod` = 171, gap = 28 net (37 prod-only − 9 dev-only). The verified dump (gate
+2.1b) was taken from the same throwaway and matched the catalog exactly.
 
 ### Sec 5.1 — Authoritative diff query (read-only, both DBs — freeze-safe)
 
@@ -271,60 +273,79 @@ SELECT table_name FROM information_schema.tables
 
 ### Sec 5.2 — Prod-only schemas: FATE RESOLVED → NOT PORTED, DEFINITION PRESERVED
 
-Per Sec 4, **every** prod-only table takes the same fate — no per-table decision
-remains. The candidate AI-video-editing cluster identified from the live `-prod`
-list (2026-05-30):
+Per Sec 4, **every** prod-only table takes the same fate. The authoritative set of
+**37 prod-only tables** (confirmed by diff 2026-05-31; these exist on `-prod` and
+NOT on canon `-dev`):
 
-- **Editing core:** `ai_edit_plans`, `edit_maps`, `editing_decisions`, `raw_footage`,
-  `scene_footage_links`, `video_processing_jobs`, `audio_clips`, `layers`,
-  `layer_assets`, `layer_presets`, `scene_layer_configuration`, `beats`,
-  `interactive_elements`.
-- **Script tooling:** `script_metadata`, `script_templates`, `script_suggestions`,
-  `script_learning_profiles`, `script_edit_history`.
-- **AI learning:** `ai_training_data`, `ai_revisions`, `decision_patterns`.
-- **Game/economy:** `lala_cash_grab_quests`, `lala_micro_goals`, `lala_episode_formulas`.
+**Clear AI-video-editing feature schema (~28):**
+`ai_edit_plans`, `ai_interactions`, `ai_revisions`, `ai_training_data`,
+`audio_clips`, `beats`, `decision_patterns`, `edit_maps`, `editing_decisions`,
+`interactive_elements`, `layers`, `layer_assets`, `layer_presets`,
+`scene_layer_configuration`, `markers`, `processing_queues`, `raw_footage`,
+`scene_footage_links`, `script_edit_history`, `script_learning_profiles`,
+`script_metadata`, `script_suggestions`, `script_templates`, `upload_logs`,
+`video_processing_jobs`, `lala_cash_grab_quests`, `lala_episode_formulas`,
+`lala_micro_goals`.
 
-**Two caveats, by design not deferred decisions:**
+**Stragglers — prod-only but not obviously editing-feature (flag for rebuild, not
+for cutover):**
+`character_profiles`, `character_clips`, `decision_logs`, `user_decisions`,
+`episode_phases`, `show_configs`, `layout_templates`, `lala_episode_timeline`,
+`lala_friend_archetypes`.
 
-1. These are **candidates**, not the confirmed prod-only set. Membership is only
-   confirmed by subtracting the `-dev` list (Sec 5.1). Some may also exist on `-dev`.
-   This does **not** change any fate — everything not-on-canon is preserved-not-ported
-   regardless — but the diff is still needed to know the exact set the parked migration
-   file must capture.
-2. The candidate list above (~24) is short of the hazard doc's "37 prod-only." The
-   gap is forked tables not recognizable as editing-feature from names alone — the
-   diff surfaces them. Again: same fate, but the preservation file must capture the
-   *real* set, so the diff is a packaging input, not a decision input.
+**Fate for all 37: NOT PORTED, DEFINITION PRESERVED** (verified dump + parked
+migration file). The straggler group does not change this — but flags real
+questions for the *post-audit rebuild*, not the cutover:
 
-**Entangled tables** (`timeline_data`, `timeline_placements`, `markers`,
-`scene_layer_configuration`) straddle the feature and live systems. Under the Sec 4
+- `character_profiles` is prod-only while canon carries `character_state` /
+  `character_arcs` / other character tables — possible fork of canon's character
+  model, or a feature-specific table. Investigate at rebuild.
+- `decision_logs` (prod) vs `decision_log` — see Sec 5.4 correction. Both the
+  singular and plural live on `-prod`; canon's situation differs.
+- `episode_phases`, `show_configs`, `user_decisions` sound like they could overlap
+  live systems. Under Sec 4 moot for the cutover (nothing ports); recorded as
+  entanglement the rebuild must classify (feature-table vs. canon-fork).
+
+This entanglement is exactly **why** the Sec 4 decision is don't-port: a blind port
+would have grafted forks of live tables onto canon during the cutover. The
+preservation file must capture all 37 definitions so the rebuild can sort them
+deliberately.
 decision this is moot for the cutover (nothing ports), but it is exactly **why** the
 decision is don't-port: these are the collision risks a blind port would have
 introduced. Record them as the entanglement the *post-audit rebuild* must resolve
 deliberately.
 
-### Sec 5.3 — Dev-only tables (already on canon)
+### Sec 5.3 — Dev-only tables (the authoritative 9, already on canon)
 
-| Table (named subset) | Note |
-|---|---|
-| pgmigrations | node-pg-migrate bookkeeping — see Sec 5.4 |
-| decision_log (singular) | collides with prod's `decision_logs` (plural) — see Sec 5.4 |
-| *(…remaining 7 — pull from Sec 5.1)* | |
+Confirmed by diff 2026-05-31 — exist on canon `-dev`, NOT on `-prod`:
 
-Dev-only tables are already present on canon by definition (canon = live `-dev`
-data). The work here is not "add them" — it's deciding whether any are themselves
-stale/abandoned and whether the collision needs resolving.
+`asset_label_map`, `character_relationships_extended`, `episode_outfits`,
+`episode_outfit_items`, `pgmigrations`, `script_edits`, `search_history`,
+`template_studio`, `video_compositions`.
+
+These are already on canon by definition (canon = live `-dev`). No action needed to
+"keep" them — the work is only to note any that are themselves stale. Two flags:
+
+- **`pgmigrations`** — node-pg-migrate bookkeeping (see Sec 5.4). Its presence on
+  canon but not `-prod` is the migration-framework fork.
+- **`template_studio`** — relevant to the incident cleanup: the 2026-05-30 reload
+  left the prod box with a "Template Studio routes failed to load" bug. The table
+  exists on canon, so the routes have a table to load against — the bug is
+  code/port-level (Sec 6.3 step 6), not a missing table. Recorded so the cutover
+  doesn't chase a schema problem that isn't there.
 
 ### Sec 5.4 — Collisions and migration-framework history (DECISION, not mechanical)
 
-- **`decision_log` vs `decision_logs`** — **CORRECTION from live `-prod` list
-  (2026-05-30):** the hazard doc framed this as dev-singular vs prod-plural, but
-  `-prod` carries **both** `decision_log` AND `decision_logs`. So it is not a clean
-  cross-DB split. Under Sec 4 neither prod-only table ports, so the cutover-time
-  collision dissolves regardless — but the framing correction should land in the
-  hazard doc whenever docs are next touched ("live state wins," per the hazard doc's
-  own provenance rule). Fold into the audit's existing "three parallel
-  decision-logging tables" finding rather than treating it fresh.
+- **`decision_log` vs `decision_logs`** — **resolved by the 2026-05-31 diff:**
+  `decision_logs` (plural) is **prod-only** (not on canon). `decision_log` (singular)
+  is on canon (it appears in neither diff list, meaning it exists on *both* — or the
+  earlier `-prod` raw list showed both `decision_log` and `decision_logs` on prod).
+  Net for the cutover: the prod-only `decision_logs` is not ported (Sec 4), so no
+  collision lands on canon. The earlier hazard-doc framing (dev-singular vs
+  prod-plural) was approximate; live state is the authority. Fold the correction into
+  the audit's existing "three parallel decision-logging tables" finding rather than
+  treating it fresh. Confirm the exact canon-side state during the rebuild, not the
+  cutover.
 - **Dual migration frameworks** — `-dev` has `pgmigrations` + `SequelizeMeta`;
   `-prod` has only `SequelizeMeta`. Decide: which framework is authoritative going
   forward, and do the two `SequelizeMeta` histories agree (diff them read-only)?
