@@ -64,9 +64,11 @@ const sharedEnv = {
 
 module.exports = {
   apps: [
-    // === PRODUCTION apps (port 3000) ===
+    // === PRODUCTION app (port 3000) — serves primepisodes.com / www ===
+    // Name kept permanently per Track B DB-1 (renaming a running process = delete+restart = prod wobble).
+    // Default env is production-correct so pm2 start without --env cannot land prod on 3002.
     {
-      name: 'episode-api',
+      name: 'episode-api-prod-hotfix',
       script: '/home/ubuntu/episode-metadata/src/server.js',
       cwd: '/home/ubuntu/episode-metadata',
       interpreter: 'node',
@@ -80,11 +82,12 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       env: {
         ...sharedEnv,
-        PORT: 3002,
+        PORT: 3000,
         HOST: '0.0.0.0',
+        NODE_ENV: 'production',
         API_VERSION: 'v1',
-        APP_NAME: 'Episode Metadata API (Development)',
-        ALLOWED_ORIGINS: 'https://dev.episodes.primestudios.dev,http://localhost:3000,http://localhost:3002,http://localhost:5173,http://127.0.0.1:3002,http://127.0.0.1:5173,https://dev.primepisodes.com',
+        APP_NAME: 'Episode Metadata API (Production)',
+        ALLOWED_ORIGINS: 'https://primepisodes.com,https://www.primepisodes.com',
       },
       env_production: {
         ...sharedEnv,
@@ -96,6 +99,7 @@ module.exports = {
         ALLOWED_ORIGINS: 'https://primepisodes.com,https://www.primepisodes.com',
       }
     },
+    // === Shared WORKER (one, per Track B DB-2 — no prod/dev split) ===
     {
       name: 'episode-worker',
       script: '/home/ubuntu/episode-metadata/src/workers/start.js',
@@ -122,9 +126,10 @@ module.exports = {
         EXPORT_MAX_CONCURRENT_JOBS: '1',
       }
     },
-    // === DEV apps (port 3002) — keeps dev.primepisodes.com alive ===
+    // === DEV app (port 3002) — serves dev.primepisodes.com ===
+    // Name episode-api retained to match the running dev process.
     {
-      name: 'episode-api-dev',
+      name: 'episode-api',
       script: '/home/ubuntu/episode-metadata/src/server.js',
       cwd: '/home/ubuntu/episode-metadata',
       interpreter: 'node',
@@ -143,26 +148,6 @@ module.exports = {
         API_VERSION: 'v1',
         APP_NAME: 'Episode Metadata API (Development)',
         ALLOWED_ORIGINS: 'https://dev.episodes.primestudios.dev,http://localhost:3000,http://localhost:3002,http://localhost:5173,http://127.0.0.1:3002,http://127.0.0.1:5173,https://dev.primepisodes.com',
-      },
-    },
-    {
-      name: 'episode-worker-dev',
-      script: '/home/ubuntu/episode-metadata/src/workers/start.js',
-      cwd: '/home/ubuntu/episode-metadata',
-      interpreter: 'node',
-      interpreter_args: '',
-      instances: 1,
-      exec_mode: 'fork',
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '2G',
-      error_file: '/home/ubuntu/episode-metadata/logs/dev-worker-error.log',
-      out_file: '/home/ubuntu/episode-metadata/logs/dev-worker-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      env: {
-        ...sharedEnv,
-        EXPORT_TEMP_DIR: '/home/ubuntu/episode-metadata/exports-temp',
-        EXPORT_MAX_CONCURRENT_JOBS: '1',
       },
     }
   ]
