@@ -1,4 +1,4 @@
-# Track B -- PM2 Topology Formalization (DRAFT v0.1)
+# Track B -- PM2 Topology Formalization (DRAFT v0.2)
 
 > **PREP DOCUMENT. AUTHORIZES NO PROD-BOX ACTION.**
 > Reading/drafting this changes nothing on `episode-backend` (`54.163.229.144`).
@@ -12,7 +12,7 @@
 | **Incident context** | `docs/audit/F-Deploy-1_INCIDENT_2026-06-01_prod-502-restore.md` |
 | **Related findings** | F-Deploy-G1-H (ecosystem default-env = dev port), FD-35 (2026-05-30 auto-deploy reload), F-Deploy-G1-AJ (no prod monitoring) |
 | **Target** | **Target B -- formalize the working topology** (make config + dump match the verified-working running state), chosen over Target A (tear down + rebuild to the original file's naming) |
-| **Status** | DRAFT v0.1 -- prep only, uncommitted. No execution. |
+| **Status** | DRAFT v0.2 -- on main. Prep only, no execution. v0.2 resolves DB-1 (keep hotfix name), DB-2 (one shared worker), DB-3 (ecosystem .env-load verified read-only 2026-06-01). |
 | **Freeze state** | Prod box restored + reboot-durable (hotfix on 3000, id-0 on 3002, dump persists both + worker). nginx unchanged + correct. |
 
 ---
@@ -81,26 +81,24 @@ After Track B, the ecosystem file + dump encode:
 - **Dump persists this exact topology** so reboot/resurrect reproduces it.
 - **No process named in a way that lies about its role.**
 
-**Open decisions to settle before execution:**
-- **DB-1 (naming):** keep `episode-api-prod-hotfix` as the permanent prod process
-  name (honest about its origin, zero rename risk), OR rename to `episode-api-prod` /
-  `episode-api` (cleaner, but renaming a running PM2 process = delete+restart =
-  prod wobble). *Lean: keep the hotfix name for now; rename only at a future
-  deliberate restart. A name is cosmetic; a prod restart is not.*
-- **DB-2 (workers):** is one shared worker correct, or does prod/dev need separate
-  workers? Current reality = one worker, working. *Lean: leave as-is unless there's
-  a known reason to split.*
-- **DB-3 (the dotenv-creds problem):** the hotfix runs with DB creds passed
-  explicitly in env because dotenv did not populate them on a bare `pm2 start`
-  (incident Sec 3). The permanent ecosystem definition must reliably get DB creds.
-  Options: (a) bake the explicit env into the ecosystem `env_production` block
-  (creds reference `process.env`, which the ecosystem file's `sharedEnv` already
-  does -- so the real question is why the bare start failed when the ecosystem
-  start works); (b) confirm the ecosystem `--env production` path loads `.env`
-  correctly (it should -- `sharedEnv` reads `process.env.DB_*`). *This needs a
-  read-only test before execution: does `pm2 start ecosystem.config.js --only <prod
-  app> --env production` come up with DB connected? If yes, DB-3 dissolves and the
-  permanent prod app is just the ecosystem definition.*
+**Decisions (RESOLVED 2026-06-01):**
+- **DB-1 (naming): RESOLVED -- keep `episode-api-prod-hotfix` as the permanent prod
+   process name.** Rename deferred indefinitely. A name is cosmetic; renaming a running
+   PM2 process is a delete+restart = prod wobble, not worth it. (If a rename is ever
+   wanted, fold it into the deferred combined-restart window, Sec 7 -- never on its own.)
+- **DB-2 (workers): RESOLVED -- one shared `episode-worker`.** No prod/dev worker
+   split. Current single worker is working; no known reason to split. Revisit only if a
+   concrete need appears.
+- **DB-3 (ecosystem credential path): RESOLVED (read-only verify 2026-06-01).** The
+   ecosystem file loads `.env` via `require('dotenv').config({ path: join(__dirname,
+   '.env') })` -- an EXPLICIT, cwd-independent path -- before defining `sharedEnv`,
+   which passes `DB_*` into each app's env. So `pm2 start ecosystem.config.js --env
+   production` comes up DB-connected through `sharedEnv`; the app never depends on its
+   own `server.js:7` bare `dotenv.config()` for DB creds. The incident's bare `pm2 start
+   src/server.js` failed ONLY because `server.js:7` calls bare `dotenv.config()` (no
+   path -> resolves `.env` from `process.cwd()`, which was not the app root). **The
+   ecosystem prod definition is viable as-is** -- no need to bake explicit creds into
+   `env_production`; the existing `sharedEnv` mechanism handles it correctly.
 
 ---
 
@@ -143,11 +141,12 @@ hotfix process + the current dump are the fallback -- if any edit breaks a futur
 restart, the running state is untouched and still serving).
 
 1. **(Read-only, pre-flight) Test the ecosystem prod path.** `pm2 start
-   ecosystem.config.js --only episode-api --env production` on a SCRATCH basis... NO
-   -- that collides with running id-0. Instead: read `ecosystem.config.js`'s
-   `env_production` block and confirm it would supply DB creds (via `sharedEnv` ->
-   `process.env.DB_*` <- `.env`). Settle DB-3 by reasoning + a non-colliding test if
-   one is safe. *This step is analysis, not a live start.*
+   ecosystem.config.js --only episode-api --env production` would collide with running
+   id-0, so it was NOT run. Instead DB-3 was settled read-only (2026-06-01): the
+   ecosystem file loads `.env` via an explicit `__dirname` path before `sharedEnv`
+   passes `DB_*` to each app, so the `--env production` path comes up DB-connected.
+   **DB-3 RESOLVED (Sec 3) -- this step is complete; the ecosystem prod definition is
+   viable as-is, no creds workaround needed.**
 2. **Edit `ecosystem.config.js`** to encode the working topology (DB-1/DB-2/DB-3
    decisions applied). File edit only -- running processes unaffected.
 3. **Reconcile the dump** so resurrect uses the corrected definitions. (Mechanics
@@ -207,6 +206,8 @@ The 2026-06-01 incident clarified the FD-31 vs Track B scope split:
 ---
 *Track B topology formalization. Target B (make config + dump match the verified-working
 running state), Minimal-B path (config correctness now, defer the prod restart to a
-combined window with FD-31 credential rotation). Prep only; no prod-box action.
-nginx confirmed correct and out of scope. The 2026-06-01 incident moved this from
-"parked future project" to "scoped and justified."*
+combined window with FD-31 credential rotation). v0.2 resolves all three open decisions:
+DB-1 (keep hotfix name), DB-2 (one shared worker), DB-3 (ecosystem .env-load verified
+read-only -- prod definition viable as-is). Prep only; no prod-box action. nginx confirmed
+correct and out of scope. The 2026-06-01 incident moved this from "parked future project"
+to "scoped and justified."*
