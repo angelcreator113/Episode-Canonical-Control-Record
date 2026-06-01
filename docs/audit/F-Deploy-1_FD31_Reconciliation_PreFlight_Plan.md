@@ -15,9 +15,9 @@
 | **Hazard authority** | `F-Deploy-1_PROD_SplitBrain_HAZARD.md` (repo root) |
 | **Incident context** | `F-Deploy-1_INCIDENT_2026-05-30_prod-autodeploy.md` (repo root) |
 | **Fix Plan lineage** | Inherits v1.7 (FD-1--FD-35); feeds a future revision (v1.8+) |
-| **Status** | DRAFT v1.3 -- on main. ALL SIX pre-flight gates GREEN (2026-06-01); pre-flight phase COMPLETE. Preservation artifact committed (#737). Cutover sequence expanded to full commands (Sec 6.3). Cutover scope reduced + .env-credential-state corrected (v1.3). The cutover execution is its own gated session; no gate is "moved" by planning. |
-| **Drafted** | 2026-05-30; v1.1 canon decision; v1.2 verified dump + authoritative diff (2026-05-31); v1.3 preservation artifact + full cutover commands + gate-completion + .env correction (2026-06-01) |
-| **Freeze state** | Prod box FROZEN + DEGRADED (port 3002, route-loading bug, pm2 save state). On-disk .env is CANON-ONLY (DB_HOST -> episode-control-dev; no -prod creds present) -- verified 2026-06-01; the data-swap landmine is defused on disk (Fix Plan v1.8 FD-36). Freeze fully in force (reboot/resurrect path unverified). |
+| **Status** | DRAFT v1.4 -- on main. ALL SIX pre-flight gates GREEN; pre-flight COMPLETE. Preservation artifact committed (#737). v1.4: Sec 6.3 steps 5-6 (prod restart, port flip, pm2 save) HANDED TO TRACK B per the 2026-06-01 incident -- FD-31 cutover reduced to credential rotation + non-topology cleanup; the restart happens in a combined window with Track B (see Track_B_PM2_Topology_Formalization_Plan.md). Cutover execution is its own gated session. |
+| **Drafted** | 2026-05-30; v1.1 canon decision; v1.2 verified dump + diff; v1.3 preservation artifact + full cutover commands + .env correction (2026-06-01); v1.4 steps 5-6 handed to Track B after the 2026-06-01 prod-502 incident (2026-06-01) |
+| **Freeze state** | Prod RESTORED 2026-06-01 (hotfix on 3000, dev on 3002, reboot-durable -- see incident doc). On-disk .env CANON-ONLY (DB_HOST -> episode-control-dev; no -prod creds) -- verified 2026-06-01; data-swap landmine defused (v1.8 FD-36). Remaining: topology formalization (Track B) + credential rotation (this doc) in a combined restart window. Freeze on canon DATA fully in force. |
 
 ---
 
@@ -428,7 +428,20 @@ session start BEFORE step 1.
    This step is intentionally empty -- the migration-framework decision (Sec 5.4) is
    deferred to the post-audit rebuild and does NOT gate the cutover.
 
-5. **Controlled restart of the prod box.** *** GATED -- DO NOT PASTE-RUN. Assemble and
+> **STEPS 5-6 HANDED TO TRACK B (2026-06-01).** The 2026-06-01 prod-502 incident
+> established that the prod restart, port flip (3002->3000), and pm2-save/topology
+> fix are Track B work, not FD-31 cutover work (see
+> `Track_B_PM2_Topology_Formalization_Plan.md` and
+> `F-Deploy-1_INCIDENT_2026-06-01_prod-502-restore.md`). FD-31 owns the credential
+> rotation (steps 2-3); Track B owns the restart (steps 5-6). They execute TOGETHER
+> in a single combined restart window -- FD-31 rotates the credential, Track B's
+> restart-to-align applies it, in one prod restart, not several. Steps 5-6 below are
+> retained for context but are TRACK B's to run; FD-31 does not perform the restart.
+> NOTE: prod is currently RESTORED (hotfix on 3000, 2026-06-01) -- so the "port 3002
+> with nothing on 3000" framing in step 5/6 is historical; the live state is prod-up
+> via the additive hotfix, and Track B formalizes that.
+
+5. **[TRACK B] Controlled restart of the prod box.** *** GATED -- DO NOT PASTE-RUN. Owned by Track B; runs in the combined window. Assemble and
    execute deliberately at session time, with rollback confirmed. *** This is the one
    irreversible action. Restart must use the production env so PM2 reads the right
    ecosystem block (port 3000, not 3002 -- F-Deploy-G1-H). Per the standing rule, ANY
@@ -438,7 +451,7 @@ session start BEFORE step 1.
    left un-templated here by design; build it at the session from the live ecosystem
    config, do not copy a restart line out of this document.]
 
-6. **Degraded-state cleanup** (same session or a follow-up gated restart): port 3002 ->
+6. **[TRACK B] Degraded-state cleanup / topology** (Track B's Minimal-B / combined-restart window): port 3002 ->
    3000 (F-Deploy-G1-H, `--env production`), the Template Studio route-loading bug
    (code/port-level -- the `template_studio` table exists on canon, Sec 5.3, so not a
    missing-table problem), and correct `pm2 save` / `dump.pm2` so resurrect state is right.
