@@ -101,7 +101,10 @@ if they don't match this catalog, that is itself an abort condition (Sec 7).
 | wardrobe | 40 |
 | social_profiles | 444 |
 | franchise_knowledge | 605 |
-| ai_usage_logs | 764 |
+ai_usage_logs: 765   (re-baselined 2026-06-02 from 764; the +1 was a live AI-usage log
+                      row stamped during the 06-01 session — append-only, climbs with
+                      live traffic, NOT a reliable abort-fingerprint. The content tables
+                      are the meaningful gate-1 fingerprints.)
 
 ### Sec 3.2 -- Path B (RECOMMENDED): restore-and-verify the snapshot
 

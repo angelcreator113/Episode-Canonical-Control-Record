@@ -144,3 +144,43 @@ not inspected and is the unverified unknown. [3] gains a hard prerequisite: a bo
 credential reconcile before any restart, or the restart-to-align would crash prod on canon
 auth. No mutable action taken. The live re-verify worked as designed -- it caught a
 restart-breaking condition before the irreversible step.*
+
+## Sec 7 (ADDENDUM, same session 2026-06-02) — Gate 2.5 RESOLVED box-side: GREEN
+
+Closes the Sec 3.3 UNVERIFIED status. The box-side credential reconcile this doc
+deferred was performed later the same session — read-only, one-shot SSH per command
+(no interactive session left open, no pm2 mutation, no `.env` write).
+
+- `pm2 list` (prod box `episode-backend`, i-02ae7608c531db485, 54.163.229.144): three
+  processes online. **id 3 `episode-api-prod-hotfix`** (fork, ~28h) serves prod `/health`
+  on 3000 — the 2026-06-01 additive-restore hotfix. id 0 `episode-api` (cluster, 43h) is
+  the original prod-named app (FD-35 wrong-port legacy, not serving 3000). id 1
+  `episode-worker` out of scope.
+- `pm2 env 3` DB lines: `postgres` @ `episode-control-dev…/episode_metadata` — the
+  credential canon is actively accepting (id 3 DB-connected ~28h).
+- `grep DB_* /home/ubuntu/episode-metadata/.env` (the file a restart reads): identical
+  DB_HOST/DB_NAME/DB_USER; DB_PASSWORD **matches** the running process's working
+  credential (compared on-screen; value recorded nowhere).
+
+**Finding:** the box `.env` holds the working canon credential. A restart on the current
+box `.env` comes up authenticated, not DB-disconnected. The #749 credential divergence
+was **workstation-only** — the stale `.env` was the workstation copy, not the box. The
+restart-breaker hazard (Sec 3.2) does NOT apply to the box. **Gate 2.5 (FD-31 Pre-Flight
+v1.4) is GREEN, box-verified, as of 2026-06-02.**
+
+**Scope note:** the workstation `.env` divergence (Sec 3.1) is unresolved but irrelevant
+to [3] — it does not govern a prod restart. Remains a hygiene item under FD-31 Sec 6.5
+(rotate-at-cutover). Cause (Sec 3.4) undetermined; does not block [3].
+
+**Related hazard surfaced same session:** `.github/workflows/deploy-production.yml` is
+ACTIVE and, if dispatched, overwrites the box `.env` from `PROD_DB_*` secrets (AK-1/AK-2,
+not yet set to canon) and migrates against `episode-control-prod` (not the canon
+`-dev` instance) — re-arming the split-brain this addendum confirms is currently defused
+at the box. `workflow_dispatch`-only (cannot auto-fire). Decision owed: `gh workflow
+disable` as interlock vs. handle at [3] cutover. This is the AK finding (#747) in concrete
+form.
+
+**[3] entry gate, updated:** (1) abort re-verify — done (#749). (2) gate 2.5 — GREEN,
+box-verified (this addendum). (3) AK five-point — partial (AK-3/AK-4 #752; AK-1/AK-2
+deferred to cutover; AK-5 open; `deploy-production.yml` active per above). (4) combined
+window — gated executable, not yet run. No mutable action taken this session.
