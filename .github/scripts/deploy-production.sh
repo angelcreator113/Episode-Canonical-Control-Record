@@ -193,10 +193,13 @@ if [ -f nginx/episode-prod.conf ]; then
   fi
   if sudo nginx -t 2>&1; then
     sudo systemctl reload nginx
-    echo "✓ Nginx config deployed and reloaded"
+    echo "Nginx config deployed and reloaded"
   else
-    echo "⚠️  Nginx config test failed — keeping existing config"
-    sudo rm -f /etc/nginx/sites-enabled/episode-prod
+    # AK-4: do NOT delete the prod vhost and do NOT reload. nginx keeps serving its
+    # current in-memory config; abort the deploy so a human fixes the config on disk.
+    echo "DEPLOYMENT BLOCKED: nginx -t failed. Prod vhost left in place, nginx NOT reloaded."
+    echo "   The running config is unchanged and still serving. Fix the config on disk before redeploying."
+    exit 1
   fi
 else
   echo "⚠️  No nginx/episode-prod.conf found — skipping nginx deploy"
