@@ -219,42 +219,34 @@ if ! command -v pm2 &> /dev/null; then
   npm install -g pm2
 fi
 
-# Stop existing production processes (preserve dev processes)
-echo "📋 Stopping production processes..."
-pm2 stop episode-api episode-worker 2>/dev/null || true
-pm2 delete episode-api episode-worker 2>/dev/null || true
+# Stop existing PRODUCTION process only (preserve dev episode-api@3002).
+# Names per #746 ecosystem.config.js: prod=episode-api-prod-hotfix@3000, dev=episode-api@3002, worker=episode-worker (shared).
+echo "Stopping production process..."
+pm2 stop episode-api-prod-hotfix 2>/dev/null || true
+pm2 delete episode-api-prod-hotfix 2>/dev/null || true
 sleep 2
 
-# Start with ecosystem config if it exists, otherwise start manually
+# Start with ecosystem config if it exists
 if [ -f ecosystem.config.js ]; then
-  echo "📋 Starting with ecosystem config (production + dev)..."
-  pm2 start ecosystem.config.js --only episode-api --env production --update-env
-  pm2 start ecosystem.config.js --only episode-worker --env production --update-env
-  # Also ensure dev processes are running (port 3002 for dev.primepisodes.com)
-  if ! pm2 list | grep -q "episode-api-dev.*online"; then
-    echo "📋 Starting dev processes..."
-    pm2 start ecosystem.config.js --only episode-api-dev --update-env
-    pm2 start ecosystem.config.js --only episode-worker-dev --update-env
-  fi
+  echo "Starting production app + shared worker from ecosystem config..."
+  # Prod app: default env in the file is already production-correct (3000); --env production is belt-and-suspenders.
+  pm2 start ecosystem.config.js --only episode-api-prod-hotfix --env production --update-env
+  # Shared worker (DB-2: one worker, no prod/dev split) — reload to pick up new code gracefully where possible.
+  pm2 reload ecosystem.config.js --only episode-worker --update-env 2>/dev/null \
+    || pm2 start ecosystem.config.js --only episode-worker --update-env
+  # NOTE: dev app (episode-api@3002) is intentionally NOT touched by a prod deploy.
 else
-  echo "📋 Starting with direct PM2 command..."
-  if [ -f src/server.js ]; then
-    pm2 start src/server.js --name episode-api --env production
-  elif [ -f app.js ]; then
-    pm2 start app.js --name episode-api --env production
-  else
-    echo "❌ No server file found (src/server.js or app.js)"
-    exit 1
-  fi
+  echo "ecosystem.config.js not found — aborting to avoid mis-naming a process (see AK-3)."
+  exit 1
 fi
 
 pm2 save --force
 sleep 3
 pm2 status
 
-if ! pm2 list | grep -q "episode-api.*online"; then
+if ! pm2 list | grep -q "episode-api-prod-hotfix.*online"; then
   echo "❌ App is not online!"
-  pm2 logs episode-api --lines 50 --nostream
+  pm2 logs episode-api-prod-hotfix --lines 50 --nostream
   exit 1
 fi
 
@@ -278,7 +270,7 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   if [ "$i" -eq "10" ]; then
     echo "❌ Health check failed after 10 attempts (last HTTP $HTTP_CODE)"
     cat /tmp/health_response.json 2>/dev/null || true
-    pm2 logs episode-api --lines 30 --nostream
+    pm2 logs episode-api-prod-hotfix --lines 30 --nostream
     exit 1
   fi
 done
