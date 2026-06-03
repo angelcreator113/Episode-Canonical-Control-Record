@@ -60,6 +60,10 @@ Phase 0 inspects BOTH from the box `.env` in one read-only pass. Either landmine
 
 ## Sec 2 — Decision (a): restart vehicle = A2 (recorded, doc-backed)
 
+**Decision (a) ratified: A2 — direct pm2/ecosystem cutover. "Deploy to Production" stays DISABLED through [3]. AK path (b) is post-[3] cleanup.**
+
+**Decision register (durable lock, 2026-06-03):** *(a) = A2, ratified 2026-06-03, user. Direct pm2/ecosystem; prod-deploy workflow disabled through [3]; AK (b) deferred post-[3].*
+
 **A2 — direct pm2/ecosystem restart; `Deploy to Production` workflow stays DISABLED
 through [3].** Rationale, all from the source docs:
 
