@@ -6,12 +6,12 @@
 |---|---|
 | **Plan reference** | F-Stats-1 Fix Plan v1.2 Decision #8, Decision #9 (F-Deploy-1 promoted post-Phase-A) |
 | **Date started** | 2026-05-15 |
-| **Date last updated** | 2026-05-15 (end of day 1) |
+| **Date last updated** | 2026-06-02 (registry reconciled to AK) |
 | **Auditor** | JustAWomanInHerPrime (JAWIHP) / Evoni, with assistant |
 | **Repo HEAD at audit start** | `742c66b6` (F-Stats-1 plan v1.2 §12.20 + Decision #9 commit) |
-| **Status** | IN PROGRESS — day 1 complete; 5/7 §3 file-read sections done |
-| **Findings filed** | 21 (A through U) |
-| **Deferred items** | F-Deploy-G1-T (requires reading `.github/scripts/deploy-production.sh`) |
+| **Status** | CONTENT-COMPLETE (A-AA, 2026-05-16); registry reconciled to AK (Sec 8) |
+| **Findings filed** | 37 letters (A-AK); AH VOID; 36 substantive |
+| **Deferred items** | F-Deploy-G1-T (resolved via AK finding #747) |
 
 ---
 
