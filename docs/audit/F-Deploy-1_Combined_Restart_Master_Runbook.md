@@ -188,13 +188,11 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
    ported (FD-31 §4/§5.2). Migration-framework decision deferred to the post-audit
    rebuild; does NOT gate the cutover.
 5. **[TRACK B] The controlled restart-to-align** (FD-31 §6.3 step 5 → Track B v0.2 Sec 3–5):
-   the ONE irreversible action. Re-launch prod against the corrected #746
-   `ecosystem.config.js` with `--env production` so PM2 reads the prod block (port 3000,
-   not 3002 — F-Deploy-G1-H). **Hard Rule 7 stop even when self-initiated.** Assemble the
-   command at session time from the live ecosystem config — do NOT paste a restart line
-   from any doc. Immediately after: `/health` must show `DB_HOST`=canon AND counts match
-   Sec 5. **Wrong host or wrong counts → ABORT, restore from snapshot (Sec 9). Do not "fix
-   forward."**
+  the ONE irreversible action. Re-launch prod against the corrected #746
+  `ecosystem.config.js` with `--env production` so PM2 reads the prod block (port 3000,
+  not 3002 — F-Deploy-G1-H). **Hard Rule 7 stop even when self-initiated.** Assemble the
+  command at session time from the live ecosystem config — do NOT paste a restart line
+  from any doc. For the post-restart integrity check's counting method, see "Integrity gate — counting method (per FD-38)" below. Note: that block does not authorize the restart; the box is frozen per v1.8.
 6. **[TRACK B] Degraded-state cleanup / topology** (FD-31 §6.3 step 6 → Track B): confirm
    port 3000 (already correct via hotfix), the Template Studio route-loading bug
    (code/port-level — `template_studio` table exists on canon, FD-31 §5.3, so not a
@@ -210,6 +208,25 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
    encrypt the insurance snapshot (currently unencrypted); migrate the box off static
    `AWS_ACCESS_KEY_ID`/`SECRET` in `.env` to an instance profile (F-Deploy-G1-AD/AE).
 
+### Integrity gate — counting method (per FD-38)
+
+> **NOT an authorization.** The box is FROZEN per v1.8 and FD-31 is OPEN
+> (schema-fork + degraded-state). This specifies HOW to count when a
+> separately-authorized reconciliation eventually reaches the post-restart
+> integrity check. It does not authorize a restart. Do NOT use /health for this gate.
+
+Run on the box, read-only, against canon:
+
+```
+export PGPASSWORD="$(grep '^DB_PASSWORD=' /home/ubuntu/episode-metadata/.env | cut -d= -f2-)"; PGOPTIONS='-c default_transaction_read_only=on' psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com -U postgres -d episode_metadata -c "SELECT current_database() AS db, inet_server_addr() AS server, (SELECT count(*) FROM shows) shows, (SELECT count(*) FROM episodes) episodes, (SELECT count(*) FROM assets) assets, (SELECT count(*) FROM world_events) world_events, (SELECT count(*) FROM wardrobe) wardrobe, (SELECT count(*) FROM social_profiles) social_profiles, (SELECT count(*) FROM franchise_knowledge) franchise_knowledge;"; unset PGPASSWORD
+```
+
+PASS iff ALL of: db = episode_metadata; server = 10.0.20.224; shows = 10, episodes = 72, assets = 64, world_events = 53, wardrobe = 40, social_profiles = 444, franchise_knowledge = 605.
+
+Any deviation = ABORT + restore from snapshot. Do NOT fix forward.
+
+Separately, /health must return 200 + database:connected (LIVENESS only). Its showCount/episodeCount are soft-delete-filtered (live catalog) and are NOT the integrity comparator — see FD-38. (ai_usage_logs is informational, not a hard-gate fingerprint — FD-38(e).)
+
 ## Sec 8 — Consolidated abort conditions (hard stops — no judgment, just stop)
 
 From FD-31 §7 + HAZARD + PreFlight, gathered:
@@ -218,8 +235,10 @@ From FD-31 §7 + HAZARD + PreFlight, gathered:
 - Phase 1: live content counts/total don't match the catalog → STOP, understand first.
 - Verified dump counts don't match → backup untrustworthy → STOP.
 - Live diff surfaces tables not in the matrix → STOP, classify.
-- Phase 2 post-restart: `/health` wrong `DB_HOST` or wrong counts → ABORT IMMEDIATELY,
-  restore from snapshot, do not "fix forward."
+- Phase 2 post-restart: integrity gate mismatch (`db`/`server` identity or any
+  unfiltered fingerprint count) → ABORT IMMEDIATELY, restore from snapshot,
+  do not "fix forward."
+- Phase 2 post-restart: `/health` non-200 or `database != connected` → ABORT.
 - Gate 2.5 not green when the restart is reached → STOP (do not restart with a `.env`
   that can't authenticate against canon).
 - ANY uncertainty about which instance/host a command targets → STOP. The whole incident

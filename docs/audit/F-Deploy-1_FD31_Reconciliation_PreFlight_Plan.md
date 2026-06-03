@@ -101,7 +101,10 @@ if they don't match this catalog, that is itself an abort condition (Sec 7).
 | wardrobe | 40 |
 | social_profiles | 444 |
 | franchise_knowledge | 605 |
-| ai_usage_logs | 764 |
+| ai_usage_logs | 765 |
+
+Note: `ai_usage_logs` is volatile append-only telemetry, tracked for situational
+awareness but excluded from the hard abort fingerprint gate (per FD-38(e)).
 
 ### Sec 3.2 -- Path B (RECOMMENDED): restore-and-verify the snapshot
 
