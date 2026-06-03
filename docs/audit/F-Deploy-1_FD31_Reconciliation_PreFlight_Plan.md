@@ -101,7 +101,10 @@ if they don't match this catalog, that is itself an abort condition (Sec 7).
 | wardrobe | 40 |
 | social_profiles | 444 |
 | franchise_knowledge | 605 |
-| ai_usage_logs | 764 |
+| ai_usage_logs | 765 |
+
+Note: `ai_usage_logs` is volatile append-only telemetry, tracked for situational
+awareness but excluded from the hard abort fingerprint gate (per FD-38(e)).
 
 ### Sec 3.2 -- Path B (RECOMMENDED): restore-and-verify the snapshot
 
@@ -414,7 +417,7 @@ session start BEFORE step 1.
 
 1. **Confirm rollback in hand.** Verified dump (`episode-control-dev-verified-20260530.dump`,
    Sec 3) present + snapshot `episode-control-dev-prefreeze-insurance-20260530` `available`.
-   Re-verify live canon row counts match Sec 3.1 (72/10/64/53/40/444/605/764). Mismatch -> ABORT (Sec 7).
+   Re-verify live canon row counts match the Sec 3.1 catalog (gate fingerprint: episodes 72, shows 10, assets 64, world_events 53, wardrobe 40, social_profiles 444, franchise_knowledge 605 -- `ai_usage_logs` is informational, excluded from the hard gate per FD-38(e)). Mismatch -> ABORT (Sec 7).
 
 2. **(Optional, hygiene) Rotate canon `-dev` password.** Generate locally; set via
    `aws rds modify-db-instance --region us-east-1 --db-instance-identifier episode-control-dev --master-user-password <NEW> --apply-immediately`; poll `PendingModifiedValues` empty.
@@ -445,9 +448,7 @@ session start BEFORE step 1.
    execute deliberately at session time, with rollback confirmed. *** This is the one
    irreversible action. Restart must use the production env so PM2 reads the right
    ecosystem block (port 3000, not 3002 -- F-Deploy-G1-H). Per the standing rule, ANY
-   prod-box restart is a hard Rule 7 stop even when developer-initiated. Immediately
-   after: verify `/health` shows `DB_HOST`=canon and counts match Sec 3.1. Wrong host
-   or wrong counts -> ABORT, restore from snapshot (Sec 6.4). [Exact restart command
+   prod-box restart is a hard Rule 7 stop even when developer-initiated. Immediately after: post-restart integrity follows the runbook's "Integrity gate — counting method (per FD-38)" block (unfiltered `count(*)` + `db`/`server` identity asserts via read-only psql); `/health` is liveness-only and its soft-delete-filtered counts are NOT the integrity comparator (FD-38). Any identity or fingerprint deviation -> ABORT, restore from snapshot (Sec 6.4). [Exact restart command
    left un-templated here by design; build it at the session from the live ecosystem
    config, do not copy a restart line out of this document.]
 
@@ -494,8 +495,8 @@ Three migration locations are in play and the cutover/rebuild must not conflate 
 - The verified dump's counts don't match -> the backup is not trustworthy -> STOP.
 - The live diff surfaces tables not accounted for in the matrix -> STOP, classify
   before proceeding.
-- After the cutover restart, `/health` shows the wrong `DB_HOST` or wrong counts ->
-  ABORT IMMEDIATELY, restore from snapshot, do not "fix forward."
+- Phase 2 post-restart: integrity gate mismatch (`db`/`server` identity or any unfiltered fingerprint count, per the runbook's FD-38 integrity gate) -> ABORT IMMEDIATELY, restore from snapshot, do not "fix forward."
+- Phase 2 post-restart: `/health` non-200 or `database != connected` (LIVENESS only) -> ABORT.
 - No durable credential location is ready when step 3 is reached -> STOP (do not
   restart with a `.env` that can't authenticate against canon). (As of 2026-06-01
   this is satisfied -- `.env` holds a working canon credential -- but re-confirm live
