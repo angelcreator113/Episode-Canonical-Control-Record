@@ -30,7 +30,7 @@ The 2026-06-04 [3] session, assembling the Minimal-B config edit against live st
 
 | Area | Item | Status |
 |---|---|---|
-| Register | FD-39 | MINTED (keystone-class) — box↔repo divergence; finding FILED, investigation pending (plan doc Sec 2) |
+| Register | FD-39 | INVESTIGATED (Session 1, read-only) - box↔repo divergence CONFIRMED but its nature CORRECTED: stale git pointer, not unique uncommitted work. All seven tracked box changes (incl. both named keystones) already in current origin/main. Finding-body above records the at-filing reading; correction authority: Session1_Results v1.0. FD-39 stays OPEN as divergence record. |
 | Decision | (a) [3] restart vehicle | RATIFIED A2 (2026-06-03) — unchanged from v1.10 |
 | Reconciliation | box↔repo divergence | OPEN — new prerequisite to [3]; plan doc frames it, no strategy chosen |
 | Reconciliation | FD-31 schema-fork / degraded-state legs | OPEN — unchanged; now downstream of box↔repo reconciliation |
