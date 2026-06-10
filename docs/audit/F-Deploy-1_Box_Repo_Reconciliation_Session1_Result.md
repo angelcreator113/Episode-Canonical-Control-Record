@@ -13,15 +13,15 @@
 | **Scope** | Sec 2 #1 (per-file box-vs-origin delta) and Sec 2 #2 (scripts-deletion delta) of `F-Deploy-1_Box_Repo_Reconciliation_Plan_DRAFT.md`. |
 | **Method** | Git blob identity. Each captured box file hashed with `git hash-object`; compared to `git rev-parse origin/main:<path>`. Equal hash = byte-identical blob (immune to CRLF / encoding-render noise). Deletions tested with `cat-file -e origin/main:<path>`. |
 | **Reference state** | origin/main HEAD `931526af` at time of reads. |
-| **Inputs** | `Documents\PrimeStudios-Backups\box-uncommitted-20260608\` (five captured source files + 356KB patch). |
-| **Status** | Session 1 substantially complete. Two checks remain (see Open Tail). |
+| **Inputs** | `Documents\PrimeStudios-Backups\box-uncommitted-20260608\` (five captured source files + 356KB patch). The migration was checked via the patch's recorded blob hashes, as it was not captured as a standalone file. |
+| **Status** | Captured-modifications delta COMPLETE (six items, all already upstream). One check remains (two deploy files, expected-divergent — see Open Tail). |
 
 ---
 
-## Finding 1 — Captured source files are ALL already upstream
+## Finding 1 — All six captured modifications are already upstream
 
-All five captured box source files are **byte-identical** to current origin/main.
-Blob hashes matched exactly on both sides:
+All five captured box source files plus the one tracked migration are
+**byte-identical** to current origin/main. Blob hashes matched exactly:
 
 | File (repo path) | Blob hash (box == origin/main) | Verdict |
 |---|---|---|
@@ -30,6 +30,27 @@ Blob hashes matched exactly on both sides:
 | `src/models/CharacterState.js` | `988cd968` | Already upstream |
 | `src/app.js` | `f6ea263e` | Already upstream |
 | `src/middleware/aiRateLimiter.js` | `1a17fe82` | Already upstream |
+| `src/migrations/20260718000000-create-episode-scripts-and-feed-posts.js` | `b8152d0c` | Already upstream |
+
+The migration was checked differently from the five source files, which were
+captured as standalone files in the backup dir; the migration's box version
+exists only inside the 356KB patch. The patch header records the migration going
+from blob `14d7a009` (the box's stale *committed* baseline) to `b8152d0c` (the
+box's edited *working-tree* version). `rev-parse origin/main:` returned
+`b8152d0c` — i.e. origin/main is byte-identical to the box's **edited** version.
+Same verdict as the rest: the box edit reproduces what is already committed
+upstream; redundant, never pulled.
+
+**Migration content note (cross-reference, not a new finding):** the box edit
+converts plain `addIndex` calls into idempotent self-healing logic — it
+`describeTable`-checks for a missing `version` column and adds it if absent, then
+uses `CREATE ... INDEX IF NOT EXISTS` instead of bare `addIndex`. The inline
+comment states the reason: self-heal for partially-created tables from failed
+prior attempts. This is the same defensive-migration / prod-doesn't-match-dev
+schema-drift pattern the audit already flagged at `wardrobe.js:1291` and
+`WorldEvent.js:57`. The migration is both already-in-canon AND itself an instance
+of that documented hazard. Cross-reference in the audit; do not mint a new
+finding.
 
 **Both keystone-class worries from the Plan's Sec 0 are resolved as already-canon:**
 
@@ -83,18 +104,19 @@ belongs to a later step, after the Open Tail closes.
 
 ## Open Tail — to finish Session 1
 
-Two checks remain before the delta table is complete:
+One check remains before the delta table is fully complete:
 
-1. **Migration file `src/migrations/20260718000000-…`** — listed in Sec 0 as a
-   tracked box modification; not yet hashed. Run the same `hash-object` vs
-   `rev-parse origin/main:` comparison as the five source files.
-2. **`ecosystem.config.js` and `.github/scripts/deploy-production.sh`** — added
+1. **`ecosystem.config.js` and `.github/scripts/deploy-production.sh`** — added
    to the Sec 2 #1 delta list this session. These are EXPECTED to diverge: Sec 0
    establishes the box runs the pre-#746 4-app `ecosystem.config.js`, and PR #752
    (the corrected deploy script) exists only on origin/main. Hash to confirm and
    quantify the divergence; the expected verdict is "box is behind," not
    "box-unique work." This is #752 territory — both files belong to the Session 3
-   box-alignment / Track-B topology step, parked until then.
+   box-alignment / Track-B topology step, parked until then. Confirmation, not
+   discovery.
+
+The migration file (`20260718000000-…`) was in this tail in the prior revision;
+it is now RESOLVED — see Finding 1.
 
 ## Relationship to existing plans
 
@@ -112,9 +134,9 @@ Two checks remain before the delta table is complete:
   inline fingerprint numbers — point to this note and the Plan.
 
 ---
-*Session 1 read-only delta result for the prod box/repo divergence. Five captured
-source files byte-identical to origin/main; sampled script deletions (4/90)
-already absent upstream. No box-unique work found in the checked set —
-divergence is "stale remote, never pulled." Two checks remain (migration file;
-the two deploy files). Box stays FROZEN; no strategy chosen; no box session
-scheduled.*
+*Session 1 read-only delta result for the prod box/repo divergence. All six
+captured modifications (five source files + one migration) byte-identical to
+origin/main; sampled script deletions (4/90) already absent upstream. No
+box-unique work found in the checked set — divergence is "stale remote, never
+pulled." One check remains (the two expected-divergent deploy files). Box stays
+FROZEN; no strategy chosen; no box session scheduled.*
