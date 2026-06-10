@@ -23,7 +23,7 @@ These are established and not to be relitigated:
 
 - **Box git HEAD = `8425c13e`** ("fix(ci): escape github-script inputs…"), with `origin/main`/`origin/HEAD` on the box also pointing there. Prior commit `1f9d5167` carries tag `f-auth-1-keystone-v1.0` and `f8744ecd` references #664 — i.e. the box's newest commit is ~2026-05-09 era.
 - **Workstation / true origin HEAD = `db274597`** (#762), with #751/#755/#757–#762 all merged. The box has none of this.
-- **The box's "up to date with origin/main" is against a stale, un-fetched ref.** This is why the box `ecosystem.config.js` is the pre-#746 4-app version — #746 and everything after never reached the box.
+- **The box's "up to date with origin/main" is against a stale, un-fetched ref.** This is why the box `ecosystem.config.js` is the pre-#746 4-app version — #746 and everything after never reached the box. Keep `ecosystem.config.js` and `.github/scripts/deploy-production.sh` in the box-vs-origin delta review, because they define the reconciled Track B end-state.
 - **Prod is maintained by direct, uncommitted on-box edits**, never committed or pushed. Tracked modifications: `src/app.js` (−96), `src/config/sequelize.js` (−53), `src/middleware/aiRateLimiter.js`, `src/migrations/20260718000000-…`, `src/models/index.js` (+4); ~90 `scripts/` deletions (AK-5-class cleanup). Untracked: `src/models/CharacterState.js`, three `.env.bak*`.
 - **Two of these edits are keystone-class:**
   - `sequelize.js` removes the `DATABASE_URL` parse pathway from the `production` config (commented as eliminating the silent-override drift class) — this is the **split-brain root cause fixed in code** (FD-36 / HAZARD landmine).
@@ -49,7 +49,7 @@ Resolve these first; each is a workstation or read-only-box task. None mutate th
    - Or are they UNIQUE to the box (applied on-box, never upstreamed)? If so they must be captured into commits BEFORE any history reconciliation.
    - Expect a mix. `CharacterState.js` is likely box-unique. `sequelize.js` split-brain fix — check whether an equivalent landed upstream.
 2. **Is the AK-5 `scripts/` deletion already done upstream?** The ~90 deletions may match a committed cleanup on origin/main. If so they're not box-unique work, just an un-pulled state.
-3. **Does origin/main, checked out clean, actually run on the box?** The reconciliation target is "box runs committed code." Before committing to that, confirm origin/main is bootable against the live `.env`/RDS (this can be tested on the DEV box `i-016395bb5f7a51a0b`, NOT prod — that is what the dev box is for).
+3. **Does origin/main, checked out clean, actually run on the box?** The reconciliation target is "box runs committed code." Before committing to that, confirm origin/main is bootable against a dev-safe configuration on the DEV box `i-016395bb5f7a51a0b`, NOT prod — no `DB_SYNC_FORCE`, `ENABLE_DB_SYNC` stays off, and the test must not point the dev box at canon RDS directly.
 4. **What is the box's git remote URL and why is it stale?** `git -C … remote -v` + `git -C … log origin/main` read-only — establish whether it's a never-fetched remote, a wrong remote, or a detached deploy. Determines whether "fetch" is even safe/meaningful.
 5. **Is the deploy pipeline implicated?** `Deploy to Production` is disabled (AK path a). Was it ever the mechanism that updated the box, or has the box ALWAYS been hand-maintained? Answers whether re-enabling a pipeline is part of the end-state or a separate hazard.
 
