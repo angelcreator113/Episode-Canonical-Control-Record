@@ -1,3 +1,12 @@
+> **[SUPERSEDED 2026-06-10 -- AT-FILING RECORD ONLY]**
+> This v0.1 selection-lean is superseded by
+> `F-Deploy-1_BvC_SelectionLean_Consolidated_2026-06-10_DRAFT.md` (v0.2).
+> Its Sec 1 carries the disk-peak execution constraint as OPEN and frames the lean's
+> "not firm" on that openness. Both are stale: the constraint was resolved by method
+> (off-box build + stream-extract) in `F-Deploy-1_B_Install_Method_2026-06-10_DRAFT.md`,
+> and the lean is "not firm" on [3]-non-execution, not on an open input. The body below
+> is retained unaltered as the at-filing record. For current state, read the consolidated note.
+> Box stays FROZEN; FD-31 OPEN; [3] not primed.
 # F-Deploy-1 -- B-vs-C Reconciliation Strategy: SELECTION LEAN (DRAFT v0.1)
 
 > **RECORDS A SELECTION DIRECTION. AUTHORIZES NO BOX ACTION. PRIMES NOTHING.**
