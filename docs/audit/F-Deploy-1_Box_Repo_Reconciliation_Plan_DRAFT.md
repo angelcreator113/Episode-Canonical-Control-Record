@@ -8,6 +8,18 @@
 > session. This doc scopes the problem, fixes the facts, and lays out the
 > decision structure — it does not resolve it and invents no mechanics.
 
+> **SUPERSEDED IN PART (post-filing, 2026-06-08 → 2026-06-10).** This Plan is the
+> at-filing record (DRAFT v0.1, 2026-06-04/06-08). Its Sec 2 investigation and Sec 3
+> strategy framing have been overtaken by a later note chain and must NOT be read as
+> current: Sec 2 #1/#3 are ANSWERED, and the Sec 3 A/B/C fork is RESOLVED — Strategy A
+> withdrawn, Strategy B selected as a lean (C parked-not-killed). The live record is,
+> in order: Strategy-Revisit (`F-Deploy-1_Reconciliation_Strategy_Revisit_2026-06-08_DRAFT.md`),
+> Pricing (`F-Deploy-1_Strategy_Pricing_BvC_2026-06-09_DRAFT.md`),
+> Headroom (`F-Deploy-1_ProdBox_HeadroomCheck_2026-06-10_DRAFT.md`),
+> Selection-Lean (`F-Deploy-1_BvC_SelectionLean_2026-06-10_DRAFT.md`),
+> Install-Method (`F-Deploy-1_B_Install_Method_2026-06-10_DRAFT.md`). Body text below is
+> left intact as the at-filing record; these notes are the correction authority.
+
 | | |
 |---|---|
 | **Why this exists** | The 2026-06-04 [3] session, assembling the Minimal-B config edit against live state, found the prod box is a month and dozens of PRs behind true origin/main on a stale un-fetched remote, AND that prod runs a month of uncommitted, prod-only hand-edits — including keystone work. This is the root cause of the cross-environment schema/code drift the audit has chased. It is larger than the ecosystem-file question that opened [3], and it blocks [3]/Minimal-B. |
@@ -42,6 +54,13 @@ The hazard: any normal git reconciliation on the box (`fetch` + `merge`/`rebase`
 
 ## Sec 2 — Investigation questions (read-only, before any plan is chosen)
 
+> **STATUS (post-filing):** #1 (per-file delta) ANSWERED — Session 1 Results: zero
+> box-unique tracked content, all seven tracked changes already in canon, divergence
+> was a stale git pointer (FD-39). #3 (does clean origin/main boot) ANSWERED GREEN —
+> dev-box boot test 2026-06-09, booted against canon with no schema mutation. #2/#4/#5
+> not separately closed here; see the note chain. Questions left verbatim below as
+> at-filing record.
+
 Resolve these first; each is a workstation or read-only-box task. None mutate the box.
 
 1. **What is the true delta between box edits and repo state?** For each of the five modified files, diff the captured box copy against the *current origin/main* version (workstation, fully read-only):
@@ -54,6 +73,16 @@ Resolve these first; each is a workstation or read-only-box task. None mutate th
 5. **Is the deploy pipeline implicated?** `Deploy to Production` is disabled (AK path a). Was it ever the mechanism that updated the box, or has the box ALWAYS been hand-maintained? Answers whether re-enabling a pipeline is part of the end-state or a separate hazard.
 
 ## Sec 3 — Candidate reconciliation strategies (to be chosen AFTER Sec 2)
+
+> **FORK RESOLVED (post-filing).** The A/B/C framing below is at-filing and is NOT
+> current. Strategy A is WITHDRAWN. Strategy B is the SELECTED LEAN (not a firm close);
+> its one open execution constraint — the disk-peak question — is RESOLVED BY METHOD
+> (off-box build + stream-extract; peak designed out), see the Install-Method note.
+> Strategy C is PARKED-NOT-KILLED; it reopens only if B's method prerequisites prove
+> infeasible (runtime parity unachievable, or safe stream-extract/cleanup unguaranteeable),
+> NOT on any transient-peak measurement. The "B = higher infra effort" / "A = likely the
+> spine" framing below is the stale first impression the Pricing note was written to
+> correct. See the note chain (banner, top) for the live record.
 
 Framed, not chosen. Each ends with the box running committed code that matches a known origin/main state, with prod continuity preserved.
 
