@@ -18,6 +18,20 @@
 | **Status** | DRAFT v0.1 — orchestration only, no execution. The actual next executable step is Phase 0 (box-side credential reconcile), itself read-only-plus-one-gated-edit, NO restart. |
 | **Standing constraint** | Box is one-keystroke-from-disaster. SSH discipline (HAZARD Sec 3 + #750 Sec 1) applies to every box-touching step: single read-only commands, NO `pm2 restart/reload/delete/stop/save/start/kill` outside the deliberate Phase 2 restart. |
 
+> **Additive supersession (2026-06-10) — Strategy B code-reconcile folded in.**
+> This runbook is extended to fold Strategy B's code reconciliation into the [3] window
+> as **Phase 2A** (plus a pre-window off-box build). Prior revisions scoped the window as
+> credential + topology + security only; that scope is now incomplete — the code
+> reconciliation carries the window's newest risk-bearing mechanics (disk thin-margin,
+> zero-swap operating caveat, parity gate) and belongs on the master phase map, not in a
+> parallel "authoritative" sequence. The B track's method, gating, and constraints are
+> bound into the Phase 2A gates from three 2026-06-10 artifacts:
+> - `F-Deploy-1_B_Install_Method_2026-06-10_DRAFT.md` — method, C1/C2 extract controls, abort posture.
+> - `F-Deploy-1_ProdBox_HeadroomCheck_2026-06-10_DRAFT.md` — disk/memory headroom; **disk is the binding axis** (thin-but-fits), zero-swap operating caveat.
+> - `F-Deploy-1_BvC_SelectionLean_Consolidated_2026-06-10_DRAFT.md` — **B is the selected lean; C parked-not-killed.** Phase 2A assumes B; if the call ever reverts to C, this phase is replaced, not edited.
+>
+> No box action authorized; [3] not primed.
+
 ---
 
 ## Sec 0 — One-line + the headline this assembly surfaced
@@ -130,10 +144,12 @@ correction (incl. the open #752) becomes **post-[3] cleanup**, not an [3] prereq
 
 | Phase | What | Touches box? | Restart? | Source | Session |
 |---|---|---|---|---|---|
+| **pre-2A** | Off-box build to parity target (arch/libc HIGH, Node/npm best-known) | NO — workstation/build-host | NO | Parity Sequencing #767 Sec 3 | Pre-window prep; no box session |
 | **0** | Box-side credential reconcile → re-establish gate 2.5 | Read-only SSH + at most one gated `.env` edit | **NO** | #750 runbook | **Next executable session** (low stakes) |
 | **1** | Live abort re-verify (counts, snapshot, dump) | Read-only (workstation→canon RDS) | NO | FD-31 §3.1/§7 + PreFlight Sec 5 | At [3]'s own session start (fresh, untrusted from prior) |
 | **AK** | Five-point gate satisfied via path (a) | n/a | NO | AK gate-status; this doc Sec 2 | Already in force (workflow disabled) |
-| **2** | Combined cutover: cred rotation + restart-to-align + route fix + security sweep | YES — the one irreversible restart | **YES (once)** | FD-31 §6.3 steps 2–3 + Track B steps 5–8 | The [3] window itself — deliberate, backup-first |
+| **2A** | Strategy B code reconcile: parity confirm gate → stream-extract built tree to a PARALLEL path → stand up parallel process; serving tree/process untouched | YES — additive only (parallel tree + process) | NO (additive; the flip is in 2B) | B Install-Method (C1/C2); Parity #767 (gate); Headroom (disk/swap); Selection-Lean (lean) | The [3] window — opens the box-mutating window, before cutover |
+| **2** | Cutover (Phase 2B): cred rotation + restart-to-align + route fix + security sweep | YES — the one irreversible restart | **YES (once)** | FD-31 §6.3 steps 2–3 + Track B steps 5–8 | The [3] window itself — deliberate, backup-first |
 
 **Phases 0 and 1 are GREEN-gates for Phase 2.** Phase 2 does not begin until Phase 0 has
 re-marked gate 2.5 green AND Phase 1's live abort checks pass at the [3] session's own
@@ -210,6 +226,64 @@ corrections sit in OPEN PR #752 (not on main; not required for A2). AK-5 (orphan
 `scripts/deploy/`) is parallel-safe cleanup, not [3]-blocking. **No AK action is a Phase 2
 prerequisite under A2.** The path (b) five-point correction is post-[3] cleanup.
 
+## Sec 7A — PHASE 2A: Strategy B code reconciliation (the additive half of the window)
+
+**Begins only after Phase 0 GREEN + Phase 1 GREEN — the same gates as 2B.** Phase 2A is
+the opening of the box-mutating window: it stands up a PARALLEL checkout and a PARALLEL
+process and does **not** touch the live-serving tree (id 3) or its process until the 2B
+flip. That additivity is Strategy B's defining safety property — a free standing rollback —
+and the reason B is the selected lean over Strategy C's destructive reset
+(`F-Deploy-1_BvC_SelectionLean_Consolidated_2026-06-10_DRAFT.md`). This phase assumes B.
+
+**Pre-window (no box touch).** The off-box build is finalized before the window per the
+parity sequencing note (`F-Deploy-1_P1_Parity_Sequencing_2026-06-10_DRAFT.md` Sec 3): pin
+build-host arch from AWS control-plane (HIGH), libc from recorded prod OS (HIGH), Node/npm
+to best-known prior record (MEDIUM); `npm ci` against the committed lockfile; verify the
+tree starts off-box. No prod box is touched to build. The only prod-directed pre-window
+read is control-plane (arch), strictly weaker than the read-only SSH already taken.
+
+Steps (the read-only probe is fenced; both mutations are left un-templated by design —
+assemble at session time against live state, do not paste a mutation line from any doc):
+
+1. **Parity confirm gate (read-only, at window open).** Inside the abort envelope, under
+  the same SSH discipline as Phase 1, run the four-tuple probe:
+   ```
+   uname -m; ldd --version | head -1; node --version; npm --version
+   ```
+  Match all four against the build-host pins → proceed. **Mismatch any → CLEAN PRE-WRITE
+  ABORT:** discard the off-box artifact, re-pin the drifted dimension (in practice Node/npm,
+  the MEDIUM tier), rebuild off-box, re-attempt at a later window. **No box bytes are
+  written on this abort** — it is the cheapest abort in the runbook. (Parity note Sec 4.)
+2. **Disk precheck (read-only).** Confirm the writable volume still admits the ~1.1 GB
+  second tree with margin. Per the headroom note (Sec 2), residual is ~1.4 GB on a single
+  68%-used volume — **disk is the binding axis.** `df -h /` read; if residual will not hold
+  the tree plus transient install/build peak → **ABORT before extract.** No partial extract.
+3. **Stream-extract the built tree to a PARALLEL path — GATED MUTATION (un-templated).**
+  Per the Install-Method note's C1/C2 controls. The transfer must be **piped straight into
+  extraction with no intermediate tar persisted on the constrained volume** — this is
+  load-bearing: a persisted-then-unpacked tar would make old-tar + extracting-tree coexist on
+  disk and reintroduce the very transient peak the off-box method exists to remove (note Sec 0,
+  Sec 2 step 3). Because there is no on-box `npm install` and no persisted tar, **the only bytes
+  landing on the volume are the finished ~1.1 GB steady-state tree — peak collapses to steady
+  state** against the ~1.4 GB residual (~0.3 GB slack, headroom Sec 2). The tree lands BESIDE
+  the serving tree at a fresh parallel path (C1); it does **not** overwrite
+  `/home/ubuntu/episode-metadata`. **Rule 7 — confirm the target is the fresh PARALLEL path and
+  NOT the serving tree, twice.** (Method authority: `F-Deploy-1_B_Install_Method_2026-06-10_DRAFT.md`.)
+4. **Stand up the parallel process — GATED MUTATION (un-templated).** A second process
+  against the new tree, mirroring the existing id 0 second-app slot class (~159 MiB; fits
+  with margin per headroom). **Zero-swap operating caveat:** there is no paging soft-landing
+  — an overshoot past available is a hard OOM. Watch standup memory. This does **not** touch
+  id 3 (live-serving). **Rule 7.**
+5. **Verify the parallel process against canon (read-only).** Same identity + unfiltered
+  integrity discipline as the 2B integrity gate (`current_database()` + `inet_server_addr()`
+  + the seven-table unfiltered fingerprint), run against the parallel process's connection.
+  id 3 is still the serving process; this proves the new process is canon-correct **before**
+  any flip. Mismatch → ABORT before 2B; serving process untouched.
+
+**Phase 2A output:** a reconciled parallel tree + a healthy parallel process running against
+canon, with the live-serving tree and process untouched and retained as the standing
+rollback. The flip onto the reconciled tree happens in Phase 2B step 5.
+
 ## Sec 7 — PHASE 2: The combined cutover window (the one irreversible restart)
 
 **Begins only after Phase 0 GREEN + Phase 1 GREEN.** One prod restart for all of it, not
@@ -259,6 +333,10 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
   the integrity comparator - see FD-31.
 
   (ai_usage_logs is tracked informationally, not part of this hard gate - FD-31(e).)
+  Under Strategy B, this "restart-to-align" is the additive **flip**: point serving onto
+  the Phase 2A reconciled tree/process, not a re-launch of the old tree. The old tree +
+  old process are **RETAINED** as the standing rollback — do NOT delete until 2B is
+  confirmed green (Sec 8 gate passes). Assemble the flip at session time; un-templated.
 6. **[TRACK B] Degraded-state cleanup / topology** (FD-31 §6.3 step 6 → Track B): confirm
    port 3000 (already correct via hotfix), the Template Studio route-loading bug
    (code/port-level — `template_studio` table exists on canon, FD-31 §5.3, so not a
@@ -282,6 +360,16 @@ From FD-31 §7 + HAZARD + PreFlight, gathered:
 - Phase 1: live content counts/total don't match the catalog → STOP, understand first.
 - Verified dump counts don't match → backup untrustworthy → STOP.
 - Live diff surfaces tables not in the matrix → STOP, classify.
+- Phase 2A: parity four-tuple mismatch → CLEAN PRE-WRITE ABORT (discard off-box artifact,
+  re-pin Node/npm, rebuild, retry a later window). Not a box-state abort — nothing written.
+- Phase 2A: disk residual will not hold the ~1.1 GB second tree + extract margin at the
+  precheck → ABORT before extract. **C2 cleanup mechanic:** any aborted or failed transfer must
+  **remove its fresh target path before any retry** — a partial tree left in place strands up to
+  ~1.1 GB and eats the ~0.3 GB slack, breaking peak==steady-state on the failure path (note Sec 3, C2).
+- Phase 2A: OOM / memory pressure during parallel-process standup (zero swap = hard OOM,
+  not paging) → ABORT standup, tear down the parallel process; live-serving id 3 unaffected.
+- Phase 2A: parallel process fails the canon identity/integrity verify → ABORT before any
+  2B flip; serving process untouched.
 - Phase 2 post-restart: AG gate mismatch (`db`/`server` identity or any unfiltered
   fingerprint count) → ABORT IMMEDIATELY, restore from snapshot, do not "fix forward."
 - Phase 2 post-restart: `/health` is non-200 or `database` is not `connected` → ABORT.
@@ -299,6 +387,14 @@ without BOTH confirmed.** Additionally, the additive-hotfix re-launch the 06-01 
 used is recoverable exactly (the incident doc records the command) as an immediate
 service-restore bridge if the restart-to-align misbehaves.
 
+**Code-layer rollback (Strategy B's standing-rollback advantage).** Distinct from the DB
+snapshot/dump rollback above, which covers the DATA layer. Under B, the old serving tree +
+old process are retained through Phase 2A and the 2B flip; if the flip misbehaves, revert
+serving to the retained old process (mechanics per the Install-Method note; un-templated,
+assemble at session time). This is why B was preferred over C: C's `git reset --hard`
+destroys the serving tree and has no equivalent in-window code-layer revert. Do not delete
+the retained old tree/process until the 2B post-restart integrity gate passes green.
+
 ## Sec 10 — What this runbook does NOT do
 
 - Does NOT authorize, schedule, or begin [3] or Phase 0. Each phase is its own gated step.
@@ -311,6 +407,15 @@ service-restore bridge if the restart-to-align misbehaves.
 
 ## Sec 11 — Session boundaries (which work is which sitting)
 
+- **Pre-Session-B prep (off-box, no box touch):** Off-box Strategy B build per the
+  P1 parity sequencing note (`F-Deploy-1_P1_Parity_Sequencing_2026-06-10_DRAFT.md` Sec 3).
+  Build host pinned to best-known parity: arch HIGH (AWS control-plane), libc HIGH
+  (recorded prod OS), Node/npm MEDIUM (best-known prior record). `npm ci` against the
+  committed lockfile; verify the tree starts off-box BEFORE the window. The P1 parity
+  four-tuple is *confirmed-or-aborted* at the Phase 2A parity gate (Sec 7A step 1) —
+  a MEDIUM-tier mismatch aborts cleanly pre-write and the build is re-pinned + rebuilt.
+  This ordering dependency (build provisioned before parity is confirmed) is recorded so
+  a future session does not trip over it. [3]-spec item; authorizes nothing.
 - **Session A (next, low stakes):** Phase 0 — box-side credential reconcile (#750).
   Read-only + at most one gated `.env` edit. No restart. Output: gate 2.5 green-for-real,
   #751 stub filled.

@@ -1,3 +1,10 @@
+> **SUPERSEDED (2026-06-10) — retained for history, DO NOT EXECUTE.**
+> The authoritative [3] runbook is `docs/audit/F-Deploy-1_[3]_Master_Runbook_DRAFT.md`
+> (#762), now extended with the Strategy B code-reconcile phase (Phase 2A) and
+> bound to the 06-10 B-track artifacts (Install-Method, Headroom, Selection-Lean). This
+> near-duplicate is retired in place to avoid two drifting box-mutation sequences. Not
+> deleted, to preserve history. Use the #762 draft.
+
 # F-Deploy-1 — [3] Combined-Restart Window: MASTER RUNBOOK (DRAFT v0.1)
 
 > **ORCHESTRATION / PREP DOCUMENT. AUTHORIZES NO PROD-BOX ACTION BY ITSELF.**
