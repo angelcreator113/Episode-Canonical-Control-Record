@@ -16,7 +16,7 @@
 > in order: Strategy-Revisit (`F-Deploy-1_Reconciliation_Strategy_Revisit_2026-06-08_DRAFT.md`),
 > Pricing (`F-Deploy-1_Strategy_Pricing_BvC_2026-06-09_DRAFT.md`),
 > Headroom (`F-Deploy-1_ProdBox_HeadroomCheck_2026-06-10_DRAFT.md`),
-> Selection-Lean (`F-Deploy-1_BvC_SelectionLean_2026-06-10_DRAFT.md`),
+> Selection-Lean (`F-Deploy-1_BvC_SelectionLean_Consolidated_2026-06-10_DRAFT.md`),
 > Install-Method (`F-Deploy-1_B_Install_Method_2026-06-10_DRAFT.md`). Body text below is
 > left intact as the at-filing record; these notes are the correction authority.
 
