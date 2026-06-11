@@ -18,7 +18,7 @@
 | **Trigger** | The install-method note (2026-06-10) closed v0.1's Sec 1 open constraint by designing out the on-box transient disk peak. With pricing (both halves), headroom (open axis measured), and install-method (execution constraint resolved) all landed in canon, the fork has no open selection input -- it is resolvable on Evoni's deliberate call. |
 | **Inputs (all on main)** | Pricing note (`F-Deploy-1_Strategy_Pricing_BvC_2026-06-09_DRAFT.md`; both halves on common terms, A withdrawn). Headroom note (`F-Deploy-1_ProdBox_HeadroomCheck_2026-06-10_DRAFT.md`; sufficient, disk-bound; holds the fingerprint numbers). Install-method note (`F-Deploy-1_B_Install_Method_2026-06-10_DRAFT.md`; disk-peak designed out, preconditions named). Strategy-revisit note (`F-Deploy-1_Reconciliation_Strategy_Revisit_2026-06-08_DRAFT.md`; named trap). |
 | **Method** | Decision record only. Workstation. No SSH, no box, no mutation. (The disk-write + supersede-banner + commit of this note are themselves Rule 7 execute steps, gated on review.) |
-| **Status** | DRAFT v0.2 -- consolidated lean recorded; write-up pending review. Not canon. C parked, not closed. |
+| **Status** | RECORDED v1.0 -- consolidated selection lean reviewed and recorded as canon: Strategy B is the selected direction (lean, not firm close -- [3] not executed). C parked, not killed (Sec 2 reopen trigger). Selection recorded only; primes nothing, authorizes no box action. |
 
 ---
 
