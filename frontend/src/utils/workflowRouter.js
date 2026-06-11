@@ -63,7 +63,7 @@ export const STATUS_CONFIG = {
     icon: '👀',
     route: (id) => `/episodes/${id}/review`,
     nextSteps: [
-      'Preview complete animatic',
+      'Review complete episode',
       'Create thumbnail',
       'Export final video'
     ],
