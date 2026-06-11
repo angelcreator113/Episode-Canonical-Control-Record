@@ -9,10 +9,17 @@
 |---|---|
 | **Finding** | F-CW-1 |
 | **Severity** | P0 (user-facing dead navigation, mid-workflow) |
-| **Status** | DRAFT — discovery complete, remediation deferred |
+| **Status** | SUPERSEDED — remediated by PR #773 (`16ddf341`). Discovery record retained below as at-filing evidence. |
 | **Discovered** | 2026-06-10 |
 | **Verified against** | live working tree at HEAD `0f0bf76b` (`frontend/src/App.jsx`, `frontend/src/utils/workflowRouter.js`) |
-| **Authorizes** | nothing — discovery record only |
+| **Authorizes** | nothing — discovery record only. Remediation authority: PR #773. |
+
+> **SUPERSEDE NOTE (post-remediation):** Shape-B repoint landed via PR #773
+> (squash `16ddf341` on main). The two deferred destinations were selected and
+> validated against the live route table: `scripted → /episodes/${id}/plan`
+> (`ScenePlannerPage`) and `in_review → /episodes/${id}/review` (`EpisodeReview`).
+> The "destination deferred" / "out of scope" language in the body below reflects
+> the discovery-time state and is retained unaltered as the at-filing record.
 
 ## Summary
 
