@@ -15,7 +15,7 @@
 | **Purpose** | Single execution-ordered map for [3] — the combined prod-restart window — assembling the four canonical procedures into phases, with one consolidated abort/rollback frame. |
 | **Sources assembled** | (1) `F-Deploy-1_BoxSide_Credential_Reconcile_Runbook.md` (#750) — Phase 0. (2) `F-Deploy-1_FD31_Reconciliation_PreFlight_Plan.md` v1.4 (§3.1, §6.3, §7) — Phase 1 + Phase 2 credential steps. (3) `Track_B_PM2_Topology_Formalization_Plan.md` v0.2 — Phase 2 restart-to-align. (4) `F-Deploy-1_PROD_SplitBrain_HAZARD.md` — abort/restore frame + the do-not list. Plus `F-Deploy-1_PreFlight_Reverify_2026-06-02.md` — the gate-2.5 finding. |
 | **Decision (a) — restart vehicle** | **A2: direct pm2/ecosystem; `Deploy to Production` stays disabled (AK path a).** This is what FD-31 v1.4 §6.3 + Track B v0.2 already specify — recorded here as ratified, not newly decided. See Sec 2. |
-| **Status** | DRAFT v0.1 — orchestration only, no execution. The actual next executable step is Phase 0 (box-side credential reconcile), itself read-only-plus-one-gated-edit, NO restart. |
+| **Status** | DRAFT v0.1 — orchestration only, no execution. The actual next executable step is Phase 0 (box-side credential reconcile), itself read-only-plus-one-gated-edit, NO restart. **[CORRECTED 2026-06-11: Phase 0 / gate 2.5 CLOSED by #751 (2026-06-02), re-verified 2026-06-11 — see `F-Deploy-1_Gate2.5_ReVerify_2026-06-11_DRAFT.md` and Sec 0. Next unexecuted entry-gate work = live abort re-verify and/or AK audit.]** |
 | **Standing constraint** | Box is one-keystroke-from-disaster. SSH discipline (HAZARD Sec 3 + #750 Sec 1) applies to every box-touching step: single read-only commands, NO `pm2 restart/reload/delete/stop/save/start/kill` outside the deliberate Phase 2 restart. |
 
 > **Additive supersession (2026-06-10) — Strategy B code-reconcile folded in.**
@@ -53,6 +53,8 @@ Consequence (the useful one): **the real next executable step is not [3]. It is 
 — the #750 box-side credential reconcile** — which is read-only except one gated `.env`
 edit, with NO restart. Far lower stakes than the cutover, and it is what re-establishes
 whether [3] can proceed at all.
+
+> **[CORRECTED 2026-06-11.]** Phase 0 was executed and gate 2.5 re-marked GREEN by #751 (`F-Deploy-1_BoxSide_Credential_Reconcile_Outcome_2026-06-02.md`) on 2026-06-02 — the same day this section was drafted, which is why this body still reads "Phase 0 is next." Re-verified 2026-06-11 (`F-Deploy-1_Gate2.5_ReVerify_2026-06-11_DRAFT.md`), box `.env` unchanged. Next unexecuted entry-gate work: live abort re-verify and/or AK five-point audit. Phase 0 is CLOSED.
 
 ## Sec 1 — The two restart-breaking landmines (read before any phase)
 
@@ -145,7 +147,7 @@ correction (incl. the open #752) becomes **post-[3] cleanup**, not an [3] prereq
 | Phase | What | Touches box? | Restart? | Source | Session |
 |---|---|---|---|---|---|
 | **pre-2A** | Off-box build to parity target (arch/libc HIGH, Node/npm best-known) | NO — workstation/build-host | NO | Parity Sequencing #767 Sec 3 | Pre-window prep; no box session |
-| **0** | Box-side credential reconcile → re-establish gate 2.5 | Read-only SSH + at most one gated `.env` edit | **NO** | #750 runbook | **Next executable session** (low stakes) |
+| **0** | Box-side credential reconcile → re-establish gate 2.5 | Read-only SSH + at most one gated `.env` edit | **NO** | #750 runbook | **CLOSED — #751 (2026-06-02), re-verified 2026-06-11** |
 | **1** | Live abort re-verify (counts, snapshot, dump) | Read-only (workstation→canon RDS) | NO | FD-31 §3.1/§7 + PreFlight Sec 5 | At [3]'s own session start (fresh, untrusted from prior) |
 | **AK** | Five-point gate satisfied via path (a) | n/a | NO | AK gate-status; this doc Sec 2 | Already in force (workflow disabled) |
 | **2A** | Strategy B code reconcile: parity confirm gate → stream-extract built tree to a PARALLEL path → stand up parallel process; serving tree/process untouched | YES — additive only (parallel tree + process) | NO (additive; the flip is in 2B) | B Install-Method (C1/C2); Parity #767 (gate); Headroom (disk/swap); Selection-Lean (lean) | The [3] window — opens the box-mutating window, before cutover |
