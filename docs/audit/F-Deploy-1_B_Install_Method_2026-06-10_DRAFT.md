@@ -2,7 +2,7 @@
 
 > **DEFINES B'S INSTALL METHOD ONLY. AUTHORIZES NO BOX ACTION. PRIMES NOTHING.**
 > This note resolves Strategy B's one open execution constraint -- the disk-peak
-> question carried forward by `F-Deploy-1_BvC_SelectionLean_2026-06-10_DRAFT.md`
+> question carried forward by `F-Deploy-1_BvC_SelectionLean_Consolidated_2026-06-10_DRAFT.md`
 > (Sec 1) -- not by *measuring* a transient install peak (shown intractable below)
 > but by *designing it out*: build dependencies off-box and stream a ready-to-run
 > tree onto prod, so nothing but the steady-state tree ever touches the constrained
