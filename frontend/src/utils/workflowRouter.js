@@ -35,7 +35,7 @@ export const STATUS_CONFIG = {
     color: '#3b82f6',
     bgColor: '#dbeafe',
     icon: '📜',
-    route: (id) => `/episodes/${id}/scene-composer`,
+    route: (id) => `/episodes/${id}/plan`,
     nextSteps: [
       'Design scenes in Spatial View',
       'Add backgrounds and characters',
@@ -61,7 +61,7 @@ export const STATUS_CONFIG = {
     color: '#8b5cf6',
     bgColor: '#ede9fe',
     icon: '👀',
-    route: (id) => `/episodes/${id}/animatic-preview`,
+    route: (id) => `/episodes/${id}/review`,
     nextSteps: [
       'Preview complete animatic',
       'Create thumbnail',
