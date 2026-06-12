@@ -237,6 +237,8 @@ flip. That additivity is Strategy B's defining safety property — a free standi
 and the reason B is the selected lean over Strategy C's destructive reset
 (`F-Deploy-1_BvC_SelectionLean_Consolidated_2026-06-10_DRAFT.md`). This phase assumes B.
 
+**Code-reconcile adequacy basis (FD-39 bridge).** Phase 2A's stream-extract lands a tree built from the pinned origin/main commit; that this replaces the box's divergent tree *without losing box-unique work* rests on the FD-39 reconciliation bridge (`F-Deploy-1_FD39_Box_Repo_Reconciliation_Bridge_DRAFT.md`, main `9f3f56a8`, #782): FD-39 Session 1 corrected the box↔repo divergence to a stale git pointer plus cleaner box text-encoding drift, with all seven tracked box changes — including both keystones (`sequelize.js` split-brain fix, `CharacterState` model) — already present in origin/main. The reconcile is therefore non-destructive at the code-tree layer. This binds B as the chosen box↔repo reconciliation strategy for the v1.11/FD-39 reparenting; it does not close FD-39 (stays OPEN as divergence record until [3] executes) and does not change Phase 2A's mechanics or gates.
+
 **Pre-window (no box touch).** The off-box build is finalized before the window per the
 parity sequencing note (`F-Deploy-1_P1_Parity_Sequencing_2026-06-10_DRAFT.md` Sec 3): pin
 build-host arch from AWS control-plane (HIGH), libc from recorded prod OS (HIGH), Node/npm
@@ -396,6 +398,7 @@ serving to the retained old process (mechanics per the Install-Method note; un-t
 assemble at session time). This is why B was preferred over C: C's `git reset --hard`
 destroys the serving tree and has no equivalent in-window code-layer revert. Do not delete
 the retained old tree/process until the 2B post-restart integrity gate passes green.
+The retained old serving tree is the box's pre-reconcile divergent tree; per the FD-39 bridge (`9f3f56a8`) it carries no box-unique work absent from origin/main, so retaining-then-reverting to it is a recoverability bridge only, not preservation of unique state.
 
 ## Sec 10 — What this runbook does NOT do
 
