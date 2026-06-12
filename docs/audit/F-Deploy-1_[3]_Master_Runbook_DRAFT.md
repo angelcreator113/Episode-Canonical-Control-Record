@@ -55,6 +55,8 @@ edit, with NO restart. Far lower stakes than the cutover, and it is what re-esta
 whether [3] can proceed at all.
 
 > **[CORRECTED 2026-06-11.]** Phase 0 was executed and gate 2.5 re-marked GREEN by #751 (`F-Deploy-1_BoxSide_Credential_Reconcile_Outcome_2026-06-02.md`) on 2026-06-02 — the same day this section was drafted, which is why this body still reads "Phase 0 is next." Re-verified 2026-06-11 (`F-Deploy-1_Gate2.5_ReVerify_2026-06-11_DRAFT.md`), box `.env` unchanged. Next unexecuted entry-gate work: live abort re-verify and/or AK five-point audit. Phase 0 is CLOSED.
+>
+> **[RE-OPENED then RESOLVED 2026-06-12 — credential gap, recovered by rotation.]** 2026-06-12 pre-flight probing found a credential gap: no Secrets Manager entry, no SSM parameter, and no valid off-box copy of the canon DB password. The live pm2 connection pool stayed up only because it was established before the gap; a restart would have failed canon auth because the box `.env` did NOT hold a working credential. **Gate 2.5 was RED.** The gap was **resolved same session by emergency rotation** (see `F-Deploy-1_Canon_RDS_Password_Rotation_2026-06-12.md`): canon `episode-control-dev` rotated to a new master password, the new value was written to the box `.env`, and SSL read-only probe confirmed canon auth (`episode_metadata` / `10.0.20.224`). **Gate 2.5 is GREEN again on the new credential.** Consequence for Phase 2: the FD-31 §6.3 step-2 rotation that was deferred to cutover is **ALREADY EXECUTED - DO NOT RE-ROTATE at cutover.** Phase 0 is CLOSED (on the new credential). The pm2 processes still hold the OLD credential in memory (not restarted); the restart-to-align is now the credential cutover onto the box `.env` value - it MUST come up green or ABORT+restore.
 
 ## Sec 1 — The two restart-breaking landmines (read before any phase)
 
@@ -147,7 +149,7 @@ correction (incl. the open #752) becomes **post-[3] cleanup**, not an [3] prereq
 | Phase | What | Touches box? | Restart? | Source | Session |
 |---|---|---|---|---|---|
 | **pre-2A** | Off-box build to parity target (arch/libc HIGH, Node/npm best-known) | NO — workstation/build-host | NO | Parity Sequencing #767 Sec 3 | Pre-window prep; no box session |
-| **0** | Box-side credential reconcile → re-establish gate 2.5 | Read-only SSH + at most one gated `.env` edit | **NO** | #750 runbook | **CLOSED — #751 (2026-06-02), re-verified 2026-06-11** |
+| **0** | Box-side credential reconcile → re-establish gate 2.5 | Read-only SSH + at most one gated `.env` edit | **NO** | #750 runbook | **RE-OPENED 2026-06-12 — gate 2.5 RED (credential gap); rotation → `.env` update required before [3] proceeds. See Sec 0 and Sec 7 step 2.** |
 | **1** | Live abort re-verify (counts, snapshot, dump) | Read-only (workstation→canon RDS) | NO | FD-31 §3.1/§7 + PreFlight Sec 5 | At [3]'s own session start (fresh, untrusted from prior) |
 | **AK** | Five-point gate satisfied via path (a) | n/a | NO | AK gate-status; this doc Sec 2 | Already in force (workflow disabled) |
 | **2A** | Strategy B code reconcile: parity confirm gate → stream-extract built tree to a PARALLEL path → stand up parallel process; serving tree/process untouched | YES — additive only (parallel tree + process) | NO (additive; the flip is in 2B) | B Install-Method (C1/C2); Parity #767 (gate); Headroom (disk/swap); Selection-Lean (lean) | The [3] window — opens the box-mutating window, before cutover |
@@ -300,14 +302,15 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
 
 1. **Confirm rollback in hand** (FD-31 §6.3 step 1): verified dump present + snapshot
    `available`; re-confirm live counts match Sec 5. Mismatch → ABORT.
-2. **[FD-31] (Optional, hygiene) Rotate canon `-dev` password** (§6.3 step 2): generate
-   locally; `aws rds modify-db-instance --region us-east-1 --db-instance-identifier
-   episode-control-dev --master-user-password <NEW> --apply-immediately`; poll
-   `PendingModifiedValues` empty. **Rule 7 — write to LIVE CANON; confirm the identifier
-   is `episode-control-dev`, NOT `-prod`, twice.** (Skippable; if skipped, `.env` needs
-   no change in step 3.)
-3. **[FD-31] Write the new `DB_PASSWORD` into the box `.env`** (§6.3 step 3) if step 2 ran.
-   `DB_HOST` is already canon (Phase 0 confirmed). Edit-without-restart is safe.
+2. **[FD-31] Rotation - ALREADY EXECUTED 2026-06-12, do NOT repeat.** The canon `-dev`
+  rotation that FD-31 §6.3 step 2 deferred to cutover was performed early as gap-recovery
+  (see Sec 0 and `F-Deploy-1_Canon_RDS_Password_Rotation_2026-06-12.md`). The box `.env`
+  already holds the new value. **Do NOT rotate again at cutover** - re-rotating would
+  strand the box `.env` and the pm2 memory on different credentials. This step is now a
+  no-op; proceed to step 3 confirmation.
+3. **[FD-31] Confirm the box `.env` holds the post-06-12 `DB_PASSWORD`** (§6.3 step 3):
+  already written. `DB_HOST` is already canon (Phase 0 confirmed). No edit is needed unless
+  verification fails.
 4. **(NO-OP) Schema port** (§6.3 step 4): nothing ports — all 37 prod-only tables NOT
    ported (FD-31 §4/§5.2). Migration-framework decision deferred to the post-audit
    rebuild; does NOT gate the cutover.
