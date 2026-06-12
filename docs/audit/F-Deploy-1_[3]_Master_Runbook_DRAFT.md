@@ -18,7 +18,7 @@
 | **Status** | DRAFT v0.1 — orchestration only, no execution. The actual next executable step is Phase 0 (box-side credential reconcile), itself read-only-plus-one-gated-edit, NO restart. **[CORRECTED 2026-06-11: Phase 0 / gate 2.5 CLOSED by #751 (2026-06-02), re-verified 2026-06-11 — see `F-Deploy-1_Gate2.5_ReVerify_2026-06-11_DRAFT.md` and Sec 0. Next unexecuted entry-gate work = live abort re-verify and/or AK audit.]** |
 | **Standing constraint** | Box is one-keystroke-from-disaster. SSH discipline (HAZARD Sec 3 + #750 Sec 1) applies to every box-touching step: single read-only commands, NO `pm2 restart/reload/delete/stop/save/start/kill` outside the deliberate Phase 2 restart. |
 
-> **Additive supersession (2026-06-10) — Strategy B code-reconcile folded in.**
+> **Additive supersession (2026-06-10, reconciled 2026-06-11) — Strategy B code-reconcile folded in.**
 > This runbook is extended to fold Strategy B's code reconciliation into the [3] window
 > as **Phase 2A** (plus a pre-window off-box build). Prior revisions scoped the window as
 > credential + topology + security only; that scope is now incomplete — the code
