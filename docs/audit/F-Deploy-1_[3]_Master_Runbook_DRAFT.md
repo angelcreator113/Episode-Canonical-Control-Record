@@ -356,9 +356,9 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
    (b) complete first (incl. merging #752 and finishing AK-1/AK-2/AK-5) — this is the
    post-[3] cleanup, NOT done in the [3] window itself.
 8. **Post-cutover security sweep** (FD-31 §6.3 step 8): close `0.0.0.0/0` on the RDS SGs
-   (F-Deploy-G1-AF, top priority — incl. canon `-dev`; confirm dev/staging SGs too);
+   (F-Deploy-G1-AF, top priority — incl. canon `-dev`; confirm dev/staging SGs too) and on the prod box SG sg-05c3a6ed6eee7b3a6 (F-Deploy-G1-AE);
    encrypt the insurance snapshot (currently unencrypted); migrate the box off static
-   `AWS_ACCESS_KEY_ID`/`SECRET` in `.env` to an instance profile (F-Deploy-G1-AD/AE).
+   `AWS_ACCESS_KEY_ID`/`SECRET` in `.env` to an instance profile (F-Deploy-G1-AD).
 
 ## Sec 8 — Consolidated abort conditions (hard stops — no judgment, just stop)
 
