@@ -1,4 +1,4 @@
-# F-Deploy-1 -- B-vs-C Reconciliation Strategy: SELECTION LEAN (CONSOLIDATED, DRAFT v0.2)
+# F-Deploy-1 -- B-vs-C Reconciliation Strategy: SELECTION LEAN (CONSOLIDATED, RECORDED v1.0)
 
 > **RECORDS A SELECTION DIRECTION. AUTHORIZES NO BOX ACTION. PRIMES NOTHING.**
 > Consolidates and supersedes `F-Deploy-1_BvC_SelectionLean_2026-06-10_DRAFT.md` (v0.1).
