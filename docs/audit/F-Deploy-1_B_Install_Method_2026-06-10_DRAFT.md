@@ -64,7 +64,19 @@ A tree built off-box carries compiled native modules (any dependency with a `.no
 
 Parity is verified by a **read-only check at [3]-window open** (`node --version`, `npm --version`, `uname -m`, libc family), under the same SSH discipline and abort envelope as the window's Phase 1 re-verify. A mismatch at window open is a clean **pre-write abort** -- no box bytes have been touched.
 
-**Sequencing note on P1 (flagged, not resolved here):** the parity *target values* are read at [3]-open, but the off-box build must be provisioned to match *before* the window. This is a real ordering dependency -- the build cannot be finalized until parity is known, but parity is confirmed only when [3] opens. Resolution belongs to [3]-spec work, not this note; the leaning recommendation is **build host pinned to best-known parity, confirmed-or-aborted at window open** (a low-confidence pre-pin is acceptable because mismatch aborts cleanly before any write). Recorded so a future session does not trip over the dependency.
+**Sequencing note on P1 (flagged, not resolved here):**
+
+> **[SUPERSEDED 2026-06-12 -- P1 sequencing dependency RESOLVED.]** This dependency is
+> discharged by `F-Deploy-1_P1_Parity_Sequencing_2026-06-10_DRAFT.md`, the [3]-spec note
+> that resolves it: the build's compile **target** is fully specifiable pre-window with no
+> box touch (arch HIGH via AWS control-plane, libc HIGH via recorded prod OS, Node/npm
+> MEDIUM via best-known prior record), while the four-tuple read at window open is a
+> confirm-or-abort **gate**, not a discovery the build waited on. The [3] runbook already
+> reflects this (pre-2A off-box build row + parity gate); this note's Sec 3 is brought
+> into line here. The original "flagged, not resolved here" paragraph below is retained
+> unchanged as the at-filing record. Box FROZEN; FD-31 OPEN; [3] not primed.
+
+the parity *target values* are read at [3]-open, but the off-box build must be provisioned to match *before* the window. This is a real ordering dependency -- the build cannot be finalized until parity is known, but parity is confirmed only when [3] opens. Resolution belongs to [3]-spec work, not this note; the leaning recommendation is **build host pinned to best-known parity, confirmed-or-aborted at window open** (a low-confidence pre-pin is acceptable because mismatch aborts cleanly before any write). Recorded so a future session does not trip over the dependency.
 
 **Control C1 -- fresh target path.**
 Stream-extract must target a **fresh path**, never over an existing tree. Extracting over an existing tree risks coexistence bulk (old + new) on the constrained volume -- reintroducing the very transient the method exists to remove.
