@@ -127,6 +127,7 @@ Open backlog (non-blocking):
   franchise_brain consolidation.
 - SAL show row has placeholder description ("ffff...") and stale denormalized
   episode_count=0 - fix before user-facing launch.
+- Two legacy draft docs still cite `F-Deploy-1_Box_Repo_Reconciliation_Session1_Results_DRAFT.md`; repoint to the existing v1.0 authority file `F-Deploy-1_Box_Repo_Reconciliation_Session1_Results.md` when those docs are next touched.
 
 **A2 — direct pm2/ecosystem restart; `Deploy to Production` workflow stays DISABLED
 through [3].** Rationale, all from the source docs:
