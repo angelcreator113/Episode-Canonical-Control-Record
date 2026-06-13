@@ -20,7 +20,7 @@ Write-Host "Public endpoint: $ep_public"
 
 ### 2. Confirm Canonical Private Resolution From Box
 ```powershell
-$resolved_ip = ssh -i "C:\Users\12483\episode-prod-key.pem" ubuntu@54.163.229.144 "getent hosts episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com | awk '{print $1}' | head -n1"
+$resolved_ip = ssh -i "C:\Users\12483\episode-prod-key.pem" ubuntu@54.163.229.144 "getent hosts episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com | awk '{print `$1}' | head -n1"
 Write-Host "Resolved private IP from box: $resolved_ip"
 if ($resolved_ip -ne "100.50.2.212") { throw "Canonical IP mismatch. Expected 100.50.2.212, got $resolved_ip" }
 ```
