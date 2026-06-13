@@ -21,6 +21,16 @@
 > The "destination deferred" / "out of scope" language in the body below reflects
 > the discovery-time state and is retained unaltered as the at-filing record.
 
+> **POST-REMEDIATION COPY REVIEW (2026-06-13):** Following the PR #773 repoint,
+> the `STATUS_CONFIG` display copy (`nextSteps`) and the requirement-gate labels
+> (`{id, label, required}` map) were reviewed for drift against the new route
+> targets. Both were found already consistent with the repointed stages and
+> require no change. Specifically, the `in_review` gate item
+> `{ id: 'animatic', label: 'Animatic preview ready', required: true }` describes
+> a gate *condition* (the review artifact exists), not the button destination;
+> it remains accurate after the route moved to `/episodes/${id}/review`. No copy
+> edit was made. This note retires the deferred copy-pass item as resolved-no-change.
+
 ## Summary
 
 The "Continue Working" button computes its navigation target from
