@@ -149,7 +149,7 @@ correction (incl. the open #752) becomes **post-[3] cleanup**, not an [3] prereq
 
 | Phase | What | Touches box? | Restart? | Source | Session |
 |---|---|---|---|---|---|
-| **pre-2A** | Off-box build to parity target (arch/libc HIGH, Node/npm best-known) | NO — workstation/build-host | NO | Parity Sequencing #767 Sec 3 | Pre-window prep; no box session |
+| **pre-2A** | Off-box build to parity target (arch/libc HIGH, Node/npm best-known) | NO — workstation/build-host | NO | Parity Sequencing #767 Sec 3; PASS record: `F-Deploy-1_Pre2A_OffBox_Build_Confirmation_2026-06-14_PASS.md` | Pre-window prep; no box session |
 | **0** | Box-side credential reconcile → re-establish gate 2.5 | Read-only SSH + at most one gated `.env` edit | **NO** | #750 runbook | **RE-OPENED 2026-06-12 — gate 2.5 RED (credential gap); rotation → `.env` update required before [3] proceeds. See Sec 0 and Sec 7 step 2.** |
 | **1** | Live abort re-verify (counts, snapshot, dump) | Read-only (workstation→canon RDS) | NO | FD-31 §3.1/§7 + PreFlight Sec 5 | At [3]'s own session start (fresh, untrusted from prior) |
 | **AK** | Five-point gate satisfied via path (a) | n/a | NO | AK gate-status; this doc Sec 2 | Already in force (workflow disabled) |
