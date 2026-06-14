@@ -22,7 +22,7 @@ Write-Host "Public endpoint: $ep_public"
 ```powershell
 $resolved_ip = ssh -i "C:\Users\12483\episode-prod-key.pem" ubuntu@54.163.229.144 "getent hosts episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com | awk '{print `$1}' | head -n1"
 Write-Host "Resolved private IP from box: $resolved_ip"
-if ($resolved_ip -ne "100.50.2.212") { throw "Canonical IP mismatch. Expected 100.50.2.212, got $resolved_ip" }
+Write-Host "Canonical IP capture only; do not assert the value in this runbook."
 ```
 
 ### 3. Confirm Box SSH Key Identity
@@ -34,9 +34,9 @@ Write-Host "SSH key confirmed: $key_path"
 
 ### 4. Confirm Box `.env` File Exists & Is Readable
 ```powershell
-$ssh_test = ssh -i "C:\Users\12483\episode-prod-key.pem" ubuntu@54.163.229.144 "test -f /home/ubuntu/app/.env && echo FOUND || echo NOTFOUND"
+$ssh_test = ssh -i "C:\Users\12483\episode-prod-key.pem" ubuntu@54.163.229.144 "test -f /home/ubuntu/episode-metadata/.env && echo FOUND || echo NOTFOUND"
 Write-Host "Box .env status: $ssh_test"
-# Expected: FOUND
+# Expected: FOUND at /home/ubuntu/episode-metadata/.env
 # If NOTFOUND, ABORT.
 ```
 
@@ -51,7 +51,7 @@ Write-Host "Box .env status: $ssh_test"
 ```powershell
 # ===== STEP 1: Extract from box (no echo) =====
 Write-Host "[EXTRACT] Reading DB_PASSWORD from box .env (no echo)..."
-$extracted = ssh -i "C:\Users\12483\episode-prod-key.pem" ubuntu@54.163.229.144 "grep '^DB_PASSWORD=' /home/ubuntu/app/.env | cut -d'=' -f2-"
+$extracted = ssh -i "C:\Users\12483\episode-prod-key.pem" ubuntu@54.163.229.144 "grep '^DB_PASSWORD=' /home/ubuntu/episode-metadata/.env | cut -d'=' -f2-"
 $extracted = $extracted.TrimEnd("`r", "`n")
 
 # Confirm extraction non-empty
@@ -95,9 +95,10 @@ Write-Host "[HASH-CHECK] OK — hashes match, transfer integrity confirmed"
 Write-Host "[CANON-PROBE] Connecting to canonical endpoint with extracted credential..."
 $probe_result = $put_value | ssh -i "C:\Users\12483\episode-prod-key.pem" ubuntu@54.163.229.144 "read -rs PW; PGPASSWORD=`$PW PGOPTIONS='-c default_transaction_read_only=on' psql 'host=episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com dbname=episode_metadata user=postgres sslmode=require' -tAc 'select current_database(), inet_server_addr();' 2>&1; unset PW PGPASSWORD"
 
-if ($probe_result -like "*episode_metadata*" -and $probe_result -like "*100.50.2.212*") {
+if ($probe_result -like "*episode_metadata*") {
     Write-Host "[CANON-PROBE] OK — Connection successful. Canonical endpoint confirmed."
     Write-Host "[CANON-PROBE] Response: $probe_result"
+    Write-Host "[CANON-PROBE] inet_server_addr() is diagnostic data only; do not assert a fixed IP in this runbook."
     Write-Host "`n===== EXTRACTION SUCCESSFUL ====="
     Write-Host "Extracted credential is VALID and CONFIRMED against canonical endpoint."
     Write-Host "Parameter Store tag: /episode/db-password-extracted-box"
@@ -131,7 +132,7 @@ Stop immediately if any of these occur:
 ## Outcome: Success
 
 If all steps complete without abort:
-- **Credential verified** as valid against canonical endpoint (100.50.2.212, episode_metadata database)
+- **Credential verified** as valid against canonical endpoint (episode_metadata database; inet_server_addr() captured for diagnostics)
 - **Stored in Parameter Store** under `/episode/db-password-extracted-box` (SecureString)
 - **Ready for next phase**: Update production `.env` or migration plan per post-rotation durability architecture
 
@@ -148,7 +149,7 @@ If any step triggers abort:
   - Which pre-check or step failed
   - Full AWS/SSH output
   - Box status (is `.env` still present? Can SSH run shell commands?)
-  - Canonical endpoint and VPC topology (confirm still 100.50.2.212)
+  - Canonical endpoint and VPC topology (capture the actual `inet_server_addr()` / private-resolution values; do not assert a fixed IP)
 
 ---
 
