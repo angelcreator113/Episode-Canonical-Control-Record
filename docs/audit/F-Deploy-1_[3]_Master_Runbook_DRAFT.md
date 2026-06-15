@@ -9,6 +9,8 @@
 > [3] remains gated and is its own deliberate session, opened only after Phase 0 and
 > Phase 1 below are GREEN. Reading this changes nothing on `episode-backend`
 > (`54.163.229.144`, `i-02ae7608c531db485`).
+>
+> **BLOCKER (2026-06-14):** Canon credential confirmed exposed; treated as compromised. [3] cannot open until rotation completes and the put-parameter gate closes against the rotated credential. See `docs/audit/F-Deploy-1_Canon_Credential_Exposure_Finding_2026-06-14_DRAFT.md`.
 
 | | |
 |---|---|
