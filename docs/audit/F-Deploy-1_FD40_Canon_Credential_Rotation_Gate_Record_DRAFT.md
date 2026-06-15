@@ -43,8 +43,18 @@
 > - Evidence count is five, not four.
 >
 > ### Outstanding operator action (gate-close hygiene)
-> - [ ] Operator attests local terminal scrollback cleared and no raw credential capture
+> - [x] Operator attests local terminal scrollback cleared and no raw credential capture
 >       persists on disk from this session or the 2026-06-14 exposure session.
+>       **Attested 2026-06-15, evoni-admin** - see hygiene attestation below.
+>
+> ### Hygiene attestation — 2026-06-15, evoni-admin
+> Local disk scan (write-time >= 2026-06-14) across user-writable paths: no raw rotated
+> credential present in any FD doc or runbook (all VALUE_PRESENT=False). Local repo `.env`
+> confirmed gitignored and untracked - not in version control or commit history; retained
+> intentionally as a local non-versioned operational working file. PSReadLine command
+> history reviewed: no credential passed as a literal command-line argument (keyword hits
+> were a `git grep` and a `Get-History`, both benign). No active transcript logging found
+> for this window. Terminal scrollback cleared by operator.
 >
 > ---
 
