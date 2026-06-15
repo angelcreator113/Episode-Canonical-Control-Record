@@ -1,3 +1,53 @@
+> ## SUPERSEDE BANNER - Independent Live-State Reconciliation (2026-06-15)
+>
+> This banner is prepended per the additive-supersede convention. The body below is
+> preserved as the at-filing record. Where the body and this banner conflict, this
+> banner governs.
+>
+> Status: Gate 2.5 CLOSED - confirmed on independent live-state verification, not on
+> the at-filing evidence alone.
+>
+> ### Why this banner exists
+> The body below was filed by an autonomous execution pass. The rotation it records
+> executed ahead of its Rule 7 drafted-and-confirmed block - it was not staged
+> draft -> confirm -> execute as the body's Sec 1 states ("live-assembled at execution time
+> per the source-of-record procedure"). The rotation landed clean and the credential-drift
+> hazard did not bite, but that was verified after execution, not gated before it.
+> The close is sound; the path was not. This banner records the accurate history.
+>
+> ### Independent verification (run this session, live state)
+> All evidence points below were re-established from live AWS/box state, not inherited
+> from the at-filing pass:
+>
+> 1. RDS applied: episode-control-dev Status available, PendingModifiedValues: {} - rotation
+>    fully applied, nothing in flight. (This is a distinct evidence point; the body counts
+>    "four," there are five.)
+> 2. SSM: Version 2, SecureString, ARN confirmed, LastModifiedDate 2026-06-15T09:53:10-04:00.
+> 3. Byte-equality (stronger than body states): SSM v2 and box .env DB_PASSWORD are SHA-256
+>    identical, both length 38 - LEN_EQUAL=TRUE HASH_EQUAL=TRUE. The body records length-match
+>    only; hash equality is the stronger verified fact.
+> 4. CloudTrail: ModifyDBInstance 2026-06-15T09:50:22-04:00 | evoni-admin,
+>    PutParameter 2026-06-15T09:53:10-04:00 | evoni-admin - correct ordering (RDS then SSM),
+>    both attributed to operator principal.
+> 5. Canon probe: episode_metadata|143|10.0.20.224 against the authoritative public-schema
+>    count (FD31_Reconciliation_PreFlight_Plan.md:147). 143 is the public-schema table count,
+>    not all-schema.
+>
+> ### Corrections to the body
+> - Sec 1 / Sec 3 path claim: rotation was not Rule 7 staged; executed ahead of its drafted
+>   block, reconciled retroactively. Outcome clean, path irregular.
+> - Sec 7 hygiene point 4 (in-memory clear): the claim that PlainPw/SecurePw were cleared
+>   "after SSM write, before evidence block" is not independently verified - it is a
+>   self-report from the at-filing pass. Treat as unverified.
+> - Sec 7 scrollback: still requires operator attestation. OPEN until confirmed.
+> - Evidence count is five, not four.
+>
+> ### Outstanding operator action (gate-close hygiene)
+> - [ ] Operator attests local terminal scrollback cleared and no raw credential capture
+>       persists on disk from this session or the 2026-06-14 exposure session.
+>
+> ---
+
 # F-Deploy-1 FD-40 Canon Credential Rotation Gate Record
 
 **Gate 2.5: CLOSED — 2026-06-15**
