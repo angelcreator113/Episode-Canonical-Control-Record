@@ -10,7 +10,7 @@
 > Phase 1 below are GREEN. Reading this changes nothing on `episode-backend`
 > (`54.163.229.144`, `i-02ae7608c531db485`).
 >
-> **BLOCKER (2026-06-14):** Canon credential confirmed exposed; treated as compromised. [3] cannot open until rotation completes and the put-parameter gate closes against the rotated credential. See `docs/audit/F-Deploy-1_Canon_Credential_Exposure_Finding_2026-06-14_DRAFT.md`.
+> **BLOCKER (2026-06-14):** Canon credential confirmed exposed; treated as compromised. [3] cannot open until rotation completes and the put-parameter gate closes against the rotated credential. See `docs/audit/F-Deploy-1_Canon_Credential_Exposure_Finding_2026-06-14_DRAFT.md`. If that finding is later promoted off `_DRAFT`, update this pointer in the same PR.
 
 | | |
 |---|---|
@@ -358,7 +358,7 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
    (b) complete first (incl. merging #752 and finishing AK-1/AK-2/AK-5) — this is the
    post-[3] cleanup, NOT done in the [3] window itself.
 8. **Post-cutover security sweep** (FD-31 §6.3 step 8): close `0.0.0.0/0` on the RDS SGs
-   (F-Deploy-G1-AF, top priority — incl. canon `-dev`; confirm dev/staging SGs too) and on the prod box SG sg-05c3a6ed6eee7b3a6 (F-Deploy-G1-AE);
+  (F-Deploy-G1-AF on fork-side SG `sg-0164d0b20fbebacbb`, plus canon-side SG `sg-002578912805d1930`; confirm dev/staging SGs too) and on the prod box SG sg-05c3a6ed6eee7b3a6 (F-Deploy-G1-AE);
    encrypt the insurance snapshot (currently unencrypted); migrate the box off static
    `AWS_ACCESS_KEY_ID`/`SECRET` in `.env` to an instance profile (F-Deploy-G1-AD).
 
