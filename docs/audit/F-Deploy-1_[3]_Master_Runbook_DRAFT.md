@@ -10,6 +10,8 @@
 > Phase 1 below are GREEN. Reading this changes nothing on `episode-backend`
 > (`54.163.229.144`, `i-02ae7608c531db485`).
 >
+> **[RESOLVED 2026-06-15 — FD-40.]** This BLOCKER no longer gates [3]. The canon-credential exposure was remediated by rotation; gate 2.5 is CLOSED durable on main via PR #799, confirmed on independent live-state re-verification (PR #801). SSM Parameter Store (`/episode-metadata/canon/db_password`, v2 SecureString) is the credential backup-of-record. Evidence lives in the FD-40 gate record + #801 verification note — do not inline it here. Original BLOCKER text preserved below as at-filing record.
+>
 > **BLOCKER (2026-06-14):** Canon credential confirmed exposed; treated as compromised. [3] cannot open until rotation completes and the put-parameter gate closes against the rotated credential. See `docs/audit/F-Deploy-1_Canon_Credential_Exposure_Finding_2026-06-14_DRAFT.md`. If that finding is later promoted off `_DRAFT`, update this pointer in the same PR.
 
 | | |
@@ -152,11 +154,11 @@ correction (incl. the open #752) becomes **post-[3] cleanup**, not an [3] prereq
 | Phase | What | Touches box? | Restart? | Source | Session |
 |---|---|---|---|---|---|
 | **pre-2A** | Off-box build to parity target (arch/libc HIGH, Node/npm best-known) | NO — workstation/build-host | NO | Parity Sequencing #767 Sec 3; PASS record: `F-Deploy-1_Pre2A_OffBox_Build_Confirmation_2026-06-14_PASS.md` | Pre-window prep; no box session |
-| **0** | Box-side credential reconcile → re-establish gate 2.5 | Read-only SSH + at most one gated `.env` edit | **NO** | #750 runbook | **RE-OPENED 2026-06-12 — gate 2.5 RED (credential gap); rotation → `.env` update required before [3] proceeds. See Sec 0 and Sec 7 step 2.** |
+| **0** | Box-side credential reconcile → re-establish gate 2.5 | Read-only SSH + at most one gated `.env` edit | **NO** | #750 runbook | **[CORRECTED 2026-06-15 — FD-40]** Gate 2.5 GREEN / CLOSED. Credential reconciled and rotated; closed durable via PR #799 (verified #801). See Sec 0 [CORRECTED] blocks + FD-40 record. (#777 corrected Sec 0 + Status row but not this phase-map row — this completes it.) |
 | **1** | Live abort re-verify (counts, snapshot, dump) | Read-only (workstation→canon RDS) | NO | FD-31 §3.1/§7 + PreFlight Sec 5 | At [3]'s own session start (fresh, untrusted from prior) |
 | **AK** | Five-point gate satisfied via path (a) | n/a | NO | AK gate-status; this doc Sec 2 | Already in force (workflow disabled) |
 | **2A** | Strategy B code reconcile: parity confirm gate → stream-extract built tree to a PARALLEL path → stand up parallel process; serving tree/process untouched | YES — additive only (parallel tree + process) | NO (additive; the flip is in 2B) | B Install-Method (C1/C2); Parity #767 (gate); Headroom (disk/swap); Selection-Lean (lean) | The [3] window — opens the box-mutating window, before cutover |
-| **2** | Cutover (Phase 2B): cred rotation + restart-to-align + route fix + security sweep | YES — the one irreversible restart | **YES (once)** | FD-31 §6.3 steps 2–3 + Track B steps 5–8 | The [3] window itself — deliberate, backup-first |
+| **2** | Cutover (Phase 2B): restart-to-align / cutover confirmation / topology finalize / post-cutover security sweep. **[CORRECTED 2026-06-15]** Credential rotation executed/closed in FD-40 (no longer cutover payload). Route fix landed — PR #773 (F-CW-1) merged. | YES — the one irreversible restart | **YES (once)** | FD-31 §6.3 steps 2–3 + Track B steps 5–8 | The [3] window itself — deliberate, backup-first |
 
 **Phases 0 and 1 are GREEN-gates for Phase 2.** Phase 2 does not begin until Phase 0 has
 re-marked gate 2.5 green AND Phase 1's live abort checks pass at the [3] session's own
@@ -164,7 +166,9 @@ start. Phase 0 can (and should) run as its own earlier, low-stakes session.
 
 ---
 
-## Sec 4 — PHASE 0: Box-side credential reconcile (gate 2.5) — the next executable step
+## Sec 4 — PHASE 0: Box-side credential reconcile (gate 2.5) — CLOSED-phase record
+
+> **[CORRECTED 2026-06-15 — FD-40]** Sec 4 is a CLOSED-phase record, not the next step. Phase 0 was executed via #750/#751 (2026-06-02); gate 2.5 re-marked GREEN, re-verified 06-11, re-confirmed/superseded by FD-40 (PR #799/#801, 06-15). The #750 reference below is historical authority for what was done, not a forward instruction.
 
 **Run the existing `F-Deploy-1_BoxSide_Credential_Reconcile_Runbook.md` (#750) verbatim.**
 This runbook does not restate its commands — it points at #750 as the authority and
@@ -311,9 +315,10 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
   already holds the new value. **Do NOT rotate again at cutover** - re-rotating would
   strand the box `.env` and the pm2 memory on different credentials. This step is now a
   no-op; proceed to step 3 confirmation.
-3. **[FD-31] Confirm the box `.env` holds the post-06-12 `DB_PASSWORD`** (§6.3 step 3):
-  already written. `DB_HOST` is already canon (Phase 0 confirmed). No edit is needed unless
-  verification fails.
+    **[CORRECTED 2026-06-15 — FD-40]** Authority re-anchored; no-repeat + strand warning PRESERVED; rotation count carried OPEN. The no-repeat direction and the strand warning both stand — mechanically correct: box `.env` is in the live credential chain (PM2 resurrect reads `.env`; the AG gate greps `DB_PASSWORD` from `.env`), so re-rotating at cutover would leave `.env` on the prior value and the restart would fail canon auth. Superseded is only the authority reference: the operative rotation for gate 2.5 is the FD-40 rotation, SSM v2 as backup-of-record — not the 06-12 / value-held-in-`.env` framing.
+    **OPEN — not asserted here:** whether the canon credential was rotated once or twice. A 06-12 emergency rotation is on record (`Canon_RDS_Password_Rotation_2026-06-12.md`); the FD-40 record shows a 06-15 RDS ModifyDBInstance + SSM v2 write. Both events are real on record; the count is unresolved. The reconciliation does not depend on it — no-repeat-at-cutover holds either way.
+
+3. **[CORRECTED 2026-06-15 — FD-40] Confirm the box `.env` against SSM v2 — two checks, not a self-authorizing `.env` read** (§6.3 step 3): (a) Verify box `.env` holds the post-FD-40 rotation value, confirmed against SSM v2 as the authority (FD-40 verified them SHA-256 identical at 06-15 close — **re-verify live at session time, do not inherit**). (b) Confirm canon DB auth succeeds via live read-only probe. Keep the DB_HOST-is-canon confirmation (Phase 0 established). This is a verification step, not a write — `.env` must match SSM v2 and is verified against it, not bypassed, not self-authorizing.
 4. **(NO-OP) Schema port** (§6.3 step 4): nothing ports — all 37 prod-only tables NOT
    ported (FD-31 §4/§5.2). Migration-framework decision deferred to the post-audit
    rebuild; does NOT gate the cutover.
@@ -358,7 +363,7 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
    (b) complete first (incl. merging #752 and finishing AK-1/AK-2/AK-5) — this is the
    post-[3] cleanup, NOT done in the [3] window itself.
 8. **Post-cutover security sweep** (FD-31 §6.3 step 8): close `0.0.0.0/0` on the RDS SGs
-  (F-Deploy-G1-AF on fork-side SG `sg-0164d0b20fbebacbb`, plus canon-side SG `sg-002578912805d1930`; confirm dev/staging SGs too) and on the prod box SG sg-05c3a6ed6eee7b3a6 (F-Deploy-G1-AE);
+  (**[CORRECTED 2026-06-15 — FD-40]** AF label inversion fixed; canon SG already contained. AF = the canon RDS SG `sg-002578912805d1930` (byte-exact — gate record Sec 4, v20). `sg-0164d0b20fbebacbb` is the empty fork SG, NOT canon and not the AF target; it remains an explicit post-[3] sweep close item as its own real exposure, separate from AF. State note (live): canon SG `sg-002578912805d1930` already had `0.0.0.0/0` removed during 06-14 containment (narrowed to four explicit CIDRs) — so the AF post-[3] item is residual hardening, not an open `0.0.0.0/0`. The fork SG `sg-0164d0b20fbebacbb` is still `0.0.0.0/0` on :5432 (gate record Sec 8) — a separate deferred item. Standing escalation trigger: `0.0.0.0/0` or `3.94.166.174/32` reappearing on canon ingress :5432. Confirm dev/staging SGs too) and on the prod box SG sg-05c3a6ed6eee7b3a6 (F-Deploy-G1-AE);
    encrypt the insurance snapshot (currently unencrypted); migrate the box off static
    `AWS_ACCESS_KEY_ID`/`SECRET` in `.env` to an instance profile (F-Deploy-G1-AD).
 
