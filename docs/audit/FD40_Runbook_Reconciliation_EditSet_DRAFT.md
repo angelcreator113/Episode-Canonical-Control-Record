@@ -13,7 +13,7 @@
 ## Two items that need an operator call before the PR
 
 1. **Locus 1 filing shape** — **DECISION: Variant A** (resolved-banner-over-original; additive-supersede).
-2. **Rotation count (§3) stays OPEN** — not resolved by this edit-set. Drafted into locus 5 as explicitly-open. No action needed unless you want to resolve it separately by reading the #799 gate record + #801 note against the 06-12 rotation doc.
+2. **Rotation count (§3) stays OPEN** — not resolved by this edit-set. Drafted into locus 5 as explicitly-open. No action needed unless you want to resolve it separately by reading the #799 gate record + #801 note against the 06-12 rotation doc. **[RESOLVED 2026-06-16 - Stop Gate #1.]** Count now resolved against live AWS artifacts: two canon rotation episodes (06-12 emergency, three masterUserPassword calls, value cardinality indeterminate; 06-15 gate-close paired to SSM v2). SSM-lag (first record 06-14) recorded as historical control-gap, not a Gate 2.5 reopen. Runbook line 319 carries the durable RESOLVED block; this note keeps the plan consistent with it. The "stays OPEN / resolve it separately" text above is the at-filing state, now superseded by this resolution.
 
 ---
 
