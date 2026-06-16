@@ -82,14 +82,18 @@
 
 ---
 
-### Locus 7 — Sec 7 Step 8  (label inversion + containment-state nuance found in live read)
+### Locus 7 — Sec 7 Step 8 (AF is a class finding; member states differ)
 
 **Current text:** `…close 0.0.0.0/0 on the RDS SGs (F-Deploy-G1-AF on fork-side SG sg-0164d0b20fbebacbb, plus canon-side SG sg-002578912805d1930; confirm dev/staging SGs too)…`
 
 **Replacement:**
-> **[CORRECTED 2026-06-15 — FD-40] AF label inversion fixed; canon SG already contained.** **AF = the canon RDS SG `sg-002578912805d1930`** (byte-exact — gate record Sec 4, v20). `sg-0164d0b20fbebacbb` is the **empty fork's** SG, NOT canon and not the AF target. **It remains an explicit post-[3] sweep close item as its own real exposure (separate from AF).**
-> **State note (live):** canon SG `sg-002578912805d1930` already had `0.0.0.0/0` *removed* during 06-14 containment (narrowed to four explicit CIDRs) — so the AF post-[3] item is residual hardening, not an open `0.0.0.0/0`. The fork SG `sg-0164d0b20fbebacbb` *is* still `0.0.0.0/0` on :5432 (gate record Sec 8) — a separate deferred item. Standing escalation trigger: `0.0.0.0/0` or `3.94.166.174/32` reappearing on canon ingress :5432.
-> Preserve box-SG line (AE = `sg-05c3a6ed6eee7b3a6`) and AD instance-profile / snapshot-encryption items as written.
+> **[CORRECTED 2026-06-16 — AF lineage restored to source.]** Per the AF birth record (`8043a591` / #722), **F-Deploy-G1-AF is a class finding: all three RDS SGs admitted 5432 from `0.0.0.0/0` at filing, prod included.** It is not a single SG. Member states now differ and must be tracked separately:
+>
+> **Canon SG `sg-002578912805d1930`** (guards canon RDS at `10.0.20.224`; note the *instance is named `episode-control-dev` but holds live canon* — naming inversion): `0.0.0.0/0` **removed during 06-14 containment**, narrowed to four explicit CIDRs (FD-40 Sec 3). Residual hardening only; not an open `0.0.0.0/0`. **Was-it-used is INDETERMINATE** — no VPC flow logs on canon VPC `vpc-0754967be21268e7e` (FD-40 Sec 6), so containment closed the hole but did not establish whether anything traversed it while open. Carry as investigation item, not closed.
+> **Fork SG `sg-0164d0b20fbebacbb`** (empty `episode-control-prod`): **still open `0.0.0.0/0` on :5432** (FD-40 Sec 8; G1_Audit F-Deploy-G1-AF entry). Separate post-[3] sweep close item.
+> **Staging SG:** **unverified** — confirm at fold-in (G1_Audit F-Deploy-G1-AF entry, "confirm the dev/staging SGs").
+> Standing escalation trigger: `0.0.0.0/0` or `3.94.166.174/32` reappearing on **canon** ingress :5432 (both removed 06-14; see FD-40 containment evidence).
+> Preserve box-SG line **(AE = `episode-backend-sg`, ports 22/3000/3002/80/443 open `0.0.0.0/0`, G1_Audit F-Deploy-G1-AE)** and AD instance-profile / snapshot-encryption items as written.
 
 ---
 
