@@ -26,6 +26,13 @@ Live AWS control-plane evidence confirms a non-lockstep credential timeline acro
 - **2026-06-14 14:19:58 EDT** - PutParameter, Version 1, overwrite falsey/empty, user `evoni-admin`, source `108.216.160.136`.
 - **2026-06-15 09:53:10 EDT** - PutParameter, Version 2, `Overwrite=True`, user `evoni-admin`, source `108.216.160.136`.
 
+These two are the only PutParameter events on the canon path in the 06-11..06-16 window. A separate non-canon parameter appears on the same combined SSM timeline and is recorded here for completeness:
+
+- **2026-06-13 10:53:59 EDT** - PutParameter, Version 1, `Overwrite=True`, path `/episode/db-password-extracted-box` (NOT the canon path), user `evoni-admin`, source `108.216.160.136`.
+- **2026-06-13 11:07:21 EDT** - DeleteParameter, path `/episode/db-password-extracted-box`, same user/source. Parameter confirmed absent on a 2026-06-16 live get-parameter lookup (ParameterNotFound).
+
+This parameter existed off-box for ~13 minutes on 06-13. Its value is CloudTrail-redacted and the parameter is deleted, so canon-relevance is indeterminate from control-plane evidence; it was never the canon backup-of-record (distinct path, transient lifespan).
+
 ### 2.2 ModifyDBInstance events for canon instance `episode-control-dev` (CloudTrail)
 
 - **2026-06-12 10:18:19 EDT** - ModifyDBInstance, `masterUserPassword` present, `ApplyImmediately=False`, user `evoni-admin`, source `108.216.160.136`.
@@ -46,7 +53,7 @@ Live AWS control-plane evidence confirms a non-lockstep credential timeline acro
    - 06-15 `ModifyDBInstance` (09:50:22) precedes 06-15 PutParameter v2 (09:53:10).
 
 3. **06-12 to 06-14 is evidenced as gate-2.5-RED gap recovery, not benign lag.**
-   - On 06-12, canon RDS-side password-change activity existed while no off-box copy was present (no SSM/Secrets authority copy in place at that point).
+   - On 06-12, canon RDS-side password-change activity existed while no canon-authority off-box copy was in place (no SSM/Secrets backup-of-record for the canon credential at that point). Qualifier: a separate, non-canon parameter (`/episode/db-password-extracted-box`, Section 2.1) was briefly created and deleted on 06-13 within this span; its value is redacted and its canon-relevance is indeterminate, so it is not treated as a canon off-box copy. The RED-gap finding rests on absence of a canon-authority copy, which this 13-minute non-canon parameter does not satisfy.
    - SSM v1 creation on 06-14 is therefore part of recovery from the RED gap.
    - The 06-14 SSM v1 create and the necessity of the 06-15 rotation are motivated by the exposure event recorded in FD-40 Section 3 (see that record for classification). This note does not restate that classification; it cross-references it as the reason the 06-15 rotation followed the 06-14 create.
    - Current authority remains FD-40 gate-close state (SSM v2 backup-of-record).
