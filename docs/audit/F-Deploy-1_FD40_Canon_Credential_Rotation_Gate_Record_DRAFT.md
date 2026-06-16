@@ -101,6 +101,18 @@ Scope: Gate 2.5 rotation and closure record. Canon AF-label correction. Escalati
 - SSM `/episode-metadata/canon/db_password` overwritten to version 2.
 - All four evidence points satisfied. Gate 2.5 CLOSED.
 
+### [CORRECTED-WRONG 2026-06-16 - Section 4 AF-scope retraction]
+
+Section 4 below frames the fork SG `sg-0164d0b20fbebacbb` as a "mislabel" that is "not canon" and not the AF target. **That scoping is wrong against the AF source record.** Per `8043a591` (#722), F-Deploy-G1-AF was filed as a *class* finding covering all three RDS SGs open on 5432 - the fork SG is a legitimate **member** of AF, not a mislabel to be corrected away.
+
+**What Section 4 gets right (not retracted):** the canon SG `sg-002578912805d1930` was genuinely exposed and genuinely needs hardening. Those claims stand.
+
+**What is retracted:** only the assertion that the fork SG's AF association was a mislabel, and the implication that hardening targets the canon SG *exclusively*. Both SGs are AF members; both need closure (canon contained 06-14, fork still open per this record's own Sec 8).
+
+**Consistency note:** this reconciles Section 4 with Section 8 of this same record, which already lists the fork SG as still-open and schedules "AF SG lockdown" in the post-[3] sweep - i.e. Section 8 already treats the fork SG as in AF scope. Section 4 is the outlier.
+
+Authoritative AF lineage: `8043a591` and `docs/audit/F-Deploy-1_G1_Audit.md` (F-Deploy-G1-AF entry). Original Section 4 text preserved below as at-filing record.
+
 ## 4) Canon AF-label correction (carried and closed)
 
 - Canon-side exposed SG: `sg-002578912805d1930` (canon, `10.0.20.224`)
