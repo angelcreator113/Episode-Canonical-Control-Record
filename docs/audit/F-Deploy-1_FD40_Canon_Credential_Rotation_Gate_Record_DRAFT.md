@@ -56,6 +56,16 @@
 > were a `git grep` and a `Get-History`, both benign). No active transcript logging found
 > for this window. Terminal scrollback cleared by operator.
 >
+> ### Forward note - 2026-06-16 (chain-step verification)
+> A later read-only thread placed this gate-close pair on a fuller credential
+> timeline: a 2026-06-12 canon RDS ModifyDBInstance cluster (gap-recovery) and a
+> 2026-06-14 SSM v1 create precede the 06-15 RDS-then-SSM ordering recorded in
+> banner point 4 above. That fuller timeline and the Stop Gate #1 reconciliation are
+> recorded in docs/audit/F-Deploy-1_Stop_Gate_1_ChainStep_Verification_2026-06-16_DRAFT.md.
+> The rotation count is held OPEN (CloudTrail redacts values; not asserted there).
+> No-repeat-at-cutover (Section 6.3) is unaffected. This note adds a forward pointer only;
+> it does not reopen, re-close, or re-attest Gate 2.5.
+>
 > ---
 
 # F-Deploy-1 FD-40 Canon Credential Rotation Gate Record
