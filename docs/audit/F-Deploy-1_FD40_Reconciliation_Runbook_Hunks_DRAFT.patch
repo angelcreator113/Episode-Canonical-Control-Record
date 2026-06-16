@@ -1,0 +1,91 @@
+# F-Deploy-1 FD-40 Reconciliation Runbook Hunks (DRAFT)
+# Mode: draft-only artifact. Do not apply automatically.
+# Target: docs/audit/F-Deploy-1_[3]_Master_Runbook_DRAFT.md
+# Method: anchor-driven string replacement (no guessed line offsets).
+# For wrapped multiline sections (notably hunks 5/6), treat OLD_EXACT as reference text.
+# Apply by singular ANCHOR_REGEX + bounded paragraph replacement; do not require full raw
+# multiline OLD_EXACT byte-for-byte equality before replacement.
+# Encoding policy for this pass: scope mojibake normalization OUT. Keep replacements
+# encoding-consistent with current runbook body bytes (content-only reconciliation).
+# Open carry-forward preserved: Stop Gate #1 (rotation count) remains unresolved; loci 5/6 are count-neutral.
+# Operator decisions at apply time: locus 1 filing shape; locus 7 fork-SG disposition (close vs decommission).
+
+## HUNK 1 (Locus 1): Top BLOCKER -> resolved banner over original
+ANCHOR_REGEX: BLOCKER \(2026-06-14\)
+ACTION: Insert NEW block immediately above existing BLOCKER paragraph; keep original paragraph unchanged below.
+NEW_BLOCK:
+**[RESOLVED 2026-06-15 — supersedes the BLOCKER below.]** The canon-credential exposure has been **remediated**: the credential was rotated and gate 2.5 closed durable on `main` via PR #799 (FD-40, 2026-06-15), with AWS SSM Parameter Store (v2) as backup-of-record and box `.env` byte-equal to SSM at close. **This BLOCKER no longer gates [3].** Two honest carry-forwards: (a) the forensic "was the exposed credential ever used" question is **unresolvable from available evidence** (PR #799) and stays open; (b) rotation-count (one vs. two) is **not** asserted here — see FD-40 note §3. Original text retained below as the at-filing record.
+
+## HUNK 2 (Locus 2): Sec 3 Phase 0 row
+ANCHOR_REGEX: gate 2\.5 RED \(credential gap\); rotation
+OLD_EXACT:
+**RE-OPENED 2026-06-12 — gate 2.5 RED (credential gap); rotation → `.env` update required before [3] proceeds. See Sec 0 and Sec 7 step 2.**
+NEW_EXACT:
+**GREEN / CLOSED — gate 2.5 re-marked green; credential reconciled and rotated, closed durable via PR #799 (FD-40, 2026-06-15). See Sec 0 correction blocks and the FD-40 record for evidence. Phase 0 is CLOSED.**
+
+## HUNK 3 (Locus 3a): Sec 4 heading
+ANCHOR_REGEX: Sec 4 .*next executable step
+OLD_EXACT:
+## Sec 4 — PHASE 0: Box-side credential reconcile (gate 2.5) — the next executable step
+NEW_EXACT:
+## Sec 4 — PHASE 0: Box-side credential reconcile (gate 2.5) — CLOSED-phase record
+
+## HUNK 3 (Locus 3b): Sec 4 lead line
+ANCHOR_REGEX: Run the existing `F-Deploy-1_BoxSide_Credential_Reconcile_Runbook\.md` \(#750\) verbatim
+OLD_EXACT:
+**Run the existing `F-Deploy-1_BoxSide_Credential_Reconcile_Runbook.md` (#750) verbatim.**
+NEW_EXACT:
+Phase 0 was **executed** via #750/#751 (2026-06-02), gate 2.5 re-marked GREEN (re-verified 2026-06-11), and the credential subsequently rotated + gate 2.5 closed durable in FD-40 (PR #799, 2026-06-15). `F-Deploy-1_BoxSide_Credential_Reconcile_Runbook.md` (#750) below is retained as the **historical authority for what was done**, not a forward instruction.
+
+## HUNK 4 (Locus 4): Sec 3 Phase 2 row payload
+ANCHOR_REGEX: cred rotation \+ restart-to-align \+ route fix \+ security sweep
+OLD_EXACT:
+Cutover (Phase 2B): cred rotation + restart-to-align + route fix + security sweep
+NEW_EXACT:
+Cutover (Phase 2B): restart-to-align / cutover confirmation / topology finalize / post-cutover security sweep
+
+## HUNK 5 (Locus 5): Sec 7 Step 2 (count-neutral)
+ANCHOR_REGEX: Rotation - ALREADY EXECUTED 2026-06-12, do NOT repeat
+APPLY_MODE: Use ANCHOR_REGEX to find the step start, then replace the full Step-2 paragraph block bounded by the next numbered step. Do not key replacement solely on wrapped OLD_EXACT bytes.
+OLD_EXACT:
+2. **[FD-31] Rotation - ALREADY EXECUTED 2026-06-12, do NOT repeat.** The canon `-dev`
+rotation that FD-31 §6.3 step 2 deferred to cutover was performed early as gap-recovery
+(see Sec 0 and `F-Deploy-1_Canon_RDS_Password_Rotation_2026-06-12.md`). The box `.env`
+already holds the new value. **Do NOT rotate again at cutover** - re-rotating would
+strand the box `.env` and the pm2 memory on different credentials. This step is now a
+no-op; proceed to step 3 confirmation.
+NEW_EXACT:
+2. **[FD-31] Rotation — ALREADY EXECUTED, do NOT repeat.** The canon `-dev` rotation that FD-31 §6.3 step 2 deferred to cutover has already been performed; authority of record is the **FD-40 rotation close (PR #799, 2026-06-15)** with **SSM Parameter Store v2** as backup-of-record. The box `.env` holds the post-rotation value. **Do NOT rotate again at cutover** — re-rotating would strand the box `.env` and the pm2 memory on different credentials (`.env` is in the live credential chain: PM2 resurrect reads it). This step is a no-op; proceed to step 3 confirmation.
+
+## HUNK 6 (Locus 6): Sec 7 Step 3 (count-neutral)
+ANCHOR_REGEX: Confirm the box `.env` holds the post-06-12 `DB_PASSWORD`
+APPLY_MODE: Use ANCHOR_REGEX to find the step start, then replace the full Step-3 paragraph block bounded by the next numbered step. Do not key replacement solely on wrapped OLD_EXACT bytes.
+OLD_EXACT:
+3. **[FD-31] Confirm the box `.env` holds the post-06-12 `DB_PASSWORD`** (§6.3 step 3):
+already written. `DB_HOST` is already canon (Phase 0 confirmed). No edit is needed unless
+verification fails.
+NEW_EXACT:
+3. **[FD-31] Verify the box `.env` `DB_PASSWORD` against SSM v2, then confirm canon auth** (§6.3 step 3): (a) confirm the box `.env` holds the post-rotation value, verified **against SSM Parameter Store v2 as source-of-truth** — at FD-40 close the two were byte-equal (`SSM_LEN=38 ENV_LEN=38 EQUAL=TRUE`, PR #799), but **re-verify live at [3] cold-open**, do not assume `.env` is still correct or self-authorizing; (b) confirm canon DB auth succeeds via a read-only live probe. `DB_HOST` = canon is already confirmed (Phase 0). This is a verification step, **not a write.** **Load-bearing:** `.env` must match SSM v2 and is verified against it — `.env` is in the credential chain, not bypassed.
+
+## HUNK 7 (Locus 7): Sec 7 Step 8 AF + sweep scope
+ANCHOR_REGEX: F-Deploy-G1-AF on fork-side SG `sg-0164d0b20fbebacbb`
+OLD_EXACT:
+8. **Post-cutover security sweep** (FD-31 §6.3 step 8): close `0.0.0.0/0` on the RDS SGs
+(F-Deploy-G1-AF on fork-side SG `sg-0164d0b20fbebacbb`, plus canon-side SG
+`sg-002578912805d1930`; confirm dev/staging SGs too) and on the prod box SG
+sg-05c3a6ed6eee7b3a6 (F-Deploy-G1-AE); encrypt the insurance snapshot (currently unencrypted);
+migrate the box off static `AWS_ACCESS_KEY_ID`/`SECRET` in `.env` to an instance profile
+(F-Deploy-G1-AD).
+NEW_EXACT:
+8. **Post-cutover security sweep** (FD-31 §6.3 step 8): close `0.0.0.0/0` on the RDS SGs. **F-Deploy-G1-AF = the canon RDS SG `sg-002578912805d1930`** (label corrected on record per FD-40 / PR #799 and the v20 handoff — *not* the fork's `sg-0164d0b20fbebacbb`); this is the P0. **Also** close `0.0.0.0/0` on the fork RDS SG `sg-0164d0b20fbebacbb` — `G1_Audit.md` verified its 5432 ingress open; it is **not** the AF finding but is a real exposure in its own right, so it stays in the sweep (confirm its disposition if the fork is being decommissioned). Confirm dev/staging SGs too. Close `0.0.0.0/0` on the prod box SG `sg-05c3a6ed6eee7b3a6` (F-Deploy-G1-AE). Encrypt the insurance snapshot (currently unencrypted). Migrate the box off static `AWS_ACCESS_KEY_ID`/`SECRET` in `.env` to an instance profile (F-Deploy-G1-AD). **Standing escalation trigger** (v20): treat `0.0.0.0/0` or `3.94.166.174/32` reappearing on the canon SG `tcp/5432` ingress as an escalation, not routine.
+
+## HUNK 8 (Locus 8): preserve guard only
+ANCHOR_REGEX: episode-api-prod-hotfix
+ACTION: No textual replacement. Verify closed-identity framing remains and no "unidentified hotfix" language is introduced.
+
+## APPLY CHECKLIST (operator)
+1) Recompute exact on-disk anchors via Select-String before each replacement.
+2) Apply one hunk at a time; re-read target section after each replacement.
+3) Keep loci 5/6 count-neutral; do not insert one-vs-two rotation claims.
+4) Stage only docs/audit/F-Deploy-1_[3]_Master_Runbook_DRAFT.md.
+5) Use [skip-automerge], no closing keywords near #N.
