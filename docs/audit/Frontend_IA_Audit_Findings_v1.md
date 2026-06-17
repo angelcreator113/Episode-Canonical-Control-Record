@@ -108,6 +108,12 @@ live "Producer Mode" links all point to `/shows/:id/world` (WorldAdmin), at the
 episode list" resolves to a thin wrapper around `ProductionTab`, reached via a silent
 redirect from `/episodes`. Compounds IA-4 (what that wrapper actually shows).
 
+**Disposition (2026-05-31):** Alias stands; substance routed to IA-4. The `/episodes`
+redirect (`<Navigate to="/universe/production" replace />`, `App.jsx:325`) is consistent with the file's established
+redirect-alias convention — a sound pattern, not a defect. The real issue is the
+redirect's *destination* (the single-show scoping of `ProductionTab`), tracked as
+IA-4 (HIGH). No source change proposed here.
+
 ### IA-4 — Universe-level page silently scoped to one arbitrary show (severity: HIGH)
 
 `ProductionTab` is mounted at a universe-level route (`/universe/production`, also the
@@ -148,6 +154,22 @@ layer (cf. F-Stats-1's raw-SQL writers around the CharacterState model, and the
 franchise tier's six services with private canon copies). Same disease, frontend
 tier.
 
+**Disposition (2026-05-31):** Flagged, routed to consolidation. The file-local
+`listShowsApi` (`UniverseProductionPage.jsx:18-19`, raw `apiClient.get('/api/v1/shows')`
+→ `r.data`) is one of 5 cross-CP copies (6 incl. `WorldSetupGuide`), sanctioned by
+**CP15 Decision 2 / v2.12 §9.11**. Unlike IA-3's redirect aliases, this convention is
+*not* sound — it is the frontend instance of the private-copy-of-shared-logic
+anti-pattern (cf. F-Stats-1 raw-SQL writers around CharacterState; franchise tier's
+six services with private canon copies). Concrete cost: each copy returns
+un-normalized `r.data`, forcing per-site response-shape guessing
+(`UniverseProductionPage.jsx:47-48` `shData.data || shData.shows || shData`). Canonical
+replacement exists and is normalized: `showService.getAllShows()` (`showService.js:22-30`,
+returns `response.data?.data || []`, covered by `showService.test.js`). **Resolving
+IA-5 requires reopening CP15 Decision 2.** Doc-only this session; execution routed to
+the **Consolidation Backlog** (`listShowsApi` item).
+
+**IA-5 extension note (2026-06-17):** Read of `ShowAssetsTab.jsx` confirms a second frontend instance of the same anti-pattern class (raw `api` client + per-site response-shape guessing): `import api` (`ShowAssetsTab.jsx:3`) and four direct `api.get` calls with local shape guards (`:32-41`, e.g. `sceneRes.value.data?.data || sceneRes.value.data || []`). These hit distinct asset endpoints (`scene-sets`, `ui-overlays`, `wardrobe`, `assets`), **not** the shows-listing endpoint — so this is *not* an additional `listShowsApi` duplicate. It is corroborating evidence that the anti-pattern is systemic across surfaces, not isolated to one. Consolidation Backlog scope remains valid and is strengthened.
+
 ### IA-6 — ShowDetail tab labels do not match their keys or components (severity: MED-HIGH)
 
 ShowDetail's six visual tabs, their internal keys, and their rendered components do
@@ -182,6 +204,8 @@ Note: the Episodes tab (position 2) renders **two** episode-list UIs —
 with `ProductionTab`'s own "segmented episode browser with story cards"
 (`ProductionTab.jsx:10`), a show's episode list has at least **three distinct
 presentations** across the app.
+
+**IA-6 sub-item resolution (2026-06-17):** Read of `ShowAssetsTab.jsx` resolves the open sub-item recorded above (`:194`). The surface is an asset-library roll-up/launcher, not production-workflow tooling: `SECTION_CONFIG` (`:11-17`) defines five asset categories (scene sets, overlays, wardrobe, invitations, uploads), each rendered as counts/thumbnails (`:98-201`) plus — where a target exists — outbound navigation to underlying editors (`goTo`, `:75-78`; note `uploads` has `link: null` (`:16`) and is count-only). Header text reads "Production Assets" (`:89`). No episode workflow/state logic is present. **Disposition:** internal key `assets` is accurate; the visual tab label "Production" oversells scope. Remediation direction (cleanup phase): relabel the tab to "Assets" (or "Production Assets"), routed to Sec 7 step 3 (canonical naming). No source change in this pass.
 
 ---
 
@@ -224,7 +248,9 @@ These are observations for the eventual cleanup phase, not findings in themselve
 
 ## Sec 6 — What this document does NOT do
 
-- Does **not** propose a cleanup, redesign, or consolidation. That is the next phase.
+- Does **not** propose a cleanup, redesign, or full consolidation *plan* — that
+  remains the next phase. (A **Consolidation Backlog** of items surfaced by these
+  findings is now recorded below; it is a parking lot, not a plan.)
 - Does **not** rename, move, or change any component, route, or label.
 - Does **not** fully map `WorldAdmin` or `EpisodeDetail` internals — this pass
   established the entry-point inventory and the overlap structure; deep maps of those
@@ -248,6 +274,26 @@ Per Path A, remediation is its own pass. When taken up, the natural order:
 
 ---
 
-*Frontend IA audit findings, draft v1. Inventory + six findings (IA-1…IA-6),
+## Consolidation Backlog
+
+### CONSOLIDATION ITEM — collapse file-local `listShowsApi` copies onto `showService.getAllShows()`
+
+Scope: 5-6 sites (confirm exact set + `WorldSetupGuide` via repo-wide grep as step 1).
+Per site: replace `listShowsApi()` call with `showService.getAllShows()`, delete the
+file-local def + its `v2.12 §9.11` comment, drop the now-redundant response-shape
+guard, add the `showService` import. **Precondition:** reopen/supersede CP15 Decision 2.
+Risk: contract mismatch — `listShowsApi` returns raw `r.data`,
+`getAllShows()` returns a normalized array + re-throws on non-2xx; each site verified
+against the normalized contract before swap (watch for `.shows` access or missing
+try/catch). Rule 7-gated multi-file change; not a freeze-window op. Frontend-only —
+does not touch the prod box.
+
+**§9.11 read (2026-06-17, read-only):** The `v2.12 §9.11` cited by `listShowsApi` resolves to `F-AUTH-1_Fix_Plan_v2.12.docx` (not a frontend spec). §9.11 locks a "File-local helper convention (LOCKED v2.12)" — helpers file-local, overlapping endpoints duplicated rather than imported, framed as a benign isolation tradeoff. It does **not** name a canonical show-fetch source. Consequence: the Consolidation Backlog precondition ("reopen/supersede CP15 Decision 2") is confirmed correct and strict — collapsing the copies supersedes a LOCKED F-AUTH-1 decision, so this item is **coupled to F-AUTH-1** (front of the fix sequence, behind F-Deploy-1), not a free-standing frontend cleanup. (Classification from a mammoth raw-text extract; exact §9.11 wording to be re-read from the docx if/when F-AUTH-1 reopening is taken up.)
+
+---
+
+*Frontend IA audit findings, draft v1.1. Inventory + six findings (IA-1…IA-6),
 file:line-backed, three overlap hypotheses tested. Stops at findings per Path A.
-Freeze-irrelevant (frontend analysis). Cleanup plan deferred to its own phase.*
+v1.1 (2026-05-31, committed 2026-06-17): added IA-3/IA-5 dispositions +
+Consolidation Backlog; reconciled Sec 6 framing. Freeze-irrelevant (frontend
+analysis). Cleanup plan deferred to its own phase.*
