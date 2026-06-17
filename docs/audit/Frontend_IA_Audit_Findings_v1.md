@@ -168,6 +168,8 @@ returns `response.data?.data || []`, covered by `showService.test.js`). **Resolv
 IA-5 requires reopening CP15 Decision 2.** Doc-only this session; execution routed to
 the **Consolidation Backlog** (`listShowsApi` item).
 
+**IA-5 extension note (2026-06-17):** Read of `ShowAssetsTab.jsx` confirms a second frontend instance of the same anti-pattern class (raw `api` client + per-site response-shape guessing): `import api` (`ShowAssetsTab.jsx:3`) and four direct `api.get` calls with local shape guards (`:32-41`, e.g. `sceneRes.value.data?.data || sceneRes.value.data || []`). These hit distinct asset endpoints (`scene-sets`, `ui-overlays`, `wardrobe`, `assets`), **not** the shows-listing endpoint — so this is *not* an additional `listShowsApi` duplicate. It is corroborating evidence that the anti-pattern is systemic across surfaces, not isolated to one. Consolidation Backlog scope remains valid and is strengthened.
+
 ### IA-6 — ShowDetail tab labels do not match their keys or components (severity: MED-HIGH)
 
 ShowDetail's six visual tabs, their internal keys, and their rendered components do
@@ -202,6 +204,8 @@ Note: the Episodes tab (position 2) renders **two** episode-list UIs —
 with `ProductionTab`'s own "segmented episode browser with story cards"
 (`ProductionTab.jsx:10`), a show's episode list has at least **three distinct
 presentations** across the app.
+
+**IA-6 sub-item resolution (2026-06-17):** Read of `ShowAssetsTab.jsx` resolves the open sub-item recorded above (`:194`). The surface is an asset-library roll-up/launcher, not production-workflow tooling: `SECTION_CONFIG` (`:11-17`) defines five asset categories (scene sets, overlays, wardrobe, invitations, uploads), each rendered as counts/thumbnails (`:98-201`) plus — where a target exists — outbound navigation to underlying editors (`goTo`, `:75-78`; note `uploads` has `link: null` (`:16`) and is count-only). Header text reads "Production Assets" (`:89`). No episode workflow/state logic is present. **Disposition:** internal key `assets` is accurate; the visual tab label "Production" oversells scope. Remediation direction (cleanup phase): relabel the tab to "Assets" (or "Production Assets"), routed to Sec 7 step 3 (canonical naming). No source change in this pass.
 
 ---
 
