@@ -288,6 +288,8 @@ against the normalized contract before swap (watch for `.shows` access or missin
 try/catch). Rule 7-gated multi-file change; not a freeze-window op. Frontend-only —
 does not touch the prod box.
 
+**§9.11 read (2026-06-17, read-only):** The `v2.12 §9.11` cited by `listShowsApi` resolves to `F-AUTH-1_Fix_Plan_v2.12.docx` (not a frontend spec). §9.11 locks a "File-local helper convention (LOCKED v2.12)" — helpers file-local, overlapping endpoints duplicated rather than imported, framed as a benign isolation tradeoff. It does **not** name a canonical show-fetch source. Consequence: the Consolidation Backlog precondition ("reopen/supersede CP15 Decision 2") is confirmed correct and strict — collapsing the copies supersedes a LOCKED F-AUTH-1 decision, so this item is **coupled to F-AUTH-1** (front of the fix sequence, behind F-Deploy-1), not a free-standing frontend cleanup. (Classification from a mammoth raw-text extract; exact §9.11 wording to be re-read from the docx if/when F-AUTH-1 reopening is taken up.)
+
 ---
 
 *Frontend IA audit findings, draft v1.1. Inventory + six findings (IA-1…IA-6),
