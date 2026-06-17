@@ -84,6 +84,8 @@
 
 ### Locus 7 — Sec 7 Step 8 (AF is a class finding; member states differ)
 
+> **Forward note (2026-06-16):** This Locus apply anchor quotes the older fork-plus-canon text (Version 1: AF on fork-side SG sg-0164... plus canon-side SG sg-002...). The live runbook body at commit a97a1747 does NOT contain Version 1 - it carries the 2026-06-15 single-SG parenthetical (Version 2: AF = the canon RDS SG sg-002...; sg-0164... is the empty fork SG, NOT canon and not the AF target), which is the FD-40 Sec 4 relabel later retracted as wrong via #809. Confirm-and-apply MUST anchor on the live body Version 2 text, not the Version 1 quoted below. The Replacement block (Version 3, class-finding) is correct as written and matches #808; only this Current-text anchor is stale.
+
 **Current text:** `…close 0.0.0.0/0 on the RDS SGs (F-Deploy-G1-AF on fork-side SG sg-0164d0b20fbebacbb, plus canon-side SG sg-002578912805d1930; confirm dev/staging SGs too)…`
 
 **Replacement:**
