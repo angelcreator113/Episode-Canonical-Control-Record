@@ -1,3 +1,28 @@
+> **CORRECTION 2026-06-18 (additive-supersede; text below preserved verbatim):**
+> P-4/P-5 reverts to **NOT PASSED** on the live board. This document records a
+> real off-box parity build (pinned `903517f2`, Docker ubuntu:22.04 / amd64 /
+> glibc 2.35, NodeSource Node 20, torn down post-verify) but states its build,
+> four-tuple, npm ci, and start-verify outcomes as **summary assertions**; this
+> document does **not** contain the transcript-level evidence required to verify
+> execution of the gate — no captured `uname -m` / `ldd --version` / `node -v` /
+> `npm -v` block, no pasted `npm ci` output, no pasted start-check transcript.
+> P-4/P-5 is a build-execution gate; a build being real does not make its results
+> verifiable from the record. Disposition: NOT PASSED until a build session
+> records captured transcripts in the PASS artifact.
+>
+> Scope of this claim: limited to this document. It asserts nothing about the
+> separate 2026-06-14 #806 Pre-2A build confirmation, whose body is not read here.
+>
+> Consequence: the cold **[3]** window precondition is **UNMET**; [3] is not
+> openable. The off-box parity build remains the active gating item and must run
+> in its own fresh cold session, rebuild-at-priming from the then-current pin,
+> zero box contact, with transcripts pasted into the PASS artifact.
+>
+> Open contradiction the real build must resolve: the build verified at Node
+> **v20.20.2** (rolling NodeSource 20.x) while the box runs **v20.20.1**. The
+> rebuild must show `npm ci` engines-range behavior under the A1 ABI decision —
+> not a patch-exact match — consistent with the #812 false-abort fix.
+
 # F-Deploy-1 — P-4/P-5 Off-Box Parity Build: PASS
 
 | | |

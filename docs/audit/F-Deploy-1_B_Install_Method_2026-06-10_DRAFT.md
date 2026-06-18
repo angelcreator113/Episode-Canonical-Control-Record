@@ -1,3 +1,9 @@
+> **CORRECTION 2026-06-18 (additive-supersede):** The line-1 "[RESOLVED — Sec 2
+> steps 1–2 (P-4/P-5) executed and PASSED]" banner is **superseded**. P-4/P-5 is
+> **NOT PASSED** — see the canonical correction in
+> `F-Deploy-1_P4P5_PASS_2026-06-18.md` (2026-06-18). Sec 2 steps 1–2 remain the
+> next executable off-box work. Box FROZEN; [3] not primed.
+
 > **[RESOLVED 2026-06-18 — Sec 2 steps 1–2 (P-4/P-5) executed and PASSED.]** Result in `F-Deploy-1_P4P5_PASS_2026-06-18.md`. Step 3 (stream onto box) and Sec 3 C1/C2 remain [3]-window work, unexecuted. This draft retained for at-filing traceability; do not execute from it.
 # F-Deploy-1 -- Strategy B Install Method: PREREQUISITE FOR PRIMING (DRAFT v0.1)
 
