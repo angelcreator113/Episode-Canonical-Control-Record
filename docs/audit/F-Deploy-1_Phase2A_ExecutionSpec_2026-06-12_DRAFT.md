@@ -1,3 +1,4 @@
+> **[RESOLVED 2026-06-18 — P-4/P-5 CLOSED (PASS).]** Prerequisite 2 (Sec 0) and the P-4/P-5 rows (Sec 1) are discharged. Operative result recorded in `F-Deploy-1_P4P5_PASS_2026-06-18.md` (build from pinned `903517f2`, `Node v20.20.2`/glibc 2.35/x86_64, start-verified). Node v20.20.2 recorded as empirical confirm; MEDIUM pin language unchanged. The "OPEN" markers below are retained as at-filing record; do not read them as current. Box-side Sec 2+ unchanged. Box FROZEN; [3] not primed.
 # F-Deploy-1 — Phase 2A Execution Spec: [3]-WINDOW BOX-MUTATION HALF (DRAFT v0.1)
 
 > **EXECUTION-ORDERED SPEC. AUTHORIZES NO BOX ACTION. PRIMES NOTHING.**
