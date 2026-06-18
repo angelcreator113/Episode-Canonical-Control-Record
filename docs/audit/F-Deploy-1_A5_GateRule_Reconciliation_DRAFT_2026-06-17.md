@@ -1,3 +1,10 @@
+> **CORRECTION 2026-06-18 (additive-supersede):** The "[P-4/P-5 CLOSED 2026-06-18
+> — PASS]" banner near the top of this file is **superseded**. P-4/P-5 is **NOT
+> PASSED** — see the canonical correction in `F-Deploy-1_P4P5_PASS_2026-06-18.md`
+> (2026-06-18). This file's "still OPEN / next executable work" statements for
+> P-4/P-5 are therefore **current**. The A5 gate-rule decision (A1 engines-range,
+> Edits 1–5) is unaffected and stands. Box FROZEN; [3] not primed.
+
 # F-Deploy-1 — A5 Gate-Rule Reconciliation (REVIEW-ONLY DRAFT, 2026-06-17)
 
 > **PLANNING / REVIEW ARTIFACT. AUTHORIZES NO BOX ACTION. PRIMES NOTHING. EDITS NO RUNBOOK BODY.**
