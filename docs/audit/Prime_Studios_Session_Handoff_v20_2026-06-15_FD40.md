@@ -1,3 +1,12 @@
+> **[SUPERSEDED - point-in-time handoff, 2026-06-18]**
+> This is a dated 2026-06-15 handoff; its "floor" (HEAD 33a434e6, PR #799) is stale.
+> Current main HEAD is 9d6961f2 (Fix Plan v1.12, PR #821). Do not inherit this
+> handoff's state as current. Specifically: this file's "Gate 2.5 closed durable via
+> PR #799" describes the gate file being recorded - #799 did not mint the FD-40
+> register; v1.12 (PR #821) did. This file is the likely propagation vector by
+> which "register through FD-40" entered working memory as a false settled fact; it is
+> retained as trail and explicitly flagged so it cannot be re-read as current. Run the
+> wake-up trio against live state; trust nothing dated here.
 # Prime Studios — Session Handoff v20 (post-FD-40, 2026-06-15)
 
 **Floor for next session:** HEAD `33a434e6` on `origin/main` (FD-40 squash, PR #799). Wake-up sequence first, always: `git fetch origin` -> `git log --oneline -1 origin/main` -> `gh pr list --state open`. Fetch before any reset. Expect HEAD at `33a434e6` or later.

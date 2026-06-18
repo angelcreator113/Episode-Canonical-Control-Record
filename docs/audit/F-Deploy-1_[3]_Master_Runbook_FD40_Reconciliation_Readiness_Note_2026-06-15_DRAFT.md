@@ -148,3 +148,11 @@ This note does not:
 - change PM2 state, secrets, or SGs.
 
 This note is the draft artifact for later confirm-and-apply reconciliation.
+---
+
+**[v1.12 MINT POINTER - 2026-06-18, FD-40 / PR #821 / 9d6961f2]** The
+confirm-and-apply reconciliation this note anticipated was carried out: the EditSet's
+runbook corrections are on main, and FD-40 is now validly minted by Fix Plan v1.12
+(PR #821, 9d6961f2) - the register authority the rotation record originally lacked.
+This note is retained as at-filing context. Where it cites closure "via #799," read
+that as the file being recorded; v1.12 is the register mint.
