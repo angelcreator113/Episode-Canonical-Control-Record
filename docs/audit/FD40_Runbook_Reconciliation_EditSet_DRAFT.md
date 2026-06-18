@@ -1,3 +1,11 @@
+> **[APPLIED + SUPERSEDED - 2026-06-18, FD-40 / v1.12 / PR #821 / 9d6961f2]**
+> All seven REPLACE TARGETS in this edit-set were applied to the live [3] Master
+> Runbook (Loci 1-3 verified on main this session: top-of-file BLOCKER resolved-banner,
+> Sec 3 phase-map Phase 0 row = "GREEN / CLOSED," Sec 4 closed-phase-record heading).
+> Register authority for the FD-40 mint is now Fix Plan v1.12 (PR #821, 9d6961f2),
+> not PR #799 - #799 recorded the gate file; v1.12 minted the register. This edit-set
+> is spent; retained as at-filing record. Verify against live runbook text, not this
+> draft, at any future confirm time.
 # FD-40 Reconciliation — [3] Master Runbook Edit-Set (DRAFT for confirm-and-apply)
 
 **Target:** `docs/audit/F-Deploy-1_[3]_Master_Runbook_DRAFT.md`

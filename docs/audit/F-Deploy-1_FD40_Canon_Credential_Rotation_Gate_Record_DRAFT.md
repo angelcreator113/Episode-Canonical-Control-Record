@@ -169,3 +169,16 @@ Remaining deferred items (not this session):
 ---
 
 *FD-40 gate record. Gate 2.5 CLOSED 2026-06-15. Credential rotated on episode-control-dev; SSM v2 written by evoni-admin at 2026-06-15T09:53:10-04:00; box .env aligned (38 chars, EQUAL=TRUE); canon probe confirmed episode_metadata|143|10.0.20.224. No credential value recorded. [3] not primed.*
+
+---
+
+**[REGISTER MINT - 2026-06-18, FD-40 / v1.12 / PR #821 / 9d6961f2]**
+This at-filing record (above) documented the rotation and Gate 2.5 closure, but it
+was a standalone file with no Fix Plan minting revision behind it - its "CLOSED"
+status was self-applied, not register-authoritative. Fix Plan v1.12 (PR #821,
+merged to main as 9d6961f2) now validly mints FD-40 for this gate-record
+subject. As of that mint, Gate 2.5 is CLOSED by register authority. Note: earlier
+references in this cluster to closure "via PR #799" describe the file/banner being
+recorded durably - #799 did not mint the register; v1.12 did. Three close-qualifiers
+travel forward (in-memory PlainPw/SecurePw clear self-reported not independently
+verified; rotation COUNT held OPEN; Stop Gate #1 no-repeat-at-cutover MANDATORY).
