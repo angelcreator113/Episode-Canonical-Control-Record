@@ -228,6 +228,16 @@ Phase 0's.** Read-only, workstation→canon RDS (the PreFlight Sec 1 method:
 Mismatch on the content counts or total = something changed since the catalog; understand
 it before touching anything (FD-31 §7). This is itself an abort condition.
 
+> **[COLD-ENTRY FOLD 2026-06-17 -- A5.]** This Sec 5 IS the cold window's permitted read (the
+> checklist's "Step 0" maps here; the runbook has no literally-named Step 0). It carries, as
+> settled main content: (1) Gate rule = engines-range per A1 (Sec 7A step 1 / ExecutionSpec
+> G2A-1). (2) A2-cfg pre-restart runtime-bind gate recorded at Phase 2 step 5; the box read +
+> ecosystem.config.js mechanism change are DEFERRED to this cold window, not A5. (3) G2A-1 / G2A-2
+> are DEFINED, window-time LIVE gates -- live-confirm-required-at-window, not resolvable in
+> advance; the G2A-2 disk precheck is a live `df -h /` read, not an inherited doc value. (4) Freeze
+> asterisk: an un-gated probe wrote inert /tmp/pm2jlist.json (#813) -- a found /tmp artifact is
+> EXPECTED, NOT a new mutation. See docs/audit/F-Deploy-1_A5_GateRule_Reconciliation_DRAFT_2026-06-17.md.]
+
 ## Sec 6 — AK five-point gate (satisfied via path a)
 
 Per this doc Sec 2 + the AK gate-status addendum: `Deploy to Production` is DISABLED
@@ -267,6 +277,16 @@ assemble at session time against live state, do not paste a mutation line from a
   ABORT:** discard the off-box artifact, re-pin the drifted dimension (in practice Node/npm,
   the MEDIUM tier), rebuild off-box, re-attempt at a later window. **No box bytes are
   written on this abort** — it is the cheapest abort in the runbook. (Parity note Sec 4.)
+
+   *[CORRECTED 2026-06-17 -- A1, engines-range. OPERATIVE MATCH CRITERION for this gate:
+   match arch and libc EXACTLY (HIGH-tier: x86_64 / glibc Ubuntu 22.04); match Node and npm
+   against the engines-range contract (engines.node >=20.0.0, engines.npm >=9.0.0; Node major 20,
+   ABI-stable), NOT patch-exact against the build-host binary. A same-major, ABI-compatible Node
+   (box v20.20.1 vs a build host's v20.20.2) PASSES -- it is not a mismatch. Mismatch = arch/libc
+   differ, OR Node major differs / falls outside the engines range -> CLEAN PRE-WRITE ABORT
+   (posture above unchanged). Supersedes the "build-host pins" patch-exact reading that caused the
+   #812 false abort. Decision A1, 2026-06-17, owner (Evoni); see
+   docs/audit/F-Deploy-1_A5_GateRule_Reconciliation_DRAFT_2026-06-17.md.]*
 2. **Disk precheck (read-only).** Confirm the writable volume still admits the ~1.1 GB
   second tree with margin. Per the headroom note (Sec 2), residual is ~1.4 GB on a single
   68%-used volume — **disk is the binding axis.** `df -h /` read; if residual will not hold
@@ -324,6 +344,19 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
    ported (FD-31 §4/§5.2). Migration-framework decision deferred to the post-audit
    rebuild; does NOT gate the cutover.
 5. **[TRACK B] The controlled restart-to-align** (FD-31 §6.3 step 5 → Track B v0.2 Sec 3-5):
+  *[CORRECTED 2026-06-17 -- A2-cfg, NOT restart-vehicle A2 in Sec 2. HARD pre-restart
+   runtime-bind gate: before the restart-to-align, verify which binary `interpreter: 'node'`
+   resolves to under the live ecosystem PATH, and that the resolved binary is PRESENT on box and
+   within the A1 engines-range contract. The restart MUST bind a confirmed-present,
+   engines-compatible Node that is the explicitly decided target. If the PATH-forced
+   /home/ubuntu/.nvm/versions/node/v20.20.0/bin/node exists, treat it as the bound runtime
+   unless/until the config mechanism is changed. If the PATH-forced directory does NOT exist,
+   record the fall-through target actually selected. If the operator cannot prove which binary
+   the restart will bind, or it is not the decided target, or it falls outside engines-range ->
+   ABORT BEFORE restart. Engines-range parity (G2A-1) is necessary but NOT sufficient: it does
+   not prove which on-box Node the restart executes. A2-cfg = option (c), mechanism-level fix;
+   exact ecosystem.config.js change DEFERRED to this cold window as pre-restart discipline, not
+   done in A5. Owner direction recorded 2026-06-17; see docs/audit/F-Deploy-1_A5_GateRule_Reconciliation_DRAFT_2026-06-17.md.]*
   the ONE irreversible action. Re-launch prod against the corrected #746
   `ecosystem.config.js` with `--env production` so PM2 reads the prod block (port 3000,
   not 3002 - F-Deploy-G1-H). **Hard Rule 7 stop even when self-initiated.** Assemble the

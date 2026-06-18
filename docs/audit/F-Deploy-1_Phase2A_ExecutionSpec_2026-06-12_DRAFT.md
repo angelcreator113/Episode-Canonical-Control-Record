@@ -76,6 +76,14 @@ The four-tuple confirm-or-abort gate. Read-only SSH, inside the abort envelope:
 uname -m; ldd --version | head -1; node --version; npm --version
 ```
 Match all four against the Sec 1 pins (arch, libc, Node, npm).
+
+*[CORRECTED 2026-06-17 -- aligned to A1 decision; word-aligned with Master Runbook Sec 7A step 1.
+Per-dimension strictness: match arch and libc EXACTLY (HIGH-tier). Match Node and npm against the
+engines-range contract (Node major 20, ABI-stable; engines.node >=20.0.0 / engines.npm >=9.0.0) --
+NOT patch-exact. A same-major ABI-compatible Node (box v20.20.1 vs build host v20.20.2) passes. The
+Sec 1 pins ARE engines-ranges; "match all four against the pins" is NOT four equal-strictness
+matches. Mismatch = arch/libc differ, OR Node outside engines range -> CLEAN PRE-WRITE ABORT.
+See docs/audit/F-Deploy-1_A5_GateRule_Reconciliation_DRAFT_2026-06-17.md.]*
 - **All match → proceed to G2A-2.**
 - **Any mismatch → CLEAN PRE-WRITE ABORT.** Discard the off-box artifact, re-pin the
   drifted dimension (in practice Node/npm — the MEDIUM tier), rebuild off-box, re-attempt

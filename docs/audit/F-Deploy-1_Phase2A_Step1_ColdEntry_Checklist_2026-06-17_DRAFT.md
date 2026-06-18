@@ -35,9 +35,16 @@ So: **Section A is warm-legal and lands on main. Section B is the cold window an
 
 ## Section A — Warm-legal prerequisites (land on main BEFORE the cold window)
 
+> **[STEP 0 MAPPING 2026-06-17 -- A5.]** "Runbook Step 0" throughout this checklist = Master
+> Runbook **Sec 5 / Phase 1 live abort re-verify** (the runbook has no literally-named Step 0).
+> A0-A4 are folded there per A5. Section A's A1-A4 question-phrasing is preserved as the historical
+> warm-session staging; the decisions are recorded in
+> docs/audit/F-Deploy-1_A5_GateRule_Reconciliation_DRAFT_2026-06-17.md (additive-supersede, per the
+> #816 precedent -- the staged doc is not rewritten).
+
 - [ ] **A-merge.** Confirm #812 / #813 / #814 are on `origin/main` (`git log --oneline -5 origin/main`).
 - [ ] **A1 — Gate-rule decision.** With the runbook owner, decide whether Phase 2A Step 1 asserts **exact-patch** Node parity (current rule → re-aborts on .1 vs .2) or **ABI/engines-range** satisfaction (→ passes on benign same-major skew), given a source-on-box deploy. Record the decision on main as a runbook-rule clarification / FD entry. *This is the gating decision; nothing downstream is real until it lands.*
-- [ ] **A2 — Config-vs-runtime drift handling.** Ecosystem config declares Node `20.20.0` (PATH + NODE_VERSION); runtime is `20.20.1`; both binaries present, so a config-driven restart can silently shift runtime to `20.20.0`. Decide and record the handling (align config to runtime, or explicitly accept and gate it) **before any restart step exists in the path.**
+- [ ] **A2-cfg — Config-vs-runtime drift handling.** Ecosystem config declares Node `20.20.0` (PATH + NODE_VERSION); runtime is `20.20.1`; both binaries present, so a config-driven restart can silently shift runtime to `20.20.0`. Decide and record the handling (align config to runtime, or explicitly accept and gate it) **before any restart step exists in the path.**
 - [ ] **A3 — Re-pin / rebuild applicability (depends on A1).** #812 said "rebuild off-box against confirmed pin"; #814 withdrew the down-pin reasoning because there is **no build artifact** in the source-on-box runtime path. Resolve whether rebuild-at-priming applies to the runtime at all, or governs only the off-box build-viability checks (P-4/P-5). If A1 lands ABI/engines-range, this question may dissolve — confirm, don't assume.
 - [ ] **A4 — Surface prerequisites G2A-1 and G2A-2.** #812 names these as "surface before first mutation." *I do not have their contents.* Read them from source, record their status, and resolve or explicitly carry each.
 - [ ] **A5 — Fold A0–A4 into Step 0 / abort re-verify text on main.** This is the move that keeps the next window cold. After A1–A4 land, edit runbook Step 0 (and the abort re-verify procedure) so it carries: the settled gate rule, the drift-handling decision, the G2A-1/G2A-2 status, and the freeze asterisk. Ship via the normal gated `[skip-automerge]` PR.
@@ -59,7 +66,7 @@ So: **Section A is warm-legal and lands on main. Section B is the cold window an
 - [ ] **B2 — Scoped Step 0 read only.** Read runbook Step 0 (now carrying A0–A4 per A5). Do **not** read handoffs, prior session notes, or general onboarding. *Exact Step 0 wording: source from the live runbook — not reproduced here.*
 - [ ] **B3 — FD-31 §7 abort re-verify against LIVE terminal output.** Run the re-verify **as written in FD-31 §7** (I do not have its text; source it). Account for the known `/tmp/pm2jlist.json` write — a found `/tmp` artifact is expected, not a new mutation.
 - [ ] **B4 — Rerun Phase 2A Step 1 from top.** Under the **settled** gate rule (A1). Re-probe the box read-only; apply the rule as folded into Step 0. Abort remains a valid success condition.
-- [ ] **B5 — Pre-restart config-drift gate.** If and only if the path reaches a restart step: verify which Node the restart will bind (config forces `20.20.0`); do not let it shift runtime unless `20.20.0` is the decided target per A2. Otherwise abort.
+- [ ] **B5 — Pre-restart config-drift gate.** If and only if the path reaches a restart step: verify which Node the restart will bind (config forces `20.20.0`); do not let it shift runtime unless `20.20.0` is the decided target per A2-cfg. Otherwise abort.
 
 ---
 
@@ -79,4 +86,4 @@ So: **Section A is warm-legal and lands on main. Section B is the cold window an
 - G2A-1 and G2A-2 prerequisite definitions.
 - Exact runbook Step 0 / Step 1 wording.
 
-*End of cold-entry checklist DRAFT. Author: Claude (warm session), with Evoni. Owner-level items (A1, A2) require the runbook owner.*
+*End of cold-entry checklist DRAFT. Author: Claude (warm session), with Evoni. Owner-level items (A1, A2-cfg) require the runbook owner.*
