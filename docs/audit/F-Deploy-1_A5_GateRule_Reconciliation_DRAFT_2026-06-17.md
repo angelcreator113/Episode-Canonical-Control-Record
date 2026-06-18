@@ -20,6 +20,8 @@
 
 > **[APPLIED 2026-06-17 via this PR.]** Edits 1-5 executed in the same PR; this file is now the on-main A5 decision record cited by Master Runbook Sec 7A/Sec 7/Sec 5 and the ExecutionSpec. The "review-only" framing below is the at-drafting state, preserved verbatim per additive-supersede.
 
+> **[P-4/P-5 CLOSED 2026-06-18 — PASS; supersedes the "OPEN" statements below.]** The A5 statements below that describe P-4/P-5 as "still OPEN / next executable work" are this file's at-drafting state, retained as at-filing record — do not read them as current. The off-box parity build PASSED; result in `F-Deploy-1_P4P5_PASS_2026-06-18.md` (recorded on main in `36a7cf27`). This changes nothing else about A5's scope: A5 still does not open the cold window, prime [3], or touch the box. Box FROZEN; FD-31 OPEN; [3] NOT PRIMED.
+
 ---
 
 ## 1) The A1 decision (OWNER-LEVEL — record verbatim, attributed, dated)
