@@ -1,3 +1,48 @@
+> **STATUS UPDATE 2026-06-19 (additive-supersede; all text below preserved verbatim):**
+> P-4/P-5 returns to **PASS** on the live board, now backed by transcript-level
+> evidence captured this session. This supersedes the 2026-06-18 NOT-PASSED
+> correction below: the gap it identified -- no captured four-tuple, no pasted
+> npm ci, no pasted start-verify -- is closed by the transcript in p4p5-build-20260619-091646.log.
+>
+> Build provenance: built at HEAD ae721589, equivalent to pin 903517f2 for all
+> build-relevant inputs (git diff 903517f2..ae721589 is docs/audit-only; no
+> package.json, package-lock.json, src/, or Dockerfile change). Recorded as
+> built-at-HEAD to match the actual checkout.
+>
+> Captured evidence (in p4p5-build-20260619-091646.log):
+> - Build: docker compose build --no-cache, BUILD EXIT 0; npm ci added 946
+>   packages with no engines-range abort (A1 ABI behavior; #812 false-abort did
+>   not recur).
+> - Four-tuple (in-container): ARCH=x86_64, glibc 2.35, NODE=v20.20.2, NPM=10.8.2.
+>   v20.20.2 vs box v20.20.1 is a PASS under the A1 engines-range decision, as
+>   the correction below anticipated.
+> - Image digest of record:
+>   sha256:b0b917d6b5ba5d921136c2818209bb38c733f6bc747c7e5ff0424807dc8e093b
+>   (compose-default tag ...-app:latest; the digest is the binding identifier,
+>   not the tag).
+> - P-5 start-verify: container Up 40s, zero restarts, /health returned 200, full
+>   route tree mounted, ABI load clean (no .node load failure). Disposable scratch
+>   Postgres torn down with -v post-verify; zero box contact; box remains FROZEN.
+>
+> Non-blocking observations (not P-5 failures): empty-DB relation-does-not-exist
+> (live F-App-1 boot-migrate sighting); Redis ECONNREFUSED (no sidecar, graceful
+> degrade); three route registrations (episodes, files, jobs, socket) threw
+> JWT_SECRET-must-be-set -- a config-gated load refusal, not an ABI failure; the
+> harness does not set JWT_SECRET by design.
+>
+> Consequence: the cold [3] window PRECONDITION is now MET. [3] is NOT primed by
+> this result -- it remains its own fresh cold session (own wake-up trio, scoped
+> runbook read, live FD-31 Sec 7 abort re-verify, inherit nothing). Box-side gate
+> sequence, the A2-cfg ecosystem.config.js mechanism change, and FD-31 Sec 7
+> abort re-verify all remain [3]-window work, unchanged.
+>
+> Filename note: this file is named _PASS_; its live status is governed by the
+> topmost banner, not the filename. The name has at times disagreed with body
+> status. A rename is deferred as optional cleanup; do not infer status from it.
+>
+> Mint/scope: this is a status flip on an existing artifact and mints no FD
+> number. The detailed evidence pack is a separate follow-up commit.
+
 > **CORRECTION 2026-06-18 (additive-supersede; text below preserved verbatim):**
 > P-4/P-5 reverts to **NOT PASSED** on the live board. This document records a
 > real off-box parity build (pinned `903517f2`, Docker ubuntu:22.04 / amd64 /
