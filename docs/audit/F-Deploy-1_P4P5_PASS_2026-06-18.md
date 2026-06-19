@@ -1,3 +1,54 @@
+> ============================================================
+> SUPERSEDE BANNER - 2026-06-19 (PASS WITHDRAWN)
+> ============================================================
+> STATUS: P-4/P-5 = NOT PASSED. [3] precondition NOT met.
+>
+> The PASS banner below (added by commit 4909b05a, PR #823) is
+> WITHDRAWN. It does not rest on a single coherent captured run.
+>
+> Provenance defect (verified 2026-06-19 against live tree):
+> - Named transcript p4p5-build-20260619-091646.log is UNTRACKED:
+>   git log --all -- "docs/audit/*.log" is empty; the file exists
+>   only at repo root, not committed, not under docs/audit/.
+> - Run 091646 CONFIRMS: x86_64/amd64, glibc 2.35, Node v20.20.2,
+>   npm 10.8.2, "Up 40 seconds", a GET /health request, models
+>   loaded.
+> - Run 091646 DOES NOT CONTAIN: the image digest
+>   sha256:b0b917d6..., a "BUILD EXIT 0" marker, nor any
+>   exporting / manifest / writing-image / naming-to line. The
+>   named run exported NO image.
+> - Digest sha256:b0b917d6... appears ONLY in a DIFFERENT run,
+>   p4p5-build-20260619-091243.log line 2063 ("exporting manifest
+>   list"), captured roughly 4 minutes earlier.
+> - The tracked evidence file docs/audit/P4P5_Evidence_*.md
+>   contains NONE of: b0b917d6, "BUILD EXIT", "sha256".
+> - /health 200 status code not literally present in 091646 (the
+>   request is logged, the status line is not) - unconfirmed, not
+>   contradicted.
+> - Note: 091646 logged Redis "giving up after 5 reconnect
+>   attempts" (line 2354); the app came up regardless. Whether
+>   Redis-up belongs to the P-5 start-verify spec is a runbook
+>   question, not adjudicated here.
+>
+> Conclusion: the PASS attaches run 091243's image digest to run
+> 091646's start-verify and presents them as one attestation.
+> This is stitched cross-run evidence. Under the single-clean-run
+> rule the PASS is unsupported and is withdrawn.
+>
+> Remedy (cold session, not this one): one clean captured rerun
+> that builds, exports (digest line present), starts detached,
+> stays up, and serves /health 200 - all in a SINGLE log -
+> committed to a tracked path via explicit git add in the same
+> motion. The PASS banner is then re-written from that one file.
+>
+> FD discipline: this is an evidence/correction note, not a new
+> FD mint. The next Fix Plan revision should reflect
+> P-4/P-5 = NOT PASSED and carry forward this provenance finding.
+>
+> Filed 2026-06-19. Supersedes the PASS added in commit 4909b05a.
+> Body below preserved verbatim.
+> ============================================================
+
 > **STATUS UPDATE 2026-06-19 (additive-supersede; all text below preserved verbatim):**
 > P-4/P-5 returns to **PASS** on the live board, now backed by transcript-level
 > evidence captured this session. This supersedes the 2026-06-18 NOT-PASSED
