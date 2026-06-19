@@ -1,0 +1,25 @@
+# Dockerfile.parity — P-4/P-5 evidence parity ONLY.
+# NOT the repo runtime Dockerfile (node:20-alpine/musl, fails the glibc axis).
+# Target: x86_64 + glibc 2.35 (ubuntu:22.04) + Node 20 / npm 10.x (NodeSource).
+FROM --platform=linux/amd64 ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg build-essential \
+      libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libvips-dev \
+ && mkdir -p /etc/apt/keyrings \
+ && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+ && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+      > /etc/apt/sources.list.d/nodesource.list \
+ && apt-get update && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+ENV NODE_ENV=development
+# Entry is src/server.js (NOT the main-field app.js, NOT the repo Dockerfile's `node server.js`).
+CMD ["node", "src/server.js"]

@@ -1,4 +1,154 @@
 > ============================================================
+> SUPERSEDE BANNER - 2026-06-19 (PASS RESTORED)
+> ============================================================
+> STATUS: P-4/P-5 = PASSED. P-4/P-5 precondition for [3] MET; OTHER [3]
+> preconditions (cold session, live FD-31 Sec 7 abort re-verify, scoped Sec 5
+> read) NOT yet met; [3] not primed.
+>
+> This banner is prepended per the additive-supersede convention.
+> The withdrawal banner below is preserved as the at-filing
+> correction record. Where the withdrawal banner and this banner
+> conflict, this banner governs.
+>
+> P-4/P-5 returns to PASS on the live board, now backed by a
+> single coherent captured run recorded in this tracked artifact.
+>
+> Captured evidence (20260619-124226, inline below):
+> - Build: docker compose -f docker-compose.parity.yml build
+>   --progress=plain; BUILD EXIT 0.
+> - Image digest of record:
+>   sha256:348719ce8bbe12fbfde1836ab2db746cc93eb4c4ffed1eb40d374cc78db1d517
+> - Four-tuple (in-container): x86_64, glibc 2.35, Node
+>   v20.20.2, npm 10.8.2.
+> - P-5 start-verify: docker compose -f docker-compose.parity.yml
+>   up -d; UP EXIT 0; /health polled 000, 000, then 200;
+>   health body showed database connected against disposable
+>   Postgres.
+> - Zero box contact: disposable local Postgres only; no AWS, no
+>   creds, no route to prod box or canon RDS, matching the parity
+>   compose file.
+>
+> Consequence: the withdrawal basis is superseded, not appealed.
+> The prior defect was lack of one tracked coherent run tying
+> build, digest, four-tuple, and start-verify together. That
+> defect is closed by the inline 20260619-124226 transcript below
+> in this tracked artifact.
+>
+> Session provenance: captured in a warm session (this session ran P-4/P-5).
+> This session is NOT a [3]-primer; [3] remains a fresh cold session per the
+> locked sequence.
+> ============================================================
+
+```text
+===== P4P5 SINGLE-RUN CAPTURE 2026-06-19T12:42:26.6325917-04:00 =====
+docker : --progress is a global compose flag, better use `docker compose --progress xx 
+build ...
+At line:10 char:1
++ docker compose -f docker-compose.parity.yml build --progress=plain *> ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	+ CategoryInfo          : NotSpecified: (--progress is a...ss xx build ...:String)  
+   [], RemoteException
+	+ FullyQualifiedErrorId : NativeCommandError
+ 
+ Image p4p5-parity Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 599B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile.parity
+#2 transferring dockerfile: 1.23kB 0.0s done
+#2 WARN: FromPlatformFlagConstDisallowed: FROM --platform flag should not use constant value "linux/amd64" (line 4)
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/ubuntu:22.04
+#3 DONE 0.7s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 97B done
+#4 DONE 0.0s
+
+#5 [1/6] FROM docker.io/library/ubuntu:22.04@sha256:4f838adc7181d9039ac795a7d0aba05a9bd9ecd480d294483169c5def983b64d
+#5 resolve docker.io/library/ubuntu:22.04@sha256:4f838adc7181d9039ac795a7d0aba05a9bd9ecd480d294483169c5def983b64d 0.0s done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 739.49kB 0.8s done
+#6 DONE 0.9s
+
+#7 [2/6] RUN apt-get update && apt-get install -y --no-install-recommends       ca-certificates curl gnupg build-essential       libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libvips-dev  && mkdir -p /etc/apt/keyrings  && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main"       > /etc/apt/sources.list.d/nodesource.list  && apt-get update && apt-get install -y --no-install-recommends nodejs  && rm -rf /var/lib/apt/lists/*
+#7 CACHED
+
+#8 [3/6] WORKDIR /app
+#8 CACHED
+
+#9 [4/6] COPY package.json package-lock.json ./
+#9 CACHED
+
+#10 [5/6] RUN npm ci
+#10 CACHED
+
+#11 [6/6] COPY . .
+#11 DONE 5.1s
+
+#12 exporting to image
+#12 exporting layers
+#12 exporting layers 11.2s done
+#12 exporting manifest sha256:062540cbb87cef9ffb6fd95444e4b9d3f22a814c4cf9f10d9f149ed82a8259e1 0.0s done
+#12 exporting config sha256:681d1d52c11fc820ed91b5ee720397cd789ff2385a7704e7561da4aef17c5566 0.0s done
+#12 exporting attestation manifest sha256:3820bf697fa887213575afd0bdb0f17c1eb2c851d7f9a5d1fa2ba40758036f9d 0.0s done
+#12 exporting manifest list sha256:348719ce8bbe12fbfde1836ab2db746cc93eb4c4ffed1eb40d374cc78db1d517 0.0s done
+#12 naming to docker.io/library/p4p5-parity:latest
+#12 naming to docker.io/library/p4p5-parity:latest done
+#12 unpacking to docker.io/library/p4p5-parity:latest
+#12 unpacking to docker.io/library/p4p5-parity:latest 4.3s done
+#12 DONE 15.6s
+
+#13 resolving provenance for metadata file
+#13 DONE 0.0s
+ Image p4p5-parity Built 
+===== BUILD EXIT 0 =====
+IMAGE ID: sha256:348719ce8bbe12fbfde1836ab2db746cc93eb4c4ffed1eb40d374cc78db1d517
+===== INSPECT EXIT 0 =====
+docker :  Network episode-canonical-control-record-1_default Creating 
+At line:18 char:1
++ docker compose -f docker-compose.parity.yml up -d *>> $log
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	+ CategoryInfo          : NotSpecified: ( Network episod...fault Creating :String)  
+   [], RemoteException
+	+ FullyQualifiedErrorId : NativeCommandError
+ 
+ Network episode-canonical-control-record-1_default Created 
+ Container episode-canonical-control-record-1-postgres-1 Creating 
+ Container episode-canonical-control-record-1-postgres-1 Created 
+ Container episode-canonical-control-record-1-app-1 Creating 
+ Container episode-canonical-control-record-1-app-1 Created 
+ Container episode-canonical-control-record-1-postgres-1 Starting 
+ Container episode-canonical-control-record-1-postgres-1 Started 
+ Container episode-canonical-control-record-1-postgres-1 Waiting 
+ Container episode-canonical-control-record-1-postgres-1 Healthy 
+ Container episode-canonical-control-record-1-app-1 Starting 
+ Container episode-canonical-control-record-1-app-1 Started 
+===== UP EXIT 0 =====
+===== HEALTH POLL START =====
+poll 1 : HTTP 000
+poll 2 : HTTP 000
+poll 3 : HTTP 200
+===== HEALTH POLL END (healthy=True) =====
+---PARITY TUPLE---
+x86_64
+ldd (Ubuntu GLIBC 2.35-0ubuntu3.13) 2.35
+Copyright (C) 2022 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+Written by Roland McGrath and Ulrich Drepper.
+v20.20.2
+10.8.2
+---HEALTH BODY---
+{"status":"healthy","timestamp":"2026-06-19T16:43:05.309Z","uptime":9.244552649,"version":"v1","environment":"development","config":{"DATABASE_URL":"SET","DB_HOST":"NOT SET","DB_NAME":"NOT SET","DB_SSL":"NOT SET"},"database":"connected","showsTableExists":false,"currentDatabase":"evidence"}
+===== CAPTURE COMPLETE =====
+```
+
+> ============================================================
 > SUPERSEDE BANNER - 2026-06-19 (PASS WITHDRAWN)
 > ============================================================
 > STATUS: P-4/P-5 = NOT PASSED. [3] precondition NOT met.
