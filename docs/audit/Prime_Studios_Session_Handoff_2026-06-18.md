@@ -130,6 +130,12 @@ it re-verifies.
 
 ---
 
+## Addendum — 2026-06-20 session finding (FD-39 quantification)
+
+**FD-39 is registered in Fix Plan v1.11 (not missing).** Live box read 2026-06-20 confirmed: box is 197 commits behind origin/main; `sequelize.js` on box is the old version (retains `DATABASE_URL` pathway + staging block); `CharacterState` model is byte-identical to main (diff clean, keystone safe). `sequelize.js` is **not** absorbed box-unique work — it is a newer main-side rewrite in origin/main that removes `DATABASE_URL` and binds production to discrete `DB_*` variables. This change **rides with the [3] reconcile** and requires verified discrete-key env completeness before any restart (gate 2b added to [3] runbook, PR #828, commit `4fae6768`). FD-39 bridge corrected to match in same PR. Formal promotion of "197-commit quantification" into the Fix Plan register body is deferred to the next FD-39/[3] working session — not owed now, nothing at risk.
+
+---
+
 ## 5. Standing discipline reaffirmed this session
 
 - **IDE agent is for POINTING at files, NOT for dispositioning them.** This session
