@@ -256,7 +256,7 @@ flip. That additivity is Strategy B's defining safety property — a free standi
 and the reason B is the selected lean over Strategy C's destructive reset
 (`F-Deploy-1_BvC_SelectionLean_Consolidated_2026-06-10_DRAFT.md`). This phase assumes B.
 
-**Code-reconcile adequacy basis (FD-39 bridge).** Phase 2A's stream-extract lands a tree built from the pinned origin/main commit; that this replaces the box's divergent tree *without losing box-unique work* rests on the FD-39 reconciliation bridge (`F-Deploy-1_FD39_Box_Repo_Reconciliation_Bridge_DRAFT.md`, main `9f3f56a8`, #782): FD-39 Session 1 corrected the box↔repo divergence to a stale git pointer plus cleaner box text-encoding drift, with all seven tracked box changes — including both keystones (`sequelize.js` split-brain fix, `CharacterState` model) — already present in origin/main. The reconcile is therefore non-destructive at the code-tree layer. This binds B as the chosen box↔repo reconciliation strategy for the v1.11/FD-39 reparenting; it does not close FD-39 (stays OPEN as divergence record until [3] executes) and does not change Phase 2A's mechanics or gates.
+**Code-reconcile adequacy basis (FD-39 bridge).** Phase 2A's stream-extract lands a tree built from the pinned origin/main commit; that this replaces the box's divergent tree *without losing box-unique work* rests on the FD-39 reconciliation bridge (`F-Deploy-1_FD39_Box_Repo_Reconciliation_Bridge_DRAFT.md`, main `9f3f56a8`, #782): FD-39 Session 1 corrected the box↔repo divergence to a stale git pointer plus cleaner box text-encoding drift, and later verification confirmed the `CharacterState` keystone is present in main and byte-identical to box. **Correction:** `sequelize.js` is not absorbed box-unique work in this bridge framing; it is a newer main-side rewrite that removes `DATABASE_URL` fallback and binds production to discrete `DB_*` variables. That change is carried by reconcile under an explicit env-completeness gate (below), not assumed as passive carry-forward. With that gate satisfied, reconcile remains non-destructive at the code-tree layer. This binds B as the chosen box↔repo reconciliation strategy for the v1.11/FD-39 reparenting; it does not close FD-39 (stays OPEN as divergence record until [3] executes) and does not change Phase 2A's mechanics or gates.
 
 **Pre-window (no box touch).** The off-box build is finalized before the window per the
 parity sequencing note (`F-Deploy-1_P1_Parity_Sequencing_2026-06-10_DRAFT.md` Sec 3): pin
@@ -291,6 +291,12 @@ assemble at session time against live state, do not paste a mutation line from a
   second tree with margin. Per the headroom note (Sec 2), residual is ~1.4 GB on a single
   68%-used volume — **disk is the binding axis.** `df -h /` read; if residual will not hold
   the tree plus transient install/build peak → **ABORT before extract.** No partial extract.
+2b. **Env-completeness gate for DB connection semantics (read-only, hard gate before reconcile/restart).**
+  Because the reconciled main tree's `sequelize.js` production path uses discrete `DB_*` variables and does not rely on `DATABASE_URL`, verify on the box (cold, live) that all required discrete fields are present and correct for canon before any tree reconcile or restart: `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT`.
+  - Confirm value presence for all five keys in `/home/ubuntu/episode-metadata/.env` and verify host/identity expectations (canon host, expected DB name/user/port policy).
+  - Confirm canon auth succeeds with the discrete credentials via read-only probe.
+  - Record whether `DATABASE_URL` is present, but treat it as informational only for this gate.
+  Any missing/incorrect discrete key, or inability to prove discrete-key auth to canon, is **ABORT before extract/restart**. Do not assume runtime survival on legacy `DATABASE_URL` behavior.
 3. **Stream-extract the built tree to a PARALLEL path — GATED MUTATION (un-templated).**
   Per the Install-Method note's C1/C2 controls. The transfer must be **piped straight into
   extraction with no intermediate tar persisted on the constrained volume** — this is
@@ -415,6 +421,7 @@ From FD-31 §7 + HAZARD + PreFlight, gathered:
   precheck → ABORT before extract. **C2 cleanup mechanic:** any aborted or failed transfer must
   **remove its fresh target path before any retry** — a partial tree left in place strands up to
   ~1.1 GB and eats the ~0.3 GB slack, breaking peak==steady-state on the failure path (note Sec 3, C2).
+- Phase 2A / pre-restart env-completeness gate: any missing/incorrect discrete `DB_HOST/DB_NAME/DB_USER/DB_PASSWORD/DB_PORT`, or inability to prove canon auth from those discrete keys, or evidence prod is currently surviving only via `DATABASE_URL` semantics that reconcile removes → ABORT before extract/restart.
 - Phase 2A: OOM / memory pressure during parallel-process standup (zero swap = hard OOM,
   not paging) → ABORT standup, tear down the parallel process; live-serving id 3 unaffected.
 - Phase 2A: parallel process fails the canon identity/integrity verify → ABORT before any
