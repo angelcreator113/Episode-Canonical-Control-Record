@@ -74,3 +74,38 @@ Establish: (1) did **#828** merge? (2) is **#752** still open? (3) has **[3]** h
 
 `stash@{0}` ("WIP on main: 4481ea0c", #755 era) is the most likely home of the v15-lost
 `src/pages/` + `LandingPage.css` files, if recoverable. Not investigated this session.
+
+---
+
+## ADDENDUM (appended 2026-06-20, warm session) -- git-history credential exposure cross-reference
+
+A 2026-06-20 warm-session git-history read established that commit `5ad3c44e`
+(2026-02-05 16:41:12 +0000, copilot-swe-agent[bot], co-authored angelcreator113)
+untracked 8 credential-bearing env files, corrected both `.gitignore`s, and authored
+three audit docs (`GITHUB_REPOSITORY_AUDIT.md`, `REPOSITORY_CLEANUP_PLAN.md`,
+`SECURITY_AUDIT_FINDINGS.md`). The 8 untracked files (per `git show --name-status`):
+`.env.aws-staging`, `.env.development`, `.env.image-processing-template`, `.env.phase2`,
+`.env.staging`, `.env.staging.aws-backup`, `frontend/.env.development`,
+`frontend/.env.production`. The commit message flags "Rotate all exposed credentials"
+as IMMEDIATE-ACTION-REQUIRED -- i.e. an unperformed TODO at filing, not a completed step.
+
+Untracking is NOT a history scrub. The credential blobs remain retrievable at
+pre-`5ad3c44e` revisions. Residual exposure is therefore governed entirely by ROTATION
+status, which is box/AWS-side and not knowable from the repo. This maps to existing
+register items AD (static keys in `.env`) and FD-40 (canon credential rotation gate;
+rotation COUNT held OPEN per Gate 2.5 qualifiers). NO new finding minted -- this is a
+cross-reference, not new damage.
+
+Current-state (verified same session, contents-blind): all tracked `.env*` files are
+clean (templates / public `VITE_` vars only). `frontend/.env.production` was deleted in
+`5ad3c44e` and re-added later (`e1f206fc`) in clean form -- current keys are
+`VITE_API_URL` / `VITE_API_BASE_URL` / `VITE_API_BASE` only, all client-public by Vite
+design. Live working `.env*` are untracked + gitignored as intended.
+
+Disposition: rotation verification belongs to the [3] post-cutover security sweep
+(AD / FD-40), not a warm session. History-rewrite (BFG / git-filter-repo) REJECTED as
+remediation -- destructive to the ~197-commit box divergence and audit SHA lineage, and
+moot once creds are rotated.
+
+Open question for the rotation session: did the rotation scope cover the SPECIFIC
+secrets in these 8 Feb blobs, or only the current live `.env` set?
