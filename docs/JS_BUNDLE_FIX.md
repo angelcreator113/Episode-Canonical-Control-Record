@@ -23,7 +23,7 @@ The error indicates that requests for `/assets/*.js` files are returning HTML (i
 - ✅ Sets Content-Type explicitly for `.js` files: `application/javascript; charset=utf-8`
 - ✅ Catch-all route checks `path.extname(req.path)` and calls `next()` for files with extensions
 
-### Deployment Process ([.github/scripts/deploy-to-ec2.sh]()):
+### Deployment Process (`.github/scripts/deploy-production.sh`):
 - ✅ Builds frontend with `npm run build` in frontend directory
 - ✅ Creates `frontend/dist` directory with assets
 - ✅ PM2 runs from `/home/ubuntu/episode-metadata`
@@ -65,7 +65,7 @@ find /home/ubuntu -name "dist" -type d 2>/dev/null
 Add explicit verification to deployment script before PM2 restart:
 
 ```bash
-# In .github/scripts/deploy-to-ec2.sh, after frontend build:
+# In .github/scripts/deploy-production.sh, after frontend build:
 echo "🔍 CRITICAL: Verifying dist/assets files match index.html references..."
 DIST_ASSETS=$(ls -1 frontend/dist/assets/*.js | xargs -n1 basename)
 HTML_REFS=$(grep -o 'src="/assets/[^"]*\.js"' frontend/dist/index.html | sed 's|src="/assets/||' | sed 's|"||')

@@ -2,7 +2,7 @@
 
 > **STATUS / ADDENDUM DOCUMENT.** Records the disposition of the AK five-point
 > gate after the 2026-06-02 session. Two points (AK-3, AK-4) corrected via PR #752;
-> the remaining three are deferred or open per the notes below. This addendum does
+> the remaining points are updated per the notes below. This addendum does
 > NOT change the AK finding's severity or its hard-blocker disposition on [3] — it
 > records progress against the satisfiable five-point gate (v13 Sec 4 path (b)).
 
@@ -11,7 +11,7 @@
 | **Parent** | `F-Deploy-G1-AK_ProdDeploy_Workflow_Hazard.md` (#747); v13 Sec 4 (satisfiable gate) + Sec 8. |
 | **Session** | 2026-06-02. Corrected the two safely-correctable-outside-cutover points. |
 | **PR** | #752 — `f-deploy-g1-ak/ak3-pm2-names` (AK-3 commit `64c62092`, AK-4 commit `cdd52009`). |
-| **Gate status** | NOT yet satisfied. 2 of 5 corrected; 2 deferred to [3] cutover; 1 open scoping note. |
+| **Gate status** | NOT yet satisfied. 3 of 5 corrected; 2 deferred to [3] cutover; no remaining parallel-safe open points. |
 | **Main HEAD at session** | `285a913a` (#750) at session start; #751 + #752 opened this session. |
 
 ---
@@ -64,50 +64,67 @@ confirmed to point at the SAME canon DB, which is a deliberate cutover step, not
 blind pre-write. Also note the swallowed migration failure (`migrate:up || echo
 "...warnings"`) is a related defect to address in the same pass.
 
-**AK-5 — multiple parallel deploy scripts, one wired. OPEN scoping note (parallel-safe, not [3]-blocked).**
-The finding records (does not "fix") that five deploy artifacts exist, only
-`.github/scripts/deploy-production.sh` is wired to the workflow; the three under
-`scripts/deploy/` are orphaned. Action = establish which is canonical and whether
-the others are stale traps. This is low-stakes, parallel-safe cleanup that can be
-done any time — it is NOT blocked on the [3] cutover. Should NOT be bundled under
-"resolved at [3]"; track it as its own cleanup item.
+**AK-5 — parallel deploy scripts. CORRECTED (PR #TBD), scope wider than filed.**
+The parent finding recorded "five deploy artifacts, three orphaned under
+`scripts/deploy/`." Actual audit: **one wired canonical script**
+(`.github/scripts/deploy-production.sh`, PM2 / #746 topology, invoked by
+`deploy-production.yml:350`) and **seven unwired runnable deploy/rollback
+entrypoints** across four incompatible models — Docker-compose operator CLIs
+(`scripts/deploy/deploy-production.{sh,ps1}`, container postgres/redis @3003,
+infra prod does not run), a `sudo rm -rf`+clone nuke-deploy
+(`scripts/deploy/deploy-prod.sh`), and generic multi-env CLIs
+(`scripts/deploy/deploy.{sh,ps1}`, `scripts/deploy.sh`,
+`.github/scripts/deploy-to-ec2.sh`). None are referenced by any executable call
+site (verified via repo-wide grep); the only references were stale docs
+miscite-ing `deploy-to-ec2.sh`/`scripts/deploy.sh` as canonical (5 doc hits,
+repointed). Severity reclassified from "orphaned duplicates" to
+**incident-time mis-fire hazard**: two are destructive (host `sudo rm -rf`; DB
+restore against nonexistent compose stack), all are runnable by a human reaching
+for "the prod script" or "the rollback command." Disposition: all seven
+removed; docs repointed. Confirmed parallel-safe — deleting unreferenced scripts
+changes no deploy behavior and does not touch [3].
 
 ## Sec 2 — Gate status and what [3] still needs
 
 The AK five-point gate (v13 Sec 4) is satisfiable two ways: **(a)** disable
 `Deploy to Production` for the [3] window, OR **(b)** audit-and-correct all five
-points. After this session, path (b) is partially complete (AK-3, AK-4) but NOT
-finished — AK-1/AK-2 remain (resolvable only at cutover) and AK-5 is open.
+points. After this update, path (b) is partially complete (AK-3, AK-4, AK-5)
+but NOT finished — AK-1/AK-2 remain (resolvable only at cutover).
 
 **Therefore the AK gate is NOT yet satisfied.** At the [3] entry gate, AK is cleared by EITHER:
 - finishing AK-1/AK-2 at cutover (set both secrets to canon deliberately; post-restart
-  `/health` abort-check is the safety net) and noting AK-5 disposition, OR
+  `/health` abort-check is the safety net), OR
 - path (a): `gh workflow disable "Deploy to Production"` for the window.
 
-Do NOT arrive at [3] assuming AK is closed because #752 merged. Two of five are
-corrected; the gate needs the remainder handled at the window (or path (a)).
+Do NOT arrive at [3] assuming AK is closed because parallel-safe points are done.
+Three of five are corrected; the remaining two are cutover-bound unless path (a)
+remains in force.
 
 ## Sec 3 — What this session did NOT do
 - Did NOT run `Deploy to Production` or any deploy script (file edits only).
 - Did NOT overwrite `PROD_DB_HOST` or `PRODUCTION_DATABASE_URL` (write-only secrets;
   no blind correction).
 - Did NOT touch the nginx `sed` SSL-detection logic (only the destructive failure path).
-- Did NOT audit or cleanup the three orphaned `scripts/deploy/` scripts (AK-5 open).
+- Did NOT execute any removed parallel deploy/rollback script; AK-5 cleanup is a
+  source-control disposition only.
 - Did NOT execute [3] or the restart-to-align.
 
 ## Sec 4 — [3] entry gate (updated)
 1. Live abort-check re-verify (#749) — still owed.
 2. Credential gate 2.5 — GREEN (#751, 2026-06-02 reconcile). [done]
-3. AK five-point — AK-3/AK-4 corrected (#752); AK-1/AK-2 deferred to cutover; AK-5
-   open scoping note. Gate satisfied at [3] via cutover-completion OR workflow-disable.
+3. AK five-point — AK-3/AK-4 corrected (#752); AK-5 corrected (PR #TBD);
+  AK-1/AK-2 deferred to cutover. Gate satisfied at [3] via cutover-completion OR
+  workflow-disable.
 4. Then the combined window: FD-31 rotation + Track B restart-to-align + route fix +
    security sweep, ONE restart, post-restart `/health` = canon host + matching counts
    or ABORT+restore.
 
 ---
-*AK five-point gate status after 2026-06-02. AK-3 (PM2 names -> #746 topology, incl.
-verification-greps the finding's :217-238 citation under-counted) and AK-4 (destructive
-nginx failure path removed) corrected in PR #752. AK-1/AK-2 deferred to [3] cutover
-(write-only secrets, no blind overwrite). AK-5 open, parallel-safe, not [3]-blocked.
-Gate NOT yet satisfied — cleared at [3] via cutover-completion or workflow-disable.
+*AK five-point gate status update. AK-3 (PM2 names -> #746 topology, including
+verification-grep scope beyond the finding's :217-238 citation) and AK-4
+(destructive nginx failure path removed) corrected in PR #752. AK-5 corrected
+as parallel-safe cleanup (seven unwired runnable deploy/rollback entrypoints
+removed; docs repointed). AK-1/AK-2 deferred to [3] cutover (write-only secrets,
+no blind overwrite). Gate NOT yet satisfied outside the window: path (b) is now
+3/5, with the remaining two cutover-bound unless path (a) remains in force.
 No deploy run, no secret overwrite, no [3] execution.*

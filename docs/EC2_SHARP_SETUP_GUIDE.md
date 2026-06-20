@@ -139,7 +139,7 @@ bash scripts/rebuild-sharp.sh
 
 ## Automated Deployment
 
-The deployment script (`.github/scripts/deploy-to-ec2.sh`) now automatically rebuilds Sharp during deployment:
+The deployment script (`.github/scripts/deploy-production.sh`) runs `npm ci` on the EC2 host, which rebuilds Sharp against the box's own architecture during deployment:
 
 ```bash
 # This is automatically run during CI/CD deployment
@@ -256,7 +256,7 @@ No changes are needed to `package.json`. The `--build-from-source` flag is used 
 - **Complete Setup Script**: `scripts/ec2-setup-complete.sh`
 - **Build Tools Setup**: `scripts/setup-ec2-build-tools.sh`
 - **Sharp Rebuild Script**: `scripts/rebuild-sharp.sh`
-- **Deployment Script**: `.github/scripts/deploy-to-ec2.sh`
+- **Deployment Script**: `.github/scripts/deploy-production.sh`
 
 ---
 

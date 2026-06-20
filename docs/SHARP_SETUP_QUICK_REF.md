@@ -51,4 +51,4 @@ pm2 logs episode-api
 ## See Also
 
 - Full documentation: [EC2_SHARP_SETUP_GUIDE.md](./EC2_SHARP_SETUP_GUIDE.md)
-- Deployment script: [.github/scripts/deploy-to-ec2.sh](./.github/scripts/deploy-to-ec2.sh)
+- Deployment script: [.github/scripts/deploy-production.sh](https://claude.ai/chat/.github/scripts/deploy-production.sh)

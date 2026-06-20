@@ -133,3 +133,7 @@ frontend/frontend-dist.tgz
 .env.*
 !.env.example
 !.env.production.template
+
+# local scratch / PR-body drafts (not for commit)
+phase1_*.sh
+pr-body-*.md
