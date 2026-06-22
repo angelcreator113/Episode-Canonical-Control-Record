@@ -92,7 +92,7 @@ The MIME type fix we made was **correct and necessary**, but it exposed this pre
 The updated deployment script will prevent this from happening again. Push the changes:
 
 ```bash
-git add .github/scripts/deploy-to-ec2.sh scripts/force-clean-rebuild.sh
+git add .github/scripts/deploy-production.sh scripts/force-clean-rebuild.sh
 git commit -m "Fix: Add aggressive Vite cache clearing to prevent stale builds"
 git push origin dev
 ```
