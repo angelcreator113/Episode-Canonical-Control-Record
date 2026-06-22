@@ -2,6 +2,16 @@
 
 **Mints FD-39 (keystone-class): the prod box runs a month of uncommitted, prod-only on-box code on a stale git remote ~dozens of PRs behind `origin/main`, including two keystone-class edits (the `sequelize.js` split-brain fix and the F-Stats-1 CharacterState model) that exist in no commit. This is the cross-environment drift root cause the audit has chased. It supersedes the Minimal-B premise and reparents [3] Phase 2 behind a box↔repo reconciliation. The finding is investigation-stage; this revision FILES it as canon and points at the plan doc. It authorizes NO box action, schedules NO session, and the FROZEN box state and FD-31 open legs stand unchanged.**
 
+> **CORRECTION BANNER - FD-39 prose superseded by the Sec 4 register row (added 2026-06-21, additive).**
+> The prose in this revision (headline, Sec 1, Sec 2, and the closing summary) records the **at-filing reading** of FD-39 and is **CORRECTED** below. Where the prose says the prod box runs *uncommitted, prod-only* code that "exists in no commit" - including the two keystones (`sequelize.js` split-brain fix, F-Stats-1 `CharacterState.js`) - that is **refuted**. The authoritative reading is the **Sec 4 register row** (correction authority: Session1_Results v1.0; reinforced by v1.12's standing instruction to use the stale-git-pointer reading, not the at-filing framing):
+>
+> - **Divergence is real; its NATURE was misread.** The box-repo gap is a **stale git pointer** (`episode-backend` HEAD ~a month / dozens of PRs behind a stale un-fetched `origin/main`), **NOT unique uncommitted work**.
+> - **All seven tracked box changes - including both named keystones - are already in current `origin/main`.** The "exists in no commit" / "prod-only" / "uncommitted" framing throughout the prose is false: the work is committed and present upstream; the box simply never fetched it.
+> - **The Sec 2 "Risk closed" bullet's rationale is superseded.** The off-box capture (2026-06-08) was sound practice and is preserved, but the "one-disk-only prod-code risk" it claims to close **did not exist** - the code was already in `origin/main`. Read that bullet as a backup-of-record, not as closure of a unique-on-disk risk.
+> - **FD-39 stays OPEN** as the divergence record. The OPEN status, the supersession of Minimal-B, and the reparenting of [3] Phase 2 behind box-repo reconciliation all **stand** - those consequences follow from the divergence itself, which is confirmed, and are unaffected by the nature-correction.
+>
+> The original prose is preserved verbatim below as the at-filing record. Do not read it as current; read this banner plus the Sec 4 row as the corrected finding.
+
 | | |
 |---|---|
 | **Predecessor revision** | Fix Plan v1.10 (ratified decision (a) = A2; register through FD-38) |
