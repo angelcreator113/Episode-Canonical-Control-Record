@@ -128,3 +128,8 @@ F-Deploy-1_PhaseB_G2_S4.2_BlockedFinding.md
 # Frontend build artifacts (regenerable; never commit)
 frontend/frontend-dist.tgz
 *.tgz
+
+# --- F-Deploy-1 4.3: catch-all for ad-hoc .env backups (enumeration missed dated suffixes) ---
+.env.*
+!.env.example
+!.env.production.template
