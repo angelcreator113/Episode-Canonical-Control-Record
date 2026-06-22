@@ -1,3 +1,18 @@
+> **[RESOLVED 2026-06-21 - the fork this document framed was adjudicated by Fix Plan v1.12.]**
+> This doc (authored read-only 2026-06-18 against the then-current v1.11 register tail of FD-39)
+> correctly observed that no Fix Plan revision had yet minted FD-40 and framed the X/Y fork it
+> requires a gated revision to settle. **Fix Plan v1.12 is that revision.** It mints FD-40 to the
+> gate subject (X - canon credential rotation gate record, gate-record class), closes Gate 2.5 by
+> register authority with two hygiene items (in-memory clear self-report; rotation count) carried
+> OPEN, and handles the register-integrity defect (Y) as a note-not-mint, rejecting referent
+> collision. v1.12 Sec 2 explicitly names this file as its own framing artifact, not part of the
+> verified pre-existing orphan cluster. Verified live against origin/main 2026-06-21:
+> v1.12 register tail = FD-40; v1.13 inherits "Gate 2.5 CLOSED (FD-40)".
+> This document is therefore SUPERSEDED-AS-RESOLVED - accurate at filing, fulfilled by v1.12.
+> Orphan-standalone cluster cleanup remains separately OPEN per v1.12. At-filing body preserved
+> verbatim below.
+>
+> ---
 # F-Deploy-1 — FD-40 Reconciliation: Fork-and-Block Framing
 
 **STATUS: DRAFT ONLY. THIS DOCUMENT MINTS NOTHING.**
