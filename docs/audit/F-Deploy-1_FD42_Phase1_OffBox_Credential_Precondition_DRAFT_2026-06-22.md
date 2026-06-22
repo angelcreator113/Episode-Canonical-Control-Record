@@ -123,3 +123,30 @@ This addendum establishes provenance and mechanism only. It does not establish:
 - any cold-[3]-locked credential-validity decision,
 - any authorization for box, canon, or rotation action.
 No gate moved. Box FROZEN. [3] not primed. FD-42 remains provisional until folded into Fix Plan v1.15.
+
+## FD-42 provenance addendum #3 (2026-06-22, warm, read-only) — 06-15 09:50 canon password modify confirmed; event chain now complete
+Read scope: CloudTrail event-body inspection of the earlier canon-instance ModifyDBInstance hit in the same us-east-1 window. Warm-safe, control-plane read-only, box-free, no canon RDS data-plane contact, no mutation.
+### Result
+The 2026-06-15 09:50:22Z ModifyDBInstance event on canon (`episode-control-dev`) is also a master-password modify request:
+- requestParameters.masterUserPassword: present (`HIDDEN_DUE_TO_SECURITY_REASONS`)
+- applyImmediately: true
+- pendingModifiedValues.masterUserPassword: present
+- Same instance / operator / source context as the later 06-20 event
+Interpretation bound to evidence:
+- This proves a master-password change was requested and queued on canon at 09:50:22Z.
+- It does not, by itself, prove which exact secret value SSM v2 captured versus the prior on-box state.
+- It does not establish canon-validity of any credential group; cold-[3]-locked remains in force.
+### Bearing on the provenance chain
+With this event plus addendum #1 and #2, the chain is now event-complete:
+- 2026-06-15 09:50:22Z -- canon password modify request
+- 2026-06-15 09:53:10Z -- SSM v2 write
+- 2026-06-20 23:16:50Z -- later canon password modify request
+That makes the mechanism symmetric and gap-free as to recorded events: SSM v2 was written after the first canon modify and before the second, then left untouched after 06-15. The stale-SSM explanation remains the right mechanism, and this addendum closes the remaining uninspected event in the window.
+### Scope limits
+This addendum establishes provenance only. It does not establish:
+- the exact secret value at 09:50,
+- whether SSM v2 captured that exact post-modify value or the prior on-box state,
+- canon-validity of any credential group,
+- any cold-[3]-locked credential-validity decision,
+- any authorization for box, canon, or rotation action.
+No gate moved. Box FROZEN. [3] not primed. FD-42 remains provisional until folded into Fix Plan v1.15.
