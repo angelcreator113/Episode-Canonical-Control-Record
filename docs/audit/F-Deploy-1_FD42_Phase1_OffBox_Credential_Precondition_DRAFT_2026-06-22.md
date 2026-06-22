@@ -70,3 +70,24 @@ Phase 1 unblock.
 unstated, currently-unmet off-box-credential precondition, and that the FD-40<->FD-41 SSM v2
 status is contradictory and open. Decides no cold-[3]-locked question; authorizes no
 action. FD-42 is NOT minted until folded into Fix Plan v1.15.*
+## FD-42 provenance addendum (2026-06-22, warm, read-only) -- hypothesis (i) RULED OUT
+
+Read: aws ssm get-parameter-history on /episode-metadata/canon/db_password, --no-with-decryption, metadata-only query (no value retrieved). Account 637423256673, user evoni-admin. Warm-safe, no box/canon contact, no mutation.
+
+Result -- two versions, both SecureString, both written by evoni-admin:
+- v1: 2026-06-14T14:19:58 -04:00
+- v2: 2026-06-15T09:53:10 -04:00 (latest; matches the FD-40 06-15 09:53 SSM write)
+
+No SSM write exists after 2026-06-15. SSM v2 has been unchanged since FD-40 wrote it.
+
+Bearing on the FD-40<->FD-41 contradiction:
+- (i) SSM v2 overwritten after FD-40 verification -- RULED OUT. v2 is the same value FD-40 SHA-256-verified on 06-15; never rewritten since.
+- (ii) post-06-16 rotation stranding SSM -- constrained: no SSM write landed after 06-15, so any later canon-password change never propagated to SSM regardless.
+- (iii) the 06-15 FD-40 verification proved .env==SSM internal consistency, NOT live canon auth of either. Branch (iii) is now the leading unresolved explanation branch, but remains unproven; this read establishes parameter-write provenance only, not canon-auth validity.
+
+This read CANNOT distinguish:
+- v2 was never canon-valid at 06-15, vs.
+- canon was rotated later, outside SSM propagation.
+Separating these needs a canon RDS CloudTrail ModifyDBInstance read after 06-15 -- a separate warm diagnostic, to open with fresh intent/gate, not momentum.
+
+Does NOT establish canon-validity of any credential (cold-[3]-locked; D1 holds). Provenance only. No gate moved. Box FROZEN.
