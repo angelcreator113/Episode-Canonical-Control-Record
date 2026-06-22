@@ -91,3 +91,35 @@ This read CANNOT distinguish:
 Separating these needs a canon RDS CloudTrail ModifyDBInstance read after 06-15 -- a separate warm diagnostic, to open with fresh intent/gate, not momentum.
 
 Does NOT establish canon-validity of any credential (cold-[3]-locked; D1 holds). Provenance only. No gate moved. Box FROZEN.
+
+## FD-42 provenance addendum #2 (2026-06-22, warm, read-only) — hypothesis (ii) CONFIRMED; (iii) ruled out as mechanism
+Read scope: AWS CloudTrail lookup for ModifyDBInstance in us-east-1 from 2026-06-15T00:00:00Z, followed by event-body inspection of the canon-instance hit. Warm-safe, control-plane read-only, box-free, no canon RDS data-plane contact, no mutation.
+### Result
+CloudTrail shows a post-06-15 modify event on the canon instance:
+- Instance: episode-control-dev
+- Event time: 2026-06-20T23:16:50Z (table view: 2026-06-20T19:16:50-04:00)
+- User: evoni-admin
+- Source context: 108.216.160.136, aws-cli on Windows
+- requestParameters.masterUserPassword: present as HIDDEN_DUE_TO_SECURITY_REASONS
+- applyImmediately: true
+- pendingModifiedValues.masterUserPassword: present
+Interpretation bound to evidence:
+- This proves a master-password modify request was issued and queued with applyImmediately true.
+- This note does not separately prove completion state from CloudTrail alone.
+Identity cross-checks in event body (naming-inversion-safe):
+- VPC: vpc-0754967be21268e7e
+- SG: sg-002578912805d1930 (cited for canon-identity cross-check only; AF investigation untouched)
+### Bearing on FD-40 versus FD-41 contradiction
+- Addendum #1 established SSM v2 write provenance: written 2026-06-15 09:53 and not rewritten afterward.
+- This addendum establishes a later canon password-modify request on 2026-06-20 against canon.
+- Therefore the stale-SSM mechanism is resolved: canon moved later while SSM remained unchanged.
+Conclusions:
+- Hypothesis (ii), post-06-15 canon rotation stranding SSM: CONFIRMED.
+- Hypothesis (iii), as mechanism for the observed staleness: ruled out as mechanism.
+### Scope limits
+This addendum establishes provenance and mechanism only. It does not establish:
+- the post-06-20 password value,
+- canon-validity of any credential group,
+- any cold-[3]-locked credential-validity decision,
+- any authorization for box, canon, or rotation action.
+No gate moved. Box FROZEN. [3] not primed. FD-42 remains provisional until folded into Fix Plan v1.15.
