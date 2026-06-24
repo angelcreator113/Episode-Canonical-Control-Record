@@ -150,3 +150,11 @@ This addendum establishes provenance only. It does not establish:
 - any cold-[3]-locked credential-validity decision,
 - any authorization for box, canon, or rotation action.
 No gate moved. Box FROZEN. [3] not primed. FD-42 remains provisional until folded into Fix Plan v1.15.
+
+## FD-42 provenance addendum #4 (2026-06-24, read-only) — 06-23 canon + fork rotation, post-FD-42
+
+A read-only CloudTrail `ModifyDBInstance` lookup (us-east-1, 2026-06-19 to 06-24) found two master-password modifies not in the FD-42 record (which closes at 06-22): **canon `episode-control-dev` 2026-06-23T23:46:43Z** (resId `db-GBZ2JQVM3UIG4S6KD3WJ2RDWN4`, identity-bound, not name-trusted) and **fork `episode-control-prod` 2026-06-23T23:46:00Z**, same operator pass, fork 43s ahead. Operator-confirmed (evoni) as intended; benign, undocumented at filing.
+
+Effect: SSM v2 (`/episode-metadata/canon/db_password`, `97aac3b0...1fae`) is now stale by **two** canon rotations since its 06-15 write (06-20 per FD-42, 06-23 per this addendum). FD-42's off-box-credential precondition is **reinforced, not changed**: canon's live password is most likely the post-06-23 value, captured nowhere off-box. Control-gap recurrence (rotate-without-store), consistent with FD-42's stale-by-later-rotation mechanism. Fork co-rotation noted for the post-[3] fork SG/teardown sweep given the documented name-inversion.
+
+**Advances no gate; primes nothing; the freeze stands; FD-31/FD-42 remain OPEN.** Secret discipline: no plaintext; value redacted by CloudTrail, never captured.
