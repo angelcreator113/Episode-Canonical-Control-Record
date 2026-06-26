@@ -17,7 +17,7 @@ the probe outcome (not this doc) selects the branch.
 - `F-Deploy-1_Rotation_Session_Scoping_v2.md` Sec 4 -- probe order, candidate set, prohibited extraction methods.
 - `F-Deploy-1_ReAnchor_Scoping_2026-06-22.md` Sec 3-4 -- value-provenance gate, four cold-locked branches.
 - `F-Deploy-1_FD31_Reconciliation_PreFlight_Plan.md` Sec 6.3 (+ supersede banner) -- the rotate + restart-to-align coupling for the canon-write branch.
-- FD-42 (Fix Plan v1.15) -- the off-box-credential precondition this procedure exists to resolve.
+- FD-43 (Fix Plan v1.16) -- the off-box-credential precondition this procedure exists to resolve (supersedes FD-42/v1.15, the prior precondition framing).
 
 ---
 
