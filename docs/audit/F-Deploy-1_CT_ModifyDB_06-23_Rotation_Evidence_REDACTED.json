@@ -1,0 +1,224 @@
+{
+    "Events": [
+        {
+            "EventId": "aa17750f-9cb9-41d9-9abb-004c8cb7d249",
+            "EventName": "ModifyDBInstance",
+            "ReadOnly": "false",
+            "AccessKeyId": "REDACTED",
+            "EventTime": "2026-06-23T19:46:43-04:00",
+            "EventSource": "rds.amazonaws.com",
+            "Username": "root",
+            "Resources": [
+                {
+                    "ResourceType": "AWS::RDS::DBInstance",
+                    "ResourceName": "episode-control-dev"
+                },
+                {
+                    "ResourceType": "AWS::EC2::VPC",
+                    "ResourceName": "vpc-0754967be21268e7e"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBSubnetGroup",
+                    "ResourceName": "episode-metadata-db-subnet-dev"
+                },
+                {
+                    "ResourceType": "AWS::EC2::SecurityGroup",
+                    "ResourceName": "sg-002578912805d1930"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBOptionGroup",
+                    "ResourceName": "default:postgres-17"
+                },
+                {
+                    "ResourceType": "AWS::EC2::Subnet",
+                    "ResourceName": "subnet-096d836604a1db0ec"
+                },
+                {
+                    "ResourceType": "AWS::EC2::Subnet",
+                    "ResourceName": "subnet-01e980c37189eb3aa"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBParameterGroup",
+                    "ResourceName": "default.postgres17"
+                }
+            ],
+            "CloudTrailEvent": "{\"eventVersion\":\"1.11\",\"userIdentity\":{\"type\":\"Root\",\"principalId\":\"REDACTED_ACCT\",\"arn\":\"arn:aws:iam::REDACTED_ACCT:root\",\"accountId\":\"REDACTED_ACCT\",\"accessKeyId\":\"REDACTED_KEY\",\"sessionContext\":{\"attributes\":{\"creationDate\":\"2026-06-23T23:30:41Z\",\"mfaAuthenticated\":\"true\"}}},\"eventTime\":\"2026-06-23T23:46:43Z\",\"eventSource\":\"rds.amazonaws.com\",\"eventName\":\"ModifyDBInstance\",\"awsRegion\":\"us-east-1\",\"sourceIPAddress\":\"108.216.160.136\",\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36\",\"requestParameters\":{\"dBInstanceIdentifier\":\"episode-control-dev\",\"applyImmediately\":true,\"masterUserPassword\":\"HIDDEN_DUE_TO_SECURITY_REASONS\",\"allowMajorVersionUpgrade\":false,\"manageMasterUserPassword\":false},\"responseElements\":{\"dBInstanceIdentifier\":\"episode-control-dev\",\"dBInstanceClass\":\"db.t3.micro\",\"engine\":\"postgres\",\"dBInstanceStatus\":\"available\",\"masterUsername\":\"postgres\",\"endpoint\":{\"address\":\"episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com\",\"port\":5432,\"hostedZoneId\":\"Z2R2ITUGPM61AM\"},\"allocatedStorage\":20,\"instanceCreateTime\":\"Jan 1, 2026, 7:21:03 AM\",\"preferredBackupWindow\":\"05:39-06:09\",\"backupRetentionPeriod\":1,\"dBSecurityGroups\":[],\"vpcSecurityGroups\":[{\"vpcSecurityGroupId\":\"sg-002578912805d1930\",\"status\":\"active\"}],\"dBParameterGroups\":[{\"dBParameterGroupName\":\"default.postgres17\",\"parameterApplyStatus\":\"in-sync\"}],\"availabilityZone\":\"us-east-1b\",\"dBSubnetGroup\":{\"dBSubnetGroupName\":\"episode-metadata-db-subnet-dev\",\"dBSubnetGroupDescription\":\"Dev RDS subnets\",\"vpcId\":\"vpc-0754967be21268e7e\",\"subnetGroupStatus\":\"Complete\",\"subnets\":[{\"subnetIdentifier\":\"subnet-096d836604a1db0ec\",\"subnetAvailabilityZone\":{\"name\":\"us-east-1b\"},\"subnetOutpost\":{},\"subnetStatus\":\"Active\"},{\"subnetIdentifier\":\"subnet-01e980c37189eb3aa\",\"subnetAvailabilityZone\":{\"name\":\"us-east-1a\"},\"subnetOutpost\":{},\"subnetStatus\":\"Active\"}]},\"preferredMaintenanceWindow\":\"mon:03:36-mon:04:06\",\"upgradeRolloutOrder\":\"second\",\"pendingModifiedValues\":{\"masterUserPassword\":\"HIDDEN_DUE_TO_SECURITY_REASONS\"},\"latestRestorableTime\":\"Jun 23, 2026, 11:41:46 PM\",\"multiAZ\":false,\"engineVersion\":\"17.9\",\"autoMinorVersionUpgrade\":true,\"readReplicaDBInstanceIdentifiers\":[],\"licenseModel\":\"postgresql-license\",\"storageThroughput\":0,\"optionGroupMemberships\":[{\"optionGroupName\":\"default:postgres-17\",\"status\":\"in-sync\"}],\"publiclyAccessible\":true,\"storageType\":\"gp2\",\"dbInstancePort\":0,\"storageEncrypted\":false,\"dbiResourceId\":\"db-GBZ2JQVM3UIG4S6KD3WJ2RDWN4\",\"cACertificateIdentifier\":\"rds-ca-rsa2048-g1\",\"domainMemberships\":[],\"copyTagsToSnapshot\":false,\"monitoringInterval\":0,\"dBInstanceArn\":\"arn:aws:rds:us-east-1:REDACTED_ACCT:db:episode-control-dev\",\"iAMDatabaseAuthenticationEnabled\":false,\"databaseInsightsMode\":\"standard\",\"performanceInsightsEnabled\":false,\"deletionProtection\":false,\"associatedRoles\":[],\"httpEndpointEnabled\":false,\"tagList\":[],\"customerOwnedIpEnabled\":false,\"networkType\":\"IPV4\",\"backupTarget\":\"region\",\"certificateDetails\":{\"cAIdentifier\":\"rds-ca-rsa2048-g1\",\"validTill\":\"Jan 1, 2027, 7:19:51 AM\"},\"masterUserSecret\":{\"secretArn\":\"arn:aws:secretsmanager:us-east-1:REDACTED_ACCT:secret:rds!db-986735d2-682d-4a27-920a-75c7744d59e7-9zKL8k\",\"secretStatus\":\"active\",\"kmsKeyId\":\"arn:aws:kms:us-east-1:REDACTED_ACCT:key/1d6ffc33-ccbc-481b-995e-6a7c2ea4556a\"},\"dedicatedLogVolume\":false,\"engineLifecycleSupport\":\"open-source-rds-extended-support\",\"vPCNetworkingEnabled\":true},\"requestID\":\"f03dbbef-7946-4708-93e3-8a4a9583ed3a\",\"eventID\":\"aa17750f-9cb9-41d9-9abb-004c8cb7d249\",\"readOnly\":false,\"eventType\":\"AwsApiCall\",\"managementEvent\":true,\"recipientAccountId\":\"REDACTED_ACCT\",\"eventCategory\":\"Management\",\"tlsDetails\":{\"tlsVersion\":\"TLSv1.3\",\"cipherSuite\":\"TLS_AES_128_GCM_SHA256\",\"clientProvidedHostHeader\":\"rds.us-east-1.amazonaws.com\"},\"sessionCredentialFromConsole\":\"true\"}"
+        },
+        {
+            "EventId": "d8ebd08a-ebfb-467e-b18d-4436c2a1463e",
+            "EventName": "ModifyDBInstance",
+            "ReadOnly": "false",
+            "AccessKeyId": "REDACTED",
+            "EventTime": "2026-06-23T19:46:00-04:00",
+            "EventSource": "rds.amazonaws.com",
+            "Username": "root",
+            "Resources": [
+                {
+                    "ResourceType": "AWS::RDS::DBInstance",
+                    "ResourceName": "episode-control-prod"
+                },
+                {
+                    "ResourceType": "AWS::EC2::VPC",
+                    "ResourceName": "vpc-09cc6fa2ee3ce35ba"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBSubnetGroup",
+                    "ResourceName": "episode-metadata-db-subnet-prod"
+                },
+                {
+                    "ResourceType": "AWS::EC2::SecurityGroup",
+                    "ResourceName": "sg-0164d0b20fbebacbb"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBOptionGroup",
+                    "ResourceName": "default:postgres-17"
+                },
+                {
+                    "ResourceType": "AWS::EC2::Subnet",
+                    "ResourceName": "subnet-046953dea789798c1"
+                },
+                {
+                    "ResourceType": "AWS::EC2::Subnet",
+                    "ResourceName": "subnet-0376b65548531e4c6"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBParameterGroup",
+                    "ResourceName": "default.postgres17"
+                }
+            ],
+            "CloudTrailEvent": "{\"eventVersion\":\"1.11\",\"userIdentity\":{\"type\":\"Root\",\"principalId\":\"REDACTED_ACCT\",\"arn\":\"arn:aws:iam::REDACTED_ACCT:root\",\"accountId\":\"REDACTED_ACCT\",\"accessKeyId\":\"REDACTED_KEY\",\"sessionContext\":{\"attributes\":{\"creationDate\":\"2026-06-23T23:30:41Z\",\"mfaAuthenticated\":\"true\"}}},\"eventTime\":\"2026-06-23T23:46:00Z\",\"eventSource\":\"rds.amazonaws.com\",\"eventName\":\"ModifyDBInstance\",\"awsRegion\":\"us-east-1\",\"sourceIPAddress\":\"108.216.160.136\",\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36\",\"requestParameters\":{\"dBInstanceIdentifier\":\"episode-control-prod\",\"applyImmediately\":true,\"masterUserPassword\":\"HIDDEN_DUE_TO_SECURITY_REASONS\",\"allowMajorVersionUpgrade\":false,\"manageMasterUserPassword\":false},\"responseElements\":{\"dBInstanceIdentifier\":\"episode-control-prod\",\"dBInstanceClass\":\"db.t3.small\",\"engine\":\"postgres\",\"dBInstanceStatus\":\"available\",\"masterUsername\":\"postgres\",\"endpoint\":{\"address\":\"episode-control-prod.csnow208wqtv.us-east-1.rds.amazonaws.com\",\"port\":5432,\"hostedZoneId\":\"Z2R2ITUGPM61AM\"},\"allocatedStorage\":50,\"instanceCreateTime\":\"Jan 1, 2026, 7:22:16 AM\",\"preferredBackupWindow\":\"06:45-07:15\",\"backupRetentionPeriod\":1,\"dBSecurityGroups\":[],\"vpcSecurityGroups\":[{\"vpcSecurityGroupId\":\"sg-0164d0b20fbebacbb\",\"status\":\"active\"}],\"dBParameterGroups\":[{\"dBParameterGroupName\":\"default.postgres17\",\"parameterApplyStatus\":\"in-sync\"}],\"availabilityZone\":\"us-east-1a\",\"dBSubnetGroup\":{\"dBSubnetGroupName\":\"episode-metadata-db-subnet-prod\",\"dBSubnetGroupDescription\":\"Prod RDS subnets\",\"vpcId\":\"vpc-09cc6fa2ee3ce35ba\",\"subnetGroupStatus\":\"Complete\",\"subnets\":[{\"subnetIdentifier\":\"subnet-046953dea789798c1\",\"subnetAvailabilityZone\":{\"name\":\"us-east-1b\"},\"subnetOutpost\":{},\"subnetStatus\":\"Active\"},{\"subnetIdentifier\":\"subnet-0376b65548531e4c6\",\"subnetAvailabilityZone\":{\"name\":\"us-east-1a\"},\"subnetOutpost\":{},\"subnetStatus\":\"Active\"}]},\"preferredMaintenanceWindow\":\"sun:05:57-sun:06:27\",\"upgradeRolloutOrder\":\"second\",\"pendingModifiedValues\":{\"masterUserPassword\":\"HIDDEN_DUE_TO_SECURITY_REASONS\"},\"latestRestorableTime\":\"Jun 23, 2026, 11:41:30 PM\",\"multiAZ\":false,\"engineVersion\":\"17.9\",\"autoMinorVersionUpgrade\":true,\"readReplicaDBInstanceIdentifiers\":[],\"licenseModel\":\"postgresql-license\",\"storageThroughput\":0,\"optionGroupMemberships\":[{\"optionGroupName\":\"default:postgres-17\",\"status\":\"in-sync\"}],\"publiclyAccessible\":true,\"storageType\":\"gp2\",\"dbInstancePort\":0,\"storageEncrypted\":false,\"dbiResourceId\":\"db-56JSHEXYCAXXJ3DYMSY2WO6QBY\",\"cACertificateIdentifier\":\"rds-ca-rsa2048-g1\",\"domainMemberships\":[],\"copyTagsToSnapshot\":false,\"monitoringInterval\":0,\"dBInstanceArn\":\"arn:aws:rds:us-east-1:REDACTED_ACCT:db:episode-control-prod\",\"iAMDatabaseAuthenticationEnabled\":false,\"databaseInsightsMode\":\"standard\",\"performanceInsightsEnabled\":false,\"deletionProtection\":false,\"associatedRoles\":[],\"httpEndpointEnabled\":false,\"tagList\":[],\"customerOwnedIpEnabled\":false,\"networkType\":\"IPV4\",\"backupTarget\":\"region\",\"certificateDetails\":{\"cAIdentifier\":\"rds-ca-rsa2048-g1\",\"validTill\":\"Jan 1, 2027, 7:21:04 AM\"},\"masterUserSecret\":{\"secretArn\":\"arn:aws:secretsmanager:us-east-1:REDACTED_ACCT:secret:rds!db-e0409cc5-310b-478a-abfe-7bfc18eb4efe-MtSsmn\",\"secretStatus\":\"active\",\"kmsKeyId\":\"arn:aws:kms:us-east-1:REDACTED_ACCT:key/1d6ffc33-ccbc-481b-995e-6a7c2ea4556a\"},\"dedicatedLogVolume\":false,\"engineLifecycleSupport\":\"open-source-rds-extended-support\",\"vPCNetworkingEnabled\":true},\"requestID\":\"51a46544-1dbc-4079-a5af-cd7dc7087c47\",\"eventID\":\"d8ebd08a-ebfb-467e-b18d-4436c2a1463e\",\"readOnly\":false,\"eventType\":\"AwsApiCall\",\"managementEvent\":true,\"recipientAccountId\":\"REDACTED_ACCT\",\"eventCategory\":\"Management\",\"tlsDetails\":{\"tlsVersion\":\"TLSv1.3\",\"cipherSuite\":\"TLS_AES_128_GCM_SHA256\",\"clientProvidedHostHeader\":\"rds.us-east-1.amazonaws.com\"},\"sessionCredentialFromConsole\":\"true\"}"
+        },
+        {
+            "EventId": "e5b563f4-a9d1-468e-a100-2ca8389964ea",
+            "EventName": "ModifyDBInstance",
+            "ReadOnly": "false",
+            "AccessKeyId": "REDACTED",
+            "EventTime": "2026-06-23T19:37:56-04:00",
+            "EventSource": "rds.amazonaws.com",
+            "Username": "root",
+            "Resources": [
+                {
+                    "ResourceType": "AWS::RDS::DBInstance",
+                    "ResourceName": "episode-control-dev"
+                },
+                {
+                    "ResourceType": "AWS::EC2::VPC",
+                    "ResourceName": "vpc-0754967be21268e7e"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBSubnetGroup",
+                    "ResourceName": "episode-metadata-db-subnet-dev"
+                },
+                {
+                    "ResourceType": "AWS::EC2::SecurityGroup",
+                    "ResourceName": "sg-002578912805d1930"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBOptionGroup",
+                    "ResourceName": "default:postgres-17"
+                },
+                {
+                    "ResourceType": "AWS::EC2::Subnet",
+                    "ResourceName": "subnet-096d836604a1db0ec"
+                },
+                {
+                    "ResourceType": "AWS::EC2::Subnet",
+                    "ResourceName": "subnet-01e980c37189eb3aa"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBParameterGroup",
+                    "ResourceName": "default.postgres17"
+                }
+            ],
+            "CloudTrailEvent": "{\"eventVersion\":\"1.11\",\"userIdentity\":{\"type\":\"Root\",\"principalId\":\"REDACTED_ACCT\",\"arn\":\"arn:aws:iam::REDACTED_ACCT:root\",\"accountId\":\"REDACTED_ACCT\",\"accessKeyId\":\"REDACTED_KEY\",\"sessionContext\":{\"attributes\":{\"creationDate\":\"2026-06-23T23:30:41Z\",\"mfaAuthenticated\":\"true\"}}},\"eventTime\":\"2026-06-23T23:37:56Z\",\"eventSource\":\"rds.amazonaws.com\",\"eventName\":\"ModifyDBInstance\",\"awsRegion\":\"us-east-1\",\"sourceIPAddress\":\"108.216.160.136\",\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36\",\"requestParameters\":{\"dBInstanceIdentifier\":\"episode-control-dev\",\"applyImmediately\":true,\"allowMajorVersionUpgrade\":false,\"manageMasterUserPassword\":true},\"responseElements\":{\"dBInstanceIdentifier\":\"episode-control-dev\",\"dBInstanceClass\":\"db.t3.micro\",\"engine\":\"postgres\",\"dBInstanceStatus\":\"available\",\"masterUsername\":\"postgres\",\"endpoint\":{\"address\":\"episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com\",\"port\":5432,\"hostedZoneId\":\"Z2R2ITUGPM61AM\"},\"allocatedStorage\":20,\"instanceCreateTime\":\"Jan 1, 2026, 7:21:03 AM\",\"preferredBackupWindow\":\"05:39-06:09\",\"backupRetentionPeriod\":1,\"dBSecurityGroups\":[],\"vpcSecurityGroups\":[{\"vpcSecurityGroupId\":\"sg-002578912805d1930\",\"status\":\"active\"}],\"dBParameterGroups\":[{\"dBParameterGroupName\":\"default.postgres17\",\"parameterApplyStatus\":\"in-sync\"}],\"availabilityZone\":\"us-east-1b\",\"dBSubnetGroup\":{\"dBSubnetGroupName\":\"episode-metadata-db-subnet-dev\",\"dBSubnetGroupDescription\":\"Dev RDS subnets\",\"vpcId\":\"vpc-0754967be21268e7e\",\"subnetGroupStatus\":\"Complete\",\"subnets\":[{\"subnetIdentifier\":\"subnet-096d836604a1db0ec\",\"subnetAvailabilityZone\":{\"name\":\"us-east-1b\"},\"subnetOutpost\":{},\"subnetStatus\":\"Active\"},{\"subnetIdentifier\":\"subnet-01e980c37189eb3aa\",\"subnetAvailabilityZone\":{\"name\":\"us-east-1a\"},\"subnetOutpost\":{},\"subnetStatus\":\"Active\"}]},\"preferredMaintenanceWindow\":\"mon:03:36-mon:04:06\",\"upgradeRolloutOrder\":\"second\",\"pendingModifiedValues\":{},\"latestRestorableTime\":\"Jun 23, 2026, 11:31:46 PM\",\"multiAZ\":false,\"engineVersion\":\"17.9\",\"autoMinorVersionUpgrade\":true,\"readReplicaDBInstanceIdentifiers\":[],\"licenseModel\":\"postgresql-license\",\"storageThroughput\":0,\"optionGroupMemberships\":[{\"optionGroupName\":\"default:postgres-17\",\"status\":\"in-sync\"}],\"publiclyAccessible\":true,\"storageType\":\"gp2\",\"dbInstancePort\":0,\"storageEncrypted\":false,\"dbiResourceId\":\"db-GBZ2JQVM3UIG4S6KD3WJ2RDWN4\",\"cACertificateIdentifier\":\"rds-ca-rsa2048-g1\",\"domainMemberships\":[],\"copyTagsToSnapshot\":false,\"monitoringInterval\":0,\"dBInstanceArn\":\"arn:aws:rds:us-east-1:REDACTED_ACCT:db:episode-control-dev\",\"iAMDatabaseAuthenticationEnabled\":false,\"databaseInsightsMode\":\"standard\",\"performanceInsightsEnabled\":false,\"deletionProtection\":false,\"associatedRoles\":[],\"httpEndpointEnabled\":false,\"tagList\":[],\"customerOwnedIpEnabled\":false,\"networkType\":\"IPV4\",\"backupTarget\":\"region\",\"certificateDetails\":{\"cAIdentifier\":\"rds-ca-rsa2048-g1\",\"validTill\":\"Jan 1, 2027, 7:19:51 AM\"},\"masterUserSecret\":{\"secretArn\":\"arn:aws:secretsmanager:us-east-1:REDACTED_ACCT:secret:rds!db-986735d2-682d-4a27-920a-75c7744d59e7-9zKL8k\",\"secretStatus\":\"creating\",\"kmsKeyId\":\"arn:aws:kms:us-east-1:REDACTED_ACCT:key/1d6ffc33-ccbc-481b-995e-6a7c2ea4556a\"},\"dedicatedLogVolume\":false,\"engineLifecycleSupport\":\"open-source-rds-extended-support\",\"vPCNetworkingEnabled\":true},\"requestID\":\"0fa42217-0546-424e-b526-55e9ab34fc92\",\"eventID\":\"e5b563f4-a9d1-468e-a100-2ca8389964ea\",\"readOnly\":false,\"eventType\":\"AwsApiCall\",\"managementEvent\":true,\"recipientAccountId\":\"REDACTED_ACCT\",\"eventCategory\":\"Management\",\"tlsDetails\":{\"tlsVersion\":\"TLSv1.3\",\"cipherSuite\":\"TLS_AES_128_GCM_SHA256\",\"clientProvidedHostHeader\":\"rds.us-east-1.amazonaws.com\"},\"sessionCredentialFromConsole\":\"true\"}"
+        },
+        {
+            "EventId": "281818d2-7dbc-447a-a62e-1a20a14ee80b",
+            "EventName": "ModifyDBInstance",
+            "ReadOnly": "false",
+            "AccessKeyId": "REDACTED",
+            "EventTime": "2026-06-23T19:37:27-04:00",
+            "EventSource": "rds.amazonaws.com",
+            "Username": "root",
+            "Resources": [
+                {
+                    "ResourceType": "AWS::RDS::DBInstance",
+                    "ResourceName": "episode-control-prod"
+                },
+                {
+                    "ResourceType": "AWS::EC2::VPC",
+                    "ResourceName": "vpc-09cc6fa2ee3ce35ba"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBSubnetGroup",
+                    "ResourceName": "episode-metadata-db-subnet-prod"
+                },
+                {
+                    "ResourceType": "AWS::EC2::SecurityGroup",
+                    "ResourceName": "sg-0164d0b20fbebacbb"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBOptionGroup",
+                    "ResourceName": "default:postgres-17"
+                },
+                {
+                    "ResourceType": "AWS::EC2::Subnet",
+                    "ResourceName": "subnet-046953dea789798c1"
+                },
+                {
+                    "ResourceType": "AWS::EC2::Subnet",
+                    "ResourceName": "subnet-0376b65548531e4c6"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBParameterGroup",
+                    "ResourceName": "default.postgres17"
+                }
+            ],
+            "CloudTrailEvent": "{\"eventVersion\":\"1.11\",\"userIdentity\":{\"type\":\"Root\",\"principalId\":\"REDACTED_ACCT\",\"arn\":\"arn:aws:iam::REDACTED_ACCT:root\",\"accountId\":\"REDACTED_ACCT\",\"accessKeyId\":\"REDACTED_KEY\",\"sessionContext\":{\"attributes\":{\"creationDate\":\"2026-06-23T23:30:41Z\",\"mfaAuthenticated\":\"true\"}}},\"eventTime\":\"2026-06-23T23:37:27Z\",\"eventSource\":\"rds.amazonaws.com\",\"eventName\":\"ModifyDBInstance\",\"awsRegion\":\"us-east-1\",\"sourceIPAddress\":\"108.216.160.136\",\"userAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36\",\"requestParameters\":{\"dBInstanceIdentifier\":\"episode-control-prod\",\"applyImmediately\":true,\"allowMajorVersionUpgrade\":false,\"manageMasterUserPassword\":true},\"responseElements\":{\"dBInstanceIdentifier\":\"episode-control-prod\",\"dBInstanceClass\":\"db.t3.small\",\"engine\":\"postgres\",\"dBInstanceStatus\":\"available\",\"masterUsername\":\"postgres\",\"endpoint\":{\"address\":\"episode-control-prod.csnow208wqtv.us-east-1.rds.amazonaws.com\",\"port\":5432,\"hostedZoneId\":\"Z2R2ITUGPM61AM\"},\"allocatedStorage\":50,\"instanceCreateTime\":\"Jan 1, 2026, 7:22:16 AM\",\"preferredBackupWindow\":\"06:45-07:15\",\"backupRetentionPeriod\":1,\"dBSecurityGroups\":[],\"vpcSecurityGroups\":[{\"vpcSecurityGroupId\":\"sg-0164d0b20fbebacbb\",\"status\":\"active\"}],\"dBParameterGroups\":[{\"dBParameterGroupName\":\"default.postgres17\",\"parameterApplyStatus\":\"in-sync\"}],\"availabilityZone\":\"us-east-1a\",\"dBSubnetGroup\":{\"dBSubnetGroupName\":\"episode-metadata-db-subnet-prod\",\"dBSubnetGroupDescription\":\"Prod RDS subnets\",\"vpcId\":\"vpc-09cc6fa2ee3ce35ba\",\"subnetGroupStatus\":\"Complete\",\"subnets\":[{\"subnetIdentifier\":\"subnet-046953dea789798c1\",\"subnetAvailabilityZone\":{\"name\":\"us-east-1b\"},\"subnetOutpost\":{},\"subnetStatus\":\"Active\"},{\"subnetIdentifier\":\"subnet-0376b65548531e4c6\",\"subnetAvailabilityZone\":{\"name\":\"us-east-1a\"},\"subnetOutpost\":{},\"subnetStatus\":\"Active\"}]},\"preferredMaintenanceWindow\":\"sun:05:57-sun:06:27\",\"upgradeRolloutOrder\":\"second\",\"pendingModifiedValues\":{},\"latestRestorableTime\":\"Jun 23, 2026, 11:31:29 PM\",\"multiAZ\":false,\"engineVersion\":\"17.9\",\"autoMinorVersionUpgrade\":true,\"readReplicaDBInstanceIdentifiers\":[],\"licenseModel\":\"postgresql-license\",\"storageThroughput\":0,\"optionGroupMemberships\":[{\"optionGroupName\":\"default:postgres-17\",\"status\":\"in-sync\"}],\"publiclyAccessible\":true,\"storageType\":\"gp2\",\"dbInstancePort\":0,\"storageEncrypted\":false,\"dbiResourceId\":\"db-56JSHEXYCAXXJ3DYMSY2WO6QBY\",\"cACertificateIdentifier\":\"rds-ca-rsa2048-g1\",\"domainMemberships\":[],\"copyTagsToSnapshot\":false,\"monitoringInterval\":0,\"dBInstanceArn\":\"arn:aws:rds:us-east-1:REDACTED_ACCT:db:episode-control-prod\",\"iAMDatabaseAuthenticationEnabled\":false,\"databaseInsightsMode\":\"standard\",\"performanceInsightsEnabled\":false,\"deletionProtection\":false,\"associatedRoles\":[],\"httpEndpointEnabled\":false,\"tagList\":[],\"customerOwnedIpEnabled\":false,\"networkType\":\"IPV4\",\"backupTarget\":\"region\",\"certificateDetails\":{\"cAIdentifier\":\"rds-ca-rsa2048-g1\",\"validTill\":\"Jan 1, 2027, 7:21:04 AM\"},\"masterUserSecret\":{\"secretArn\":\"arn:aws:secretsmanager:us-east-1:REDACTED_ACCT:secret:rds!db-e0409cc5-310b-478a-abfe-7bfc18eb4efe-MtSsmn\",\"secretStatus\":\"creating\",\"kmsKeyId\":\"arn:aws:kms:us-east-1:REDACTED_ACCT:key/1d6ffc33-ccbc-481b-995e-6a7c2ea4556a\"},\"dedicatedLogVolume\":false,\"engineLifecycleSupport\":\"open-source-rds-extended-support\",\"vPCNetworkingEnabled\":true},\"requestID\":\"d5e4b3ab-6199-420a-8c1d-b6ce91488d02\",\"eventID\":\"281818d2-7dbc-447a-a62e-1a20a14ee80b\",\"readOnly\":false,\"eventType\":\"AwsApiCall\",\"managementEvent\":true,\"recipientAccountId\":\"REDACTED_ACCT\",\"eventCategory\":\"Management\",\"tlsDetails\":{\"tlsVersion\":\"TLSv1.3\",\"cipherSuite\":\"TLS_AES_128_GCM_SHA256\",\"clientProvidedHostHeader\":\"rds.us-east-1.amazonaws.com\"},\"sessionCredentialFromConsole\":\"true\"}"
+        },
+        {
+            "EventId": "de08475c-5195-45c0-a89f-cbd2dec9bffd",
+            "EventName": "ModifyDBInstance",
+            "ReadOnly": "false",
+            "AccessKeyId": "REDACTED",
+            "EventTime": "2026-06-20T19:16:50-04:00",
+            "EventSource": "rds.amazonaws.com",
+            "Username": "evoni-admin",
+            "Resources": [
+                {
+                    "ResourceType": "AWS::RDS::DBInstance",
+                    "ResourceName": "episode-control-dev"
+                },
+                {
+                    "ResourceType": "AWS::EC2::VPC",
+                    "ResourceName": "vpc-0754967be21268e7e"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBSubnetGroup",
+                    "ResourceName": "episode-metadata-db-subnet-dev"
+                },
+                {
+                    "ResourceType": "AWS::EC2::SecurityGroup",
+                    "ResourceName": "sg-002578912805d1930"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBOptionGroup",
+                    "ResourceName": "default:postgres-17"
+                },
+                {
+                    "ResourceType": "AWS::EC2::Subnet",
+                    "ResourceName": "subnet-096d836604a1db0ec"
+                },
+                {
+                    "ResourceType": "AWS::EC2::Subnet",
+                    "ResourceName": "subnet-01e980c37189eb3aa"
+                },
+                {
+                    "ResourceType": "AWS::RDS::DBParameterGroup",
+                    "ResourceName": "default.postgres17"
+                }
+            ],
+            "CloudTrailEvent": "{\"eventVersion\":\"1.11\",\"userIdentity\":{\"type\":\"IAMUser\",\"principalId\":\"AIDAZI2LDARQZQMRI4J7D\",\"arn\":\"arn:aws:iam::REDACTED_ACCT:user/evoni-admin\",\"accountId\":\"REDACTED_ACCT\",\"accessKeyId\":\"REDACTED_KEY\",\"userName\":\"evoni-admin\"},\"eventTime\":\"2026-06-20T23:16:50Z\",\"eventSource\":\"rds.amazonaws.com\",\"eventName\":\"ModifyDBInstance\",\"awsRegion\":\"us-east-1\",\"sourceIPAddress\":\"108.216.160.136\",\"userAgent\":\"aws-cli/2.33.2 md/awscrt#0.29.1 ua/2.1 os/windows#11 md/arch#amd64 lang/python#3.13.11 md/pyimpl#CPython m/E,b,Z,n cfg/retry-mode#standard md/installer#exe md/prompt#off md/command#rds.modify-db-instance\",\"requestParameters\":{\"dBInstanceIdentifier\":\"episode-control-dev\",\"applyImmediately\":true,\"masterUserPassword\":\"HIDDEN_DUE_TO_SECURITY_REASONS\",\"allowMajorVersionUpgrade\":false},\"responseElements\":{\"dBInstanceIdentifier\":\"episode-control-dev\",\"dBInstanceClass\":\"db.t3.micro\",\"engine\":\"postgres\",\"dBInstanceStatus\":\"available\",\"masterUsername\":\"postgres\",\"endpoint\":{\"address\":\"episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com\",\"port\":5432,\"hostedZoneId\":\"Z2R2ITUGPM61AM\"},\"allocatedStorage\":20,\"instanceCreateTime\":\"Jan 1, 2026, 7:21:03 AM\",\"preferredBackupWindow\":\"05:39-06:09\",\"backupRetentionPeriod\":1,\"dBSecurityGroups\":[],\"vpcSecurityGroups\":[{\"vpcSecurityGroupId\":\"sg-002578912805d1930\",\"status\":\"active\"}],\"dBParameterGroups\":[{\"dBParameterGroupName\":\"default.postgres17\",\"parameterApplyStatus\":\"in-sync\"}],\"availabilityZone\":\"us-east-1b\",\"dBSubnetGroup\":{\"dBSubnetGroupName\":\"episode-metadata-db-subnet-dev\",\"dBSubnetGroupDescription\":\"Dev RDS subnets\",\"vpcId\":\"vpc-0754967be21268e7e\",\"subnetGroupStatus\":\"Complete\",\"subnets\":[{\"subnetIdentifier\":\"subnet-096d836604a1db0ec\",\"subnetAvailabilityZone\":{\"name\":\"us-east-1b\"},\"subnetOutpost\":{},\"subnetStatus\":\"Active\"},{\"subnetIdentifier\":\"subnet-01e980c37189eb3aa\",\"subnetAvailabilityZone\":{\"name\":\"us-east-1a\"},\"subnetOutpost\":{},\"subnetStatus\":\"Active\"}]},\"preferredMaintenanceWindow\":\"mon:03:36-mon:04:06\",\"upgradeRolloutOrder\":\"second\",\"pendingModifiedValues\":{\"masterUserPassword\":\"HIDDEN_DUE_TO_SECURITY_REASONS\"},\"latestRestorableTime\":\"Jun 20, 2026, 11:13:40 PM\",\"multiAZ\":false,\"engineVersion\":\"17.9\",\"autoMinorVersionUpgrade\":true,\"readReplicaDBInstanceIdentifiers\":[],\"licenseModel\":\"postgresql-license\",\"storageThroughput\":0,\"optionGroupMemberships\":[{\"optionGroupName\":\"default:postgres-17\",\"status\":\"in-sync\"}],\"publiclyAccessible\":true,\"storageType\":\"gp2\",\"dbInstancePort\":0,\"storageEncrypted\":false,\"dbiResourceId\":\"db-GBZ2JQVM3UIG4S6KD3WJ2RDWN4\",\"cACertificateIdentifier\":\"rds-ca-rsa2048-g1\",\"domainMemberships\":[],\"copyTagsToSnapshot\":false,\"monitoringInterval\":0,\"dBInstanceArn\":\"arn:aws:rds:us-east-1:REDACTED_ACCT:db:episode-control-dev\",\"iAMDatabaseAuthenticationEnabled\":false,\"databaseInsightsMode\":\"standard\",\"performanceInsightsEnabled\":false,\"deletionProtection\":false,\"associatedRoles\":[],\"httpEndpointEnabled\":false,\"tagList\":[],\"customerOwnedIpEnabled\":false,\"networkType\":\"IPV4\",\"backupTarget\":\"region\",\"certificateDetails\":{\"cAIdentifier\":\"rds-ca-rsa2048-g1\",\"validTill\":\"Jan 1, 2027, 7:19:51 AM\"},\"dedicatedLogVolume\":false,\"engineLifecycleSupport\":\"open-source-rds-extended-support\",\"vPCNetworkingEnabled\":true},\"requestID\":\"bef7ac00-f133-4465-9d69-504497a5bf54\",\"eventID\":\"de08475c-5195-45c0-a89f-cbd2dec9bffd\",\"readOnly\":false,\"eventType\":\"AwsApiCall\",\"managementEvent\":true,\"recipientAccountId\":\"REDACTED_ACCT\",\"eventCategory\":\"Management\",\"tlsDetails\":{\"tlsVersion\":\"TLSv1.3\",\"cipherSuite\":\"TLS_AES_128_GCM_SHA256\",\"clientProvidedHostHeader\":\"rds.us-east-1.amazonaws.com\"}}"
+        }
+    ]
+}
