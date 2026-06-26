@@ -412,6 +412,17 @@ rotation-for-correctness:
 
 ### Sec 6.3 -- Cutover sequence (FULL -- gate 2.4)
 
+> **WARNING -- SUPERSEDE BANNER (Sec 6.3), added 2026-06-25. Authority: FD-42 (Fix Plan v1.15). Original 6.3 below is preserved verbatim; this banner corrects credential-state assumptions 6.3 was written under (pre-06-15 world, off-box credential working). Read before executing 6.3.**
+>
+> **Per FD-42, the off-box canon credential (`.env` == SSM v2) is STALE by >=2 rotations (06-20, 06-23). The only credential that currently authenticates canon exists in pm2 id-3 in-memory pool. This changes three things in 6.3:**
+>
+> 1. **Step 2 rotation is MANDATORY, not "optional hygiene."** It is the sole means of establishing a known off-box canon credential -- there is no working off-box value to fall back on. "Skip step 2" is NOT a valid branch.
+> 2. **Step 3 "if step 2 skipped, .env needs no change" no longer applies** -- step 2 is not skipped. The rotated <NEW> value MUST be written to .env AND to SSM (new version, closing the FD-42 off-box gap) within this window.
+> 3. **The restart (Track B step 5) is credential-destructive, not only data/topology-irreversible.** When the process cycles, the in-memory working credential is GONE. If .env does not already hold the rotated <NEW> value at cycle time, canon access is lost with NO off-box recovery. The 6.3 coupling ("rotate + restart-to-align in one combined window") is therefore REQUIRED for credential survival, not merely efficient. Order within the window: rotate canon -> confirm PendingModifiedValues empty -> write <NEW> to .env + SSM -> THEN restart.
+>
+> **The <NEW> value never appears in any document, chat, or commit. Rule 7 gate on the canon modify-db-instance stands; confirm episode-control-dev, NOT -prod, twice.**
+
+
 Run under Rule 7, each step a boundary. Re-verify the Sec 7 abort checks live at
 session start BEFORE step 1.
 
