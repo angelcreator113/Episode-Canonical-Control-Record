@@ -1,13 +1,19 @@
 #!/bin/bash
-# Pre-commit hook: blocks commits that introduce ungated cost patterns.
+# Pre-commit hook: blocks commits that introduce root-level junk or ungated cost patterns.
 # Install: git config core.hooksPath .githooks
 
-echo "[pre-commit] Running cost exposure audit..."
+# Root-junk guard (node-based; added after the ct_modifydb.json incident 2026-06-26)
+echo "[pre-commit] Checking for root-level junk..."
+if ! node scripts/check-root-junk.js; then
+  echo ""
+  echo "Commit blocked — remove or relocate root-level junk above before committing."
+  exit 1
+fi
 
+echo "[pre-commit] Running cost exposure audit..."
 if ! bash scripts/audit-cost-exposure.sh; then
   echo ""
   echo "Commit blocked — fix cost exposure issues above before committing."
   exit 1
 fi
-
 echo "[pre-commit] Cost audit passed."
