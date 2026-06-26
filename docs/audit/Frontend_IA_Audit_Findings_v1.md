@@ -297,3 +297,8 @@ file:line-backed, three overlap hypotheses tested. Stops at findings per Path A.
 v1.1 (2026-05-31, committed 2026-06-17): added IA-3/IA-5 dispositions +
 Consolidation Backlog; reconciled Sec 6 framing. Freeze-irrelevant (frontend
 analysis). Cleanup plan deferred to its own phase.*
+---
+
+**IA-6 disposition -- ShowAssetsTab sub-item (2026-06-26, read-only).** `ShowAssetsTab.jsx:5` self-describes as "Production Asset Dashboard" in its header comment; fetches asset endpoints only (`/scene-sets`, `/ui-overlays`, `/wardrobe`, `/assets?asset_scope=SHOW`) and renders five asset categories (Scene Sets, Lala's Phone, Wardrobe, Invitations, Uploads). Component (`ShowAssetsTab`), internal key (`assets`), and content all agree = Assets. The ShowDetail tab label "Production" (`ShowDetail.jsx:257,260`) is the sole element out of step -- it is the defect, not the key or component. Fix direction = one-word label change "Production" -> "Assets"; NOT a component/key rename. Note: the word "Production" in the component's own docstring is itself IA-1 `Produc*`-overload residue -- the same naming collision IA-1 flagged leaking into the component-level comment. The label fix is therefore consistent with, not in tension with, the eventual IA-1 canonical-naming decision.
+
+*v1.2 (2026-06-26): IA-6 disposition addendum -- three-way analysis (component + key + content all agree = Assets; label is sole mismatch) + IA-1 connection note recorded.*
