@@ -85,6 +85,18 @@ one that writes a new canon password. The value-provenance gate (ReAnchor Sec 3)
 
 Two sub-paths -- choose per session policy, both gated:
 
+> **Preference within Branch 4 (Finding 3, FD-43 #865).** 4a and 4b are NOT neutral
+> choices. 4a is PREFERRED: it propagates the EXISTING working credential (the in-memory
+> value) to the off-box surfaces without touching canon -- the same re-anchor mechanism
+> branches 2 and 3 use (write an already-authenticated value to SSM/.env), differing only
+> in that the value is sourced from masked in-memory extraction rather than a disk file.
+> The thread through branches 2, 3, and 4a is identical: re-anchor an authenticated value,
+> whatever its source; canon's password is unchanged. The mechanism is `ssm put-parameter`
+> (+ .env write), NOT `modify-db-instance`. 4b (rotate fresh) is the FALLBACK only when
+> extraction is prohibited or fails -- and it is the ONLY sub-path that changes the
+> authenticated value, constitutes a canon write, and increments the credential rotation
+> COUNT (FD-42 qualifier). Try 4a first; fall to 4b only if 4a is unavailable.
+
 **4a -- Masked in-memory extraction (if policy permits reading the running secret):**
 1. Extraction is masked, hashed, non-printing ONLY. `pm2 env`, `pm2 jlist`, `pm2 prettylist`
    are PROHIBITED -- they print the secret to console/transcript (v2 Sec 4).
