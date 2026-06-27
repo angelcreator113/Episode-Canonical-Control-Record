@@ -1,555 +1,177 @@
-# Session Handoff Document
+# Session Handoff — 2026-06-27
 
-**Date:** 2026-04-14
-**Status:** Ready for next session pickup
-
----
-
-## Part 1: What Was Built This Session
-
-### 1. DREAM Cities System
-
-Created the unified LalaVerse geography — 5 cities forming the D.R.E.A.M. acronym:
-
-| Letter | City | Domain | Color |
-|--------|------|--------|-------|
-| **D** | Dazzle District | Fashion & Luxury | `#d4789a` |
-| **R** | Radiance Row | Beauty & Wellness | `#a889c8` |
-| **E** | Echo Park | Entertainment & Nightlife | `#c9a84c` |
-| **A** | Ascent Tower | Tech & Innovation | `#6bba9a` |
-| **M** | Maverick Harbor | Creator Economy & Counter-culture | `#7ab3d4` |
-
-Each city has: neighborhoods/pins, universities, corporations, major events, resident archetypes, and cultural energy descriptions.
-
-**Key files:**
-- `frontend/src/data/dreamCities.js` — DREAM_CITIES, UNIVERSITIES, CORPORATIONS, WORLD_LAYERS
-- `frontend/src/data/influencerData.js` — Archetypes, relationships, economy, trends
-- `frontend/src/data/calendarData.js` — Award shows, celebrity hierarchy, media outlets
-- `frontend/src/data/memoryData.js` — Memory types, archives, legends, feuds
-- `frontend/src/components/DreamMap.jsx` — Interactive map component
-
-**Backend:**
-- **Migration** `20260725000000` — Renames old city enums (nova_prime → dazzle_district, etc.) across SocialProfile model
-- `CITY_CULTURE` mappings updated in `socialProfileRoutes.js`
-- `feedConstants.js` LALAVERSE_CITIES updated
-- `GET/PUT /api/v1/world/map/positions` — Load/save city layouts (PageContent model)
-- `POST /api/v1/world/map/upload` — Upload map image to S3
-- `GET /api/v1/world/map` — Get map image URL
+**Status:** Incident contained. P0 mitigated. DO NOT start work without reading this.
 
 ---
 
-### 2. Interactive World Map
+## CRITICAL: CI STATE DIVERGENCE
 
-`DreamMap.jsx` — Full interactive map component with:
-- Pan (drag) and zoom (mouse wheel) controls
-- City zone hotspots with glow effects and letter badges
-- Location pins showing scene sets on hover
-- Lala's position indicator with pulse animation
-- Creator distribution by city sidebar
-- Edit mode to reposition cities and persist to DB
-- Gradient placeholder map (awaiting uploaded world render)
-- Opens as modal from map pin icon in script beats (`EpisodeScriptTab.jsx`)
+`auto-merge-to-dev.yml` and `deploy-dev.yml` are **DISABLED** via GitHub Actions UI
+(2026-06-27). The workflow *files* on disk look intact and unchanged — do not trust
+them as evidence the pipeline is live. Before any session, verify:
 
----
+    gh workflow list --all
 
-### 3. Four Consolidated Pages
+Must show both as `disabled_manually`. If either shows `active`, stop and assess
+before pushing anything to a `claude/**` branch.
 
-Merged scattered world-building pages into 4 focused pages:
-
-| New Page | Merges | Route | Tabs |
-|----------|--------|-------|------|
-| **WorldDashboard** | WorldSetupGuide + UniverseWorldState | `/world-dashboard` | Setup Progress, World State, Tensions |
-| **WorldFoundation** | WorldInfrastructure + WorldLocations | `/world-foundation` | The Map, Locations, The Loop |
-| **SocialSystems** | InfluencerSystems + Legends + Society | `/social-systems` | Archetypes, Legends/Society, Rules, Trends |
-| **CultureEvents** | CulturalCalendar + CulturalMemory | `/culture-events` | Calendar, Memory, Legacy |
-
-All under FRANCHISE in sidebar.
-
-Culture & Events uses 3 sub-components: `Culture/EventsTab.jsx`, `Culture/AwardsMediaTab.jsx`, `Culture/HistoryTab.jsx`
-
-SocialSystems covers: 15 archetypes, 50 legends, famous 25, celebrity hierarchy, media outlets, relationships, economy, trends, algorithm, drama mechanics.
-
-**WorldDashboard** provides a 7-step setup wizard:
-1. World Foundation (DREAM cities, companies, universities)
-2. Social Systems (influence, archetypes, economy)
-3. Culture & Events (yearly rhythm, auto-spawn events)
-4. Cultural Memory (legends, feuds, archives)
-5. Locations & Venues (map, venues, scene sets)
-6. Generate Feed (influencers, rivals, friends)
-7. Create World Events (calendar auto-spawn)
+**Re-enable preconditions (ALL must be met before re-enabling):**
+1. Fix deploy-dev.yml structural flaw: `bootstrap-sequelize-meta.js` has no error
+   handler; a bootstrap failure exits under `set -eo pipefail` after `pm2 stop all`
+   already ran, leaving production stopped. Migration step has a soft-fail handler
+   (`MIGRATION_FAILED=true`); bootstrap needs equivalent, or PM2 restart must be
+   wrapped in `trap ... EXIT` so it runs unconditionally.
+2. Evaluate `DEV_DB_PASSWORD` GitHub Secret independently. Do NOT update it simply
+   to make the deploy work — that writes the current canon credential into CI, which
+   is wrong during an active freeze. Evaluate at re-enable time when continuous
+   deploy is actually wanted.
+3. Freeze must have lifted and continuous-deploy must be explicitly intended.
 
 ---
 
-### 4. Feed-to-Location Connection
+## Box State (confirmed at session close, 2026-06-27 ~13:01 UTC)
 
-Added location awareness to the social feed system:
+| id | name                    | mode    | port | status  | notes                                        |
+|----|-------------------------|---------|------|---------|----------------------------------------------|
+| 0  | episode-api             | cluster | 3002 | online  | DB connected (fixed this session — see trap) |
+| 1  | episode-worker          | fork    | —    | online  | DB connected (fixed this session — see trap) |
+| 3  | episode-api-prod-hotfix | fork    | 3000 | online  | DB connected, healthy — LIVE SERVE           |
+| 4  | episode-api-parallel    | fork    | 3003 | stopped | --no-autorestart; tree intact                |
 
-- **Migration:** `20260725000001-add-location-to-social-profiles.js`
-  - `home_location_id` FK on social_profiles → world_locations (where a creator lives)
-  - `frequent_venues` JSONB array of location IDs they visit
-- **Profile generation** (`socialProfileRoutes.js`): auto-creates signature venue per creator based on content category (fashion→Showroom, beauty→Studio, music→Studio, etc.)
-- **Event automation** (`eventAutomationService.js`): `findVenue()` checks host's frequent venues → host's city → category match → fallback
-- **WorldLocation model**: `hasMany(SocialProfile, { as: 'residents' })`
-- **Seed infrastructure** (`worldStudio.js`): 30 locations across 5 DREAM cities with addresses
-- Location types: city, district, street, venue, property, interior, exterior, landmark, virtual, transitional
-- Venue types: restaurant, club, bar, cafe, salon, spa, gallery, museum, boutique, gym, hotel, office, park, rooftop, theater
-- Property types: penthouse, mansion, apartment, townhouse, studio, villa, loft, cottage
+**PM2-stored-env rotation trap (root cause not fixed):** id 0 and id 1 had been
+database-disconnected since a prior password rotation. PM2 caches `DB_PASSWORD` in
+its stored-env snapshot at first start; `dotenv.config()` will not override an
+already-set env var, so any `pm2 restart` reloads the cached stale password silently.
+Fixed this session via `pm2 startOrRestart ecosystem.config.js --only <name>`, which
+re-parses the ecosystem config (calls `dotenv.config()` before `sharedEnv` builds)
+and injects the current `.env` password. **The structural trap is not fixed: any
+future DB password rotation will silently disconnect any PM2 process not subsequently
+restarted via `startOrRestart ecosystem.config.js`. This will recur on every rotation
+unless PM2 startup is changed to always re-read `.env` at restart.**
 
----
-
-### 5. Phone Hub + Screen Renderer
-
-**Phone Hub** (`frontend/src/components/PhoneHub.jsx`):
-- Visual phone device with screen preview
-- 13 screen type slots: Home, Feed, DMs, Invitation, Closet, Comments, Stories, Profile, Alerts, Camera, Shopping, Live, Map
-- 7 phone skins: Midnight, Rose Gold, Gold, Silver, White, Pink, Lavender
-- Custom frame upload
-- Existing overlays map to screen slots by name/beat matching
-
-**UI Overlays Tab** (`frontend/src/pages/UIOverlaysTab.jsx`) — full rewrite:
-- Phone Hub design: device preview left, screen grid right
-- Detail panel with Generate, Upload, Download, Remove BG, Delete
-- Modal stays open after actions (no scroll-to-top)
-- Delete button on all overlay cards
-- Tab persistence in URL (`?tab=overlays-tab`)
-
-**Phone Screen Renderer** (`src/services/phoneScreenRenderer.js` + `src/models/FeedMoment.js`):
-- Generates phone mockup PNGs showing what Lala sees on her phone during scenes
-- Types: notification, post, story, dm, live, ui_interaction
-- Canvas-rendered with custom fonts, notch, status bar, rounded corners
-- Each FeedMoment captures: trigger (profile, handle, action), screen content, dual voice script (JustAWoman vs Lala internal), narrative impact, financial context
-- Stored in `feed_moments` table with associations to episodes, events, social_profiles
+id 4 (parallel): parallel tree `/home/ubuntu/episode-metadata-parallel/` is intact
+on disk (P1-P5 executed, `.env` symlinked to serving tree, node_modules present).
+Process is stopped and held — `--no-autorestart`. Phase 2A construction is complete;
+the process was stopped by the CI/CD incident this session and not restarted.
 
 ---
 
-### 6. Auto-Remove-BG
+## P0 — Deploy Automation (mitigated, deferred fix)
 
-Background removal integrated across asset pipeline:
-- Primary: remove.bg API (via `REMOVEBG_API_KEY`)
-- Fallback: RunwayML `removeBackground()`
-- Applied when `removeBackground: true` flag is set during object/asset generation
-- Used in wardrobe controller and scene studio controller
-- **Key files:**
-  - `src/services/objectGenerationService.js`
-  - `src/services/AssetProcessingService.js`
-  - `src/services/RunwayMLService.js`
-  - `src/controllers/wardrobeController.js`
-  - `src/controllers/sceneStudioController.js`
+**What happened:** Any push to a `claude/**` branch triggered `auto-merge-to-dev.yml`,
+which merged the branch into `dev`. That triggered `deploy-dev.yml`, which:
+1. Ran `pm2 stop all || true` unconditionally before uploading the tarball
+2. Deployed code
+3. Ran `node scripts/bootstrap-sequelize-meta.js` (no error handler) — FAILED with
+   `password authentication failed` because GitHub Secret `DEV_DB_PASSWORD` is stale
+   (never updated post-FD-40 rotation)
+4. `set -eo pipefail` exited the SSH session before reaching PM2 restart
+5. Production stayed stopped
 
----
+Triggered twice this session: once for the AG-gate finding branch, once for the
+construction spec branch. Both deploys failed at bootstrap; both left all processes
+stopped. id 3 was recovered first (canon-confirmed before proceeding to id 0/id 1).
 
-### 7. Culture & Events Redesign
+**Mitigation:** Both workflows disabled via `gh workflow disable` on 2026-06-27.
+Chain is dead. `claude/**` pushes arm nothing.
 
-`frontend/src/pages/CultureEvents.jsx` — Unified culture page with three tabs:
-
-- **Calendar tab:** Yearly cultural events (award shows, birthdays, micro-events), event categories (fashion/beauty/entertainment/lifestyle/community/technology), auto-spawn world events with host/guest generation
-- **Memory tab:** Cultural memory, legends, feuds, archives, anniversaries, nostalgia waves
-- **Legacy tab:** How the world remembers significant moments
-- `calendarRoutes.js`: `CATEGORY_TO_DREAM_CITY` mapping + `dreamCityFromEvent()` helper
-- Events tab shows By City (default) or By Month view — each event card shows city letter badge
-- Connected to world events via `location_id`
-- Integrated with Feed via auto-generation of social posts about events
+**Also discovered:** `auto-merge-to-dev.yml` resolves conflicts via `git merge -X ours`
+(dev wins, feature branch conflicting hunks silently discarded). Notification only
+via comment on issue #708. Check #708 for new comments after any future `claude/**`
+push to confirm no content was discarded on dev. This session's two merges were clean
+(#708 had no new comments, confirmed by live read).
 
 ---
 
-### 8. Franchise Brain Auto-Push
+## Security Finding (POINTER ONLY — do not restate value here)
 
-**Manual push** — `frontend/src/components/PushToBrain.jsx`:
-- Reusable "Push to Brain" button on any world-building page
-- Sends page's `usePageData` state to the franchise brain ingest pipeline
-- Creates entries as "Pending Review" status
-- Available on: CultureEvents, SocialSystems, WorldFoundation, and other pages
-- **Route:** `POST /franchise-brain/push-from-page`
+A production DB credential (pre-FD-40 rotation value) was exposed in cleartext during
+incident diagnosis on 2026-06-27. Appears in this session's transcript and SSH tool
+log chain. Bash history on box was cleared (partial mitigation only — transcript/logs
+persist; clearing bash history is not the remediation).
 
-**Auto-push on episode completion** — `episodeCompletionService.js` Step 16:
-- Auto-creates franchise_knowledge entries when an episode completes
-- Pushes episode result + character state snapshot
-- Supersedes previous state snapshot automatically
-- `franchiseBrainRoutes.js`: seed route checks table existence before counting
+**Evidence of deprecation (partial, not confirmed):** The RDS actively rejected id 0's
+stale stored-env password. By timeline reasoning that stored value is likely the same
+pre-rotation credential as the leaked transcript value — but this is inference from
+timestamps, not a direct test of the leaked value itself. Treat as
+*likely-deprecated, not confirmed-deprecated*.
 
-**Knowledge categories:** Franchise Laws, Character, Narrative, Locked Decision, Technical, Brand, World
+**Open check — explicitly not closed:** SSM parameter history, version 1 (pre-FD-40
+snapshot, written 2026-06-14). Has not been verified live. The leaked value may or may
+not appear in SSM v1. Method: read SSM parameter version list with timestamps and
+dates only — no value output needed. Do not treat the finding as closed until this is
+run and (if any doubt remains) a direct auth probe confirms rejection.
 
----
-
-### 9. Wardrobe Improvements
-
-- `wardrobeLibraryController.js`: auto-remove-bg on upload via Remove.bg API (non-blocking)
-- CSS: `object-fit: contain`, padding, warm gradient background, hover zoom
+**Action if any doubt:** treat as compromised, rotate again.
 
 ---
 
-### 10. All Fixes
+## Open Items (prioritized)
 
-- `UniversePage.jsx`: load universe from `show.universe_id` instead of hardcoded UUID
-- `WorldDashboard.jsx`: `safeFetch` for page-content checks, correct URL (`/page-content/` not `/page-data/`)
-- `SidebarProgress.jsx`: light pink background
-- `FranchiseBrain.jsx`: routes point to new consolidated pages
-- `WorldSetupGuide.jsx`: step routes point to new pages
-- Silent catch linting fixes in episodeCompletionService
-- Feed profile generation connected to DREAM city locations
-- Event auto-spawn linked to venue locations
-- World state snapshots and timeline events in WorldDashboard
-- Tension pairs tracking between characters/factions
+**[BLOCKED until P0 fix]**
+- Construction spec PR: commit `880c8dd7` on remote branch
+  `claude/f-deploy-1-phase2a-construction-spec-2026-06-27`, no PR opened.
+  *(SHA as of this session — verify live: `git log origin/claude/f-deploy-1-phase2a-construction-spec-2026-06-27 --oneline -1`)*
+  Do NOT open PR until workflows are re-enabled safely.
+- Sec5 evidence note: `docs/audit/F-Deploy-1_2026-06-26_Sec5_ReVerify_Evidence.md`
+  — untracked locally, never committed. Safe from `git checkout`; will not survive
+  `git clean -fd`.
+- PR #871 (AG-gate finding): OPEN, not merged. Commit `52360a2e` on remote branch
+  `claude/f-deploy-1-ag-gate-quiescence-finding-2026-06-27`.
+  *(SHA as of this session — verify live before relying on it.)*
+  Leave open; do not merge until pipeline is safe and P0 is resolved.
 
----
+**[SECURITY]**
+- SSM v1 credential check: explicitly open (see above).
 
-## Part 2: Screen Layer System Spec (Next Session Build)
-
-### Vision
-
-**Canva for phone screens** — extend the existing Scene Studio with device framing so you can compose what Lala sees on her phone as layered, exportable screen overlays.
-
-### Current State — What Already Exists
-
-The Scene Studio is a **production Canva-like editor** built on **Konva.js** (`konva` ^10.2.0, `react-konva` ^18.2.14). Do NOT introduce Fabric.js — everything builds on Konva.
-
-#### Canvas Engine (already working)
-| File | What it does |
-|------|-------------|
-| `SceneStudio/SceneStudio.jsx` (~1000 lines) | Main orchestrator — loads from API, manages panels, keyboard shortcuts, auto-save |
-| `SceneStudio/Canvas/StudioCanvas.jsx` (~709 lines) | Konva `<Stage>` + `<Layer>` — renders objects, selection, zoom/pan, snap guides, background |
-| `SceneStudio/Toolbar.jsx` | Tools (Select/Pan/Erase), zoom controls, platform presets, grid toggle, export |
-| `SceneStudio/useSceneStudioState.js` (~639 lines) | Central state hook — all state + actions below |
-
-#### State Hook — Key API (`useSceneStudioState`)
-```javascript
-// State you'll extend:
-canvasSettings: { zoom, panX, panY, gridVisible, snapEnabled, backgroundColor, sceneStates }
-objects: [{ id, type, x, y, width, height, rotation, opacity, layerOrder, isVisible, isLocked, groupId, depthLayer, ... }]
-
-// Actions you'll call:
-addObject(obj)              // adds to canvas, auto-increments layerOrder
-updateCanvasSettings(changes) // merges into canvasSettings, marks dirty for data keys
-serializeForSave()          // returns { objects, canvas_settings } for API save
-loadFromApi(data, type)     // hydrates from GET response
-groupObjects(ids)           // groups objects under shared groupId
-```
-
-#### Existing Object Types (`Canvas/objects/`)
-- `ImageObject.jsx`, `VideoObject.jsx`, `TextObject.jsx`, `ShapeObject.jsx`
-- Object type map in StudioCanvas: `{ image, video, text, shape, decor, overlay }`
-
-#### Existing Panels & Tabs
-- `InspectorPanel.jsx` (~800 lines) — Transform, opacity, blend modes (normal/multiply/screen/overlay/soft-light), depth layers (FG/MG/BG), time-of-day color grading, visibility/lock toggles
-- `ObjectsPanel.jsx` — Layer list with reorder/hide/lock
-- Tabs: `TemplatesTab`, `GenerateTab`, `LibraryTab`, `DecorTab`, `TextTab`, `ShapesTab`, `SceneStatesTab`, `UploadTab`
-
-#### Existing Platform Presets (in `Toolbar.jsx`, exported as `PLATFORM_PRESETS`)
-```javascript
-youtube:   { width: 1920, height: 1080, label: 'YouTube 16:9' }
-instagram: { width: 1080, height: 1920, label: 'Instagram 9:16' }
-tiktok:    { width: 1080, height: 1920, label: 'TikTok 9:16' }
-square:    { width: 1080, height: 1080, label: 'Square 1:1' }
-cinema:    { width: 2560, height: 1440, label: 'Cinema 16:9' }
-```
-
-#### Existing Backend Models
-- `Layer.js` — layer_number (1-5), type, opacity, blend_mode, z_index
-- `SceneLayerConfiguration.js` — 5-layer JSONB, complexity tracking
-- `LayerAsset.js` — Assets per layer
-- `LayerPreset.js` — System + user presets with versioning, usage stats
-- Migration `20260701000000` — `canvas_settings` JSONB column on scenes + scene_sets
-
-#### Already Installed (no new packages)
-- `konva` ^10.2.0, `react-konva` ^18.2.14, `canvas` ^3.2.1, `html2canvas` ^1.4.1
+**[POST-FREEZE]**
+- Fix deploy-dev.yml: bootstrap error handling + trap-based PM2 restart.
+- Fix PM2-stored-env rotation trap: permanent fix requires changing PM2 startup to
+  always re-read `.env` at restart (e.g., always use `startOrRestart ecosystem.config.js`
+  after any rotation, or remove `DB_PASSWORD` from `sharedEnv` so it is never cached).
+- id 4 (parallel process): re-start when [3] window approaches; tree is intact.
+- [3] combined-restart window: NOT primed, NOT executed this session. Opens in its
+  own cold, deliberately-primed session. This session is disqualified from priming
+  it (too warm, too much state). The AG-gate finding (PR #871) and the construction
+  spec (`880c8dd7`) must both be in main before [3] is primed.
+- ANTHROPIC_API_KEY rotation: separate, timing TBD.
 
 ---
 
-### What to Build
+## Phase 2A Status (complete as of 2026-06-27)
 
-#### A. Device Frame Presets — `frames/devicePresets.js`
-
-Add 4 phone presets. These extend `PLATFORM_PRESETS` but include safe area and chrome data:
-
-```javascript
-export const DEVICE_PRESETS = {
-  iphone_15: {
-    width: 393, height: 852,
-    label: 'iPhone 15',
-    cornerRadius: 55,
-    safeArea: { top: 59, bottom: 34, left: 0, right: 0 },
-    notch: 'dynamic_island',    // shape key for DeviceFrame
-    homeIndicator: true,
-  },
-  iphone_15_max: {
-    width: 430, height: 932,
-    label: 'iPhone 15 Pro Max',
-    cornerRadius: 55,
-    safeArea: { top: 59, bottom: 34, left: 0, right: 0 },
-    notch: 'dynamic_island',
-    homeIndicator: true,
-  },
-  android_pixel: {
-    width: 412, height: 915,
-    label: 'Android Pixel 8',
-    cornerRadius: 28,
-    safeArea: { top: 36, bottom: 24, left: 0, right: 0 },
-    notch: 'punch_hole',
-    homeIndicator: false,        // uses nav bar
-    navBar: { height: 48, style: 'gesture' },
-  },
-  fantasy_phone: {
-    width: 400, height: 880,
-    label: 'LalaVerse Phone',
-    cornerRadius: 40,
-    safeArea: { top: 44, bottom: 30, left: 0, right: 0 },
-    notch: 'none',
-    homeIndicator: true,
-    brandColor: '#B8962E',       // gold accent
-  },
-};
-```
-
-**Integration:** Import into `Toolbar.jsx`, merge with `PLATFORM_PRESETS`. Add a visual separator between video presets and phone presets in the dropdown.
-
-#### B. Safe Area Guides — `frames/SafeAreaGuide.jsx`
-
-Konva `<Group>` rendered inside `StudioCanvas` above the background but below content objects:
-
-```
-┌─────────────────────────────────┐
-│  Status bar zone (top inset)    │  ← semi-transparent overlay
-│  ┌───────────────────────────┐  │
-│  │                           │  │
-│  │    Content safe area      │  │  ← dashed border
-│  │                           │  │
-│  └───────────────────────────┘  │
-│  Home indicator zone (bottom)   │  ← semi-transparent overlay
-└─────────────────────────────────┘
-```
-
-- Reads `safeArea` insets from active device preset
-- Toggle via new `safeAreaVisible` key in `canvasSettings` (add to `VIEW_ONLY_KEYS` in state hook so it doesn't trigger save)
-- Toolbar gets a new phone-shaped icon button next to the grid toggle
-- Semi-transparent `rgba(0,0,0,0.15)` fill for unsafe zones, dashed stroke for safe area border
-
-#### C. Device Frame Chrome — `frames/DeviceFrame.jsx`
-
-Konva `<Group>` rendered on top of everything in `StudioCanvas`:
-
-- **Status bar** — time, signal, battery icons as Konva `<Text>` elements positioned in the top safe area
-- **Dynamic Island / Punch Hole / None** — drawn based on preset's `notch` key
-- **Home Indicator** — thin rounded `<Rect>` centered at bottom
-- **Device bezel** — rounded `<Rect>` with `cornerRadius` from preset, stroke only, no fill
-
-Toggled via `deviceFrameVisible` in `canvasSettings` (also a `VIEW_ONLY_KEYS` entry).
-
-#### D. Layer Management Extensions
-
-Extend `InspectorPanel.jsx` and `ObjectsPanel.jsx`:
-
-- When a device preset is active, auto-inject a locked "Device Chrome" group at the top of the layer stack
-- Chrome group objects get `isLocked: true`, `groupId: 'device-chrome'` — they're visible in ObjectsPanel but greyed out / non-draggable
-- Add a "Background" section in InspectorPanel when device mode is active: wallpaper image picker or gradient (stores in `canvasSettings.deviceBackground`)
-- Existing `groupObjects`/`ungroupObjects` actions in state hook already support grouping
-
-#### E. Export Pipeline Extension
-
-Extend the existing `onExport` callback in `SceneStudio.jsx`:
-
-| Export Mode | What it includes |
-|-------------|-----------------|
-| **Screen only** | Content layers — no chrome, no bezel |
-| **With chrome** | Content + status bar + notch + home indicator |
-| **Device mockup** | Full device with bezel, shadow, slight perspective tilt |
-| **Batch** | All 4 device presets at once (ZIP download) |
-
-- Quality: 1x (actual pixels), 2x, 3x multiplier
-- Format: PNG (with alpha for mockup), JPEG, WebP
-- Uses Konva's `stage.toDataURL()` — already available, just needs to toggle chrome layer visibility before capture
-
-#### F. Text Tool — Device Font Presets
-
-Extend `TextTab.jsx` and `TextObject.jsx`:
-
-Add a "Phone UI" section with preset text styles:
-- **Notification title** — SF Pro / Roboto, 15px, semibold
-- **Notification body** — SF Pro / Roboto, 13px, regular
-- **App label** — SF Pro / Roboto, 11px, regular
-- **Badge count** — SF Pro / Roboto, 12px, bold, white on red circle
-- **DM message** — system font, 16px, in chat bubble shape
-- **Username** — DM Mono, 14px, bold (LalaVerse style)
-
-Each preset creates a `TextObject` with pre-set `styleData` including font, size, weight, color.
-
-#### G. Template System Integration
-
-Connect to existing `src/routes/sceneTemplates.js` and `TemplatesTab.jsx`:
-
-Pre-seed 5 phone screen templates (saved as SceneTemplate records):
-1. **"Lala's Home Screen"** — App grid layout with wallpaper
-2. **"Notification Stack"** — Notification center with 3 stacked cards
-3. **"DM Conversation"** — Chat bubbles with typing indicator
-4. **"Feed Post"** — Social media post frame (profile pic, image, likes, caption)
-5. **"Story View"** — Full-screen story with top progress bar, username, reply input
-
-Templates store their device preset key so loading a template auto-selects the right frame.
+- P1-P5 executed and verified live on box.
+- Parallel tree at `/home/ubuntu/episode-metadata-parallel/`, code at origin/main
+  HEAD `13002465` *(verify live on box: `git -C /home/ubuntu/episode-metadata rev-parse origin/main`)*.
+- P6 (delete staging node_modules) HELD until parallel tree's cutover role completes.
+- Runbook Steps 4-5 complete: parallel process stood up, FD-38 fingerprint confirmed,
+  zero-delta vs 2026-06-26 confirmed baseline (itself consistent with 2026-05-31 dump;
+  three samples, not continuous monitoring), identity: episode_metadata / 10.0.20.224.
 
 ---
 
-### New Files to Create
+## Findings That Live Here (no separate artifact)
 
-```
-frontend/src/components/SceneStudio/
-  frames/
-    devicePresets.js         # DEVICE_PRESETS data (dimensions, insets, notch type)
-    DeviceFrame.jsx          # Konva <Group> — status bar, notch, home indicator, bezel
-    SafeAreaGuide.jsx        # Konva <Group> — safe area overlay + dashed border
-  panels/
-    tabs/
-      FrameTab.jsx           # Panel tab — device picker, safe area toggle, background
-```
+The following findings have no separate committed artifact. **This document is their
+only durable record until they are filed into the Fix Plan:**
 
-### Files to Extend
-
-| File | Changes |
-|------|---------|
-| `Toolbar.jsx` | Merge `DEVICE_PRESETS` into platform dropdown, add safe area toggle button |
-| `useSceneStudioState.js` | Add `safeAreaVisible`, `deviceFrameVisible`, `deviceBackground` to `canvasSettings`; add all three to `VIEW_ONLY_KEYS` |
-| `StudioCanvas.jsx` | Render `<SafeAreaGuide>` between background and objects layer; render `<DeviceFrame>` above all objects |
-| `InspectorPanel.jsx` | Add device background section (wallpaper/gradient) when device preset active |
-| `ObjectsPanel.jsx` | Show locked chrome group when device preset active |
-| `SceneStudio.jsx` | Add `FrameTab` to left panel tabs; extend export modal with device export modes |
-| `TextTab.jsx` | Add "Phone UI" preset section |
-
-### Backend Needs
-
-Minimal — mostly frontend work:
-
-1. **No new models** — use existing Layer, LayerPreset, SceneTemplate
-2. **Seed data** — Add phone frame presets to LayerPreset table via existing seed infrastructure
-3. **Template seeding** — Pre-create 5 phone screen templates via `POST /api/v1/scene-templates`
-4. **Assets** — Device frame PNGs (if using raster notch shapes) uploaded to S3 via existing asset pipeline; alternatively draw all chrome with Konva shapes (no assets needed)
-
-### Priority Order
-
-1. `devicePresets.js` — data file, no UI needed, unblocks everything
-2. `SafeAreaGuide.jsx` + wire into `StudioCanvas` — immediate visual value
-3. `DeviceFrame.jsx` — chrome rendering
-4. `FrameTab.jsx` — device picker panel tab
-5. Toolbar integration — presets dropdown + toggle buttons
-6. State hook updates — `canvasSettings` keys + `VIEW_ONLY_KEYS`
-7. Export pipeline — device export modes
-8. Template seeding — 5 phone screen templates
-9. `TextTab` phone UI presets
+- **P0 deploy automation analysis** — full mechanism documented in P0 section above:
+  bootstrap-before-restart, `set -eo pipefail`, `DEV_DB_PASSWORD` stale, `-X ours`
+  data-loss behavior, two-session trigger history.
+- **Security finding** — credential exposure, timeline reasoning, open SSM v1 check.
+- **PM2-stored-env rotation trap** — structural issue documented in Box State section.
+- **Process finding** — treating PR-open as inert documentation action in a
+  frozen-prod repo; any automation-triggering action needs the same pre-flight
+  discipline as box mutations.
 
 ---
 
-### Phone Hub Screen Expansion
+## Process Finding
 
-The Phone Hub (`PhoneHub.jsx` + `UIOverlaysTab.jsx`) currently has 13 screen slots. Expand to **26 screens** covering Lala's full phone experience. Each screen is a designed overlay image (like the glassmorphism Messages mockup) that gets uploaded or AI-generated.
-
-#### Current 13 Screens (in `SCREEN_TYPES` array)
-`home`, `feed`, `dm`, `invite`, `wardrobe`, `comments`, `story`, `profile`, `notif`, `camera`, `shop`, `live`, `map`
-
-#### New Screens to Add (13 more)
-
-```javascript
-// Add to SCREEN_TYPES in PhoneHub.jsx:
-{ key: 'messages',    label: 'Messages',    icon: '✉️',  desc: 'Text conversations' },
-{ key: 'calls',       label: 'Calls',       icon: '📞', desc: 'Call history & FaceTime' },
-{ key: 'contacts',    label: 'Contacts',    icon: '👥', desc: 'Contact list' },
-{ key: 'tasks',       label: 'Tasks',       icon: '✅', desc: 'To-do & reminders' },
-{ key: 'brand_deals', label: 'Brand Deals', icon: '🤝', desc: 'Sponsorship offers' },
-{ key: 'deadlines',   label: 'Deadlines',   icon: '⏰', desc: 'Upcoming due dates' },
-{ key: 'stats',       label: 'Stats',       icon: '📊', desc: 'Analytics & metrics' },
-{ key: 'creator_hub', label: 'Creator Hub', icon: '🎨', desc: 'Content management' },
-{ key: 'settings',    label: 'Settings',    icon: '⚙️',  desc: 'Phone settings' },
-{ key: 'accessories', label: 'Accessories', icon: '💎', desc: 'Jewelry & extras' },
-{ key: 'gallery',     label: 'Gallery',     icon: '🖼️',  desc: 'Photo gallery' },
-{ key: 'music',       label: 'Music',       icon: '🎵', desc: 'Now playing' },
-{ key: 'wallet',      label: 'Wallet',      icon: '💳', desc: 'Payments & cards' },
-```
-
-#### Visual Style — Glassmorphism Theme
-
-All screens follow the dreamy, sparkly aesthetic (reference: Messages mockup):
-- **Background:** soft pink/lavender gradient with sparkle particles
-- **Cards/rows:** frosted glass (`backdrop-filter: blur`, white 10-15% opacity)
-- **Corners:** large radius (16-20px) on glass cards
-- **Typography:** elegant serif for titles (like "Messages" in script), DM Mono for UI labels
-- **Chrome:** rose gold bezel, status bar with time/signal/battery
-- **Bottom nav:** frosted glass pill-shaped icons
-- **Glow accents:** subtle gold/pink light effects at edges
-
-#### Upload Workflow (already works, just needs more slots)
-
-The upload flow in `UIOverlaysTab.jsx` already supports:
-1. Click a screen slot card
-2. Upload button opens file picker
-3. Image uploads to S3 via `/api/v1/ui-overlays/:showId` route
-4. Phone preview updates with the uploaded image
-5. Generate button creates an AI-designed screen via Claude
-
-The only code change needed: expand `SCREEN_TYPES` array in `PhoneHub.jsx` and organize the grid into sections.
-
-#### Screen Grid Organization
-
-Group the 26 screens in the UI grid by category:
-
-| Section | Screens |
-|---------|---------|
-| **Core** | Home, Feed, Messages, DMs, Stories, Profile |
-| **Communication** | Calls, Contacts, Comments, Live, Alerts |
-| **Business** | Brand Deals, Stats, Creator Hub, Deadlines, Tasks |
-| **Lifestyle** | Closet, Accessories, Shopping, Camera, Gallery |
-| **World** | Map, Invitation, Music, Wallet, Settings |
-
-#### File Changes
-
-| File | Change |
-|------|--------|
-| `PhoneHub.jsx` | Add 13 new entries to `SCREEN_TYPES`, add `SCREEN_CATEGORIES` grouping |
-| `UIOverlaysTab.jsx` | Render screen grid grouped by category with section headers |
-
----
-
-### Screen Link System (Built This Session)
-
-Interactive tap zones with icon overlays — lets you link app icons on the home screen (or any screen) to navigate between phone screens.
-
-#### How It Works
-
-1. Upload your home screen image (glassmorphism design with app icon placeholders)
-2. Click **"Edit Links"** in the detail panel
-3. **Draw rectangles** over each app icon on the screen image
-4. For each zone: assign a **target screen** (dropdown of all SCREEN_TYPES) + upload a custom **icon overlay image**
-5. **Save Links** persists to the overlay's asset metadata as JSONB
-6. In the phone preview, tapping a zone **navigates to that screen** with a **back button** to return
-
-#### Data Model
-
-Screen links stored as JSONB array on the asset's `metadata.screen_links`:
-
-```javascript
-{
-  screen_links: [
-    { id: 'link-abc', x: 12, y: 45, w: 18, h: 10, target: 'messages', label: 'Messages', icon_url: 'https://s3.../icon.png' },
-    { id: 'link-def', x: 38, y: 45, w: 18, h: 10, target: 'feed', label: 'Feed', icon_url: 'https://s3.../feed-icon.png' },
-  ]
-}
-```
-
-Positions are **percentages** (0-100) so they work at any resolution.
-
-#### Backend Routes
-
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/api/v1/ui-overlays/:showId/screen-links/:assetId` | `PUT` | Save screen_links array to asset metadata |
-| `/api/v1/ui-overlays/:showId/screen-links/:assetId` | `GET` | Load screen_links from asset metadata |
-| `/api/v1/ui-overlays/:showId/screen-links/:assetId/icon` | `POST` | Upload icon image for a specific link zone (multipart, fields: `icon`, `link_id`) |
-
-#### New Files
-
-| File | Purpose |
-|------|---------|
-| `frontend/src/components/ScreenLinkEditor.jsx` | Draw zones on screen, assign targets, upload icons, drag to reposition |
-
-#### Modified Files
-
-| File | Changes |
-|------|---------|
-| `frontend/src/components/PhoneHub.jsx` | `ScreenLinkOverlay` renders icon images + clickable hotspots, back button with nav history |
-| `frontend/src/pages/UIOverlaysTab.jsx` | "Edit Links" button, `ScreenLinkEditor` panel, navigation state (handleNavigate/handleBack), link save/upload handlers |
-| `src/routes/uiOverlayRoutes.js` | 3 new routes for screen links CRUD + icon upload, list endpoint returns `screen_links` |
+Treating PR-open as a documentation action (not a gated mutation) was the discipline
+gap. In this repo, pushing a `claude/**` branch triggers the auto-merge pipeline
+(now disabled, but the principle holds for any future automation). The same pre-flight
+discipline applied to box mutations — "what does this actually trigger?" — applies
+to any action in a frozen-prod repo. The pipeline being disabled fixes the immediate
+hazard; the process lesson is to verify automation consequences before acting, not
+just for box writes.
