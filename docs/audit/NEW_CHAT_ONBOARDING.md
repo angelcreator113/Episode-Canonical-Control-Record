@@ -6,13 +6,13 @@
 
 ---
 
-> [STOP] **PROD HAZARD -- READ BEFORE ANY F-Deploy-1 OR PROD WORK.** Prod box `episode-backend` (`54.163.229.144`) is in a confirmed split-brain: the running process serves the live populated database, the on-disk `.env` points at a verified-empty one. A `pm2 restart` / reboot / deploy / `.env` edit silently swaps prod onto the empty DB -- boots clean, serves nothing, no error. **No restart/reboot/deploy/`.env` edit on that box until gated reconciliation.** Full detail and the do-not list: `F-Deploy-1_PROD_SplitBrain_HAZARD.md` (repo root). If this session is about to propose a restart, an SG change, or an `.env` fix -- stop and read that doc.
+> [STOP] **PROD STATE -- READ BEFORE ANY F-Deploy-1 OR PROD WORK (updated 2026-06-01).** The data-swap catastrophe the old hazard described is DEFUSED: the on-disk `.env` is now canon-only (`DB_HOST -> episode-control-dev`, verified; FD-36), so a restart comes up on canon, not the empty DB. BUT prod is currently running on an EMERGENCY HOTFIX (additive PM2 process on port 3000, after a 2026-06-01 outage), not a clean topology, and a credential was exposed in-session. Before any prod action read, in order: `docs/audit/Prime_Studios_Audit_Handoff_v12.md`, `docs/audit/F-Deploy-1_INCIDENT_2026-06-01_prod-502-restore.md`, the FD-31 Pre-Flight Plan v1.4, and the Track B plan v0.2. The remaining prod work is the **combined restart window** (topology align + credential rotation) -- a topology/ops matter, gated under Rule 7, NOT a data-catastrophe. The original `F-Deploy-1_PROD_SplitBrain_HAZARD.md` (repo root) is historical context, now largely mitigated.
 
 ---
 
 ## 1. Wake-up sequence (read in order)
 
-0. **If this session touches F-Deploy-1 or prod at all, read `F-Deploy-1_PROD_SplitBrain_HAZARD.md` (repo root) FIRST.** Prod is frozen -- a restart silently destroys prod data. The hazard doc's Sec 3 do-not list is binding before any prod action.
+0. **If this session touches F-Deploy-1 or prod at all, read the STOP banner above + `docs/audit/Prime_Studios_Audit_Handoff_v12.md` and the 2026-06-01 incident doc FIRST.** The data-swap catastrophe is defused (FD-36); prod runs on an emergency hotfix pending the combined restart window. Prod actions are gated under Rule 7, but are now topology/ops work, not data-loss avoidance.
 1. **Read this doc end-to-end.** ~5 minutes. After reading, sanity-check §11 against current state — `git log --oneline -1 main` should match (or be reasonably close to) the main HEAD §11 names. If main has moved significantly past what §11 claims, treat §11 as stale and verify against the canonical docs it points at.
 2. **Read the current audit canonical doc on main.** See §11 for which revision is current. The audit doc is the authoritative state-of-codebase reference; this onboarding doc is orientation only. Allow ~30 minutes for a full first read.
 3. **Read the current F-Deploy-1 Fix Plan revision on main.** See §11 for which revision is current. Fix Plan revisions are additive — later revisions build on earlier ones, which remain on main as historical record.
@@ -164,43 +164,31 @@ If §11 looks more than a few days old, treat it as orientation only and verify 
 
 ---
 
-## 11. Current fix-cycle state — as of 2026-05-19
+## 11. Current fix-cycle state -- as of 2026-06-01
 
-**This section is quick orientation only.** Authoritative current state lives in `docs/audit/F-Deploy-1_Fix_Plan_v1.3.md` (current Fix Plan revision) and `docs/audit/Prime_Studios_Audit_Handoff_v10.docx` (audit canonical) on main. If this section conflicts with those, those win.
+**This section is quick orientation only and goes stale fast.** Authoritative current state lives in `docs/audit/Prime_Studios_Audit_Handoff_v12.md` (audit canonical) and `docs/audit/F-Deploy-1_Fix_Plan_v1.8.md` (current Fix Plan revision) on main. If this section conflicts with those, those win.
 
 **Canonical docs on main:**
-- Audit: **v10** (`docs/audit/Prime_Studios_Audit_Handoff_v10.docx`, PR #701, commit `b0575e56`, merged 2026-05-16).
-- F-Deploy-1 Fix Plan: **v1.3** (`docs/audit/F-Deploy-1_Fix_Plan_v1.3.md`, PR #710, merged 2026-05-19T12:54:47Z).
+- Audit: **v12** (`docs/audit/Prime_Studios_Audit_Handoff_v12.md`, additive on v11/v10).
+- F-Deploy-1 Fix Plan: **v1.8**. Register FD-1 through FD-37.
+- FD-31 reconciliation: **Pre-Flight Plan v1.4** (`docs/audit/F-Deploy-1_FD31_Reconciliation_PreFlight_Plan.md`) -- all six pre-flight gates GREEN, pre-flight COMPLETE.
+- Topology: **Track B plan v0.2** (`docs/audit/Track_B_PM2_Topology_Formalization_Plan.md`).
+- Incident: `docs/audit/F-Deploy-1_INCIDENT_2026-06-01_prod-502-restore.md`.
 
-**Main HEAD at this writing:** `c4304bed`. Goes stale on the next merge — for current head, `git log --oneline -1 main`.
+For current main HEAD: `git log --oneline -1 main`.
 
-**Active sprint:** F-Deploy-1 Phase B G1 — α/β architectural decision.
-- Started 2026-05-19T12:54:47Z, ends 2026-05-26T12:54:47Z (1 week per FD-10).
-- Soak monitoring is **passive** — observe, don't act unless soak criteria break.
-- Soak criteria (Fix Plan v1.0 §5.5): no autonomous merges to main outside the validate.yml-gated PR path; no `-X ours` events that fail to notify Issue #708; no branch protection bypasses; no F-Deploy-G1-Y recurrence.
+**Prod state (2026-06-01):** RESTORED after a multi-day 502 outage (found by manual check -- no alert; finding F-Deploy-G1-AJ). Running on an emergency additive hotfix (PM2 `episode-api-prod-hotfix` on port 3000; dev on 3002; reboot-durable). The data-swap landmine is defused (FD-36, `.env` canon-only). NOT a clean topology -- Track B formalizes it.
 
-**Phase A gate status:**
-- G1 (pre-flight): CLOSED via v1.1 / PR #703.
-- G2 (containment + safety ship): CLOSED via v1.3 / PR #710.
-- G3 (diagnostic): SUPERSEDED by in-line sub-form D work (v1.3 §4.3).
-- G4 (soak): CLOSED CLEAN 2026-05-26 — all four criteria held byte-for-byte across Day 4 and Day 7 snapshots; see `docs/audit/F-Deploy-1_PhaseA_G4_Close.md`.
+**The true next executable prod action:** the **combined restart window** -- FD-31 credential rotation + Track B topology align + route-bug fix, in ONE gated prod restart (Rule 7 hard stop on the restart itself). This is topology/ops work, not data-catastrophe.
 
-**Branch protection on main:** LIVE per FD-5. Required status checks: Cost Exposure Audit, Tests, Route Validation (three job-level names per FD-23). `strict=true` per FD-24. Zero required reviews. `enforce_admins: false`.
+**Keystone status:**
+- F-Deploy-1: Fix Plans v1.0-v1.8 on main. Phase A CLOSED, Phase B G1 CLOSED. Phase B G2 still BLOCKED on FD-31, but FD-31 substantially advanced (pre-flight complete, data-swap defused, preservation captured #737, cutover scoped). G2 Sec 4.2 memory gate still owed.
+- F-AUTH-1: artifact on main (v2.37, #664), execution blocked behind F-Deploy-1 full close.
+- F-App-1: SHIPPED (incident-driven). F-Stats-1: Phase A CLOSED, Phase B blocked behind F-Deploy-1 full close.
+- F-Reg-2, F-Ward-1, F-Ward-3, F-Franchise-1 (Director Brain), F-Sec-3: queued behind F-Deploy-1 full close.
 
-**F-Deploy-G1-Y (autonomous PR-opening mechanism):** CLOSED per FD-22 as "identified — removal-sufficient" on N=8 evidence with loki isolated. Correlation + sufficiency finding, not causation. Supersedes v1.2 FD-19 (which deferred on N=1).
+**Open (v12 Sec 10):** combined restart window; AJ monitoring IMPLEMENTATION (plan on main #743, alarm not yet created); credential rotation (canon DB pw exposed + in hotfix env, `-prod` pw, AWS static keys); `-prod` teardown; G1 registry reconcile (still owed, v12 Sec 8.1); Frontend IA dispositions PR; the parked `world_events` backfill migration (reconciliation-gated).
 
-**Issue #708:** OPEN intentionally as durable running-log surface for `-X ours` notifications. The workflow writes to #708 when `-X ours` fires; closing #708 would break the `gh issue comment` target. Not an incomplete-implementation issue.
+**Decisions log range:** Fix Plan register FD-1 through FD-37.
 
-**PR #704:** CLOSED per FD-25. Incident record preserved via git history.
-
-**Blocked behind G4 soak completion (= Phase A close):**
-- Phase B G1 architectural decision (separate-EC2 α vs shared-safe β, per FD-8).
-- F-Stats-1 Phase B G2 (per Decision #98 revised in v10: blocker is **Fix Plan Phase A close**, not G1 close).
-- F-AUTH-1 fix execution (six-step recipe ships through hardened pipeline post-soak).
-- All downstream keystones: F-App-1, F-Ward-1, F-Reg-2, F-Ward-3, F-Franchise-1 (Director Brain), F-Sec-3.
-
-**Phase B G1 drafting is parallel-safe with G4 soak** — it produces a Fix Plan v1.4 or separate Phase B G1 doc, doesn't ship architectural changes until soak closes.
-
-**Decisions log range:** Fix Plan v1.0 ended at FD-12; v1.1 added FD-13–15; v1.2 added FD-16–20; v1.3 added FD-21–25. Current: FD-25.
-
-**F-Stats-1 Phase A:** CLOSED 2026-05-15 — CharacterState Sequelize model on main as `30f10fe7` (PR #684). Phase B blocked behind Phase A close of F-Deploy-1 (see above).
+**Branch protection on main:** LIVE. Required checks: Cost Exposure Audit, Tests, Route Validation.

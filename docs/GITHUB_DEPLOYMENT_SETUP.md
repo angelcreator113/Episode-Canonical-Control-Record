@@ -160,7 +160,7 @@ After adding the secrets:
 
 **Current State:**
 - ✅ GitHub workflows updated with SSH deployment steps
-- ✅ Deployment script created at `scripts/deploy.sh`
+- ✅ Deployment handled by `.github/scripts/deploy-production.sh` (invoked by `deploy-production.yml`)
 - ⏳ Waiting for GitHub secrets to be configured
 
 **Next Step:** Add the two secrets to GitHub, then test a deployment!
