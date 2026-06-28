@@ -383,6 +383,19 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
 
   Any deviation = ABORT + restore from snapshot. Do NOT fix forward.
 
+[CORRECTION BANNER 2026-06-28 — prepended per additive-supersede; body below preserved verbatim from filing]
+NON-AUTHORITATIVE. This note does NOT gate priming the [3] window. Read before the annotation below.
+
+1. "AG" is not a minted designation. The Fix Plan register through v1.16 (FD-43, confirmed on origin/main 2026-06-28) mints no "AG" finding. The annotation below cites F-Deploy-1_AG_Gate_WriteQuiescence_Finding_2026-06-27_DRAFT.md — a standalone draft, which carries no register authority. Per project convention, a standalone file is an evidence note, not a designation.
+
+2. Status of this block: evidence note + forward-pointer, interpretive-under-review. The reasoning below (write-cold premise, identity-first rule, abort-default frame) is retained for evaluation. It is NOT an operative gate and supersedes nothing in the verbatim "Any deviation = ABORT" gate above it.
+
+3. Two defects block ratification and MUST be resolved before any mint:
+   (a) The identity values in clause (c) below are unconfirmed against live main as of this filing. Confirm via current_database() / inet_server_addr() on the live canon instance before they gate any identity check.
+   (b) Typographic corruption in the hard-abort rules below ("any deltaon shows", "is alegitimate application write", "does not changethe gate") must be corrected. Garbled hard-abort text protecting an irreversible op is not cosmetic.
+
+4. Forward-pointer: if this finding is ratified, it is minted as FD-44 via Fix Plan v1.17 (next available after FD-43), and this runbook annotation is re-pointed at the minted FD — not the draft. Until then, a cold Session B operator treats the "Any deviation = ABORT" gate above as the sole operative gate and disregards the frame below as interpretive context only.
+[END CORRECTION BANNER]
 [NOTE 2026-06-27 — AG gate write-quiescence interpretive frame; ref F-Deploy-1_AG_Gate_WriteQuiescence_Finding_2026-06-27_DRAFT.md]
 The "Any deviation = ABORT" gate above is preserved verbatim and is NOT softened by this note. This note supplies the interpretive context a cold Session B operator needs at the gate; it does not change the gate mechanism.
 
