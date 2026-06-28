@@ -292,7 +292,7 @@ jobs:
             echo '🧹 Cleaning up disk space...'
             echo \"Disk BEFORE: \$(df -h / | tail -1 | awk '{print \$4}')\"
             # Stop PM2 so files can be safely replaced
-            pm2 stop all 2>/dev/null || true
+            pm2 stop episode-api episode-worker 2>/dev/null || true
             # Remove old node_modules + source (biggest space consumers)
             rm -rf ~/episode-metadata/node_modules 2>/dev/null || true
             rm -rf ~/episode-metadata/src ~/episode-metadata/scripts 2>/dev/null || true
@@ -316,6 +316,40 @@ jobs:
           # ─── Deploy everything in a single SSH session ───
           ssh $SSH_OPTS $EC2_USER@$EC2_HOST "
             set -eo pipefail
+
+            # -- Fix F-Deploy-1: guarantee PM2 restart on ANY exit (scoped to dev processes) --
+            # Root cause: bootstrap-sequelize-meta.js ran unguarded under pipefail AFTER
+            # the cleanup block stopped the dev processes, so a bootstrap failure killed
+            # the SSH session before any restart -> prod down. Two incidents, same mechanism.
+            # restore_pm2 fires on EXIT regardless of failure mode, restoring only the
+            # two dev processes the cleanup stopped (episode-api, episode-worker).
+            #
+            # SCOPE: restores only episode-api (3002/dev) and episode-worker (shared).
+            # episode-api-prod-hotfix (3000/prod) is protected by exclusion -- the cleanup
+            # block stops only the two dev processes, so prod is never stopped by this
+            # workflow and never needs to be restored by this trap.
+            #
+            # startOrRestart --only re-parses ecosystem.config.js -> re-runs dotenv ->
+            # reads the CURRENT .env DB_PASSWORD. NEVER use `pm2 resurrect` here: it
+            # replays the stale-env dump and reintroduces the post-rotation dead-password
+            # disconnect (PM2-stored-env rotation trap, SESSION_HANDOFF.md).
+            #
+            # VALIDATED 2026-06-28 (sandbox, pm2 6.0.14 parity-matched to box):
+            # both behaviors below confirmed; box-version-matched, not asserted from memory.
+            # (1) CONFIRMED: `pm2 startOrRestart --only ... --update-env` refreshes env on
+            #     already-running processes -- verified via /proc/<pid>/environ flip v1->v2.
+            # (2) CONFIRMED: `startOrRestart --only` STARTS a stopped process (stopped,pid 0
+            #     -> online,new pid), and --only leaves excluded processes untouched (the
+            #     prod-hotfix exclusion holds: decoy pid/uptime unchanged across the call).
+            # Discovery risk retired. REMAINING: confirm-in-passing on first gated dev
+            # deploy on the real box (not discovery -- behavior is known). Evidence:
+            # docs/audit/F-Deploy-1_Finding_TrapScope_PM2Discipline_2026-06-28.md
+            restore_pm2() {
+              cd \$HOME/episode-metadata || return
+              pm2 startOrRestart ecosystem.config.js --only episode-api,episode-worker --update-env 2>&1 | tail -10 || true
+              pm2 save 2>&1 | tail -2 || true
+            }
+            trap restore_pm2 EXIT
 
             # Use whatever Node is available on the system
             export NVM_DIR=\$HOME/.nvm
@@ -418,15 +452,8 @@ jobs:
               MIGRATION_FAILED=true
             fi
 
-            # Restart the Node.js backend + worker via PM2
-            echo '🔄 Restarting PM2...'
-            pm2 delete all 2>/dev/null || true
-            sleep 2
-            # Kill anything still holding port 3002
-            fuser -k 3002/tcp 2>/dev/null || true
-            sleep 1
-            pm2 start ecosystem.config.js --only episode-api,episode-worker --env development 2>&1 | tail -5
-            pm2 save
+            # PM2 restart handled by restore_pm2 trap on EXIT (see top of heredoc).
+
 
             # Health check — retry up to 30 seconds
             echo '🏥 Health check...'
