@@ -383,6 +383,20 @@ Execution order (FD-31 §6.3 steps 2–3 = credential; Track B steps 5–6 = res
 
   Any deviation = ABORT + restore from snapshot. Do NOT fix forward.
 
+[NOTE 2026-06-27 — AG gate write-quiescence interpretive frame; ref F-Deploy-1_AG_Gate_WriteQuiescence_Finding_2026-06-27_DRAFT.md]
+The "Any deviation = ABORT" gate above is preserved verbatim and is NOT softened by this note. This note supplies the interpretive context a cold Session B operator needs at the gate; it does not change the gate mechanism.
+
+(a) Restart-as-quiesce is intentional. No separate drain/traffic-stop step is required or implied. The mechanism is not the gap.
+
+(b) Write-cold assumption (the gate's undocumented premise, now stated): the seven fingerprint tables are assumed write-cold across the Phase 2B window, so no legitimate application write lands between the step-1 count confirmation and the step-5 restart. Operationally well-founded (see finding doc Evidence). This premise is what makes "any deviation = ABORT" interpretable.
+
+(c) Deviation-interpretation frame (counts only; identity confirmed first):
+- IDENTITY FIRST. db != episode_metadata OR server != 10.0.20.224 is NOT a count deviation — it means the query hit the wrong database; the counts are irrelevant. Abort-and-restore, no investigative frame. This fires before any count reasoning.
+- Burden of proof runs toward abort. Restore is cheap and reversible; proceeding on a misread of an irreversible operation is not. Abort unless you can DEFINITIVELY establish both (a) the deviation is a legitimate application write AND (b) proceeding is safe given it. Certainty, not plausibility. Any genuine ambiguity = abort.
+- Investigate-to-understand (NOT to license proceeding): small positive delta (+1 to low single digits) on a write-capable table (social_profiles, episodes, assets, wardrobe, franchise_knowledge), plausibly correlated with cutover timing. Investigate to understand what you are aborting over; abort-and-restore remains the default.
+- Hard abort, no investigation: negative delta on any table; large delta of any magnitude; any delta on `shows`.
+The gate's hard-abort default is the correct posture. This frame tells the operator which territory they are in; in both, abort is the default unless certainty is achieved.
+
   Separately, /health must return 200 + database:connected (LIVENESS check only).
   Its showCount/episodeCount are soft-delete-filtered (live catalog) and are NOT
   the integrity comparator - see FD-31.
