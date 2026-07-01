@@ -112,11 +112,14 @@ Before the [3] window opens:
 
 **Closure = Option 1 (disable the `deploy-dev` trigger), not Option 2 (pull the SSH secret)** —
 chosen for cold-session verifiability. A [3] session with no inherited context must be able to
-re-derive this precondition live in **one command**, same pattern as every other precondition:
+re-derive this precondition live in **one binary check** — expected result is **empty output**
+(the file's only `push:` is commented), so it is pass/fail with no interpretation:
 
 ```
-git show origin/main:.github/workflows/deploy-dev.yml   # push: branches: [dev] is commented out
+git show origin/main:.github/workflows/deploy-dev.yml | Select-String -Pattern "^\s*push:"
 ```
+(bash equivalent, also expected-empty:
+`git show origin/main:.github/workflows/deploy-dev.yml | grep -nE '^[[:space:]]*push:'`)
 
 Option 2 (removing `EC2_SSH_KEY` / `DEV_EC2_HOST`) verifies only through GitHub *settings* state —
 off-pattern, and easier for a cold session to check wrong. `[skip-automerge]` is per-commit author
