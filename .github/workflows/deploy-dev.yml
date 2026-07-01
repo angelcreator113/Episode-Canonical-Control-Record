@@ -1,9 +1,24 @@
 name: Deploy to Development
 
 on:
-  push:
-    branches:
-      - dev
+  # ── DISABLED 2026-07-01 for the F-Deploy-1 freeze (opened for the [3] window) ──
+  # The push→dev trigger arms the autonomous cascade documented in
+  # docs/audit/F-Deploy-1_AllStopped_CauseClosed_WorkflowCascade_2026-07-01.md:
+  #   claude/** doc-PR → Auto-merge (App-token) → THIS deploy → SSH into the shared
+  #   prod/dev box → stop dev processes + write ANTHROPIC/FAL/REMOVEBG into .env +
+  #   --update-env restart.
+  # During the freeze that clobbers rotation surfaces S2/S3 and can restart PM2 out
+  # of band on a deliberately-frozen box. Re-enable ONLY via a deliberate gated
+  # decision after [3] closes AND the shared-box exposure is re-assessed (Phase B G1
+  # α/β) — re-arming the cascade onto the shared box otherwise re-opens F-Deploy-G1-AA.
+  # workflow_dispatch is kept intentionally: a manual, human-initiated dispatch is a
+  # gated lever, not the unattended cascade (parity with deploy-production per
+  # F-Deploy-G1-S, which catalogued dispatch-only as a positive property).
+  # Verify disabled from git (expected: EMPTY output — the only push: is commented):
+  #   git show origin/main:.github/workflows/deploy-dev.yml | Select-String -Pattern "^\s*push:"
+  # push:
+  #   branches:
+  #     - dev
   workflow_dispatch:
 
 concurrency:
