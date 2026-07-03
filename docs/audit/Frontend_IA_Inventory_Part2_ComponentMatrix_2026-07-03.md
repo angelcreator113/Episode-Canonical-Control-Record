@@ -133,6 +133,27 @@ The `feed/` subdirectory contains one routed component and four sub-components:
 
 ---
 
+**§7 CORRECTION — filed 2026-07-03 (additive supersede; at-filing §7 body preserved verbatim below, unedited)**
+
+Supersedes §7's coupled-removal classification, its "Risk: Zero" label, and its "executable any session" conclusion. Does NOT supersede the existence of RelationshipEngine cleanup candidates — that inventory is being re-derived and is incomplete (see "Unverified" below).
+
+FINDING. §7 classified RelationshipEngine as a coupled-only removal (SEVEN artifacts, single mount via App route :427, "Risk: Zero"). Live grep on origin/main (HEAD 2f393707, #892; 2026-07-03) falsifies the classification on the one axis that gates a removal — reachability.
+
+EVIDENCE (live, origin/main).
+- App.jsx:98 lazy-imports RelationshipEngine; route mounted at App.jsx:427. Live host #1 — the single mount §7 assumed.
+- WorldStudio.jsx:20 INDEPENDENTLY lazy-imports RelationshipEngine; WorldStudio.jsx:1165 renders `<RelationshipEngine />` inside `{ studioTab === 'relationships' && (…) }`, Suspense-wrapped, between the other live studio tabs. Live host #2 — user-reachable via the Relationships tab. NOT listed in §7.
+
+CONCLUSION. RelationshipEngine has two independent live hosts, one a reachable UI tab. It is NOT coupled-only-dead. §7's seven-artifact removal changelist is VOID as written: executing it (delete file + remove route :427) leaves WorldStudio.jsx:20 importing a deleted module and :1165 rendering a ghost — crashing the Relationships tab. Removal is re-scoped from mechanical coupled cleanup (executable any session) to a FEATURE-RETIREMENT PRODUCT DECISION with F-Franchise-1 / Director Brain (relationship-modeling) implications. Not executable as a coupled removal.
+
+UNVERIFIED / OPEN (stated so this correction does not itself mint a replacement phantom fact).
+- Full artifact re-count NOT completed — the catch-all reference sweep was not run this session. Treat any "9 artifacts" figure as provisional, not settled.
+- §7's WorldStudio button at :1692 was not reproduced by the reference grep; status unconfirmed — separate open thread.
+- `components/RelationshipEngine/` (primitives.jsx, tokens.js) are page-downstream dependencies; disposition undetermined.
+
+Register: no FD number. IA-finding correction, not a Fix Plan register event.
+
+---
+
 ## 7. Coupled-Removal Plan: RelationshipEngine
 
 **Status**: PLANNED, NOT EXECUTED. File exists at `c92abb56`. Route is live. No removal has occurred.
