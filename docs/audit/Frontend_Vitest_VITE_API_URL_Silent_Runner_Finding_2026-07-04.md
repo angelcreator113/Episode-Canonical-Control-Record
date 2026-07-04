@@ -7,6 +7,25 @@
 **Status:** Documented — fix unverified, separate PR required
 
 ---
+## ⚠ SUPERSEDE NOTICE — 2026-07-04
+
+**Status (superseded):** fix VERIFIED locally — 99/99 files, 793/793 tests pass. Three faults identified. Real gap = CI never runs frontend Vitest. (Original `**Status:**` header above shows the doc as first filed.)
+
+**The 181 failures were a local-environment artifact, not a main-state fault.** A clean CI checkout of `main` has no `frontend/.env`. With `VITE_API_URL` unset, the `|| '/api/v1'` and `|| ''` fallbacks both resolve correctly — the tests pass without any fix. The suite was never red *on main*; it was red on any developer machine with a local `frontend/.env` setting `VITE_API_URL=http://localhost:3002/api/v1`. CI never ran the suite, so the failures were invisible.
+
+**Three distinct faults were found, not one:**
+
+| Fault | Description | Fix |
+|---|---|---|
+| A | `VITE_API_URL` absolute URL from local `.env`; `API_BASE` in ~24 page modules builds absolute URLs while tests assert relative paths | Local `frontend/.env.test`, `VITE_API_URL=` empty — gitignored (`.env.*`), not committed |
+| B | `${API}` prefix collision: `StoryDashboard`, `WritingRhythm`, `AmberCommandCenter` use `API = VITE_API_URL \|\| ''`; an `.env.test` value of `/api/v1` double-prefixed these. Empty string fixes both A and B | Same `.env.test` (empty value) |
+| C | Windows-only `new URL(import.meta.url).pathname` returns `/C:/...`, doubling to `C:\C:\...` (ENOENT, 0 tests collected) in `WorldStudio.test.jsx`. Linux/CI unaffected — regex is a no-op on `/home/...` | **Committed** — `.replace(/^\/([A-Za-z]:)/, '$1')` |
+
+**The real enforcement gap is unchanged and is now the primary finding.** CI still does not run frontend Vitest. Until `cd frontend && npm test -- --run` is wired into the `Validate` workflow, there is no environment of record for this suite and any regression is invisible. The env-var fixes are local workarounds on top of an unrun suite.
+
+**Original finding body preserved below.**
+
+---
 
 ## How It Was Found
 
