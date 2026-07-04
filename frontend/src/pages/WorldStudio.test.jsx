@@ -37,8 +37,9 @@ vi.mock('./SocialProfileGenerator', () => ({ default: () => null }));
 import apiClient from '../services/api';
 import { fetchCharacterFollows, generateCharacterFollows } from './WorldStudio';
 
-// vitest exposes import.meta.url; extract directory via URL parsing
-const TEST_DIR = path.dirname(new URL(import.meta.url).pathname);
+// vitest exposes import.meta.url; extract directory via URL parsing.
+// On Windows, pathname begins with /C:/...; strip the leading slash.
+const TEST_DIR = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const WS_SOURCE = fs.readFileSync(
   path.join(TEST_DIR, 'WorldStudio.jsx'),
   'utf8',
