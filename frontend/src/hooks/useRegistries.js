@@ -1,7 +1,7 @@
 /**
  * useRegistries — Shared hook for fetching character registries
  *
- * Both CharacterGenerator and CharacterRegistryPage need the registry list
+ * CharacterRegistryPage and other character-domain pages need the registry list
  * from /api/v1/character-registry/registries. This hook deduplicates that logic.
  *
  * Usage:

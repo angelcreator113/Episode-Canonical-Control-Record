@@ -1,11 +1,11 @@
 /**
- * Character Constants — Shared across CharacterGenerator & CharacterRegistryPage
+ * Character Constants — Shared across CharacterRegistryPage and character-domain pages
  *
  * Single source of truth for role colors, labels, icons, momentum states,
  * world labels, dossier tabs, archetypes, and other character-domain constants.
  *
- * CRITICAL: Both CharacterGenerator.jsx and CharacterRegistryPage.jsx import
- *           from here. If you change a value, both pages update.
+ * CRITICAL: CharacterRegistryPage.jsx and related pages import
+ *           from here. If you change a value, all importers update.
  */
 
 // ─── Role System ──────────────────────────────────────────────────────────────

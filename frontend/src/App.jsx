@@ -57,7 +57,6 @@ const EventFeedDashboard = lazy(() => import('./pages/feed/EventFeedDashboard'))
 const ShowSettings = lazy(() => import('./pages/ShowSettings'));
 const ExportPage = lazy(() => import('./pages/ExportPage'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
-const StorytellerPage = lazy(() => import('./pages/StorytellerPage'));
 // Redirect from /book/:id → WriteMode (first chapter)
 const BookToWriteRedirect = () => {
   const { id } = useParams();
@@ -91,7 +90,6 @@ const UniverseAssetsPage = lazy(() => import('./pages/UniverseAssetsPage'));
 const UniverseWorldStatePage = lazy(() => import('./pages/UniverseWorldStatePage'));
 const UniverseTensionsPage = lazy(() => import('./pages/UniverseTensionsPage'));
 const StoryDashboardPage = lazy(() => import('./pages/StoryDashboardPage'));
-const FranchiseBrainPage = lazy(() => import('./pages/FranchiseBrainPage'));
 const WritingRhythmPage = lazy(() => import('./pages/WritingRhythmPage'));
 const ReadingMode = lazy(() => import('./pages/ReadingMode'));
 const WriteMode = lazy(() => import('./pages/WriteMode'));
@@ -99,14 +97,12 @@ const RelationshipEngine = lazy(() => import('./pages/RelationshipEngine'));
 const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
-const StoryEngine = lazy(() => import('./pages/StoryEngine'));
 const StoryEvaluationEngine = lazy(() => import('./pages/StoryEvaluationEngine'));
 const StoryProposer = lazy(() => import('./pages/StoryProposer'));
 const NovelAssembler = lazy(() => import('./pages/NovelAssembler'));
 const StoryThreadTracker = lazy(() => import('./pages/StoryThreadTracker'));
 const StoryCalendar = lazy(() => import('./pages/StoryCalendar'));
 const StoryHealthDashboard = lazy(() => import('./pages/StoryHealthDashboard'));
-const CharacterGenerator = lazy(() => import('./pages/CharacterGenerator'));
 const CharacterProfile = lazy(() => import('./pages/CharacterProfilePage'));
 const SetupWizard = lazy(() => import('./pages/SetupWizard'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
@@ -139,7 +135,6 @@ const WorldFoundation = lazy(() => import('./pages/WorldFoundation'));
 const SocialSystemsPage = lazy(() => import('./pages/SocialSystems'));
 const CultureEvents = lazy(() => import('./pages/CultureEvents'));
 const WorldDashboard = lazy(() => import('./pages/WorldDashboard'));
-const ShowBrain = lazy(() => import('./pages/ShowBrain'));
 const ShowBiblePage = lazy(() => import('./pages/ShowBiblePage'));
 const StoriesPage = lazy(() => import('./pages/StoriesPage'));
 const TextureReviewPage = lazy(() => import('./pages/TextureReviewPage'));
@@ -270,15 +265,13 @@ function AppContent() {
   // Only match episode-scoped URLs for full-screen (not /studio/* picker pages)
   const isTimelineEditor = /\/episodes\/[^/]+\/timeline/.test(location.pathname);
   const isExportPage = location.pathname.includes('/export');
-  const isStorytellerPage = location.pathname.includes('/storyteller');
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
   const isWriteMode = location.pathname.startsWith('/write/');
   const isChapterJourney = location.pathname.startsWith('/chapter/');
   // Social Import is now embedded in Universe page as a tab
   const isSetupWizard = location.pathname === '/setup';
-  const isStoryEngine = location.pathname === '/story-engine';
   const isSceneStudioEditor = /\/studio\/scene(-set)?\//.test(location.pathname);
-  const isFullScreen = isTimelineEditor || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isSetupWizard || isStoryEngine || isSceneStudioEditor;
+  const isFullScreen = isTimelineEditor || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isSetupWizard || isSceneStudioEditor;
   const hideFooter = isFullScreen;
 
   return (
