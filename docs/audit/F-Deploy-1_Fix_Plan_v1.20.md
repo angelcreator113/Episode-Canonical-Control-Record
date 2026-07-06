@@ -1,6 +1,6 @@
 # F-Deploy-1 Fix Plan — v1.20 (2026-07-06)
 
-Formal revision. Supersedes v1.19''s FD register only as stated below;
+Formal revision. Supersedes v1.19's FD register only as stated below;
 all other v1.19 content stands. Basis: FD-38 execution, pm2 save, and
 FD-45 re-digest, all recorded in
 Audit_Handoff_Delta_2026-07-06_FD38_save.md (same PR).

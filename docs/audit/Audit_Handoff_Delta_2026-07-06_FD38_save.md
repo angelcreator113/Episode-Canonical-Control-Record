@@ -43,7 +43,7 @@ ratified text at origin/main ec73e675).
 5. Credential-at-rest acknowledgment: the new dump serializes live env
    including DB_PASSWORD for both online api processes — same surface
    v1.18 flagged at FD-45 mint. No new exposure; recorded as the
-   re-digest requires. Remediation remains FD-45''s open tail.
+   re-digest requires. Remediation remains FD-45's open tail.
 
 ## Resulting state
 
