@@ -1,24 +1,70 @@
 name: Deploy to Development
 
+# ═══════════════════════════════════════════════════════════════════════════
+# REWRITE 2026-07-10 — F-Deploy-1 Fix Plan v1.30 §5 (rewrite gate) / FD-57.
+# Replaces the shared-box SSH deploy reviewed in v1.30 §2 (R1–R6).
+#
+# DESIGN (deltas from the pre-rewrite file):
+#   • Transport: SSM RunCommand (FD-57, zero-inbound). No runner→SSH. The
+#     Security Group is untouched by deploys.
+#   • Targeting: by instance tag (Name=episode-dev-backend). NO host secret
+#     exists on this path — DEV_EC2_HOST is retired (deleted with this PR's
+#     gate) and EPISODE_DEV_BACKEND_HOST is unreferenced. Exceeds the v1.30
+#     §5 pt-1 spec ("retarget to EPISODE_DEV_BACKEND_HOST"): recorded as a
+#     spec delta — no lever can point at the shared box because no lever
+#     exists.
+#   • Runner auth: GitHub OIDC → role episode-gha-deploy-dev. No static AWS
+#     keys on this path (F-Deploy-G1-AD retirement, this path only).
+#   • Secrets: this workflow carries ZERO application secrets. No DEV_DB_*
+#     injection, no write_env_key, no .env writes, no --update-env clobber.
+#     The app and migrations read episode-metadata/dev/database via the
+#     instance role (FD-55 decision (b), scope per FD-58). The CauseClosed
+#     Sec 4 secret-clobber mechanism (v1.30 §2 R3) is structurally absent.
+#   • Restart discipline: explicit scoped restart before the health check;
+#     EXIT trap (armed only after DB env resolves, disarmed after the
+#     explicit restart) as failure insurance for the window between eval
+#     and restart.
+#     --only episode-api,episode-worker is CONFIG HYGIENE, not shared-box
+#     exclusion: the shipped ecosystem.config.js defines a prod-configured
+#     app (episode-api-prod-hotfix); unscoped startOrRestart would
+#     materialize it on any box. (RF-1–RF-4, Fix Plan v1.31.)
+#   • DB env model (spec delta 3): migrations and PM2 process env carry
+#     DB_* resolved at deploy time via scripts/print-db-env.js from the
+#     secret (instance role). App-boot secret reading remains open inside
+#     P4's code PR; the pm2-env-carried model is the acknowledged design
+#     until then.
+#
+# TRIGGER POSTURE:
+#   • NO push trigger exists anywhere in this file — deliberate, per the
+#     CauseClosed (2026-07-01) Sec 6 abort-precondition. Binary check
+#     (expected EMPTY):
+#       git show origin/main:.github/workflows/deploy-dev.yml | Select-String -Pattern "^\s*push:"
+#   • workflow_dispatch retained as the gated human lever (parity with
+#     deploy-production per F-Deploy-G1-S).
+#   • The Actions-level runtime disable (disabled_manually, 2026-07-01) is
+#     workflow-ID state and SURVIVES this file's merge. Merging this rewrite
+#     RE-ENABLES NOTHING. Re-enablement remains its own Rule 7 gate per Fix
+#     Plan v1.28 §5 / v1.30 §5 pt-5.
+#
+# PREREQUISITES BEFORE FIRST DISPATCH (none exist at authoring; all gated):
+#   P1  Instance role gains SSM permissions (AmazonSSMManagedInstanceCore or
+#       scoped inline); instance registered — verify:
+#         aws ssm describe-instance-information (non-empty for the instance)
+#   P2  GitHub OIDC provider + IAM role episode-gha-deploy-dev (trust scoped
+#       to this repo + environment "development"); permissions: S3 Put/Get on
+#       s3://episode-metadata-storage-dev/deploys/*, ssm:SendCommand scoped
+#       to the instance ARN + AWS-RunShellScript, ssm:ListCommandInvocations,
+#       ssm:GetCommandInvocation
+#   P3  Secret episode-metadata/dev/database exists + instance role carries
+#       the secretsmanager read statement (FD-55(b), scope per FD-58; folds
+#       into the FD-45 remediation window)
+#   P4  App-side loader: scripts/print-db-env.js resolves DB_* from the
+#       secret via the instance role (code PR, separate)
+#   P5  Nginx provisioning on episode-dev-backend confirmed (frontend leg
+#       fails loudly if absent — that is correct behavior, not a bug)
+# ═══════════════════════════════════════════════════════════════════════════
+
 on:
-  # ── DISABLED 2026-07-01 for the F-Deploy-1 freeze (opened for the [3] window) ──
-  # The push→dev trigger arms the autonomous cascade documented in
-  # docs/audit/F-Deploy-1_AllStopped_CauseClosed_WorkflowCascade_2026-07-01.md:
-  #   claude/** doc-PR → Auto-merge (App-token) → THIS deploy → SSH into the shared
-  #   prod/dev box → stop dev processes + write ANTHROPIC/FAL/REMOVEBG into .env +
-  #   --update-env restart.
-  # During the freeze that clobbers rotation surfaces S2/S3 and can restart PM2 out
-  # of band on a deliberately-frozen box. Re-enable ONLY via a deliberate gated
-  # decision after [3] closes AND the shared-box exposure is re-assessed (Phase B G1
-  # α/β) — re-arming the cascade onto the shared box otherwise re-opens F-Deploy-G1-AA.
-  # workflow_dispatch is kept intentionally: a manual, human-initiated dispatch is a
-  # gated lever, not the unattended cascade (parity with deploy-production per
-  # F-Deploy-G1-S, which catalogued dispatch-only as a positive property).
-  # Verify disabled from git (expected: EMPTY output — the only push: is commented):
-  #   git show origin/main:.github/workflows/deploy-dev.yml | Select-String -Pattern "^\s*push:"
-  # push:
-  #   branches:
-  #     - dev
   workflow_dispatch:
 
 concurrency:
@@ -27,6 +73,13 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write   # OIDC federation — see header; no static AWS keys on this path
+
+env:
+  AWS_REGION: us-east-1
+  DEPLOY_BUCKET: episode-metadata-storage-dev
+  DEPLOY_PREFIX: deploys/dev
+  INSTANCE_TAG: episode-dev-backend
 
 jobs:
   test:
@@ -82,7 +135,6 @@ jobs:
 
   build:
     needs: test
-    if: always() && (needs.test.result == 'success' || needs.test.result == 'failure')
     runs-on: ubuntu-latest
 
     steps:
@@ -99,13 +151,11 @@ jobs:
       - name: Install backend dependencies
         run: |
           npm ci --production
-          # Also need sequelize-cli for DB migrations during deploy
           npm install --no-save sequelize-cli
 
       - name: Prune node_modules for deployment
         run: |
           echo "node_modules size before prune: $(du -sh node_modules | cut -f1)"
-          # Remove documentation files
           find node_modules -type f \( \
             -name "*.md" -o -name "*.d.ts" -o -name "*.map" -o \
             -name "LICENSE*" -o -name "LICENCE*" -o -name "CHANGELOG*" -o \
@@ -114,7 +164,6 @@ jobs:
             -name ".eslintrc*" -o -name ".prettierrc*" -o -name ".babelrc*" -o \
             -name "*.flow" -o -name "Makefile" \
           \) -delete 2>/dev/null || true
-          # Remove test/doc/example directories
           find node_modules -maxdepth 3 -type d \( \
             -name "__tests__" -o -name "test" -o -name "tests" -o \
             -name "spec" -o -name "docs" -o -name "doc" -o \
@@ -141,7 +190,6 @@ jobs:
           cp package-lock.json deploy/
           cp ecosystem.config.js deploy/
           cp .sequelizerc deploy/
-          # Include pre-built node_modules (avoids npm install on disk-constrained EC2)
           mv node_modules deploy/
           tar -czf episode-metadata-${{ github.sha }}.tar.gz deploy/
           echo "Artifact size: $(du -sh episode-metadata-${{ github.sha }}.tar.gz | cut -f1)"
@@ -155,7 +203,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     environment:
       name: development
       url: https://dev.primepisodes.com
@@ -166,362 +214,245 @@ jobs:
         with:
           name: episode-metadata-build-dev
 
-      # Fail fast with a diagnosable error when the dev host is unreachable or
-      # out of disk. Without this guard, a stuck EC2 instance produces an opaque
-      # "Connection timed out during banner exchange" after ~60s inside the
-      # big Deploy step — which ate the previous run. Try to reach SSH with 3
-      # quick retries, then verify we have room for the ~100MB tarball before
-      # spending build time on the real deploy.
-      - name: Preflight — SSH reachability + disk-space guard
-        env:
-          EC2_HOST: ${{ secrets.DEV_EC2_HOST }}
-          EC2_USER: ${{ secrets.DEV_EC2_USER }}
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::637423256673:role/episode-gha-deploy-dev   # P2 — does not exist yet
+          aws-region: us-east-1
+
+      # Preflight replaces the old SSH-reachability probe in kind: verify the
+      # target is SSM-managed and Online BEFORE uploading anything. Fail fast
+      # with the P1 pointer if not.
+      - name: Preflight — SSM target Online
+        id: preflight
         run: |
-          if [ -z "$EC2_HOST" ] || [ -z "$EC2_SSH_KEY" ]; then
-            echo "⏭️  Preflight skipped — EC2 secrets not configured"
-            exit 0
-          fi
-
-          if [ -z "$EC2_USER" ]; then
-            EC2_USER="ubuntu"
-          fi
-
-          mkdir -p ~/.ssh
-          echo "$EC2_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-
-          SSH_OPTS="-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=2 -o ServerAliveInterval=10 -o ServerAliveCountMax=2"
-
-          echo "🌐 Runner network diagnostics"
-          RUNNER_IP=$(curl -fsS https://api.ipify.org || true)
-          if [ -n "$RUNNER_IP" ]; then
-            echo "  - Runner public IP: $RUNNER_IP"
-            echo "  - If SSH fails, ensure Security Group allows TCP/22 from this IP (or GitHub Actions IP ranges)."
-          else
-            echo "  - Runner public IP: unavailable"
-          fi
-          if timeout 5 bash -c "cat < /dev/null > /dev/tcp/$EC2_HOST/22" 2>/dev/null; then
-            echo "  - Raw TCP probe: port 22 open"
-          else
-            echo "  - Raw TCP probe: port 22 closed/unreachable from runner"
-          fi
-
-          echo "🔌 Probing SSH to $EC2_HOST..."
-          REACHABLE=false
-          LAST_ERR=""
-          for i in 1 2 3 4 5 6; do
-            LAST_ERR=$(ssh $SSH_OPTS $EC2_USER@$EC2_HOST 'echo ok' 2>&1 >/dev/null || true)
-            if [ -z "$LAST_ERR" ]; then
-              echo "✅ SSH reachable (attempt $i)"
-              REACHABLE=true
-              break
-            fi
-            if [ $i -lt 6 ]; then
-              echo "  ⏳ Attempt $i failed, retrying in 15s..."
-              sleep 15
-            fi
-          done
-
-          if [ "$REACHABLE" != "true" ]; then
-            echo "::error title=EC2 dev SSH preflight failed::Could not open SSH session to $EC2_USER@$EC2_HOST after 6 attempts (~3m). Deploy aborted before SCP."
-            echo ""
-            echo "Last SSH error:"
-            echo "  $LAST_ERR"
-            echo ""
-            echo "Most common causes (ordered by likelihood):"
-            echo "  1. Wrong username or SSH key for this host"
-            echo "     - Current user: $EC2_USER"
-            echo "     - If your AMI user is ec2-user, ubuntu, or admin, set DEV_EC2_USER accordingly"
-            echo "     - Ensure EC2_SSH_KEY matches the instance key pair private key"
-            echo "  2. EC2 instance stopped or rebooting — check AWS console and start it"
-            echo "  3. Disk 100% full → instance becomes SSH-unresponsive"
-            echo "     Recover via AWS SSM Session Manager or reboot, then clean ~/.pm2/logs/*.log"
-            echo "  4. Security Group blocking port 22 from GitHub Actions runners"
-            echo "     Compare the runner public IP printed above with your inbound SG rules"
-            echo "  5. EC2 out of memory and swapping — reboot from AWS console"
-            echo ""
-            echo "After fixing, re-run this workflow from the Actions tab (top-right → Re-run failed jobs)."
+          INFO=$(aws ssm describe-instance-information \
+            --filters "Key=tag:Name,Values=${INSTANCE_TAG}" \
+            --query "InstanceInformationList[?PingStatus=='Online'].[InstanceId,PingStatus,PlatformName]" \
+            --output text)
+          if [ -z "$INFO" ]; then
+            echo "::error title=SSM preflight failed::No Online SSM-managed instance with tag Name=${INSTANCE_TAG}. Prerequisite P1 (see workflow header) is not satisfied, or the instance/agent is down."
             exit 1
           fi
+          INSTANCE_ID=$(echo "$INFO" | head -1 | cut -f1)
+          echo "✅ SSM target Online: $INSTANCE_ID"
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
 
-          echo ""
-          echo "💾 Checking disk space on EC2..."
-          FREE_MB=$(ssh $SSH_OPTS $EC2_USER@$EC2_HOST 'df -BM --output=avail / | tail -1 | tr -d " M"')
-          echo "  Free space on /: ${FREE_MB}MB"
-
-          MIN_FREE_MB=500
-          if [ "$FREE_MB" -lt "$MIN_FREE_MB" ]; then
-            echo "::error title=EC2 disk almost full::Only ${FREE_MB}MB free on /, need at least ${MIN_FREE_MB}MB for the ~100MB tarball + extraction overhead."
-            echo ""
-            echo "Top space consumers on the instance:"
-            ssh $SSH_OPTS $EC2_USER@$EC2_HOST 'sudo du -hx / 2>/dev/null | sort -hr | head -10' || true
-            echo ""
-            echo "Quick cleanup (run via AWS SSM or SSH):"
-            echo "  rm -rf ~/.pm2/logs/*.log"
-            echo "  rm -rf ~/episode-metadata/logs/*.log"
-            echo "  sudo journalctl --vacuum-size=10M"
-            echo "  sudo apt-get clean"
-            exit 1
-          fi
-
-          echo "✅ Preflight passed — SSH reachable, ${FREE_MB}MB free."
-
-      - name: Deploy to EC2
-        env:
-          EC2_HOST: ${{ secrets.DEV_EC2_HOST }}
-          EC2_USER: ${{ secrets.DEV_EC2_USER }}
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          DEV_DB_HOST: ${{ secrets.DEV_DB_HOST }}
-          DEV_DB_USER: ${{ secrets.DEV_DB_USER }}
-          DEV_DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
-          DEV_DB_NAME: ${{ secrets.DEV_DB_NAME }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          FAL_KEY: ${{ secrets.FAL_KEY }}
-          REMOVEBG_API_KEY: ${{ secrets.REMOVEBG_API_KEY }}
+      - name: Write on-box deploy script
         run: |
-          if [ -z "$EC2_HOST" ] || [ -z "$EC2_SSH_KEY" ]; then
-            echo "⏭️  EC2 deployment skipped - secrets not configured"
-            echo "Set DEV_EC2_HOST and EC2_SSH_KEY in GitHub Secrets to enable"
-            echo ""
-            echo "Commit: ${{ github.sha }}"
-            echo "Branch: ${{ github.ref_name }}"
-            exit 0
+          cat > deploy-on-box.sh <<'ONBOX'
+          #!/usr/bin/env bash
+          # Runs on episode-dev-backend as ubuntu (invoked via sudo -u ubuntu).
+          # Expects env: ARTIFACT_URL (presigned), DEPLOY_SHA.
+          # Carries NO credentials. DB env for migrations comes from
+          # scripts/print-db-env.js reading episode-metadata/dev/database via
+          # the instance role (P3/P4).
+          set -eo pipefail
+
+          APP_DIR=$HOME/episode-metadata
+          mkdir -p "$APP_DIR/logs"
+
+          # Scoped restart — RF-1 (v1.31): --only is CONFIG HYGIENE, not
+          # shared-box exclusion. The shipped ecosystem.config.js still
+          # defines episode-api-prod-hotfix (port 3000, NODE_ENV=production);
+          # an unscoped startOrRestart would MATERIALIZE a prod-configured
+          # process on this box. Scoping prevents that anywhere this file
+          # runs. pm2 resurrect remains banned (stale-env rotation trap,
+          # SESSION_HANDOFF.md).
+          # NOTE: the EXIT trap is installed LATER — only after DB_* env is
+          # resolved (RF-2, v1.31): a trap armed before the eval would fire
+          # --update-env with empty DB env on early failure, clobbering a
+          # healthy process — the R3 mechanism-family in miniature. Nothing
+          # before the eval stops PM2, so no restart is owed before then.
+          restore_pm2() {
+            cd "$APP_DIR" 2>/dev/null || return
+            pm2 startOrRestart ecosystem.config.js --only episode-api,episode-worker --update-env 2>&1 | tail -10 || true
+            pm2 save 2>&1 | tail -2 || true
+          }
+
+          export NVM_DIR=$HOME/.nvm
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          echo "Node: $(node -v)  npm: $(npm -v)"
+          if ! command -v pm2 &>/dev/null; then
+            echo '📦 Installing pm2...'
+            sudo npm install -g pm2
           fi
+          echo "pm2: $(pm2 -v)"
 
-          echo "🚀 Deploying to dev server..."
-
-          # Setup SSH key
-          mkdir -p ~/.ssh
-          echo "$EC2_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-
-          if [ -z "$EC2_USER" ]; then
-            EC2_USER="ubuntu"
-          fi
-
-          SSH_OPTS="-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=5 -o ConnectTimeout=30 -o ConnectionAttempts=2"
-
-          # Free disk space on EC2 before uploading
-          ssh $SSH_OPTS $EC2_USER@$EC2_HOST "
-            echo '🧹 Cleaning up disk space...'
-            echo \"Disk BEFORE: \$(df -h / | tail -1 | awk '{print \$4}')\"
-            # Stop PM2 so files can be safely replaced
-            pm2 stop episode-api episode-worker 2>/dev/null || true
-            # Remove old node_modules + source (biggest space consumers)
-            rm -rf ~/episode-metadata/node_modules 2>/dev/null || true
-            rm -rf ~/episode-metadata/src ~/episode-metadata/scripts 2>/dev/null || true
-            # Remove npm cache + temp + logs
+          echo "💾 Disk before: $(df -h / | tail -1 | awk '{print $4}')"
+          FREE_MB=$(df -BM --output=avail / | tail -1 | tr -d ' M')
+          if [ "$FREE_MB" -lt 500 ]; then
+            echo "🧹 Low disk (${FREE_MB}MB) — cleaning..."
+            rm -rf "$APP_DIR/node_modules" "$APP_DIR/logs"/*.log ~/.pm2/logs/*.log /tmp/dev-deploy.tar.gz 2>/dev/null || true
             npm cache clean --force 2>/dev/null || true
-            rm -rf ~/.npm/_cacache ~/.npm/_logs 2>/dev/null || true
-            rm -rf /tmp/deploy /tmp/dev-deploy.tar.gz /tmp/*.tar.gz /tmp/deploy-tmp 2>/dev/null || true
-            rm -rf ~/episode-metadata/logs/*.log 2>/dev/null || true
-            rm -rf ~/.pm2/logs/*.log 2>/dev/null || true
             sudo journalctl --vacuum-size=10M 2>/dev/null || true
             sudo apt-get clean 2>/dev/null || true
-            sudo rm -rf /var/cache/apt/archives/*.deb /var/log/*.gz /var/log/*.1 /var/log/*.old 2>/dev/null || true
-            echo \"Disk AFTER cleanup: \$(df -h / | tail -1 | awk '{print \$4}')\"
-          "
+          fi
 
-          # Upload build artifact (includes pre-built node_modules from CI)
-          scp $SSH_OPTS \
-            episode-metadata-${{ github.sha }}.tar.gz \
-            $EC2_USER@$EC2_HOST:/tmp/dev-deploy.tar.gz
+          echo '⬇️  Fetching artifact...'
+          curl -fsSL "$ARTIFACT_URL" -o /tmp/dev-deploy.tar.gz
+          echo "Artifact: $(du -sh /tmp/dev-deploy.tar.gz | cut -f1) (sha ${DEPLOY_SHA})"
 
-          # ─── Deploy everything in a single SSH session ───
-          ssh $SSH_OPTS $EC2_USER@$EC2_HOST "
-            set -eo pipefail
+          # ─── Frontend + nginx (P5: fails loudly if nginx absent — correct) ───
+          echo '🎨 Deploying frontend...'
+          mkdir -p /tmp/deploy-tmp
+          cd /tmp/deploy-tmp
+          tar -xzf /tmp/dev-deploy.tar.gz --strip-components=1 deploy/dist deploy/nginx
+          sudo rm -rf /var/www/html/*
+          sudo cp -r dist/* /var/www/html/
+          sudo chown -R www-data:www-data /var/www/html
+          sudo chmod 755 /var/www/html /var/www/html/assets
+          sudo cp nginx/episode-dev.conf /etc/nginx/sites-enabled/episode
+          sudo nginx -t
+          sudo systemctl restart nginx
+          rm -rf /tmp/deploy-tmp
+          echo '✅ Frontend + Nginx deployed'
 
-            # -- Fix F-Deploy-1: guarantee PM2 restart on ANY exit (scoped to dev processes) --
-            # Root cause: bootstrap-sequelize-meta.js ran unguarded under pipefail AFTER
-            # the cleanup block stopped the dev processes, so a bootstrap failure killed
-            # the SSH session before any restart -> prod down. Two incidents, same mechanism.
-            # restore_pm2 fires on EXIT regardless of failure mode, restoring only the
-            # two dev processes the cleanup stopped (episode-api, episode-worker).
-            #
-            # SCOPE: restores only episode-api (3002/dev) and episode-worker (shared).
-            # episode-api-prod-hotfix (3000/prod) is protected by exclusion -- the cleanup
-            # block stops only the two dev processes, so prod is never stopped by this
-            # workflow and never needs to be restored by this trap.
-            #
-            # startOrRestart --only re-parses ecosystem.config.js -> re-runs dotenv ->
-            # reads the CURRENT .env DB_PASSWORD. NEVER use `pm2 resurrect` here: it
-            # replays the stale-env dump and reintroduces the post-rotation dead-password
-            # disconnect (PM2-stored-env rotation trap, SESSION_HANDOFF.md).
-            #
-            # VALIDATED 2026-06-28 (sandbox, pm2 6.0.14 parity-matched to box):
-            # both behaviors below confirmed; box-version-matched, not asserted from memory.
-            # (1) CONFIRMED: `pm2 startOrRestart --only ... --update-env` refreshes env on
-            #     already-running processes -- verified via /proc/<pid>/environ flip v1->v2.
-            # (2) CONFIRMED: `startOrRestart --only` STARTS a stopped process (stopped,pid 0
-            #     -> online,new pid), and --only leaves excluded processes untouched (the
-            #     prod-hotfix exclusion holds: decoy pid/uptime unchanged across the call).
-            # Discovery risk retired. REMAINING: confirm-in-passing on first gated dev
-            # deploy on the real box (not discovery -- behavior is known). Evidence:
-            # docs/audit/F-Deploy-1_Finding_TrapScope_PM2Discipline_2026-06-28.md
-            restore_pm2() {
-              cd \$HOME/episode-metadata || return
-              pm2 startOrRestart ecosystem.config.js --only episode-api,episode-worker --update-env 2>&1 | tail -10 || true
-              pm2 save 2>&1 | tail -2 || true
-            }
-            trap restore_pm2 EXIT
+          # ─── Backend ───
+          echo '🔧 Deploying backend...'
+          rm -rf "$APP_DIR/src" "$APP_DIR/scripts" "$APP_DIR/node_modules"
+          cd "$APP_DIR"
+          tar -xzf /tmp/dev-deploy.tar.gz --strip-components=1 \
+            deploy/src deploy/scripts deploy/node_modules \
+            deploy/package.json deploy/package-lock.json \
+            deploy/ecosystem.config.js deploy/.sequelizerc
+          rm -f /tmp/dev-deploy.tar.gz
+          echo "Disk after extract: $(df -h / | tail -1 | awk '{print $4}')"
 
-            # Use whatever Node is available on the system
-            export NVM_DIR=\$HOME/.nvm
-            if [ -s \$NVM_DIR/nvm.sh ]; then
-              . \$NVM_DIR/nvm.sh
+          # DB env from Secrets Manager via instance role — NO secrets arrive
+          # with this deploy (P3/P4). print-db-env.js emits export lines.
+          echo '🔐 Resolving DB env from episode-metadata/dev/database...'
+          eval "$(node scripts/print-db-env.js)"
+
+          # Trap armed HERE — after DB env exists, per RF-2 (see comment at
+          # restore_pm2 above). From this point, any exit path restarts the
+          # two dev processes with a complete environment.
+          trap restore_pm2 EXIT
+
+          echo '🔧 Bootstrapping migration metadata...'
+          node scripts/bootstrap-sequelize-meta.js
+
+          echo '🗃  Running migrations...'
+          MIGRATION_FAILED=false
+          if ! npx sequelize-cli db:migrate --env development 2>&1 | tail -20; then
+            echo '⚠ Migration failed — trap will still restart PM2 so the site stays up'
+            MIGRATION_FAILED=true
+          fi
+
+          # Explicit restart BEFORE the health check — RF-3 (v1.31): the trap
+          # fires at EXIT, i.e. AFTER the health check runs; relying on it
+          # alone means the check polls a not-yet-restarted (or, on first
+          # deploy, never-started) app. The trap remains as failure insurance
+          # for exit paths that skip this line.
+          echo '🚀 Restarting PM2 (scoped)...'
+          restore_pm2
+          # RF-4 (v1.31): disarm — the restart is done. A trap left armed
+          # would fire a SECOND restart at EXIT, after the health check has
+          # already verified this one: an unverified restart behind a green
+          # run. Every exit path below this line reports state; none changes
+          # PM2 state; no insurance is owed.
+          trap - EXIT
+
+          echo '🏥 Health check...'
+          HEALTHY=false
+          for i in 1 2 3 4 5 6; do
+            sleep 5
+            if curl -sf http://localhost:3002/health > /dev/null 2>&1; then
+              HEALTHY=true
+              echo "✅ Backend healthy (attempt $i)"
+              break
             fi
-            echo \"Node: \$(node -v)  npm: \$(npm -v)\"
+            echo "  ⏳ Attempt $i — not ready yet..."
+          done
+          if [ "$HEALTHY" != "true" ]; then
+            echo '❌ Health check failed after 30s — PM2 logs:'
+            pm2 logs episode-api --lines 30 --nostream || true
+            exit 1
+          fi
 
-            # Install pm2 globally if not found
-            if ! command -v pm2 &>/dev/null; then
-              echo '📦 Installing pm2...'
-              sudo npm install -g pm2
-            fi
-            echo \"pm2: \$(pm2 -v)\"
+          echo '🔍 Route verification...'
+          SHOWS_OK=false; EPISODES_OK=false
+          curl -sf http://localhost:3002/api/v1/shows > /dev/null 2>&1 && SHOWS_OK=true
+          curl -sf http://localhost:3002/api/v1/episodes > /dev/null 2>&1 && EPISODES_OK=true
+          echo "  Shows route: $SHOWS_OK"
+          echo "  Episodes route: $EPISODES_OK"
 
-            APP_DIR=\$HOME/episode-metadata
-            mkdir -p \$APP_DIR/logs
+          echo "Disk final: $(df -h / | tail -1 | awk '{print $4}')"
+          if [ "$MIGRATION_FAILED" = "true" ]; then
+            echo '❌ Deployment completed but migrations failed'
+            exit 1
+          fi
+          echo '✅ Full deployment complete'
+          ONBOX
+          chmod +x deploy-on-box.sh
 
-            echo \"Disk before extraction: \$(df -h / | tail -1 | awk '{print \$4}')\"
+      - name: Upload artifact + script to S3, presign
+        id: s3
+        run: |
+          KEY_ART="${DEPLOY_PREFIX}/${{ github.sha }}/episode-metadata.tar.gz"
+          KEY_SCR="${DEPLOY_PREFIX}/${{ github.sha }}/deploy-on-box.sh"
+          aws s3 cp "episode-metadata-${{ github.sha }}.tar.gz" "s3://${DEPLOY_BUCKET}/${KEY_ART}"
+          aws s3 cp deploy-on-box.sh "s3://${DEPLOY_BUCKET}/${KEY_SCR}"
+          ART_URL=$(aws s3 presign "s3://${DEPLOY_BUCKET}/${KEY_ART}" --expires-in 1800)
+          SCR_URL=$(aws s3 presign "s3://${DEPLOY_BUCKET}/${KEY_SCR}" --expires-in 1800)
+          # Presigned URLs are capability tokens (30 min TTL) — mask from logs
+          echo "::add-mask::$ART_URL"
+          echo "::add-mask::$SCR_URL"
+          echo "art_url=$ART_URL" >> "$GITHUB_OUTPUT"
+          echo "scr_url=$SCR_URL" >> "$GITHUB_OUTPUT"
 
-            # ─── Deploy frontend (extract only dist + nginx from tarball) ───
-            echo '🎨 Deploying frontend...'
-            mkdir -p /tmp/deploy-tmp
-            cd /tmp/deploy-tmp
-            tar -xzf /tmp/dev-deploy.tar.gz --strip-components=1 deploy/dist deploy/nginx
-            sudo rm -rf /var/www/html/*
-            sudo cp -r dist/* /var/www/html/
-            sudo chown -R www-data:www-data /var/www/html
-            sudo chmod 755 /var/www/html /var/www/html/assets
-            echo '🔧 Deploying nginx config...'
-            sudo cp nginx/episode-dev.conf /etc/nginx/sites-enabled/episode
-            sudo nginx -t
-            sudo systemctl restart nginx
-            rm -rf /tmp/deploy-tmp
-            echo '✅ Frontend + Nginx deployed'
+      - name: Deploy via SSM RunCommand
+        run: |
+          INSTANCE_ID='${{ steps.preflight.outputs.instance_id }}'
+          # Fetch script as root, execute as ubuntu with only two env values:
+          # the presigned artifact URL and the sha. No credentials cross.
+          CMD="curl -fsSL '${{ steps.s3.outputs.scr_url }}' -o /tmp/deploy-on-box.sh && chmod +x /tmp/deploy-on-box.sh && sudo -u ubuntu ARTIFACT_URL='${{ steps.s3.outputs.art_url }}' DEPLOY_SHA='${{ github.sha }}' bash /tmp/deploy-on-box.sh"
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "deploy-dev ${{ github.sha }}" \
+            --timeout-seconds 900 \
+            --parameters "{\"commands\":[\"$CMD\"],\"executionTimeout\":[\"900\"]}" \
+            --query "Command.CommandId" --output text)
+          echo "SSM CommandId: $COMMAND_ID"
 
-            # ─── Deploy backend (extract pre-built node_modules + source) ───
-            echo '🔧 Deploying backend...'
-            # Ensure old files are gone (cleanup should have done this)
-            rm -rf \$APP_DIR/src \$APP_DIR/scripts \$APP_DIR/node_modules
+          echo '⏳ Polling command status...'
+          STATUS="Pending"
+          for i in $(seq 1 60); do
+            sleep 15
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            echo "  [$i] $STATUS"
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut) break ;;
+            esac
+          done
 
-            # Extract backend files directly into app dir (no intermediate copy)
-            cd \$APP_DIR
-            tar -xzf /tmp/dev-deploy.tar.gz --strip-components=1 \
-              deploy/src deploy/scripts deploy/node_modules \
-              deploy/package.json deploy/package-lock.json \
-              deploy/ecosystem.config.js deploy/.sequelizerc
+          echo '─── On-box output (stdout tail) ───'
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --query "StandardOutputContent" --output text | tail -80
+          if [ "$STATUS" != "Success" ]; then
+            echo '─── On-box stderr tail ───'
+            aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+              --query "StandardErrorContent" --output text | tail -40
+            echo "::error title=Deploy failed::SSM command ended $STATUS"
+            exit 1
+          fi
+          echo '✅ Deploy Success'
 
-            # Delete tarball immediately to free disk space
-            rm -f /tmp/dev-deploy.tar.gz
-
-            echo \"Disk after backend deploy: \$(df -h / | tail -1 | awk '{print \$4}')\"
-
-            # NO npm install — node_modules is pre-built from CI ✅
-
-            # Set DB env vars for RDS (from GitHub Secrets)
-            export DB_HOST='$DEV_DB_HOST'
-            export DB_PORT='5432'
-            export DB_NAME='$DEV_DB_NAME'
-            export DB_USER='$DEV_DB_USER'
-            export DB_PASSWORD='$DEV_DB_PASSWORD'
-            export DB_SSL='true'
-            export DB_SSL_REJECT_UNAUTHORIZED='false'
-
-            # Claude AI API key for memory extraction
-            export ANTHROPIC_API_KEY='$ANTHROPIC_API_KEY'
-
-            # fal.ai key for Flux Kontext img2img (wardrobe product-shot
-            # regeneration). remove.bg key for wardrobe background removal.
-            # Empty string is fine — the consuming code treats unset keys as
-            # "feature disabled" and returns a clear error to callers.
-            export FAL_KEY='$FAL_KEY'
-            export REMOVEBG_API_KEY='$REMOVEBG_API_KEY'
-
-            # Also persist to .env so the keys survive instance reboots and
-            # pm2 resurrect (which only captures the env set at the moment
-            # `pm2 start` runs). Skip writing when the secret is an empty
-            # string — preserves any existing value already in .env.
-            ENV_FILE=\$APP_DIR/.env
-            touch \"\$ENV_FILE\"
-            write_env_key() {
-              local name=\"\$1\" value=\"\$2\"
-              [ -z \"\$value\" ] && return 0
-              grep -v \"^\${name}=\" \"\$ENV_FILE\" > \"\${ENV_FILE}.tmp\" 2>/dev/null || true
-              echo \"\${name}=\${value}\" >> \"\${ENV_FILE}.tmp\"
-              mv \"\${ENV_FILE}.tmp\" \"\$ENV_FILE\"
-            }
-            write_env_key FAL_KEY \"\$FAL_KEY\"
-            write_env_key REMOVEBG_API_KEY \"\$REMOVEBG_API_KEY\"
-            write_env_key ANTHROPIC_API_KEY \"\$ANTHROPIC_API_KEY\"
-
-            # Bootstrap SequelizeMeta for databases created by sequelize.sync()
-            echo '🔧 Bootstrapping migration metadata...'
-            node scripts/bootstrap-sequelize-meta.js
-
-            # Run database migrations against RDS
-            echo '🗃️ Running migrations...'
-            if ! npx sequelize-cli db:migrate --env development 2>&1 | tail -20; then
-              echo '⚠️ Migration failed — will still restart PM2 so site stays up'
-              MIGRATION_FAILED=true
-            fi
-
-            # PM2 restart handled by restore_pm2 trap on EXIT (see top of heredoc).
-
-
-            # Health check — retry up to 30 seconds
-            echo '🏥 Health check...'
-            HEALTHY=false
-            for i in 1 2 3 4 5 6; do
-              sleep 5
-              if curl -sf http://localhost:3002/health > /dev/null 2>&1; then
-                HEALTHY=true
-                echo \"✅ Backend is healthy (attempt \$i)\"
-                break
-              fi
-              echo \"  ⏳ Attempt \$i — not ready yet...\"
-            done
-
-            if [ \"\$HEALTHY\" != \"true\" ]; then
-              echo '⚠️ Backend health check failed after 30s — check PM2 logs'
-              pm2 logs episode-api --lines 30 --nostream
-              echo ''
-              echo \"Disk free: \$(df -h / | tail -1 | awk '{print \$4}')\"
-              exit 1
-            fi
-
-            # Route verification — check critical routes load
-            echo '🔍 Route verification...'
-            SHOWS_OK=false
-            EPISODES_OK=false
-            curl -sf http://localhost:3002/api/v1/shows > /dev/null 2>&1 && SHOWS_OK=true
-            curl -sf http://localhost:3002/api/v1/episodes > /dev/null 2>&1 && EPISODES_OK=true
-            echo \"  Shows route: \$SHOWS_OK\"
-            echo \"  Episodes route: \$EPISODES_OK\"
-            if [ \"\$EPISODES_OK\" != \"true\" ]; then
-              echo '⚠️ Episodes route not loading — dumping PM2 error logs:'
-              pm2 logs episode-api --lines 50 --nostream 2>&1 | grep -i 'error\|fail\|cannot\|module' | head -20
-            fi
-
-            # Cleanup
-            rm -rf /tmp/deploy /tmp/dev-deploy.tar.gz
-            echo \"Disk final: \$(df -h / | tail -1 | awk '{print \$4}')\"
-
-            if [ \"\${MIGRATION_FAILED:-}\" = \"true\" ]; then
-              echo '❌ Deployment completed but migrations failed — check migration errors above'
-              exit 1
-            fi
-            echo '✅ Full deployment complete'
-          "
+      - name: Cleanup S3 deploy objects
+        if: always()
+        run: |
+          aws s3 rm "s3://${DEPLOY_BUCKET}/${DEPLOY_PREFIX}/${{ github.sha }}/" --recursive || true
 
       - name: Deployment summary
         run: |
           echo "## Dev Deployment" >> $GITHUB_STEP_SUMMARY
           echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Transport: SSM RunCommand (FD-57, zero-inbound)" >> $GITHUB_STEP_SUMMARY
+          echo "- Target: tag Name=episode-dev-backend (no host secret)" >> $GITHUB_STEP_SUMMARY
+          echo "- Secrets carried by this workflow: NONE" >> $GITHUB_STEP_SUMMARY
           echo "- Site: https://dev.primepisodes.com" >> $GITHUB_STEP_SUMMARY
-          echo "- Frontend: ✅ Deployed to Nginx" >> $GITHUB_STEP_SUMMARY
-          echo "- Backend: ✅ Deployed, migrated, PM2 restarted" >> $GITHUB_STEP_SUMMARY
-
-
