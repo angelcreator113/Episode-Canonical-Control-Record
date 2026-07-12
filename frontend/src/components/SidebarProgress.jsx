@@ -90,7 +90,7 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
   const doneCount = steps.filter(s => s.done).length;
   const pct = Math.round((doneCount / steps.length) * 100);
   const nextStep = steps.find(s => !s.done);
-  const priorityColor = pct === 100 ? '#2E8B57' : pct >= 60 ? '#b0922e' : '#C0392B';
+  const priorityColor = pct >= 60 ? '#A8834E' : '#A6647F';
 
   // Hide when fully complete
   if (pct === 100) return null;
@@ -108,7 +108,7 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
           border: `2px solid ${priorityColor}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 10, fontWeight: 700, color: priorityColor,
-          fontFamily: 'DM Sans, sans-serif',
+          fontFamily: 'Jost, sans-serif',
         }}>
           {pct}%
         </div>
@@ -120,10 +120,10 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
     <div style={{
       margin: '8px 12px',
       borderRadius: 8,
-      border: '1px solid #f0d4de',
-      background: '#fdf2f6',
+      border: '1px solid #E3D5C3',
+      background: '#FAF6F0',
       overflow: 'hidden',
-      fontFamily: 'DM Sans, sans-serif',
+      fontFamily: 'Jost, sans-serif',
       fontSize: 12,
     }}>
       {/* Header */}
@@ -134,16 +134,16 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
           padding: '8px 10px', cursor: 'pointer', userSelect: 'none',
         }}
       >
-        <span style={{ fontWeight: 600, color: '#1C1814', fontSize: 11, letterSpacing: '0.04em' }}>
+        <span style={{ fontWeight: 500, color: '#A6647F', fontSize: 11, letterSpacing: '0.14em' }}>
           SHOW PROGRESS
         </span>
-        <span style={{ fontSize: 10, color: '#7A7268' }}>
+        <span style={{ fontSize: 10, color: '#A08B72' }}>
           {open ? '▾' : '▸'} {pct}%
         </span>
       </div>
 
       {/* Progress bar */}
-      <div style={{ height: 3, background: '#E0D9CC', margin: '0 10px 6px 10px', borderRadius: 2, overflow: 'hidden' }}>
+      <div style={{ height: 3, background: '#E3D5C3', margin: '0 10px 6px 10px', borderRadius: 2, overflow: 'hidden' }}>
         <div style={{
           height: '100%', width: `${pct}%`,
           background: priorityColor, borderRadius: 2,
@@ -160,7 +160,7 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '3px 0',
-                color: step.done ? '#2E8B57' : '#B8AFA2',
+                color: step.done ? '#A6647F' : '#A08B72',
                 fontSize: 11,
                 cursor: step.done ? 'default' : 'pointer',
               }}
@@ -175,7 +175,7 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
               }}>
                 {step.label}
               </span>
-              <span style={{ fontSize: 9, color: step.done ? '#2E8B57' : '#B8AFA2', fontWeight: 600 }}>
+              <span style={{ fontSize: 9, color: step.done ? '#A6647F' : '#A08B72', fontWeight: 600 }}>
                 {step.detail}
               </span>
             </div>
@@ -190,7 +190,7 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
                 border: 'none', borderRadius: 6,
                 background: priorityColor, color: '#fff',
                 fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                letterSpacing: '0.02em', fontFamily: 'DM Sans, sans-serif',
+                letterSpacing: '0.02em', fontFamily: 'Jost, sans-serif',
                 transition: 'opacity 0.15s',
               }}
               onMouseEnter={e => e.target.style.opacity = '0.85'}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import authService from '../services/authService';
 import '../styles/Login.css';
@@ -57,65 +58,80 @@ export default function Login() {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-box">
-        <h1>Episode Canonical<br />Control Record</h1>
-        <h2>Sign In</h2>
+    <div className="login-page">
+      <div className="login-top">
+        <Link className="login-brand" to="/">PRIME STUDIOS</Link>
+        <Link className="login-back" to="/">
+          <ArrowLeft size={14} />
+          Back to the story
+        </Link>
+      </div>
 
-        {error && <div className="alert alert-error">{error}</div>}
-        {success && <div className="alert alert-success">{success}</div>}
+      <div className="login-stage">
+        <div className="login-blob login-blob--blush" />
+        <div className="login-blob login-blob--lilac" />
+        <div className="login-blob login-blob--sand" />
 
-        <form onSubmit={handleLogin}>
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              disabled={loading}
-            />
-          </div>
+        <div className="login-card">
+          <div className="login-eyebrow">THE STUDIO DOOR</div>
+          <h1>Welcome <em>back.</em></h1>
+          <p className="login-sub">The world kept every memory while you were gone.</p>
 
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <div className="password-wrapper">
+          {error && <div className="alert alert-error">{error}</div>}
+          {success && <div className="alert alert-success">{success}</div>}
+
+          <form onSubmit={handleLogin}>
+            <div className="form-group">
+              <label htmlFor="email">Email</label>
               <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="lala@primestudios.com"
+                autoComplete="email"
                 required
                 disabled={loading}
               />
-              <button
-                type="button"
-                className="password-eye"
-                onClick={() => setShowPassword(v => !v)}
-                tabIndex={-1}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? '◉' : '○'}
-              </button>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            className="btn btn-primary btn-block"
-            disabled={loading}
-          >
-            {loading ? 'Signing in…' : 'Sign In'}
-          </button>
-        </form>
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
+              <div className="password-wrapper">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••••"
+                  autoComplete="current-password"
+                  required
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  className="password-eye"
+                  onClick={() => setShowPassword(v => !v)}
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
 
-        <p className="help-text">
-          Enter your credentials to access the canonical record
-        </p>
+            <button
+              type="submit"
+              className="login-btn"
+              disabled={loading}
+            >
+              {loading ? 'ENTERING…' : 'ENTER THE STUDIO'}
+            </button>
+          </form>
+        </div>
       </div>
+
+      <div className="login-foot">PRIME STUDIOS &middot; THE ATELIER OF THE LALAVERSE</div>
     </div>
   );
 }

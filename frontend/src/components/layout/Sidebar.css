@@ -1,24 +1,26 @@
 /* ═══════════════════════════════════════════════════════════════════
    Sidebar.css — Prime Studios Navigation
-   Pink #d4789a · Blue #7ab3d4 · Lavender #a889c8
-   Light theme · DM Sans / Segoe UI
+   Atelier palette: cream #F5EDE3 · tan #8A7156 · brown #5C4632
+   rose #C98DA4 · rose-deep #A6647F · blush #F2DCE4 · lilac #E6DCF2
+   Jost body · Cormorant Garamond accents
 ═══════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600&family=Jost:wght@300;400;500&display=swap');
 
 :root {
-  --ps-pink:        #d4789a;
-  --ps-pink-light:  #fce8f0;
-  --ps-pink-mid:    #f5d0e0;
-  --ps-blue:        #7ab3d4;
-  --ps-blue-light:  #e8f4fb;
-  --ps-lav:         #a889c8;
-  --ps-lav-light:   #f2edfb;
-  --ps-gold:        #c4903a;
-  --ps-text:        #1a1a1a;
-  --ps-text-mid:    #555;
-  --ps-muted:       #999;
-  --ps-border:      #ebebeb;
-  --ps-bg:          #fafafa;
-  --ps-surface:     #ffffff;
+  --ps-pink:        #A6647F;   /* rose-deep — primary accent */
+  --ps-pink-light:  #F2DCE4;   /* blush */
+  --ps-pink-mid:    #DDBAC8;
+  --ps-blue:        #7B62A8;   /* lilac-deep */
+  --ps-blue-light:  #E6DCF2;   /* lilac */
+  --ps-lav:         #7B62A8;
+  --ps-lav-light:   #E6DCF2;
+  --ps-gold:        #A8834E;
+  --ps-text:        #5C4632;   /* brown */
+  --ps-text-mid:    #8A7156;   /* tan-text */
+  --ps-muted:       #A08B72;   /* tan-soft */
+  --ps-border:      #E3D5C3;   /* tan-line */
+  --ps-bg:          #F5EDE3;   /* cream */
+  --ps-surface:     #FAF6F0;   /* cream-light */
   --ps-sidebar-w:         192px;
   --ps-sidebar-w-collapsed: 52px;
   --ps-radius:      8px;
@@ -37,7 +39,7 @@
   transition: width 0.2s ease;
   overflow: hidden;
   position: relative;
-  font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Jost', 'DM Sans', 'Segoe UI', system-ui, sans-serif;
 }
 
 .ps-sidebar-collapsed {
@@ -58,9 +60,9 @@
 
 .ps-brand-mark {
   font-size: var(--text-md);
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  color: var(--ps-text);
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: #7A5C3E;
   white-space: nowrap;
 }
 
@@ -113,7 +115,7 @@
 .ps-nav::-webkit-scrollbar { width: 10px; }
 .ps-nav::-webkit-scrollbar-track { background: transparent; }
 .ps-nav::-webkit-scrollbar-thumb { background: var(--ps-border); border-radius: 5px; min-height: 40px; }
-.ps-nav::-webkit-scrollbar-thumb:hover { background: #999; }
+.ps-nav::-webkit-scrollbar-thumb:hover { background: #C9B394; }
 .ps-nav { scrollbar-width: auto; scrollbar-color: var(--ps-border) transparent; }
 
 /* ── ZONE ────────────────────────────────────────────────────────────── */
@@ -127,9 +129,9 @@
   gap: 6px;
   padding: 10px 14px 4px;
   font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--ps-muted);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--ps-pink);
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -142,7 +144,7 @@
 }
 
 .ps-zone-label-toggle:hover {
-  color: var(--ps-text-mid);
+  color: var(--ps-text);
 }
 
 .ps-zone-chevron {
@@ -161,9 +163,9 @@
   letter-spacing: 0.04em;
   padding: 1px 5px;
   border-radius: 3px;
-  background: #f0eeee;
-  color: #bbb;
-  border: 1px solid #e0dddd;
+  background: var(--ps-bg);
+  color: var(--ps-muted);
+  border: 1px solid var(--ps-border);
 }
 
 /* ── NAV ITEM ────────────────────────────────────────────────────────── */
@@ -427,7 +429,7 @@
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.35);
+    background: rgba(92, 70, 50, 0.35);
     z-index: 999;
   }
 
