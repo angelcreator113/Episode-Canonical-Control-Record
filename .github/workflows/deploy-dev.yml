@@ -323,6 +323,10 @@ jobs:
           # with this deploy (P3/P4). print-db-env.js emits export lines.
           echo '🔐 Resolving DB env from episode-metadata/dev/database...'
           eval "$(node scripts/print-db-env.js)"
+          # DB_SSL is config, not a secret — staged here, NOT in the loader's
+          # 5-export contract. Must precede the trap (RF-2): first-dispatch
+          # finding, run 29357042127 ("no encryption" pg_hba rejection).
+          export DB_SSL=true
 
           # Trap armed HERE — after DB env exists, per RF-2 (see comment at
           # restore_pm2 above). From this point, any exit path restarts the
