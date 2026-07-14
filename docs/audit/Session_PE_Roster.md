@@ -1342,3 +1342,82 @@ Closed entries remain in the chronological PE sequence above with their CLOSED s
 - Severity changes: update in place with a parenthetical note
   recording the change date.
 - Verification amendments: append below original entry with `⚠️ VERIFICATION AMENDMENT` heading. Preserve original entry for evidence-state continuity per v11 §3.3 closure-semantic vocabulary. PE #51 and PE #52 entries demonstrate the pattern.
+
+
+### PE #62 — Pattern 40 §12.11 residue is unowned: no keystone or follow-up plan tracks surviving schema-as-JS sites (P2, OPEN, NEW 2026-07-14)
+
+**Finding.** F-App-1 G1 Audit §12.11 (2026-05-14) cataloged Pattern 40
+instances outside F-App-1 scope and recorded "Follow-up plan recommended."
+As of 2026-07-14 (main `9f3986f4`), no follow-up plan exists and no
+keystone owns the sites. Ownership was declined twice, explicitly:
+
+- F-App-1 Fix Plan v1 (Drift Inventory): type reconciliation "belongs in
+  a follow-up plan addressing F-Stats-1 / the broader Pattern 40
+  retirement" — deferred outward.
+- F-Stats-1 Fix Plan v1.0 (scope): "Does NOT address §12.11 Pattern 40
+  sites for other tables" — declined inward.
+
+No queued keystone absorbs them: F-Ward-1 owns only `episode_wardrobe`;
+F-Franchise-1 owns canon-as-JS constants, not runtime DDL. F-App-1's
+formal closure retired Pattern 40 at its master instance only.
+
+**Live enumeration (verified 2026-07-14 against origin/main `9f3986f4`,
+positive-control grep per FD-51; independently re-verified same day in a
+second session's review pass):**
+
+Variant B — inline `CREATE TABLE IF NOT EXISTS` in request-path code,
+5 sites / 3 tables:
+- `src/controllers/videoCompositionController.js:35` — `video_compositions`
+- `src/routes/admin.js:53` — `video_compositions` (second declaration of
+  same table; two-file drift, two independent schema authors)
+- `src/routes/storyHealth.js:244` and `:276` — `chapter_versions`
+  (duplicate-within-file variant)
+- `src/routes/worldStudio.js:319` — `ecosystem_previews`
+
+Variant A — per §12.11 (not re-verified live this session): 11
+`model.sync()` sites across 5 files, 7+ models (`StoryTaskArc`,
+`ContinuityTimeline`, `ContinuityCharacter`, `ContinuityBeat`,
+`ContinuityBeatCharacter`, `FranchiseKnowledge`, `GenerationJob`), plus
+`src/models/index.js:1797` `sequelize.sync()` inside the model loader.
+Variant A live re-verification owed at ownership time.
+
+**Count delta, adjudicated closed (reads 2026-07-14):** the G1 Audit
+Report's headline count ("six additional hits") conflicts with its own
+itemization, which lists exactly five DDL sites — the same five, at the
+same line numbers, present live at `9f3986f4` (files untouched since
+audit). The sixth "hit" is best identified as
+`videoCompositionController.js:33`, a comment line visible in the audit's
+own grep transcript. The conflation minted inside the audit report
+itself: its Steps 4–5 body counts "six additional hits across four
+files," and its own §12.11 summary (line 514) hardens that to "6 Variant
+B sites" — hits transcribed as sites between body and summary of the
+same document. No Fix Plan carries the defect. Alternative explanation
+investigated and excluded by pickaxe: an `episode_wardrobe` auto-create
+in `src/routes/wardrobe.js` was added (`2da64649`) and removed
+(`0ab7b04a`) the same day, 2026-02-19 — three months before the audit;
+F-Ward-1 adjacency moot. No enumeration drift exists; the live count of
+five is authoritative.
+
+**Why it matters (P2, not P0):** unlike the retired boot-path master,
+these fire lazily on route hits — they are live, current schema authors
+in production code, drifting independently of the migration chain (the
+exact mechanism behind the F-App-1 `career_goals` tier/is_active drift
+and the `source` ENUM-vs-VARCHAR divergence). No incident attributed to
+them to date. The hazard is silent divergence plus the double-declination
+pattern itself: a recommendation with no owner does not execute.
+
+**Resolution path:** ownership decision at a future register revision.
+Candidate homes: (a) dedicated Pattern 40 retirement plan (F-Schema-1)
+sequenced after current keystones; (b) explicit scope absorption into
+F-Franchise-1 (weak fit — different pattern family); (c) explicit
+accepted-risk disposition with periodic re-enumeration. Not a candidate
+for silent absorption; the decision itself must be recorded.
+
+**Namespace note:** distinct from F-AUTH-1 Fix Plan internal "Track 8 PE
+candidates" (its PE #7–#14), which are a plan-local numbering.
+
+**Discovery context:** surfaced during F-Deploy-1 §4.4 burn-in day 0
+(read-only session, no gate contact). Session also confirmed F-App-1
+formal status (shipped 2026-05-14, Decision #105, does not gate sequence)
+against Handoff v11 + PE #53 — closing a records-staleness loop of
+exactly the shape PE #53 predicted.
