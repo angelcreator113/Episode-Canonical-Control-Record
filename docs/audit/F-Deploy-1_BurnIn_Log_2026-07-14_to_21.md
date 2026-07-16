@@ -99,3 +99,30 @@ session transcript and a local result file. Same mechanism-class as the
   root-scope PM2 daemon (read with a write side effect). Cleanup = one
   `pm2 kill` as root via SSM. Drafted, UNRATIFIED; may ride any daily or
   the window close.
+
+## Day 2 -- 2026-07-16 (recorded 14:13-14:30 local, 18:13-18:30Z)
+
+**Verdict: GREEN. All s5.4 observables clean. Zero findings. Filtered
+PM2 read (runbook item 3) proven in service: both apps read without env
+disclosure.**
+
+- **Dev box:** up 2 days 5:10 (no reboot); load 0.00; mem 432/1910 MB;
+  disk 71% (stable vs day 1).
+- **PM2 (filtered read):** episode-worker online restart_time=1;
+  episode-api online restart_time=1 -- both frozen at heal values.
+- **Health:** HEALTH:200 EXIT:0 (SSM 354fa340, 18:15:41Z).
+- **Dev CPU:** flat ~0.42% across 24h, on baseline.
+- **Prod (CloudWatch only):** 0.49-0.59% baseline; cron-shaped bumps
+  0.80 (23:17 local), 1.10 (01:17), 0.75 (10:17). 1.10 = week max,
+  noted-not-finding; watch only if the 01:17 bump grows day over day.
+- **Targeting:** nothing since run 29359414179. Clean.
+- **F-Deploy-G1-Y:** zero. Ten most recent subjects all numbered PRs;
+  zero open PRs. HEAD 251db9da (#936).
+- **Trio note:** one transient GitHub connection reset at session open;
+  cleared on retry, TCP verified. No impact.
+- **route53-primepisodes.json identified (day-1 ledger item):** read-only
+  snapshot of the live zone (list-resource-record-sets output). Confirms
+  the A record aliases to ALB primepisodes-alb-1912818060, not the prod
+  box directly. Reproducible via one CLI read -- no backup owed;
+  disposition rides with cutover planning.
+- **Residue unchanged:** root PM2 daemon kill still drafted/unratified.
