@@ -126,3 +126,33 @@ disclosure.**
   box directly. Reproducible via one CLI read -- no backup owed;
   disposition rides with cutover planning.
 - **Residue unchanged:** root PM2 daemon kill still drafted/unratified.
+## Day 3 -- 2026-07-17 (recorded 18:30-18:45 local, 22:30-22:45Z)
+
+**Verdict: GREEN. All s5.4 observables clean. Zero findings. Third
+consecutive green day.**
+
+- **Dev box:** up 3 days 9:25 (no reboot); load 0.14/0.04/0.01
+  (momentary, = our own SSM dispatch); mem 417/1910 MB; disk 71%
+  (flat, day 3 of 3).
+- **PM2 (filtered read):** episode-worker online restart_time=1;
+  episode-api online restart_time=1 -- frozen at heal values, day 3.
+- **Health:** HEALTH:200 EXIT:0 (SSM 957a8722, 22:30:59Z).
+- **Dev CPU:** flat ~0.42%; one 1.02% bucket ~01:31 local -- overnight
+  cron-shaped, same slot as prod's nightly bump; noted, not a finding.
+- **Prod (CloudWatch only):** 0.49-0.53% baseline (mild +0.04pp drift in
+  back half, within noise, day 4 confirms); bumps 0.81 (01:17 slot) and
+  0.72. **Day-2 watch retired:** 01:17 bump SHRANK (1.10 -> 0.81), not
+  grew.
+- **Targeting:** nothing since run 29359414179. Clean.
+- **F-Deploy-G1-Y:** zero. Five most recent subjects all numbered PRs;
+  zero open PRs. HEAD d9e6cffe (#937).
+- **Procedural artifact (drafting-side):** one placeholder fetch executed
+  (PASTE-FULL-UUID) before the real UUID was substituted; re-fetched
+  correctly, no data lost. Runbook amendment 3 minted: fetch commands
+  are drafted only AFTER the UUID exists -- never pre-staged with a
+  placeholder.
+- **Runbook amendments 1-2 (day-2 close, recorded here):** certify reads
+  must show the pattern on screen -- an exit code alone certifies nothing;
+  sync = pull + confirm new HEAD hash -- checkout's "up to date" is a
+  stale-ref statement, never sync confirmation.
+- **Residue unchanged:** root PM2 daemon kill drafted/unratified.
