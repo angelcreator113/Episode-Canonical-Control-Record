@@ -156,3 +156,30 @@ consecutive green day.**
   sync = pull + confirm new HEAD hash -- checkout's "up to date" is a
   stale-ref statement, never sync confirmation.
 - **Residue unchanged:** root PM2 daemon kill drafted/unratified.
+
+## Day 4 -- 2026-07-18 (recorded 21:28-21:40 local, 01:28-01:40Z Jul 19)
+
+**Verdict: GREEN. Dev pristine, fourth consecutive clean day. One held
+watch on prod (micro-drift, below), not a finding.**
+
+- **Dev box:** up 4 days 12:24 (no reboot); load 0.06/0.03/0.00; mem
+  426/1910 MB; disk 71% (flat, day 4 of 4).
+- **PM2 (filtered read):** episode-worker online restart_time=1;
+  episode-api online restart_time=1 -- frozen at heal values, day 4.
+- **Health:** HEALTH:200 EXIT:0 (SSM 53cf0b64, 01:29:39Z Jul 19).
+- **Dev CPU:** 0.39-0.42%, trending mildly DOWN; the ~01:30 cron-shaped
+  bucket read 0.46 (vs 1.02 day 3) -- that watch RETIRED as noise.
+- **Prod (CloudWatch only):** baseline ~0.53-0.55% vs 0.49% days 1-2 --
+  monotonic +0.06pp creep over three days. Bumps 1.12 (02:30), 0.96
+  (04:30), 0.73 (10:30, 16:30) -- within established shapes. Magnitude
+  is capacity-irrelevant; the monotonic shape holds the watch ONE more
+  day. Day 5 flat ~0.55 = new plateau, benign, retire. Still climbing =
+  one CloudWatch memory read (box-free) for corroboration. Box remains
+  FROZEN either way.
+- **Targeting:** nothing since run 29359414179 (4 days frozen). Clean.
+- **F-Deploy-G1-Y:** zero. Five most recent subjects all numbered PRs;
+  zero open PRs. HEAD 71cf9864 (#938).
+- **Runbook note:** day-3 close-out (#938) executed solo by maintainer
+  including cleanup -- runbook fully transferred. Amendment 3 held: fetch
+  drafted only after UUID existed this lap.
+- **Residue unchanged:** root PM2 daemon kill drafted/unratified.
