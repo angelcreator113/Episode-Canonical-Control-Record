@@ -20,7 +20,7 @@ const ALLOWED_ROOT = new Set([
   "F-Deploy-1_PROD_SplitBrain_HAZARD.md", "Mvp", "README.md",
   "SESSION_HANDOFF.md", "START_APP.bat", "START_APP.ps1", "VERSION.txt",
   "app.js", "backups", "docker-compose.parity.yml", "docker-compose.test.yml",
-  "docker-compose.yml", "docs", "ecosystem.config.js", "frontend",
+  "docker-compose.yml", "docs", "ecosystem.config.js", "ecosystem.dev.config.js", "frontend",
   "jest.config.js", "lambda", "migrations-node-pg-migrate", "migrations",
   "nginx", "package-lock.json", "package.json", "scripts", "src",
   "start-servers.ps1", "start.bat", "start.ps1", "start.sh", "templates",

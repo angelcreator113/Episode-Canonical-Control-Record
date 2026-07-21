@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 const { Sequelize } = require('sequelize');
-const eco = require('./ecosystem.config.js').apps[0];
+const eco = require('./ecosystem.dev.config.js').apps[0];
 const cfg = eco.env_development || eco.env;
 
 const seq = new Sequelize(cfg.DB_NAME, cfg.DB_USER, cfg.DB_PASSWORD, {
