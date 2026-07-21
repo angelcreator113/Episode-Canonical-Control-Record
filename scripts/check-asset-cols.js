@@ -1,4 +1,4 @@
-const eco = require('./ecosystem.config.js');
+const eco = require('./ecosystem.dev.config.js');
 const cfg = eco.apps[0].env;
 const { Client } = require('pg');
 const c = new Client({

@@ -188,7 +188,7 @@ jobs:
           cp -r nginx deploy/
           cp package.json deploy/
           cp package-lock.json deploy/
-          cp ecosystem.config.js deploy/
+          cp ecosystem.dev.config.js deploy/
           cp .sequelizerc deploy/
           mv node_modules deploy/
           tar -czf episode-metadata-${{ github.sha }}.tar.gz deploy/
@@ -253,11 +253,11 @@ jobs:
           mkdir -p "$APP_DIR/logs"
 
           # Scoped restart — RF-1 (v1.31): --only is CONFIG HYGIENE, not
-          # shared-box exclusion. The shipped ecosystem.config.js still
-          # defines episode-api-prod-hotfix (port 3000, NODE_ENV=production);
-          # an unscoped startOrRestart would MATERIALIZE a prod-configured
-          # process on this box. Scoping prevents that anywhere this file
-          # runs. pm2 resurrect remains banned (stale-env rotation trap,
+          # shared-box exclusion. Post-s4.5.1 split: the shipped manifest is
+          # ecosystem.dev.config.js (dev-only; root config is prod-only), which
+          # structurally cannot materialize a prod-configured process here.
+          # --only is RETAINED as explicit hygiene and intent-locking anywhere
+          # this file runs. pm2 resurrect remains banned (stale-env rotation trap,
           # SESSION_HANDOFF.md).
           # NOTE: the EXIT trap is installed LATER — only after DB_* env is
           # resolved (RF-2, v1.31): a trap armed before the eval would fire
@@ -266,7 +266,7 @@ jobs:
           # before the eval stops PM2, so no restart is owed before then.
           restore_pm2() {
             cd "$APP_DIR" 2>/dev/null || return
-            pm2 startOrRestart ecosystem.config.js --only episode-api,episode-worker --update-env 2>&1 | tail -10 || true
+            pm2 startOrRestart ecosystem.dev.config.js --only episode-api,episode-worker --update-env 2>&1 | tail -10 || true
             pm2 save 2>&1 | tail -2 || true
           }
 
@@ -315,7 +315,7 @@ jobs:
           tar -xzf /tmp/dev-deploy.tar.gz --strip-components=1 \
             deploy/src deploy/scripts deploy/node_modules \
             deploy/package.json deploy/package-lock.json \
-            deploy/ecosystem.config.js deploy/.sequelizerc
+            deploy/ecosystem.dev.config.js deploy/.sequelizerc
           rm -f /tmp/dev-deploy.tar.gz
           echo "Disk after extract: $(df -h / | tail -1 | awk '{print $4}')"
 
