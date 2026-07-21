@@ -183,3 +183,58 @@ watch on prod (micro-drift, below), not a finding.**
   including cleanup -- runbook fully transferred. Amendment 3 held: fetch
   drafted only after UUID existed this lap.
 - **Residue unchanged:** root PM2 daemon kill drafted/unratified.
+
+## Day 7 -- 2026-07-21 (recorded 07:29-07:45 local, 11:29-11:45Z) -- WINDOW CLOSE
+
+**Verdict: GREEN. Final day clean. Window verdict: CLEAN -- adjudicated
+in Fix Plan v1.44.**
+
+### Days 5-6 gap disclosure
+
+Days 5 (Sun 07-19) and 6 (Mon 07-20) were NOT probe-observed: no SSM
+dispatch, no daily entry. Disclosed, not papered over. Recovery basis:
+
+- **CloudWatch backfill (complete):** 72h hourly CPU pulled this morning
+  for BOTH boxes -- every bucket present, no gaps in the metric stream.
+  The gap exists only in point-in-time probes, not in the metric record.
+- **Cumulative counters (bounding):** day-7 uptime 6d 22:25 = continuous
+  since the 07-14 pre-deploy boot -- NO reboot occurred at any point in
+  the window, including the gap. Restart counts 1/1 = frozen at heal
+  values -- NO app crash occurred at any point. The gap's worst-case
+  failure modes are retroactively excluded.
+- **Honest arithmetic:** 7/7 days metric-observed (both boxes, zero
+  anomalies); 5/7 days probe-observed; gap bounded by cumulative state.
+
+### Day 7 observables
+
+- **Dev box:** up 6 days 22:25 (continuous, zero reboots all window);
+  load 0.00; mem 427/1910 MB; disk 71% (flat all 7 days; 2.2G avail vs
+  2.3G day 1 = log-growth rounding, noise).
+- **PM2 (filtered read):** episode-worker online restart_time=1;
+  episode-api online restart_time=1 -- frozen at heal values, all week.
+- **Health:** HEALTH:200 EXIT:0 (SSM 016d3e88, 11:31:23Z). 200 on every
+  probe-observed day, 5 of 5.
+- **Dev CPU (72h backfill):** 0.39-0.40% baseline, max excursion 0.58%.
+  Continuous, quiet, trending down across the week.
+- **Prod (CloudWatch only, 72h backfill):** 0.53-0.56% DEAD FLAT Sat-Tue.
+  **Day-4 micro-drift watch RETIRED:** the days 1-4 creep (0.49 -> 0.55)
+  stopped exactly at day 4's level -- step to a new plateau, not a trend.
+  Capacity-irrelevant. No memory read needed. Box frozen throughout,
+  zero contact all window.
+- **Targeting:** frozen at run 29359414179, six days. Clean.
+- **F-Deploy-G1-Y:** zero recurrences, all 7 days. HEAD a35149cd (#939)
+  at day-7 open; all recent subjects numbered PRs; zero open PRs.
+
+### Window summary (for v1.44 citation)
+
+Seven calendar days 2026-07-14 ~18:53Z -> 2026-07-21. Zero findings
+against either box. One measurement-side P1 (day 1, jlist disclosure --
+contained, rotation on owed ledger). Two watches raised, both retired
+benign (dev 01:30 cron: noise; prod micro-drift: plateau). Runbook
+hardened across the week (3 amendments + JSON-params, PYTHONUTF8,
+filtered-PM2, no-placeholder rules). Entries certified by merge commits
+#936, #937, #938, #939, and this entry's own.
+
+### Residue at window close
+
+- Root PM2 daemon kill: drafted, unratified -- disposition to v1.44.
