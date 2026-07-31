@@ -150,6 +150,23 @@ This doc never states it.
     no-BOM UTF-8 through `Get-Content`; single-quoted here-strings;
     PowerShell `>` redirect writes UTF-16 — for UTF-8 file output from
     git, use `cmd /c "git show ... > file"`.
+13. **Navigation documents outlive their windows.** A doc whose purpose is
+    to safely bootstrap a session - allow-lists, cold-entry handoffs,
+    template packs, scoped-read runbooks - is written to be TRUSTED and to
+    instruct distrust of everything else. That makes it immune to rule 1:
+    rule 1's remedy is a per-file contested read, and these docs forbid
+    exactly those reads. They also survive their own window silently,
+    because closing a window mints a revision, not a banner on the
+    navigation. Before following ANY document that tells you what you may
+    read, verify its subject is still open against the live register tail -
+    even if the document's own navigation rules forbid it. Perform only the
+    minimum register-tail check needed to determine open-or-closed, then
+    stop reading. If the register says closed, the document is void and the
+    register wins; nothing was lost by the check, because there was no
+    window to prime. If it says open, hand off to a fresh session - one
+    session's coldness is a bounded cost, and skipping the check is not.
+    Retire such docs by terminal supersede banner carrying the facts
+    in-band; a "see vNN" pointer is out-of-bounds for its intended reader.
 
 ---
 
