@@ -526,18 +526,17 @@ router.post('/world/:showId/goals/sync', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     // Get character state
-    const [states] = await models.sequelize.query(
-      `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
-      { replacements: { showId } }
-    );
-    if (!states?.length) return res.json({ success: true, synced: 0, note: 'No character state found' });
-    const state = states[0];
+    // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
+    // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
+    const state = await models.CharacterState.findOne({
+      where: { show_id: showId, character_key: 'lala' },
+    });
+    if (!state) return res.json({ success: true, synced: 0, note: 'No character state found' });
 
     // Get active goals
-    const [goals] = await models.sequelize.query(
-      `SELECT * FROM career_goals WHERE show_id = :showId AND status = 'active'`,
-      { replacements: { showId } }
-    );
+    const goals = await models.CareerGoal.findAll({
+      where: { show_id: showId, status: 'active' },
+    });
 
     let synced = 0;
     const completed = [];
@@ -550,18 +549,12 @@ router.post('/world/:showId/goals/sync', requireAuth, async (req, res) => {
       if (newValue === goal.current_value) continue;
 
       // Update current value
-      await models.sequelize.query(
-        `UPDATE career_goals SET current_value = :val, updated_at = NOW() WHERE id = :id`,
-        { replacements: { val: newValue, id: goal.id } }
-      );
+      await goal.update({ current_value: newValue });
       synced++;
 
       // Check if goal is now complete
       if (newValue >= goal.target_value && goal.status === 'active') {
-        await models.sequelize.query(
-          `UPDATE career_goals SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = :id`,
-          { replacements: { id: goal.id } }
-        );
+        await goal.update({ status: 'completed', completed_at: new Date() });
         completed.push({ id: goal.id, title: goal.title, metric: goal.target_metric });
 
         // Spawn unlock opportunities from completed goal
