@@ -598,19 +598,19 @@ router.get('/world/:showId/suggest-events', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     // Get active goals
-    const [goals] = await models.sequelize.query(
-      `SELECT * FROM career_goals WHERE show_id = :showId AND status = 'active'`,
-      { replacements: { showId } }
-    );
+    const goals = await models.CareerGoal.findAll({
+      where: { show_id: showId, status: 'active' },
+    });
 
     // Get character state
     let charState = {};
     try {
-      const [states] = await models.sequelize.query(
-        `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
-        { replacements: { showId } }
-      );
-      if (states?.length) charState = states[0];
+      // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
+      // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
+      const state = await models.CharacterState.findOne({
+        where: { show_id: showId, character_key: 'lala' },
+      });
+      if (state) charState = state;
     } catch (e) { console.warn('[career-goals] character state query error:', e?.message); }
 
     // Determine accessible career tier
