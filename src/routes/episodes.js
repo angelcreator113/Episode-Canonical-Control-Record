@@ -918,7 +918,7 @@ try { scriptSkeletonGenerator = require('../utils/scriptSkeletonGenerator'); } c
 router.post('/:id/generate-beats', requireAuth, aiRateLimiter, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { models, sequelize } = require('../models');
-  const { Episode } = models;
+  const { Episode, CharacterState } = models;
 
   const episode = await Episode.findByPk(id);
   if (!episode) return res.status(404).json({ success: false, error: 'Episode not found' });
@@ -938,17 +938,18 @@ router.post('/:id/generate-beats', requireAuth, aiRateLimiter, asyncHandler(asyn
   // Get character state for context-aware generation
   let characterState = {};
   try {
-    const [states] = await sequelize.query(
-      `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
-      { replacements: { showId } }
-    );
-    if (states && states.length > 0) {
+    // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
+    // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
+    const state = await CharacterState.findOne({
+      where: { show_id: showId, character_key: 'lala' },
+    });
+    if (state) {
       characterState = {
-        coins: states[0].coins,
-        reputation: states[0].reputation,
-        brand_trust: states[0].brand_trust,
-        influence: states[0].influence,
-        stress: states[0].stress,
+        coins: state.coins,
+        reputation: state.reputation,
+        brand_trust: state.brand_trust,
+        influence: state.influence,
+        stress: state.stress,
       };
     }
   } catch (e) { /* no state yet */ }
