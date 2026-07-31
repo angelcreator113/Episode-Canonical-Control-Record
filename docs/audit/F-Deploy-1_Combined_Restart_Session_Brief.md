@@ -1,3 +1,42 @@
+> ===== TERMINAL SUPERSEDE / SAFETY STOP (prepended 2026-07-31) =====
+> THIS DOCUMENT IS VOID FOR EXECUTION. STOP READING FOR ACTION.
+>
+> The [3] window is not open. Fix Plan v1.20 (2026-07-06) recorded the
+> id-3/[3] restart-to-align thread COMPLETE and closed FD-31 and FD-38.
+> Fix Plan v1.48 (2026-07-22) closed Phase B and the F-Deploy-1 KEYSTONE.
+>
+> DO NOT prime a session from this document.
+> DO NOT run any [3] step, gate, probe, capture, or verification below.
+> DO NOT mint a Fix Plan revision or advance the FD register from this track.
+>
+> FREEZE NOTICE: FD-31 being CLOSED does NOT lift the prod freeze. v1.20
+> states freeze posture for prod actions outside ratified gates is
+> UNCHANGED; v1.48 confirms standing gates survived the keystone close.
+> This document confers NO authority to reboot, restart, or alter the prod
+> box, and no authority to write, rotate, or re-anchor any credential.
+>
+> Any reference below to retired [3] runbooks is non-authoritative.
+>
+> STALE-VALUE NOTICE: every count, fingerprint, PM2 id, process name, port
+> binding, credential candidate, and endpoint below is a snapshot from its
+> authoring date. Do not compare live state against any of them. A mismatch
+> against values in this retired document is expected and is NOT, by itself,
+> an abort signal.
+>
+> If you need current state, derive it live: numeric-sort the
+> docs/audit/F-Deploy-1_Fix_Plan_v1.*.md revisions and read the tail.
+> Do not treat any version number in this banner as current.
+>
+> See NEW_CHAT_ONBOARDING.md Sec 4 rule 13.
+>
+> Historical observations may be informative, but all restart/abort comparator
+> instructions below are void for execution. Specifically void: the Sec 2
+> seven-table fingerprint and the Sec 3 Step 0 / Sec 4 abort-and-restore gate.
+> Comparing live counts against Sec 2 will mismatch and would drive an
+> unwarranted snapshot restore. Surviving as reference: Sec 5 window
+> preconditions, Sec 6 launch-housekeeping backlog, Sec 8 risk shape.
+> Original at-filing text preserved verbatim below.
+> ==================================================================
 # F-Deploy-1 — Combined Restart ([3]) Session Brief
 
 **Authored 2026-06-03. Scoping artifact for the [3] combined prod-restart window. Additive on Handoff v15, Fix Plan v1.9 (FD-38), and Fix Plan v1.10 (decision (a) ratified). Authorities for exact step commands: the Combined Restart Master Runbook (FD-38-aligned via #759) and FD-31 Pre-Flight v1.4 — this brief does not replace them.**
