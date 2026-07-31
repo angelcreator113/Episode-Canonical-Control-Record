@@ -125,9 +125,20 @@ This doc never states it.
 4. **Attribution.** Masked-input exhibits cannot self-attribute. An exhibit
    produced under conflicting session records is superseded by a fresh
    attributable run, not reconciled.
-5. **RDS identity by query, never by name.** Instance names are misleading
-   by design here. `SELECT current_user, current_database(),
-   inet_server_addr();` before any DB-touching action.
+5. **Identity by function, never by label.** Names in this environment are
+   historically unreliable; a label is the output of an identity
+   derivation, never an input to one. Derive per resource class:
+   - **RDS:** `SELECT current_user, current_database(), inet_server_addr(),
+     inet_server_port();` before any DB-touching action. The canon instance
+     is named for an environment it is not.
+   - **Processes:** verify role by ingress route (`nginx -T`), then bound
+     port (`ss`), then map to PID and process-manager id. Never infer role
+     from process name; prod and dev names have been inverted at the PM2
+     layer (F-Deploy-1_Finding_PM2_ProcessIdentity_Inversion_2026-06-14.md).
+   - **Hosts:** an SSH target is an address. A process name that resembles
+     a host name is not one.
+   Derive the mapping live every time. Any process-to-port or name-to-role
+   mapping recorded in a document is a snapshot of its authoring date.
 6. **Prod box FROZEN by default.** No reboot/restart outside a deliberate
    gated window. Confirm freeze status live.
 7. **FD numbers are minted only by Fix Plan revisions.** Standalone files
