@@ -77,10 +77,10 @@ router.post('/world/:showId/goals/seed', requireAuth, async (req, res) => {
     // Check for existing goals to avoid duplicates
     let existingTitles = new Set();
     try {
-      const [existing] = await models.sequelize.query(
-        'SELECT title FROM career_goals WHERE show_id = :showId',
-        { replacements: { showId } }
-      );
+      const existing = await models.CareerGoal.findAll({
+        attributes: ['title'],
+        where: { show_id: showId },
+      });
       existingTitles = new Set((existing || []).map(g => g.title.toLowerCase().trim()));
     } catch { /* table may not exist yet */ }
 
@@ -297,32 +297,24 @@ router.post('/world/:showId/goals/seed', requireAuth, async (req, res) => {
       const isActiveTier = arcStart <= (activate_tier === 1 ? 8 : activate_tier === 2 ? 16 : 24);
 
       try {
-        await models.sequelize.query(
-          `INSERT INTO career_goals (id, show_id, title, description, type, target_metric,
-           target_value, current_value, starting_value, status, priority,
-           unlocks_on_complete, fail_consequence, episode_range, icon, color, created_at, updated_at)
-           VALUES (:id, :showId, :title, :description, :type, :target_metric,
-           :target_value, :current_value, :starting_value, :status, :priority,
-           :unlocks_on_complete, :fail_consequence, :episode_range, :icon, :color, NOW(), NOW())`,
-          { replacements: {
-            id: uuidv4(),
-            showId,
-            title: goal.title,
-            description: goal.description,
-            type: goal.type,
-            target_metric: goal.target_metric,
-            target_value: goal.target_value,
-            current_value: goal.current_value || 0,
-            starting_value: goal.starting_value || 0,
-            status: isActiveTier ? 'active' : 'paused',
-            priority: goal.priority,
-            unlocks_on_complete: JSON.stringify(goal.unlocks_on_complete || []),
-            fail_consequence: goal.fail_consequence || null,
-            episode_range: JSON.stringify(goal.episode_range || [1, 24]),
-            icon: goal.icon || '🎯',
-            color: goal.color || '#6366f1',
-          } }
-        );
+        await models.CareerGoal.create({
+          id: uuidv4(),
+          show_id: showId,
+          title: goal.title,
+          description: goal.description,
+          type: goal.type,
+          target_metric: goal.target_metric,
+          target_value: goal.target_value,
+          current_value: goal.current_value || 0,
+          starting_value: goal.starting_value || 0,
+          status: isActiveTier ? 'active' : 'paused',
+          priority: goal.priority,
+          unlocks_on_complete: goal.unlocks_on_complete || [],
+          fail_consequence: goal.fail_consequence || null,
+          episode_range: goal.episode_range || [1, 24],
+          icon: goal.icon || '🎯',
+          color: goal.color || '#6366f1',
+        });
         created++;
       } catch (err) {
         console.warn(`[CareerGoals] Failed to seed "${goal.title}":`, err.message);
@@ -367,11 +359,9 @@ router.post('/world/:showId/goals', requireAuth, async (req, res) => {
 
     // Enforce limits: 1 primary, 2 secondary active at a time
     if (type === 'primary' || type === 'secondary') {
-      const [existing] = await models.sequelize.query(
-        `SELECT COUNT(*) as count FROM career_goals WHERE show_id = :showId AND type = :type AND status = 'active'`,
-        { replacements: { showId, type } }
-      );
-      const count = parseInt(existing[0]?.count || 0);
+      const count = await models.CareerGoal.count({
+        where: { show_id: showId, type, status: 'active' },
+      });
       const limit = type === 'primary' ? 1 : 2;
       if (count >= limit) {
         return res.status(400).json({
@@ -383,45 +373,37 @@ router.post('/world/:showId/goals', requireAuth, async (req, res) => {
     // Auto-populate current_value from character state if metric matches
     let autoValue = current_value;
     try {
-      const [states] = await models.sequelize.query(
-        `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
-        { replacements: { showId } }
-      );
-      if (states?.length > 0 && states[0][target_metric] !== undefined) {
-        autoValue = states[0][target_metric];
+      // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
+      // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
+      const state = await models.CharacterState.findOne({
+        where: { show_id: showId, character_key: 'lala' },
+      });
+      if (state && state[target_metric] !== undefined) {
+        autoValue = state[target_metric];
       }
     } catch (e) { /* no state */ }
 
     const id = uuidv4();
-    await models.sequelize.query(
-      `INSERT INTO career_goals
-       (id, show_id, season_id, arc_id, title, description, type,
-        target_metric, target_value, current_value, starting_value,
-        status, priority, icon, color,
-        unlocks_on_complete, fail_consequence, episode_range,
-        created_at, updated_at)
-       VALUES
-       (:id, :showId, :season_id, :arc_id, :title, :description, :type,
-        :target_metric, :target_value, :current_value, :starting_value,
-        'active', :priority, :icon, :color,
-        :unlocks_on_complete, :fail_consequence, :episode_range,
-        NOW(), NOW())`,
-      {
-        replacements: {
-          id, showId,
-          season_id: season_id || null,
-          arc_id: arc_id || null,
-          title, description: description || null, type,
-          target_metric, target_value,
-          current_value: autoValue,
-          starting_value: autoValue,
-          priority, icon, color,
-          unlocks_on_complete: JSON.stringify(unlocks_on_complete),
-          fail_consequence: fail_consequence || null,
-          episode_range: episode_range ? JSON.stringify(episode_range) : null,
-        },
-      }
-    );
+    await models.CareerGoal.create({
+      id,
+      show_id: showId,
+      season_id: season_id || null,
+      arc_id: arc_id || null,
+      title,
+      description: description || null,
+      type,
+      target_metric,
+      target_value,
+      current_value: autoValue,
+      starting_value: autoValue,
+      status: 'active',
+      priority,
+      icon,
+      color,
+      unlocks_on_complete,
+      fail_consequence: fail_consequence || null,
+      episode_range: episode_range || null,
+    });
 
     const [created] = await models.sequelize.query(
       `SELECT * FROM career_goals WHERE id = :id`, { replacements: { id } }
@@ -456,29 +438,24 @@ router.put('/world/:showId/goals/:goalId', requireAuth, async (req, res) => {
       'unlocks_on_complete', 'fail_consequence', 'season_id', 'arc_id', 'episode_range',
     ];
 
-    const setClauses = [];
-    const replacements = { showId, goalId };
+    const attrs = {};
 
     for (const field of allowedFields) {
       if (updates[field] !== undefined) {
-        const val = typeof updates[field] === 'object' ? JSON.stringify(updates[field]) : updates[field];
-        setClauses.push(`${field} = :${field}`);
-        replacements[field] = val;
+        attrs[field] = updates[field];
       }
     }
 
     // Auto-set completed_at
     if (updates.status === 'completed') {
-      setClauses.push('completed_at = NOW()');
+      attrs.completed_at = new Date();
     }
 
-    if (setClauses.length === 0) return res.status(400).json({ error: 'No fields to update' });
-    setClauses.push('updated_at = NOW()');
+    if (Object.keys(attrs).length === 0) return res.status(400).json({ error: 'No fields to update' });
 
-    await models.sequelize.query(
-      `UPDATE career_goals SET ${setClauses.join(', ')} WHERE id = :goalId AND show_id = :showId`,
-      { replacements }
-    );
+    await models.CareerGoal.update(attrs, {
+      where: { id: goalId, show_id: showId },
+    });
 
     const [updated] = await models.sequelize.query(
       `SELECT * FROM career_goals WHERE id = :goalId`, { replacements: { goalId } }
@@ -502,10 +479,9 @@ router.delete('/world/:showId/goals/:goalId', requireAuth, async (req, res) => {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    await models.sequelize.query(
-      `DELETE FROM career_goals WHERE id = :goalId AND show_id = :showId`,
-      { replacements: { showId, goalId } }
-    );
+    await models.CareerGoal.destroy({
+      where: { id: goalId, show_id: showId },
+    });
     return res.json({ success: true, deleted: goalId });
   } catch (error) {
     console.error('Delete goal error:', error);
@@ -526,18 +502,17 @@ router.post('/world/:showId/goals/sync', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     // Get character state
-    const [states] = await models.sequelize.query(
-      `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
-      { replacements: { showId } }
-    );
-    if (!states?.length) return res.json({ success: true, synced: 0, note: 'No character state found' });
-    const state = states[0];
+    // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
+    // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
+    const state = await models.CharacterState.findOne({
+      where: { show_id: showId, character_key: 'lala' },
+    });
+    if (!state) return res.json({ success: true, synced: 0, note: 'No character state found' });
 
     // Get active goals
-    const [goals] = await models.sequelize.query(
-      `SELECT * FROM career_goals WHERE show_id = :showId AND status = 'active'`,
-      { replacements: { showId } }
-    );
+    const goals = await models.CareerGoal.findAll({
+      where: { show_id: showId, status: 'active' },
+    });
 
     let synced = 0;
     const completed = [];
@@ -550,18 +525,12 @@ router.post('/world/:showId/goals/sync', requireAuth, async (req, res) => {
       if (newValue === goal.current_value) continue;
 
       // Update current value
-      await models.sequelize.query(
-        `UPDATE career_goals SET current_value = :val, updated_at = NOW() WHERE id = :id`,
-        { replacements: { val: newValue, id: goal.id } }
-      );
+      await goal.update({ current_value: newValue });
       synced++;
 
       // Check if goal is now complete
       if (newValue >= goal.target_value && goal.status === 'active') {
-        await models.sequelize.query(
-          `UPDATE career_goals SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = :id`,
-          { replacements: { id: goal.id } }
-        );
+        await goal.update({ status: 'completed', completed_at: new Date() });
         completed.push({ id: goal.id, title: goal.title, metric: goal.target_metric });
 
         // Spawn unlock opportunities from completed goal
@@ -598,19 +567,19 @@ router.get('/world/:showId/suggest-events', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     // Get active goals
-    const [goals] = await models.sequelize.query(
-      `SELECT * FROM career_goals WHERE show_id = :showId AND status = 'active'`,
-      { replacements: { showId } }
-    );
+    const goals = await models.CareerGoal.findAll({
+      where: { show_id: showId, status: 'active' },
+    });
 
     // Get character state
     let charState = {};
     try {
-      const [states] = await models.sequelize.query(
-        `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
-        { replacements: { showId } }
-      );
-      if (states?.length) charState = states[0];
+      // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
+      // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
+      const state = await models.CharacterState.findOne({
+        where: { show_id: showId, character_key: 'lala' },
+      });
+      if (state) charState = state;
     } catch (e) { console.warn('[career-goals] character state query error:', e?.message); }
 
     // Determine accessible career tier
