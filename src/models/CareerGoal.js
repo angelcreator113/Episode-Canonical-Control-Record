@@ -43,6 +43,7 @@ module.exports = (sequelize) => {
     color: { type: DataTypes.STRING(20), allowNull: true, defaultValue: '#6366f1' },
 
     completed_at: { type: DataTypes.DATE, allowNull: true },
+    deleted_at: { type: DataTypes.DATE, allowNull: true },
   }, {
     tableName: 'career_goals',
     timestamps: true,
