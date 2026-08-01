@@ -405,11 +405,11 @@ router.post('/world/:showId/goals', requireAuth, async (req, res) => {
       episode_range: episode_range || null,
     });
 
-    const [created] = await models.sequelize.query(
-      `SELECT * FROM career_goals WHERE id = :id`, { replacements: { id } }
-    );
+    const created = await models.CareerGoal.findAll({
+      where: { id },
+    });
 
-    const goal = created[0];
+    const goal = created[0].get({ plain: true });
     goal.progress = 0;
     goal.remaining = goal.target_value - goal.current_value;
 
