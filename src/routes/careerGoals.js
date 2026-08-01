@@ -456,29 +456,24 @@ router.put('/world/:showId/goals/:goalId', requireAuth, async (req, res) => {
       'unlocks_on_complete', 'fail_consequence', 'season_id', 'arc_id', 'episode_range',
     ];
 
-    const setClauses = [];
-    const replacements = { showId, goalId };
+    const attrs = {};
 
     for (const field of allowedFields) {
       if (updates[field] !== undefined) {
-        const val = typeof updates[field] === 'object' ? JSON.stringify(updates[field]) : updates[field];
-        setClauses.push(`${field} = :${field}`);
-        replacements[field] = val;
+        attrs[field] = updates[field];
       }
     }
 
     // Auto-set completed_at
     if (updates.status === 'completed') {
-      setClauses.push('completed_at = NOW()');
+      attrs.completed_at = new Date();
     }
 
-    if (setClauses.length === 0) return res.status(400).json({ error: 'No fields to update' });
-    setClauses.push('updated_at = NOW()');
+    if (Object.keys(attrs).length === 0) return res.status(400).json({ error: 'No fields to update' });
 
-    await models.sequelize.query(
-      `UPDATE career_goals SET ${setClauses.join(', ')} WHERE id = :goalId AND show_id = :showId`,
-      { replacements }
-    );
+    await models.CareerGoal.update(attrs, {
+      where: { id: goalId, show_id: showId },
+    });
 
     const [updated] = await models.sequelize.query(
       `SELECT * FROM career_goals WHERE id = :goalId`, { replacements: { goalId } }
@@ -502,10 +497,9 @@ router.delete('/world/:showId/goals/:goalId', requireAuth, async (req, res) => {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    await models.sequelize.query(
-      `DELETE FROM career_goals WHERE id = :goalId AND show_id = :showId`,
-      { replacements: { showId, goalId } }
-    );
+    await models.CareerGoal.destroy({
+      where: { id: goalId, show_id: showId },
+    });
     return res.json({ success: true, deleted: goalId });
   } catch (error) {
     console.error('Delete goal error:', error);
