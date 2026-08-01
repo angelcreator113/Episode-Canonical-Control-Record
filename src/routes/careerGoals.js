@@ -77,10 +77,10 @@ router.post('/world/:showId/goals/seed', requireAuth, async (req, res) => {
     // Check for existing goals to avoid duplicates
     let existingTitles = new Set();
     try {
-      const [existing] = await models.sequelize.query(
-        'SELECT title FROM career_goals WHERE show_id = :showId',
-        { replacements: { showId } }
-      );
+      const existing = await models.CareerGoal.findAll({
+        attributes: ['title'],
+        where: { show_id: showId },
+      });
       existingTitles = new Set((existing || []).map(g => g.title.toLowerCase().trim()));
     } catch { /* table may not exist yet */ }
 
@@ -297,32 +297,24 @@ router.post('/world/:showId/goals/seed', requireAuth, async (req, res) => {
       const isActiveTier = arcStart <= (activate_tier === 1 ? 8 : activate_tier === 2 ? 16 : 24);
 
       try {
-        await models.sequelize.query(
-          `INSERT INTO career_goals (id, show_id, title, description, type, target_metric,
-           target_value, current_value, starting_value, status, priority,
-           unlocks_on_complete, fail_consequence, episode_range, icon, color, created_at, updated_at)
-           VALUES (:id, :showId, :title, :description, :type, :target_metric,
-           :target_value, :current_value, :starting_value, :status, :priority,
-           :unlocks_on_complete, :fail_consequence, :episode_range, :icon, :color, NOW(), NOW())`,
-          { replacements: {
-            id: uuidv4(),
-            showId,
-            title: goal.title,
-            description: goal.description,
-            type: goal.type,
-            target_metric: goal.target_metric,
-            target_value: goal.target_value,
-            current_value: goal.current_value || 0,
-            starting_value: goal.starting_value || 0,
-            status: isActiveTier ? 'active' : 'paused',
-            priority: goal.priority,
-            unlocks_on_complete: JSON.stringify(goal.unlocks_on_complete || []),
-            fail_consequence: goal.fail_consequence || null,
-            episode_range: JSON.stringify(goal.episode_range || [1, 24]),
-            icon: goal.icon || '🎯',
-            color: goal.color || '#6366f1',
-          } }
-        );
+        await models.CareerGoal.create({
+          id: uuidv4(),
+          show_id: showId,
+          title: goal.title,
+          description: goal.description,
+          type: goal.type,
+          target_metric: goal.target_metric,
+          target_value: goal.target_value,
+          current_value: goal.current_value || 0,
+          starting_value: goal.starting_value || 0,
+          status: isActiveTier ? 'active' : 'paused',
+          priority: goal.priority,
+          unlocks_on_complete: goal.unlocks_on_complete || [],
+          fail_consequence: goal.fail_consequence || null,
+          episode_range: goal.episode_range || [1, 24],
+          icon: goal.icon || '🎯',
+          color: goal.color || '#6366f1',
+        });
         created++;
       } catch (err) {
         console.warn(`[CareerGoals] Failed to seed "${goal.title}":`, err.message);
