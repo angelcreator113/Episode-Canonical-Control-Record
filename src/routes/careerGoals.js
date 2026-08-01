@@ -367,11 +367,9 @@ router.post('/world/:showId/goals', requireAuth, async (req, res) => {
 
     // Enforce limits: 1 primary, 2 secondary active at a time
     if (type === 'primary' || type === 'secondary') {
-      const [existing] = await models.sequelize.query(
-        `SELECT COUNT(*) as count FROM career_goals WHERE show_id = :showId AND type = :type AND status = 'active'`,
-        { replacements: { showId, type } }
-      );
-      const count = parseInt(existing[0]?.count || 0);
+      const count = await models.CareerGoal.count({
+        where: { show_id: showId, type, status: 'active' },
+      });
       const limit = type === 'primary' ? 1 : 2;
       if (count >= limit) {
         return res.status(400).json({
@@ -383,45 +381,37 @@ router.post('/world/:showId/goals', requireAuth, async (req, res) => {
     // Auto-populate current_value from character state if metric matches
     let autoValue = current_value;
     try {
-      const [states] = await models.sequelize.query(
-        `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
-        { replacements: { showId } }
-      );
-      if (states?.length > 0 && states[0][target_metric] !== undefined) {
-        autoValue = states[0][target_metric];
+      // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
+      // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
+      const state = await models.CharacterState.findOne({
+        where: { show_id: showId, character_key: 'lala' },
+      });
+      if (state && state[target_metric] !== undefined) {
+        autoValue = state[target_metric];
       }
     } catch (e) { /* no state */ }
 
     const id = uuidv4();
-    await models.sequelize.query(
-      `INSERT INTO career_goals
-       (id, show_id, season_id, arc_id, title, description, type,
-        target_metric, target_value, current_value, starting_value,
-        status, priority, icon, color,
-        unlocks_on_complete, fail_consequence, episode_range,
-        created_at, updated_at)
-       VALUES
-       (:id, :showId, :season_id, :arc_id, :title, :description, :type,
-        :target_metric, :target_value, :current_value, :starting_value,
-        'active', :priority, :icon, :color,
-        :unlocks_on_complete, :fail_consequence, :episode_range,
-        NOW(), NOW())`,
-      {
-        replacements: {
-          id, showId,
-          season_id: season_id || null,
-          arc_id: arc_id || null,
-          title, description: description || null, type,
-          target_metric, target_value,
-          current_value: autoValue,
-          starting_value: autoValue,
-          priority, icon, color,
-          unlocks_on_complete: JSON.stringify(unlocks_on_complete),
-          fail_consequence: fail_consequence || null,
-          episode_range: episode_range ? JSON.stringify(episode_range) : null,
-        },
-      }
-    );
+    await models.CareerGoal.create({
+      id,
+      show_id: showId,
+      season_id: season_id || null,
+      arc_id: arc_id || null,
+      title,
+      description: description || null,
+      type,
+      target_metric,
+      target_value,
+      current_value: autoValue,
+      starting_value: autoValue,
+      status: 'active',
+      priority,
+      icon,
+      color,
+      unlocks_on_complete,
+      fail_consequence: fail_consequence || null,
+      episode_range: episode_range || null,
+    });
 
     const [created] = await models.sequelize.query(
       `SELECT * FROM career_goals WHERE id = :id`, { replacements: { id } }
