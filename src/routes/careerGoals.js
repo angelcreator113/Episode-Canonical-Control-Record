@@ -35,15 +35,20 @@ router.get('/world/:showId/goals', requireAuth, async (req, res) => {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    let query = `SELECT * FROM career_goals WHERE show_id = :showId`;
-    const replacements = { showId };
+    const where = { show_id: showId };
+    if (status) where.status = status;
+    if (type) where.type = type;
 
-    if (status) { query += ` AND status = :status`; replacements.status = status; }
-    if (type) { query += ` AND type = :type`; replacements.type = type; }
+    const rows = await models.CareerGoal.findAll({
+      where,
+      order: [
+        models.sequelize.literal(`CASE type WHEN 'primary' THEN 1 WHEN 'secondary' THEN 2 WHEN 'passive' THEN 3 END`),
+        ['priority', 'ASC'],
+        ['created_at', 'DESC'],
+      ],
+    });
 
-    query += ` ORDER BY CASE type WHEN 'primary' THEN 1 WHEN 'secondary' THEN 2 WHEN 'passive' THEN 3 END, priority ASC, created_at DESC`;
-
-    const [goals] = await models.sequelize.query(query, { replacements });
+    const goals = rows.map(r => r.get({ plain: true }));
 
     // Calculate progress for each
     const enriched = goals.map(g => ({
