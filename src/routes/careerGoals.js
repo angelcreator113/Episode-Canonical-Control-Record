@@ -457,9 +457,9 @@ router.put('/world/:showId/goals/:goalId', requireAuth, async (req, res) => {
       where: { id: goalId, show_id: showId },
     });
 
-    const [updated] = await models.sequelize.query(
-      `SELECT * FROM career_goals WHERE id = :goalId`, { replacements: { goalId } }
-    );
+    const updated = await models.CareerGoal.findAll({
+      where: { id: goalId },
+    });
 
     return res.json({ success: true, goal: updated[0] });
   } catch (error) {
