@@ -42,39 +42,32 @@ async function getModels() {
   }
 }
 
-async function getOrCreateCharacterState(sequelize, showId, seasonId, characterKey) {
-  const [CharacterState] = await sequelize.query(
-    `SELECT * FROM character_state
-     WHERE show_id = :showId
-     AND character_key = :characterKey
-     AND (season_id = :seasonId OR season_id IS NULL)
-     ORDER BY season_id DESC NULLS LAST
-     LIMIT 1`,
-    {
-      replacements: { showId, seasonId: seasonId || null, characterKey },
-      type: sequelize.QueryTypes.SELECT,
-    }
-  ).then(rows => [rows]).catch(() => [[]]);
+async function getOrCreateCharacterState(models, showId, seasonId, characterKey) {
+  const { Op } = models.Sequelize;
 
-  if (CharacterState && CharacterState.length > 0) {
-    return CharacterState[0];
+  const rows = await models.CharacterState.findAll({
+    where: {
+      show_id: showId,
+      character_key: characterKey,
+      [Op.or]: [{ season_id: seasonId || null }, { season_id: null }],
+    },
+    order: [models.sequelize.literal('season_id DESC NULLS LAST')],
+    limit: 1,
+  }).catch(() => []);
+
+  if (rows && rows.length > 0) {
+    return rows[0];
   }
 
   // Auto-seed with defaults
   const id = uuidv4();
-  await sequelize.query(
-    `INSERT INTO character_state (id, show_id, season_id, character_key, coins, reputation, brand_trust, influence, stress, created_at, updated_at)
-     VALUES (:id, :showId, :seasonId, :characterKey, :coins, :reputation, :brand_trust, :influence, :stress, NOW(), NOW())`,
-    {
-      replacements: {
-        id,
-        showId,
-        seasonId: seasonId || null,
-        characterKey,
-        ...DEFAULT_STATS,
-      },
-    }
-  );
+  await models.CharacterState.create({
+    id,
+    show_id: showId,
+    season_id: seasonId || null,
+    character_key: characterKey,
+    ...DEFAULT_STATS,
+  });
 
   return {
     id,
@@ -145,47 +138,35 @@ router.post('/admin/reset-character-stats', requireAuth, authorize(['ADMIN']), a
     const showId = req.body?.showId || '9bd0655f-0426-4da4-95b8-44cdfd608b2b';
 
     // Debug: count existing rows for THIS show
-    const csCount = await sequelize.query(
-      `SELECT COUNT(*) as cnt FROM character_state WHERE show_id = :showId`,
-      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
-    );
-    const epCount = await sequelize.query(
-      `SELECT COUNT(*) as cnt FROM episodes WHERE show_id = :showId`,
-      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
-    );
+    const csCount = await models.CharacterState.count({ where: { show_id: showId } });
+    const epCount = await models.Episode.count({ where: { show_id: showId } });
 
     // Step 1: Reset character_state
-    const [, csMeta] = await sequelize.query(`
-      UPDATE character_state 
-      SET coins = 500, 
-          reputation = 0, 
-          brand_trust = 0, 
-          influence = 0, 
-          stress = 0,
-          last_applied_episode_id = NULL,
-          updated_at = NOW()
-      WHERE show_id = :showId
-    `, { replacements: { showId } });
+    const [csUpdated] = await models.CharacterState.update({
+      coins: 500,
+      reputation: 0,
+      brand_trust: 0,
+      influence: 0,
+      stress: 0,
+      last_applied_episode_id: null,
+    }, { where: { show_id: showId } });
 
     // Step 2: Clear episode evaluations
-    const [, epMeta] = await sequelize.query(`
-      UPDATE episodes 
-      SET evaluation_json = NULL, 
-          evaluation_status = NULL, 
-          formula_version = NULL,
-          status = 'draft',
-          updated_at = NOW()
-      WHERE show_id = :showId
-    `, { replacements: { showId } });
+    const [epUpdated] = await models.Episode.update({
+      evaluation_json: null,
+      evaluation_status: null,
+      formula_version: null,
+      status: 'draft',
+    }, { where: { show_id: showId } });
 
     res.json({
       success: true,
       target_show_id: showId,
       all_shows: shows,
-      character_state_before: parseInt(csCount[0]?.cnt || 0),
-      episodes_before: parseInt(epCount[0]?.cnt || 0),
-      character_state_updated: csMeta?.rowCount ?? 0,
-      episodes_updated: epMeta?.rowCount ?? 0,
+      character_state_before: csCount,
+      episodes_before: epCount,
+      character_state_updated: csUpdated ?? 0,
+      episodes_updated: epUpdated ?? 0,
       message: 'Character stats reset and episode evaluations cleared'
     });
   } catch (err) {
@@ -215,7 +196,7 @@ router.get('/characters/:key/state', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     const state = await getOrCreateCharacterState(
-      models.sequelize,
+      models,
       show_id,
       scope === 'global' ? null : season_id || null,
       key
@@ -286,7 +267,7 @@ router.post('/episodes/:id/evaluate', requireAuth, async (req, res) => {
     // Get character state
     const showId = episode.show_id;
     const seasonId = null; // TODO: derive from episode.season_id when available
-    const state = await getOrCreateCharacterState(models.sequelize, showId, seasonId, character_key);
+    const state = await getOrCreateCharacterState(models, showId, seasonId, character_key);
 
     // Get wardrobe items for style scoring — uses real outfit synergy
     const styleScores = { outfit_match: null, accessory_match: null, deadline_penalty: null };
@@ -588,7 +569,7 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     // Get current state
-    const state = await getOrCreateCharacterState(models.sequelize, show_id, null, key);
+    const state = await getOrCreateCharacterState(models, show_id, null, key);
 
     const oldState = {
       coins: state.coins,
