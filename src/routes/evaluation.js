@@ -123,13 +123,13 @@ router.post('/admin/reset-character-stats', requireAuth, authorize(['ADMIN']), a
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
-    const { sequelize } = models;
 
     // List ALL shows so we can see what's in the DB
-    const shows = await sequelize.query(
-      `SELECT id, name FROM shows ORDER BY created_at`,
-      { type: sequelize.QueryTypes.SELECT }
-    );
+    const showRows = await models.Show.unscoped().findAll({
+      attributes: ['id', 'name'],
+      order: [['created_at', 'ASC']],
+    });
+    const shows = showRows.map(r => r.get({ plain: true }));
     if (!shows.length) {
       return res.json({ success: false, error: 'No shows found in database' });
     }
