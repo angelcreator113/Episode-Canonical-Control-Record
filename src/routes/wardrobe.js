@@ -844,10 +844,14 @@ router.post('/seed', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     if (clear_existing) {
-      await models.sequelize.query(
-        `DELETE FROM wardrobe WHERE show_id = :show_id AND name IN (:names)`,
-        { replacements: { show_id, names: SEED_WARDROBE.map(i => i.name) } }
-      );
+      await models.Wardrobe.destroy({
+        where: {
+          show_id,
+          name: {
+            [models.Sequelize.Op.in]: SEED_WARDROBE.map(i => i.name),
+          },
+        },
+      });
     }
 
     let created = 0, skipped = 0;
@@ -855,54 +859,37 @@ router.post('/seed', requireAuth, async (req, res) => {
 
     for (const item of SEED_WARDROBE) {
       // Check duplicate
-      const [existing] = await models.sequelize.query(
-        `SELECT id FROM wardrobe WHERE show_id = :show_id AND name = :name AND deleted_at IS NULL LIMIT 1`,
-        { replacements: { show_id, name: item.name } }
-      );
-      if (existing?.length > 0) { skipped++; continue; }
+      const existing = await models.Wardrobe.findOne({
+        where: { show_id, name: item.name, deleted_at: null },
+        attributes: ['id'],
+      });
+      if (existing) { skipped++; continue; }
 
       const id = uuidv4();
-      await models.sequelize.query(
-        `INSERT INTO wardrobe
-         (id, show_id, name, clothing_category, color, season,
-          tier, lock_type, unlock_requirement, is_owned, is_visible,
-          era_alignment, aesthetic_tags, event_types, outfit_match_weight,
-          coin_cost, reputation_required, influence_required, season_unlock_episode,
-          lala_reaction_own, lala_reaction_locked, lala_reaction_reject,
-          created_at, updated_at)
-         VALUES
-         (:id, :show_id, :name, :clothing_category, :color, :season,
-          :tier, :lock_type, CAST(:unlock_requirement AS JSONB), :is_owned, :is_visible,
-          :era_alignment, CAST(:aesthetic_tags AS JSONB), CAST(:event_types AS JSONB), :outfit_match_weight,
-          :coin_cost, :reputation_required, :influence_required, :season_unlock_episode,
-          :lala_reaction_own, :lala_reaction_locked, :lala_reaction_reject,
-          NOW(), NOW())`,
-        {
-          replacements: {
-            id, show_id,
-            name: item.name,
-            clothing_category: item.clothing_category,
-            color: item.color || null,
-            season: item.season || 'all-season',
-            tier: item.tier,
-            lock_type: item.lock_type,
-            unlock_requirement: JSON.stringify(item.unlock_requirement || {}),
-            is_owned: item.is_owned,
-            is_visible: item.is_visible,
-            era_alignment: item.era_alignment || null,
-            aesthetic_tags: JSON.stringify(item.aesthetic_tags || []),
-            event_types: JSON.stringify(item.event_types || []),
-            outfit_match_weight: item.outfit_match_weight || 5,
-            coin_cost: item.coin_cost || 0,
-            reputation_required: item.reputation_required || 0,
-            influence_required: item.influence_required || 0,
-            season_unlock_episode: item.season_unlock_episode || null,
-            lala_reaction_own: item.lala_reaction_own || null,
-            lala_reaction_locked: item.lala_reaction_locked || null,
-            lala_reaction_reject: item.lala_reaction_reject || null,
-          },
-        }
-      );
+      await models.Wardrobe.create({
+        id,
+        show_id,
+        name: item.name,
+        clothing_category: item.clothing_category,
+        color: item.color || null,
+        season: item.season || 'all-season',
+        tier: item.tier,
+        lock_type: item.lock_type,
+        unlock_requirement: item.unlock_requirement || {},
+        is_owned: item.is_owned,
+        is_visible: item.is_visible,
+        era_alignment: item.era_alignment || null,
+        aesthetic_tags: item.aesthetic_tags || [],
+        event_types: item.event_types || [],
+        outfit_match_weight: item.outfit_match_weight || 5,
+        coin_cost: item.coin_cost || 0,
+        reputation_required: item.reputation_required || 0,
+        influence_required: item.influence_required || 0,
+        season_unlock_episode: item.season_unlock_episode || null,
+        lala_reaction_own: item.lala_reaction_own || null,
+        lala_reaction_locked: item.lala_reaction_locked || null,
+        lala_reaction_reject: item.lala_reaction_reject || null,
+      });
       created++;
       results.push({ name: item.name, tier: item.tier, lock_type: item.lock_type, is_owned: item.is_owned });
     }
