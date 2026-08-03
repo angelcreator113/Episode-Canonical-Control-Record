@@ -11,7 +11,7 @@ const outfitSetsController = require('../controllers/outfitSetsController');
 const episodeAssetsController = require('../controllers/episodeAssetsController');
 const timelinePlacementsController = require('../controllers/timelinePlacementsController');
 const videoCompositionController = require('../controllers/videoCompositionController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { requirePermission: _requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -56,7 +56,7 @@ router.get(
 );
 
 // List episodes
-router.get('/', validateEpisodeQuery, requireAuth, asyncHandler(episodeController.listEpisodes));
+router.get('/', validateEpisodeQuery, optionalAuth, asyncHandler(episodeController.listEpisodes));
 
 // ==================== WARDROBE ROUTES ====================
 // These must come BEFORE /:id route to avoid being caught by it
@@ -300,7 +300,7 @@ router.post(
 router.get('/:id/status', requireAuth, asyncHandler(episodeController.getEpisodeStatus));
 
 // Get single episode
-router.get('/:id', validateUUIDParam('id'), requireAuth, asyncHandler(episodeController.getEpisode));
+router.get('/:id', validateUUIDParam('id'), optionalAuth, asyncHandler(episodeController.getEpisode));
 
 // CREATE EPISODE
 router.post(
