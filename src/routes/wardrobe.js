@@ -1623,11 +1623,10 @@ router.get('/:id/pieces', requireAuth, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.json({ success: true, pieces: [] });
-    const [pieces] = await models.sequelize.query(`
-      SELECT * FROM wardrobe
-      WHERE parent_item_id = :parentId AND deleted_at IS NULL
-      ORDER BY attachment_type ASC, name ASC
-    `, { replacements: { parentId: req.params.id } });
+    const pieces = await models.Wardrobe.findAll({
+      where: { parent_item_id: req.params.id, deleted_at: null },
+      order: [['attachment_type', 'ASC'], ['name', 'ASC']],
+    });
     return res.json({ success: true, pieces: pieces || [] });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -1644,10 +1643,13 @@ router.post('/:id/pieces', requireAuth, async (req, res) => {
 
     if (existing_item_id) {
       // Link an existing wardrobe item as an attachment piece
-      await models.sequelize.query(
-        `UPDATE wardrobe SET parent_item_id = :parentId, attachment_type = :attachType, updated_at = NOW()
-         WHERE id = :itemId AND deleted_at IS NULL`,
-        { replacements: { parentId, attachType: attachment_type || 'accessory', itemId: existing_item_id } }
+      await models.Wardrobe.update(
+        {
+          parent_item_id: parentId,
+          attachment_type: attachment_type || 'accessory',
+          updated_at: new Date(),
+        },
+        { where: { id: existing_item_id, deleted_at: null } }
       );
       return res.json({ success: true, message: 'Existing item linked as attachment piece' });
     }
@@ -1656,32 +1658,27 @@ router.post('/:id/pieces', requireAuth, async (req, res) => {
     if (!name) return res.status(400).json({ success: false, error: 'name is required' });
 
     // Get parent info to inherit character/show
-    const [parent] = await models.sequelize.query(
-      `SELECT character, character_id, show_id FROM wardrobe WHERE id = :parentId AND deleted_at IS NULL`,
-      { replacements: { parentId } }
-    );
-    if (!parent?.length) return res.status(404).json({ success: false, error: 'Parent item not found' });
+    const parent = await models.Wardrobe.findOne({
+      where: { id: parentId, deleted_at: null },
+      attributes: ['character', 'character_id', 'show_id'],
+    });
+    if (!parent) return res.status(404).json({ success: false, error: 'Parent item not found' });
 
     const pieceId = uuidv4();
-    await models.sequelize.query(`
-      INSERT INTO wardrobe (id, name, clothing_category, attachment_type, parent_item_id, description, color, s3_url, brand,
-        character, character_id, show_id, created_at, updated_at)
-      VALUES (:id, :name, :category, :attachType, :parentId, :description, :color, :s3Url, :brand,
-        :character, :characterId, :showId, NOW(), NOW())
-    `, { replacements: {
+    await models.Wardrobe.create({
       id: pieceId,
       name,
-      category: clothing_category || attachment_type || 'accessories',
-      attachType: attachment_type || 'accessory',
-      parentId,
+      clothing_category: clothing_category || attachment_type || 'accessories',
+      attachment_type: attachment_type || 'accessory',
+      parent_item_id: parentId,
       description: description || null,
       color: color || null,
-      s3Url: s3_url || null,
+      s3_url: s3_url || null,
       brand: brand || null,
-      character: parent[0].character,
-      characterId: parent[0].character_id,
-      showId: parent[0].show_id,
-    } });
+      character: parent.character,
+      character_id: parent.character_id,
+      show_id: parent.show_id,
+    });
 
     return res.json({ success: true, piece: { id: pieceId, name, attachment_type, parent_item_id: parentId } });
   } catch (err) {
@@ -1698,16 +1695,19 @@ router.delete('/:id/pieces/:pieceId', requireAuth, async (req, res) => {
 
     if (detach === 'true') {
       // Just unlink — keep the item as standalone
-      await models.sequelize.query(
-        `UPDATE wardrobe SET parent_item_id = NULL, attachment_type = NULL, updated_at = NOW()
-         WHERE id = :pieceId AND parent_item_id = :parentId AND deleted_at IS NULL`,
-        { replacements: { pieceId: req.params.pieceId, parentId: req.params.id } }
+      await models.Wardrobe.update(
+        {
+          parent_item_id: null,
+          attachment_type: null,
+          updated_at: new Date(),
+        },
+        { where: { id: req.params.pieceId, parent_item_id: req.params.id, deleted_at: null } }
       );
     } else {
       // Soft-delete the piece
-      await models.sequelize.query(
-        `UPDATE wardrobe SET deleted_at = NOW() WHERE id = :pieceId AND parent_item_id = :parentId AND deleted_at IS NULL`,
-        { replacements: { pieceId: req.params.pieceId, parentId: req.params.id } }
+      await models.Wardrobe.update(
+        { deleted_at: new Date() },
+        { where: { id: req.params.pieceId, parent_item_id: req.params.id, deleted_at: null } }
       );
     }
 
@@ -1724,10 +1724,13 @@ router.put('/:id/set', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { is_set, set_name } = req.body;
 
-    await models.sequelize.query(
-      `UPDATE wardrobe SET is_set = :isSet, set_name = :setName, updated_at = NOW()
-       WHERE id = :id AND deleted_at IS NULL`,
-      { replacements: { isSet: is_set !== false, setName: set_name || null, id: req.params.id } }
+    await models.Wardrobe.update(
+      {
+        is_set: is_set !== false,
+        set_name: set_name || null,
+        updated_at: new Date(),
+      },
+      { where: { id: req.params.id, deleted_at: null } }
     );
 
     return res.json({ success: true });
