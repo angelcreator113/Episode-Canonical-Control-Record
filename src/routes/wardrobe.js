@@ -1218,23 +1218,25 @@ router.post('/select', requireAuth, async (req, res) => {
     }
 
     // 1. Verify item exists and is selectable (owned, rep-unlockable, or coin-purchasable)
-    const [items] = await models.sequelize.query(
-      `SELECT id, name, is_owned, lock_type, coin_cost, reputation_required FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
-      { replacements: { wardrobe_id } }
-    );
-    if (!items?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
-    const item = items[0];
+    const item = await models.Wardrobe.findOne({
+      attributes: ['id', 'name', 'is_owned', 'lock_type', 'coin_cost', 'reputation_required'],
+      where: { id: wardrobe_id, deleted_at: null },
+      raw: true,
+    });
+    if (!item) return res.status(404).json({ error: 'Wardrobe item not found' });
     const repOk = item.lock_type === 'reputation' && (req.body.reputation || 0) >= (item.reputation_required || 0);
 
     // Auto-purchase coin-locked items inline during select
     let coinPurchased = false;
     if (!item.is_owned && !repOk && item.lock_type === 'coin' && show_id) {
       const cost = item.coin_cost || 0;
-      const [states] = await models.sequelize.query(
-        `SELECT id, coins FROM character_state WHERE show_id = :show_id AND character_key = 'lala' ORDER BY updated_at DESC LIMIT 1`,
-        { replacements: { show_id } }
-      );
-      const currentCoins = states?.[0]?.coins ?? 0;
+      const state = await models.CharacterState.findOne({
+        attributes: ['id', 'coins'],
+        where: { show_id, character_key: 'lala' },
+        order: [['updated_at', 'DESC']],
+        raw: true,
+      });
+      const currentCoins = state?.coins ?? 0;
       if (currentCoins >= cost) {
         // Atomic dual-write: deduct from character_state AND log the ledger
         // row inside one Sequelize transaction. Either both happen or
@@ -1247,7 +1249,7 @@ router.post('/select', requireAuth, async (req, res) => {
         await models.sequelize.transaction(async (t) => {
           await models.sequelize.query(
             `UPDATE character_state SET coins = coins - :cost, updated_at = NOW() WHERE id = :id`,
-            { replacements: { cost, id: states[0].id }, transaction: t }
+            { replacements: { cost, id: state.id }, transaction: t }
           );
           await logTransaction(models.sequelize, show_id, {
             type: 'expense',
@@ -1264,9 +1266,9 @@ router.post('/select', requireAuth, async (req, res) => {
           });
         });
         // Mark item as owned
-        await models.sequelize.query(
-          `UPDATE wardrobe SET is_owned = true, updated_at = NOW() WHERE id = :wardrobe_id`,
-          { replacements: { wardrobe_id } }
+        await models.Wardrobe.update(
+          { is_owned: true, updated_at: new Date() },
+          { where: { id: wardrobe_id } }
         );
         coinPurchased = true;
         item.is_owned = true;
@@ -1291,9 +1293,12 @@ router.post('/select', requireAuth, async (req, res) => {
 
     // 3. Increment times_worn (non-fatal)
     try {
-      await models.sequelize.query(
-        `UPDATE wardrobe SET times_worn = COALESCE(times_worn, 0) + 1, updated_at = NOW() WHERE id = :wardrobe_id`,
-        { replacements: { wardrobe_id } }
+      await models.Wardrobe.update(
+        {
+          times_worn: models.sequelize.literal('COALESCE(times_worn, 0) + 1'),
+          updated_at: new Date(),
+        },
+        { where: { id: wardrobe_id } }
       );
     } catch (e) { /* non-fatal */ }
 
