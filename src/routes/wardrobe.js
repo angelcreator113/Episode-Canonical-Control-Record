@@ -50,14 +50,19 @@ router.get('/categories-audit', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not available' });
     const { getSlotForCategory } = require('../utils/wardrobeSlots');
 
-    const where = show_id ? 'WHERE (show_id = :show_id OR show_id IS NULL) AND deleted_at IS NULL' : 'WHERE deleted_at IS NULL';
-    const [rows] = await models.sequelize.query(
-      `SELECT clothing_category AS category, COUNT(*)::int AS count
-       FROM wardrobe ${where}
-       GROUP BY clothing_category
-       ORDER BY count DESC`,
-      { replacements: show_id ? { show_id } : {} }
-    );
+    const showFilter = show_id
+      ? { [models.Sequelize.Op.or]: [{ show_id }, { show_id: null }] }
+      : {};
+    const rows = await models.Wardrobe.findAll({
+      attributes: [
+        ['clothing_category', 'category'],
+        [models.sequelize.literal('COUNT(*)::int'), 'count'],
+      ],
+      where: { deleted_at: null, ...showFilter },
+      group: ['clothing_category'],
+      order: [models.sequelize.literal('count DESC')],
+      raw: true,
+    });
 
     const report = (rows || []).map(r => ({
       category: r.category,
@@ -259,22 +264,25 @@ router.post('/bulk/sync-coin-costs', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not available' });
     const { USD_TO_COINS } = require('../utils/financialRates');
     const { show_id } = req.query;
-    const where = show_id ? 'AND (show_id = :show_id OR show_id IS NULL)' : '';
-    const [rows] = await models.sequelize.query(
-      `SELECT id, price FROM wardrobe
-       WHERE deleted_at IS NULL
-         AND (coin_cost IS NULL OR coin_cost = 0)
-         AND price IS NOT NULL AND price > 0
-         ${where}`,
-      { replacements: show_id ? { show_id } : {} }
-    );
+    const rows = await models.Wardrobe.findAll({
+      attributes: ['id', 'price'],
+      where: {
+        deleted_at: null,
+        [models.Sequelize.Op.or]: [{ coin_cost: null }, { coin_cost: 0 }],
+        price: { [models.Sequelize.Op.gt]: 0 },
+        ...(show_id
+          ? { [models.Sequelize.Op.and]: [{ [models.Sequelize.Op.or]: [{ show_id }, { show_id: null }] }] }
+          : {}),
+      },
+      raw: true,
+    });
     let updated = 0;
     for (const r of rows || []) {
       const coins = Math.round(parseFloat(r.price) * USD_TO_COINS);
       if (!Number.isFinite(coins) || coins <= 0) continue;
-      await models.sequelize.query(
-        `UPDATE wardrobe SET coin_cost = :coins, updated_at = NOW() WHERE id = :id`,
-        { replacements: { coins, id: r.id } }
+      await models.Wardrobe.update(
+        { coin_cost: coins, updated_at: new Date() },
+        { where: { id: r.id } }
       );
       updated++;
     }
@@ -1794,12 +1802,11 @@ router.post('/:showId/auto-tag-event-types', requireAuth, aiRateLimiter, async (
       elite: ['gala', 'premiere', 'brand_deal'],
     };
 
-    const [rows] = await models.sequelize.query(
-      `SELECT id, name, aesthetic_tags, event_types, occasion, brand, tier, color
-       FROM wardrobe
-       WHERE show_id = :showId AND deleted_at IS NULL`,
-      { replacements: { showId } }
-    );
+    const rows = await models.Wardrobe.findAll({
+      attributes: ['id', 'name', 'aesthetic_tags', 'event_types', 'occasion', 'brand', 'tier', 'color'],
+      where: { show_id: showId, deleted_at: null },
+      raw: true,
+    });
 
     const items = (rows || []).map(item => {
       const current = (() => {
