@@ -115,10 +115,14 @@ router.get('/outfit/:episode_id', requireAuth, async (req, res) => {
     const itemIds = (items || []).filter(i => parseInt(i.attachment_count) > 0).map(i => i.id);
     let allPieces = [];
     if (itemIds.length > 0) {
-      const [pieces] = await models.sequelize.query(`
-        SELECT * FROM wardrobe WHERE parent_item_id IN (:itemIds) AND deleted_at IS NULL
-        ORDER BY attachment_type ASC, name ASC
-      `, { replacements: { itemIds } });
+      const pieces = await models.Wardrobe.findAll({
+        where: {
+          parent_item_id: { [models.Sequelize.Op.in]: itemIds },
+          deleted_at: null,
+        },
+        order: [['attachment_type', 'ASC'], ['name', 'ASC']],
+        raw: true,
+      });
       allPieces = pieces || [];
     }
 
@@ -944,16 +948,14 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
 
     // Auto-lookup event from episode if caller didn't supply prestige
     if (episode_id && !prestige) {
-      const [evRows] = await models.sequelize.query(`
-        SELECT we.name, we.event_type, we.dress_code, we.dress_code_keywords,
-               we.prestige, we.strictness, we.host_brand
-        FROM world_events we
-        WHERE we.used_in_episode_id = :episode_id
-        LIMIT 1
-      `, { replacements: { episode_id } });
+      const ev = await models.WorldEvent.unscoped().findOne({
+        attributes: ['name', 'event_type', 'dress_code', 'dress_code_keywords',
+          'prestige', 'strictness', 'host_brand'],
+        where: { used_in_episode_id: episode_id },
+        raw: true,
+      });
 
-      if (evRows?.[0]) {
-        const ev = evRows[0];
+      if (ev) {
         event_name = event_name || ev.name || '';
         event_type = event_type || ev.event_type || '';
         dress_code = dress_code || ev.dress_code || '';
@@ -974,14 +976,15 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
     host_brand = host_brand || '';
 
     // 1. Fetch all visible wardrobe items for this show
-    const [allItems] = await models.sequelize.query(
-      `SELECT * FROM wardrobe 
-       WHERE show_id = :show_id 
-       AND deleted_at IS NULL 
-       AND (is_visible = true OR is_owned = true)
-       ORDER BY tier, name`,
-      { replacements: { show_id } }
-    );
+    const allItems = await models.Wardrobe.findAll({
+      where: {
+        show_id,
+        deleted_at: null,
+        [models.Sequelize.Op.or]: [{ is_visible: true }, { is_owned: true }],
+      },
+      order: [['tier', 'ASC'], ['name', 'ASC']],
+      raw: true,
+    });
 
     if (allItems.length === 0) {
       return res.json({ success: true, pool: [], message: 'No wardrobe items found. Seed items first.' });
