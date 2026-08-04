@@ -1341,11 +1341,13 @@ router.post('/purchase', requireAuth, async (req, res) => {
     if (item.lock_type !== 'coin') return res.status(400).json({ error: `Cannot purchase — lock type is ${item.lock_type}` });
 
     // 2. Get Lala's coins
-    const [states] = await models.sequelize.query(
-      `SELECT * FROM character_state WHERE show_id = :show_id AND character_key = 'lala' ORDER BY updated_at DESC LIMIT 1`,
-      { replacements: { show_id } }
-    );
-    const currentCoins = states?.[0]?.coins ?? 0;
+    const state = await models.CharacterState.findOne({
+      attributes: ['coins'],
+      where: { show_id, character_key: 'lala' },
+      order: [['updated_at', 'DESC']],
+      raw: true,
+    });
+    const currentCoins = state?.coins ?? 0;
     const cost = item.coin_cost || 0;
 
     if (currentCoins < cost) {
@@ -1386,9 +1388,9 @@ router.post('/purchase', requireAuth, async (req, res) => {
     });
 
     // 4. Mark item as owned
-    await models.sequelize.query(
-      `UPDATE wardrobe SET is_owned = true, updated_at = NOW() WHERE id = :wardrobe_id`,
-      { replacements: { wardrobe_id } }
+    await models.Wardrobe.update(
+      { is_owned: true, updated_at: new Date() },
+      { where: { id: wardrobe_id } }
     );
 
     // 5. Log purchase in state history (non-fatal — purchase already succeeded)
