@@ -1,3 +1,5 @@
+jest.unmock('uuid');
+
 /**
  * Integration Tests - Wardrobe money paths
  *
