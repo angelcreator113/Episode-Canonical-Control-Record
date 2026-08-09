@@ -5,9 +5,11 @@ This doc contains ZERO frontier assertions by design. It tells you WHERE
 current state lives and HOW to derive it — never WHAT it currently is.
 Its predecessor (frozen 2026-06-01) died of snapshot rot that leaked past
 its own quarantine section; this version cannot rot on that axis because
-it holds no state to go stale. If any sentence here appears to assert
-current phase, status, version, or configuration — treat that as a defect
-in this doc and correct it.
+it holds no state to go stale. The live state map, checklist, and
+naming-collision guidance now live in
+[docs/audit/Prime_Studios_Audit_Handoff_v21.md](docs/audit/Prime_Studios_Audit_Handoff_v21.md).
+If any sentence here appears to assert current phase, status, version, or
+configuration — treat that as a defect in this doc and correct it.
 
 ---
 
@@ -201,7 +203,10 @@ This doc never states it.
 
 This doc changes only when the PROJECT changes (a keystone is added or
 resolved, a discipline is minted or retired, the working model shifts).
-It never changes to "update status" — it has no status to update. If you
-find yourself adding a version number, a phase, a date-stamped state, or
-an infrastructure property: stop. That content belongs in a Fix Plan
-revision, and this doc already tells the reader how to find those.
+It never changes to "update status" — it has no status to update. The live
+state map now resides in
+[docs/audit/Prime_Studios_Audit_Handoff_v21.md](docs/audit/Prime_Studios_Audit_Handoff_v21.md);
+this doc is pointer-only for that layer. If you find yourself adding a
+version number, a phase, a date-stamped state, or an infrastructure
+property: stop. That content belongs in a Fix Plan revision or in the
+handoff v21, and this doc already tells the reader how to find those.
