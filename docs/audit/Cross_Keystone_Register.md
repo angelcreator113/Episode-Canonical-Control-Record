@@ -48,6 +48,7 @@ concerns **FD-40 (F-Deploy-1)**, which is unrelated to open item 40 (F-Stats-1).
 | # | Finding | Reach | Ownership | Fix |
 |---|---|---|---|---|
 | XK-1 | `paranoid` exposure — 48 model tables inherit `paranoid` with no `deleted_at` column | F-Stats-1, F-Ward-1, F-Ward-3 | OWNED (F-Stats-1 v1.31) | UNEVALUATED |
+| XK-2 | Row-scope not enforced in SQL — scope parameter present in the route, used for a read, dropped at the write | F-Stats-1, F-AUTH-1 | OWNED (F-Stats-1 v1.46) | UNEVALUATED |
 
 ---
 
@@ -109,6 +110,89 @@ to evaluate them and this entry does not evaluate them either. Any of the three
 touches a FROZEN prod and requires its own gated decision. Ownership here means
 the item has a home and a reader, not that a remedy is selected.
 
+---
+
+### XK-2 — row-scope not enforced in SQL
+
+**Origin:** §35.5 finding class 1 (F-Stats-1), recorded v1.33 with reach
+established in one file and none beyond it. Reach established beyond it at v1.44
+§47.3. Exclusion from F-AUTH-1 upheld on categorical grounds at v1.45 §48.4.
+Admitted here by F-Stats-1 v1.46.
+
+**Evidence artifacts:** F-Stats-1 Fix Plan v1.33 §35.5 (class recorded), v1.41
+§44.3 and §44.7 (instances and sub-forms), v1.44 §47.3 (reach), v1.45
+§48.4 (categorical basis). **None is superseded or moved.**
+
+**Mechanism.** A handler destructures `showId` from its route, uses it to scope a
+read, then issues a write keyed on the row id alone. The tenancy boundary is
+enforced once, in JavaScript, and the write trusts that invariant rather than
+restating it as a SQL predicate.
+
+```
+SELECT id, phases FROM show_arcs WHERE show_id = :showId AND status = 'active' ...   -- scoped
+UPDATE show_arcs SET phases = :phases, updated_at = NOW() WHERE id = :id             -- unscoped
+```
+
+**Why it survives every existing check.** Every instance declares `requireAuth`
+and passes F-AUTH-1's CP12 greps, because CP12 greps auth declarations and these
+declarations are correct. The defect is invisible to a probe that reads
+middleware and visible only to one that reads predicates.
+
+**Sub-forms observed:**
+
+| Sub-form | Instances |
+|---|---|
+| Scope cashed at the write | `worldEvents.js` 1837, 1910, 1911; `arcRoutes.js` :158, :209 |
+| Caller-supplied FK written unvalidated | `worldEvents.js` 1229 |
+| Route scope parameters entirely unread | `worldEvents.js` 1271, 1605, 1510 |
+
+**Cross-keystone reach:**
+
+| Keystone | Surface | Instances |
+|---|---|---|
+| F-Stats-1 | `worldEvents.js` | 1837, 1910, 1911, 1229, 1271, 1605, 1510 |
+| F-AUTH-1 | `arcRoutes.js` (CP7 cluster) | :158, :209 |
+
+25 of the 38 `worldEvents.js` statements dispositioned at v1.41 carry no scope
+term, and three handlers read no route scope parameter at all. `arcRoutes.js` is
+enumerated twice in F-AUTH-1 v2.37's CP7 cluster. *Inference, stated as such:*
+its specific tier dispositions were not read, and CP7's completion is inferred
+from the backend sweep's closure at CP12 rather than from a CP7-specific marker.
+**What is established is that the file lies inside a keystone's enumerated sweep
+scope and the instances survive it.**
+
+**Why no single keystone resolves it.** F-AUTH-1's five-tier model governs which
+callers may reach an endpoint. `PUT /world/:showId/arc/phase/:phase` is correctly
+Tier 1 — `requireAuth`, a mutation, auth required regardless — and still
+writes another show's arc. **A route can be perfectly tiered and still cross
+tenants.** F-Stats-1 converts raw SQL to ORM calls, and **an ORM call without a
+scope clause is exactly as unscoped as the SQL it replaces**; v1.41 §44.3 ruled
+most instances WITHDRAW in any case. The defect lives between two correct
+questions.
+
+**Severity — bounded.** Exploitation requires a known row UUID, and none of the
+examined handlers provides an enumeration path. **That bounds it; it does not
+remove it.** The `arcRoutes.js` instances write `phases` and `progression_log` on
+`show_arcs` — canon columns on the arc progression path.
+
+**Extent — not established.** Two files. Twenty of the twenty-two `:showId`
+route files are unprobed, and the probe that found `arcRoutes.js` was a floor: it
+misses `WHERE e.id`, `WHERE id=:` without a space, and multi-line `WHERE`
+clauses. F-Ward-1, F-Ward-3, F-Reg-2, F-Franchise-1 and F-Sec-3 surfaces are
+unexamined. **Admission does not depend on extent; a later revision may measure
+it without disturbing this entry.**
+
+**Prod carve-out.** No prod enumeration was performed and none is implied.
+`FD31-prod-only-schema-20260601.sql` lists `show_arcs`, so the table may sit
+inside the prod/dev schema divergence F-Deploy-1 recorded — **unverified, and
+no statement about prod exposure carries support until a gated window supplies
+one.** Prod is FROZEN.
+
+**Fix: unevaluated.** Candidates not evaluated here include restating the scope
+predicate on every write, a repository-layer scoping helper, and row-level
+security at the database. Each has different reach and cost. **Ownership here
+means the item has a home and a reader, not that a remedy is selected.**
+
 ## §5 What this register does not do
 
 - Does not evaluate or select fixes. Every entry's remedy is unevaluated.
@@ -130,3 +214,4 @@ by a Fix Plan revision that cites the entry, never by editing this file alone.
 *Author: Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni.*
 *Date: 2026-08-09. Main at `f499a3ba`. Ratified by: F-Stats-1 Fix Plan v1.31.*
 *Admitted: XK-1. Mints no FD. Evaluates no fix. No live database contact.*
+*Admitted: XK-2 — 2026-08-14. Ratified by: F-Stats-1 Fix Plan v1.46. Main at `055da746`. Mints no FD. Evaluates no fix. No live database contact.*
