@@ -7,7 +7,7 @@ Its predecessor (frozen 2026-06-01) died of snapshot rot that leaked past
 its own quarantine section; this version cannot rot on that axis because
 it holds no state to go stale. The live state map, checklist, and
 naming-collision guidance now live in
-[docs/audit/Prime_Studios_Audit_Handoff_v21.md](docs/audit/Prime_Studios_Audit_Handoff_v21.md).
+the newest `docs/audit/Prime_Studios_Audit_Handoff_v<N>.md` revision, found by the numeric sort at §1.5 — never by assuming a version number, including one written here.
 If any sentence here appears to assert current phase, status, version, or
 configuration — treat that as a defect in this doc and correct it.
 
@@ -205,8 +205,8 @@ This doc changes only when the PROJECT changes (a keystone is added or
 resolved, a discipline is minted or retired, the working model shifts).
 It never changes to "update status" — it has no status to update. The live
 state map now resides in
-[docs/audit/Prime_Studios_Audit_Handoff_v21.md](docs/audit/Prime_Studios_Audit_Handoff_v21.md);
+the newest `Prime_Studios_Audit_Handoff` revision per §1.5;
 this doc is pointer-only for that layer. If you find yourself adding a
 version number, a phase, a date-stamped state, or an infrastructure
 property: stop. That content belongs in a Fix Plan revision or in the
-handoff v21, and this doc already tells the reader how to find those.
+newest handoff revision, and this doc already tells the reader how to find those. **A hardcoded pointer to a versioned target is itself the rot this section forbids** — the pointer read v21 while the tail was v22.
