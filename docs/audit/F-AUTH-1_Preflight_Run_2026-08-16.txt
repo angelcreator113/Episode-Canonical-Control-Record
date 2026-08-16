@@ -1,0 +1,378 @@
+================================================================
+F-AUTH-1 Section 5.1 Pre-Flight Grep v2
+Run date: 2026-08-16 16:34:25 -04:00
+Project root: C:\Users\12483\Projects\Episode-Canonical-Control-Record-1
+Routes dir:   C:\Users\12483\Projects\Episode-Canonical-Control-Record-1\src\routes
+App file:     C:\Users\12483\Projects\Episode-Canonical-Control-Record-1\src\app.js
+================================================================
+
+=== Pass 1: optionalAuth inventory ===
+
+Explicit per-route optionalAuth declarations on WRITES (POST/PUT/PATCH/DELETE):
+
+File                  Line Content                                                                             
+----                  ---- -------                                                                             
+luxuryFilterRoutes.js   11 luxuryFilterRouter.post('/validate', optionalAuth, async (req, res) => {            
+luxuryFilterRoutes.js   32 luxuryFilterRouter.post('/quick-check', optionalAuth, (req, res) => {               
+seasonRhythmRoutes.js   16 seasonRhythmRouter.post('/validate', optionalAuth, async (req, res) => {            
+worldStudio.js        2483 router.post('/world/generate-ecosystem-preview', optionalAuth({                     
+                           degradeOnInfraFailure: true }), async (req, res) => {                               
+
+
+
+
+File-level router.use(optionalAuth) mounts:
+
+File                  Line Content                  
+----                  ---- -------                  
+authorNoteRoutes.js     18 router.use(optionalAuth);
+entanglementRoutes.js   40 router.use(optionalAuth);
+
+
+
+
+=== Pass 2: File-level auth mount inventory ===
+
+Files with file-level auth mounts:
+
+File                         Line Content                  
+----                         ---- -------                  
+authorNoteRoutes.js            18 router.use(optionalAuth);
+calendarRoutes.js              40 router.use(requireAuth); 
+characterCrossingRoutes.js     21 router.use(requireAuth); 
+characterGenerationRoutes.js   33 router.use(requireAuth); 
+entanglementRoutes.js          40 router.use(optionalAuth);
+feedRelationshipRoutes.js      22 router.use(requireAuth); 
+mirrorFieldRoutes.js           18 router.use(requireAuth); 
+pageContent.js                  6 router.use(requireAuth); 
+undergroundRoutes.js           24 router.use(requireAuth); 
+wantFieldRoutes.js             17 router.use(requireAuth); 
+
+
+
+
+PE #52 candidate files (write routes, no file-level auth mount): 120 files
+
+=== Pass 3: src/app.js global auth mounts ===
+
+
+File   Line Content                                                                         
+----   ---- -------                                                                         
+app.js  236 app.use(optionalAuth);                                                          
+app.js 1168 app.use('/admin/queues', requireAuth, authorize(['ADMIN']), queueMonitorRoutes);
+
+
+
+
+=== Pass 4: Per-route auth detection (conservative) ===
+
+For each PE #52 candidate file, count routes where auth middleware
+appears inline between path and handler. This catches Patterns 1, 4,
+5, 6 from the deliverable's pattern enumeration.
+
+Per-file conservative classification:
+
+
+File                         TotalWrites ConfirmedAuth NoAuthDetected
+----                         ----------- ------------- --------------
+compositions.js                       19             7             12
+continuityEngine.js                   11             0             11
+templateStudio.js                      7             0              7
+roles.js                               5             0              5
+animatic.js                            4             0              4
+auth.js                                5             1              4
+footage.js                             4             0              4
+decisions.js                           1             0              1
+sceneStudioEpisodeRoutes.js            2             2              0
+sceneTemplates.js                      3             3              0
+scriptAnalysis.js                      2             2              0
+opportunityRoutes.js                   6             6              0
+scenes.js                             27            27              0
+sceneSetRoutes.js                     51            51              0
+scriptGenerator.js                     5             5              0
+scripts.js                             6             6              0
+search.js                              2             2              0
+musicCues.js                           6             6              0
+onboarding.js                          4             4              0
+scriptParse.js                         3             3              0
+novelIntelligenceRoutes.js             8             8              0
+phoneMissionRoutes.js                  3             3              0
+productionPackage.js                   2             2              0
+propertyRoutes.js                      5             5              0
+phonePlaythroughRoutes.js              3             3              0
+press.js                               4             4              0
+processing.js                          4             4              0
+relationships.js                       8             8              0
+sceneLibrary.js                        3             3              0
+sceneLinks.js                          3             3              0
+sceneProposeRoute.js                   5             5              0
+phoneAIRoutes.js                       2             2              0
+pdfIngestRoute.js                      1             1              0
+outfitSets.js                          3             3              0
+seasonRhythmRoutes.js                  1             1              0
+wardrobe.js                           25            25              0
+wardrobeApproval.js                    3             3              0
+wardrobeBrands.js                      5             5              0
+upgradeRoutes.js                      10            10              0
+todoListRoutes.js                      7             7              0
+uiOverlayRoutes.js                    17            17              0
+universe.js                            5             5              0
+worldStudio.js                        35            35              0
+worldTemperatureRoutes.js              1             1              0
+youtube.js                             3             3              0
+worldEvents.js                        39            39              0
+wardrobeEventRoutes.js                 2             2              0
+wardrobeLibrary.js                    11            11              0
+world.js                               1             1              0
+stories.js                            13            13              0
+storyEvaluationRoutes.js               6             6              0
+storyHealth.js                         1             1              0
+socialProfileRoutes.js                24            24              0
+seed.js                                3             3              0
+shows.js                               9             9              0
+socialProfileBulkRoutes.js             6             6              0
+thumbnails.js                          7             7              0
+tierFeatures.js                       24            24              0
+timelineData.js                        1             1              0
+therapy.js                             6             6              0
+storyteller.js                        24            24              0
+templates.js                           3             3              0
+textureLayerRoutes.js                  3             3              0
+character-clips.js                     3             3              0
+characterAI.js                         5             5              0
+characterDepthRoutes.js                4             4              0
+cfoAgentRoutes.js                      3             3              0
+audio-clips.js                         3             3              0
+beats.js                               3             3              0
+careerGoals.js                         5             5              0
+characterSparkRoute.js                 3             3              0
+consciousness.js                       6             6              0
+cursorPaths.js                         8             8              0
+characterRegistry.js                  31            31              0
+characterFollowRoutes.js               3             3              0
+characterGenerator.js                  6             6              0
+characterGrowthRoute.js                2             2              0
+interview.js                           8             8              0
+planning.js                            6             6              0
+stories.js                             9             9              0
+extras.js                              4             4              0
+assistant.js                           4             4              0
+core.js                                6             6              0
+engine.js                             16            16              0
+arcRoutes.js                           5             5              0
+arcTrackingRoutes.js                   2             2              0
+assets.js                             16            16              0
+amberSessionRoutes.js                  2             2              0
+voice.js                               4             4              0
+admin.js                               1             1              0
+amberDiagnosticRoutes.js               5             5              0
+decisionLogs.js                        1             1              0
+iconSlots.js                           3             3              0
+imageProcessing.js                     3             3              0
+jobs.js                                3             3              0
+iconCues.js                           11            11              0
+gameShows.js                           3             3              0
+generate-script-from-book.js           1             1              0
+hairLibraryRoutes.js                   4             4              0
+makeupLibraryRoutes.js                 4             4              0
+markers.js                             4             4              0
+metadata.js                            5             5              0
+luxuryFilterRoutes.js                  2             2              0
+lala-scene-detection.js                2             2              0
+lalaScripts.js                         1             1              0
+layers.js                              7             7              0
+episodeScriptWriterRoutes.js           3             3              0
+evaluation.js                          5             5              0
+eventGeneratorRoute.js                 1             1              0
+episodes.js                           51            51              0
+editMaps.js                            4             4              0
+episodeBriefRoutes.js                  8             8              0
+episodeOrchestrationRoute.js           1             1              0
+feedSchedulerRoutes.js                 8             8              0
+files.js                               2             2              0
+franchiseBrainRoutes.js               11            11              0
+feedPostRoutes.js                      3             3              0
+export.js                              2             2              0
+feedEnhancedRoutes.js                  3             3              0
+feedPipelineRoutes.js                  2             2              0
+
+
+
+Pass 4 aggregate:
+  Total write routes in PE #52 candidate files: 853
+  Routes with confirmed inline auth (Pattern 1/5/6): 805
+  Routes with no auth detected by Pass 4: 48
+
+=== Pass 5: Per-route auth detection (aggressive) ===
+
+For routes that Pass 4 did not catch, look more broadly: scan up
+to 15 lines after the route declaration for auth middleware
+references including arrays and indirected names. False positives
+possible (comments mentioning auth, nearby unrelated routes).
+
+Per-file three-tier classification:
+
+
+File                         TotalWrites Tier1_Confirmed Tier2_Probable Tier3_NeedsInspection
+----                         ----------- --------------- -------------- ---------------------
+compositions.js                       19               7              0                    12
+continuityEngine.js                   11               0              0                    11
+templateStudio.js                      7               0              0                     7
+roles.js                               5               0              0                     5
+animatic.js                            4               0              0                     4
+auth.js                                5               1              0                     4
+footage.js                             4               0              0                     4
+decisions.js                           1               0              0                     1
+sceneStudioEpisodeRoutes.js            2               2              0                     0
+sceneTemplates.js                      3               3              0                     0
+scriptAnalysis.js                      2               2              0                     0
+opportunityRoutes.js                   6               6              0                     0
+scenes.js                             27              27              0                     0
+sceneSetRoutes.js                     51              51              0                     0
+scriptGenerator.js                     5               5              0                     0
+scripts.js                             6               6              0                     0
+search.js                              2               2              0                     0
+musicCues.js                           6               6              0                     0
+onboarding.js                          4               4              0                     0
+scriptParse.js                         3               3              0                     0
+novelIntelligenceRoutes.js             8               8              0                     0
+phoneMissionRoutes.js                  3               3              0                     0
+productionPackage.js                   2               2              0                     0
+propertyRoutes.js                      5               5              0                     0
+phonePlaythroughRoutes.js              3               3              0                     0
+press.js                               4               4              0                     0
+processing.js                          4               4              0                     0
+relationships.js                       8               8              0                     0
+sceneLibrary.js                        3               3              0                     0
+sceneLinks.js                          3               3              0                     0
+sceneProposeRoute.js                   5               5              0                     0
+phoneAIRoutes.js                       2               2              0                     0
+pdfIngestRoute.js                      1               1              0                     0
+outfitSets.js                          3               3              0                     0
+seasonRhythmRoutes.js                  1               1              0                     0
+wardrobe.js                           25              25              0                     0
+wardrobeApproval.js                    3               3              0                     0
+wardrobeBrands.js                      5               5              0                     0
+upgradeRoutes.js                      10              10              0                     0
+todoListRoutes.js                      7               7              0                     0
+uiOverlayRoutes.js                    17              17              0                     0
+universe.js                            5               5              0                     0
+worldStudio.js                        35              35              0                     0
+worldTemperatureRoutes.js              1               1              0                     0
+youtube.js                             3               3              0                     0
+worldEvents.js                        39              39              0                     0
+wardrobeEventRoutes.js                 2               2              0                     0
+wardrobeLibrary.js                    11              11              0                     0
+world.js                               1               1              0                     0
+stories.js                            13              13              0                     0
+storyEvaluationRoutes.js               6               6              0                     0
+storyHealth.js                         1               1              0                     0
+socialProfileRoutes.js                24              24              0                     0
+seed.js                                3               3              0                     0
+shows.js                               9               9              0                     0
+socialProfileBulkRoutes.js             6               6              0                     0
+thumbnails.js                          7               7              0                     0
+tierFeatures.js                       24              24              0                     0
+timelineData.js                        1               1              0                     0
+therapy.js                             6               6              0                     0
+storyteller.js                        24              24              0                     0
+templates.js                           3               3              0                     0
+textureLayerRoutes.js                  3               3              0                     0
+character-clips.js                     3               3              0                     0
+characterAI.js                         5               5              0                     0
+characterDepthRoutes.js                4               4              0                     0
+cfoAgentRoutes.js                      3               3              0                     0
+audio-clips.js                         3               3              0                     0
+beats.js                               3               3              0                     0
+careerGoals.js                         5               5              0                     0
+characterSparkRoute.js                 3               3              0                     0
+consciousness.js                       6               6              0                     0
+cursorPaths.js                         8               8              0                     0
+characterRegistry.js                  31              31              0                     0
+characterFollowRoutes.js               3               3              0                     0
+characterGenerator.js                  6               6              0                     0
+characterGrowthRoute.js                2               2              0                     0
+interview.js                           8               8              0                     0
+planning.js                            6               6              0                     0
+stories.js                             9               9              0                     0
+extras.js                              4               4              0                     0
+assistant.js                           4               4              0                     0
+core.js                                6               6              0                     0
+engine.js                             16              16              0                     0
+arcRoutes.js                           5               5              0                     0
+arcTrackingRoutes.js                   2               2              0                     0
+assets.js                             16              16              0                     0
+amberSessionRoutes.js                  2               2              0                     0
+voice.js                               4               4              0                     0
+admin.js                               1               1              0                     0
+amberDiagnosticRoutes.js               5               5              0                     0
+decisionLogs.js                        1               1              0                     0
+iconSlots.js                           3               3              0                     0
+imageProcessing.js                     3               3              0                     0
+jobs.js                                3               3              0                     0
+iconCues.js                           11              11              0                     0
+gameShows.js                           3               3              0                     0
+generate-script-from-book.js           1               1              0                     0
+hairLibraryRoutes.js                   4               4              0                     0
+makeupLibraryRoutes.js                 4               4              0                     0
+markers.js                             4               4              0                     0
+metadata.js                            5               5              0                     0
+luxuryFilterRoutes.js                  2               2              0                     0
+lala-scene-detection.js                2               2              0                     0
+lalaScripts.js                         1               1              0                     0
+layers.js                              7               7              0                     0
+episodeScriptWriterRoutes.js           3               3              0                     0
+evaluation.js                          5               5              0                     0
+eventGeneratorRoute.js                 1               1              0                     0
+episodes.js                           51              51              0                     0
+editMaps.js                            4               4              0                     0
+episodeBriefRoutes.js                  8               8              0                     0
+episodeOrchestrationRoute.js           1               1              0                     0
+feedSchedulerRoutes.js                 8               8              0                     0
+files.js                               2               2              0                     0
+franchiseBrainRoutes.js               11              11              0                     0
+feedPostRoutes.js                      3               3              0                     0
+export.js                              2               2              0                     0
+feedEnhancedRoutes.js                  3               3              0                     0
+feedPipelineRoutes.js                  2               2              0                     0
+
+
+
+Pass 5 aggregate:
+  Tier 1 (confirmed auth, Pattern 1/5/6): 805 routes
+  Tier 2 (probable auth, Pattern 2/3 likely): 0 routes
+  Tier 3 (needs per-route inspection): 48 routes
+
+=== Drift Summary ===
+
+PE #51 verification (corrected 2026-05-21):
+  Note: PE #51 lists 7 write routes total. Pass 1 catches 4 (Pattern 1,
+        single-line). The 3 iconSlots writes use Pattern 5/6 (multi-line)
+        and are detected by Pass 4 instead. See iconSlots.js Tier 1 count.
+  Explicit per-route optionalAuth on writes (Pattern 1 only): 4 found / 4 expected - MATCH
+  File-level optionalAuth mounts: 2 found / 2 expected - MATCH
+  src/app.js bare app.use(optionalAuth): line 236 / expected 236 - MATCH
+  src/app.js path-prefixed admin auth: line 1168 / expected 1168 - MATCH
+
+PE #52 verification (outer bound, corrected 2026-05-21):
+  Candidate files: 120 found / 120 expected - MATCH
+  Candidate write routes: 853 found / 853 expected - MATCH
+
+Per-route refinement (Passes 4 + 5):
+  Outer bound (no file-level auth mount): 853 routes
+  Tier 1 (confirmed inline auth, Pattern 1/5/6): 805 routes (94%)
+  Tier 2 (probable auth, Pattern 2/3 likely): 0 routes (0%)
+  Tier 3 (NEEDS PER-ROUTE INSPECTION): 48 routes (6%)
+
+  Tier 3 is the prioritized F-AUTH-1 execution work surface.
+  Tier 1 routes are auth-confirmed at script-detection level.
+  Tier 2 routes need verification but are likely auth-gated via array
+  or indirected middleware patterns the script's regexes can't
+  authoritatively confirm.
+
+Status: No drift since 2026-05-21 verification inventory.
+        F-AUTH-1 execution can proceed against current PE #51 / PE #52 framing.
+
+================================================================
+End of F-AUTH-1 Section 5.1 Pre-Flight Grep v2
+================================================================
