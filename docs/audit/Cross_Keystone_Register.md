@@ -49,6 +49,7 @@ concerns **FD-40 (F-Deploy-1)**, which is unrelated to open item 40 (F-Stats-1).
 |---|---|---|---|---|
 | XK-1 | `paranoid` exposure — 48 model tables inherit `paranoid` with no `deleted_at` column | F-Stats-1, F-Ward-1, F-Ward-3 | OWNED (F-Stats-1 v1.31) | UNEVALUATED |
 | XK-2 | Row-scope not enforced in SQL — scope parameter present in the route, used for a read, dropped at the write | F-Stats-1, F-AUTH-1 | OWNED (F-Stats-1 v1.46) | UNEVALUATED |
+| XK-3 | No authorization substrate for the tenancy root — no user↔show relation exists, so `show_id` is caller-asserted and unverifiable | F-AUTH-1, F-Stats-1 | OWNED (F-Stats-1 v1.57) | UNEVALUATED |
 
 ---
 
@@ -193,6 +194,117 @@ predicate on every write, a repository-layer scoping helper, and row-level
 security at the database. Each has different reach and cost. **Ownership here
 means the item has a home and a reader, not that a remedy is selected.**
 
+### XK-3 — no authorization substrate for the tenancy root
+
+**Origin:** arrived through FD-62's remedy question (F-Stats-1 v1.56 §59.7), not
+through a probe aimed at this. FD-62 records three destructive handlers taking
+`show_id` from the request body and validating presence only. Designing a remedy
+required answering *may this principal act on this show*, and that question has no
+data behind it. Admitted here by F-Stats-1 v1.57.
+
+**Evidence artifacts:** F-Stats-1 Fix Plan v1.55 §58.3 (the sub-form), v1.56 §59
+(FD-62), and v1.57 §60 (the four admission gates and their reads). **None is
+superseded or moved.**
+
+**Mechanism.** `req.user.id` is `decoded.sub` — a Cognito subject string. No row
+stands behind it. There is no `User` model in `src/models/`, no user table, and no
+model in the codebase declares a `belongsTo` to one. `shows` carries no ownership
+column; neither does `universes`, the only model above it. The authorization
+middleware tier — `authorize`, a documented alias for `verifyGroup` — compares
+`req.user.groups` against a named group and never receives a resource identifier.
+
+**The consequence is not that a check was omitted. There is no check to omit.**
+A handler that wanted to authorize a `show_id` has no relation to consult, no
+helper to call, and no middleware signature that would accept the resource.
+
+**What was read.** Four admission gates, all repo reads, no live database contact.
+These are **XK-3 Gate 1 … XK-3 Gate 4**, always written in full; they are unrelated
+to CP12-G1 … CP12-G6 and to Track G3 … Track G6 (F-AUTH-1).
+
+| Admission gate | Result | Basis |
+|---|---|---|
+| XK-3 Gate 1 | `shows` has no ownership column, at creation or in any ALTER | `src/models/Show.js`; `src/migrations/20260109132556-create-shows.js`; `scripts/migrations/fix-shows-schema.sql`; `create-shows-only.sql`; `recreate-shows-table.js`; plus `src/models/Universe.js` above it |
+| XK-3 Gate 2 | no resource-scoped authorization tier exists | `src/middleware/auth.js` direct read; `authorize` = `verifyGroup` by its own comment; 30 call sites all pass `admin`/`ADMIN` |
+| XK-3 Gate 3 | **OPEN** — principal population unmeasured | requires live DB; prod FROZEN |
+| XK-3 Gate 4 | no model declares a User association; no `User` model exists | 40-hit grep over `src/models/*.js`, zero associations; `git ls-tree` on `src/models` |
+
+**XK-3 Gate 4's forty hits are provenance, not ownership.** `created_by` on `Scene`,
+`SceneLibrary`, `Marker`, `EpisodeTemplate`, `LayerPreset`, `ThumbnailComposition`,
+`SceneTemplate`; `user_id` on `DecisionLog`, `EditingDecision`,
+`WardrobeUsageHistory`, `PhonePlaythroughState`, `file`, `job`. Every one records
+*who acted*. None confers or checks a right. `file.js` and `job.js` do partition by
+`user_id` in raw SQL, and `PhonePlaythroughState` carries a `(user_id, …)` unique
+index — **these partition leaf records and do not reach the show tier.**
+
+**XK-3 Gate 2's sample is not the population.** The call-site scan was truncated at
+thirty by the probe's own flag. The gate rests on the middleware **signature**,
+which does not depend on the count; the sample corroborates and does not carry it.
+A later revision may measure the full population without disturbing this entry.
+
+**Distinct from XK-2, and the distinction is load-bearing.** XK-2 is an enforcement
+failure: the tenant value is available and correct, and the write drops it. XK-3 is
+a substrate absence: the tenant value is caller-supplied and nothing can authorize
+it. **XK-2's remedy does not fix XK-3's instances.** FD-62's three sites restate
+`show_id` in the destructive predicate — they satisfy XK-2's test — and delete
+another show's catalogue anyway. Restating the predicate on every write, XK-2's
+first candidate remedy, leaves them exactly as they are.
+
+**Why no single keystone resolves it.** F-AUTH-1's five-tier model governs *which
+callers may reach an endpoint*; every tier answers a question about the actor and
+none about the resource. F-AUTH-1 could close every open deployment track and this
+would be untouched. F-Stats-1 converts raw SQL to ORM calls and reads predicates;
+a correctly scoped ORM call is still scoped to a caller-supplied value. The remedy
+spans schema, model layer, middleware, and every consumer that would call it —
+outside both.
+
+**Cross-keystone reach:**
+
+| Keystone | Surface | Basis |
+|---|---|---|
+| F-AUTH-1 | `src/middleware/auth.js` — the tier model has no resource-scoped member | direct read; `authorize`/`verifyGroup`/`authorizeRole` all group-only |
+| F-Stats-1 | the 30-site shape; FD-62's three instances | v1.55 §58, v1.56 §59 |
+
+**F-Sec-3 is deliberately excluded.** Its surface plausibly overlaps, and that is
+not established. §2 does not admit asserted reach, and an unestablished third
+keystone would weaken an entry that clears the threshold on two.
+
+**Severity — bounded, and the bound is unmeasured.** The defect is real: the
+substrate is absent, established by three closed gates on direct reads. The exploit
+path is bounded: it requires a second principal — some authenticated caller who
+should not reach a given show. **Whether such a caller exists is XK-3 Gate 3, it is
+open, and no present-population claim is made in either direction.** Admitted as
+*bounded and unmeasured*, not as resolved and not as presently exploited.
+
+**How this differs from XK-1's openness.** XK-1 was admitted with its population
+question open — how many tables, in which environments. That is an open question
+about *extent*. XK-3's open gate gates *severity*: whether the structural absence
+has a present exploit path at all. **Both are admissible with the question open, and
+they are not the same shape of openness.** Closing XK-3 Gate 3 would change what can
+be said about exploitation and would change nothing about whether the substrate
+exists.
+
+**Not downgraded by an unmeasured population, and not inflated by one.** F-Stats-1
+v1.56 §59.4 took this posture for FD-62 and it is carried here unchanged.
+
+**XK-3 Gate 3 carve-out.** No live database contact was made for this entry. The
+principal population, the row count of `shows`, and whether any environment's
+`shows` table differs from all five schema sources are **unverified and must not be
+assumed in either direction.** Any statement about them requires a gated window and
+carries no support until one supplies it. Prod is FROZEN.
+
+**Prod carve-out.** Four creation paths for `shows` were found in the repository —
+the canonical migration, two ad-hoc SQL scripts, and a Node script — **and they
+disagree on column types and on the `status` representation.** Which one built any
+given environment is not recorded anywhere. No prod enumeration was performed and
+none is implied.
+
+**Fix: unevaluated.** Candidates not evaluated here include an ownership column on
+`shows` with a backfill, a user↔show join table, a `User` model with associations,
+and a resource-scoped middleware tier taking the resource id as an argument. Each
+implies a different remedy for FD-62 and for the 30-site shape. Every candidate
+touches schema and requires its own gated decision. **Ownership here means the item
+has a home and a reader, not that a remedy is selected.**
+
 ## §5 What this register does not do
 
 - Does not evaluate or select fixes. Every entry's remedy is unevaluated.
@@ -215,3 +327,4 @@ by a Fix Plan revision that cites the entry, never by editing this file alone.
 *Date: 2026-08-09. Main at `f499a3ba`. Ratified by: F-Stats-1 Fix Plan v1.31.*
 *Admitted: XK-1. Mints no FD. Evaluates no fix. No live database contact.*
 *Admitted: XK-2 — 2026-08-14. Ratified by: F-Stats-1 Fix Plan v1.46. Main at `055da746`. Mints no FD. Evaluates no fix. No live database contact.*
+*Admitted: XK-3 — 2026-08-16. Ratified by: F-Stats-1 Fix Plan v1.57. Main at `ff3637ec`. Mints no FD. Evaluates no fix. No live database contact.*
