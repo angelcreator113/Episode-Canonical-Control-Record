@@ -33,11 +33,11 @@
 const express  = require('express');
 const router   = express.Router();
 const { Op: _Op }   = require('sequelize');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { fireRipple, resolveEvent } = require('../services/rippleEngine');
 
-// Apply optionalAuth to all routes
-router.use(optionalAuth);
+// Apply requireAuth to all routes
+router.use(requireAuth);
 
 // ── Helper: load models ──────────────────────────────────────────────────────
 function getModels(req) {

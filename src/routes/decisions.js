@@ -4,12 +4,13 @@ const express = require('express');
 const router = express.Router();
 const { UserDecision, DecisionPattern, Episode, Scene } = require('../models');
 const { Op } = require('sequelize');
+const { requireAuth } = require('../middleware/auth');
 
 /**
  * POST /api/decisions
  * Log a user decision
  */
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const {
       episode_id,
@@ -65,7 +66,7 @@ router.post('/', async (req, res) => {
  * GET /api/decisions
  * List decisions with filters
  */
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const {
       episode_id,
@@ -129,7 +130,7 @@ router.get('/', async (req, res) => {
  * GET /api/decisions/patterns
  * List learned patterns
  */
-router.get('/patterns', async (req, res) => {
+router.get('/patterns', requireAuth, async (req, res) => {
   try {
     const {
       pattern_type,
@@ -168,7 +169,7 @@ router.get('/patterns', async (req, res) => {
  * GET /api/decisions/episode/:episodeId/stats
  * Get decision statistics for an episode
  */
-router.get('/episode/:episodeId/stats', async (req, res) => {
+router.get('/episode/:episodeId/stats', requireAuth, async (req, res) => {
   try {
     const decisions = await UserDecision.findAll({
       where: { episode_id: req.params.episodeId },
@@ -236,7 +237,7 @@ router.get('/episode/:episodeId/stats', async (req, res) => {
  * GET /api/decisions/:id
  * Get single decision
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const decision = await UserDecision.findByPk(req.params.id, {
       include: [

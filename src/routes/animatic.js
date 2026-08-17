@@ -6,6 +6,7 @@ const router = express.Router();
 const beatService = require('../services/beatService');
 const { Scene, AudioClip } = require('../models');
 const asyncHandler = require('express-async-handler');
+const { requireAuth } = require('../middleware/auth');
 
 // ==========================================
 // BEAT AUTO-GENERATION
@@ -20,7 +21,7 @@ const asyncHandler = require('express-async-handler');
  *   options: { defaultDuration, paddingBetweenLines, autoGenerateIdle, includeUIBeats }
  * }
  */
-router.post('/scenes/:sceneId/beats/generate', asyncHandler(async (req, res) => {
+router.post('/scenes/:sceneId/beats/generate', requireAuth, asyncHandler(async (req, res) => {
   const { sceneId } = req.params;
   const { scriptLines, options } = req.body;
 
@@ -67,7 +68,7 @@ router.post('/scenes/:sceneId/beats/generate', asyncHandler(async (req, res) => 
  *   options: { defaultDuration, paddingBetweenLines, autoGenerateIdle, includeUIBeats }
  * }
  */
-router.post('/scenes/:sceneId/beats/preview', asyncHandler(async (req, res) => {
+router.post('/scenes/:sceneId/beats/preview', requireAuth, asyncHandler(async (req, res) => {
   const { sceneId } = req.params;
   const { scriptLines, options } = req.body;
 
@@ -95,7 +96,7 @@ router.post('/scenes/:sceneId/beats/preview', asyncHandler(async (req, res) => {
  * DELETE /api/v1/scenes/:sceneId/beats/clear
  * Clear all beats and character clips for a scene
  */
-router.delete('/scenes/:sceneId/beats/clear', asyncHandler(async (req, res) => {
+router.delete('/scenes/:sceneId/beats/clear', requireAuth, asyncHandler(async (req, res) => {
   const { sceneId } = req.params;
 
   // Verify scene exists
@@ -120,7 +121,7 @@ router.delete('/scenes/:sceneId/beats/clear', asyncHandler(async (req, res) => {
  * POST /api/v1/scenes/:sceneId/beats/dialogue-clips
  * Generate dialogue clips for all dialogue beats
  */
-router.post('/scenes/:sceneId/beats/dialogue-clips', asyncHandler(async (req, res) => {
+router.post('/scenes/:sceneId/beats/dialogue-clips', requireAuth, asyncHandler(async (req, res) => {
   const { sceneId } = req.params;
 
   // Verify scene exists
@@ -152,7 +153,7 @@ router.post('/scenes/:sceneId/beats/dialogue-clips', asyncHandler(async (req, re
  * GET /api/v1/scenes/:sceneId/composition
  * Get complete scene composition (beats + character clips + audio clips)
  */
-router.get('/scenes/:sceneId/composition', asyncHandler(async (req, res) => {
+router.get('/scenes/:sceneId/composition', requireAuth, asyncHandler(async (req, res) => {
   const { sceneId } = req.params;
 
   // Verify scene exists
@@ -214,7 +215,7 @@ router.get('/scenes/:sceneId/composition', asyncHandler(async (req, res) => {
  * GET /api/v1/scenes/:sceneId/timeline
  * Get timeline-friendly representation of all tracks
  */
-router.get('/scenes/:sceneId/timeline', asyncHandler(async (req, res) => {
+router.get('/scenes/:sceneId/timeline', requireAuth, asyncHandler(async (req, res) => {
   const { sceneId } = req.params;
 
   // Verify scene exists
