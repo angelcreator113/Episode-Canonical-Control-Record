@@ -13,6 +13,7 @@
 
 const express = require('express');
 const { Sequelize } = require('sequelize');
+const { requireAuth } = require('../middleware/auth');
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
   logging: false,
@@ -25,7 +26,7 @@ const router = express.Router();
  * List templates with optional filters
  * Query params: status, locked, format, name
  */
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const { status, locked, format, name, limit = 50, offset = 0 } = req.query;
 
@@ -106,7 +107,7 @@ router.get('/', async (req, res) => {
  * GET /api/v1/template-studio/:id
  * Get single template by ID
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -140,7 +141,7 @@ router.get('/:id', async (req, res) => {
  * POST /api/v1/template-studio
  * Create new template (always starts as DRAFT)
  */
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const {
       name,
@@ -220,7 +221,7 @@ router.post('/', async (req, res) => {
  * PUT /api/v1/template-studio/:id
  * Update template (only DRAFT templates can be edited)
  */
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -340,7 +341,7 @@ router.put('/:id', async (req, res) => {
  * DELETE /api/v1/template-studio/:id
  * Delete template (only DRAFT templates)
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -387,7 +388,7 @@ router.delete('/:id', async (req, res) => {
  * POST /api/v1/template-studio/:id/clone
  * Clone template to new version (creates DRAFT copy)
  */
-router.post('/:id/clone', async (req, res) => {
+router.post('/:id/clone', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -467,7 +468,7 @@ router.post('/:id/clone', async (req, res) => {
  * POST /api/v1/template-studio/:id/publish
  * Publish template (DRAFT → PUBLISHED)
  */
-router.post('/:id/publish', async (req, res) => {
+router.post('/:id/publish', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -518,7 +519,7 @@ router.post('/:id/publish', async (req, res) => {
  * POST /api/v1/template-studio/:id/lock
  * Lock template (prevents any further edits)
  */
-router.post('/:id/lock', async (req, res) => {
+router.post('/:id/lock', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -569,7 +570,7 @@ router.post('/:id/lock', async (req, res) => {
  * POST /api/v1/template-studio/:id/archive
  * Archive template (PUBLISHED → ARCHIVED)
  */
-router.post('/:id/archive', async (req, res) => {
+router.post('/:id/archive', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 

@@ -1,14 +1,14 @@
 // ════════════════════════════════════════════════════════════════════════════
-// LUXURY FILTER ROUTES — v1.1 (tightened regex + optionalAuth)
+// LUXURY FILTER ROUTES — v1.1 (tightened regex + requireAuth)
 // Mount at: /api/v1/luxury-filter
 // ════════════════════════════════════════════════════════════════════════════
 
 const express = require('express');
 const luxuryFilterRouter = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { runLuxuryFilter, quickCheck } = require('../services/luxuryFilterService');
 
-luxuryFilterRouter.post('/validate', optionalAuth, async (req, res) => {
+luxuryFilterRouter.post('/validate', requireAuth, async (req, res) => {
   try {
     const { scriptText, episodeTitle, episodeArchetype, designedIntent, skipSemanticPass = false } = req.body;
 
@@ -29,7 +29,7 @@ luxuryFilterRouter.post('/validate', optionalAuth, async (req, res) => {
   }
 });
 
-luxuryFilterRouter.post('/quick-check', optionalAuth, (req, res) => {
+luxuryFilterRouter.post('/quick-check', requireAuth, (req, res) => {
   try {
     const { scriptText } = req.body;
     if (!scriptText || typeof scriptText !== 'string') {

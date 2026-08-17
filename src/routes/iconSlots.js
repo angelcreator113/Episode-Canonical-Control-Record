@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const iconSlotController = require('../controllers/iconSlotController');
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 // ============================================================================
 // ICON SLOT MAPPINGS
@@ -18,7 +18,7 @@ const { optionalAuth } = require('../middleware/auth');
  */
 router.get(
   '/mappings',
-  optionalAuth,
+  requireAuth,
   iconSlotController.getAllMappings
 );
 
@@ -28,7 +28,7 @@ router.get(
  */
 router.get(
   '/mappings/:assetRole',
-  optionalAuth,
+  requireAuth,
   iconSlotController.getMappingByRole
 );
 
@@ -38,7 +38,7 @@ router.get(
  */
 router.get(
   '/:slotId',
-  optionalAuth,
+  requireAuth,
   iconSlotController.getIconsBySlot
 );
 
@@ -48,7 +48,7 @@ router.get(
  */
 router.post(
   '/mappings',
-  optionalAuth,
+  requireAuth,
   iconSlotController.createMapping
 );
 
@@ -58,7 +58,7 @@ router.post(
  */
 router.put(
   '/mappings/:assetRole',
-  optionalAuth,
+  requireAuth,
   iconSlotController.updateMapping
 );
 
@@ -68,7 +68,7 @@ router.put(
  */
 router.delete(
   '/mappings/:assetRole',
-  optionalAuth,
+  requireAuth,
   iconSlotController.deleteMapping
 );
 

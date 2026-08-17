@@ -5,7 +5,7 @@
 
 const express = require('express');
 const seasonRhythmRouter = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { validateRhythm, getArcHealthSummary } = require('../services/seasonRhythmValidator');
 
 /**
@@ -13,7 +13,7 @@ const { validateRhythm, getArcHealthSummary } = require('../services/seasonRhyth
  * Body: { showId, episodeNumber, proposedOutcome, proposedIntent }
  * proposedOutcome: 'slay' | 'pass' | 'safe' | 'fail' (case-insensitive)
  */
-seasonRhythmRouter.post('/validate', optionalAuth, async (req, res) => {
+seasonRhythmRouter.post('/validate', requireAuth, async (req, res) => {
   try {
     const { showId, episodeNumber, proposedOutcome, proposedIntent } = req.body;
 
@@ -47,7 +47,7 @@ seasonRhythmRouter.post('/validate', optionalAuth, async (req, res) => {
 /**
  * GET /api/v1/season-rhythm/arc-health/:showId/:episodeNumber
  */
-seasonRhythmRouter.get('/arc-health/:showId/:episodeNumber', optionalAuth, async (req, res) => {
+seasonRhythmRouter.get('/arc-health/:showId/:episodeNumber', requireAuth, async (req, res) => {
   try {
     const health = await getArcHealthSummary(
       req.params.showId,
@@ -63,7 +63,7 @@ seasonRhythmRouter.get('/arc-health/:showId/:episodeNumber', optionalAuth, async
 /**
  * GET /api/v1/season-rhythm/season-health/:showId
  */
-seasonRhythmRouter.get('/season-health/:showId', optionalAuth, async (req, res) => {
+seasonRhythmRouter.get('/season-health/:showId', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const { Episode } = require('../models');

@@ -17,6 +17,7 @@ const ThumbnailGeneratorService = require('../services/ThumbnailGeneratorService
 const VersioningService = require('../services/VersioningService');
 const FilterService = require('../services/FilterService');
 const { models } = require('../models');
+const { requireAuth } = require('../middleware/auth');
 const { authenticateJWT, requireGroup } = require('../middleware/jwtAuth');
 const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { fromIni, fromEnv } = require('@aws-sdk/credential-providers');
@@ -65,7 +66,7 @@ const isValidUUID = (uuid) => {
  * GET /api/v1/compositions
  * Get all compositions for an episode (includes composition_assets)
  */
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const { episode_id, limit } = req.query;
 
@@ -145,7 +146,7 @@ router.get('/', async (req, res) => {
  * Create new composition and generate selected format thumbnails
  * Phase 2.5: Admin manual trigger - no auth required
  */
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     console.log('📥 POST /compositions request body:', JSON.stringify(req.body, null, 2));
 
@@ -431,7 +432,7 @@ router.post('/', async (req, res) => {
  * GET /api/v1/compositions/episode/:episodeId
  * Get all compositions for episode
  */
-router.get('/episode/:episodeId', async (req, res) => {
+router.get('/episode/:episodeId', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const compositions = await CompositionService.getEpisodeCompositions(episodeId);
@@ -454,7 +455,7 @@ router.get('/episode/:episodeId', async (req, res) => {
  * GET /api/v1/compositions/:id
  * Get composition by ID
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const composition = await CompositionService.getComposition(id);
@@ -614,7 +615,7 @@ router.post('/:id/generate', authenticateJWT, requireGroup('ADMIN'), async (req,
  * Generate thumbnails using Runway ML + Sharp (Phase 2.5)
  * Manual trigger - no auth required for testing
  */
-router.post('/:id/generate-thumbnails', async (req, res) => {
+router.post('/:id/generate-thumbnails', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`🎬 Generating thumbnails for composition: ${id}`);
@@ -913,7 +914,7 @@ router.delete('/:id', authenticateJWT, async (req, res) => {
  * POST /api/v1/compositions/:id/generate-formats
  * Generate additional formats for existing composition
  */
-router.post('/:id/generate-formats', async (req, res) => {
+router.post('/:id/generate-formats', requireAuth, async (req, res) => {
   try {
     const { selected_formats } = req.body; // Array: ['FACEBOOK', 'TWITTER']
 
@@ -945,7 +946,7 @@ router.post('/:id/generate-formats', async (req, res) => {
  * PATCH /api/v1/compositions/:id
  * Update composition assets
  */
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireAuth, async (req, res) => {
   try {
     const composition = await CompositionService.updateComposition(req.params.id, req.body);
 
@@ -965,7 +966,7 @@ router.patch('/:id', async (req, res) => {
  * POST /api/v1/compositions/:id/assets
  * Assign an asset to a composition role slot
  */
-router.post('/:id/assets', async (req, res) => {
+router.post('/:id/assets', requireAuth, async (req, res) => {
   try {
     const { asset_id, role } = req.body;
 
@@ -1027,7 +1028,7 @@ router.post('/:id/assets', async (req, res) => {
  * GET /api/v1/compositions/:id/versions
  * Get complete version history for a composition
  */
-router.get('/:id/versions', async (req, res) => {
+router.get('/:id/versions', requireAuth, async (req, res) => {
   try {
     if (!isValidUUID(req.params.id)) {
       return res.status(400).json({ error: 'Invalid composition ID format' });
@@ -1051,7 +1052,7 @@ router.get('/:id/versions', async (req, res) => {
  * GET /api/v1/compositions/:id/versions/:versionNumber
  * Get specific version details with full snapshot
  */
-router.get('/:id/versions/:versionNumber', async (req, res) => {
+router.get('/:id/versions/:versionNumber', requireAuth, async (req, res) => {
   try {
     if (!isValidUUID(req.params.id)) {
       return res.status(400).json({ error: 'Invalid composition ID format' });
@@ -1080,7 +1081,7 @@ router.get('/:id/versions/:versionNumber', async (req, res) => {
  * GET /api/v1/compositions/:id/versions/:versionA/compare/:versionB
  * Compare two versions side-by-side
  */
-router.get('/:id/versions/:versionA/compare/:versionB', async (req, res) => {
+router.get('/:id/versions/:versionA/compare/:versionB', requireAuth, async (req, res) => {
   try {
     if (!isValidUUID(req.params.id)) {
       return res.status(400).json({ error: 'Invalid composition ID format' });
@@ -1111,7 +1112,7 @@ router.get('/:id/versions/:versionA/compare/:versionB', async (req, res) => {
  * POST /api/v1/compositions/:id/revert/:versionNumber
  * Revert composition to a previous version
  */
-router.post('/:id/revert/:versionNumber', async (req, res) => {
+router.post('/:id/revert/:versionNumber', requireAuth, async (req, res) => {
   try {
     if (!isValidUUID(req.params.id)) {
       return res.status(400).json({ error: 'Invalid composition ID format' });
@@ -1145,7 +1146,7 @@ router.post('/:id/revert/:versionNumber', async (req, res) => {
  * GET /api/v1/compositions/:id/version-stats
  * Get version statistics and history summary
  */
-router.get('/:id/version-stats', async (req, res) => {
+router.get('/:id/version-stats', requireAuth, async (req, res) => {
   try {
     if (!isValidUUID(req.params.id)) {
       return res.status(400).json({ error: 'Invalid composition ID format' });
@@ -1184,7 +1185,7 @@ router.get('/:id/version-stats', async (req, res) => {
  *   - offset: pagination offset (default 0)
  *   - episodeId: optional episode filter
  */
-router.get('/search', async (req, res) => {
+router.get('/search', requireAuth, async (req, res) => {
   try {
     const {
       formats = '',
@@ -1251,7 +1252,7 @@ router.get('/search', async (req, res) => {
  * Query Parameters:
  *   - episodeId: optional, limit to specific episode
  */
-router.get('/search/filters/options', async (req, res) => {
+router.get('/search/filters/options', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.query;
     const options = await FilterService.getFilterOptions(episodeId);
@@ -1273,7 +1274,7 @@ router.get('/search/filters/options', async (req, res) => {
  * GET /api/v1/compositions/:id/outputs
  * Get all outputs (generated thumbnails) for a composition
  */
-router.get('/:id/outputs', async (req, res) => {
+router.get('/:id/outputs', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { CompositionOutput } = models;
@@ -1302,7 +1303,7 @@ router.get('/:id/outputs', async (req, res) => {
  *
  * Body: { formats: ['YOUTUBE', 'INSTAGRAM_FEED'], regenerate: false }
  */
-router.post('/:id/outputs/generate', async (req, res) => {
+router.post('/:id/outputs/generate', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { formats, regenerate = false } = req.body;
@@ -1381,7 +1382,7 @@ router.post('/:id/outputs/generate', async (req, res) => {
  * DELETE /api/v1/outputs/:id
  * Delete a specific output (generated thumbnail)
  */
-router.delete('/outputs/:id', async (req, res) => {
+router.delete('/outputs/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { CompositionOutput } = models;
@@ -1416,7 +1417,7 @@ router.delete('/outputs/:id', async (req, res) => {
  * DELETE /api/v1/compositions/:id/assets/:role
  * Remove an asset from a composition slot
  */
-router.delete('/:id/assets/:role', async (req, res) => {
+router.delete('/:id/assets/:role', requireAuth, async (req, res) => {
   try {
     const { id, role } = req.params;
     const { ThumbnailComposition, EpisodeAsset } = models;
@@ -1467,7 +1468,7 @@ router.delete('/:id/assets/:role', async (req, res) => {
  *
  * Body: { draft_overrides: { roles: { ... } } }
  */
-router.post('/:id/save-draft', async (req, res) => {
+router.post('/:id/save-draft', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { draft_overrides } = req.body;
@@ -1516,7 +1517,7 @@ router.post('/:id/save-draft', async (req, res) => {
  *
  * Body: { regenerate_formats: ['YOUTUBE', 'INSTAGRAM_FEED'] }
  */
-router.post('/:id/apply-draft', async (req, res) => {
+router.post('/:id/apply-draft', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { regenerate_formats = [] } = req.body;
@@ -1618,7 +1619,7 @@ router.post('/:id/apply-draft', async (req, res) => {
  * PATCH /api/v1/compositions/:id/slot-positions
  * Save custom slot positions/sizes to composition config
  */
-router.patch('/:id/slot-positions', async (req, res) => {
+router.patch('/:id/slot-positions', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { slotPositions, backgroundOpacity, selectedFormat } = req.body;

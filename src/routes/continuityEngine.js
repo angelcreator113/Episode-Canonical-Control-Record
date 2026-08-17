@@ -8,6 +8,7 @@
 
 const express = require('express');
 const router = express.Router();
+const { requireAuth } = require('../middleware/auth');
 
 /* ------------------------------------------------------------------ */
 /*  Lazy model loader                                                  */
@@ -53,7 +54,7 @@ async function ensureTables() {
 /* ================================================================== */
 
 /** GET /timelines — list all timelines */
-router.get('/timelines', async (req, res) => {
+router.get('/timelines', requireAuth, async (req, res) => {
   try {
     await ensureTables();
     const { ContinuityTimeline, ContinuityBeat, ContinuityCharacter } = getModels();
@@ -72,7 +73,7 @@ router.get('/timelines', async (req, res) => {
 });
 
 /** GET /timelines/:id — full timeline with beats + characters */
-router.get('/timelines/:id', async (req, res) => {
+router.get('/timelines/:id', requireAuth, async (req, res) => {
   try {
     const { ContinuityTimeline, ContinuityBeat, ContinuityCharacter } = getModels();
     const timeline = await ContinuityTimeline.findByPk(req.params.id, {
@@ -98,7 +99,7 @@ router.get('/timelines/:id', async (req, res) => {
 });
 
 /** POST /timelines — create a new timeline */
-router.post('/timelines', async (req, res) => {
+router.post('/timelines', requireAuth, async (req, res) => {
   try {
     const { ContinuityTimeline } = getModels();
     const { title, description, season_tag, show_id } = req.body;
@@ -117,7 +118,7 @@ router.post('/timelines', async (req, res) => {
 });
 
 /** PUT /timelines/:id — update timeline metadata */
-router.put('/timelines/:id', async (req, res) => {
+router.put('/timelines/:id', requireAuth, async (req, res) => {
   try {
     const { ContinuityTimeline } = getModels();
     const timeline = await ContinuityTimeline.findByPk(req.params.id);
@@ -137,7 +138,7 @@ router.put('/timelines/:id', async (req, res) => {
 });
 
 /** DELETE /timelines/:id */
-router.delete('/timelines/:id', async (req, res) => {
+router.delete('/timelines/:id', requireAuth, async (req, res) => {
   try {
     const { ContinuityTimeline } = getModels();
     const timeline = await ContinuityTimeline.findByPk(req.params.id);
@@ -155,7 +156,7 @@ router.delete('/timelines/:id', async (req, res) => {
 /* ================================================================== */
 
 /** POST /timelines/:id/characters — add a character to a timeline */
-router.post('/timelines/:id/characters', async (req, res) => {
+router.post('/timelines/:id/characters', requireAuth, async (req, res) => {
   try {
     const { ContinuityTimeline, ContinuityCharacter } = getModels();
     const timeline = await ContinuityTimeline.findByPk(req.params.id);
@@ -184,7 +185,7 @@ router.post('/timelines/:id/characters', async (req, res) => {
 });
 
 /** PUT /characters/:id — update a character */
-router.put('/characters/:id', async (req, res) => {
+router.put('/characters/:id', requireAuth, async (req, res) => {
   try {
     const { ContinuityCharacter } = getModels();
     const character = await ContinuityCharacter.findByPk(req.params.id);
@@ -204,7 +205,7 @@ router.put('/characters/:id', async (req, res) => {
 });
 
 /** DELETE /characters/:id */
-router.delete('/characters/:id', async (req, res) => {
+router.delete('/characters/:id', requireAuth, async (req, res) => {
   try {
     const { ContinuityCharacter } = getModels();
     const char = await ContinuityCharacter.findByPk(req.params.id);
@@ -222,7 +223,7 @@ router.delete('/characters/:id', async (req, res) => {
 /* ================================================================== */
 
 /** POST /timelines/:id/beats — add a beat with character assignments */
-router.post('/timelines/:id/beats', async (req, res) => {
+router.post('/timelines/:id/beats', requireAuth, async (req, res) => {
   try {
     const { ContinuityTimeline, ContinuityBeat, ContinuityCharacter, ContinuityBeatCharacter } = getModels();
     const timeline = await ContinuityTimeline.findByPk(req.params.id);
@@ -273,7 +274,7 @@ router.post('/timelines/:id/beats', async (req, res) => {
 });
 
 /** PUT /beats/:id — update a beat + optionally reassign characters */
-router.put('/beats/:id', async (req, res) => {
+router.put('/beats/:id', requireAuth, async (req, res) => {
   try {
     const { ContinuityBeat, ContinuityCharacter, ContinuityBeatCharacter } = getModels();
     const beat = await ContinuityBeat.findByPk(req.params.id);
@@ -309,7 +310,7 @@ router.put('/beats/:id', async (req, res) => {
 });
 
 /** DELETE /beats/:id */
-router.delete('/beats/:id', async (req, res) => {
+router.delete('/beats/:id', requireAuth, async (req, res) => {
   try {
     const { ContinuityBeat } = getModels();
     const beat = await ContinuityBeat.findByPk(req.params.id);
@@ -323,7 +324,7 @@ router.delete('/beats/:id', async (req, res) => {
 });
 
 /** POST /beats/reorder — bulk-update sort_order */
-router.post('/beats/reorder', async (req, res) => {
+router.post('/beats/reorder', requireAuth, async (req, res) => {
   try {
     const { ContinuityBeat } = getModels();
     const { order } = req.body; // [{ id, sort_order }, ...]
@@ -343,7 +344,7 @@ router.post('/beats/reorder', async (req, res) => {
 /* ================================================================== */
 
 /** GET /timelines/:id/conflicts — detect all continuity conflicts */
-router.get('/timelines/:id/conflicts', async (req, res) => {
+router.get('/timelines/:id/conflicts', requireAuth, async (req, res) => {
   try {
     const { ContinuityBeat, ContinuityCharacter } = getModels();
 
@@ -404,7 +405,7 @@ router.get('/timelines/:id/conflicts', async (req, res) => {
 /*  SEED — Preloads demo data matching the mockup                      */
 /* ================================================================== */
 
-router.post('/timelines/:id/seed-demo', async (req, res) => {
+router.post('/timelines/:id/seed-demo', requireAuth, async (req, res) => {
   try {
     const { ContinuityTimeline, ContinuityCharacter, ContinuityBeat, ContinuityBeatCharacter } = getModels();
 
