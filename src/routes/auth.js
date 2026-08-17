@@ -40,7 +40,7 @@ const refreshLimiter = rateLimit({
  */
 router.post('/login', loginLimiter, validateLoginRequest, async (req, res) => {
   try {
-    const { email, password, groups, role } = req.body;
+    const { email, password } = req.body;
 
     // Validate email
     if (!email || !email.includes('@')) {
@@ -65,8 +65,8 @@ router.post('/login', loginLimiter, validateLoginRequest, async (req, res) => {
       id: `user-${email.split('@')[0]}-${Date.now()}`, // Generate ID for dev/test
       email,
       name: email.split('@')[0],
-      groups: groups || (role === 'admin' ? ['ADMIN', 'EDITOR'] : ['USER', 'EDITOR']),
-      role: role || 'USER',
+      groups: ['USER'],
+      role: 'USER',
     };
 
     const tokens = TokenService.generateTokenPair(user);
@@ -138,45 +138,6 @@ router.post('/refresh', refreshLimiter, validateRefreshRequest, async (req, res)
       error: 'Unauthorized',
       message: error.message,
       code: 'AUTH_REFRESH_FAILED',
-    });
-  }
-});
-
-/**
- * POST /api/v1/auth/test-token
- * Generate a test token for development
- * Remove or secure this in production!
- */
-router.post('/test-token', async (req, res) => {
-  try {
-    // Only allow in development
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Test tokens not available in production',
-        code: 'AUTH_TEST_NOT_ALLOWED',
-      });
-    }
-
-    const { email, groups, role } = req.body;
-
-    const testToken = TokenService.generateTestToken({
-      email: email || 'test@episode-metadata.dev',
-      groups: groups || ['USER', 'EDITOR'],
-      role: role || 'USER',
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: 'Test token generated',
-      data: testToken,
-    });
-  } catch (error) {
-    console.error('Test token generation error:', error);
-    return res.status(500).json({
-      error: 'Internal Server Error',
-      message: error.message,
-      code: 'AUTH_TEST_TOKEN_ERROR',
     });
   }
 });
