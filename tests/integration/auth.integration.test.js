@@ -265,22 +265,29 @@ const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com');
     });
   });
 
-  describe('POST /api/v1/auth/test-token (Development Only)', () => {
-    it('should generate test token in development', async () => {
-      if (process.env.NODE_ENV === 'production') {
-        expect(true).toBe(true); // Skip in production
-        return;
-      }
-
+  // FD-65 (F-AUTH-1). This route was deleted per Fix Plan v2.50 §1 change #1:
+  // it minted signed tokens for anonymous callers with caller-specified
+  // `groups` and `role`, behind no rate limiter and no validation middleware,
+  // gated only by NODE_ENV. This block previously asserted it returned 200 —
+  // i.e. it was a test that the endpoint worked. It is now a guard that the
+  // route stays gone.
+  //
+  // The request still sends `role: 'ADMIN'` deliberately: that is the payload
+  // which made the endpoint dangerous, and a 404 means no handler is mounted to
+  // receive it in any environment. The previous NODE_ENV skip is dropped
+  // because the route is absent everywhere, not merely blocked in production.
+  //
+  // Re-adding a `/test-token` route is not authorized by v2.50 and would fail
+  // here. If it is ever reinstated, it needs its own adjudication.
+  describe('POST /api/v1/auth/test-token — deleted under FD-65', () => {
+    it('is not mounted; anonymous minting via this route is gone', async () => {
       const res = await request(app).post('/api/v1/auth/test-token').send({
         email: 'custom@test.dev',
         role: 'ADMIN',
       });
 
-      expect(res.status).toBe(200);
-      expect(res.body.data).toHaveProperty('accessToken');
-      expect(res.body.data.user.email).toBe('custom@test.dev');
-      expect(res.body.data.user.role).toBe('ADMIN');
+      expect(res.status).toBe(404);
+      expect(res.body).not.toHaveProperty('data.accessToken');
     });
   });
 
