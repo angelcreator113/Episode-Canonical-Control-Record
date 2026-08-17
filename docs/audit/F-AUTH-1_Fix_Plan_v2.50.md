@@ -3,7 +3,7 @@
 
 **Document version**
 
-v2.50 — **AUTHORIZES REMEDIATION. MINTS NOTHING. SHIPS NO CODE.** FD tail remains **FD-65 (F-AUTH-1)**; XK tail remains **XK-3**. Authorizes a **declared-partial** remediation of FD-65: deletion of the `POST /api/v1/auth/test-token` route, and removal of caller-supplied `groups` / `role` from `POST /api/v1/auth/login`. **The authorization is bounded at §1 and closes nothing.** Records that **Cognito token issuance has never existed in this codebase** (§2), which reduces all three `/login` remediation options to scheduled projects (§3). **Cites FD-65 (F-AUTH-1), minted at v2.49, pending merge as of this basis** — see §9. Derived from git against `origin/main` at `ffe91c3d`. No live database contact and no request issued to any deployed host.
+v2.50 — **AUTHORIZES REMEDIATION. MINTS NOTHING. SHIPS NO CODE.** FD tail remains **FD-65 (F-AUTH-1)**; XK tail remains **XK-3**. Authorizes a **declared-partial** remediation of FD-65: deletion of the `POST /api/v1/auth/test-token` route, and removal of caller-supplied `groups` / `role` from `POST /api/v1/auth/login`. **The authorization is bounded at §1 and closes nothing.** Records that **Cognito token issuance has never existed in this codebase** (§2), which reduces all three `/login` remediation options to scheduled projects (§3). **Cites FD-65 (F-AUTH-1), minted at v2.49 and landed on main at `2359cbe6`** — see §9. Derived from git against `origin/main` at `2359cbe6`. No live database contact and no request issued to any deployed host.
 
 **Author**
 
@@ -140,13 +140,13 @@ The closure revision — the v2.47 slot in the v2.46 → code → v2.47 cycle th
 
 # §9. Basis and merge-order dependency
 
-**This revision cites FD-65 (F-AUTH-1), which is minted at v2.49 and is not in `origin/main` as of this basis.**
+**This revision cites FD-65 (F-AUTH-1), minted at v2.49 and now present in `origin/main` at `2359cbe6`.**
 
-Basis is `ffe91c3d`. At the time of drafting, PR **#1041** (v2.48, mints FD-64) and the v2.49 PR are both open and unmerged, the latter blocked by a GitHub API outage rather than by review.
+Basis is `2359cbe6`. PR **#1041** (v2.48, mints FD-64) merged at `436a8772`; PR **#1042** (v2.49, mints FD-65) merged at `2359cbe6`.
 
-**Required merge order: v2.48 → v2.49 → v2.50.** v2.49 §6 supersedes v2.48 §5.1, and a supersession landing before the text it supersedes leaves `main` briefly holding a correction to an absent document. This revision inherits that constraint and adds one: it authorizes remediation of a finding that must exist in `main` first.
+**The required merge order, v2.48 → v2.49 → v2.50, was honoured.** v2.49 §6 supersedes v2.48 §5.1, and FD-65 was present in `main` before this revision's authorization could rely on it. The dependency is satisfied.
 
-**This dependency is stated rather than resolved.** If the basis advances before this revision lands, its basis line and this section are to be updated in place before merge — that is a pre-merge correction to an unlanded document, not an edit to a prior revision's body, and does not engage the additive-supersede discipline.
+**The pre-merge licence to update this revision's basis line and this section in place was exercised here.** This is a correction to an unlanded document, not an edit to a prior revision's body, and does not engage the additive-supersede discipline.
 
 **That licence expires at merge, and expires completely.** Once this revision is in `main`, its basis line and this section are a landed body like any other. Any subsequent correction to them is a **v2.51 matter and must be made forward**, under the same additive-supersede discipline that governs §2's and §6's corrections to v2.49. **There is no window in which an in-place edit to a merged revision is permitted by this paragraph or any other.**
 
@@ -178,10 +178,10 @@ Basis is `ffe91c3d`. At the time of drafting, PR **#1041** (v2.48, mints FD-64) 
 - Does not edit any prior revision's body. §2 corrects v2.49 §1's reading of the `/login` comment **forward**; §6 narrows v2.49 §2.3 **forward**. Both prior texts stand as written.
 - Does not supply Gate G3's authenticated half. **Track G4 is not entered. Track G5 remains BLOCKED.**
 - Does not claim or open a prod window. **Prod remains FROZEN; confirm freeze status live before any prod-touching action.**
-- **No live database contact and no request issued to any deployed host.** Derived from git against `origin/main` at `ffe91c3d`.
+- **No live database contact and no request issued to any deployed host.** Derived from git against `origin/main` at `2359cbe6`.
 
 ---
 
 *Author: Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni.*
-*Date: 2026-08-17. Main at `ffe91c3d`. Predecessor: v2.49.*
-*Type: Remediation adjudication — the v2.46 slot in the adjudicate → ship → close cycle. Authorizes a declared-partial fix against FD-65, bounded at §1 and closing nothing. Records that Cognito issuance has never existed and costs the three `/login` options as projects. Fixes the closure revision's obligations in advance. Ships no code. Mints no FD, no XK, no PE. Tail: FD-65. XK tail: XK-3. Changes no gate. Cites FD-65 pending merge — see §9. No live database contact. [skip-automerge]*
+*Date: 2026-08-17. Main at `2359cbe6`. Predecessor: v2.49.*
+*Type: Remediation adjudication — the v2.46 slot in the adjudicate → ship → close cycle. Authorizes a declared-partial fix against FD-65, bounded at §1 and closing nothing. Records that Cognito issuance has never existed and costs the three `/login` options as projects. Fixes the closure revision's obligations in advance. Ships no code. Mints no FD, no XK, no PE. Tail: FD-65. XK tail: XK-3. Changes no gate. Cites FD-65 landed on main — see §9. No live database contact. [skip-automerge]*
