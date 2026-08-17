@@ -17,13 +17,31 @@
  *   - malformed header     -> 401 AUTH_INVALID_FORMAT
  * Only a well-formed bearer token reaches the verifier.
  *
- * DEFERRED, and recorded at Fix Plan v2.47 §4.1: the authenticated-200 half of
- * Gate G3's minimum. It needs a mocked Cognito verifier, which this suite does
- * not have. tests/integration/auth.integration.test.js uses TokenService, which
- * is the jwtAuth.js path (D20) and does not authenticate requireAuth routes.
+ * Gate G3's authenticated half is supplied below, and needs no Cognito mock.
+ * An earlier draft of this comment claimed it did, on the grounds that
+ * TokenService is the jwtAuth.js path (D20) and does not authenticate
+ * requireAuth routes. That was wrong, and Fix Plan v2.49 §6 supersedes it:
+ * middleware/auth.js:2 imports tokenService's verifyToken as verifyHs256Token,
+ * and verifyToken:190 routes HS256 tokens to it. A TokenService-minted token
+ * therefore authenticates a requireAuth route directly.
+ *
+ * The routing is by `alg` in the token header, so it is environment-
+ * independent — the NODE_ENV === 'test' branch at auth.js:197 is only the
+ * unparseable-alg fallback and is not what makes these tests pass.
  */
 const request = require('supertest');
 const app = require('../../src/app');
+const TokenService = require('../../src/services/tokenService');
+
+// Gate G3's authenticated half. Minted through the HS256 path requireAuth
+// actually accepts (v2.49 §6). Deliberately NOT the ADMIN group: these routes
+// are Tier 1 per v2.46, so a plain authenticated principal is the correct
+// probe, and using ADMIN would mask a route that had been mis-tiered upward.
+const authToken = () =>
+  TokenService.generateToken(
+    { id: 'fd63-gate-g3', email: 'fd63@example.test', groups: ['USER'], role: 'USER' },
+    'access'
+  );
 
 // Mirrors the guard in auth.integration.test.js — never run against RDS.
 const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com');
@@ -77,6 +95,28 @@ const SHAPES = [
       expect(res.body).not.toHaveProperty('status', 'SUCCESS');
       expect(res.body).not.toHaveProperty('success', true);
     });
+
+    // Gate G3's authenticated half for this sub-form.
+    //
+    // The assertion is deliberately negative — "not rejected by auth" — and not
+    // a 200. These handlers validate bodies and touch the database, so an
+    // authenticated request legitimately returns 400 or 500 here. Asserting 200
+    // would couple this suite to handler behaviour it is not testing and would
+    // fail for reasons that have nothing to do with authentication.
+    //
+    // What it proves: requireAuth ran, accepted the credential, and called
+    // next(). A 401 of either code would mean it did not.
+    test('valid HS256 token -> passes requireAuth and reaches the handler', async () => {
+      const res = await request(app)
+        [method](url)
+        .set('Authorization', `Bearer ${authToken()}`)
+        .send({});
+
+      expect(res.status).not.toBe(401);
+      expect(['AUTH_REQUIRED', 'AUTH_INVALID_FORMAT', 'AUTH_INVALID_TOKEN']).not.toContain(
+        res.body?.code
+      );
+    });
   });
 
   // Malformed-header path. Distinct code, and it also proves the middleware is
@@ -96,6 +136,38 @@ const SHAPES = [
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty('code', 'AUTH_INVALID_FORMAT');
     });
+  });
+
+  // Negative control for the authenticated half above.
+  //
+  // Those tests assert "not 401", which is only meaningful if a 401 is
+  // reachable on the same request shape. This proves it is: a structurally
+  // valid HS256 token signed with the wrong secret is rejected. Without this,
+  // a requireAuth that had degraded to accepting anything would leave every
+  // authenticated assertion green.
+  test('well-formed HS256 token with a bad signature is rejected', async () => {
+    const jwt = require('jsonwebtoken');
+    const forged = jwt.sign(
+      { sub: 'fd63-forged', email: 'forged@example.test', type: 'access' },
+      'not-the-real-secret-but-long-enough-32chars',
+      { algorithm: 'HS256', expiresIn: '1h' }
+    );
+
+    const res = await request(app)
+      .post('/api/v1/decisions')
+      .set('Authorization', `Bearer ${forged}`)
+      .send({});
+
+    expect(res.status).toBe(401);
+
+    // The code, not just the status, is what makes this a control. requireAuth
+    // emits 401 from three places: AUTH_REQUIRED (no header), from
+    // AUTH_INVALID_FORMAT (header shape), and AUTH_INVALID_TOKEN from the catch
+    // after verifyToken has run and thrown. Only the third proves the token was
+    // parsed, routed to the HS256 verifier, and rejected on its signature.
+    // Asserting the status alone would pass on a merely malformed token, which
+    // never reaches the verifier at all.
+    expect(res.body).toHaveProperty('code', 'AUTH_INVALID_TOKEN');
   });
 
   // The two codes must stay distinct. F-Auth-4's frontend contract branches on
