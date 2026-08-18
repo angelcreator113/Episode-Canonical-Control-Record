@@ -195,7 +195,7 @@ That is the discipline working — none of these was found by an external check 
 | 9 | FD-63's probe half — §21's G1 detects one of four miss shapes | v2.43 §2.3; v2.47 §5 | — | — |
 | 10 | FD-64 — `getRolesForshow` casing; `Model.update()` without `where` | v2.48 §2 | An authorizing revision | — |
 
-**Nine of ten open items carry no owner.** The column is left blank rather than filled with a plausible name, **because the blanks are the finding.** The ledger grew from six items to ten in the course of reading one gate's full text.
+**Ten of eleven open items carry no owner.** The column is left blank rather than filled with a plausible name, **because the blanks are the finding.** The ledger grew from six items to eleven in the course of reading one gate's full text and then scoping what it blocks.
 
 ---
 
@@ -221,7 +221,7 @@ That is the discipline working — none of these was found by an external check 
 - **A soak would establish neither that the surface is closed nor clause 3** (§2.1).
 - **The fifth instance of v2.51 §4's pattern closed the last check on a live defect, rather than costing a correction. A sixth is recorded alongside it. Four of the six now originate inside the documents that state the discipline** (§4.1).
 - **v1.5 §6.1's heading and table disagree on the number of gates. Unresolved** (§7).
-- **Nine of ten open items are unowned** (§6).
+- **Ten of eleven open items are unowned** (§6).
 
 # §9. What this revision does not do
 
