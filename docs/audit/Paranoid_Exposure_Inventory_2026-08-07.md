@@ -7,6 +7,34 @@
 | **Basis** | `394ca354`. Probe run `31211484715` (workflow_dispatch, branch `diag/deleted-at-inventory`, since deleted). |
 | **Owner** | UNASSIGNED. Spans F-Stats-1, F-Ward-1, F-Ward-3. |
 
+## CORRECTION BANNER — added 2026-08-18
+
+**Body below preserved verbatim. Where they disagree, this banner governs. §2's exposed count and §7's appendix are corrected; §1's mechanism and §6's declinations are unchanged.**
+
+**Authority — a reading.** This document is the measurement of record, amended by additive-supersede, and corrected here on the reading that correcting a measurement needs no ratification — the same reading applied to XK-1's entry. **If a ratifying revision disagrees, this is an unratified correction that announced itself as one.**
+
+**The correction, derived here and not inherited.** §3 states the mechanism and excludes four models. **The same criterion across all 48 in §7 excludes eleven more.** Measured 2026-08-18: every model loaded via `src/models/index.js`, tested for whether a deletion attribute resolves — `Model.options.deletedAt` or `deletedAt`, checked against `rawAttributes` — with column presence from `information_schema` on a scratch database built by all 210 migrations. Models resolving **no deletion attribute** cannot name `deleted_at` and cannot fail:
+
+`activity_logs`, `ai_usage_logs`, `metadata_storage`, `asset_labels`, `asset_roles`, `asset_usage_log`, `processing_queue`, `show_configs`, `thumbnails`, `episode_wardrobe`, `episode_wardrobe_defaults`
+
+| | as published | corrected |
+|---|---:|---:|
+| Model tables inheriting `paranoid` | 110 | **110 — unchanged** |
+| Missing `deleted_at` and exposed | 48 | **37** |
+| Missing `deleted_at` but inoperatively paranoid | 4 | **15** |
+
+**The denominator is confirmed, not corrected.** An independent probe on 2026-08-18 also found 110. Two instruments, eleven days apart, same figure. **That confirms the population and nothing about the exposure count**, since both applied the same flawed test to it.
+
+**Criterion, precisely.** `timestamps: false` is *sufficient*; **the property that matters is that no deletion attribute resolves.** Both tests were run over the eleven and agree on all eleven. A re-run should use the attribute test. No custom `deletedAt` mappings exist in the set — verified, not assumed.
+
+**`episode_wardrobe` leaves this list and is not thereby clean.** It is F-Ward-1's Pattern 40b table — **no migration anywhere** — and that finding is untouched. Leaving a `deleted_at` exposure list is not a statement that the table is sound.
+
+**§5's reciprocal-reference obligation — now open, not unaffected.** With `episode_wardrobe` and `episode_wardrobe_defaults` both withdrawn, no exposed table remains cited for F-Ward-1. Whether F-Ward-1's half of the obligation survives depends on whether it tracks reach or names keystones. **Not resolved here; queued for the ratifying revision.** F-Ward-3's half is unaffected.
+
+**Cross-reference.** `Cross_Keystone_Register.md` XK-1 cites this document and carries its own banner, including the F-Ward-1 reach withdrawal. Per that register's §5 it cannot amend this artifact; **the two are independent derivations of the same measurement, not one citing the other.** Raised also at `FD-66_Model_Migration_Contract_Mismatch_2026-08-18_DRAFT.md` §B4.
+
+---
+
 ## §1 Mechanism
 
 `src/config/sequelize.js` sets `paranoid: true` in the global `define`
