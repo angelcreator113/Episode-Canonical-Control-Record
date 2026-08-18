@@ -19,7 +19,7 @@ exports.generateIconCues = async (req, res) => {
     // Generate icon cues using AI service
     const result = await iconCueGeneratorService.generateFromEpisode(episodeId, {
       regenerate,
-      userId: req.user?.sub,
+      userId: req.user?.id,
     });
     
     res.json({

@@ -19,7 +19,7 @@ router.post('/', requireAuth, async (req, res) => {
     const log = await DecisionLog.create({
       episode_id,
       scene_id,
-      user_id: req.user?.sub,
+      user_id: req.user?.id,
       action_type,
       entity_type,
       entity_id,

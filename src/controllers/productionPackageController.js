@@ -19,7 +19,7 @@ exports.generateProductionPackage = async (req, res) => {
     
     // Generate complete package
     const result = await productionPackageService.generatePackage(episodeId, {
-      userId: req.user?.sub,
+      userId: req.user?.id,
     });
     
     const duration = Date.now() - startTime;

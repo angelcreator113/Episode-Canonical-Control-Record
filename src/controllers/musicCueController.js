@@ -17,7 +17,7 @@ exports.generateMusicCues = async (req, res) => {
     
     // Generate music cues from scene structure
     const result = await musicCueGeneratorService.generateFromScenes(episodeId, {
-      userId: req.user?.sub,
+      userId: req.user?.id,
     });
     
     res.json({
