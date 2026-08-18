@@ -3,7 +3,7 @@
 
 **Document version**
 
-v2.52 — **WITHHOLDS THE GATE G3 DISCHARGE. CHANGES NO GATE. MINTS NOTHING. SHIPS NO CODE.** FD tail remains **FD-65 (F-AUTH-1)**; XK tail remains **XK-3**. **Gate G3 has four clauses; two are met, one is evidenced, and one is unmet and presently unmeetable** (§1). A discharge ruling was given against v2.47 §4.1's single-clause quotation of the gate; **a ruling on a partial premise does not reach the gate as written**, and this revision therefore records no discharge (§1.1). **Clause 3's blocker is a live defect**: `req.user` carries no `sub` key in any of the three middlewares, and five sites read `req.user?.sub` and persist `undefined` (§1.2). **Track G4's precondition is NOT satisfied** (§2). Records the fifth instance of v2.51 §4's pattern — the first with a measurable cost rather than a correctable record (§4). Derived from git against `origin/main` at `148698cb`. No live database contact and no request issued to any deployed host.
+v2.52 — **WITHHOLDS THE GATE G3 DISCHARGE. CHANGES NO GATE. MINTS NOTHING. SHIPS NO CODE.** FD tail remains **FD-65 (F-AUTH-1)**; XK tail remains **XK-3**. **Gate G3 has four clauses; two are met, one is evidenced, and one is unmet and presently unmeetable** (§1). A discharge ruling was given against v2.47 §4.1's single-clause quotation of the gate; **a ruling on a partial premise does not reach the gate as written**, and this revision therefore records no discharge (§1.1). **Clause 3's blocker is a live defect**: `req.user` carries no `sub` key in any of the three middlewares, and five sites read `req.user?.sub` and persist `undefined` (§1.2). **Track G4's precondition is NOT satisfied** (§2). **Records that F-Auth-5 alone blocks clause 3** — CZ-5 is done, Step 6b is deferred by name and separable (§1.3). Records the fifth and sixth instances of v2.51 §4's pattern, and **corrects v2.49 §2.4's gate count forward: 36 is a floor, not a total** (§4.1). Derived from git against `origin/main` at `148698cb`. No live database contact and no request issued to any deployed host.
 
 **Author**
 
@@ -64,9 +64,23 @@ A sixth site, `src/routes/thumbnails.js:81`, reads `req.user?.sub || req.user?.i
 
 **What is established:** the mechanism, from source and history. **What is not established:** the state of any `decision_logs` row. No database was contacted, prod is FROZEN, and **the age figure is a claim about code, not about rows.** How many writes occurred, and what the `user_id` column holds for them, is **unmeasured**.
 
-**The drift is live and dominant.** `req.user?.sub` appears in 6 files; `req.user?.id` in 26. **Step 6 — which `v1.5:31` schedules to close exactly this drift — is unexecuted.** Clause 3 cannot be met by writing a test; the test would fail. It is blocked on Step 6.
+**The drift is live and dominant.** `req.user?.sub` appears in 6 files; `req.user?.id` in 26. **Clause 3 cannot be met by writing a test; the test would fail.** It is blocked on the sub-step `v1.5:31` schedules to close exactly this drift — **F-Auth-5, and F-Auth-5 alone** (§1.3).
 
 **This revision records the defect because it is clause 3's blocker and therefore the reason the discharge is withheld. It does not mint it.** The mint — an FD number, the five-site enumeration as a finding, the remedy question, and the relationship to F-Auth-5's scheduled fix — belongs to its own revision, on the split v2.49 §5 used for the credential-custody finding.
+
+## §1.3 Step 6's actual status — F-Auth-5 is the only blocker
+
+**"Blocked on Step 6" would be too wide, and the distinction matters to whoever authorizes the fix.** `v1.5:64` gives Step 6 as three sub-steps. They are in three different states.
+
+| Sub-step | State | Evidence |
+|---|---|---|
+| **CZ-5** — `sendBeacon` → `fetch` + `keepalive` | **DONE** | `frontend/src/components/BookEditor.jsx:58` carries `keepalive: true`, with the explanatory comment at `:45`. **`sendBeacon` appears nowhere in `frontend/src/`.** |
+| **F-Auth-4** — reconcile `requireAuth` / `authenticateToken` with the frontend interceptor | **PARTIAL** | Frontend half done — that is clause 4 at §1, met. **Backend half deferred by name:** `src/middleware/auth.js:484` states *"The duplicate `authenticateToken` implementation is removed in a later **Step 6b**."* `authenticateToken` remains live in `activityController`, `notificationController`, `presenceController` and `socketController`. |
+| **F-Auth-5** — close the `req.user.sub` / `req.user.id` drift | **NOT DONE** | §1.2 |
+
+**Only F-Auth-5 blocks clause 3.** Step 6b — removing the duplicate `authenticateToken` — gates nothing currently open and is separable.
+
+**An authorization aimed at clause 3 should name F-Auth-5, not Step 6.** Naming Step 6 would sweep in a deferred sub-step that no open item requires, and turn a bounded reconciliation across six files into a three-part project.
 
 ---
 
@@ -118,7 +132,7 @@ v2.51 §4 records four instruments and is written in the vocabulary of probes. *
 
 **Proof.** A summary of this program's work stated that the sweep at `8ba2b95c` left *"95 handlers genuinely authenticated."* Defensible word by word; **false in effect**, because `/login` issues a token to anyone who asks, so requiring a token is not requiring authentication. Nothing in §4 as written would catch it, because the claim was not the output of a search.
 
-## §4.1 The fifth instance — where the pattern had a cost
+## §4.1 The fifth and sixth instances
 
 **v2.47 §4.1 quoted G3 as *"Test coverage minimum: one authenticated + one unauthenticated test per sub-form."* The quotation is accurate. It is one clause of four.** v2.48, v2.49, v2.51 and this revision's own earlier draft each inherited it as though it were the gate, and the earlier draft discharged a four-clause gate citing one clause.
 
@@ -137,7 +151,21 @@ The first four were failures of record: a probe or a claim answered a narrower q
 
 **That is not four failures. It is one failure with four points at which it could have been caught, and the quotation closed the last of them.** Every prior instance of this pattern cost a correction. **This one cost the only mechanism that would have surfaced a live defect**, and it was caught by reading the gate rather than by anything the system did.
 
-**Scope.** The rule applies to revision text, PR bodies, commit messages and summaries — every place a claim is recorded. **It applies with particular force to quotations of normative text**, where the excerpt becomes the operative rule for everyone downstream who does not re-read the source.
+### The sixth instance — v2.49 §2.4's gate count, corrected forward
+
+**v2.49 §2.4 records *"36 `authorize([...])` gates across 11 route files."*** That enumeration was produced by a search **scoped to `src/routes/` and matching the spelling `authorize(`**. `src/middleware/auth.js:466` aliases `authorizeRole = authorize`, and controllers gate with the alias — `activityController`, `notificationController`, `presenceController` and `socketController` each do. **Those gates were not counted.**
+
+**Corrected forward: 36 is a floor, not a total. The true number is unmeasured, and none is offered here.** The four controllers above surfaced while reading `authenticateToken` usage for §1.3, not from a search for the alias — so there may be gates using `authorizeRole` in files that never mention `authenticateToken`. **Producing a count from that incidental evidence would repeat the error being recorded**, and v2.51 §4's rule forbids it: the search that found these cannot see the ones it was not looking for.
+
+**What this does not change.** The remediation at `75ac05f0` closed caller-supplied `groups`, which closes escalation to **any** such gate regardless of how many exist. **The correction is to the enumeration, not to the remedy.** v2.49 §2.4's substantive point — that the audit trail sat behind the credential an intrusion would supply — is unaffected, since `auditLogs.js` is inside the counted set either way.
+
+### On where these two came from
+
+**Both are this series' own.** The fifth was a quotation inherited from v2.47 §4.1; the sixth an enumeration written at v2.49 §2.4. **Four of the six recorded instances now originate inside the documents that state the discipline.**
+
+That is the discipline working — none of these was found by an external check — and it is simultaneously a measure of how readily the pattern reproduces, including in documents whose explicit subject is the pattern. **Both readings are correct and neither should be used to dismiss the other.**
+
+**Scope.** The rule applies to revision text, PR bodies, commit messages and summaries — every place a claim is recorded. **It applies with particular force to quotations of normative text**, where the excerpt becomes the operative rule for everyone downstream who does not re-read the source, and to **enumerations presented without their scope**, where the count becomes the population.
 
 ---
 
@@ -156,7 +184,8 @@ The first four were failures of record: a probe or a claim answered a narrower q
 | # | Item | Origin | Blocked on | Owner |
 |---:|---|---|---|---|
 | 1 | **Gate G3 clause 3** — decisionLogs `user_id` test | v1.5:398; §1.2 | Item 2 — the test would fail today | — |
-| 2 | **Step 6 (CZ-5 + F-Auth-4 + F-Auth-5)** — unexecuted; closes the `sub`/`id` drift | v1.5:31, :64; §1.2 | An authorizing revision | — |
+| 2 | **F-Auth-5 alone** — the `sub`/`id` reconciliation. The only Step 6 sub-step blocking clause 3; CZ-5 is done and Step 6b is separable | v1.5:31, :64; §1.3 | An authorizing revision naming **F-Auth-5**, not Step 6 | — |
+| 2b | **Step 6b** — remove the duplicate `authenticateToken`, live in four controllers | `auth.js:484`; §1.3 | Nothing currently open; separable | — |
 | 3 | **The `req.user?.sub` defect** — five sites persisting `undefined`; recorded, unminted | §1.2 | Its own minting revision | — |
 | 4 | The Gate G3 discharge ruling, re-made against the full text | v2.51 §6 item 7; §1.1 | Items 1 and 2 | — |
 | 5 | The issuance decision — FD-65 cannot close without it | v2.50 §3 | Item 8; all three options are projects | — |
@@ -186,10 +215,11 @@ The first four were failures of record: a probe or a claim answered a narrower q
 - **The discharge ruling was given against a one-clause quotation and does not reach the gate as written; no discharge is recorded** (§1.1).
 - **Clause 3 is unmeetable, not merely unmet: `req.user` has no `sub` key, and five sites persist `undefined`** (§1.2).
 - **The site at `decisionLogs.js:22` has read an unpopulated key since `7ae309f2` (2026-02-08). This is a claim about code age; the rows are unmeasured** (§1.2).
-- **Step 6 is unexecuted, and the drift it would close is live in 6 files against 26** (§1.2).
+- **The drift is live in 6 files against 26. Of Step 6's three sub-steps, CZ-5 is done, F-Auth-4 is partial with Step 6b deferred by name at `auth.js:484`, and F-Auth-5 alone blocks clause 3** (§1.2, §1.3).
+- **v2.49 §2.4's "36 gates" was scoped to `src/routes/` and the `authorize(` spelling; controllers gating via the `authorizeRole` alias were uncounted. 36 is a floor; the true count is unmeasured and none is offered. The remedy at `75ac05f0` is unaffected** (§4.1).
 - **Track G4's precondition is not satisfied** (§2).
 - **A soak would establish neither that the surface is closed nor clause 3** (§2.1).
-- **The fifth instance of v2.51 §4's pattern closed the last check on a live defect, rather than costing a correction** (§4.1).
+- **The fifth instance of v2.51 §4's pattern closed the last check on a live defect, rather than costing a correction. A sixth is recorded alongside it. Four of the six now originate inside the documents that state the discipline** (§4.1).
 - **v1.5 §6.1's heading and table disagree on the number of gates. Unresolved** (§7).
 - **Nine of ten open items are unowned** (§6).
 
@@ -202,7 +232,9 @@ The first four were failures of record: a probe or a claim answered a narrower q
 - Does not close FD-63, FD-64 or FD-65. **FD-65 remains OPEN and P0.**
 - Does not settle v1.5 §6.1's six-versus-seven discrepancy (§7).
 - Does not select an issuance option, assign an owner to any item at §6, or authorize the environment read.
-- Does not edit any prior revision's body. §1.1 supersedes v2.47 §4.1's quotation **forward**; §4.1 extends v2.51 §4 **forward**.
+- **Does not offer a corrected gate count.** §4.1 establishes that v2.49 §2.4's 36 is a floor and declines to name a total, because the evidence that surfaced the omission cannot bound it.
+- **Does not authorize F-Auth-5, Step 6b, or any part of Step 6** (§1.3, §6 items 2 and 2b).
+- Does not edit any prior revision's body. §1.1 supersedes v2.47 §4.1's quotation **forward**; §4.1 extends v2.51 §4 and corrects v2.49 §2.4 **forward**.
 - Does not claim or open a prod window. **Prod remains FROZEN; confirm freeze status live before any prod-touching action.**
 - **No live database contact and no request issued to any deployed host.** Derived from git against `origin/main` at `148698cb`.
 
