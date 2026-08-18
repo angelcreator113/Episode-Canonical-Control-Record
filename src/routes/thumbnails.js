@@ -78,7 +78,7 @@ router.post(
   asyncHandler(async (req, res) => {
     try {
       const ThumbnailService = require('../services/ThumbnailService');
-      const userId = req.user?.sub || req.user?.id || 'system';
+      const userId = req.user.id;
       const thumbnail = await ThumbnailService.publishThumbnail(req.params.id, userId);
       res.json({
         success: true,

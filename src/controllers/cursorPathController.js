@@ -19,7 +19,7 @@ exports.generateCursorPaths = async (req, res) => {
     // Generate cursor paths using AI service
     const result = await cursorPathGeneratorService.generateFromIconCues(episodeId, {
       regenerate,
-      userId: req.user?.sub,
+      userId: req.user?.id,
     });
     
     res.json({

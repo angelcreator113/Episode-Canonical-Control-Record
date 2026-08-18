@@ -114,11 +114,31 @@ const anonymousLogin = (body) => request(app).post('/api/v1/auth/login').send(bo
         .get(ADMIN_GATED_URL)
         .set('Authorization', `Bearer ${adminToken}`);
 
-      // Deliberately "cleared the gate", not "returned 200". The handler
-      // queries the database and returns 500 in this environment; asserting
-      // 200 would couple this control to handler behaviour it does not test
-      // and would fail for reasons unrelated to authorization. What the
-      // control must show is that authorize(['ADMIN']) admits a genuine ADMIN
+      // Deliberately "cleared the gate", not "returned 200". Past the gate the
+      // handler 500s on every database this repo builds, with no environmental
+      // qualifier: src/migrations/20240101000005-create-activity-logs.js
+      // creates `activity_logs` with camelCase columns (userId, actionType, …),
+      // while src/models/ActivityLog.js:101 declares `underscored: true`, so
+      // every query the model issues asks for user_id, action_type, … Nothing
+      // reconciles the two, and GET /api/v1/audit-logs has never worked.
+      //
+      // Observed both ways on 2026-08-18 — locally, and in CI on the Validate
+      // run for PR #1049: `column "user_id" does not exist`, raised at
+      // src/routes/auditLogs.js:52.
+      //
+      // An earlier version of this comment claimed no migration creates the
+      // table. That was wrong, and how it was wrong is worth keeping: the
+      // search was `grep migrations/`, but .sequelizerc points
+      // `migrations-path` at src/migrations/. This repo has two migration
+      // directories and only src/migrations/ is the one sequelize reads.
+      //
+      // Not established: whether other models share this mismatch. 133 of 154
+      // models declare `underscored: true`, and none but ActivityLog has been
+      // checked against the migration that creates its table.
+      //
+      // So `toBe(200)` is not a tightening this control is giving up; it would
+      // fail everywhere, on handler behaviour this control does not test.
+      // What the control must show is that authorize(['ADMIN']) admits a genuine ADMIN
       // — i.e. that the 403 asserted above comes from the gate rejecting
       // ['USER'], not from the gate being broken or the router unmounted.
       expect(res.status).not.toBe(403);
