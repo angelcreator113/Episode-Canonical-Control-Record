@@ -114,11 +114,26 @@ const anonymousLogin = (body) => request(app).post('/api/v1/auth/login').send(bo
         .get(ADMIN_GATED_URL)
         .set('Authorization', `Bearer ${adminToken}`);
 
-      // Deliberately "cleared the gate", not "returned 200". The handler
-      // queries the database and returns 500 in this environment; asserting
-      // 200 would couple this control to handler behaviour it does not test
-      // and would fail for reasons unrelated to authorization. What the
-      // control must show is that authorize(['ADMIN']) admits a genuine ADMIN
+      // Deliberately "cleared the gate", not "returned 200" — and not because
+      // of anything local. Past the gate the handler 500s for a repo-level
+      // reason: no migration in migrations/ creates `activity_logs`, and the
+      // ActivityLog model maps to it with `underscored: true`
+      // (src/models/ActivityLog.js:101).
+      //
+      // Observed 2026-08-18 against the local test database: the table is
+      // there from an older sync with camelCase columns, so the model's
+      // snake_case mapping raises `column "user_id" does not exist` and
+      // src/routes/auditLogs.js:52 returns 500.
+      //
+      // Not run against CI, so this half is read off the repo rather than
+      // observed: .github/workflows/validate.yml builds its database from
+      // `npm run migrate:up` alone and sets no ENABLE_DB_SYNC, so src/app.js:70
+      // skips sync and no migration supplies the relation — the handler cannot
+      // reach 200 there either.
+      //
+      // So `toBe(200)` is not a tightening this control is giving up; it would
+      // fail in both places, on handler behaviour this control does not test.
+      // What the control must show is that authorize(['ADMIN']) admits a genuine ADMIN
       // — i.e. that the 403 asserted above comes from the gate rejecting
       // ['USER'], not from the gate being broken or the router unmounted.
       expect(res.status).not.toBe(403);
