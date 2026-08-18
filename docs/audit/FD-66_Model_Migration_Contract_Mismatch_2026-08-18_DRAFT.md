@@ -58,7 +58,15 @@ Two instances were investigated in depth before the population was measured — 
 
 **That remediation was correct and it was incomplete.** It closed the write path. **It did not reconcile the schema the path had already produced, and it did not check whether the migrations could reproduce that schema on their own.** They cannot: 28 models name columns migrations do not create, and 38 name tables migrations do not build.
 
-**So the 28 are not 28 independent oversights. They are one omission with 28 visible consequences** — and that is why they cluster on exactly the declarations the auto-repair used to satisfy silently: `paranoid` (19 of 28) and `underscored` (4 of 28).
+**On that reading the 28 are not 28 independent oversights but one omission with 28 visible consequences.**
+
+**The axis distribution is consistent with that and does not establish it.** The mismatches cluster on `paranoid` (19 of 28) and `underscored` (4 of 28) — the declarations the auto-repair would have satisfied silently. **But those are also the declarations a hand-written migration must translate into DDL by hand**, and they would cluster the same way under any regime where models declare behaviour and humans write the migrations. **The 19 missing `deleted_at` are equally consistent with 19 authors forgetting a column Sequelize adds implicitly.**
+
+**What the clustering does support, and this is all it supports:** these are the declarations most likely to drift, whatever the cause.
+
+**The evidence that would distinguish the two accounts is commit-time ordering, and it was not gathered.** A model that gained `paranoid: true` **after** the auto-repair was removed and still has no migration is an ordinary omission; one that gained it **before** was materialised silently and then stranded when the block went. `git log -S` across the 19 would separate them. **It was not run, no proportion is claimed, and this document asserts nothing about how the 28 divide between the two.**
+
+**None of §1.1's account depends on it.** That the block existed, materialised model declarations, was removed, and left the schema unreconciled is established from F-App-1's own documents and from the measurement — independently of what the axis distribution suggests about individual cases.
 
 ## §1.2 Relation to §12.11 / `PE #62` — same cause, different object
 
