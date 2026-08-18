@@ -1,7 +1,7 @@
 | **PRIME STUDIOS** **FINDING — FD-66** *Mints FD-66. Ships no code. Changes no gate.* |
 | --- |
 
-# Finding — FD-66: Models Declare Schema Behaviour Their Migrations Do Not Provide
+# Finding — FD-66: The Schema Residue of F-App-1's Incomplete Remediation
 
 **Date:** 2026-08-18
 **Status:** **DRAFT.** Mints **FD-66**; FD tail advances **FD-65 → FD-66**. **Priority P0, ruled** — see §0.1. Ships no code. Changes no gate. Authorizes nothing.
@@ -12,13 +12,16 @@
 - **A local scratch database was created, migrated, read, and dropped** — `fd66_migrations_only` on the same local instance — for the measurement at §6. 210 migrations were applied to it. Its removal is confirmed.
 - **One command connected to a database other than its intended target.** `npx sequelize db:migrate` was first run with `DATABASE_URL` exported but `NODE_ENV` unset; `.env` sets `NODE_ENV=production`, and the production config block **deliberately ignores `DATABASE_URL`** (`src/config/sequelize.js:141-145`), resolving instead to discrete `DB_*` vars. On this machine those resolve to `127.0.0.1` / `episode_metadata_test`, so the connection was local and the command executed no DDL — it reported *"schema already up to date"*. **On a machine where `DB_HOST` pointed at RDS, that command would have reached it.** Recorded because the near-miss is the reportable part, not the outcome.
 - **No request was issued to any deployed host.** Prod remains FROZEN and untouched.
-**Additive on:** F-AUTH-1 Fix Plan v2.53. Supersedes nothing. Corrections owed forward are stated at §5.
+**Additive on:** F-AUTH-1 Fix Plan v2.53, and on **F-App-1** — this finding is the schema residue F-App-1's remediation left behind (§1.1). Supersedes nothing. Corrections owed forward are stated at §5.
+**Related, not subsumed:** **§12.11 / `PE #62`** — the write paths F-App-1 declared out of scope. Same root cause, different object (§1.2). Paired closure is flagged and not decided (§1.3).
 
 ---
 
 ## §0. One-line
 
-**Of 146 Sequelize models checked against a database built by migrations alone, 28 name a column or a table that database does not have, and a further 38 have no table under any spelling.** The 27 split across three axes with three different remedies — **19** missing `deleted_at` under `paranoid: true`, **4** naming mismatches, **10** naming columns that exist in no spelling (§6.3.1). Three of the 27 are confirmed by probe to make an HTTP route return 500 unconditionally — the route Gate G3 clause 3 depends on, the route v2.49 §2.4 named as the control that would evidence an intrusion, and one of the six sites remediated at `ed3461c5`.
+**F-App-1 removed the write paths that bypassed migrations. It did not reconcile the schema those paths had already produced. This finding is that residue, measured.**
+
+**Of 146 Sequelize models checked against a database built by migrations alone, 28 name a column or a table that database does not have, and a further 38 have no table under any spelling.** The 28 split across **four** axes with four different remedies — **19** missing `deleted_at` under `paranoid: true`, **4** column-naming mismatches, **10** naming columns that exist in no spelling, **1** table-naming mismatch, with **6** failing more than one (§6.3.1, §6.3.2). Three are confirmed by probe to make an HTTP route return 500 unconditionally — the route Gate G3 clause 3 depended on, the route v2.49 §2.4 named as the control that would evidence an intrusion, and one of the six sites remediated at `ed3461c5`.
 
 ## §0.1 Priority — P0, and why not P1
 
@@ -34,11 +37,48 @@ Secondary, and sufficient on its own for P1 but not the reason for P0: FD-66 gat
 
 ## §1. What is minted, and at what scope
 
-**The finding is the class, and the class is measured.** A model declares attributes or behaviour that determine the columns Sequelize names in SQL; the migrations that build its table do not supply them; nothing reconciles the two; and no test observes the result.
+**The finding is the class, the class is measured, and the class has a cause.** A model declares attributes or behaviour that determine the columns Sequelize names in SQL; the migrations that build its table do not supply them; nothing reconciles the two; and no test observes the result.
 
 Two instances were investigated in depth before the population was measured — `activity_logs` (§2) and `decision_logs` (§3) — because each was independently observed breaking a route this session needed. They remain written up individually, as the worked examples and as the validation of the measurement method (§6.2). **They are no longer the finding's extent.**
 
-**The remedy is one decision applied per table** — correct the migration to match the model, or correct the model to match the table — which is why this is one FD and not 27. See §7.
+**The remedy is one decision applied per table** — correct the migration to match the model, or correct the model to match the table — which is why this is one FD and not 28. See §7.
+
+## §1.1 Where the 28 came from — the causal account
+
+**An earlier draft of this document presented the mismatches as a standalone discovery and could not explain their origin. It has one, and it is in the register already.**
+
+`docs/audit/F-App-1_Fix_Plan_v1.md:21` describes a schema-as-JS auto-repair block that ran in `src/app.js` on every boot where `ENABLE_DB_SYNC` was **not** set — that is, in the normal production configuration. It had two paths:
+
+- **Path A** iterated every Sequelize model and called `model.sync()` for any table absent from `pg_tables`.
+- **Path B** held five hardcoded `CREATE TABLE IF NOT EXISTS` literals for `world_events`, `character_state`, `character_state_history`, `decision_log`, `career_goals`.
+
+**For as long as that block ran, the schema was model-shaped by construction.** A model could declare `underscored: true`, inherit `paranoid: true`, or gain a new attribute, and the boot-time repair would materialise whatever it named. **Migrations were not the source of schema truth; they were one contributor to it, and the model files were the other.**
+
+**F-App-1 removed the block.** `grep -c "CREATE TABLE IF NOT EXISTS" src/app.js` returns **0**, and `src/app.js:95` records the intent: *"F-App-1: schema auto-repair removed. Migrations are now the single source of schema truth."* `docs/PRE_DEPLOYMENT_VERIFICATION.md:238` states the matching deployment posture: *"**ENABLE_DB_SYNC disabled**: Using migrations instead (recommended)."*
+
+**That remediation was correct and it was incomplete.** It closed the write path. **It did not reconcile the schema the path had already produced, and it did not check whether the migrations could reproduce that schema on their own.** They cannot: 28 models name columns migrations do not create, and 38 name tables migrations do not build.
+
+**So the 28 are not 28 independent oversights. They are one omission with 28 visible consequences** — and that is why they cluster on exactly the declarations the auto-repair used to satisfy silently: `paranoid` (19 of 28) and `underscored` (4 of 28).
+
+## §1.2 Relation to §12.11 / `PE #62` — same cause, different object
+
+**`F-App-1_G1_Audit_Report.md:514` enumerates what F-App-1 declared out of its own scope**, recorded as §12.11 and carried since as the `PE #62` residue item, unowned:
+
+- **6 Variant B sites** — inline `CREATE TABLE` SQL — covering `video_compositions`, `chapter_versions`, `ecosystem_previews`
+- **11 Variant A sites** — `model.sync()` inside routes and workers — covering `StoryTaskArc`, `ContinuityTimeline`, `ContinuityCharacter`, `ContinuityBeat`, `ContinuityBeatCharacter`, `FranchiseKnowledge`, `GenerationJob`
+- a `sequelize.sync()` in the model loader at `src/models/index.js:1797`, since drifted to `:1800` (§6.4.1)
+
+**§12.11 is unremoved code. FD-66 is unreconciled schema. Same root cause, different objects.**
+
+The overlap is visible in the measurement: `ContinuityTimeline`, `ContinuityCharacter`, `ContinuityBeat` and `ContinuityBeatCharacter` all appear in FD-66's **bucket 3** — models whose tables migrations never build — precisely because a route handler builds them at request time instead. `StoryTaskArc` appears in **bucket 2**, missing `deleted_at`.
+
+**Neither finding subsumes the other.** Closing §12.11 removes the paths and leaves the 28 broken. Closing FD-66 fixes the schema and leaves paths that can reproduce the drift.
+
+## §1.3 Paired closure — flagged, not decided
+
+**If the write paths at §12.11 remain while FD-66's schema is reconciled, the paths can recreate the divergence they caused.** A route that calls `model.sync()` at request time will materialise whatever the model then declares, against a schema a baseline has just been built to match.
+
+**That is an argument for closing the two together, or at least for ordering them.** It is **not a decision this document makes** — `PE #62` is unowned, its ownership is a register question, and FD-66 has no authority over another finding's disposition. **Recorded so that whoever sequences the baseline knows the dependency exists.**
 
 ---
 
