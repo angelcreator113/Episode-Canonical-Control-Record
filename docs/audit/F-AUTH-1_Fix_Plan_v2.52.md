@@ -1,9 +1,9 @@
-| **PRIME STUDIOS** **F-AUTH-1 FIX-PLANNING DOCUMENT** *First fix after audit close. Tier 0 keystone.* *Gate ruling. Changes Gate G3.* |
+| **PRIME STUDIOS** **F-AUTH-1 FIX-PLANNING DOCUMENT** *First fix after audit close. Tier 0 keystone.* *Withholds the Gate G3 discharge. Changes no gate.* |
 | --- |
 
 **Document version**
 
-v2.52 — **RECORDS GATE G3 DISCHARGED. CHANGES A GATE. MINTS NOTHING. SHIPS NO CODE.** FD tail remains **FD-65 (F-AUTH-1)**; XK tail remains **XK-3**. **Gate G3 is discharged**, on the ruling of JAWIHP / Evoni, on the evidence reported at v2.51 §5 and completed at `148698cb`. **Track G4's precondition is thereby satisfied. Track G4 is not entered** (§2). States two disciplines — register scope with entailment as its exception, and the extension of v2.51 §4 to prose (Part II). Carries the ledger forward, **five of six open items unowned** (Part III). **FD-65 remains OPEN and P0; the issuance half is untouched.** Derived from git against `origin/main` at `148698cb`. No live database contact and no request issued to any deployed host.
+v2.52 — **WITHHOLDS THE GATE G3 DISCHARGE. CHANGES NO GATE. MINTS NOTHING. SHIPS NO CODE.** FD tail remains **FD-65 (F-AUTH-1)**; XK tail remains **XK-3**. **Gate G3 has four clauses; two are met, one is evidenced, and one is unmet and presently unmeetable** (§1). A discharge ruling was given against v2.47 §4.1's single-clause quotation of the gate; **a ruling on a partial premise does not reach the gate as written**, and this revision therefore records no discharge (§1.1). **Clause 3's blocker is a live defect**: `req.user` carries no `sub` key in any of the three middlewares, and five sites read `req.user?.sub` and persist `undefined` (§1.2). **Track G4's precondition is NOT satisfied** (§2). Records the fifth instance of v2.51 §4's pattern — the first with a measurable cost rather than a correctable record (§4). Derived from git against `origin/main` at `148698cb`. No live database contact and no request issued to any deployed host.
 
 **Author**
 
@@ -11,140 +11,198 @@ JAWIHP / Evoni — Prime Studios
 
 **Status**
 
-*BACKEND STEP 3 SWEEP — **REOPENED-QUALIFIED** per v2.43 §4.1, unchanged. **FD-65 (F-AUTH-1)** — **OPEN, P0**, privilege half remediated and tested, issuance half untouched. **FD-63** and **FD-64** remain open. **Gate G3 — DISCHARGED** (§1). Track G4 — precondition satisfied, **not entered** (§2). Track G3 — OPEN. Track G5 — **BLOCKED** per v2.43 §4.2, unchanged. Track G6 — not reached. Prod remains FROZEN; confirm freeze status live before any prod-touching action.*
+*BACKEND STEP 3 SWEEP — **REOPENED-QUALIFIED** per v2.43 §4.1, unchanged. **FD-65 (F-AUTH-1)** — **OPEN, P0**, privilege half remediated and tested, issuance half untouched. **FD-63** and **FD-64** remain open. **Gate G3 — NOT DISCHARGED** (§1). Track G4 — **precondition NOT satisfied**; not entered (§2). Track G3 — OPEN. Track G5 — **BLOCKED** per v2.43 §4.2, unchanged. Track G6 — not reached. **Step 6 (CZ-5 + F-Auth-4 + F-Auth-5) is unexecuted** (§1.2). Prod remains FROZEN; confirm freeze status live before any prod-touching action.*
 
 ---
 
-# PART I — THE RULING
+# PART I — THE GATE
 
-# §1. Gate G3 — discharged
+# §1. Gate G3, read in full
 
-**Gate G3 is discharged.** The ruling was made by **JAWIHP / Evoni**. **This revision is where it enters the register**, and its provenance is stated at §7 so that no reader has to look for a citable record elsewhere: there is none, and this document is the ruling's durable form.
+**G3's defining text is `F-AUTH-1_Fix_Plan_v1.5.md:398`. It has four clauses.** No revision in this series has previously quoted more than one of them.
 
-**The evidence it rests on**, reported at v2.51 §5 and unchanged:
+> **G3 — Self-review passed.** Every commit in the PR read end-to-end. Test coverage minimum: one authenticated + one unauthenticated test per sub-form. F-Auth-5 has its specific test (decisionLogs write persists matching `user_id`). Frontend interceptor handles `AUTH_REQUIRED` and `AUTH_INVALID_TOKEN` as distinct paths.
 
-- **Both halves for all four miss shapes**, on `main` at `436a8772`.
-- **A negative control** on the authenticated half — a structurally valid HS256 token signed with the wrong secret returns 401 `AUTH_INVALID_TOKEN`, the verifier-rejection code, distinct from `AUTH_REQUIRED` and `AUTH_INVALID_FORMAT`, which never reach the verifier. Without it, four assertions of *"not 401"* would prove nothing.
+| # | Clause | State | Evidence |
+|---:|---|---|---|
+| 1 | Every commit in the PR read end-to-end | **Evidenced** | v2.47 §3 — all eleven CP diffs read line by line before staging; `compositions.js`'s 29 declarations enumerated individually |
+| 2 | One authenticated + one unauthenticated test per sub-form | **MET** | `436a8772` — both halves, four sub-forms, with a negative control asserting 401 `AUTH_INVALID_TOKEN`; completed by `148698cb` |
+| 3 | F-Auth-5's specific test — decisionLogs write persists matching `user_id` | **NOT MET, AND PRESENTLY UNMEETABLE** | §1.2 |
+| 4 | Frontend interceptor handles `AUTH_REQUIRED` / `AUTH_INVALID_TOKEN` as distinct paths | **MET** | `frontend/src/services/api.js:82` (wipe + redirect) and `:98` (refresh once), covered by `api.test.js` Cases A and B |
 
-**And completed since.** v2.51 §2 obligation 6 recorded a coverage gap: nothing asserted that an anonymous `POST /login` sending `groups: ['ADMIN']` fails to yield an ADMIN token. **That gap is closed at `148698cb`** (PR #1046) by `tests/integration/f-auth-1-fd65.test.js`, which asserts the echoed groups, the *signed* groups, a 403 `AUTH_GROUP_REQUIRED` against `auditLogs.js:18`'s gate, and a control showing that gate still admits a genuine ADMIN.
+**Clause 3 binds this gate, and the scoping was checked rather than assumed.** `v1.5:31` folds F-Auth-5 in as *"a sub-step of Step 6"* of this plan; `v1.5:64` gives Step 6's file list as `BookEditor.jsx:173–186` + `middleware/auth.js:256–293` + **`decisionLogs.js:22`**. F-Auth-5 is F-AUTH-1's own scope, not another finding's requirement borrowed into a shared table.
 
-**93 tests across seven suites pass**, verified against `origin/main` at `148698cb`.
+## §1.1 The ruling, and why it does not reach the gate
 
-**Why the sequence mattered.** Before `148698cb`, "the minimum is met" was ambiguous between a literal reading — the tests G3's language names exist and pass — and a stronger one, that the escalation FD-65 records is covered by its direct negative before G4 touches a deployed environment. **Landing the privilege test first collapsed the ambiguity: the minimum is now met under both readings, so the ruling does not depend on which is taken.**
+**A discharge ruling was given by JAWIHP / Evoni**, on the evidence reported at v2.51 §5 and completed at `148698cb`. **It is recorded here so the register is not silent about it.**
 
-**Discharged: v2.51 §6 item 7** (this ruling) and **v2.51 §6 item 1** (the privilege test).
+**It was given against v2.47 §4.1's quotation of G3** — *"Test coverage minimum: one authenticated + one unauthenticated test per sub-form"* — which is clause 2, accurately quoted, and one of four. Every revision since inherited that quotation as though it were the gate.
+
+**A ruling made against a partial premise does not reach the gate as written.** This is not a reversal and there is nothing to reverse: the ruling disposes of clause 2, which is met. **It does not reach clauses 1, 3 and 4, because those were not before the ruler.** Clauses 1 and 4 turn out to be satisfied; clause 3 does not.
+
+**The discharge is therefore not recorded.** The ruling stands available to be re-made against G3's full text once clause 3 is met, and the evidence for clauses 1, 2 and 4 carries forward unchanged.
+
+## §1.2 Clause 3's blocker — the mechanism
+
+**Clause 3 is not a missing test for working behaviour. The behaviour it names does not work.**
+
+**`req.user` has no `sub` key.** All three middlewares in `src/middleware/auth.js` build it identically — `authenticateToken:235`, `optionalAuth:339`, `requireAuth:510` — each assigning `id: decoded.sub` and no `sub`. **`git log -S "sub:" -- src/middleware/` returns no commit**, at any indentation, that ever added or removed such a key.
+
+**Five sites read `req.user?.sub` and persist the resulting `undefined`:**
+
+| Site | Written value |
+|---|---|
+| `src/routes/decisionLogs.js:22` | `user_id: req.user?.sub` |
+| `src/controllers/cursorPathController.js:22` | `userId: req.user?.sub` |
+| `src/controllers/iconCueController.js:22` | `userId: req.user?.sub` |
+| `src/controllers/musicCueController.js:20` | `userId: req.user?.sub` |
+| `src/controllers/productionPackageController.js:22` | `userId: req.user?.sub` |
+
+A sixth site, `src/routes/thumbnails.js:81`, reads `req.user?.sub || req.user?.id || 'system'` and is unaffected — **the only one that hedges across both spellings is the only one that works.**
+
+**This is not a regression.** `req.user?.sub` entered `decisionLogs.js:22` at **`7ae309f2` (2026-02-08)**, the file's original commit, written exactly as it stands. **The site has read an unpopulated key since that commit.**
+
+**What is established:** the mechanism, from source and history. **What is not established:** the state of any `decision_logs` row. No database was contacted, prod is FROZEN, and **the age figure is a claim about code, not about rows.** How many writes occurred, and what the `user_id` column holds for them, is **unmeasured**.
+
+**The drift is live and dominant.** `req.user?.sub` appears in 6 files; `req.user?.id` in 26. **Step 6 — which `v1.5:31` schedules to close exactly this drift — is unexecuted.** Clause 3 cannot be met by writing a test; the test would fail. It is blocked on Step 6.
+
+**This revision records the defect because it is clause 3's blocker and therefore the reason the discharge is withheld. It does not mint it.** The mint — an FD number, the five-site enumeration as a finding, the remedy question, and the relationship to F-Auth-5's scheduled fix — belongs to its own revision, on the split v2.49 §5 used for the credential-custody finding.
 
 ---
 
-# §2. What the discharge does and does not authorize
+# PART II — CONSEQUENCE
 
-**Track G4's stated precondition at v2.47 §4.1 — *"the minimum is met"* — is satisfied.**
+# §2. Track G4 — precondition not satisfied
 
-**Track G4 is not entered by this revision.** A precondition being satisfied is not a decision to proceed, and G4 is dev verification plus a two-hour soak: **the first deployed-environment contact in this program.** Two considerations keep it a separate decision, and neither blocks it:
+**Track G4's stated precondition at v2.47 §4.1 is *"the minimum is met."*** Clause 3 is unmet. **The precondition is not satisfied and Track G4 must not be entered.**
 
-- **FD-65's issuance half is open.** An anonymous caller still obtains a valid `['USER']` token from `/login`.
-- **The environment read has not been taken.** Nobody has established what `JWT_SECRET` dev and prod hold (v2.49 §5). Prod is FROZEN; **dev is not.**
+This is a stronger bar than v2.51 §5's posture, which held G4 pending a ruling. **It is now pending a defect fix**, and no ruling can supply what clause 3 asks for while the behaviour is broken.
 
 ## §2.1 Prospective — what a G4 soak would and would not establish
 
-**Recorded before G4 runs, so that its result cannot later be read for more than it is.**
+**Retained from this revision's earlier draft and unchanged in substance, because it will apply whenever G4 is eventually entered, and recording it before the run is the point.**
 
 **A green soak would establish:** that `requireAuth` executes across the 95 handlers promoted at `8ba2b95c` under sustained real traffic; that the promotion introduced no runtime break, ordering fault, or middleware-resolution failure of the kind the FD-63 static tests cannot catch; and that the four edit shapes behave identically in a deployed environment.
 
 **A green soak would NOT establish that the authentication surface is closed.** It exercises the *mechanism* by which credentials are checked, not the *scarcity* of credentials. While the issuance half of FD-65 is open, any party may obtain a valid token and pass every check the soak observes passing. **A soak in which every request is authenticated and every authenticated request is anonymous is a green soak.**
 
-**This is v2.51 §4's pattern with a two-hour runtime attached**, and it is written here rather than after the fact because that is the discipline §4 states — see §4 below for its extension to exactly this kind of claim.
+**It would also not establish clause 3.** A soak observes that requests succeed; it does not inspect what they persist. The five sites at §1.2 would write `undefined` throughout a green soak without producing a single error.
 
 ---
 
-# PART II — DISCIPLINE
+# PART III — DISCIPLINE
 
 # §3. Register scope, and entailment as its exception
 
 > **An authorization's enumeration governs the artifact under audit. A ledger of owed items governs the register's own obligations. Discharging a ledger obligation is not an artifact change and requires no authorizing revision.**
 
-**Proof.** Gate G3's own tests discharged the minimum owed at v2.47 §4.1, and **no revision authorized writing them.** If authorization were required to discharge a ledger obligation, that obligation would have been unfulfillable from the moment it was recorded — v2.47 §4.1 owed tests, and no document permitted their creation. The tests were written, merged at `436a8772`, and no revision has ever suggested they were unauthorized.
+**Proof.** Gate G3's own tests discharged the minimum owed at v2.47 §4.1, and **no revision authorized writing them.** If authorization were required to discharge a ledger obligation, that obligation would have been unfulfillable from the moment it was recorded. The tests were written, merged at `436a8772`, and no revision has suggested they were unauthorized.
 
-**Scope.** v2.50 §1's *"anything not listed here is not authorized"* binds changes to `src/`. It does not reach `tests/` work that discharges an item the register already accepts. The privilege test at `148698cb` needed no v2.52-in-advance for the same reason.
+**Scope.** v2.50 §1's *"anything not listed here is not authorized"* binds changes to `src/`. It does not reach `tests/` work discharging an item the register already accepts.
 
 **The exception, where discharge touches behaviour:**
 
 > **An edit outside an authorization's enumeration rides with the authorized change if executing that enumeration exactly and nothing else would leave the build red. If the authorized change merely enables or suggests the further edit, it is creep and stays out.**
 
-**Worked instance.** v2.50 §1 authorized deleting `/test-token` and did not list any test edit, because v2.50 §5 wrongly held the route had no caller. `tests/integration/auth.integration.test.js` asserted it returned 200. Executing §1 alone therefore left the build red — `Expected: 200 / Received: 404` — and the replacement 404 guard shipped with the change at `75ac05f0` as footprint, not creep.
+**Worked instance.** v2.50 §1 authorized deleting `/test-token` and listed no test edit, because v2.50 §5 wrongly held the route had no caller. `auth.integration.test.js` asserted it returned 200. Executing §1 alone left the build red — `Expected: 200 / Received: 404` — and the replacement 404 guard shipped with the change at `75ac05f0` as footprint, not creep.
 
-**The two rules are ordered, not parallel.** Register scope is the general case and answers most work. Entailment is the narrow exception and applies only where discharging an obligation changes what the system does.
+**The two rules are ordered, not parallel.** Register scope is the general case. Entailment is the narrow exception, and applies only where discharging an obligation changes what the system does.
 
 ---
 
-# §4. The discipline extends to prose
+# §4. The discipline extends to prose — and the fifth instance
 
 > **v2.51 §4's rule governs any claim that could be read as answering a broader question than it does. A summary sentence is an instrument.**
 
-v2.51 §4 records four instruments — a grep, an enumeration, an exclusion, and a truncated search — and is written in the vocabulary of probes. **That framing is too narrow.** The failure it describes is not a property of greps; it is a property of claims.
+v2.51 §4 records four instruments and is written in the vocabulary of probes. **That framing is too narrow.** The failure is a property of claims, not of greps.
 
-**Proof.** A summary of this program's work stated that the sweep at `8ba2b95c` left *"95 handlers genuinely authenticated."* Every word is defensible: the handlers do carry `requireAuth`, and `requireAuth` does execute. **It is nonetheless false in effect**, because `/login` issues a valid token to anyone who asks, so requiring a token is not requiring authentication. The accurate form is the one v2.49 §3 uses: **95 handlers moved from open to open-to-anyone-who-first-calls `/login`.**
+**Proof.** A summary of this program's work stated that the sweep at `8ba2b95c` left *"95 handlers genuinely authenticated."* Defensible word by word; **false in effect**, because `/login` issues a token to anyone who asks, so requiring a token is not requiring authentication. Nothing in §4 as written would catch it, because the claim was not the output of a search.
 
-**Nothing in v2.51 §4 as written would catch that**, because the claim was not the output of a search. A reader applying §4 to their own prose would be extending it rather than following it.
+## §4.1 The fifth instance — where the pattern had a cost
 
-**Scope.** The rule applies to revision text, PR bodies, commit messages, and summaries — every place a claim is recorded — and not only to searches. §2.1 above is its first prospective application: the soak's result is described in advance in terms of what it can and cannot establish, rather than summarised afterward in terms that would overstate it.
+**v2.47 §4.1 quoted G3 as *"Test coverage minimum: one authenticated + one unauthenticated test per sub-form."* The quotation is accurate. It is one clause of four.** v2.48, v2.49, v2.51 and this revision's own earlier draft each inherited it as though it were the gate, and the earlier draft discharged a four-clause gate citing one clause.
+
+**This instance differs from the other four in kind, and the difference is the point.**
+
+The first four were failures of record: a probe or a claim answered a narrower question than it was read as answering, and the correction was a correction to a document. **This one closed the last remaining check on a live defect.**
+
+**The loop, stated in full:**
+
+1. `v1.5:31` and `:64` **scheduled** the fix for the `req.user.sub` / `req.user.id` drift as Step 6, naming `decisionLogs.js:22`.
+2. **Step 6 was never executed.**
+3. **G3 clause 3 asked for the test** that would have exposed the consequence — *decisionLogs write persists matching `user_id`*.
+4. **v2.47 §4.1's quotation dropped clause 3**, and four documents inherited the quotation.
+5. **The test was never written**, so nothing surfaced the defect.
+6. **The site has read an unpopulated key since `7ae309f2` (2026-02-08).**
+
+**That is not four failures. It is one failure with four points at which it could have been caught, and the quotation closed the last of them.** Every prior instance of this pattern cost a correction. **This one cost the only mechanism that would have surfaced a live defect**, and it was caught by reading the gate rather than by anything the system did.
+
+**Scope.** The rule applies to revision text, PR bodies, commit messages and summaries — every place a claim is recorded. **It applies with particular force to quotations of normative text**, where the excerpt becomes the operative rule for everyone downstream who does not re-read the source.
 
 ---
 
-# PART III — LEDGER
+# PART IV — LEDGER
 
 # §5. Discharged since v2.51
 
 | Item | Origin | Discharged by | Where |
 |---|---|---|---|
-| The Gate G3 discharge ruling | v2.51 §6 item 7 | Ruling of JAWIHP / Evoni | §1 of this revision |
 | The `/login` privilege-half test | v2.51 §2 obligation 6; §6 item 1 | `tests/integration/f-auth-1-fd65.test.js` | `148698cb` (PR #1046) |
+
+**v2.51 §6 item 7 — the Gate G3 discharge ruling — is NOT discharged.** A ruling was given (§1.1) and does not reach the gate. The item remains open and is carried at §6.
 
 # §6. Open and carried forward
 
 | # | Item | Origin | Blocked on | Owner |
 |---:|---|---|---|---|
-| 1 | The issuance decision — FD-65 cannot close without it | v2.50 §3; v2.51 §6 item 2 | Item 4; all three options are projects requiring a dependency addition | — |
-| 2 | Credential-custody finding — XK-shaped, recorded, unadmitted | v2.49 §5; v2.51 §6 item 3 | A ratifying revision | — |
-| 3 | `JWT_SECRET` rotation | v2.49 §7; v2.51 §6 item 4 | Item 4 | — |
-| 4 | The environment read — what `JWT_SECRET` dev and prod hold | v2.49 §5, §7 | Infrastructure access; prod FROZEN | **JAWIHP / Evoni** (v2.50 §7, not delegated) |
-| 5 | FD-63's probe half — §21's G1 detects one of four miss shapes | v2.43 §2.3; v2.47 §5 | — | — |
-| 6 | FD-64 — `getRolesForshow` casing; `Model.update()` without `where` | v2.48 §2; v2.51 §6 item 6 | An authorizing revision under the adjudicate → ship → close cycle | — |
+| 1 | **Gate G3 clause 3** — decisionLogs `user_id` test | v1.5:398; §1.2 | Item 2 — the test would fail today | — |
+| 2 | **Step 6 (CZ-5 + F-Auth-4 + F-Auth-5)** — unexecuted; closes the `sub`/`id` drift | v1.5:31, :64; §1.2 | An authorizing revision | — |
+| 3 | **The `req.user?.sub` defect** — five sites persisting `undefined`; recorded, unminted | §1.2 | Its own minting revision | — |
+| 4 | The Gate G3 discharge ruling, re-made against the full text | v2.51 §6 item 7; §1.1 | Items 1 and 2 | — |
+| 5 | The issuance decision — FD-65 cannot close without it | v2.50 §3 | Item 8; all three options are projects | — |
+| 6 | Credential-custody finding — XK-shaped, recorded, unadmitted | v2.49 §5 | A ratifying revision | — |
+| 7 | `JWT_SECRET` rotation | v2.49 §7 | Item 8 | — |
+| 8 | The environment read — what `JWT_SECRET` dev and prod hold | v2.49 §5, §7 | Infrastructure access; prod FROZEN | **JAWIHP / Evoni** (v2.50 §7) |
+| 9 | FD-63's probe half — §21's G1 detects one of four miss shapes | v2.43 §2.3; v2.47 §5 | — | — |
+| 10 | FD-64 — `getRolesForshow` casing; `Model.update()` without `where` | v2.48 §2 | An authorizing revision | — |
 
-**Five of six open items carry no owner. That column is left blank rather than filled with a plausible name, because the blanks are the finding.** Two of the unowned items — the issuance decision and FD-64's defects — are the only paths by which FD-65 and FD-64 respectively can close. **An item with no owner does not progress, and the register's function is to make that visible rather than to imply motion.**
+**Nine of ten open items carry no owner.** The column is left blank rather than filled with a plausible name, **because the blanks are the finding.** The ledger grew from six items to ten in the course of reading one gate's full text.
 
 ---
 
-# PART IV — CLOSING
+# PART V — CLOSING
 
 # §7. Numeral disambiguation
 
-- **Gate G3** is **DISCHARGED** by this revision. **Track G3** is the deployment track and remains **OPEN**. They are different objects and both appear above.
-- **Provenance of the ruling.** It was made by **JAWIHP / Evoni**, in the course of this work, and **this revision is its only durable record.** That is not the posture of v2.51 §5, which reported evidence and expressly declined to rule for want of authority. **The difference is authority, not evidence:** §5 had the same evidence and no standing; this revision carries a ruling that was given. A reader asking where the ruling lives should stop here.
-- **"Discharge" retains two senses**, per v2.51 §7. An **obligation** is discharged by being *answered* (§5's table). A **gate** is discharged by being *ruled* (§1). This revision does both, in different sections.
-- **This revision changes a gate.** Every F-AUTH-1 revision from v2.48 through v2.51 carried *"Changes no gate"* in its footer. **This one does not, and the omission is deliberate** — a reader scanning footers for that phrase should notice its absence rather than assume it.
+- **Gate G3 is NOT discharged.** **Track G3** is the deployment track and remains OPEN. **Track G4's precondition is not satisfied.**
+- **The ruling at §1.1 was given and is recorded.** It disposes of clause 2. It does not discharge the gate, because clauses 1, 3 and 4 were not before it. **This is not a reversal**; nothing in it is withdrawn.
+- **"Changes no gate" is restored to the footer.** This revision's earlier draft dropped that line because it recorded a discharge. **It records none, and the line returns.** A reader comparing drafts should note the line tracks the act, not the topic.
+- **The gate sequence's own count is unresolved.** `v1.5.md` §6.1 is headed **"The Seven Gates"** and its table lists **six** (G1–G6). Every revision in this series, including this one, has cited *"v1.5's six-gate sequence."* **The heading and the table disagree**, and this revision does not settle which is correct — whether the heading is wrong or a gate is absent from the table is its own investigation. **Recorded as an observation, unresolved.**
 - **FD tail remains FD-65**; **XK tail remains XK-3.** Nothing is minted.
 
 # §8. What this revision establishes
 
-- **Gate G3 is discharged**, on Evoni's ruling, on v2.51 §5's evidence completed by `148698cb` (§1).
-- **The ruling does not depend on which reading of "minimum met" is taken**, because the privilege test closed the gap that separated them (§1).
-- **Track G4's precondition is satisfied; G4 is not entered** (§2).
-- **A green G4 soak would establish that the mechanism works and would not establish that the surface is closed** — recorded prospectively (§2.1).
-- **Discharging a ledger obligation requires no authorizing revision; entailment is the narrow exception where it changes behaviour** (§3).
-- **v2.51 §4's discipline governs prose, not only probes** (§4).
-- **Five of six open items are unowned** (§6).
-- **FD-65 remains OPEN and P0. The issuance half is untouched by anything recorded here.**
+- **Gate G3 has four clauses. Two are met, one is evidenced, one is unmet** (§1).
+- **The discharge ruling was given against a one-clause quotation and does not reach the gate as written; no discharge is recorded** (§1.1).
+- **Clause 3 is unmeetable, not merely unmet: `req.user` has no `sub` key, and five sites persist `undefined`** (§1.2).
+- **The site at `decisionLogs.js:22` has read an unpopulated key since `7ae309f2` (2026-02-08). This is a claim about code age; the rows are unmeasured** (§1.2).
+- **Step 6 is unexecuted, and the drift it would close is live in 6 files against 26** (§1.2).
+- **Track G4's precondition is not satisfied** (§2).
+- **A soak would establish neither that the surface is closed nor clause 3** (§2.1).
+- **The fifth instance of v2.51 §4's pattern closed the last check on a live defect, rather than costing a correction** (§4.1).
+- **v1.5 §6.1's heading and table disagree on the number of gates. Unresolved** (§7).
+- **Nine of ten open items are unowned** (§6).
 
 # §9. What this revision does not do
 
-- **Ships no code.** **Mints nothing** — no FD, no XK, no PE.
-- **Closes no finding.** Not FD-63, not FD-64, not FD-65. Discharging Gate G3 is not closing a finding, and §7 distinguishes the two.
-- **Does not enter Track G4**, notwithstanding that its precondition is now satisfied (§2). **Track G5 remains BLOCKED.**
+- **Ships no code. Mints nothing** — no FD, no XK, no PE. **Changes no gate.**
+- **Does not discharge Gate G3**, and does not reverse or withdraw the ruling at §1.1.
+- **Does not mint the `req.user?.sub` defect** (§1.2, §6 item 3), authorize Step 6, or propose a remedy for either.
+- **Does not enter Track G4**, whose precondition is not satisfied. **Track G5 remains BLOCKED.**
+- Does not close FD-63, FD-64 or FD-65. **FD-65 remains OPEN and P0.**
+- Does not settle v1.5 §6.1's six-versus-seven discrepancy (§7).
 - Does not select an issuance option, assign an owner to any item at §6, or authorize the environment read.
-- Does not admit v2.49 §5's credential-custody finding or authorize `JWT_SECRET` rotation.
-- Does not authorize any change to `src/`. §3 states when authorization is required; it grants none.
-- Does not edit any prior revision's body. §4 extends v2.51 §4 **forward**; §3 generalises the rule adopted during the `75ac05f0` remediation **forward**.
+- Does not edit any prior revision's body. §1.1 supersedes v2.47 §4.1's quotation **forward**; §4.1 extends v2.51 §4 **forward**.
 - Does not claim or open a prod window. **Prod remains FROZEN; confirm freeze status live before any prod-touching action.**
 - **No live database contact and no request issued to any deployed host.** Derived from git against `origin/main` at `148698cb`.
 
@@ -152,4 +210,4 @@ v2.51 §4 records four instruments — a grep, an enumeration, an exclusion, and
 
 *Author: Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni.*
 *Date: 2026-08-18. Main at `148698cb`. Predecessor: v2.51.*
-*Type: Gate ruling. **Changes Gate G3 — owed → discharged**, on Evoni's ruling, of which this revision is the only durable record. Track G4's precondition satisfied; G4 not entered, with the soak's reach recorded prospectively. States register scope with entailment as its exception, and extends v2.51 §4's discipline to prose. Carries the ledger with five of six items unowned. Ships no code. Closes no finding. Mints no FD, no XK, no PE. Tail: FD-65, OPEN, P0. XK tail: XK-3. No live database contact. [skip-automerge]*
+*Type: Gate reading. **Withholds the Gate G3 discharge** — the gate has four clauses, one unmet and presently unmeetable, and the ruling given reached only the clause that was quoted. Records clause 3's blocker as a live defect without minting it. Track G4's precondition not satisfied. Records the fifth instance of the v2.51 §4 pattern, the first with a cost rather than a correction. Ships no code. Changes no gate. Mints no FD, no XK, no PE. Tail: FD-65, OPEN, P0. XK tail: XK-3. No live database contact. [skip-automerge]*
