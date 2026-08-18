@@ -17,6 +17,78 @@
 
 ---
 
+## CORRECTION BANNER — added 2026-08-18, after filing
+
+**This banner corrects counts and discloses a duplication. The body below is preserved verbatim per additive-supersede. Where the two disagree, this banner governs.**
+
+### B1. Axis P is over-counted. Every number below carries its basis.
+
+The probe at §6.2 treated `Model.options.paranoid` as the exposure test. **It is not.** A model that also sets `timestamps: false` resolves **no deletion attribute at all** — Sequelize never names `deleted_at`, so nothing fails. Those models are **inoperatively paranoid** and must be excluded.
+
+**The correct test is whether a deletion attribute resolves, not whether `paranoid` reports true.** `timestamps: false` is one sufficient condition for it not to; the attribute test is the property itself and is what a re-run should use.
+
+| Basis | Method | Axis P | Broken total |
+|---|---|---:|---:|
+| `77fc5fb0` — this document's basis | **as filed, wrong method** | 19 | 28 |
+| `77fc5fb0` — this document's basis | corrected | **13** | **25** |
+| `main` as of 2026-08-18 | corrected | **12** | **24** |
+
+**The first two rows are the same commit.** They differ by method, not by basis — stated explicitly so no reader takes the change for schema drift.
+
+Six Axis P members are inoperatively paranoid: `metadata_storage`, `thumbnails`, `activity_logs`, `episode_wardrobe_defaults`, `asset_usage_log`, `ai_usage_logs`.
+
+**The broken total is not 28 minus 6.** Three of the six remain broken on other axes — `metadata_storage` and `activity_logs` on naming, `thumbnails` on absent-in-every-spelling. Only `episode_wardrobe_defaults`, `asset_usage_log` and `ai_usage_logs` leave the broken set.
+
+**`decision_logs` moved between the two corrected rows.** The migration at `956697c0`, authorized by v2.54 §1, added its `deleted_at` after this document's basis. **Three different numbers are all correct; they differ only by commit.** Any figure quoted from this document without its basis will become false without anyone stating an untruth — which is the mechanism behind most of what this document records.
+
+**Verified, not assumed:** no model in the set uses a custom `deletedAt` mapping. All resolve to the literal `deleted_at`, so the probe's fallback was correct in every case. Measured against a rebuilt migrations-only schema, 2026-08-18.
+
+### B2. Axis P is XK-1's territory, and this document re-derived it without citation.
+
+**`Cross_Keystone_Register.md` XK-1 — `paranoid` exposure — measured this on 2026-08-07, eleven days before this document, and has been OWNED since F-Stats-1 v1.31.** Its evidence artifact, `Paranoid_Exposure_Inventory_2026-08-07.md`, is *"not superseded and not moved… the measurement of record."*
+
+**This document did not cite either.** Its Axis P is XK-1 re-measured, and its §6.4.1 prod point restates the inventory's own carve-out in weaker terms.
+
+**The over-count was predicted.** The inventory §3 states: *"Anyone re-running this probe must apply the same correction."* This document re-ran a probe of the same shape and did not apply it.
+
+**Independent corroboration, and of which quantity.** The inventory reports **110 models inheriting `paranoid`**; this document's probe found **110**. Two instruments, eleven days apart, same figure. **That corroborates the denominator — the population declaring `paranoid` — and nothing else.** It is **not** confirmation of either document's exposure count, since both applied the same flawed exposure test to that shared denominator.
+
+### B3. The two measure different populations. Reconciled by membership, not by arithmetic.
+
+XK-1 reports **48** exposed; this document's corrected Axis P is **13**. **They do not disagree — they have different denominators.** Every one of the inventory's 48 partitions exactly:
+
+| Partition | Count |
+|---|---:|
+| Inoperatively paranoid — no deletion attribute resolves | 11 |
+| Exposed, table **exists** in a migrations-built schema — this document's Axis P | **13** |
+| Exposed, table **absent entirely** — this document's bucket 3 | 24 |
+| **Total** | **48** |
+
+**Zero residue.** Axis P is scoped to models whose table exists; XK-1 counts across all models regardless. The 13 matches by membership, not only by count.
+
+### B4. RAISED, NOT RESOLVED — a challenge to XK-1's own count
+
+**Criterion used, stated because B1 makes the distinction load-bearing:** the eleven below were derived with the **`attr=NO` test — no deletion attribute resolves** — not with the weaker `timestamps: false`. Both criteria were run over the eleven and agree on all eleven, so the challenge does not depend on which is used.
+
+**Applying the inventory's own criterion across all 48 excludes eleven models it did not exclude**, beyond the four it names: `activity_logs`, `ai_usage_logs`, `metadata_storage`, `asset_labels`, `asset_roles`, `asset_usage_log`, `processing_queue`, `show_configs`, `thumbnails`, `episode_wardrobe`, `episode_wardrobe_defaults`.
+
+**`episode_wardrobe_defaults`, `activity_logs`, `metadata_storage`, `thumbnails`, `ai_usage_logs` and `asset_usage_log` appear here and also among B1's six** — same criterion, same finding, already excluded from Axis P above. Their appearance here is not a second claim; the eleven is the same test applied to the inventory's wider population.
+
+**On that reading the exposed set is 37, not 48**, and XK-1's cross-keystone citation of `episode_wardrobe` does not hold on the paranoid axis — it is Pattern 40b (no migration anywhere) but has `timestamps: false` and no deletion attribute.
+
+**This is raised here and is not corrected here.** XK-1 is owned by F-Stats-1 and admitted by ratification; per the register's authority note **a self-applied entry carries no register authority**, and this document has none over another entry. **The route for amending an admitted entry is not established. Until it is, treat XK-1 as stating 48 and this banner as raising a challenge to it.**
+
+**XK-1's admission is not threatened by the challenge.** §2.1 requires reach into two or more keystones; `character_state` (F-Stats-1) and `outfit_sets` / `outfit_set_items` (F-Ward-3) remain in the genuine set. Two survive, so admission holds and this is an amendment question, not an unwind.
+
+### B5. Open questions, stated rather than resolved by omission
+
+- **Scope or absorb.** Whether this document should be re-scoped to exclude Axis P as XK-1's territory, or absorb it with attribution. A register decision; XK-1 is owned by F-Stats-1.
+- **Reciprocal-reference obligation.** XK-1's §4 requires that *"when F-Ward-1 or F-Ward-3 opens a plan artifact, it must reference the inventory and this entry."* This document is not a Ward artifact but touches `episode_wardrobe`. Whether the obligation attaches is a reading of the register's scope, and self-applied readings carry no authority.
+
+**Neither is answered here. Both go to the ratifying revision.**
+
+---
+
 ## §0. One-line
 
 **F-App-1 removed the write paths that bypassed migrations. It did not reconcile the schema those paths had already produced. This finding is that residue, measured.**
