@@ -55,6 +55,37 @@ concerns **FD-40 (F-Deploy-1)**, which is unrelated to open item 40 (F-Stats-1).
 
 ### XK-1 — `paranoid` exposure
 
+#### CORRECTION BANNER — XK-1, added 2026-08-18
+
+**Body below preserved verbatim per §6. Where they disagree, this banner governs. This corrects a count and withdraws one reach row. It changes no status: XK-1 remains OWNED (F-Stats-1 v1.31), fix UNEVALUATED.**
+
+**Authority — a reading, not settled.** §6 requires a ratifying Fix Plan revision for *status changes* and specifies for *corrections* only that they prepend a banner and preserve the body. This banner is authored on the reading that a correction needs no ratification, since §6 imposes that requirement pointedly on status changes and not corrections, and the front-matter's *"a self-applied entry carries no register authority"* governs **admission**. **That is inference from silence about who may author a correction. If a ratifying revision reads §6 otherwise, this is an unratified correction that said so on its face.**
+
+**The correction.** This entry's own *"Method correction — carry this forward"* paragraph identifies the over-count and excludes four models, stating the test as *models with timestamps AND no `deleted_at`*. **The property that actually governs is whether a deletion attribute resolves** — `timestamps: false` is sufficient for it not to, but the attribute test is the thing itself. **Applied across the full 48, it excludes eleven more:**
+
+`activity_logs`, `ai_usage_logs`, `metadata_storage`, `asset_labels`, `asset_roles`, `asset_usage_log`, `processing_queue`, `show_configs`, `thumbnails`, `episode_wardrobe`, `episode_wardrobe_defaults`
+
+**Exposed set: 48 → 37.** Derived 2026-08-18: every model loaded, deletion attribute resolved via `Model.options.deletedAt` against `rawAttributes`, column presence read from `information_schema` on a scratch database built by all 210 migrations. Both criteria were run and **agree on all eleven**. No model uses a custom `deletedAt` mapping — verified.
+
+**Reach — the F-Ward-1 row is withdrawn in full.** Both tables cited for F-Ward-1 are among the eleven.
+
+| Keystone | Exposed tables |
+|---|---|
+| F-Stats-1 | `character_state` |
+| F-Ward-3 | `outfit_sets`, `outfit_set_items` |
+
+**`episode_wardrobe` is withdrawn from the paranoid axis and is not thereby clean.** It remains F-Ward-1's **Pattern 40b** table — no migration anywhere — an undisturbed finding. Withdrawal means it cannot fail on `deleted_at`; it means nothing about whether its table exists.
+
+**Admission — conditional, not settled.** §2.1 requires reach into two or more keystones. **On the current reading, admission holds at exactly two — and that holding is contingent on the F-Ward-3 pair qualifying, which the next paragraph leaves open.** There is no margin: any further withdrawal drops reach to one and makes admission a status question requiring ratification.
+
+**Open, not raised as a challenge here.** `outfit_sets` and `outfit_set_items` have **no table at all** in a migrations-built schema, so their failure mode is a missing relation, not a missing `deleted_at` column. Whether such tables belong in a `paranoid`-exposure finding is unresolved. **This banner does not pursue it, and states plainly that its own admission claim above depends on the answer.**
+
+**§4's reciprocal-reference obligation — now open.** §4 binds F-Ward-1 and F-Ward-3 plan artifacts to reference this entry and the inventory. **With F-Ward-1's row withdrawn in full, this entry claims no exposed table for F-Ward-1**, so whether F-Ward-1's half of the obligation survives depends on whether it was written to track reach or to track the keystones named. **Not resolved here; queued for the ratifying revision.** F-Ward-3's half is unaffected.
+
+**Cross-reference.** Measurement of record: `Paranoid_Exposure_Inventory_2026-08-07.md`, which carries its own banner deriving 48 → 37 **independently**. Per §5 this register does not amend that artifact. Raised also at `FD-66_Model_Migration_Contract_Mismatch_2026-08-18_DRAFT.md` §B4.
+
+---
+
 **Origin:** open item 40 (F-Stats-1), minted v1.23 (#988), re-homed to the
 inventory at v1.24 (`95525f30`, #990), ownership escalated at v1.30
 (`f499a3ba`, #996), assigned here by F-Stats-1 v1.31.
