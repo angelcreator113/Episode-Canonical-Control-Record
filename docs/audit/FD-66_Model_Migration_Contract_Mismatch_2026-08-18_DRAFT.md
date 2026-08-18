@@ -121,7 +121,11 @@ The class is: **a model-level declaration that changes the SQL Sequelize generat
 
 **F-AUTH-1 Fix Plan v2.53 §4 states:** *"Executing §1 makes Gate G3 clause 3 meetable. The test at §1.1 fails today and passes after."*
 
-**That is false.** v2.53 §1.1's assertions 1 and 2 require a persisted `user_id` on `decision_logs`. No row is ever persisted. The specified test fails **before and after** `ed3461c5`, for a reason unrelated to F-Auth-5. Assertion 3 — that an anonymous POST persists no row — is meetable today, and passes for the wrong reason: the route persists nothing for anyone.
+**That is false.** v2.53 §1.1's assertions 1 and 2 require a persisted `user_id` on `decision_logs`. No row is ever persisted. The specified test fails **before and after** `ed3461c5`, for a reason unrelated to F-Auth-5. **Assertion 3 is different from 1 and 2 and the difference matters: it is met but unverifiable.** The behaviour it asserts already holds — an anonymous POST returns **401 `AUTH_REQUIRED`** from `requireAuth` before any database contact, so no row is persisted, and that is the right reason rather than a coincidence of the 500. **What cannot be done is verify it**, because the verification query — `DecisionLog.findOne` on the request's `entity_id` — names the same absent column and throws. **The subject holds; the instrument is broken.**
+
+*Corrected in place before filing, 2026-08-18.* An earlier draft of this section said assertion 3 *"passes for the wrong reason: the route persists nothing for anyone."* **The demonstration at v2.54 §2 disproved that** — the pre-migration run shows the anonymous test failing at its `findOne`, after its `401` and `AUTH_REQUIRED` assertions had already passed. The correction is made in place rather than forward because this document had not landed; **additive-supersede binds documents on `main`, and the register never carried the wrong version.**
+
+**Consequence for the migration at `956697c0`:** it made two assertions verifiable, of which only one concerned behaviour that was actually broken.
 
 **v2.53 §1.1 was written on 2026-08-18 against a route that had not functioned since 2026-02-08, and the route was not exercised before the specification was written.** This is a specification wrong about what is practical rather than wrong about the world, and it is the register's first recorded instance of that shape.
 
@@ -285,7 +289,16 @@ Stated per v2.51 §4.1, because the number above will otherwise become the next 
 
 ### §7.1 Direction ruled in session — migrations as the single source of schema truth
 
-**Recorded as a ruling given in the course of this work, with no written basis in the register. It is not an authorization and this document cannot make it one.**
+**Recorded as a ruling given in the course of this work. It is not an authorization and this document cannot make it one.**
+
+**Correction to an earlier draft of this section, made in place before filing:** it stated the direction had *"no written basis in the register."* **That was wrong, and the basis is stronger than a ruling.**
+
+- **`docs/audit/F-App-1_Fix_Plan_v1.md`** records the schema-as-JS auto-repair block in `src/app.js` — Path A calling `model.sync()` for any absent table, and Path B's **five hardcoded `CREATE TABLE IF NOT EXISTS` literals** for `world_events`, `character_state`, `character_state_history`, `decision_log`, `career_goals`. **F-App-1 removed it.** `grep -c "CREATE TABLE IF NOT EXISTS" src/app.js` returns **0**, and `src/app.js:95` carries the result: *"F-App-1: schema auto-repair removed. Migrations are now the single source of schema truth."*
+- **`docs/PRE_DEPLOYMENT_VERIFICATION.md:238`** states the deployment posture directly: *"**ENABLE_DB_SYNC disabled**: Using migrations instead (recommended)."*
+
+**So migrations-only is prior policy, already executed once.** What is new here is not the direction but the discovery that **the schema does not currently satisfy it** — 28 models name columns the migrations do not create. F-App-1 closed the write path that bypassed migrations; **it did not reconcile the schema that path had already produced.** That is FD-66.
+
+**The remaining ruling, and it is narrower than the earlier draft claimed:** that reconciliation proceeds by correcting migrations rather than by re-enabling sync, and that a baseline is required before the sync code path's disposition is decided.
 
 The direction is **migrations only**. The stated grounds: `sync({ alter: true })` ships a schema change as a side effect of editing a model file — no separate artifact, no review gate, no down path, and the ability to drop columns when a model narrows. **In a repository whose premise is that every change is authorized, shipped and closed against a register, a schema that cannot be reconstructed from version control is the one artifact with no provenance.**
 
