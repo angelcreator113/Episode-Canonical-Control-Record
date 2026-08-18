@@ -169,7 +169,9 @@ The class is: **a model-level declaration that changes the SQL Sequelize generat
 
 ## §5. What this blocks, and the corrections owed forward
 
-### §5.1 Gate G3 clause 3 is unmeetable, and was unmeetable when specified
+### §5.1 Gate G3 clause 3 was unmeetable, and was unmeetable when specified — cleared before this document landed
+
+> **STATE AT FILING.** **Clause 3 is met on `main` as of `19b31b1d`.** The blocker this section describes was removed by the migration at `956697c0`, authorized at v2.54 §1, and the test at `16c47a5f` passes with the before/after pair v2.54 §2 required. **Everything below is the state this finding found, and is written in the tense of that finding; it is not a present-tense claim about the gate.** Recorded here rather than left to a reader, because a clause-level claim about a gate that reads as current and is not is the exact shape of the fifth instance at v2.52 §4.1 — accurate text, inherited forward, no longer true. **The closure record belongs to v2.55; this line exists only so §5.1 cannot be read as live.**
 
 **F-AUTH-1 Fix Plan v2.53 §4 states:** *"Executing §1 makes Gate G3 clause 3 meetable. The test at §1.1 fails today and passes after."*
 
