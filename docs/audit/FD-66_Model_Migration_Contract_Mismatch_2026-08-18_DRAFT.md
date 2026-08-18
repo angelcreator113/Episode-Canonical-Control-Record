@@ -254,6 +254,21 @@ Sums to 33 against 27 mismatched models because **6 models fail more than one ax
 
 **Therefore, on the deploy path as written, a deployed database is built by migrations — the same path as the measured schema.** That makes `GET /api/v1/audit-logs` and `POST /api/v1/decision-logs` likely broken in the deployed environments in exactly the way they are broken in CI.
 
+**A third write path, gated by neither flag — correction made in place before filing.** An earlier draft of this section reasoned only about `src/app.js:70`'s boot-time sync and concluded that sync is opt-in via `ENABLE_DB_SYNC` and `DB_SYNC_ALTER`. **That reasoning is incomplete.**
+
+`src/models/index.js:1791-1806` exports a `sync` **method** whose defaults are:
+
+```js
+alter: process.env.NODE_ENV === 'development',
+force: false,
+```
+
+**It is not reached at import and not reached at boot** — verified: it is a method definition, and its only caller in the repository is `scripts/reset-database.js:28`, immediately after `db.drop()`. **But when invoked it consults neither `ENABLE_DB_SYNC` nor `DB_SYNC_ALTER`, and enables `alter` from `NODE_ENV` alone.**
+
+**The consequence for this finding is direct and it is not small.** `reset-database.js` drops every table and recreates the schema **from the models**. A database built that way has, by construction, exactly the columns the models declare — **so none of the 28 mismatches in §6.3 would be present on it.** Whether a given database exhibits this finding therefore depends on which of *three* paths built it, not two: migrations, boot-time sync, or a model-driven rebuild.
+
+**F-App-1's own audit flagged this call site** — `F-App-1_G1_Audit_Report.md:514` lists *"a suspicious `sequelize.sync()` call inside the model loader (`src/models/index.js:1797`)"* among §12.11's findings, declared out of F-App-1 scope. **The line has since drifted to `:1800`; the call is the same one.**
+
 **What the repository also establishes, and it cuts the other way:** **sync has been used historically.** `scripts/fix-missing-tables.js:3` describes itself as fixing *"missing tables after DB_SYNC_FORCE incident"*, and `src/migrations/20260323100000-add-scene-sets-generation-status.js:7` records a column that *"was never added via migration — only present when ENABLE_DB_SYNC + alter"*. **Some database has been shaped by sync at some point.** A deployed schema may therefore carry columns the migrations never created.
 
 **What remains unestablished, and is not repository-answerable:** the actual column state of any deployed database. Prod is FROZEN and no host was contacted. **This section narrows the question from "which provisioning system" to "migrations by the deploy path, with evidenced historical sync of unknown extent" — it does not close it.** Closing it is an infrastructure read and is owed.
@@ -346,6 +361,7 @@ A comment shipped at `4573d253` claimed no migration creates `activity_logs`. Th
 - **It establishes the population against a migrations-only database and against nothing else.** 27 of 146 models mismatch that schema (§6.3). Whether any deployed database matches that schema is **unmeasured** — `sequelize.sync()` at `src/app.js:87` and six request-path `.sync()` calls may have added columns there (§6.5).
 - **It does not establish 27 broken routes.** Three were probed (§6.4). The other 24 are models with missing columns and no route observation.
 - **It classifies bucket 3 only by name, not by disposition.** Of 39, one (`ProcessingQueue`) is a table-name mismatch and is a defect (§6.3.2); 38 have no table under any spelling, and **this finding does not sort them.** Four are named in migration source but created elsewhere; six request-path `.sync()` calls exist and could account for some. **The rest may be unused, may be dead, or may be broken — not established, and not claimed as defects.**
+- **It does not establish which of three paths built any given database.** Migrations, boot-time sync (`src/app.js:70`, double-gated), or a model-driven rebuild (`scripts/reset-database.js` → `src/models/index.js:1791`, gated by neither flag). **A database built by the third would exhibit none of the 28 mismatches**, because sync creates columns from the models. The infrastructure read owed at §6.4.1 must therefore establish provenance, not merely current columns.
 - **It names the `PE #62` overlap and does not reconcile it.** `PE #62` is recorded as F-App-1 residue, filed and unowned (v2.43, v2.45). **This finding did not read what `PE #62` documents and makes no claim about its contents** — only that runtime-created tables are territory the two items may share. Reconciling them is separate work against an unowned item.
 - **It does not establish CI behaviour for `decision_logs`.** §3.2 is observed locally and derived for CI.
 - **It does not establish the state of any deployed database.** No deployed host was contacted; prod is FROZEN. Whether `activity_logs` or `decision_logs` on dev or prod match their migrations is unmeasured.
