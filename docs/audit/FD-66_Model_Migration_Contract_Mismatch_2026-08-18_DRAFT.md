@@ -78,7 +78,11 @@ Two instances were investigated in depth before the population was measured — 
 
 **§12.11 is unremoved code. FD-66 is unreconciled schema. Same root cause, different objects.**
 
-The overlap is visible in the measurement: `ContinuityTimeline`, `ContinuityCharacter`, `ContinuityBeat` and `ContinuityBeatCharacter` all appear in FD-66's **bucket 3** — models whose tables migrations never build — precisely because a route handler builds them at request time instead. `StoryTaskArc` appears in **bucket 2**, missing `deleted_at`.
+**The overlap is measured, not inferred, and the distinction matters.** `ContinuityTimeline`, `ContinuityCharacter`, `ContinuityBeat` and `ContinuityBeatCharacter` appear in FD-66's own **bucket 3** — models whose tables migrations never build — and `src/routes/continuityEngine.js:40-43` calls `.sync()` on exactly those four. **Both halves come from this document's own instruments**; the correspondence was not obtained by matching names against §12.11's list. `StoryTaskArc` appears in **bucket 2**, missing `deleted_at`.
+
+**§12.11's counts are quoted, not verified by this document, and one of them disagrees with this document's own instrument.** The 6 Variant B and 11 Variant A figures above are F-App-1's enumeration, reproduced as such. **This document's grep found 6 request-path `.sync()` call sites against §12.11's 11 Variant A.** The difference is **unexplained**: it may be worker files, which this document did not search; drift since the report was written; or an error in either count. **A reader must not treat 11 as measured here — FD-66's own instrument disagrees with it, and neither number has been reconciled.**
+
+**Recorded as owed, not performed.** Re-counting the write paths is bounded work and would firm up §1.3. **It is not load-bearing for anything this document decides**, since §1.3 makes no decision — which is why the discrepancy is recorded rather than resolved.
 
 **Neither finding subsumes the other.** Closing §12.11 removes the paths and leaves the 28 broken. Closing FD-66 fixes the schema and leaves paths that can reproduce the drift.
 
