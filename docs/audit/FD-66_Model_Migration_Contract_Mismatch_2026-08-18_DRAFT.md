@@ -17,6 +17,32 @@
 
 ---
 
+## CORRECTION BANNER 2 — added 2026-08-18, after `79f9bab1`
+
+**Banners are read newest-first. Where two banners disagree, the later governs; where a banner and the body disagree, the banner governs. Banner 1 below is preserved exactly as merged at `79f9bab1` and is not edited — a dated layer that changes after merging cannot be relied on for what it said on its date.**
+
+**Scope of this banner: Banner 1's §B5 second question only.** B1, B2, B3, B4 and **B5's first question stand unchanged**.
+
+### B5's second question rested on a premise that is no longer true
+
+**What B5 said.** *"This document is not a Ward artifact but touches `episode_wardrobe`. Whether the obligation attaches is a reading of the register's scope."* The question had force because `episode_wardrobe` was one of two tables XK-1's reach table cited for **F-Ward-1** — so a document touching it plausibly stood in the relation §4's obligation governs.
+
+**What changed.** `76a7f1ac` withdrew XK-1's F-Ward-1 reach row **in full**: both `episode_wardrobe` and `episode_wardrobe_defaults` resolve no deletion attribute and are inoperatively paranoid. **XK-1 now cites no exposed table for F-Ward-1**, so touching `episode_wardrobe` no longer places any document in relation to XK-1's reach. **The question as posed has lost its hook.**
+
+**What replaces it, narrower.** This document still touches `episode_wardrobe` — bucket 3, no table under any spelling — but as **F-Ward-1's Pattern 40b instance**, not as an XK-1 reach table. Whether §4's obligation attaches on *that* basis is a different question with a different answer path: it turns on whether the obligation tracks the tables XK-1 claims or the keystones it names. **That question is recorded at XK-1's own banner and at the inventory's, for F-Ward-1's half of the obligation generally. It is deliberately not re-asked here** — a third copy of an unowned question is how a citation reaches eight carriers.
+
+**B5's first question is untouched. Scope-vs-absorb stands exactly as written.** Axis P is XK-1's territory whether or not the F-Ward-1 row survives, and nothing in `76a7f1ac` bears on it. **This banner corrects one premise, not both questions.**
+
+### Recorded as an instance, not fixed quietly
+
+The claim merged in Banner 1 at `79f9bab1`, was invalidated by `76a7f1ac` roughly an hour later, and was live on `main` in between. **This program invalidated its own citation and did not re-derive it at the point of quoting** — the same failure Banner 1 documents in other artifacts, at the shortest span and with the fullest record.
+
+**It is the only instance in this sequence where the whole chain is documented end to end** — claim, basis, invalidation, and span on `main` — because both ends were authored here rather than reconstructed from evidence. **It demonstrates that the cost of a stale citation is set by whether it is quoted, not by how long it stands:** XK-1's `48` was wrong for eleven days and cost three citations; this claim was wrong for one hour and cost one, and the correction is the same size either way.
+
+**The operative discipline, stated because "read skeptically" has no trigger and this does:** *re-derive a figure at the point of citation, at the current basis, or do not quote it.*
+
+---
+
 ## CORRECTION BANNER — added 2026-08-18, after filing
 
 **This banner corrects counts and discloses a duplication. The body below is preserved verbatim per additive-supersede. Where the two disagree, this banner governs.**
