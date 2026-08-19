@@ -1517,3 +1517,68 @@ mechanism it may not fit, and if so, what the right probe would even be.
 
 *Scoping question recorded 2026-08-19, after the amendment landed at
 `ccd8a7c9`. No measurement performed. No FD minted. Prod FROZEN.*
+
+### PE #63 — `[skip-automerge]` compliance against F-Deploy-1 v1.26 §3.4: 2 of 40 recent commits carry the required token (P2, OPEN, NEW 2026-08-19)
+
+**Date filed:** 2026-08-19
+**Severity:** P2
+**Status:** OPEN
+**Basis:** `main` at `91436ac1`, read at filing.
+
+**This entry measures compliance with an existing ruling. It is not a new
+finding and does not restate one.** The finding is **F-Deploy-1 Fix Plan v1.26
+§3.4**, *"`[skip-automerge]` has been decorative since 2026-06-27"*, which
+records that the token gates a workflow that cannot run, names PR #908 and
+#909 as instances, and rules: **the token "must continue to be used — it is
+the only protection if the workflow is re-enabled."** §3.4 is the authority
+for everything about the hazard; this entry adds only the rate.
+
+**Measured: 2 of the last 40 commits on `main` carry the token.** The two are
+`436a8772` (F-AUTH-1 Gate G3 unauthenticated half) and `539b522d` (F-Stats-1
+Fix Plan v1.60). **The remaining 38 omit it**, including the three filed by
+this session — `c038b6c6`, `65c8f6d4`, `91436ac1`. Method: `git log -1
+--format=%B` per commit, case-insensitive match, over `git log -40`.
+
+**The requirement re-binds when *either* disablement layer lifts, and the two
+layers are not equally visible.** v1.26 §3.4 records the YAML-vs-API split and
+names *"API re-enabled, YAML still commented"* as the dangerous direction,
+because that transition produces no repository-visible change. **For
+`auto-merge-to-dev.yml` — the workflow this token actually gates — that is
+already the standing configuration.** Its YAML trigger is live and uncommented:
+
+```yaml
+on:
+  push:
+    branches:
+      - 'claude/**'
+```
+
+**Only the API layer holds it.** `Auto-merge to Dev` (id 244372826) is
+`disabled_manually`; last run 2026-06-27. **A single API-layer toggle re-arms
+it with no commit, no review, and nothing observable in the repository**, at
+which point every future push to `claude/**` whose head commit lacks the token
+auto-merges to `dev`. `dev` is currently stale at `dc18b83d`.
+
+**Not concluded: why the rate is what it is.** F-Deploy-1's own last revision
+**v1.48 carries the token in both its body and its closing line**, so the
+practice held where the ruling lived — but **v1.48 (2026-07-22) falls outside
+the 40-commit window**, and the two carriers inside the window are F-AUTH-1
+and F-Stats-1 documents, not F-Deploy-1. **The window data does not support a
+clean scope-of-awareness split**, and no cause is claimed here. The rate is
+the finding; the explanation is not measured.
+
+**Deferral rationale.** F-Deploy-1's keystone CLOSED 2026-07-22 per v1.48, so
+there is no active plan owning the workflow. **The re-enablement decision's
+venue is not re-derived here** — it was framed at v1.28 §4.3 and
+recharacterized by v1.30 §5 as a rewrite gate rather than a toggle gate, and
+whether that is still where the decision lives is unestablished. This entry
+deliberately does not write into any F-Deploy-1 revision.
+
+**Resolution path.** Either resume carrying the token per v1.26 §3.4, or
+supersede §3.4's ruling explicitly. **What should not persist is the current
+state — a standing requirement at 5% compliance whose enforcement mechanism is
+one toggle away from returning.** Retroactive correction of the 38 is not
+proposed; history is not rewritten and the token only affects pushes.
+
+*Filed 2026-08-19. No measurement of any deployed host. No workflow enabled,
+disabled, or edited. No FD minted. Prod FROZEN.*
