@@ -1494,3 +1494,26 @@ none does.
 
 **Not established by this amendment.** No deployed schema was contacted; prod
 is FROZEN. Ownership is unchanged and remains the subject of this entry.
+
+**Not scoped: whether Variant B or the request-path seeder has an analogue
+to §4's ordering constraint.** §4's measurement was motivated — branch (c)
+surfaced accidentally and raised a real question about whether that failure
+mode had a population. Variant B and the seeder site at
+`franchiseBrainRoutes.js:105-106` have no such trigger, and *"has no
+equivalent measurement"* is true of most things; **it is not by itself a
+reason to measure.** The mechanisms also differ enough that §4's question
+may not transfer: inline `CREATE TABLE IF NOT EXISTS` has no Sequelize FK
+resolution to order — the DDL is whatever the literal says — and a seeder's
+`up()` runs whatever its author wrote in whatever order they wrote it.
+**Whether "latent ordering exposure" is even the right question for those
+two is itself unestablished.**
+
+**This is an open scoping decision, not a pending measurement.** Recorded
+so it is read as neither an owed probe nor a closed question. What a cold
+session decides is whether the §4 harness — one process per model, each
+against its own fresh migrations-built schema — is worth rebuilding for a
+mechanism it may not fit, and if so, what the right probe would even be.
+**The Variant A axis is closed; this does not reopen it.**
+
+*Scoping question recorded 2026-08-19, after the amendment landed at
+`ccd8a7c9`. No measurement performed. No FD minted. Prod FROZEN.*
