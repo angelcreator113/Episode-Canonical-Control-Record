@@ -33,6 +33,36 @@ narrower than §1 states: v2.54 §2 item 4 requires them *in the closure
 revision*, so transcription into v2.55 is the outstanding act, not
 re-derivation.
 
+**§1 item 2's status column is corrected, not withdrawn.** It reads *"Not
+started in any landed commit"*. **That is false, and false against a source
+this very index cites elsewhere.** `ed3461c5` — landed before this index was
+compiled, before v2.54's own `8a537c9c` basis — reconciles `req.user?.sub` to
+`req.user?.id` at all six sites v2.53 §1 authorized, `thumbnails.js:81`
+included as site 6. v2.54 §2.2 itself states it plainly: *"Item 2 — F-Auth-5
+— closed at `ed3461c5`."* The item 2 row contradicts the document it cites.
+
+**What is still owed is narrower than the row states, and is not code.** v2.54
+§5 bullet 2 (*"does not close the F-Auth-5 remediation — that is v2.55"*) and
+§6 bullet 3 (*"v2.55 closes F-Auth-5"*) are both true, and neither is about
+unwritten code. They are the same shape as Gate G3 clause 3 in §2.2 above:
+**available to make is not made.** The condition — six sites reconciled — is
+met. The remediation's *closure* is a ruling, and the ruling is what v2.55
+owes, against v2.54 §5/§6's exact requirements and whatever v2.52 §6 item 2
+records, read in full rather than through grep context.
+
+**Do not conflate with `thumbnails.js`'s other, unrelated defect.**
+`POST /api/v1/thumbnails/:id/publish` is still broken per v2.54 §2.3 —
+*"Axis A, eight absent columns"* — but that is a schema defect on the same
+route, not an unreconciled actor-attribution site. Both are true of one file;
+they are not one finding.
+
+**Three threads `ed3461c5` leaves open, recorded here and resolved nowhere:**
+the third blind spot named at v2.53 §1.1 — call sites outside `src/` — was
+searched once, returning a stale comment at
+`tests/unit/middleware/auth.test.js:83` asserting `req.user.sub`, left
+unchanged as outside the authorization; and the commit explicitly excludes
+Step 6b, CZ-5, and any `src/middleware/` change.
+
 ### How this document came to assert an absence it had not searched
 
 **§4 lists `956697c0` as a pointer. Its message body was never read.** *"Not
@@ -41,19 +71,24 @@ claim is only as good as the search behind it. **No search was run.** The
 pointer list was compiled from `git log --oneline`, which shows subject lines
 only, and `956697c0`'s subject line does not mention 2b.
 
+**Item 2's row is the same failure a second time.** *"Not started in any
+landed commit"* is also an absence claim, and no commit-body search was run
+behind it either — `ed3461c5`'s own message names the six sites, `thumbnails`
+included, and was available to read before this index shipped.
+
 **Recorded rather than fixed quietly, because the failure is this document's
 own subject matter.** §3 exists to catch a citation that went stale by
-mechanism, through no error by its author. **This is a citation that was never
-checked at all. The two are different failures, and only one of them is
-anybody's fault.**
+mechanism, through no error by its author. **These are citations that were
+never checked at all. The two are different failures from §3's, and only one
+of them is anybody's fault.**
 
 **Unaffected:** §2, §3, §3.1, §5, §6, and the closing non-establishments. **The
 Axis P finding at §3 stands** — it was derived by reading FD-66's banner
 against v2.54's text, and both were read in full.
 
 **Method note for whoever closes the remaining items: read the commit bodies,
-not the subject lines.** `956697c0` and `16c47a5f` each carry multi-paragraph
-records that `--oneline` hides entirely.
+not the subject lines.** `956697c0`, `16c47a5f`, and `ed3461c5` each carry
+multi-paragraph records that `--oneline` hides entirely.
 
 **Type: index. Not a revision, not a specification, and not an authorization.**
 It records **what v2.55 was owed and by whom**, so the list survives outside a
