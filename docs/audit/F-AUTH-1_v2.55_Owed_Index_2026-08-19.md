@@ -1,5 +1,60 @@
 # F-AUTH-1 v2.55 — Owed Index
 
+## CORRECTION BANNER — added 2026-08-19, after `65c8f6d4`
+
+**§1 item 3 is withdrawn. The `down` verification gate WAS exercised at ship
+time, and the record is in the commit that carried the migration.**
+
+**What §1 item 3 claims:** *"whether 2b was executed is not stated in any
+landed commit message"*, developed into *"the precedent-setting migration's
+gate has no evidence of having been exercised."*
+
+**That is false.** `956697c0`'s commit message states:
+
+> `down` removes the column. **Verified as a gate per v2.54 section 2 step 2b,
+> not assumed from an exit code:** `information_schema` read after each phase
+> gave PRESENT (timestamptz, nullable, default NONE) → ABSENT after
+> `db:migrate:undo` → PRESENT with identical shape after re-apply. **No
+> residue.**
+
+**This satisfies v2.54 §2 step 2b on its own terms, method included.** Step 2b
+required confirming absence *"by reading `information_schema`, not by trusting
+the command's exit code."* The record names `information_schema` and
+explicitly disclaims the exit code. **Item 3 is discharged. There is no open
+question about the precedent, and no phase of the cycle is unrecorded.**
+
+**§1 item 1 is sharpened, not withdrawn.** `16c47a5f`'s message carries a
+section headed *"THE BEFORE/AFTER PAIR, as v2.54 section 2 sequences it"*: the
+run-time `origin/main` SHA `8a537c9c401c63dc5698fc1df94ad79f2e8d5daf` — read
+at run time as §2 step 1 required, not quoted from the revision — the verbatim
+BEFORE output (2 of 2 failed at the absent column) and the AFTER pass (2 of 2,
+test unchanged). **The records exist and are durable.** What remains owed is
+narrower than §1 states: v2.54 §2 item 4 requires them *in the closure
+revision*, so transcription into v2.55 is the outstanding act, not
+re-derivation.
+
+### How this document came to assert an absence it had not searched
+
+**§4 lists `956697c0` as a pointer. Its message body was never read.** *"Not
+stated in any landed commit message"* is an absence claim, and an absence
+claim is only as good as the search behind it. **No search was run.** The
+pointer list was compiled from `git log --oneline`, which shows subject lines
+only, and `956697c0`'s subject line does not mention 2b.
+
+**Recorded rather than fixed quietly, because the failure is this document's
+own subject matter.** §3 exists to catch a citation that went stale by
+mechanism, through no error by its author. **This is a citation that was never
+checked at all. The two are different failures, and only one of them is
+anybody's fault.**
+
+**Unaffected:** §2, §3, §3.1, §5, §6, and the closing non-establishments. **The
+Axis P finding at §3 stands** — it was derived by reading FD-66's banner
+against v2.54's text, and both were read in full.
+
+**Method note for whoever closes the remaining items: read the commit bodies,
+not the subject lines.** `956697c0` and `16c47a5f` each carry multi-paragraph
+records that `--oneline` hides entirely.
+
 **Type: index. Not a revision, not a specification, and not an authorization.**
 It records **what v2.55 was owed and by whom**, so the list survives outside a
 session transcript. **Every entry below cites a landed source** — a v2.54
