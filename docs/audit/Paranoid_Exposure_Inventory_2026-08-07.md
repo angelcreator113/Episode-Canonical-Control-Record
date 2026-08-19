@@ -7,6 +7,40 @@
 | **Basis** | `394ca354`. Probe run `31211484715` (workflow_dispatch, branch `diag/deleted-at-inventory`, since deleted). |
 | **Owner** | UNASSIGNED. Spans F-Stats-1, F-Ward-1, F-Ward-3. |
 
+## CORRECTION BANNER 2 — added 2026-08-19
+
+**Banners are read newest-first. Where two disagree the later governs; where a banner and the body disagree the banner governs. The 2026-08-18 banner below is preserved exactly as merged at `76a7f1ac` and is not edited.**
+
+**Dates.** Added **2026-08-19**; measurements run **2026-08-18**. The session spanned midnight. Both correct.
+
+**§7's appendix contains 24 tables that cannot exhibit this document's own mechanism.** §1 states the failure as `column "deleted_at" does not exist` on the first INSERT against a migration-built database. **24 of the 48 have no table at all in such a database.** Three branches, measured 2026-08-18, none reaching a missing-column failure:
+
+| Model | before `sync()` | `sync()` | `deleted_at` after |
+|---|---|---|---|
+| `Marker` → `markers` | `relation "markers" does not exist` | succeeded | **present** |
+| `ContinuityBeat` → `continuity_beats` | `relation … does not exist` | **failed** — `relation "continuity_timelines" does not exist` | n/a |
+| `FileStorage` → `FileStorages` | `relation … does not exist` | **failed** — `relation "Episodes" does not exist` | n/a |
+
+Table absent → missing relation, a different defect. `sync()` succeeds → it creates `deleted_at` too, since the model declares `paranoid`. `sync()` fails → table stays absent, failure remains a missing relation; this arises when a model's FK targets are themselves in the 24.
+
+**All 24 were checked systematically, not inferred from the probes: every one resolves `deleted_at` exactly** — no custom `deletedAt` field name, no missing deletion attribute.
+
+| | as published | 2026-08-18 banner | this banner |
+|---|---:|---:|---:|
+| exposed | 48 | 37 | **13** |
+
+**13 at the basis preceding `956697c0`; 12 as of `main` at `803b0265`. This is the remainder of the partition in the banner below, not an independent second measurement.**
+
+**Basis and limits.** Scratch database built from `src/migrations` only — the sole tree `db:migrate` reads; four others hold migration-shaped files and none run. **Not asserted for any deployed schema:** §4's prod carve-out stands. **A table created by `model.sync` before `paranoid` was added would exist, lack `deleted_at`, and be genuinely exposed** — excluded here by the basis, not by measurement. That path is **current, not historical**: §12.11's Variant A sites are intact, exactly 11 live `Model.sync()` calls in `src/routes/` and `src/workers/`, verified 2026-08-19. Only its five Variant B inline-DDL literals were removed.
+
+**§4's cross-keystone reach is affected.** Both F-Ward-3 tables are among the 24; with F-Ward-1 already withdrawn, reach reduces to F-Stats-1 alone. **This document does not evaluate the consequence** — admission is the register's question, referred to a ratifying revision.
+
+**Prior art checked:** F-Stats-1 v1.57 §60 contains no characterisation of absent-table exposure. Recorded so the check is known to have been run.
+
+**Cross-reference.** `Cross_Keystone_Register.md` XK-1 carries a matching second banner; neither cites the other as authority.
+
+---
+
 ## CORRECTION BANNER — added 2026-08-18
 
 **Body below preserved verbatim. Where they disagree, this banner governs. §2's exposed count and §7's appendix are corrected; §1's mechanism and §6's declinations are unchanged.**
