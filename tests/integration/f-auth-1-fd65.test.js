@@ -129,8 +129,25 @@ const anonymousLogin = (body) => request(app).post('/api/v1/auth/login').send(bo
       // An earlier version of this comment claimed no migration creates the
       // table. That was wrong, and how it was wrong is worth keeping: the
       // search was `grep migrations/`, but .sequelizerc points
-      // `migrations-path` at src/migrations/. This repo has two migration
-      // directories and only src/migrations/ is the one sequelize reads.
+      // `migrations-path` at src/migrations/.
+      //
+      // SEARCH src/migrations/. That is the tree `sequelize db:migrate` reads,
+      // and the only one. A migration that exists anywhere else does not run.
+      //
+      // Corrected 2026-08-19: an earlier version of this comment also said
+      // "this repo has two migration directories." That count is withdrawn,
+      // not replaced. There are more than two, and no number is
+      // substitutable, because "migration directory" has no predicate here:
+      // `migrations/`, `migrations/sequelize-migrations/`,
+      // `scripts/migrations/` and `migrations-node-pg-migrate/` all hold
+      // migration-shaped files, and these trees have been counted several
+      // different ways, each correct under some predicate and wrong under
+      // another. `migrations-node-pg-migrate/` is not even sequelize — it
+      // uses node-pg-migrate's `exports.up = (pgm) =>` form.
+      //
+      // The operative consequence, which is what matters here: a grep hit
+      // outside src/migrations/ does not mean a migration runs, and a miss
+      // inside it is the only negative worth acting on.
       //
       // Not established: whether other models share this mismatch. 133 of 154
       // models declare `underscored: true`, and none but ActivityLog has been
