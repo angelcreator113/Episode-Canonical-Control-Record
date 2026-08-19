@@ -1344,7 +1344,7 @@ Closed entries remain in the chronological PE sequence above with their CLOSED s
 - Verification amendments: append below original entry with `⚠️ VERIFICATION AMENDMENT` heading. Preserve original entry for evidence-state continuity per v11 §3.3 closure-semantic vocabulary. PE #51 and PE #52 entries demonstrate the pattern.
 
 
-### PE #62 — Pattern 40 §12.11 residue is unowned: no keystone or follow-up plan tracks surviving schema-as-JS sites (P2, OPEN, NEW 2026-07-14)
+### PE #62 — Pattern 40 §12.11 residue is unowned: no keystone or follow-up plan tracks surviving schema-as-JS sites (P2, OPEN, NEW 2026-07-14, AMENDED 2026-08-19)
 
 **Finding.** F-App-1 G1 Audit §12.11 (2026-05-14) cataloged Pattern 40
 instances outside F-App-1 scope and recorded "Follow-up plan recommended."
@@ -1421,3 +1421,76 @@ candidates" (its PE #7–#14), which are a plan-local numbering.
 formal status (shipped 2026-05-14, Decision #105, does not gate sequence)
 against Handoff v11 + PE #53 — closing a records-staleness loop of
 exactly the shape PE #53 predicted.
+**2026-08-19 amendment.** Surfaced incidentally while correcting an unrelated
+`paranoid`-exposure count; no probe was aimed at this entry. Verified against
+`origin/main` `803b0265`. Four items.
+
+**1. Variant A live re-verification — performed, not discharged.** This entry
+records re-verification as *owed at ownership time*. There is still no owner, so
+this is recorded as **performed and available**, not as discharging the
+obligation. **Exactly 11 live `Model.sync()` calls**, matching §12.11's count
+independently: `src/routes/continuityEngine.js:40,41,42,43`
+(`ContinuityTimeline`, `ContinuityCharacter`, `ContinuityBeat`,
+`ContinuityBeatCharacter`), `src/routes/franchiseBrainRoutes.js:66`
+(`FranchiseKnowledge`), `src/routes/memories/engine.js:2434,3183,3470,3662`
+(`StoryTaskArc`), `src/routes/sceneSetRoutes.js:52` and
+`src/workers/sceneGenerationWorker.js:235` (`GenerationJob`). **11 sites, 7
+distinct models.**
+
+**2. Variant B also still present — all five.**
+`src/controllers/videoCompositionController.js:35`, `src/routes/admin.js:53`,
+`src/routes/storyHealth.js:244` and `:276`, `src/routes/worldStudio.js:319`. A
+`grep` for `CREATE TABLE IF NOT EXISTS` across `src/` returns exactly 5.
+**Neither variant has been retired.** F-App-1 retired a *different* set — the
+`app.js` auto-repair literals for `world_events`, `character_state`,
+`character_state_history`, `decision_log`, `career_goals` — and that grep
+returns 0 in `app.js`. **The two sets are both described as "five inline-DDL
+sites" and are not the same five; a probe against `app.js` measures F-App-1's
+set and says nothing about this entry's.**
+
+**3. A third variant, not covered by A or B: request-path seeder execution.**
+`src/routes/franchiseBrainRoutes.js:105-106` obtains a live query interface and
+runs a seeder's `up()` inside a request handler:
+
+```js
+const queryInterface = db.sequelize.getQueryInterface();
+await seeder.up(queryInterface, db.Sequelize);
+```
+
+Not `model.sync` (Variant A), not an inline `CREATE TABLE` (Variant B) — it
+executes seeder machinery against the live schema from the request path. **This
+file already appears in Variant A at `:66`; this is a separate mechanism in the
+same file.**
+
+**4. Variant A's sync order is load-bearing, and nothing records it.** Measured
+per-model against fresh migrations-built schemas — each model synced in its own
+process against its own copy of a migrated template, so the probe could not
+create the ordering it was measuring:
+
+| Model | `sync()` on a fresh migrated schema |
+|---|---|
+| `ContinuityTimeline` | OK |
+| `ContinuityCharacter` | **fails** — `relation "continuity_timelines" does not exist` |
+| `ContinuityBeat` | **fails** — `relation "continuity_timelines" does not exist` |
+| `ContinuityBeatCharacter` | **fails** — `relation "continuity_beats" does not exist` |
+| `FranchiseKnowledge` | OK |
+| `StoryTaskArc` | OK |
+| `GenerationJob` | OK |
+
+**3 of 7 models cannot sync independently, and all three are in the one route
+that orders them correctly.** `continuityEngine.js:40-43` syncs Timeline (40),
+then Character (41), Beat (42), BeatCharacter (43); Character and Beat need
+`continuity_timelines` from line 40, and BeatCharacter needs `continuity_beats`
+from line 42. **The ordering is exactly right and exactly necessary. No other
+Variant A site is affected.**
+
+**Severity stays P2, and this amendment measures why rather than assuming it.**
+The constraint is **latent, not live** — no site fails at runtime today. The
+exposure is that the order is undocumented: reordering those four lines breaks
+the route, and nothing in the code or the register says so. Had any unprotected
+site synced a model with absent FK targets, that would have been a runtime
+failure on a fresh database and a different finding; the probe establishes that
+none does.
+
+**Not established by this amendment.** No deployed schema was contacted; prod
+is FROZEN. Ownership is unchanged and remains the subject of this entry.
