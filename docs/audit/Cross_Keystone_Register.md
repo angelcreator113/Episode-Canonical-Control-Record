@@ -55,6 +55,66 @@ concerns **FD-40 (F-Deploy-1)**, which is unrelated to open item 40 (F-Stats-1).
 
 ### XK-1 — `paranoid` exposure
 
+#### CORRECTION BANNER 2 — XK-1, added 2026-08-19
+
+**Banners on this entry are read newest-first. Where two disagree the later governs; where a banner and the entry body disagree the banner governs. The 2026-08-18 banner below is preserved exactly as merged at `76a7f1ac` and is not edited — a dated layer that changes after merging cannot be relied on for what it said on its date.**
+
+**Dates.** This banner was added **2026-08-19**. The measurements it reports were run **2026-08-18**, before midnight. Both are correct; the session spanned the boundary.
+
+##### The 24 bucket-3 members are miscategorised
+
+The banner below partitioned the original 48 into 11 inoperatively paranoid, 13 exposed with the table present, and **24 exposed with the table absent entirely**. **That third group cannot exhibit this entry's own stated mechanism** — *"`column "deleted_at"` does not exist on the first INSERT against a migration-built database."*
+
+**Three branches, all measured 2026-08-18 against a migrations-built schema. None reaches a missing-column failure.**
+
+| Model | before `sync()` | `sync()` | `deleted_at` after |
+|---|---|---|---|
+| `Marker` → `markers` | `relation "markers" does not exist` | succeeded | **present** |
+| `ContinuityBeat` → `continuity_beats` | `relation … does not exist` | **failed** — `relation "continuity_timelines" does not exist` | n/a |
+| `FileStorage` → `FileStorages` | `relation … does not exist` | **failed** — `relation "Episodes" does not exist` | n/a |
+
+- **Table absent** → the failure is a **missing relation**, a different defect.
+- **`sync()` succeeds** → it creates `deleted_at` too, because the model declares `paranoid`. Not exposed.
+- **`sync()` fails** → the table stays absent, so the failure remains a missing relation. Arises when a bucket-3 model's foreign-key targets are themselves in the 24: `continuity_beats` needs `continuity_timelines`, which is also absent. `src/routes/continuityEngine.js:40-43` syncs Timeline before Beat, so that route's ordering is load-bearing.
+
+**Systematically checked, not inferred from the three probes: all 24 resolve `deleted_at` exactly** — no custom `deletedAt` field name, no missing deletion attribute. The custom-mapping check the banner below applied to the 19 did not cover these; it now does.
+
+**Exposed set: 37 → 13** at the basis preceding `956697c0`; **→ 12** as of `main` at `803b0265`, where the `decision_logs` migration has landed. **This is not a second instrument agreeing with FD-66's Axis P.** It is the remainder of the partition already established below — arithmetic on one measurement, not corroboration by two.
+
+##### Basis, and what is not asserted
+
+**The scratch database was built from `src/migrations` only** — the tree `.sequelizerc` names and the only one `sequelize db:migrate` reads. **Four other trees hold migration-shaped files** (`migrations/`, `migrations/sequelize-migrations/`, `scripts/migrations/`, `migrations-node-pg-migrate/`, the last using node-pg-migrate rather than sequelize) and none run under `db:migrate`.
+
+**This claim holds for a migrations-built schema and is not asserted for any deployed schema.** This entry's own carve-out states prod's schema drifted separately, was never verified, and must not be assumed.
+
+**One path is excluded by the basis rather than by measurement, and it is current rather than historical.** A table created by `model.sync` *before* `paranoid` was added to its model would exist, lack `deleted_at`, and be **genuinely exposed**. That cannot occur in a migrations-built schema. **It can occur wherever a runtime sync runs — and §12.11's Variant A sites are intact: exactly 11 live `Model.sync()` calls in `src/routes/` and `src/workers/`, verified 2026-08-19.** Only §12.11's five Variant B inline-DDL literals were removed, by F-App-1.
+
+##### §2.1 limb 1 now fails
+
+With the F-Ward-1 row already withdrawn, and **both** F-Ward-3 tables — `outfit_sets`, `outfit_set_items` — among the miscategorised 24, **reach reduces to F-Stats-1 alone (`character_state`)**. §2.1 limb 1 requires two or more keystones.
+
+**The banner below committed this entry in advance to how that is handled, before the measurement came back:**
+
+> *any further withdrawal drops reach to one and makes admission a status question requiring ratification*
+
+**That criterion was set at `76a7f1ac` and is honoured here. This banner does not assert admission survives, and does not assert it fails.**
+
+##### §2.1 limb 2, stated and not resolved
+
+§2.1's second limb admits a finding that *"sits outside the sequence entirely (boot path, pipeline, workstation)."* **This entry's defect originates in `src/config/sequelize.js`'s global `define` block — boot path.** Whether that carries admission independently of keystone reach is a reading of §2.1's scope and **belongs to a ratifying revision, likely F-Stats-1's, which owns this entry.**
+
+**Noted without pursuing:** if limb 2 does carry it, the entry was **correctly admitted for a reason nobody stated at admission** — different from admission having been wrong.
+
+##### Prior art: checked, none found
+
+**F-Stats-1 v1.57 §60 was searched for any characterisation of absent-table exposure and returned nothing** — no reference to missing relations, absent tables, or the distinction between them and missing columns. Recorded so a later reader knows the check was run rather than skipped.
+
+**Separately, and not a qualification of the above:** §60.6 held prior art this correction program should have cited earlier — four parallel migration trees, and model/migration drift in the inverse direction. That miss is corrected at PR #1056 and is not re-litigated here.
+
+**Cross-reference.** `Paranoid_Exposure_Inventory_2026-08-07.md` carries a matching second banner deriving 37 → 13; per §5 this register cannot amend it. Raised also at `FD-66_Model_Migration_Contract_Mismatch_2026-08-18_DRAFT.md`.
+
+---
+
 #### CORRECTION BANNER — XK-1, added 2026-08-18
 
 **Body below preserved verbatim per §6. Where they disagree, this banner governs. This corrects a count and withdraws one reach row. It changes no status: XK-1 remains OWNED (F-Stats-1 v1.31), fix UNEVALUATED.**
