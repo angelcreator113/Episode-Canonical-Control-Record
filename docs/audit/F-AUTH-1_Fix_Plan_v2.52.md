@@ -5,6 +5,18 @@
 
 v2.52 — **WITHHOLDS THE GATE G3 DISCHARGE. CHANGES NO GATE. MINTS NOTHING. SHIPS NO CODE.** FD tail remains **FD-65 (F-AUTH-1)**; XK tail remains **XK-3**. **Gate G3 has four clauses; two are met, one is evidenced, and one is unmet and presently unmeetable** (§1). A discharge ruling was given against v2.47 §4.1's single-clause quotation of the gate; **a ruling on a partial premise does not reach the gate as written**, and this revision therefore records no discharge (§1.1). **Clause 3's blocker is a live defect**: `req.user` carries no `sub` key in any of the three middlewares, and five sites read `req.user?.sub` and persist `undefined` (§1.2). **Track G4's precondition is NOT satisfied** (§2). **Records that F-Auth-5 alone blocks clause 3** — CZ-5 is done, Step 6b is deferred by name and separable (§1.3). Records the fifth and sixth instances of v2.51 §4's pattern, and **corrects v2.49 §2.4's gate count forward: 36 is a floor, not a total** (§4.1). Derived from git against `origin/main` at `148698cb`. No live database contact and no request issued to any deployed host.
 
+> **CORRECTION BANNER - Sec 1 row 4's line citations are asymmetric (added 2026-08-20, after `5a0bda60`, additive).**
+> Row 4 cites `frontend/src/services/api.js:82` *(wipe + redirect)* and `:98` *(refresh once)*. **The dispositions are correct and clause 4 remains MET.** What is corrected is the citation form: the two line numbers do not point at the same kind of thing, and `:82` does not contain the behaviour its parenthetical names.
+>
+> - **`:82` is a declaration site, not a behaviour site.** It is `'AUTH_REQUIRED',`, a member of the `SESSION_FAIL_CODES` set declared at `:81-84`. The wipe-and-redirect it is glossed with executes at **`:121-123`** - `if (status === 401 && (!code || SESSION_FAIL_CODES.has(code))) { wipeSessionAndRedirect(); ... }`.
+> - **`:98` is a behaviour site.** It is the branch head `if (status === 401 && code === 'AUTH_INVALID_TOKEN')`, and the single-retry refresh it is glossed with executes inside that branch at `:110-114`. Line number and behaviour coincide here; at `:82` they do not.
+> - **Clause 4's disposition is unaffected.** Both paths exist and are distinct: `AUTH_REQUIRED` wipes and redirects, `AUTH_INVALID_TOKEN` refreshes once under a `_retried` contract. **MET stands, and no gate reading changes.**
+> - **The file has not moved.** `git diff 148698cb..5a0bda60 -- frontend/src/services/api.js` is empty; no commit has touched it since this revision's own basis. The correction is to this document's description, never to the code.
+>
+> **Reach, stated rather than assumed.** This revision is superseded, and a verifier re-checking Gate G3 opens v2.55 Sec 3.1, not this row. v2.55 drops the parenthetical and does not carry the error forward, though it still cites `:82` as live evidence without naming it a declaration site. **This banner is archival hygiene on the document that carries the error. It is not a protection for the G3 verifier and should not be read as one.**
+>
+> The original prose is preserved verbatim below as the at-filing record. Do not read it as current; read this banner plus the row it corrects as the corrected citation.
+
 **Author**
 
 JAWIHP / Evoni — Prime Studios
