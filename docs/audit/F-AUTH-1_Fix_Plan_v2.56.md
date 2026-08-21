@@ -15,6 +15,16 @@ remains **FD-66**; XK tail remains **XK-3**. Derived from git against
 `origin/main` at `d68bfda78c0db3b609b085a2bb1808a62f00b899`. No live database
 contact and no request issued to any deployed host.
 
+> **CORRECTION BANNER — the Status field's `Gate G3` / `Track G3` pair is SUPERSEDED, and §3's deferral is DISCHARGED (added 2026-08-21, after `f214cece`, additive).**
+> **Both changes are made by `F-AUTH-1_Fix_Plan_v2.57.md`. Nothing else in this revision moves.**
+>
+> - **The Status field carries *"Track G3 — OPEN"* and *"Gate G3 — DISCHARGED"* as two dispositions.** **They are one gate.** v2.57 §1.3 rules `Gate G<n>` and `Track G<n>` co-referential for n=3–6, and v2.57 §3 item 3 retires the two-line form. **The pair is superseded by a single line: `G3 — PARTIALLY DISCHARGED, OPEN` — v1.5 §6.1 clauses 1–4 discharged at v2.55 §3.1 and standing; §5.71 limbs 1 and 3 unattempted.** The discharge is **incomplete, not void**; nothing ruled at v2.55 §3.1 is unwound (v2.57 §2.1).
+> - **§3's deferral is discharged.** §3 recorded the `Gate G<n>` / `Track G<n>` question and deferred it, naming the read it required. **That read was performed at `f214cece` and the ruling is at v2.57 §1.** §3's finding that *"the two schemes may be one sequence under two prefixes"* is **selected**; its reading 2 is refuted, and its reading 3 — under which this revision's Gate G3 discharge would have become void — **does not hold** (v2.57 §1.3).
+> - **§3's read-pointer is corrected.** §3 names the required read as *"v1.5 §7.3 and §5.71 in full."* **v1.5 §7.3 is a G4/G5 artifact**, not a G3 one — v1.5 §7 opens *"Run this checklist on dev (during G4) and again on prod after G5 cutover."* **G3's specification is v1.5 §6.1 line 398**, with its clauses 3 and 4 substantiated at v1.5 §4.6. See v2.57 §1.1.
+> - **§3's six-scheme deferral ground stands for the four schemes it named.** `CP12-G<n>`, `XK-3 Gate <n>`, F-Deploy-1's `Gate 2.5` and its Rule 7 window gates are **not bound** by v2.57 (v2.57 §1.4). Only `Gate G<n>` is newly bound into v2.38 §2.2's lock, as an alias of `Track G<n>` — **the part §3's stated ground never reached.**
+>
+> **What stands: everything else.** §1 and §1.1 including the limb table, §2 and §2.1, §4 and §4.1–§4.3, §5, §6's numeral disambiguation, and §7's non-establishments are unaffected. **§6's *"limb" vs "clause"* discipline is RETAINED and is now explained** — the two words name two specifications of one gate, not two gates (v2.57 §1.3). The original prose is preserved verbatim below as the at-filing record.
+
 **Author**
 
 JAWIHP / Evoni — Prime Studios
