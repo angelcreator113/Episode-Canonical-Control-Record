@@ -9,6 +9,21 @@
 
 ---
 
+> **CORRECTION BANNER — Sec 4.2 instance 3's namespace characterization was ASSERTED, NOT DERIVED (added 2026-08-21, after `f214cece`, additive).**
+> **Sec 4.2 instance 3 reads *"v2.37 Sec 5.71's three limbs, **specifying the same G3**, went unconsulted."* That characterization rules the `Gate G<n>` / `Track G<n>` namespace question — the same question Sec 8 states this document does not rule. **The document contradicts itself in force, and this banner records that, not a ruling.**
+>
+> - **Its source carried a disclaimer that this document dropped.** v2.56 §2.1 states the identity and then immediately disclaims reliance on it: *"Whether v1.5's G3 and §5.71's Track G3 are one gate with two specifications or two gates is **deferred to §3 and is not relied on here**."* v2.56 §3 defers the question explicitly. **Sec 4.2 carried the identity forward and left the disclaimer behind.**
+> - **The characterization has since been confirmed. It was not derived when written.** A read of `F-AUTH-1_Fix_Plan_v1.5.md` §6.1 and §9.9 against `F-AUTH-1_Fix_Plan_v2.37.md` §5.71 in full, performed at `f214cece` on 2026-08-21, establishes that v1.5's `G3`–`G6` and §5.71's `G3`–`G6` are one sequence. **Sec 4.2's characterization is correct. It was correct before anyone had established it.**
+> - **That it landed correctly is what makes this a finding rather than a slip.** Sec 5's argument is that a checklist item handing over a *result* is read instead of run, and *"stops being questioned at the moment it stops being true."* **A correct-by-luck characterization is indistinguishable from a derived one at the point of reading**, and inherits none of the derivation's guarantees. This document's own test — *"could re-deriving it falsify the item's own text?"* — is the test Sec 4.2 instance 3 was never put to.
+> - **Sec 1 and Sec 2 carry `Gate G3 — DISCHARGED` and `Track G3 — OPEN` as simultaneous status lines.** Those two lines are coherent only on a reading of the namespace question that this document does not establish and v2.56 §3 does not select. **They must not be read as independently settled.** The ruling is owed to a revision and is not made here.
+> - **Instance 3 also names the wrong revision, and a successor following it will read the wrong document.** Sec 4.2 instance 3 places the omission at **v2.55 §3.1**, as does v2.56 §2.1. **It is inherited from v2.53 §4**, which set the sufficiency premise two revisions before the discharge — *"the discharge ruling withheld at v2.52 §1.1 can be re-made **against the full text**"* — and scoped "the full text" to v1.5's four clauses alone. **v2.55 executed that instruction faithfully and is not where this went wrong.** Recorded at `F-AUTH-1_Fix_Plan_v2.57.md` §2.3. **The completeness claim sits in a citation**, which makes it a fourth scale for Sec 4.3's table, alongside a value, an enumeration and a definition.
+>
+> **What stands.** Sec 0, Sec 1's derivation instruction and every row of its table, Sec 2, Sec 3, Sec 4.1, Sec 4.2 instances 1 and 2, Sec 4.3, Sec 5 in full, Sec 6's ten items, Sec 7, and Sec 8. **Only Sec 4.2 instance 3's namespace characterization is qualified**, and it is qualified as to its derivation, not its content.
+>
+> **Sec 6 item 2 status at this banner: PARTIALLY RUN.** The F-AUTH-1 row was re-derived at `f214cece` and is unchanged — the authority is `F-AUTH-1_Fix_Plan_v2.56.md`. **The F-Deploy-1, F-Stats-1, F-App-1, Cross-keystone, XK-1-evidence and PE-roster rows were NOT re-derived.** A successor must not read this banner's existence as the item having been satisfied.
+>
+> The original prose is preserved verbatim below as the at-filing record.
+
 ## Sec 0 — Why v23 exists
 
 v22 merged 2026-08-09 and its checklist worked. Three of its ten items caught

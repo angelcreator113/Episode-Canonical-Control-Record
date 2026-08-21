@@ -12,6 +12,16 @@
 
 > **Note:** This file is the markdown source-of-truth for tooling that cannot read `.docx`. The companion file `F-AUTH-1_Fix_Plan_v1.3.docx` in the same folder is the visual canon. If they diverge, the `.docx` is authoritative and the `.md` should be regenerated from it.
 
+> **CORRECTION BANNER - Sec 6.1's heading reads "The Seven Gates" over a SIX-row table (added 2026-08-21, after `f214cece`, additive).**
+> **The table is correct and the heading is stale. Six gates, G1 through G6. Every downstream document describing this as a "six-gate sequence" is CORRECT.**
+>
+> - **Resolved inside this document, at Sec 9.9.** *"The fix plan was originally written assuming dev/staging/prod three-environment topology; gates G4-G7 in v1.4 reflected that assumption. v1.5 collapses to two environments"* - G4 absorbs the staging soak, former G5 (staging verified) is removed entirely, former G6 becomes G5, **former G7 becomes G6.** The heading is a survival of v1.4's numbering and was not updated when the table was.
+> - **There is no G7 in this document** other than the Sec 9.9 sentence recording its removal. A reader deriving the gate count from Sec 6.1's heading will search for a seventh gate that does not exist.
+> - **Sec 7 is NOT a G3 artifact.** Sec 7 opens *"Run this checklist on dev (during G4) and again on prod after G5 cutover."* Sec 7.3 is a **G4/G5** verification item. **G3's specification is the Sec 6.1 table row at line 398**, and the substance of its clauses 3 and 4 is at Sec 4.6. Recorded because `F-AUTH-1_Fix_Plan_v2.56.md` Sec 3 names *"v1.5 Sec 7.3"* as part of the read required to rule the `Gate G<n>` / `Track G<n>` namespace; that pointer is corrected at `F-AUTH-1_Fix_Plan_v2.57.md` Sec 1.1.
+> - **The .docx subordination note above is NOT operative as written.** It names `F-AUTH-1_Fix_Plan_v1.3.docx` as the visual canon. **No v1.3 artifact of any kind exists on `origin/main`** at this basis. `F-AUTH-1_Fix_Plan_v1.5.docx` does exist and was read at `f214cece`: **it carries the same "The Seven Gates" heading over the same six-row table, with G3's cell matching this file verbatim.** The two do not diverge on Sec 6.1, so the subordination clause is not triggered there and rulings resting on Sec 6.1 rest on both texts. **A divergence does exist elsewhere in the table** (the G2 cell) and is out of scope for this banner.
+>
+> **What stands: everything.** The six-row table, all four G3 clauses, Sec 9.9, and every other section are unaffected. **Only the Sec 6.1 heading's numeral is wrong**, and this banner does not edit it - the body is preserved verbatim below as the at-filing record.
+
 ---
 
 ## 1. Executive Summary
