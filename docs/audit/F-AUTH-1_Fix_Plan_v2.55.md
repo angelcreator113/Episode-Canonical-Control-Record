@@ -13,6 +13,20 @@ Analysis derived from git against `origin/main` at
 `c61a0a9d621cbdf9f0ad00a8fd35e235c0d7c55e`. Local test database contacted at
 the cited runs; **no request issued to any deployed host.**
 
+> **CORRECTION BANNER - Sec 3.2's Track G4 precondition finding is WITHDRAWN (added 2026-08-20, after `3569162a`, additive).**
+> Sec 3.2 records *"Track G4 - precondition SATISFIED, not entered"*, and the Status field carries the same. **That is false. Track G4's precondition is NOT satisfied and Track G4 is not enterable.** The discharge of Gate G3 at Sec 3.1 is unaffected and stands.
+>
+> - **Track G3 is not Gate G3, and Track G3 is OPEN.** v2.37 Sec 5.71 defines Track G3 as *"adjudicator-driven audit pass over CP1-CP12 cumulative work; verify G1-G6 still hold post-merge-resolution + cleanup-delete; production-readiness assessment for G4."* Limb 2 was discharged at v2.42 Sec 1.4. **Limbs 1 and 3 have never been attempted** - recorded as not discharged at v2.42 Sec 2.3, v2.42 Sec 5, v2.43 Sec 4.3, and v2.44, and recorded as discharged nowhere.
+> - **Limb 3 is the production-readiness assessment for G4.** The clause whose function is to authorize G4 entry is one of the two never attempted. Gate G3's four-clause discharge does not reach it.
+> - **This revision dropped Track G3's status rather than closing it.** v2.39 through v2.53 carried Track G3's status in fifteen consecutive revisions - OPEN, then pending re-validation per v2.43 Sec 4.3. v2.54 carries zero mentions. This revision's single occurrence is the Sec 5 glossary line defining the label, not a status. **A reader grepping `Track G3` here gets a hit and no disposition.**
+> - **What stands:** Sec 1, Sec 2, Sec 2.1, Sec 2.2, Sec 3, **Sec 3.1 including the Gate G3 discharge ruling**, Sec 4, Sec 4.1, Sec 5, and Sec 6's non-establishments. Only Sec 3.2's precondition finding and the Status field's Track G4 clause are withdrawn.
+>
+> **The error's shape, recorded because it is a recurrence of this register's own diagnosis.** Sec 3.2 did not misread v2.47 Sec 4.1 - that section's minimum genuinely is Gate G3 clause 2, and clause 2 genuinely is met. **It read one precondition as the precondition.** That is structurally identical to the failure v2.52 Sec 1.1 diagnosed one level down: *"A ruling made against a partial premise does not reach the gate as written."* The register named that shape, wrote it up, and committed it again three revisions later at a higher level. **Documenting a hazard class does not retire it.**
+>
+> **Namespace note, not a ruling.** *"Gate G3"* appears first at v2.47 and 66 times through v2.55. **It is defined** - v2.47, v2.48, v2.49, v2.51 and v2.52 each disambiguate it from Track G3 explicitly, as *"F-AUTH-1's v1.5 six-gate sequence - Self-review passed, the gate carrying the test minimum"* against *"the deployment track."* **What was never done is binding it into v2.38 Sec 2.2's lock**, which names only `CP12-G<n>` and `Track G<n>`. That formalization belongs to a ratifying revision.
+>
+> The original prose is preserved verbatim below as the at-filing record. Do not read it as current; read this banner plus Sec 3.1 as the corrected finding.
+
 **Author**
 
 JAWIHP / Evoni — Prime Studios
