@@ -1,3 +1,135 @@
+> **CORRECTION BANNER — DIMENSION 2 FAIL WITHDRAWN; DELIVERY-PATH STATUS
+> UNSCORED (added 2026-08-22, after `8a016049`, additive).**
+>
+> **v2.59 §3's ruling that Dimension 2 was `PERFORMED — FAIL` is withdrawn.**
+> The live workflow facts it records remain accurate at its basis:
+>
+> - `Auto-merge to Dev` was `disabled_manually`;
+> - its YAML trigger was `claude/**`, not §5.71's historical
+>   *"backup→dev auto-merge"* wording;
+> - `Deploy to Development` was active and manual-dispatch-only;
+> - its latest successful run was against `1844e56b`, not candidate
+>   `ce305d34`; and
+> - candidate `ce305d34` had not been deployed.
+>
+> **Those facts do not establish delivery-path failure.** v2.59 treated the
+> absence of a reconciliation inside the F-AUTH-1 revision series as though it
+> were the absence of an owning disposition anywhere:
+>
+> > *"no F-AUTH-1 revision reconciles this manual-main path with §5.71's
+> > backup→dev auto-merge precondition."*
+>
+> That sentence is literally scoped and literally true. **It is not a
+> sufficient premise for a cross-keystone delivery-path ruling.** The delivery
+> mechanism is owned by F-Deploy-1, whose governing chain was outside v2.59's
+> evidence set.
+>
+> **The omitted authority was not unknown. It was a known non-read.** Prime
+> Studios Audit Handoff v23 Sec 8 had already recorded:
+>
+> > *"Does not read F-Deploy-1 v1.30, which is where `deploy-dev.yml`'s rewrite
+> > and its API-layer posture would be authorized if they are authorized
+> > anywhere."*
+>
+> v1.30 was on the docket by name while v2.59 was drafted. **The assessment
+> nevertheless ruled on the delivery path without first reading the document
+> it already knew might authorize that path.** This is not failure to discover
+> an unknown dependency. It is failure to treat a known evidence gap as
+> blocking a ruling that turned on it.
+>
+> **The completed read changes the interpretation materially.**
+>
+> - **F-Deploy-1 v1.30 §3/§5** specifies the replacement architecture: SSM
+>   zero-inbound transport, no push trigger, no workflow-carried application
+>   secrets, and separately gated re-enablement.
+> - **v1.31** records the rewrite and its P1–P5 prerequisite register.
+> - **v1.32–v1.42** carry those prerequisites through execution and make
+>   re-enablement proposable.
+> - **v1.43 §2** takes and executes the Rule 7 re-enablement ruling:
+>   *"Enabling ≠ running: `workflow_dispatch` is the only trigger."*
+> - **v1.43 §4** records the first green end-to-end dispatch and closes §4.3.
+> - **v1.46 §4** records a second end-to-end verification dispatch against
+>   `1844e56b`, all jobs green and box-confirmed.
+> - **v1.48** closes G2, Phase B, and F-Deploy-1 while leaving only the future
+>   **push-trigger** decision gated.
+>
+> **The current manual-main path is therefore not an undefined alternative to
+> §5.71's path. It is the authorized, implemented, re-enabled, and field-proven
+> successor path.** F-Deploy-1 is CLOSED; recognizing its existing disposition
+> does not reopen or amend that keystone.
+>
+> **A second error followed from the same non-read.** v2.59 §3.2 repeated the
+> workflow header's P1–P5 language as though the prerequisites remained gated.
+> The later F-Deploy-1 chain closes them: P1–P3 explicitly, P4 by fold at first
+> dispatch, P5 before re-enablement, followed by two green dispatch records.
+> **Stale header framing was preferred over the owning register's later
+> disposition.**
+>
+> ### The fourth instance — ours
+>
+> **This is the fourth recorded instance of one premise standing for the
+> whole:**
+>
+> 1. v2.52 §1.1 — one quoted clause stood for a four-clause gate;
+> 2. v2.55 §3.2 — one stated minimum stood for G4's whole precondition;
+> 3. v2.55 §3.1 — one document's G3 specification stood for the union of two;
+> 4. **v2.59 §3 — absence inside one keystone stood for absence of an owning
+>    disposition across two keystones.**
+>
+> **The fourth is ours.** v1.30 was not an unknown dependency: v23 Sec 8 had
+> named it as a non-read and identified it as the likely authority for the
+> workflow rewrite. The known gap was scheduled and still was not treated as
+> blocking a ruling that depended on it. This is direct evidence for v2.56
+> §2.1's conclusion: **documenting a hazard class does not retire it.**
+>
+> ### Governing corrections
+>
+> The following v2.59 statements are withdrawn to the extent stated:
+>
+> - **Document version:** *"Dimensions 1, 2 and 4 were performed"* is corrected
+>   to **Dimensions 1 and 4 performed; Dimension 2 withdrawn to UNSCORED;
+>   Dimensions 3 and 5 NOT PERFORMED.**
+> - **Document version:** the delivery path is not an established hard blocker.
+>   The evidence-validity blocker at Dimension 4 remains.
+> - **§1 table:** Dimension 2's `PERFORMED — FAIL` cell is withdrawn and is
+>   **UNSCORED pending v2.60**.
+> - **§1 ruling:** *"The FAIL findings at Dimensions 2 and 4 are real"* is
+>   corrected to **Dimension 4's FAIL stands; Dimension 2 has no current
+>   score.**
+> - **§3:** the live workflow observations stand; the FAIL ruling, the
+>   *"unreconciled manual path"* conclusion, the implication that P1–P5 remain
+>   open, and the *"undefined transport contract"* conclusion are withdrawn.
+> - **§7:** the first two blocker rows — delivery-path reconciliation and
+>   candidate-not-deployed/deployed-SHA proof — are withdrawn as blockers.
+>   Candidate non-deployment remains an observed fact and is not scored here.
+> - **§8 item 1:** the requirement to *"select and reconcile the G4 delivery
+>   path"* is withdrawn. F-Deploy-1 already selected and proved the path.
+> - **§9:** *"Delivery-path viability failed"* is withdrawn and replaced by
+>   **"Delivery-path viability unscored; re-assessment owed at v2.60."**
+> - **Footer:** *"Dimensions 1, 2 and 4 performed"* is corrected accordingly.
+>
+> **No corrected Dimension 2 score is made by this banner.** Determining PASS
+> versus INCONCLUSIVE requires assessment work against the current path and the
+> full F-Deploy-1 authority chain at a new stamped basis. That belongs to
+> v2.60, not to a correction instrument.
+>
+> **Withdrawal of a FAIL is not progress toward PASS.** Dimension 2 is now
+> less established, not more: three of five dimensions lack a completed score
+> where two did before — Dimension 2 UNSCORED, Dimensions 3 and 5 NOT
+> PERFORMED. This correction licenses no G4 entry, scheduling, dispatch, or
+> readiness inference.
+>
+> **The top-level outcome does not change.** Dimensions 3 and 5 remain NOT
+> PERFORMED, and Dimension 2 is now UNSCORED. **ASSESSMENT NOT COMPLETED
+> stands.** Limb 3 remains OPEN and UNDISCHARGED. G4 remains not enterable. No
+> gate, finding, severity, freeze, or keystone disposition changes.
+>
+> **Unaffected:** Dimension 1 PASS; Dimension 4 FAIL; Dimensions 3 and 5 NOT
+> PERFORMED; all §4–§6 findings; the §7 blocker rows unrelated to delivery-path
+> interpretation; and every non-action at §10.
+>
+> The original v2.59 body remains below as the at-filing record.
+
 | **PRIME STUDIOS** **F-AUTH-1 FIX-PLANNING DOCUMENT** *G3 limb 3 assessment. **ASSESSMENT NOT COMPLETED.*** |
 | --- |
 
