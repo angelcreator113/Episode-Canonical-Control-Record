@@ -1,5 +1,14 @@
 # 🔐 AWS COGNITO USER POOL CONFIGURATION
 
+> **RETIRED AS CURRENT POOL-ID AUTHORITY — 2026-08-22.** This February 2026
+> setup record describes an abandoned three-pool topology. A 2026-08-21
+> metadata read found only one pool in the AWS account hosting this
+> infrastructure; the staging and prod IDs below do not resolve. The surviving
+> pool's target role is unsettled. See
+> `audit/F-AUTH-1_Decision_CognitoPoolTopology_2026-08-22.md`. Preserve the
+> body as historical setup evidence; do not copy IDs or completion claims from
+> it into configuration.
+
 **Project:** Episode Canonical Control Record  
 **Date:** February 4, 2026  
 **AWS Region:** us-east-1  
