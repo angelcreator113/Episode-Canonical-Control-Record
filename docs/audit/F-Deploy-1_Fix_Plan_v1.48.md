@@ -1,3 +1,31 @@
+> **CORRECTION BANNER — AMENDMENT 1 WAS APPENDED IN PLACE AND NOW LIVES AT
+> v1.49 (added 2026-08-22, additive; nothing below is removed or edited).**
+>
+> **Banners on this document are read newest-first.**
+>
+> The "Amendment 1" block immediately below this banner was appended to this
+> document at PR #1105 (`29cee698`), after this document had already merged at
+> `6b0900be`. Its content is sound and is not in question. **Its carriage was
+> not:** this document's content changed (`d4f382ba` → `0a31b603`) while its
+> revision number did not, and v24 Sec 6 derives document authority by numeric
+> sort — an instrument that cannot see such a change.
+>
+> **The amendment has been minted as `F-Deploy-1_Fix_Plan_v1.49.md`, which
+> governs it.** The copy below is preserved exactly as merged at `29cee698` and
+> **is not authoritative.** Where the two differ, v1.49 wins.
+>
+> **The copy below was deliberately not removed.** Deleting it would be a second
+> in-place modification of a merged revision — the defect applied again as its
+> own remedy.
+>
+> **Standing rule this establishes:** a substantive amendment to a merged
+> numbered revision **mints the next number**. A correction banner is the only
+> permitted in-place addition, and **it may point but may not carry**. Recorded
+> here; owed to v25 Sec 6 as a derivation.
+>
+> F-Deploy-1 remains **CLOSED.** No gate, finding, severity, owner or
+> disposition changes. Mints nothing. Prod FROZEN.
+
 > **AMENDMENT 1 — THE SSM REWRITE ALSO CLOSED CROSS-ENVIRONMENT WRITE, AND
 > NOTHING RECORDED THAT IT DID (added 2026-08-22 at `26bf84bd` basis,
 > additive).**
