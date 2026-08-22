@@ -18,6 +18,13 @@ jest.mock('../../../src/services/tokenService', () => ({
 const { authenticateToken, optionalAuth, requireAuth } = require('../../../src/middleware/auth');
 const tokenService = require('../../../src/services/tokenService');
 
+const makeConfigError = (missingVariables = ['COGNITO_USER_POOL_ID']) => {
+  const error = new Error('Cognito configuration missing');
+  error.code = 'AUTH_CONFIG_MISSING';
+  error.missingVariables = missingVariables;
+  return error;
+};
+
 describe('Auth Middleware - Gap Coverage', () => {
   describe('authenticateToken - Error handling', () => {
     test('should handle malformed base64 in token', async () => {
@@ -57,6 +64,41 @@ describe('Auth Middleware - Gap Coverage', () => {
       expect(_res.status || _next).toBeDefined();
 
       process.env.COGNITO_USER_POOL_ID = originalEnv;
+    });
+
+    test('returns 500 AUTH_CONFIG_MISSING with structured operator log', async () => {
+      const req = {
+        headers: { authorization: 'Bearer some.token' },
+        path: '/legacy-protected',
+        method: 'POST',
+      };
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      };
+      const next = jest.fn();
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      tokenService.verifyToken.mockImplementation(() => {
+        throw makeConfigError(['COGNITO_USER_POOL_ID']);
+      });
+
+      await authenticateToken(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'AUTH_CONFIG_MISSING' })
+      );
+      expect(next).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[F-Auth-2] auth_configuration_missing',
+        expect.objectContaining({
+          missingVariables: ['COGNITO_USER_POOL_ID'],
+          middleware: 'authenticateToken',
+          status: 500,
+        })
+      );
+
+      consoleErrorSpy.mockRestore();
     });
   });
 
@@ -253,6 +295,38 @@ describe('optionalAuth — F-Auth-3 three-case classifier', () => {
     );
   });
 
+  test.each([
+    ['default mode', optionalAuth],
+    ['degrade mode', optionalAuth({ degradeOnInfraFailure: true })],
+  ])('%s — missing config returns 500 and never degrades to anonymous', async (_label, middleware) => {
+    req.headers.authorization = 'Bearer some.token';
+    tokenService.verifyToken.mockImplementation(() => {
+      throw makeConfigError(['COGNITO_USER_POOL_ID', 'COGNITO_CLIENT_ID']);
+    });
+
+    await middleware(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Authentication configuration error',
+      message: 'Authentication is not configured on this server.',
+      code: 'AUTH_CONFIG_MISSING',
+    });
+    expect(next).not.toHaveBeenCalled();
+    expect(consoleLogSpy).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[F-Auth-2] auth_configuration_missing',
+      expect.objectContaining({
+        missingVariables: ['COGNITO_USER_POOL_ID', 'COGNITO_CLIENT_ID'],
+        path: '/test',
+        method: 'GET',
+        middleware: 'optionalAuth',
+        status: 500,
+        code: 'AUTH_CONFIG_MISSING',
+      })
+    );
+  });
+
   test('factory mode — bare optionalAuth still works as middleware reference (backward compat)', async () => {
     expect(typeof optionalAuth).toBe('function');
     await optionalAuth(req, res, next);
@@ -382,6 +456,30 @@ describe('requireAuth — F-Auth-4 Path 1 split', () => {
       })
     );
     expect(consoleLogSpy).not.toHaveBeenCalled();
+  });
+
+  test('missing config → 500 AUTH_CONFIG_MISSING with structured operator log', async () => {
+    req.headers.authorization = 'Bearer some.token';
+    tokenService.verifyToken.mockImplementation(() => {
+      throw makeConfigError(['COGNITO_CLIENT_ID']);
+    });
+
+    await requireAuth(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'AUTH_CONFIG_MISSING' })
+    );
+    expect(next).not.toHaveBeenCalled();
+    expect(consoleLogSpy).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[F-Auth-2] auth_configuration_missing',
+      expect.objectContaining({
+        missingVariables: ['COGNITO_CLIENT_ID'],
+        middleware: 'requireAuth',
+        status: 500,
+      })
+    );
   });
 
   test('malformed Authorization header → 401 AUTH_INVALID_FORMAT (matches authenticateToken; Track 1 interceptor pass-throughs per LOCKED §4.6)', async () => {
