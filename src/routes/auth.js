@@ -39,6 +39,20 @@ const refreshLimiter = rateLimit({
  * In production, this would integrate with Cognito
  */
 router.post('/login', loginLimiter, validateLoginRequest, async (req, res) => {
+  // FD-65 ISSUANCE HALF, closed 2026-08-22. This route issued a signed token
+  // to any caller supplying a well-formed email and any 6-character password;
+  // no credential was ever verified. v2.49 minted FD-65 with two halves and
+  // v2.50 closed only the privilege half (75ac05f0, caller-supplied
+  // groups/role removed), explicitly leaving this one open at P0.
+  //
+  // Disabled rather than repaired: implementing real verification is a
+  // decision about whether password login should exist at all, given Cognito
+  // is the actual authentication path. Fails closed until that is ruled.
+  return res.status(401).json({
+    error: 'Unauthorized',
+    message: 'Password login is disabled.',
+    code: 'AUTH_LOGIN_DISABLED',
+  });
   try {
     const { email, password } = req.body;
 
