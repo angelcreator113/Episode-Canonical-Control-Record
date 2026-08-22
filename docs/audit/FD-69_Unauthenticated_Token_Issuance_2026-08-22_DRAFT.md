@@ -1,3 +1,79 @@
+> **RETIREMENT — FD-69 IS WITHDRAWN AS DUPLICATIVE OF FD-65. CLOSED BY RULING
+> 2026-08-22 at `e5215a66` basis (additive).**
+>
+> **Every mechanism statement below remains true of the code it describes.**
+> What is withdrawn is FD-69's standing as a finding, because **the register
+> already held it.**
+>
+> ## Why it is withdrawn
+>
+> **FD-65, minted at v2.49 and P0, states the same defect.** Its statement:
+>
+> > *"The authentication surface issues signed tokens to unauthenticated
+> > callers at two endpoints, and permits those callers to specify their own
+> > privileges. `POST /api/v1/auth/login` performs no credential verification
+> > of any kind and reads `groups` and `role` from the request body… **Fixing
+> > the privilege half without the issuance half looks like a fix and is
+> > not.**"*
+>
+> FD-65 partitions the defect into an **issuance** half and a **privilege**
+> half. v2.50 closed the privilege half at `75ac05f0` and said in terms that
+> the issuance half remained open at P0. **FD-69 restates that open issuance
+> half and adds no defect FD-65 did not hold.**
+>
+> **This is a duplicate retirement, not a finding retraction.** The defect was
+> real, was correctly described, and has since been remediated — the disable
+> landed on `main` at `e5215a66` (PR #1100) and was applied directly to the
+> production host on 2026-08-22. **Recording FD-65's issuance half as CLOSED is
+> owed to a Fix Plan revision and is not done here.**
+>
+> ## The FD tail does not retract
+>
+> **FD-69's number is spent.** The tail advanced **FD-68 → FD-69** for a
+> duplicate, and that is the register error; it is recorded rather than undone.
+> **The tail remains FD-69. FD-70 is the next available number.** Renumbering
+> would falsify every document that cited the tail at its own basis.
+>
+> ## What survives, and where it goes
+>
+> **One thing here is not duplicative of FD-65: the deployment dimension.**
+> FD-65 is a finding about the authentication surface. It says nothing about
+> whether any host served the defect. **This document established that both
+> hosts did**, by read-only probes on 2026-08-22 — SSM to development, SSH to
+> production — and further established that **production ran a variant worse
+> than `main`**, taking `groups` from the request body and therefore mintable
+> as ADMIN, because production predated `75ac05f0`.
+>
+> **That evidence is preserved and transfers to the provenance instrument**,
+> which owns the question of what production runs versus what the deployment
+> record attests. **It is not a finding about the auth surface and does not
+> belong to FD-65.**
+>
+> ## What this corrects in FD-69's own text
+>
+> - **§0.1's claim that the finding "was surfaced by that work, not sought by
+>   it" is wrong.** It was already held, at P0, and stated in terms in
+>   `tests/integration/f-auth-1-fd65.test.js`'s header.
+> - **§3's blast radius understates production.** It reasons from `main`, where
+>   the minted token carries `groups: ['USER']` and `requireGroup('ADMIN')`
+>   holds. **On production it did not hold**; admin-gated composition endpoints
+>   were reachable.
+> - **§4's deployment statement is superseded** by the correction banner
+>   already on this document and by the provenance instrument.
+>
+> ## Reactivation condition
+>
+> **If FD-65 is ever closed, narrowed, or re-scoped such that unauthenticated
+> token issuance is left unowned, the defect must be re-minted under a new
+> number** — not by reviving FD-69. And if the deployment evidence above is not
+> carried by the provenance instrument when that instrument is filed, **this
+> retirement is premature and should be reversed rather than the evidence
+> lost.**
+>
+> This retirement ships no code, changes no gate, contacts no host, rewrites no
+> history, and mints nothing. FD tail remains **FD-69**; XK tail **XK-3**; PE
+> tail **PE #67**. Prod FROZEN.
+
 | **PRIME STUDIOS** **FINDING — FD-69** *Mints FD-69. Ships no code. Changes no gate. Selects no remedy.* |
 | --- |
 
