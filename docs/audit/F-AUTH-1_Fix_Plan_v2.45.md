@@ -1,3 +1,28 @@
+> **CORRECTION BANNER 2 — §2's ROUTE-ORDER HAZARD IS A CLASS OF SIX, NOT ONE
+> (added 2026-08-22, after `2fea0572`, additive).**
+>
+> **Banners on this document are read newest-first. Banner 1 below is preserved
+> exactly as merged and is not edited.** Banner 1 verified `/search` dead and
+> corrected §2's count from *"two of the ten GETs"* to one. **Both statements
+> remain true of `compositions.js`.**
+>
+> **What has changed is scope, not correctness.** A mechanical sweep across all
+> 140 routers finds **six shadowed declarations in four files, five of them
+> previously unknown**, arising from **two distinct mechanisms** — an exact
+> duplicate `(method, path)` in one router, and a literal path declared after a
+> parameterized path that matches it. **`/search` belongs to the second.**
+>
+> **All six are dead.** `next('route')` occurs **zero times in all of `src/`**,
+> so no route-level fall-through exists anywhere in this codebase.
+>
+> **No shadowed declaration carries authentication or ownership its live twin
+> lacks** — checked across both mechanisms.
+>
+> **The enumeration, the two mechanisms, and the instrument-validation finding
+> they produced are carried once at
+> `Route_Shadowing_Survey_2026-08-22_DRAFT.md` and are not restated here.**
+> **§2's hazard is not re-ruled**, and this banner adjudicates no member.
+
 > **CORRECTION BANNER — §2's ROUTE-ORDER HAZARD IS VERIFIED AT RUNTIME; ITS
 > COUNT IS CORRECTED (added 2026-08-22, after `cf627857`, additive).**
 >
