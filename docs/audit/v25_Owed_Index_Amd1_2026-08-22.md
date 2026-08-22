@@ -1,3 +1,25 @@
+> **CORRECTION BANNER — §A1 IS A TRIPLE, NOT A PAIR; §A3's SHAPE SPANS
+> RETRIEVAL (added 2026-08-22, additive; nothing below is removed or edited).**
+>
+> **Banners on this document are read newest-first.**
+>
+> **§A1 below states two preconditions. There are three.** Position and
+> completeness both PASS against a tree from which the record has been deleted —
+> and **eleven of twelve CP closure documents are in exactly that state.**
+> **RETRIEVABILITY** is the third property.
+>
+> **§A3's four instances are all classifiers.** The shape also occurs in
+> **retrieval**: a classifier that cannot resolve what a thing *is* reports a
+> definite category; a retriever that cannot reach whether a thing *exists*
+> reports a definite absence. **Someone hardening against classifier blindness
+> would not think to check whether the document exists.**
+>
+> **Both live at `v25_Owed_Index_Amd2_2026-08-22.md`, which governs §A1 as
+> amended here. This banner points and carries nothing.**
+>
+> §A2 and §A3's general form are unaffected. The §A3.1 fifth instance recorded
+> by the banner below stands. Mints nothing. Prod FROZEN.
+
 > **CORRECTION BANNER — §A3.1 HAS A FIFTH INSTANCE, RECORDED ELSEWHERE (added
 > 2026-08-22, additive; nothing below is removed or edited).**
 >
