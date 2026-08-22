@@ -1592,6 +1592,17 @@ disabled, or edited. No FD minted. Prod FROZEN.*
 **Status:** OPEN. **Trigger condition UNEVALUATED.**
 **Basis:** `main` at `a3002064`, read at filing. No deployed host contacted.
 
+> **AMENDMENT 2 — enumeration is CLOSED, not deferred. The remedy defect is filed as PE #65 (added 2026-08-21, after `3769db64`, additive).**
+> **Amendments on this entry are read newest-first. Where two disagree the later governs; where an amendment and the entry body disagree the amendment governs.**
+>
+> - **The enumeration read is CLOSED — permanently, not deferred.** It was proposed to settle whether any of the pool's identities is external, and so to label §9.10's trigger. **A remedy-cost derivation from documents shows the label does not change the remedy.** §9.10's plan retains the shared pool and creates a new dev pool alongside it, so **no record moves under either branch**; the base remedy is identical whoever the identities are.
+> - **The reason is not "we decided not to look."** It is that **the question as posed cannot inform the remedy, and the axis it is posed on is itself unexamined.** §9.10's trigger says *"non-Evoni user"*, but what bears on the remedy is *"a record that must not remain in prod."* **§9.10 treats those as equivalent and that equivalence is nowhere examined** — Evoni's account belongs in prod because Evoni is the operator; an external signup's status is a judgment no document has made.
+> - **A deferred question invites an answer.** Left open, this one would be answered against a proxy now known to be mis-specified. **Closed is the correct disposition, not deferred.**
+> - **This does not foreclose per-record triage.** If re-specification of the remedy (PE #65) produces a genuine need to know what the records are, **that is a new question with its own scoping and its own authorization** — not this one revived.
+> - **Trigger status is unchanged at PARTIALLY EVALUATED**, and it stays there. **Severity P1 unchanged.** What changes is that no further reading is owed against the trigger.
+>
+> **The remedy defect is a different object and is filed separately as PE #65.** §9.10's plan and its trigger describe two different operations; its central step names a *"prod pool retained as canonical user store"* that does not exist; and it was carried verbatim through eight revisions with no elaboration. **That is a defect in the remedy specification, not in this production-environment observation**, and folding it in here would make one entry carry both a finding and the critique of its own remedy.
+
 > **AMENDMENT 1 — the trigger condition is PARTIALLY EVALUATED: neither UNEVALUATED nor FIRED (added 2026-08-21, after `ebbee94f`, additive).**
 > **The Status line above reads *"Trigger condition UNEVALUATED."* That is superseded. A minimum-privilege count was run, and it does not settle §9.10's trigger.**
 >
@@ -1745,3 +1756,186 @@ no one has checked.**
 *Filed 2026-08-21. Basis `a3002064`. No measurement of any deployed host. No
 AWS API call. No workflow enabled, disabled, or edited. No FD minted. No XK
 minted. No gate changed. Prod FROZEN.*
+
+---
+
+### PE #65 — F-AUTH-1 v1.5 §9.10's remedy is unspecifiable as written: plan and trigger describe different operations, and the pool it retains does not exist (P2, OPEN, NEW 2026-08-21)
+
+**Date filed:** 2026-08-21
+**Severity:** P2 — see *Severity reasoning* below; **it creates no exposure of its own and inherits urgency from PE #64 rather than carrying its own.**
+**Status:** OPEN. Remedy requires re-specification before it can be costed.
+**Basis:** `main` at `3769db64`, derived from documents. No deployed host contacted.
+
+**This entry is about the remedy, not the condition.** The condition — dev and
+prod sharing one Cognito User Pool — is **PE #64**, which owns it. **This entry
+owns the defect in the fix §9.10 proposes for it.** They are separated
+deliberately: one entry carrying both a finding and the critique of its own
+remedy is the shape that lost §9.10 in the first place.
+
+**§9.10's remedy, quoted in full because it is four clauses and every one
+matters:**
+
+> *"split Cognito pools — separate dev pool with separate Client ID, prod pool
+> retained as canonical user store, env config updated per environment."*
+
+#### Defect 1 — the plan and its trigger describe different operations
+
+**Under the plan as written, no record moves.** The shared pool is *retained*
+as prod's canonical store; a new, empty dev pool is created alongside it; dev's
+env config is repointed. **That is why it is a config change: zero data
+movement.**
+
+**But §9.10's trigger states the opposite consequence:** *"Once a non-Evoni
+user exists in the shared pool, the split becomes a data-migration problem
+rather than a config change."* **A migration only arises under the inverse
+structure** — where the shared pool becomes *dev's* and prod users must be
+moved out of it.
+
+**The plan retains; the trigger migrates. One of them is wrong, and no revision
+reconciled them.**
+
+#### Defect 2 — the pool the remedy retains does not exist
+
+The remedy's central step names a **"prod pool retained as canonical user
+store."** **There is no prod pool.** The only Cognito User Pool in the AWS
+account hosting this infrastructure is the dev-named shared pool; the
+`PROD_POOL_ID` recorded in `docs/cognito-ids.txt` resolves to nothing (**PE
+#66**).
+
+**So the remedy does not specify which pool becomes canonical prod.** Either
+the shared pool is renamed to that role — in which case every identity created
+via dev becomes a permanent prod record — or a new prod pool is created and
+records *do* migrate, which contradicts *"retained."* **The remedy cannot be
+costed until that is chosen, and choosing it is the substance of the
+re-specification owed here.**
+
+#### Defect 3 — carried verbatim, never developed
+
+**Measured at this basis:** the §9.10 block is byte-comparable across
+`F-AUTH-1_Fix_Plan_v1.7` through `v2.20` — **identical length in every one** —
+abbreviated at `v2.37`, and absent from `v2.38` onward (PE #64). **No separate
+Cognito split plan, Track 8 document, or pool-migration artifact exists in
+`docs/audit/`.**
+
+**Eight revisions of verbatim carriage with zero elaboration.** The remedy was
+never examined after the session that wrote it.
+
+#### The proxy, and why it is the same defect as one found the same day
+
+§9.10's trigger turns on *"a non-Evoni user."* **What bears on the remedy is
+*"a record that must not remain in prod."*** §9.10 treats these as equivalent.
+**They are not** — Evoni's account belongs in prod because Evoni is the
+operator; an external signup's status is a judgment no document has made.
+
+**A proxy stood in for the question, and was then carried through eight
+revisions as though it were the question.** On 2026-08-21 the same defect
+occurred independently in this session's own liveness-check criterion, where
+identity-count stood in for person-count (**PE #64 Amendment 1**). **Two
+instances, two authors, one written and one inherited.**
+
+**The inherited one is the more instructive.** The author carrying §9.10 across
+revisions was not reasoning about the proxy — **carriage is precisely the
+operation that does not interrogate what it carries.**
+
+#### Severity reasoning
+
+**P2, and the reasoning is recorded because the number understates it.** This
+entry creates **no exposure**. What it does is **block remediation of PE #64**,
+a P1 whose trigger is partially evaluated. **It has no urgency of its own and
+inherits PE #64's.** It is filed P2 rather than P1 so the roster does not carry
+two P1s for one condition; **if that reads wrong to a later adjudicator, the
+correction is to re-class this entry, not to merge it into PE #64.**
+
+#### What this entry does not do
+
+- **Does not re-specify the remedy.** It records that re-specification is owed.
+- **Does not disturb PE #64**, its severity, or its PARTIALLY EVALUATED trigger.
+- **Does not re-open the enumeration read**, closed at PE #64 Amendment 2.
+- **Does not rule which pool should become canonical prod.** That is the
+  decision the re-specification must make, and it is not made here.
+- **Contacts no deployed host. Mints no FD, no XK. Changes no gate.**
+
+**Resolution path.** Re-specify §9.10's remedy: name which pool becomes
+canonical prod, state what happens to existing records under that choice, and
+reconcile the retention plan with the migration framing. **Per-record triage
+may fall out of that — it belongs to executing a specified remedy, not to
+labelling a trigger.**
+
+*Filed 2026-08-21. Basis `3769db64`. Derived from documents. No deployed host
+contacted. No AWS call. Prod FROZEN.*
+
+---
+
+### PE #66 — `docs/cognito-ids.txt` names two Cognito pools that do not exist, under an abandoned three-environment topology (P2, OPEN, NEW 2026-08-21)
+
+**Date filed:** 2026-08-21
+**Severity:** P2
+**Status:** OPEN
+**Basis:** `main` at `3769db64`. Pool existence established by a read **executed by Evoni**, not by Claude; see *Evidence*.
+
+**`docs/cognito-ids.txt`** — last touched `9fd1a6ce` (2026-02-14), headed
+*"=== COGNITO USER POOLS (Phase 0E) ==="* — records three entries:
+`DEV_POOL_ID`, `STAGING_POOL_ID`, `PROD_POOL_ID`. **Only the dev pool exists.**
+**Neither `STAGING_POOL_ID` nor `PROD_POOL_ID` resolves to a pool in the AWS
+account hosting this infrastructure.**
+
+**Evidence.** `list-user-pools` against that account returned exactly one pool
+— the dev-named shared pool that **PE #64** concerns. **Executed by Evoni. No
+AWS call was issued by Claude.** The call returns pool names and IDs; **no user
+data was read.**
+
+#### Why it is stale, traced rather than assumed
+
+**This is not random decay. It is a survival of an abandoned topology.**
+`F-AUTH-1_Fix_Plan_v1.5.md` §9.9 records:
+
+> *"The fix plan was originally written assuming dev/staging/prod
+> three-environment topology; gates G4–G7 in v1.4 reflected that assumption.
+> v1.5 collapses to two environments."*
+
+**`cognito-ids.txt`'s three-pool structure is that same three-environment
+assumption**, written at Phase 0E and never updated when the topology
+collapsed. **The staging pool was never created; the prod pool was never
+created; the file was never corrected.**
+
+#### Why it is a hazard rather than clutter
+
+**The filename asserts authority.** A file called `cognito-ids.txt` reads as
+the place to look up a pool ID, and **two of its three entries point at
+infrastructure that does not exist.** A reader resolving `PROD_POOL_ID` from it
+gets a well-formed identifier that fails at use.
+
+**It has already caused one downstream defect.** **PE #65** records that
+§9.10's remedy names a *"prod pool retained as canonical user store."* **The
+non-existence of that pool is what makes the remedy unspecifiable.**
+
+#### The pattern this belongs to
+
+**Three artifacts of one abandoned assumption, all found in one session:**
+
+| Artifact | Survival |
+|---|---|
+| `docs/cognito-ids.txt` | Three-pool structure; two pools never created |
+| `F-AUTH-1_Fix_Plan_v1.5.md` §6.1 heading | *"The Seven Gates"* over a six-row table (bannered at `a3002064`) |
+| `F-AUTH-1_Fix_Plan_v1.5.md` header note | Names `F-AUTH-1_Fix_Plan_v1.3.docx` as visual canon; **no v1.3 artifact exists** (bannered at `a3002064`) |
+
+**All three are the same shape: an assumption changed and its artifacts did
+not.** §9.9 recorded the decision correctly and completely. **What no step
+covered was sweeping the artifacts the decision invalidated** — and each
+survival is individually harmless-looking, which is why none was corrected.
+
+#### What this entry does not do
+
+- **Does not edit or delete `docs/cognito-ids.txt`.** Whether the file is
+  corrected, annotated, or removed is a decision, not a consequence.
+- **Does not assert that a prod pool should exist.** It records that the file
+  names one and the account has none.
+- **Does not resolve PE #65.** It supplies one input to it.
+- **Contacts no deployed host. Reads no user data. Mints no FD, no XK.**
+
+**Resolution path.** Correct or retire `docs/cognito-ids.txt`, and **sweep for
+other artifacts of the §9.9 topology collapse** — the three above were found
+incidentally, which is not evidence they are all of them.
+
+*Filed 2026-08-21. Basis `3769db64`. No AWS call issued by Claude. No user data
+read. Prod FROZEN.*
