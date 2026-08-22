@@ -1,3 +1,92 @@
+> **CORRECTION BANNER — DEPLOYMENT IS NO LONGER UNKNOWN. PROD WAS DEPLOYED WITH
+> THIS DEFECT ON 2026-05-11 (added 2026-08-22, after `6b0900be`, additive).**
+>
+> **Scope: §4 ("What is NOT established") and §8's requested read.** §1–§3 and
+> §5–§7 are unamended and unaffected. **The finding, its P0 priority, and every
+> mechanism statement stand exactly as filed.**
+>
+> ## What is now established
+>
+> **The defect is present in the artifact of the last successful deployment to
+> BOTH environments, mounted unconditionally in each.**
+>
+> | environment | last successful deploy | date | defect present | mounted unguarded |
+> |---|---|---|---|---|
+> | **development** | `1844e56b` (`workflow_dispatch`) | 2026-07-21 | **YES** | **YES** — `app.js:425` |
+> | **production** | `8425c13e` (`workflow_dispatch`) | 2026-05-11 | **YES** | **YES** — `app.js:519` |
+>
+> Verified two independent ways for each SHA: `git merge-base --is-ancestor`
+> against the introducing commit, and a direct `git show <sha>:src/routes/auth.js`
+> read showing the *"accept any password"* branch present verbatim.
+>
+> **§4 recorded that prod is FROZEN and `Deploy to Production` is
+> `disabled_manually`. Both remain true and neither bears on this.** They
+> describe what the workflow would do *now*. **They say nothing about the
+> artifact deployed on 2026-05-11.**
+>
+> ## DEPLOYED IS ESTABLISHED. SERVING IS NOT. The distinction is load-bearing
+>
+> **Stated immediately, because it is the claim most likely to be compressed.**
+>
+> - **Established:** the code deployed to each host contains the defect,
+>   unguarded.
+> - **NOT established:** that either host is *currently running* that artifact.
+>
+> **Process state, a manual rollback, a replaced instance, or a stopped service
+> are all invisible to the reads performed here.** Nothing below licenses the
+> sentence *"prod is serving this."* **Only a live host read settles that, and
+> it was not taken.**
+>
+> ## The endpoint was not exercised, deliberately
+>
+> **All of the above was derived from the GitHub Actions API and from `git`
+> against local objects. No deployed host was contacted.**
+>
+> The question was answered by establishing **which SHA was deployed** and
+> **whether that SHA contains the code** — not by issuing a request.
+> **Exercising the endpoint would have minted an unauthenticated token against
+> real infrastructure, and the finding does not require it.**
+>
+> ## Seven months, and what that means for the program
+>
+> **The defect was introduced at `9329b2b5` on 2026-01-09. It predates the
+> entire F-AUTH-1 program.**
+>
+> Every checkpoint of the Step 3 sweep, every Tier disposition, and every gate
+> discharge occurred with this in the tree. **This does not invalidate any of
+> those findings** — the sweep found what it found, on the surface it examined.
+> **It means the program's working assumption about what protection existed was
+> wrong for its entire duration, on a surface the sweep was not examining.**
+>
+> ## Scope of the exposure — established, not reassuring
+>
+> **`auth.js`'s `requireAuth` / `optionalAuth` verify through
+> `CognitoJwtVerifier` against the Cognito pool. `jwtAuth.js`'s
+> `authenticateJWT` verifies through `TokenService.verifyToken` against
+> `JWT_SECRET`.** A minted token is `JWT_SECRET`-signed and **cannot pass
+> Cognito verification.**
+>
+> **The exposure is therefore bounded to the `authenticateJWT` surface, and
+> bounded is not small.** Within that surface, **anyone able to POST can mint a
+> `groups: ['USER']` token and reach `PUT /:id`, `PUT /:id/primary` and
+> `DELETE /:id` on compositions — the delete carrying no ownership check and no
+> 403 path (§3).**
+>
+> **This is a scope statement, not a mitigation.** What it establishes is that
+> the exposure does **not** extend to the `requireAuth`-protected write surface,
+> which is the larger population. **It also means FD-69 and PE #64's shared-pool
+> question are less entangled than they appear: a minted token never reaches the
+> Cognito pool at all.**
+>
+> ## Effect on §8
+>
+> **§8's requested read is discharged in its API half and open in its live
+> half.** What remains is a host read, and it is now a materially different
+> request from the one §8 recorded: **not whether a hypothetical matters, but
+> whether a known-deployed P0 is live.** It is a prod-touching action under
+> freeze and **requires its own scoping and authorization. This banner does not
+> perform it and does not authorize it.**
+
 | **PRIME STUDIOS** **FINDING — FD-69** *Mints FD-69. Ships no code. Changes no gate. Selects no remedy.* |
 | --- |
 
