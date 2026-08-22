@@ -1520,6 +1520,49 @@ mechanism it may not fit, and if so, what the right probe would even be.
 
 ### PE #63 — `[skip-automerge]` compliance against F-Deploy-1 v1.26 §3.4: 2 of 40 recent commits carry the required token (P2, OPEN, NEW 2026-08-19)
 
+> **AMENDMENT 1 — PE #63 RETIRED; CLOSED BY RULING 2026-08-22 at
+> `36f11156` basis (additive).** The measured fact below — 2 of 40 `main`
+> commits contained `[skip-automerge]` — remains historically true. **Its use
+> as a compliance metric is withdrawn because its population is wrong.**
+>
+> `auto-merge-to-dev.yml` reads `github.event.head_commit.message` on pushes to
+> `claude/**`. Squash-merged `main` commits are different objects in a
+> different ref population. A token present or absent on `main` never
+> participated in the workflow decision PE #63 purports to measure. **The
+> entry's finding — that a standing convention was poorly followed — was not
+> disproved; the method could not measure it. This is a method retirement, not
+> a finding retraction.**
+>
+> **The operative state gives the metric no current purpose.** GitHub's API
+> reports `Auto-merge to Dev` (ID 244372826) `disabled_manually`; its YAML
+> trigger remains live only for `claude/**`; its last run remains 2026-06-27.
+> While disabled, `[skip-automerge]` gates no push. A compliance rate would
+> measure adherence to a future-guard convention, not operation of a live
+> control.
+>
+> **Recent branch composition independently makes re-derivation non-useful.**
+> Across post-v23 register PRs #1070–#1082: **11 of 13** heads are `docs/**`
+> and ineligible; **2 of 13** are `claude/**`. The two eligible heads — #1074
+> (`a65a72a7`) and #1075 (`24865959`) — both carry the token in their actual
+> commit subjects. **2 of 2 is true and too small to sustain a rate**, and the
+> emptying eligible population is structural rather than evidence of broad
+> compliance.
+>
+> **Ruling:** retire the standing rate and close PE #63. Do not re-run a
+> rolling `main`-commit metric. F-Deploy-1 v1.26 §3.4's underlying requirement
+> is not withdrawn: the token remains a cost-free future guard on eligible
+> `claude/**` pushes. F-Deploy-1 v1.48 leaves the push-trigger decision gated.
+>
+> **Reactivation condition:** if `Auto-merge to Dev` is proposed for API
+> re-enablement, or its trigger scope is changed, the re-enablement instrument
+> must re-open measurement against the **actual eligible branch-head push
+> population** and state the window before reading it. It should prefer a
+> deterministic fail-closed control over a retrospective rate. `main` squash
+> history is never an eligible substitute.
+>
+> This amendment enables, disables, or edits no workflow; rewrites no history;
+> changes no F-Deploy-1 gate; and contacts no deployed host. Prod FROZEN.
+
 **Date filed:** 2026-08-19
 **Severity:** P2
 **Status:** OPEN
