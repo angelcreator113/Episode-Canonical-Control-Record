@@ -1868,6 +1868,36 @@ contacted. No AWS call. Prod FROZEN.*
 
 ### PE #66 — `docs/cognito-ids.txt` names two Cognito pools that do not exist, under an abandoned three-environment topology (P2, OPEN, NEW 2026-08-21)
 
+> **AMENDMENT 1 — CLOSED 2026-08-22 at `0a084079` basis; authority surfaces
+> retired, historical records preserved.** `docs/cognito-ids.txt` is now
+> explicitly retired as current infrastructure authority while retaining its
+> Phase 0E values as provenance. The same governing warning is prepended to
+> `docs/COGNITO_USER_POOL_SETTINGS.md`, the other tracked file whose name and
+> framing present its pool IDs as current lookup authority. Both point to
+> `F-AUTH-1_Decision_CognitoPoolTopology_2026-08-22.md`; none assigns the
+> surviving pool a dev or prod role while PE #65 remains open.
+>
+> **The required §9.9 sweep is complete at this basis.** Four additional
+> documents carry the abandoned topology: `HANDOFF_SUMMARY.md`,
+> `MIGRATE_NOW.md`, `RDS_READY_FOR_MIGRATIONS.md`, and `CRITICAL_ISSUES.md`.
+> They are dated setup/status/incident records, not lookup surfaces; their
+> claims are preserved as historical evidence rather than rewritten into a
+> false account of what those sessions believed. `ENVIRONMENT_SETUP_GUIDE.md`
+> describes application environments generically and does not assert current
+> Cognito pool existence. The audit revisions that mention the three-
+> environment assumption do so to record its abandonment and require no
+> correction. A local `docs/infrastructure-ids.txt` also carries Phase 0E pool
+> values, but it is ignored by `.gitignore` and absent from `HEAD`; it is
+> recorded as an observed local artifact and deliberately not forced into the
+> repository by this closure.
+>
+> **Closure is narrow.** This amendment removes the false-authority hazard PE
+> #66 filed and records the surrounding artifact population. It does not
+> choose a topology, resolve PE #65, assert that a prod pool should exist,
+> alter AWS resources, or contact a deployed host. No AWS call was issued for
+> this closure; it relies on the Evoni-executed metadata read already recorded
+> below. Prod FROZEN.
+
 **Date filed:** 2026-08-21
 **Severity:** P2
 **Status:** OPEN

@@ -1,4 +1,16 @@
 
+=== RETIRED COGNITO POOL REFERENCE — 2026-08-22 ===
+DO NOT USE THIS FILE AS CURRENT INFRASTRUCTURE AUTHORITY.
+
+The Phase 0E three-pool topology below was abandoned. A 2026-08-21 metadata
+read found only one pool in the AWS account hosting this infrastructure; the
+staging and prod IDs below do not resolve. The surviving pool's target role is
+unsettled and belongs to the topology decision specified at:
+docs/audit/F-AUTH-1_Decision_CognitoPoolTopology_2026-08-22.md
+
+Resolve current pool existence from AWS and deployed configuration. The
+historical values are retained below as provenance, not as usable config.
+
 === COGNITO USER POOLS (Phase 0E) ===
 DEV_POOL_ID=us-east-1_mFVU52978
 STAGING_POOL_ID=us-east-1_jYkqo528H
