@@ -82,9 +82,13 @@ let _accessTokenVerifier = null;
 const getCognitoConfig = () => {
   const userPoolId = process.env.COGNITO_USER_POOL_ID;
   const clientId = process.env.COGNITO_CLIENT_ID;
-  if (!userPoolId || !clientId) {
+  const missingVariables = [];
+  if (!userPoolId) missingVariables.push('COGNITO_USER_POOL_ID');
+  if (!clientId) missingVariables.push('COGNITO_CLIENT_ID');
+  if (missingVariables.length > 0) {
     const err = new Error('COGNITO_USER_POOL_ID or COGNITO_CLIENT_ID not configured');
     err.code = 'AUTH_CONFIG_MISSING';
+    err.missingVariables = missingVariables;
     throw err;
   }
   return { userPoolId, clientId };
@@ -249,6 +253,13 @@ const authenticateToken = async (req, res, next) => {
       // Continue to next middleware
       next();
     } catch (error) {
+      const configResponse = respondToAuthConfigError(
+        error,
+        req,
+        res,
+        'authenticateToken'
+      );
+      if (configResponse) return configResponse;
       return res.status(401).json({
         error: 'Unauthorized',
         message: error.message,
@@ -314,6 +325,36 @@ const findCognitoInfraCause = (err) => {
   return null;
 };
 
+const findAuthConfigCause = (err) => {
+  let cur = err;
+  while (cur) {
+    if (cur.code === 'AUTH_CONFIG_MISSING') return cur;
+    cur = cur.cause;
+  }
+  return null;
+};
+
+const respondToAuthConfigError = (error, req, res, middleware) => {
+  const configCause = findAuthConfigCause(error);
+  if (!configCause) return null;
+
+  // eslint-disable-next-line no-console
+  console.error('[F-Auth-2] auth_configuration_missing', {
+    missingVariables: configCause.missingVariables || [],
+    path: req.path,
+    method: req.method,
+    middleware,
+    status: 500,
+    code: 'AUTH_CONFIG_MISSING',
+  });
+
+  return res.status(500).json({
+    error: 'Authentication configuration error',
+    message: 'Authentication is not configured on this server.',
+    code: 'AUTH_CONFIG_MISSING',
+  });
+};
+
 const buildOptionalAuthMiddleware = (options = {}) => {
   const degradeOnInfraFailure = options.degradeOnInfraFailure === true;
 
@@ -350,6 +391,8 @@ const buildOptionalAuthMiddleware = (options = {}) => {
       maybeAuthDebug(req, source, alg, decoded && decoded.sub);
       return next();
     } catch (error) {
+      const configResponse = respondToAuthConfigError(error, req, res, 'optionalAuth');
+      if (configResponse) return configResponse;
       const infraCause = findCognitoInfraCause(error);
       if (infraCause) {
         // Case C — Cognito/JWKS infrastructure failure
@@ -521,6 +564,8 @@ const requireAuth = async (req, res, next) => {
     maybeAuthDebug(req, source, alg, decoded && decoded.sub);
     return next();
   } catch (error) {
+    const configResponse = respondToAuthConfigError(error, req, res, 'requireAuth');
+    if (configResponse) return configResponse;
     const infraCause = findCognitoInfraCause(error);
     if (infraCause) {
       // Inherits F-Auth-3 structured log + 503 contract from optionalAuth.
