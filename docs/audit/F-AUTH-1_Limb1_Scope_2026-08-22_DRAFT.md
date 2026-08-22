@@ -12,9 +12,11 @@ G3 limb 3 open; G4 not enterable; ASSESSMENT NOT COMPLETED.
 
 Basis: `origin/main` at `cde71fbc`, derived live 2026-08-22.
 
-**BASIS IS SHORT-LIVED.** PR #1090 is open and unmerged at this basis. Every
-count below is a present-surface measurement and goes stale when anything
-lands.
+**BASIS IS SHORT-LIVED.** Every count below is a present-surface measurement
+and goes stale when anything lands. **PR #1090 was open at this basis and has
+since merged at `a7f0156f`;** §5.1's corrective run was performed there. §5's
+own census figures are retained at `cde71fbc`, the basis at which they were
+derived, and are not restated at `a7f0156f`.
 
 **Environment contact, stated in full.** Local file reads; `dotenv` loaded
 `.env` into the probe process; per-router loading only — **`src/app` was never
@@ -123,36 +125,52 @@ identity:
 **Internal consistency check:** GET = 504 matches the independent read-side walk
 in the FD-67 scoping exactly.
 
-## §5.1 Two instruments agree exactly on reads and disagree by 22 on writes
+## §5.1 Two instruments disagreed on writes, agreed exactly on reads — and the disagreement is now resolved
 
-**This is the first occasion on which two independently built instruments could
-be compared on the same quantity. They do not close.**
+**The observation.** Two independently built instruments were compared on the
+same quantity:
 
 | quantity | per-router walk (§5) | app-composition walk (FD-67 scoping) |
 |---|---|---|
 | GET declarations | **504** | **504** — exact agreement |
 | write declarations | **890** (608+119+114+49) | **912** |
 
-**Exact agreement on reads alongside a 22-declaration disagreement on writes is
-more informative than either result alone.** Random divergence would not spare
-one method class entirely. **The pattern indicates a structural difference
-between the loading strategies, not measurement noise** — most plausibly
-routers reachable through app-level mounting but not through per-router
-`require`, or the converse. **Which, is not established here, and no estimate
-of the gap's composition is offered.**
+**The inference drawn from it, which proved correct.** Exact agreement on reads
+alongside disagreement on writes is more informative than either result alone:
+random divergence would not spare one method class entirely, so the cause had
+to be structural rather than noise. **That inference located the defect, and it
+is retained here because the reasoning is the transferable part.**
 
-**This bears directly on the FD-67 filing (PR #1090) and its closing note.**
-That document's write-side figure of **9 mount-only writes** was flagged there
-as resting on an argument rather than on a second instrument — the argument
-being that the `asyncHandler` opacity defect cannot reach a middleware-chain
-fact. That argument stands. **But the 9 was derived from the 912 walk, and the
-912 is now one of two disagreeing figures. The write-side 9 therefore has a
-second, independent reason to be treated as uninstrumented, and it is a reason
-that did not exist when #1090 was written.**
+**The resolution: the structure was in the instrument, not in the route
+surface.** The read-side walk deduplicated by route identity. **The write-side
+walk did not**, so a router mounted at more than one path was counted once per
+mount. **That is the whole of the asymmetry** — reads were deduplicated and
+agreed; writes were not and did not.
 
-**Neither figure is corrected here.** #1090's counts stand at their own stated
-basis. What changes is that the confirmation gap named in its closing note is
-now wider than that note describes.
+**Corrected, deduplicated by route-object identity in a single process** so
+that set difference is exact rather than key-matched:
+
+| discovery | write declarations | mount-only |
+|---|---|---|
+| per-router loading | 890 | **9** |
+| app composition | 897 | **9** |
+| **union of both** | **927** | **9** |
+
+860 appear in both discoveries; 30 are declared but not app-mounted; 37 are
+app-mounted but not reached by loading files under `src/routes`. **Both
+difference regions contain zero mount-only writes.**
+
+**The consequence for #1090's closing note is the reverse of what an earlier
+draft of this section recorded.** That note flagged the write-side **9** as
+resting on an argument rather than on a second instrument. This section
+previously added a *second* reason to treat it as uninstrumented. **Both are now
+discharged: the 9 has been confirmed, and confirmed more strongly than by
+agreement — it is invariant across all three populations above, and nothing was
+hiding in the gap between the discoveries.**
+
+**The full correction, including its effect on #1090's §4 and §8, is recorded
+as an additive banner on that document** — the root cause is stated once there
+and not restated here.
 
 # §6. The population is not the present surface
 
@@ -211,15 +229,19 @@ settles this, and no revision has raised it.**
 
 1. **`src/routes/templateStudio.js` fails to load** (`"url" argument must be of
    type string`). Its declarations are **uncounted** in §5.
-2. **Declared routers, not mounted routers.** 140 routers loaded from 142 files;
-   `app.js` names 134 route requires. **Unreconciled.**
-3. **The 890/912 write discrepancy at §5.1 is unexplained**, and its
-   composition is not estimated.
+2. **Declared routers, not mounted routers — now reconciled at §5.1** for
+   write declarations: 860 in both discoveries, 30 declared but not
+   app-mounted, 37 app-mounted but not file-loaded. **The equivalent
+   reconciliation for reads has not been run**, so §5's 504 remains a
+   single-discovery figure.
+3. **The 890/912 write discrepancy is RESOLVED** (§5.1): the write-side walk
+   did not deduplicate route objects. **This edge is discharged.**
 4. **The §3 roll-up is crude** and mixes reported denominators. It is evidence
    of non-reconciliation, **not a count.**
-5. Duplicate mounting was not checked.
-6. **Basis `cde71fbc` with PR #1090 open.** Every count goes stale on the next
-   merge.
+5. **Duplicate mounting is what caused edge 3** and is now checked for writes;
+   **it has not been checked for reads.**
+6. **Basis `cde71fbc`; #1090 has since merged at `a7f0156f`.** §5's census was
+   not re-derived there. Every count goes stale on the next merge.
 
 **No estimate is offered of how far these edges could move any figure above.**
 
