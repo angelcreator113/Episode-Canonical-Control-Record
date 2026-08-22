@@ -1969,3 +1969,123 @@ incidentally, which is not evidence they are all of them.
 
 *Filed 2026-08-21. Basis `3769db64`. No AWS call issued by Claude. No user data
 read. Prod FROZEN.*
+
+---
+
+### PE #67 — feature branch cut from a squash-merged predecessor branch produced a 749-line PR diff with 332 lines of predecessor inflation (P2, OPEN, NEW 2026-08-22)
+
+**Date filed:** 2026-08-22
+**Severity:** P2 — no defective PR landed, but the failure can place an
+unrelated predecessor artifact inside a correct-looking PR and transfer the
+error into review and merge history without failing a test.
+**Status:** OPEN. Prevention is proven in use; no repository control enforces
+it.
+**Basis:** `main` at `d58e074a`. Derived from local Git objects, reflog, and
+GitHub PR metadata. No deployed host contacted.
+
+#### The near-miss
+
+The original local v2.57 commit, `6014b0de`, was created after moving directly
+from branch `docs/audit-handoff-v23` to
+`docs/f-auth-1-v2.57-namespace-ruling`. Its parent was the Handoff branch
+commit `0f400313`, not the then-current `origin/main`.
+
+Handoff v23 had already squash-merged through PR #1069 as `f214cece`. The
+content was on `main`, but the original branch commit was not in `main`'s
+ancestry. Git therefore found merge-base `540b6d96` between `f214cece` and
+`6014b0de`, not `f214cece` itself.
+
+**The PR-style three-dot diff exposed the consequence:**
+
+| Head | Parent/base condition | `origin/main...HEAD` |
+|---|---|---:|
+| `6014b0de` (original local commit) | Parent `0f400313`, predecessor branch | **749 insertions / 4 files** |
+| `d8a612c0` (corrected PR #1070 head) | Parent `f214cece`, landed `main` | **417 insertions / 4 files** |
+
+The 749-line proposed diff included **347 lines in
+`Prime_Studios_Audit_Handoff_v23.md`**. The corrected diff included only the
+15 new Handoff lines v2.57 intentionally added. **The branch-base error inflated
+the proposed diff by 332 lines.** PR #1070 was opened and merged from corrected
+head `d8a612c0`; the 749-line form did not land.
+
+#### Why this can look clean
+
+**The feature commit itself was valid.** Its intended v2.57 changes were not
+wrong, and the predecessor content already existed on `main` in squash-
+equivalent form. The defect lived in ancestry, not file content. A normal
+syntax check, test suite, commit-body read, or two-dot tree comparison can all
+be green while the three-dot PR diff carries the predecessor again.
+
+**Squash merge is the enabling detail.** A squash preserves content and
+replaces ancestry. Continuing from the old feature branch after its PR squash-
+merges creates a branch that *looks* based on the landed work to a human reader
+but is not based on the landed commit to Git. Correct content is not a correct
+merge base.
+
+#### Prevention before detection — proven practice
+
+**Gate 1 — branch creation:** fetch and name the start point explicitly. The
+currently checked-out branch must not supply the new branch's parent by
+accident.
+
+```powershell
+git fetch origin main
+git switch -c <new-branch> origin/main
+```
+
+**Gate 2 — before opening a PR:** fetch again, require the current
+`origin/main` to be the merge base, then inspect the PR-shaped diff.
+
+```powershell
+git fetch origin main
+$main = git rev-parse origin/main
+$base = git merge-base HEAD origin/main
+if ($base -ne $main) { throw "Branch is not based on current origin/main" }
+git diff --stat origin/main...HEAD
+git diff --name-status origin/main...HEAD
+```
+
+The second gate intentionally also catches a branch whose base was correct at
+creation but became stale while `main` advanced. **Detection is not the primary
+control:** the first gate prevents inherited ancestry; the second prevents a
+bad or stale base from reaching PR review.
+
+**The practice has worked three times after the near-miss:**
+
+| PR | Feature head parent | PR base | Landed delta |
+|---:|---|---|---:|
+| #1071 | `a3002064` | `a3002064` | 132 lines / 1 file |
+| #1074 | `3c8d147d` | `3c8d147d` | 80 lines / 1 file |
+| #1075 | `0a084079` | `0a084079` | 51 lines / 3 files |
+
+Each feature head was parented directly to the current base recorded by
+GitHub, and each PR contained only its reviewed work.
+
+#### Why PE #67 remains open
+
+**This is a working practice, not an enforced control.** Nothing in the
+repository prevents `git switch -c <branch>` from inheriting the current
+feature branch, and nothing currently blocks `gh pr create` when
+`git merge-base HEAD origin/main` differs from `origin/main`. The next session
+can omit both checks and reproduce the incident without violating any hook or
+workflow.
+
+**Resolution path:** codify the two gates in the PR-opening workflow or a
+repository script that fails closed before `gh pr create`; preserve the
+three-dot stat and name-status review as visible evidence. The control must not
+auto-rebase, auto-reset, or silently rewrite commits — mismatch means stop and
+make the branch-base decision explicitly.
+
+#### What this entry does not do
+
+- **Does not assert that PR #1070 landed duplicate content.** It did not; the
+  branch was corrected first.
+- **Does not prohibit deliberate stacked branches.** It requires them to be
+  named as stacked and reviewed against their intended base rather than
+  silently targeting `main`.
+- **Does not automate branch creation, rebase any branch, or change branch
+  protection.**
+- **Mints no FD or XK. Changes no gate. Contacts no deployed host.**
+
+*Filed 2026-08-22. Basis `d58e074a`. Git/reflog/GitHub metadata only. No
+deployed host contacted. Prod FROZEN.*
