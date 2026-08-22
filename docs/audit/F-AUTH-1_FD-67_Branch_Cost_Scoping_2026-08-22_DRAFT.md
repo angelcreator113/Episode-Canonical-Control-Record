@@ -1,3 +1,75 @@
+> **CORRECTION BANNER — WRITE-DECLARATION COUNTS CORRECTED. THE 9 IS UNCHANGED
+> (added 2026-08-22, after `a7f0156f`, additive).**
+>
+> **Scope: §4's write-declaration counts, and §8's fifth edge.** No other
+> section is amended. **§7's branch costing is unaffected: the mount-only write
+> figure of 9 and the read range of 13–27 both stand, so option 1's upper bound
+> of 36 named declarations is unchanged.**
+>
+> **Root cause, stated once.** §4's walk **did not deduplicate route objects**.
+> A router mounted at more than one path was therefore counted once per mount.
+> §4's reported **912** write declarations and **903** explicitly authenticated
+> are inflated by that double-counting.
+>
+> **§8's fifth edge named this exact risk** — *"Duplicate mounting was never
+> checked; absolute counts are softer than ratios."* **The edge that was flagged
+> is the one that bit.** It is now discharged by measurement rather than left
+> open.
+>
+> **Why the read side was unaffected, and why that mattered.** The read-side
+> walk deduplicated by route identity; the write-side walk did not. **That is
+> why GET agreed at exactly 504 across two independently built instruments while
+> the write figure did not** — the asymmetry recorded at PR #1091 §5.1 as
+> evidence of a structural difference between loading strategies. **It was
+> structural, but the structure was in the instrument, not in the route
+> surface.**
+>
+> **Corrected counts, deduplicated by route-object identity.**
+>
+> | discovery | write declarations | mount-only |
+> |---|---|---|
+> | per-router loading | 890 | **9** |
+> | app composition | 897 | **9** |
+> | **union of both** | **927** | **9** |
+>
+> Reconciled in a single process, so set difference is by **route-object
+> identity** rather than by key match: per-router loading populates
+> `require.cache`, and the later `src/app` load reuses the same route objects.
+> **860 appear in both discoveries; 30 are declared but not app-mounted; 37 are
+> app-mounted but not reached by loading files under `src/routes`.**
+>
+> **Both difference regions contain zero mount-only writes.** The confirmation
+> therefore rests on nothing having been hidden in the gap between the two
+> discoveries — not merely on two counts agreeing.
+>
+> **Classification over the union of 927, three ways rather than two.**
+>
+> | | |
+> |---|---|
+> | authenticated by their own route stack | 888 |
+> | authenticated only by a `router.use()` preset | 30 |
+> | relying on the global mount alone | **9** |
+>
+> **The 30 preset-authenticated writes are a third protection mechanism this
+> document did not separate.** They match v2.37's record of the first
+> router-level preset migration (`calendarRoutes` and `pageContent`,
+> `router.use(optionalAuth)` → `router.use(requireAuth)`). A binary
+> authenticated/not reading records 918 and loses them.
+>
+> **A cross-check instrument failed here, in the way v2.61 §4.3 names.** A
+> second classifier returned **39** mount-only writes because it inspected only
+> each route's own stack and ignored `router.use()` presets — precisely the
+> *"inherited/global/router middleware"* omission §4.3 warns of. The
+> disagreement was chased rather than reported, and resolved against the
+> checker. **§4.3's objection is now evidenced rather than asserted.**
+>
+> **Environment contact for the corrective run.** Per-router and `src/app`
+> loading in one process, with **`DB_HOST` forced to loopback and
+> `DATABASE_URL` cleared before `src/app` was required** — FD-66's hazard
+> neutralised by construction rather than by what `.env` resolves to. Redis was
+> reached (`127.0.0.1:6379`, refused). No deployed host, no AWS call, no
+> Cognito contact. Prod FROZEN.
+
 | **PRIME STUDIOS** **F-AUTH-1 SCOPING DOCUMENT** *FD-67 branch cost. Rules nothing. Mints nothing. Recommends nothing.* |
 | --- |
 
