@@ -115,12 +115,33 @@ procedure is how it is discharged. **Nothing else in §7.7 is withdrawn.**
 
 **The population is the write declarations relying on the mount alone: 9.**
 
+**The write-declaration counts below were corrected after this ruling was
+drafted; the population was not.** PR #1090's figures of 912 and 903 were
+produced by a walk that did not deduplicate route objects, so routers mounted
+at more than one path were counted more than once. The full correction is
+recorded as an additive banner on that document. **The 9 is unchanged, and the
+ruling, the branch and the procedure's scope all stand on it exactly as
+written.**
+
 | | |
 |---|---|
-| write declarations (PR #1090, derived at `cde71fbc`, on `main` at `a7f0156f`) | 912 |
-| carrying explicit authentication | 903 |
+| write declarations (union of both discoveries, deduplicated) | **927** |
+| authenticated by their own route stack | 888 |
+| authenticated only by a `router.use()` preset | 30 |
 | **relying on the global mount alone — THE POPULATION** | **9** |
 | no auth middleware at all | 0 |
+
+**The three-way split is retained deliberately.** A binary
+authenticated/not-authenticated reading would record 918 and 9, and would lose
+the fact that **30 writes are protected by a router-level preset rather than by
+anything in their own declaration** — the form of protection a
+declaration-level reading is most likely to miss, and the one v2.61 §4.3 names.
+
+**The 9 is invariant across all three population choices** — 890 per-router,
+897 app-composition, 927 union — and **both difference regions contain zero
+mount-only writes**. Confirmation therefore rests on nothing having been hidden
+in the gap between discoveries, not merely on two counts agreeing. **§8's
+condition 2 is discharged by this.**
 
 **The read set is NOT a work population under this branch, and this is a
 consequence of retaining the mount.** PR #1090 enumerated 13–27
@@ -166,33 +187,35 @@ either reading.**
    a later basis:** the surface changes with development, and a population
    correct at `a7f0156f` is not automatically correct later.
 
-2. **THE 9 IS UNINSTRUMENTED, AND UNDER THIS BRANCH THAT IS LOAD-BEARING.**
-   PR #1090's closing note recorded that the 9 rests on an argument — that the
-   `asyncHandler` opacity defect cannot reach a middleware-chain fact — rather
-   than on a second instrument. PR #1091 §5.1 adds a second reason: the 9
-   derives from the 912-declaration app-composition walk, and 912 disagrees by
-   22 with the per-router walk's 890 while both agree exactly on 504 reads.
+2. **THE 9 IS THE ENTIRE SCOPE — RULED A PREREQUISITE, AND DISCHARGED.**
 
-   **Under option 1 a wrong 9 would have been one of two sets and would not have
-   disturbed the reasoning. Under this branch the 9 IS the entire scope of the
-   procedure.** A wrong 9 is a wrong procedure scope, and a write omitted from
-   it is a write the successor check never examines.
+   **Under option 1 a wrong 9 would have been one of two sets and would not
+   have disturbed the reasoning. Under this branch the 9 IS the entire scope of
+   the procedure.** A wrong 9 is a wrong procedure scope, and a write omitted
+   from it is a write the successor check never examines.
 
-   **RULED: independent confirmation of the 9 is a prerequisite to specifying
+   **RULED: independent confirmation of the 9 was a prerequisite to specifying
    the procedure, not an optional refinement.** The reason is that **an
-   unconfirmed bound is not a bound** — and a bounded procedure is preferable to
-   option 2's full-surface one precisely because its bounds are known. A branch
-   that takes its warrant from being bounded cannot leave the boundary
-   unverified.
+   unconfirmed bound is not a bound** — and a bounded procedure is preferable
+   to option 2's full-surface one precisely because its bounds are known. A
+   branch that takes its warrant from being bounded cannot leave the boundary
+   unverified. **The status of this check changed as a consequence of choosing
+   this branch;** under the earlier option-1 formulation it was correctly
+   optional.
 
-   **The 890-vs-912 disagreement makes this live rather than hypothetical:** two
-   instruments disagree on exactly the quantity the scope is drawn from.
+   **DISCHARGED.** Two reasons for doubt stood when this ruling was drafted:
+   PR #1090's closing note recorded that the 9 rested on an argument rather
+   than a second instrument, and PR #1091 §5.1 added that the 9 derived from a
+   figure two instruments disagreed on. **Both are resolved.** The disagreement
+   was an artefact of undeduplicated route objects, not of the route surface;
+   and the 9 has been confirmed across three populations with **zero mount-only
+   writes in either difference region** — so the bound is verified against
+   things having been *missed*, which is the failure mode that mattered, and
+   not merely against a second count agreeing.
 
-   Confirmation is cheap — a second walk identifying mount-only writes by a
-   different criterion either agrees or does not. **The status of this check
-   changed as a consequence of choosing this branch**, and under the earlier
-   option-1 formulation it was correctly optional: there the 9 was one of two
-   sets and a wrong 9 did not disturb the reasoning.
+   **This condition is recorded rather than deleted**, because a later revision
+   restating §6's population at a new basis re-incurs it: a bound confirmed at
+   one basis is not confirmed at another.
 
 3. **Legitimate need remains Tier adjudication and is uncounted.** §6 enumerates
    writes that *rely on* the mount, not writes that *should*. Deciding each
