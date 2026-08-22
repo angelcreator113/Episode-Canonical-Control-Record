@@ -180,20 +180,52 @@ amendment to F-Deploy-1 rather than any engineering.
 **Production has not received the equivalent change.** `deploy-production.yml`
 still reaches its host by SSH with `secrets.EC2_HOST`.
 
-# §9 Minting — proposed, not taken
+# §9 Disposition — proposed in two parts, neither taken
 
-**This is a production-environment item and PE is its natural home**, which
-would advance the PE tail **#67 → #68**.
+**This document contains two different kinds of thing, and they want different
+homes.**
 
-**It is proposed rather than taken, for a specific reason: a tail was advanced
-today for a duplicate.** FD-69 was minted 2026-08-22 for a defect FD-65 already
-held, and retired at PR #1102 with the tail left spent. **Having made that
-error once today, the author of this document is not the right party to take a
-second minting decision unreviewed.**
+## §9.1 The mechanism — proposed as PE #68
 
-The ruling party should decide whether this mints **PE #68**, amends
-**F-Deploy-1** (which owns the deploy path and §8's undocumented coverage), or
-both.
+§2's failed-deploy write, §3's four anomalies, §4's inherited deployment
+evidence and §5's open question are **observations about the production
+environment**. PE is their natural home, advancing the tail **#67 → #68**.
+
+## §9.2 The forward rule — proposed for v25's executable checklist, not for PE
+
+**§7 is not an observation. It is a standing constraint on how every future
+instrument may write about production**, and **a PE entry containing a binding
+rule is the wrong shape** — PE entries record what was found, not what
+successors must do.
+
+**Its natural home is the handoff's executable checklist**, by that document's
+own test. v24 Sec 6's rule reads:
+
+> *"if Sec 7 or any other non-action section names a specific read, that same
+> read must appear here or be explicitly classified as a bounded exclusion. A
+> runnable obligation parked only as a non-action is dropped in practice."*
+
+**§7 names a read.** Rendered as a checklist derivation it is a question a
+successor actually runs:
+
+> **Has the running production state been read, or is it about to be stated
+> from the deployment record?**
+
+**A rule that lives only here will be obeyed by whoever read this document and
+by nobody else.** That is the failure mode Sec 6's rule exists to prevent, and
+it applies to this instrument as much as to any other.
+
+## §9.3 Why neither is taken here
+
+**A tail was advanced today for a duplicate.** FD-69 was minted 2026-08-22 for
+a defect FD-65 already held, and retired at PR #1102 with the number left
+spent. **Having made that error once today, the author of this document is not
+the right party to take a second minting decision unreviewed.**
+
+The ruling party decides: PE #68, a v25 checklist item, an **F-Deploy-1**
+amendment for §8's undocumented coverage, or some combination. **§8's amendment
+is the one that expires** — it protects a control that a future change could
+remove without knowing what it held.
 
 # §10 What this instrument does not do
 
