@@ -1,3 +1,27 @@
+# =============================================================================
+# STOP — READ BEFORE RE-ENABLING OR RUNNING THIS WORKFLOW
+#
+# This workflow is DISABLED (disabled_manually) and production is FROZEN.
+#
+# On 2026-08-22 a security patch was applied DIRECTLY to the production host,
+# to src/routes/auth.js, disabling POST /api/v1/auth/login. That patch is NOT
+# in this repository. See finding FD-69 in docs/audit/.
+#
+# RUNNING THIS WORKFLOW WOULD OVERWRITE src/routes/auth.js WITH THE VERSION ON
+# main AND SILENTLY REVERT THAT SECURITY FIX.
+#
+# Do not run it until the fix exists on main. When it does, delete this block.
+#
+# Two further facts the deploy record does not show, both established
+# 2026-08-22:
+#   * The code running on production did not come from this workflow. The last
+#     successful run was 2026-05-11; the files on the box are newer. Anything
+#     reasoning from "the deployed SHA" is reasoning about this record, not
+#     about the box.
+#   * GitHub-hosted runners can no longer reach the host on port 22, so this
+#     workflow will fail at its reachability probe regardless.
+# =============================================================================
+
 name: Deploy to Production
 
 on:
