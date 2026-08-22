@@ -115,8 +115,32 @@ re-run the program that produced them.
 **`cannot-tell` is a first-class outcome, not a failure to complete a judgment.**
 It is the disposition owed wherever the CP's basis or rationale is not
 recoverable, and it must be recorded as such rather than resolved by
-re-derivation. **A pass that reports no `cannot-tell` results should be
-suspected of having quietly become a re-derivation.**
+re-derivation.
+
+## §4.1 The quality signal on limb 1's output is inverted
+
+**At an unrecoverable CP basis the pressure is to re-derive in order to resolve
+it, and that drift produces *cleaner* output** — fewer unknowns, more definite
+results. A pass that has quietly become a re-derivation does not look degraded.
+**It looks better than the pass that stayed within its ruling.**
+
+So the ordinary reading of the output must be inverted:
+
+> **A limb 1 pass reporting no `cannot-tell` results is MORE suspect than one
+> reporting several.**
+
+**This is #1106 §5 applied one level down.** There, the rule is that where
+attribution is unavailable the register must report that it cannot tell and must
+not report that nothing happened — because *"we checked and cannot tell"* and
+*"no evidence"* are indistinguishable in the output and only one of them is
+true. **Here the same substitution is available to limb 1's own auditor**, and
+the substituted result is the more presentable one.
+
+**It is the only defense against a drift that looks like rigor.** No count, no
+review of the output, and no comparison against a forecast will separate a
+disciplined pass from a re-derived one — both terminate, and the re-derived one
+terminates with better-looking numbers. **The `cannot-tell` rate is the
+discriminator, and a suspiciously low one is the signal.**
 
 **Consequence for v2.61 §4.3.** Its per-handler language describes the
 expensive reading and is not limb 1's deliverable. It is not amended here; it is
@@ -225,6 +249,9 @@ not on `main` at this basis. **That revision should land first.**
 - **Does not edit v2.42, v2.43, v2.56, v2.58 or v2.59.** The withdrawal is
   carried here and governs from here (§7).
 - **Does not amend v2.61 §4.3.** It is scoped, not corrected (§4).
+- **Does not set a threshold for §4.1's `cannot-tell` rate.** The signal is
+  stated as a direction, not a number; no rate is derivable before the first CP
+  is audited.
 - Does not advance Dimension 3, discharge limb 3, enter G4, or alter the freeze.
 - **Mints nothing.** Closes and reopens nothing. Changes no gate, severity,
   owner or disposition.
