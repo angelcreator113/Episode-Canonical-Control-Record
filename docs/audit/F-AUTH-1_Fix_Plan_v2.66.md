@@ -4,13 +4,14 @@
 **Document version**
 
 v2.66 — **SPECIFIES THE SUCCESSOR PROCEDURE v2.65 SCOPED, AND RULES CLASS B'S
-AUTH DISPOSITION.** Names all nine members by file and mounted path, assigns
-each to one of three classes, and states what adjudicating a member of each
+AUTH DISPOSITION.** Names all eight members by file and mounted path, assigns
+each to a class, and states what adjudicating a member of each
 class requires. **Rules the five `roles.js` writes incorrect as unauthenticated
-writes (§6).** Classes A and C are specified and **not** adjudicated.
+writes (§6).** Class A is specified and **not** adjudicated; **Class C is
+empty (§2).**
 
 **Does not close FD-67.** v2.65 requires the procedure to be specified *and
-executed*. This specifies it and executes one class of three. FD-67 remains
+executed*. This specifies it and executes one of the two non-empty classes. FD-67 remains
 **OPEN/P2**.
 
 **Rules no remedy** for the five, and **does not adjudicate XK-3** (§6.1, §6.2).
@@ -39,7 +40,7 @@ procedure discharges.
 
 # §2. The population, named in full
 
-**Nine write declarations. Every member is identified by file and by mounted
+**Eight write declarations. Every member is identified by file and by mounted
 path**, because a procedure that cannot name its members is not executable.
 
 | # | method | mounted path | file | class |
@@ -52,23 +53,39 @@ path**, because a procedure that cannot name its members is not executable.
 | 6 | DELETE | `/api/v1/roles/:roleKey` | `src/routes/roles.js` | B |
 | 7 | POST | `/api/v1/roles/bulk-assign` | `src/routes/roles.js` | B |
 | 8 | POST | `/api/v1/roles/validate-required` | `src/routes/roles.js` | B |
-| 9 | POST | `/api/v1/world/generate-ecosystem-preview` | `src/routes/worldStudio.js` | C |
 
-**Correction to v2.65 §6's prose.** v2.65 described the non-auth members as
-*"four roles-shaped writes, `/validate-required`, and
+
+**Two corrections to v2.65 §6, both carried here.**
+
+**First, the partition.** v2.65 described the non-auth members as *"four
+roles-shaped writes, `/validate-required`, and
 `/world/generate-ecosystem-preview`."* **`/validate-required` is declared in
-`roles.js` and belongs to the roles cluster.** The split is **3 / 5 / 1**, not
-3 / 4 / 2. The count of nine is unchanged; only its partition is corrected.
+`roles.js` and belongs to the roles cluster.**
+
+**Second, the population itself: it is eight, not nine.**
+`POST /api/v1/world/generate-ecosystem-preview`
+(`src/routes/worldStudio.js:2483`) **is not mount-dependent and is removed from
+the population.** It carries its own `optionalAuth({ degradeOnInfraFailure:
+true })` — the **§5.45 polymorphic factory** — and a factory-derived closure is
+not identity-equal to the exported symbol, so every identity-matching walk
+resolved it to `anon`. **It also already carries a `// PUBLIC:` comment with a
+recorded rationale and per its own docstring does not persist**, so §7.7's
+third checkbox was already discharged for it.
+
+**The split is therefore 3 / 5, over eight members. Class C is empty.** The
+full correction, including why three agreeing discovery methods failed to catch
+this, is carried once at v2.65's correction banner and is not restated here.
 
 # §3. Why three classes and not one procedure
 
-**Adjudicating these nine is not one kind of judgment.** A uniform step would
+**Adjudicating these eight is not one kind of judgment.** A uniform step would
 either over-specify Class A or under-specify Class B.
 
 - **Class A** is unauthenticated by definition of what the endpoint does.
 - **Class B** is unauthenticated *and* derives its tenancy root from
   caller-supplied input, which is a second, separately-owned finding.
-- **Class C** is a single declaration with neither property established.
+- **Class C is empty.** Its sole prospective member proved not to be
+  mount-dependent and was removed from the population (§2).
 
 **Stating per-class requirements is also the honest answer to the question
 limb 1 cannot yet answer for its own population** — what one judgment consists
@@ -117,25 +134,25 @@ procedure inherits that; it does not discover it and does not extend it.
 **§6 rules that these five do not require XK-3's answer in order to be
 dispositioned.**
 
-## §4.3 Class C — `/world/generate-ecosystem-preview`
+## §4.3 Class C — empty
 
-**Requirement: standalone adjudication.**
+**No members. No requirement.**
 
-Neither Class A's constitutive argument nor Class B's XK-3 entanglement has
-been established for it. It requires the ordinary question — is unauthenticated
-write access correct for this declaration, and if so, on what recorded
-rationale — answered once.
+The class was defined for `/world/generate-ecosystem-preview`, which §2 removes
+from the population as not mount-dependent. **The class is retained as a
+heading rather than deleted**, so that a reader of v2.65's three-way framing can
+see where its third member went.
 
 # §5. What the procedure establishes, and what it does not
 
 **On execution, this procedure establishes exactly one thing: for each of the
-nine, whether being mount-only is intentional or incorrect, on a recorded
-rationale.** It is not a procedure for confirming that all nine are fine —
-**§6 rules five of them incorrect**, which is a permitted outcome and not a
+eight, whether being mount-only is intentional or incorrect, on a recorded
+rationale.** It is not a procedure for confirming that all eight are fine —
+**§6 rules five of the eight incorrect**, which is a permitted outcome and not a
 failure of the procedure.
 
 **It does NOT establish that the global mount is safe.** The mount is inherited
-by every declaration in the application. This procedure examines nine. **A
+by every declaration in the application. This procedure examines eight. **A
 reader must not treat a discharged §7.7 third checkbox as a finding about
 `src/app.js:236`,** which v2.65 retained without ruling on its safety and
 which FD-63 continues to own.
@@ -204,8 +221,11 @@ route-object identity, deduplicated — and must report **zero mount-only writes
 in both difference regions**, which is the check that guards against omission
 rather than against disagreement.
 
-**If re-derivation returns a population other than these nine, execution stops
-and the scope is re-ruled.**
+**If re-derivation returns a population other than these eight, execution stops
+and the scope is re-ruled.** Re-derivation must not rely on function-identity
+matching alone: §2's removed member shows that a configured-closure middleware
+resolves to `anon` under that criterion. **Declaration-level inspection must
+accompany it.**
 
 # §8. What v2.66 does not do
 
