@@ -9,6 +9,41 @@
 
 ---
 
+> **COMPLETION BANNER — SEC 8'S F-DEPLOY-1 v1.30 NON-READ HAS BEEN PERFORMED
+> (added 2026-08-22, after `8a016049`, additive).**
+>
+> **Sec 8 was accurate at its basis and committed no error.** It stated:
+>
+> > *"Does not read F-Deploy-1 v1.30, which is where `deploy-dev.yml`'s rewrite
+> > and its API-layer posture would be authorized if they are authorized
+> > anywhere."*
+>
+> That owed read is now complete. v1.30 specifies the SSM/manual-dispatch
+> replacement architecture; v1.43 takes and executes the re-enablement ruling
+> and records the first green dispatch; v1.46 verifies the path end-to-end
+> against `1844e56b`; v1.48 closes F-Deploy-1 while leaving only the future
+> push-trigger decision gated. **The manual `workflow_dispatch` path is
+> authorized, implemented, re-enabled, and field-proven.** Recognizing that
+> disposition does not reopen or amend the closed F-Deploy-1 keystone.
+>
+> **The finding is placement, not accuracy.** Sec 8's item was
+> derivation-shaped: it named a specific unread authority and implied the
+> specific read required to resolve the transition. v23 Sec 5 argues that the
+> checklist items which worked were the ones that told a successor what to run.
+> This item had that form and still did not fire, because it lived under
+> *"What this document does not do"* rather than in Sec 6's executable
+> checklist. **A runnable obligation parked as a non-action was treated as
+> housekeeping.** That placement allowed v2.59 Dimension 2 to rule on the path
+> while its known owning authority remained unread.
+>
+> The consequence is recorded in the governing correction banner on
+> `F-AUTH-1_Fix_Plan_v2.59.md`: Dimension 2's FAIL is withdrawn to UNSCORED.
+> **No v23 ruling, status, gate, or finding changes.** Sec 8 remains correct as
+> an at-basis statement; this banner records completion of its owed read and
+> the downstream cost of its placement.
+>
+> The original Sec 8 text remains below as the at-filing record.
+
 > **CORRECTION BANNER — Sec 4.2 instance 3's namespace characterization was ASSERTED, NOT DERIVED (added 2026-08-21, after `f214cece`, additive).**
 > **Sec 4.2 instance 3 reads *"v2.37 Sec 5.71's three limbs, **specifying the same G3**, went unconsulted."* That characterization rules the `Gate G<n>` / `Track G<n>` namespace question — the same question Sec 8 states this document does not rule. **The document contradicts itself in force, and this banner records that, not a ruling.**
 >
