@@ -177,7 +177,7 @@ anonymous caller can therefore write to any tenant by naming it.**
 isolation holds across the system. It cannot establish that caller-asserted
 tenancy on an unauthenticated write is correct, **because it is not,
 independently of whatever else XK-3 would find.** Waiting on a frozen gate to
-confirm what is already visible would put five of nine members behind
+confirm what is already visible would put five of eight members behind
 production authorization for no gain.
 
 **The two deferring options are rejected on the same ground.** Option 1
@@ -213,7 +213,8 @@ progress on XK-3**, and must not cite it as evidence bearing on Gate 3.
 **The population is basis-stamped at `4e403a81` and must be re-derived
 immediately before execution.**
 
-v2.65 §8 condition 2 was discharged by confirming the nine, and it recorded its
+v2.65 §8 condition 2 was discharged by confirming the population — then nine,
+since corrected to eight — and it recorded its
 own revival condition: **a bound confirmed at one basis is not confirmed at
 another.** The route surface changes with development. Re-derivation must use
 the reconciled method — per-router and app-composition discoveries compared by
