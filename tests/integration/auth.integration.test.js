@@ -30,19 +30,28 @@ const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com');
   });
 
   describe('POST /api/v1/auth/login', () => {
-    it('should successfully login with valid credentials', async () => {
+    // FD-65 issuance half, closed 2026-08-22. This route previously issued a
+    // signed token to any caller supplying a well-formed email and any
+    // six-character password. It now fails closed before any other logic.
+    //
+    // The former 'successfully login with valid credentials' test asserted the
+    // defect as if it were the contract, and is replaced rather than removed:
+    // there were never valid credentials to supply, because nothing was
+    // verified.
+    it('is disabled and issues no token', async () => {
       const res = await request(app).post('/api/v1/auth/login').send({
         email: 'test@example.com',
         password: 'password123',
       });
 
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('success', true);
-      expect(res.body.data).toHaveProperty('accessToken');
-      expect(res.body.data).toHaveProperty('refreshToken');
-      expect(res.body.data.user.email).toBe('test@example.com');
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty('code', 'AUTH_LOGIN_DISABLED');
+      expect(res.body.data).toBeUndefined();
     });
 
+    // Still 400. validateLoginRequest is mounted AHEAD of the handler, so a
+    // malformed request never reaches the FD-65 disable. Only well-formed
+    // requests get 401. This assertion is unchanged by the disable.
     it('should reject login with missing email', async () => {
       const res = await request(app).post('/api/v1/auth/login').send({
         password: 'password123',
@@ -82,15 +91,16 @@ const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com');
       expect(res.body.details).toContain('Password is required');
     });
 
-    it('should handle rate limiting after multiple failed attempts', async () => {
-      // Note: Rate limiting is disabled in development mode
-      // This test verifies the middleware is in place
+    it('still reaches the route with the rate limiter mounted', async () => {
+      // Rate limiting is skipped in development/test, so this only asserts the
+      // request reaches the handler. It formerly asserted 200; the FD-65
+      // disable makes that 401. It does NOT assert that rate limiting works.
       const res = await request(app).post('/api/v1/auth/login').send({
         email: 'test@example.com',
         password: 'password123',
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(401);
     });
   });
 
@@ -292,15 +302,26 @@ const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com');
   });
 
   describe('End-to-End Authentication Flow', () => {
-    it('should complete full auth cycle: login -> use token -> refresh -> logout', async () => {
-      // 1. Login
+    it('should complete full auth cycle: token -> use -> refresh -> logout', async () => {
+      // 1. Obtain a token. FD-65's issuance half is closed, so /login no
+      //    longer mints one; the cycle below is unaffected by where the token
+      //    comes from, so it is minted directly. The disable itself is
+      //    asserted in the POST /login describe, not here.
       const loginRes = await request(app).post('/api/v1/auth/login').send({
         email: 'e2e@test.dev',
         password: 'password123',
       });
+      expect(loginRes.status).toBe(401);
 
-      expect(loginRes.status).toBe(200);
-      const { accessToken: token1, refreshToken: refresh1 } = loginRes.body.data;
+      const e2eTokens = TokenService.generateTokenPair({
+        id: 'e2e-user',
+        email: 'e2e@test.dev',
+        name: 'e2e',
+        groups: ['USER'],
+        role: 'USER',
+      });
+      const token1 = e2eTokens.accessToken;
+      const refresh1 = e2eTokens.refreshToken;
 
       // 2. Use token to access protected endpoint
       const meRes = await request(app)

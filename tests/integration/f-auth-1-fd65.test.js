@@ -33,6 +33,21 @@ const TokenService = require('../../src/services/tokenService');
 // Mirrors the guard in auth.integration.test.js — never run against RDS.
 const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com');
 
+// FD-65 ISSUANCE HALF CLOSED 2026-08-22. POST /login now returns 401 before any
+// other logic runs, so the assertions below that reach the privilege half
+// THROUGH /login can no longer observe it.
+//
+// They are SKIPPED, NOT DELETED. The property they assert -- that
+// caller-supplied `groups`/`role` are ignored -- still holds in code: 75ac05f0
+// removed those inputs from the handler. It is simply unobservable over HTTP
+// while the route is disabled. Deleting them would quietly discard the only
+// direct evidence of the privilege half's closure.
+//
+// If /login is ever re-enabled, set this to false and the assertions return.
+const LOGIN_DISABLED = true;
+const describeLogin = LOGIN_DISABLED ? describe.skip : describe;
+const testLogin = LOGIN_DISABLED ? test.skip : test;
+
 // auditLogs.js:18 — `router.get('/', requireAuth, authorize(['ADMIN']), ...)`,
 // mounted at src/app.js:892. Chosen because v2.49 §2.4 names it: the control
 // that would evidence an intrusion sat behind the credential the intrusion
@@ -42,7 +57,24 @@ const ADMIN_GATED_URL = '/api/v1/audit-logs';
 const anonymousLogin = (body) => request(app).post('/api/v1/auth/login').send(body);
 
 (shouldSkip ? describe.skip : describe)('F-AUTH-1 FD-65 — privilege half', () => {
-  describe('POST /login ignores caller-supplied privilege', () => {
+  // The issuance half, closed 2026-08-22. v2.49 minted FD-65 with both halves;
+  // v2.50 closed the privilege half only and said so. This is the other one.
+  describe('POST /login issues no token at all', () => {
+    test('returns 401 and no accessToken, whatever is supplied', async () => {
+      const res = await anonymousLogin({
+        email: 'escalate@example.test',
+        password: 'password123',
+        groups: ['ADMIN'],
+        role: 'admin',
+      });
+
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty('code', 'AUTH_LOGIN_DISABLED');
+      expect(res.body.data).toBeUndefined();
+    });
+  });
+
+  describeLogin('POST /login ignores caller-supplied privilege', () => {
     test('echoes ["USER"] when the caller asks for ADMIN', async () => {
       const res = await anonymousLogin({
         email: 'escalate@example.test',
@@ -75,7 +107,7 @@ const anonymousLogin = (body) => request(app).post('/api/v1/auth/login').send(bo
   });
 
   describe('the resulting token against an ADMIN gate', () => {
-    test('is refused by authorize(["ADMIN"]) — 403, not 200', async () => {
+    testLogin('is refused by authorize(["ADMIN"]) — 403, not 200', async () => {
       const login = await anonymousLogin({
         email: 'escalate@example.test',
         password: 'password123',
