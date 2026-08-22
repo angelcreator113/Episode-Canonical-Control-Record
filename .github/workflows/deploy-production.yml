@@ -1,25 +1,31 @@
 # =============================================================================
-# STOP — READ BEFORE RE-ENABLING OR RUNNING THIS WORKFLOW
+# READ BEFORE RE-ENABLING OR RUNNING THIS WORKFLOW
 #
 # This workflow is DISABLED (disabled_manually) and production is FROZEN.
 #
-# On 2026-08-22 a security patch was applied DIRECTLY to the production host,
-# to src/routes/auth.js, disabling POST /api/v1/auth/login. That patch is NOT
-# in this repository. See finding FD-69 in docs/audit/.
+# The revert hazard this block originally recorded is RESOLVED. main now
+# carries the FD-65 fix (PR #1100), functionally identical to the patch applied
+# directly to the production host on 2026-08-22, so deploying would no longer
+# revert it. That paragraph has been removed rather than left to mislead.
 #
-# RUNNING THIS WORKFLOW WOULD OVERWRITE src/routes/auth.js WITH THE VERSION ON
-# main AND SILENTLY REVERT THAT SECURITY FIX.
+# What remains true, and is why this block is not deleted:
 #
-# Do not run it until the fix exists on main. When it does, delete this block.
+#   * PRODUCTION IS ROUGHLY THREE MONTHS BEHIND main. The last successful run
+#     of this workflow was 2026-05-09. Running it now is a large change, not a
+#     routine deploy, and production is under freeze.
 #
-# Two further facts the deploy record does not show, both established
-# 2026-08-22:
-#   * The code running on production did not come from this workflow. The last
-#     successful run was 2026-05-11; the files on the box are newer. Anything
-#     reasoning from "the deployed SHA" is reasoning about this record, not
-#     about the box.
-#   * GitHub-hosted runners can no longer reach the host on port 22, so this
-#     workflow will fail at its reachability probe regardless.
+#   * THE CODE ON PRODUCTION DID NOT COME FROM THIS WORKFLOW. Files on the box
+#     are dated 2026-06-27, six weeks after that last successful run. What
+#     wrote them is NOT ESTABLISHED. Anything reasoning from "the deployed SHA"
+#     is reasoning about this record, not about the box.
+#
+#   * GITHUB-HOSTED RUNNERS CANNOT REACH THE HOST ON PORT 22. Inbound SSH was
+#     scoped to a single address on 2026-08-22, so this workflow will fail at
+#     its reachability probe until either runner ranges are permitted or the
+#     production deploy path moves to SSM, as the development path already has.
+#
+# Delete this block when production has been brought up to date through a
+# recorded deployment and the transport question is settled.
 # =============================================================================
 
 name: Deploy to Production
