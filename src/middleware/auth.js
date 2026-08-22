@@ -79,12 +79,25 @@ const { verifyToken: verifyHs256Token } = require('../services/tokenService');
 let _idTokenVerifier = null;
 let _accessTokenVerifier = null;
 
+const COGNITO_CONFIG_PLACEHOLDERS = {
+  userPoolId: 'us-east-1_XXXXXXXXX',
+  clientId: 'xxxxxxxxxxxxxxxxxxxxxxxxxx',
+};
+
 const getCognitoConfig = () => {
-  const userPoolId = process.env.COGNITO_USER_POOL_ID;
-  const clientId = process.env.COGNITO_CLIENT_ID;
+  const userPoolId = process.env.COGNITO_USER_POOL_ID?.trim();
+  const clientId = process.env.COGNITO_CLIENT_ID?.trim();
   const missingVariables = [];
   if (!userPoolId) missingVariables.push('COGNITO_USER_POOL_ID');
   if (!clientId) missingVariables.push('COGNITO_CLIENT_ID');
+  if (process.env.NODE_ENV !== 'test') {
+    if (userPoolId === COGNITO_CONFIG_PLACEHOLDERS.userPoolId) {
+      missingVariables.push('COGNITO_USER_POOL_ID');
+    }
+    if (clientId === COGNITO_CONFIG_PLACEHOLDERS.clientId) {
+      missingVariables.push('COGNITO_CLIENT_ID');
+    }
+  }
   if (missingVariables.length > 0) {
     const err = new Error('COGNITO_USER_POOL_ID or COGNITO_CLIENT_ID not configured');
     err.code = 'AUTH_CONFIG_MISSING';
