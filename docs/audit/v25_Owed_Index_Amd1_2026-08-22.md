@@ -1,3 +1,24 @@
+> **CORRECTION BANNER — §A3.1 HAS A FIFTH INSTANCE, RECORDED ELSEWHERE (added
+> 2026-08-22, additive; nothing below is removed or edited).**
+>
+> **Banners on this document are read newest-first.**
+>
+> **§A3.1's table lists four instances. A fifth was found** while applying §A1's
+> preconditions during the limb 1 measurement: **`Tier` is overloaded across
+> three unrelated taxonomies** in the F-AUTH-1 fix plans — finding priority
+> (`Tier 0`), Track 6 frontend file batching by site count, and the auth
+> disposition taxonomy. An instrument enumerating `Tier N` collects all three
+> and returns a large, confident, wrong number.
+>
+> **It is recorded at `F-AUTH-1_Limb1_Measurement_2026-08-22.md` §7**, which
+> governs it. **This banner points and carries nothing.**
+>
+> **It is the first instance found while applying §A3's rule rather than before
+> it**, which is the part worth noting: the shape recurs, and it recurs inside
+> work already disciplined against it.
+>
+> §A1, §A2 and §A3's general form are unaffected. Mints nothing. Prod FROZEN.
+
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 1** *§1 is a paired precondition. Position and completeness are two properties of one readiness question.* |
 | --- |
 
