@@ -9,6 +9,39 @@
 
 ---
 
+> **COMPLETION BANNER — SEC 6 ITEM 10 (`compositions.js` ROUTE ORDER) HAS BEEN
+> PERFORMED (added 2026-08-22, after `cf627857`, additive).**
+>
+> **Sec 6 was accurate at its basis and committed no error.** Item 10 asked:
+>
+> > *"has a runtime discriminator been run? If not, keep it open under limb 1;
+> > do not infer from declaration order alone."*
+>
+> **One has now been run.** `GET /api/v1/compositions/search` dispatches to
+> `/:id` with `id="search"`; the handler at `:1188` is unreachable.
+> `/search/filters/options` reaches its own handler and was never shadowed —
+> `/:id` matches one segment and that path is three. Fall-through was excluded
+> separately: no `next(` occurs in `:458–1030`. **`/search` is dead, not merely
+> shadowed.**
+>
+> **Method and full environment contact are recorded in F-AUTH-1 v2.45's
+> correction banner, together with the count correction owed to its §2** —
+> *"two of the ten GETs may be unreachable"* becomes **one**. No deployed host
+> was contacted; no database connection was opened; prod remains FROZEN.
+>
+> **Item 10 is discharged. Nothing else in Sec 6 moves.** No FD is minted, so
+> the FD tail remains **FD-68**; XK remains **XK-3**; PE remains **PE #67**.
+> Whether a dead request-path route warrants an FD is left undecided, and the
+> hazard **remains open under limb 1** for that disposition. Dimension 3 does
+> not advance: FD-67 and FD-68 are untouched by this, and Dimension 3's live
+> half remains unauthorized.
+>
+> **This banner rules nothing and changes no gate.** Sec 6's remaining
+> Evoni-gated items — FD-66 infrastructure, `JWT_SECRET`, FD-67/FD-68 remedies,
+> PE #65, prod-freeze live confirmation — are unchanged and remain NOT
+> PERFORMED.
+
+
 ## Sec 0 — Why v24 exists
 
 Twelve documentation-only PRs landed after v23:

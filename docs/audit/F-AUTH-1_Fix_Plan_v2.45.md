@@ -1,3 +1,68 @@
+> **CORRECTION BANNER — §2's ROUTE-ORDER HAZARD IS VERIFIED AT RUNTIME; ITS
+> COUNT IS CORRECTED (added 2026-08-22, after `cf627857`, additive).**
+>
+> **Scope: §2's *"Recorded, not ruled: a route-order hazard at
+> `compositions.js`"* paragraph only.** No other paragraph, ruling, count or
+> enumeration in v2.45 is amended. v2.45 mints nothing and this banner mints
+> nothing.
+>
+> **v2.45 committed no error.** It recorded the hazard, marked it *"Not
+> verified at runtime and not asserted,"* and recorded it precisely so a later
+> pass would not classify a dead route. That judgment was correct and the
+> hazard is real. **One clause needs amending: §2 states "two of the ten GETs
+> may be unreachable." One is.**
+>
+> **Method — runtime dispatch, not declaration order.** The real
+> `src/routes/compositions.js` router was mounted in a bare Express app under
+> real dispatch. `src/middleware/auth.js` and `src/middleware/jwtAuth.js` were
+> replaced in `require.cache` **before** the router was required, with a
+> recorder returning `req.route.path` and `req.params`. Express 5.2.1.
+>
+> | Request | Dispatched to | |
+> |---|---|---|
+> | `/search` | **`/:id`, `id="search"`** | shadowed |
+> | `/search/filters/options` | **its own handler** | reachable |
+> | `/abc-123` | `/:id` | control |
+> | `/search?q=x` | `/:id` | control |
+>
+> **`/search/filters/options` was never a candidate.** It is three segments;
+> `/:id` matches one. Only `/search` is shadowed, which is the whole of the
+> count correction.
+>
+> **Fall-through excluded separately, because the recorder cannot exclude it.**
+> The recorder short-circuits at the auth layer, so it establishes which *route
+> layer* Express dispatches to and nothing more. It does not establish that
+> `/:id`'s handler fails to call `next()`. Checked independently: the handler
+> at `:458` terminates in `res.json` or `res.status().json()` on every branch,
+> and **no `next(` occurs anywhere in `:458–1030`**. **`/search` is dead, not
+> merely shadowed — and that conclusion requires both facts, not either one.**
+>
+> **Line drift.** v2.45's basis `77d9b995` gives `:457` / `:1187` / `:1254`.
+> At `cf627857` the same three declarations sit at **`:458` / `:1188` /
+> `:1255`**. A one-line shift; the ordering is unchanged.
+>
+> **Environment contact, stated in full.** Local file reads; `dotenv` loaded
+> `.env` into the probe process; loopback HTTP on an ephemeral port. **No
+> database connection was opened** — `authenticate` and `sync` in
+> `src/models/index.js` sit inside lazily exported functions (`:1764`, `:1791`,
+> `:1900`), not at module load, and the recorder returned before any handler
+> body ran. **No deployed host was contacted. No AWS call was issued. Prod
+> remains FROZEN and untouched.**
+>
+> **Flagged, not asserted — and it is the part worth reading.** `/:id`'s
+> handler maps `error.message.includes('not found')` to 404 and everything else
+> to 500. A Postgres uuid cast failure on `id="search"` would therefore surface
+> as **500, not 404** — **a routing defect reported as a server fault.** That
+> is the same shape as **FD-68**, where absent Cognito configuration returns
+> `401 AUTH_INVALID_TOKEN` and reports an operator fault as a caller fault: in
+> both, the symptom points away from the cause. Confirming it requires a
+> database and it is **not asserted here**.
+>
+> **Minting is not decided here.** Whether a dead request-path route warrants
+> an FD — and so whether the FD tail advances past **FD-68** — is a disposition
+> this banner does not select. It records a measurement and corrects a count.
+> **The route-order hazard remains open under limb 1 for that decision.**
+
 | **PRIME STUDIOS** **F-AUTH-1 FIX-PLANNING DOCUMENT** *First fix after audit close. Tier 0 keystone.* *Six-step coordinated single-PR plan.* |
 | --- |
 
