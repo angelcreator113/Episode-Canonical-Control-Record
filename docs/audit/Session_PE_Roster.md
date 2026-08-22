@@ -1582,3 +1582,135 @@ proposed; history is not rewritten and the token only affects pushes.
 
 *Filed 2026-08-19. No measurement of any deployed host. No workflow enabled,
 disabled, or edited. No FD minted. Prod FROZEN.*
+
+---
+
+### PE #64 — Cognito User Pool shared between dev and prod: F-AUTH-1 Fix Plan v1.5 §9.10's P1 has been unrecorded since v2.38 (P1, OPEN, NEW 2026-08-21)
+
+**Date filed:** 2026-08-21
+**Severity:** P1 — retained from the origin finding, not reassessed
+**Status:** OPEN. **Trigger condition UNEVALUATED.**
+**Basis:** `main` at `a3002064`, read at filing. No deployed host contacted.
+
+**This entry re-homes an existing finding and measures how long it went
+unrecorded. It does not restate the finding's identifiers and does not
+re-assess its severity.** The finding is **F-AUTH-1 Fix Plan v1.5 §9.10**,
+*"Cognito pool unification — discovered at G1, deferred"*, which is the
+authority for everything about the condition itself. **The identifiers it
+discloses are in that section and are not reproduced here** — this entry adds
+no disclosure surface.
+
+**The finding, as v1.5 §9.10 states it.** Pre-flight env-var verification
+surfaced that **dev and prod share one Cognito User Pool and one Client ID.**
+It was not a deliberate single-tenant choice; §9.10 records intent confirmed as
+*"did not realize they were the same."* Its stated implications: any user
+signed up via dev exists in prod; any auth state created in dev affects prod;
+a token issued by dev validates against prod. §9.10 assesses **F-AUTH-1 impact
+as zero** — both environments authenticate against real, non-placeholder
+identifiers, so the boot-fail logic and the interceptor contract are unaffected
+— and files the split as a **P1 architectural follow-up, out of F-AUTH-1
+scope.**
+
+**The trigger condition, quoted because it is what makes this time-sensitive:**
+
+> *"Trigger condition: schedule before any beta tester or external user signs
+> up. Once a non-Evoni user exists in the shared pool, the split becomes a
+> data-migration problem rather than a config change."*
+
+**Whether that trigger has fired is UNEVALUATED and is not evaluated here.**
+It turns on Cognito directory state, not repository state, and is **not
+derivable from any commit.** Establishing it requires a read against deployed
+infrastructure; **prod is FROZEN**, and the question of *how* such a check is
+performed — what credential, what path, what is logged — is itself a gated
+decision that does not belong inside a filing. **The liveness check is the
+first thing owed against this entry and is scoped separately.**
+
+**The trigger governs remedy cost, not exposure severity.** Severity is
+retained at §9.10's original P1 because no evidence gathered at this basis
+bears on it. **P1 is not a statement that the trigger has not fired.** If it
+has, the remedy changes category — config change to data migration — and the
+severity question should be re-opened on that evidence, not before it.
+
+#### How long it went unrecorded
+
+**Measured at this basis by numeric sort over `docs/audit/F-AUTH-1_Fix_Plan_v*.md`:**
+
+| Revisions | Carry §9.10's finding? |
+|---|---|
+| v1.5, v1.7, v2.2, v2.12, v2.15, v2.18, v2.20, v2.37 | **All carry it** |
+| v2.38 through v2.57 | **None carry it** |
+
+**It appears in no other instrument.** Not in this roster prior to this entry;
+not in `Cross_Keystone_Register.md`. Method: case-insensitive match on the
+finding's naming across `docs/` `.md` files, plus direct inspection of both
+registers. **Twenty revisions with no disposition recorded anywhere.**
+
+**No revision closed it. The line stopped being written.** This is the vector
+`F-AUTH-1_Fix_Plan_v2.56.md` §1.1 records — *"any Status field that enumerates
+open items functions as a closure signal by omission. A status line that drops
+an item is a silent close"* — and the reader cannot distinguish *resolved and
+removed* from *not carried forward*.
+
+#### The boundary observation
+
+**This is the second silent close found in this register, and both occur at a
+point where a document series changes what kind of document it is.**
+
+| Instance | Boundary | Quiet for |
+|---|---|---|
+| Track G3's status | v2.53 → v2.54 | 15 revisions (restored at v2.56 §1) |
+| §9.10's pool-split P1 | **v2.37 → v2.38** | **20 revisions (this entry)** |
+
+**v2.37 is the last fix-planning revision** — §5.71 states *"v2.37 is the final
+F-AUTH-1 fix plan revision; subsequent work transitions to G3-G6 verification
+track."* **v2.38 is the first revision of the new character.**
+
+**The vector is more specific than "status fields go quiet."** An author
+writing the first revision of a new series character re-derives the status list
+from what the new character is *about*. Items belonging to the old character
+have no slot in the new frame and drop out — **not by a decision to close them,
+but by never being candidates for inclusion.** That is why neither instance
+shows a closing ruling: **no one declined to carry these items forward; the
+question of whether to carry them was never posed.**
+
+**Actionable form:** at any revision that changes a series' character, the
+predecessor's full open-item set must be enumerated and each item explicitly
+carried or explicitly closed. **A new frame is the moment the prior frame's
+items are most likely to be lost, and the loss leaves no artifact.**
+
+#### Incidental, recorded so it is not re-derived
+
+**The identifiers §9.10 discloses are already broadly present in the tracked
+tree** — a pattern sweep at this basis found pool-shaped values across ~29
+tracked text files and 13 binary artifacts, including `docs/cognito-ids.txt`
+and `docs/COGNITO_USER_POOL_SETTINGS.md`. **Two that appear adverse are not.**
+The occurrence in `src/middleware/auth.js` is inside a comment documenting the
+**pre-fix** state that F-AUTH-2 removed; `.env.example` carries the same value,
+which that comment identifies as the old **placeholder**. **Neither is a live
+credential in source, and this entry asserts no finding about either.**
+
+#### What this entry does not do
+
+- **Does not evaluate the trigger condition.** See above.
+- **Does not contact any deployed host**, read any Cognito directory, or issue
+  any AWS API call. **Prod remains FROZEN.**
+- **Does not restate §9.10's identifiers** or add any disclosure surface.
+- **Does not re-assess severity**, re-open F-AUTH-1's impact assessment, or
+  alter §9.10's *"F-AUTH-1 impact: zero"* finding.
+- **Does not write into any F-AUTH-1 revision.** §9.10 remains the authority;
+  this entry re-homes ownership to an instrument that is not a document series.
+- **Mints no FD, no XK. Changes no gate, status, or disposition.**
+
+**Resolution path.** **First: the liveness check, scoped as its own gated
+decision** — whether any non-Evoni identity exists in the shared pool
+determines whether the remedy is a config change or a data migration, and
+nothing else about this entry should be planned until that is known. **Then:**
+either schedule §9.10's split (separate dev pool with separate Client ID, prod
+pool retained as canonical user store, env config updated per environment), or
+supersede §9.10's deferral explicitly. **What should not persist is the current
+state — a P1 with a stated trigger, unowned for twenty revisions, whose trigger
+no one has checked.**
+
+*Filed 2026-08-21. Basis `a3002064`. No measurement of any deployed host. No
+AWS API call. No workflow enabled, disabled, or edited. No FD minted. No XK
+minted. No gate changed. Prod FROZEN.*
