@@ -1,3 +1,94 @@
+> **CORRECTION BANNER — THE POPULATION IS EIGHT, NOT NINE. THE RULING IS
+> UNAFFECTED (added 2026-08-22, after `4e403a81`, additive).**
+>
+> **Scope: §6's population figure and its three-way split.** §1–§5, §7 and §9
+> are unamended. **The branch ruling stands** — see "What survives" below.
+>
+> **One member was a false positive.**
+> `POST /api/v1/world/generate-ecosystem-preview` (`src/routes/worldStudio.js:2483`)
+> **never relied on the global mount.** It carries its own
+> `optionalAuth({ degradeOnInfraFailure: true })` — the register's **§5.45
+> polymorphic factory**, which v2.37 enumerated as exactly six invocations
+> (`press.js` ×2, `worldStudio.js` ×1, `manuscript-export.js` ×3).
+>
+> **Why the instrument missed it.** `optionalAuth` is polymorphic: called with
+> an options object it returns a *configured closure*, which is **not
+> identity-equal to the exported symbol**. Every walk identified middleware by
+> function identity against the `require`-cached exports, so the closure
+> resolved to `anon` and the declaration read as carrying no auth middleware.
+>
+> **Corrected classification over the 927-declaration union:**
+>
+> | | |
+> |---|---|
+> | authenticated by their own route stack | 888 |
+> | authenticated only by a `router.use()` preset | 30 |
+> | **own configured `optionalAuth` — NOT mount-dependent** | **1** |
+> | **relying on the global mount alone** | **8** |
+>
+> ## Independent discovery with a shared classifier is not independent confirmation
+>
+> **This is the part that matters, and it is worse than a miscount.**
+>
+> The population was confirmed across **three** discovery methods — per-router
+> (890), app-composition (897), and their union (927) — each returning 9. **All
+> three used the same identity-matching criterion, and all three inherited the
+> same blind spot.** Redundant discovery over a shared classifier produces
+> agreement, not corroboration.
+>
+> **The invariance result is reframed, not withdrawn.** The prior correction
+> argued the confirmation was *"stronger than agreement"* because both
+> difference regions — 30 declared-but-unmounted, 37 app-mounted-but-not-file-
+> loaded — contained zero mount-only writes. **That reasoning was sound about
+> coverage and silent about classification.** The gaps between discoveries were
+> checked; the criterion applied inside every discovery was not. **A finding
+> can be complete over its population and wrong about its members.**
+>
+> **This is the strongest instance yet of a form this program has recorded
+> before** — *a floor confirmed only by the instrument that produced it is not
+> confirmed.* Here three instruments produced it, and the redundancy was the
+> argument for trusting it.
+>
+> ## The eight ARE confirmed, by a criterion that does not share the blind spot
+>
+> **The false positive was found by reading a declaration, not by a fourth
+> walk.** The same source-level criterion has now been applied to all eight
+> remaining members:
+>
+> - **No `router.use()` appears in `auth.js`, `roles.js` or `worldStudio.js`**,
+>   so no router preset can supply authentication invisibly.
+> - **The five `roles.js` writes carry no middleware whatsoever** — nothing is
+>   present that could be a wrapper or a factory.
+> - **The three `auth.js` routes carry only `loginLimiter` / `refreshLimiter`
+>   (`rateLimit({…})`, defined locally at `:18` and `:27`) and shape
+>   validators.** `auth.js` imports exactly **one** authentication middleware,
+>   `authenticateJWT` at `:10`, and it appears on **`/logout` and `/me` only.**
+>
+> **Source-declaration inspection is demonstrably independent of identity
+> matching, because it is the criterion that caught the error identity matching
+> made.** The correction therefore does more than remove a known false
+> positive: **it establishes the remaining eight under a second criterion.**
+>
+> ## What survives
+>
+> **The branch ruling is unaffected.** The mount is still retained; §7.7's
+> removal requirement is still retired; the successor procedure is still scoped
+> to an enumerated population. **Eight is still bounded and every member is
+> still named** — the argument was never about the number nine.
+>
+> **Class B's five cannot be false positives of this kind.** They carry no
+> middleware at all, so there is no closure to misresolve. **Their disposition,
+> ruled at v2.66 §6, is untouched.**
+>
+> **§8 condition 2 stands discharged, on better evidence than when it was
+> discharged.** Its revival condition — *a bound confirmed at one basis is not
+> confirmed at another* — is unchanged and still live.
+>
+> **The removed member needed no adjudication in any case:** it already carries
+> a `// PUBLIC:` comment with a recorded rationale, is rate-limited to three
+> requests per minute per IP, and per its own docstring *"does NOT commit to
+> DB."* §7.7's third checkbox was already discharged for it.
+
 | **PRIME STUDIOS** **F-AUTH-1 FIX-PLANNING DOCUMENT** *FD-67 branch ruling. Rules a third branch.* |
 | --- |
 

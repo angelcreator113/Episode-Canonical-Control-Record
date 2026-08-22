@@ -1,3 +1,41 @@
+> **CORRECTION BANNER 2 — §4's MOUNT-ONLY FIGURE IS EIGHT, NOT NINE (added
+> 2026-08-22, after `4e403a81`, additive).**
+>
+> **Banners on this document are read newest-first. Banner 1 below is preserved
+> exactly as merged at `f1a6cc68` and is not edited.** Banner 1 corrected §4's
+> *total* write-declaration counts; **this banner corrects the mount-only
+> figure inside them.**
+>
+> **`POST /api/v1/world/generate-ecosystem-preview`
+> (`src/routes/worldStudio.js:2483`) is not mount-dependent.** It carries its
+> own `optionalAuth({ degradeOnInfraFailure: true })` — the **§5.45 polymorphic
+> factory**, enumerated by v2.37 as six invocations. A factory-derived closure
+> is **not identity-equal to the exported symbol**, so every identity-matching
+> walk resolved it to `anon`.
+>
+> **Mount-only writes: 8.** The 927-declaration union classifies as **888**
+> own-stack, **30** router-preset, **1** own configured `optionalAuth`, **8**
+> mount-only.
+>
+> **This bears on Banner 1's central claim and qualifies it.** Banner 1 reported
+> the figure confirmed across three discovery methods with zero mount-only
+> writes in either difference region, and argued that this rested on *"nothing
+> having been hidden in the gap"* rather than on agreement. **That argument was
+> sound about coverage and silent about classification.** All three discoveries
+> shared one identity-matching criterion and inherited one blind spot.
+> **Independent discovery with a shared classifier is not independent
+> confirmation.**
+>
+> **The eight are nonetheless confirmed, by source-declaration inspection** — a
+> criterion demonstrably independent of identity matching, since it is what
+> caught this error. **The full statement, including what survives and why the
+> branch ruling is unaffected, is carried once at F-AUTH-1 v2.65's correction
+> banner and is not restated here.**
+>
+> **§7's branch costing is affected only in the write term:** the write set is
+> 8, not 9. The read range of 13–27 is unchanged, and the mount was retained in
+> any case, so no placement work follows from either figure.
+
 > **CORRECTION BANNER — WRITE-DECLARATION COUNTS CORRECTED. THE 9 IS UNCHANGED
 > (added 2026-08-22, after `a7f0156f`, additive).**
 >
