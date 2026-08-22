@@ -1592,6 +1592,37 @@ disabled, or edited. No FD minted. Prod FROZEN.*
 **Status:** OPEN. **Trigger condition UNEVALUATED.**
 **Basis:** `main` at `a3002064`, read at filing. No deployed host contacted.
 
+> **AMENDMENT 1 — the trigger condition is PARTIALLY EVALUATED: neither UNEVALUATED nor FIRED (added 2026-08-21, after `ebbee94f`, additive).**
+> **The Status line above reads *"Trigger condition UNEVALUATED."* That is superseded. A minimum-privilege count was run, and it does not settle §9.10's trigger.**
+>
+> - **What was run, and by whom.** `describe-user-pool`, reading `UserPool.EstimatedNumberOfUsers`, against the pool §9.10 names, in `us-east-1`. **Executed by Evoni. No AWS call was issued by Claude at any point.** No `list-users` was run and **no user record was read** — the call returns pool metadata only. **Result: 3.**
+> - **Pool identity is established by document, three ways, not by inference.** (a) v1.5 §9.10's own sentence — *"dev and prod share the same Cognito User Pool and Client ID"* — names the pool that was queried. (b) v1.5's `.docx` G2 cell records that same pool as confirmed *"via PM2 runtime env on dev and prod EC2 boxes."* (c) F-Deploy-1's finding F-Deploy-G1-G records that *"dev and prod share a single EC2 instance + PM2 process group"*, so **no distinct prod runtime environment exists that could disagree.** The other pool-shaped value in v1.5 (line 84) is a different string — the pre-fix placeholder identified as such by `src/middleware/auth.js`'s own comment — and is not this pool.
+> - **ESTABLISHED: at least two identities exist in the shared pool.** A split is no longer a zero-record operation.
+> - **NOT ESTABLISHED: whether any identity is external.** §9.10's trigger language is *"beta tester or external user"* / *"non-Evoni user."* **Three identities is consistent with one person holding three accounts**, which in a pool named for the dev environment is unremarkable.
+>
+> #### The authorized criterion was wrong, and that is the finding
+>
+> The scoping accepted before the read pre-committed an interpretation table whose `≥2` row read *"more than one identity means a non-Evoni identity exists."* **That treated identity-count as a proxy for person-count. It is not one.**
+>
+> **Ruled: `≥2` is INCONCLUSIVE, and `3` is NOT reinterpreted under a repaired rule.** Repairing a criterion and then applying the repair to a result already in hand is post-hoc interpretation, however honest the repair. **The table did not address this shape at all.** What governs instead is the rule added to the same scoping before the read: *any result that requires you to know which identity is which is inconclusive by construction* — and three-identities-possibly-one-person is exactly that shape.
+>
+> **The finding, stated generally: a pre-committed criterion prevents post-hoc reinterpretation; it does not make the criterion correct.** Pre-commitment binds the reader to a rule. **It does not audit the rule.** This one encoded an unexamined assumption — one identity per person — and that assumption **survived drafting and authorization both.** The protection operated exactly as designed and still yielded an answer that had to be withdrawn, because it protected a different step than the one that failed.
+>
+> **The operational consequence:** a criterion must be examined for what it *assumes* before it is used to bind interpretation, and **the moment to do that is before the read** — while the result is unknown and cannot pull the examination toward the convenient answer. Checking a criterion after the result is in hand is subject to the same defect the pre-commitment exists to prevent.
+>
+> **This is distinct from the register's recurring "one premise standing for the whole"** (v2.52 §1.1, v2.55 §3.2, v2.55 §3.1). Those are failures to consult a whole specification. **This is a failure to interrogate a specification that was consulted completely and was itself unsound.**
+>
+> #### Status after this amendment
+>
+> **OPEN. Trigger condition PARTIALLY EVALUATED. Severity P1 — still not reassessed**, because the evidence gathered bears on remedy cost, not on exposure severity.
+>
+> **What is owed, in order.**
+> 1. **A remedy-cost derivation from documents** — whether §9.10's split costs materially different amounts depending on whether the identities are Evoni-owned or external. **If the branches do not diverge, enumeration buys a category label rather than a decision** and is not warranted.
+> 2. **Enumeration only if that derivation shows the branches diverge**, scoped and authorized separately. It is a read of user records against production identity infrastructure under freeze — **materially larger than the count**, and not a step to be folded into anything else.
+> 3. **Separately owed, not part of this entry:** `docs/cognito-ids.txt` (last touched 2026-02-14, labelled Phase 0E) names a `STAGING_POOL_ID` and a `PROD_POOL_ID` that **do not exist in the AWS account hosting the pool** — only the dev pool exists there. Traced to the dev/staging/prod topology that **v1.5 §9.9 records as abandoned**. Owed its own PE.
+>
+> **Prod remains FROZEN. The entry body below is preserved verbatim as filed at `ebbee94f`.**
+
 **This entry re-homes an existing finding and measures how long it went
 unrecorded. It does not restate the finding's identifiers and does not
 re-assess its severity.** The finding is **F-AUTH-1 Fix Plan v1.5 §9.10**,
