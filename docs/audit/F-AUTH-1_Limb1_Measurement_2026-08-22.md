@@ -1,3 +1,33 @@
+> **CORRECTION BANNER — THIS COUNT IS SUPERSEDED. IT RESTED ON A PARTIAL READ
+> OF THE RECORD (added 2026-08-23, additive; nothing below is removed or
+> edited).**
+>
+> **Banners on this document are read newest-first.**
+>
+> **The count below, its `cannot-tell` rate, and its §5 are all wrong.** This
+> document read **only the closure document's version block** and treated that
+> as the record. **The code commit's message body is equally the record**, and
+> every CP records dispositions there — bodies run 42 to 145 lines.
+>
+> **All seven `cannot-tell` results were incorrect.** Five further CPs record at
+> finer granularity than their closure statements. **The corrected count is
+> 129, not 25, with zero `cannot-tell` and zero `partial`.**
+>
+> **§5's feasibility finding is WITHDRAWN.** It held that limb 1 cannot audit
+> the first half because no disposition was recorded to confirm. **Every CP
+> recorded dispositions.**
+>
+> **The corrected measurement is
+> `F-AUTH-1_Limb1_Measurement_v2_2026-08-23.md`, which governs. This banner
+> points and carries nothing.**
+>
+> **§2's ruling of `partial` as a fourth term stands** — the term is sound and
+> simply has no instance; CP3 is not partial. The population frame in §1, CP2's
+> `patch-id` resolution in §1.1, and the two independent findings in §6 are
+> **unaffected and stand.**
+>
+> Mints nothing. Prod FROZEN.
+
 | **PRIME STUDIOS** **F-AUTH-1 LIMB 1 MEASUREMENT** *Population frame derived. 25 recorded dispositions, 3 partial to one CP, 7 CPs `cannot-tell`.* |
 | --- |
 
