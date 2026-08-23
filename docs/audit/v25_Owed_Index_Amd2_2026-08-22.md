@@ -1,3 +1,25 @@
+> **CORRECTION BANNER — AMENDMENT 3 ADDS ONE DERIVATION AND A FINDING ABOUT
+> §B3's ENFORCEMENT (added 2026-08-23, additive; nothing below is removed or
+> edited).**
+>
+> **Banners on this document are read newest-first.**
+>
+> **§B3 did not prevent its own failure mode.** One day after it was ruled,
+> three derivations were deferred with *"when it's next touched"* — a deferral
+> with no occasion attached. **Fifth occurrence across two sessions.** What
+> caught it was **a second party naming the deferral as it was made**, not the
+> rule.
+>
+> **Amendment 3 also adds §C1**, a derivation on negative existence claims: such
+> a claim is **unfalsifiable without its method**, and *"no revision restates the
+> FD tail"* was nearly filed on two consecutive mornings from two unrelated
+> blind spots — a shallow clone, then a line-wrapped `grep`.
+>
+> **All of it lives at `v25_Owed_Index_Amd3_2026-08-23.md`, which governs §B3.
+> This banner points and carries nothing.**
+>
+> §B1 and §B2 are unaffected. Mints nothing. Prod FROZEN.
+
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 2** *Retrievability is the third precondition. §A3's shape spans retrieval, not only classification.* |
 | --- |
 
