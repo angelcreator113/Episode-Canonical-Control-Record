@@ -1,3 +1,31 @@
+> **POINTER BANNER — AMENDMENT 5 CARRIES A COLD SESSION'S DERIVATIONS (added
+> 2026-08-23, additive; nothing below is removed or edited).**
+>
+> **Banners on this document are read newest-first.**
+>
+> **Nothing in this document is amended, withdrawn, or superseded.** Amendment 5
+> rules nothing and governs no section of Amendment 4. **§D1–§D5 stand exactly as
+> written**, and §C5's status remains as ruled here.
+>
+> **Amendment 5 adds §E1–§E10**: the authority derivation at `4187f78d` carried
+> with five standings; two extensions to §C3; a layer §B2 does not cover; and
+> three carriage defects owed to v25 and deliberately not amended.
+>
+> **It also carries two open questions with gate consequence**, at **§E7** — a
+> retired P0 whose retirement stands on an unfired condition attached to an
+> unfiled draft — and **§E8**, where the premise blocking FD-67's Class A may no
+> longer hold. **Neither is ruled.**
+>
+> **It uses this document without amending it.** §E0 records a **seventh
+> occurrence** of §B3's condition, cites §D4's count, and names what surfaced it
+> as §D2.1's class — **recorded, not credited**, per §D3.
+>
+> **All of it lives at `v25_Owed_Index_Amd5_2026-08-23.md`. This banner points
+> and carries nothing.**
+>
+> Mints nothing. Changes no gate, finding, severity, owner, or disposition. Prod
+> FROZEN.
+
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 4** *§C5's observation is not promoted to an operating assumption. The observation stands.* |
 | --- |
 
