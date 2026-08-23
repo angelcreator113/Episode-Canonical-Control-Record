@@ -1,3 +1,22 @@
+> **CORRECTION BANNER — §C5's FINDING IS NOT PROMOTED TO AN OPERATING
+> ASSUMPTION (added 2026-08-23, additive; nothing below is removed or edited).**
+>
+> **Banners on this document are read newest-first.**
+>
+> **§C5 below stands exactly as written and is NOT withdrawn.** The second party
+> remains the only mechanism demonstrated to have arrested ruling-in-passing.
+>
+> **What is ruled out is relying on it.** After a second demonstration in one
+> session it was proposed that §C5 become the register's operating assumption.
+> **Ruled: no.** No measured failure rate; **its failures are invisible by
+> construction** — an uncaught deferral looks exactly like no deferral; and
+> promotion would assert a control the register does not have.
+>
+> **The ruling and its reasons live at `v25_Owed_Index_Amd4_2026-08-23.md`,
+> which governs §C5's status. This banner points and carries nothing.**
+>
+> §C1–§C4 are unaffected. Mints nothing. Prod FROZEN.
+
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 3** *Negative existence claims require their method. Three observations. The only check that has worked is a second party.* |
 | --- |
 
