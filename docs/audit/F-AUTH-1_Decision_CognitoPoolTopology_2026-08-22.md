@@ -1,5 +1,17 @@
 # F-AUTH-1 — Cognito pool topology decision, owed to PE #65 — 2026-08-22
 
+## CORRECTION BANNER — POINTER ONLY
+
+**Added 2026-08-24, after `0a084079`, additive.**
+
+**This document's references to "the two non-Evoni identities" and "the 2 non-Evoni identities" are not supported by the source it cites.** `PE #64` Amendment 1 records that the liveness check established a count only, and rules externality **NOT ESTABLISHED**.
+
+**Read `PE #64` Amendments 1 and 2 before ruling on any branch.**
+
+**This banner points; it makes no ruling and carries no standing.**
+
+---
+
 ## Scope statement — read first
 
 **This document specifies a decision, not a remedy.** §9.10's remedy is unspecifiable without first choosing a target topology, and that choice depends on infrastructure ownership and product intent this register doesn't have visibility into. What follows lays out the branches, their consequences, their reversibility, and — the part that matters most — which branches can be chosen blind and which cannot. **It ends in a question for Evoni, not an answer.**
