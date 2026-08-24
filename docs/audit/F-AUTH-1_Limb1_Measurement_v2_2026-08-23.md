@@ -1,3 +1,25 @@
+> **POINTER BANNER - SECTION 5's BAND IS UNDERIVED (added 2026-08-24,
+> additive).**
+>
+> This document holds its count to a stated method and its uncertainty band to
+> none. **129 carries section 1's method in full; the `"roughly 120 to 140"`
+> band carries no derivation** - no variation enumerated, no endpoint
+> attributed, no rule generating either bound. Section 5's own closing
+> sentence is the argument against it: *a count without its boundary rule is
+> as unfalsifiable as an absence without its search.*
+>
+> Separately, section 1 declares two sources per CP while section 2 reports one
+> number per CP without per-row source attribution - and section 2 itself
+> records that the two sources agree in granularity in only one row of
+> thirteen. The resolution **rule** is stated in section 1 and is not missing;
+> what is absent is which source governed each row, so no row is checkable
+> without re-performing the two-source read.
+>
+> **129 is not disputed. No row is challenged. The band is not asserted wrong,
+> only underived.** `F-AUTH-1_Measurement_v2_Sec5_Asymmetry_2026-08-24.md`
+> carries the finding and its bounds, including why section 5's conclusion
+> survives it. This banner points; it does not carry. No body text is edited.
+
 | **PRIME STUDIOS** **F-AUTH-1 LIMB 1 MEASUREMENT v2** *Supersedes the 2026-08-22 count. 129, not 25. Zero `cannot-tell`. §5's feasibility finding withdrawn.* |
 | --- |
 

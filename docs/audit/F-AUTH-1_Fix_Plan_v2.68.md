@@ -1,3 +1,23 @@
+> **POINTER BANNER - SECTION 4.1's INVERSION RULE IS REFINED, NOT REVERSED
+> (added 2026-08-24, additive).**
+>
+> `F-AUTH-1_Limb1_Measurement_v2_2026-08-23.md` section 7 records this pointer
+> as owed: *"Does not amend `F-AUTH-1_Fix_Plan_v2.68.md`. Section 4's
+> refinement is owed to its section 4.1 as a pointer."* This places it.
+>
+> Section 4.1 rules that a limb 1 pass reporting no `cannot-tell` results is
+> MORE suspect than one reporting several. Measurement v2 reports **zero**, and
+> its own section 4.1 supplies the discriminator this section does not contain:
+> **an explained zero is a different object from a clean zero.** There, the
+> record genuinely stated dispositions for all thirteen, reading a commit body
+> is retrieval rather than inference, and the uncertainty did not vanish but
+> moved into the (scope, class) boundary - a ruling rather than a reading.
+>
+> The inversion rule stands. What it does not do is settle a zero by itself:
+> a zero is suspect until its explanation is read. Read against Measurement v2
+> section 4.1 before treating any reported rate as a verdict.
+> **This banner points; it does not carry.** Section 4.1's body is unedited.
+
 | **PRIME STUDIOS** **F-AUTH-1 FIX-PLANNING DOCUMENT** *Rules limb 1's four definitional questions. Withdraws the ~700 work estimate.* |
 | --- |
 
