@@ -76,7 +76,7 @@ Distinct from the two classes already on the register:
 
 The failure mode is bidirectional and that is what makes it dangerous: read one way it closes an obligation that should stand; read the other it defends an obligation with an argument that no longer holds. Both readings are available from the filed text.
 
-**Filing note.** `Finding_Check_Cannot_Fail_Class_2026-08-24.md` establishes that failure classes are filed as standalone cross-cutting `Finding_*` documents belonging to no keystone. This class is named here because it was found here, and is **awaiting standalone filing on that precedent**. It is not filed as a class by this document.
+**Filing note.** `Finding_Check_Cannot_Fail_Class_2026-08-24.md` establishes that failure classes are filed as standalone cross-cutting `Finding_*` documents belonging to no keystone. This class is named here because it was found here, and is **filed as a class on that precedent** at `Finding_Obligation_Outlives_Its_Reason_Class_2026-08-24.md`. That document carries the class, its negative control, and its bounds; **this section is the instance write-up, not the class.** The class is register-wide and not F-AUTH-1-specific: an obligation inside a keystone-scoped document is unfindable by anyone working another keystone.
 
 ---
 
@@ -162,7 +162,7 @@ The constraint is established. The choice is not this document's.
 
 - Does not close the section 7 rollback item.
 - Does not choose the rollback target.
-- Does not file `obligation-outlives-its-reason` as a class.
+- Does not carry the `obligation-outlives-its-reason` class. It is filed standalone at `Finding_Obligation_Outlives_Its_Reason_Class_2026-08-24.md`; this document supplies only the instance.
 - Does not edit `F-AUTH-1_BranchA_Costing_2026-08-24.md` or the addendum. Neither body is touched.
 - Does not implement, dispatch, revert, or contact anything.
 
@@ -178,6 +178,6 @@ The constraint is established. The choice is not this document's.
 | Reads | `F-AUTH-1_BranchA_Costing_2026-08-24.md` sections 7, 8; `F-AUTH-1_BranchA_Prerequisite_Addendum_2026-08-24.md` sections 2, 3, 4; `.github/workflows/deploy-dev.yml` at blob `84586e04`, lines 10-30, 255-272, 327-358 |
 | Blob-identity check | `deploy-dev.yml` identical at `f6a6933f`, `c30b5d9c`, `3b04d821` |
 | Mints | Nothing |
-| Names | One failure class, `obligation-outlives-its-reason`, awaiting standalone filing |
+| Names | One failure class, `obligation-outlives-its-reason`, filed standalone at `Finding_Obligation_Outlives_Its_Reason_Class_2026-08-24.md` |
 | Closes | Nothing |
 | Operations performed | None |
