@@ -1,3 +1,34 @@
+> **POINTER BANNER — AMENDMENT 6 REFINES WHAT POSITION'S RESULT MEANS (added
+> 2026-08-23, additive; nothing below is removed or edited).**
+>
+> **Banners on this document are read newest-first.**
+>
+> **Nothing in this document is amended, withdrawn, or superseded.** Amendment 6
+> rules nothing and governs no section of Amendment 5. **§E1–§E10 stand exactly
+> as written**, including §E1's five standings and §E9's three defects owed to
+> v25.
+>
+> **Amendment 6 adds §F1–§F5**, refining §1's POSITION check as amended by §A1
+> and §B1: **nonzero `ahead` with zero `behind` is not the stale-worktree
+> hazard**, and **`behind 0` does not mean you are reading `origin/main`** —
+> ahead-commits shadow any path they touch. **A read that must reflect
+> `origin/main` uses `git show origin/main:path` regardless of branch position.**
+>
+> **It uses this document without amending it.** §F0 records an **eighth
+> occurrence** of §B3's condition and cites §E0's count; §F3 adopts §E1's
+> standings vocabulary; §F0 states its internal attribution as a departure taken
+> because **§E1.1** established that unmarked provenance is the failure a
+> provenance instrument cannot see.
+>
+> **§F3's demonstration was observed at `4187f78d` and no longer reproduces** —
+> PR #1116 landed both files and ended the condition it demonstrated.
+>
+> **All of it lives at `v25_Owed_Index_Amd6_2026-08-23.md`. This banner points
+> and carries nothing.**
+>
+> Mints nothing. Changes no gate, finding, severity, owner, or disposition. Prod
+> FROZEN.
+
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 5** *Carries a cold session's derivations. Five standings, not three. Rules nothing. Mints nothing.* |
 | --- |
 
