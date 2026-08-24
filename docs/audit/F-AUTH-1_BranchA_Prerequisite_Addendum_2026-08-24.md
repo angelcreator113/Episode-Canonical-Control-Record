@@ -198,6 +198,33 @@ SPECIFICATION**:
 - the first repoint is sequenced after the app-client set, authorization,
   rollback, and verification specifications.
 
+### 6.1 Superseding the prod-touching conclusion does not un-gate Branch A
+
+**The gating survives; only its host-topology justification falls.**
+
+`Session_PE_Roster.md` `PE #64` records one shared Cognito pool serving dev and
+prod. Under `F-AUTH-1_Fix_Plan_v2.58.md` section 2.5, an identity operation
+against that pool **is not made dev-only by the caller's environment label**.
+Nothing in this addendum touches that. Host separation changes where a
+configuration file lives; it changes nothing about whose identity store Branch A
+re-designates.
+
+`F-AUTH-1_BranchA_ClientSecret_Addendum_2026-08-24.md` section 2 already applies
+exactly this reasoning to a `DescribeUserPoolClient` read and records it
+**NOT PERFORMED** on those grounds. The argument is already in the register at
+`main`; this section invokes it rather than re-deriving it.
+
+**Stated because the costing's pointer banner enumerates six supersessions by
+section number.** A reader working that list would see the prod-touching
+conclusion struck and have no route to the surviving ground — and would be
+entitled to read Branch A as un-gated. A correction that leaves a reader wrong
+about *whether* Branch A is gated is worse than the error it corrects, which was
+wrong only about *why*.
+
+**What the correction does move:** the configuration repoint is plausibly
+dev-only, on a dedicated instance with its own manifest, and is cheaper than the
+costing stated. **The identity promotion is unchanged and remains irreversible.**
+
 Implementation is **NOT PERFORMED**. The other four section 7 items remain
 open. `PE #65` remains open.
 
@@ -209,7 +236,7 @@ This document mints no FD, XK, or PE number and closes no finding.
 
 | Version | Date | Contents |
 |---|---|---|
-| 1.0 | 2026-08-24 | Establishes that the costing was wrong at its own `f6a6933f` basis; separates literal path/name matches from the false shared-environment inference; re-derives the prerequisite at `c30b5d9c`; records that dedicated instance and manifest separation already existed; scopes the remaining explicit dev Cognito source; fixes P0-P9 sequencing; rejects production, `.env`, database-secret, variable-rename, and SSM-argument alternatives; performs no implementation or AWS operation. |
+| 1.0 | 2026-08-24 | Establishes that the costing was wrong at its own `f6a6933f` basis; separates literal path/name matches from the false shared-environment inference; re-derives the prerequisite at `c30b5d9c`; records that dedicated instance and manifest separation already existed; scopes the remaining explicit dev Cognito source; fixes P0-P9 sequencing; rejects production, `.env`, database-secret, variable-rename, and SSM-argument alternatives; records at section 6.1 that superseding the prod-touching conclusion does not un-gate Branch A, the gating surviving on shared-pool grounds under `v2.58` section 2.5 with the already-merged ClientSecret addendum cited as the register's existing application of that reasoning; performs no implementation or AWS operation. |
 
 ---
 
