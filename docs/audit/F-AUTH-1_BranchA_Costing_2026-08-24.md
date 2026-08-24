@@ -1,3 +1,20 @@
+> **POINTER BANNER - SECTION 8.1 IS RESOLVED (added 2026-08-24, additive).**
+>
+> Section 8.1 filed the dev workflow's `--update-env` valence as UNRESOLVED.
+> It resolves by direct read, not by reasoning about intent: line 19's claim is
+> the absence of a *clobber*, not of the flag, and the trap ordering that makes
+> clobbering unreachable is stated four lines below it and again at :262-264.
+> There is no contradiction. `F-AUTH-1_Costing_Sec8.1_Resolution_2026-08-24.md`
+> carries the evidence and the disposition; this banner points to it and does
+> not reproduce it. **Sections 8.2 and 8.3 remain open.** Section 8's body is
+> unedited and remains a true record of what was unresolved at this document's
+> basis.
+>
+> Section 7's `Rollback procedure` item is separately reopened on corrected
+> ground by `F-AUTH-1_Rollback_Scope_2026-08-24.md`: the partial-repoint ground
+> stated here is discharged, but the item **does not close** - its trigger is
+> now P9 verification failure after a clean repoint.
+
 > **CORRECTION BANNER - CENTRAL TOPOLOGY PREMISE WAS INVALID AT THIS
 > DOCUMENT'S OWN BASIS (added 2026-08-24, additive).**
 >
