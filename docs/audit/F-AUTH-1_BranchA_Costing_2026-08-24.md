@@ -1,3 +1,16 @@
+> **CORRECTION BANNER - CENTRAL TOPOLOGY PREMISE WAS INVALID AT THIS
+> DOCUMENT'S OWN BASIS (added 2026-08-24, additive).**
+>
+> Sections 1 and 3, section 4's second term, section 5's prod-touching
+> conclusion, section 6's claim that environment separation did not exist,
+> and section 2 row 7's single-shared-worker inference are superseded by
+> `F-AUTH-1_BranchA_Prerequisite_Addendum_2026-08-24.md`. At the stated basis
+> `f6a6933f`, the SSM dev path already targeted the dedicated
+> `episode-dev-backend` instance and the dev/prod PM2 manifests were already
+> split. The addendum carries the evidence and corrected prerequisite; this
+> banner points to it and does not reproduce the correction. Section 7 remains
+> historical; use the merged addenda for current item dispositions.
+
 # F-AUTH-1 — Branch A costed against real config and sequencing — 2026-08-24
 
 | | |
