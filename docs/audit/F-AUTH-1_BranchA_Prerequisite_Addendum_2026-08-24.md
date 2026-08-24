@@ -4,16 +4,35 @@
 |---|---|
 | **Purpose** | Resolve the `prerequisite scope and sequence` item in `F-AUTH-1_BranchA_Costing_2026-08-24.md` section 7. |
 | **Basis** | `main` at `c30b5d9c31c09f092b45e4eb3f0acb63da48635e`, confirmed by `git ls-remote origin refs/heads/main`. |
-| **Ruling** | The environment split already exists. The remaining prerequisite is an explicit, fail-loud dev Cognito configuration source consumed by the dedicated dev deployment before PM2 restart. |
+| **Ruling** | The costing was wrong at its own basis: the environment split already existed. The remaining prerequisite is an explicit, fail-loud dev Cognito configuration source consumed by the dedicated dev deployment before PM2 restart. |
 | **Scope** | Specification only. No code implementation, AWS call, host contact, workflow dispatch, Cognito operation, or production operation was performed. |
 
 ---
 
-## 1. The costing premise has drifted
+## 1. The costing was wrong at its own basis
 
 The costing document was based on `f6a6933f` and concluded that one process
-environment served both applications. That conclusion does not hold at this
-basis.
+environment served both applications. That conclusion was false when filed.
+
+The controlling deployment changes predate `f6a6933f`:
+
+- `9557df38` rewrote the dev deploy to SSM RunCommand targeting the dedicated
+  instance on 2026-07-10;
+- `1844e56b` split the root production manifest from the dev-only manifest on
+  2026-07-21; and
+- `f6a6933f`, the costing basis, was committed on 2026-08-24.
+
+Both earlier commits are ancestors of `f6a6933f`. A direct read of
+`.github/workflows/deploy-dev.yml` at `f6a6933f` contains
+`INSTANCE_TAG: episode-dev-backend`, `aws ssm send-command`, and deployment of
+`ecosystem.dev.config.js`. A direct read of `ecosystem.dev.config.js` at the
+same basis begins by identifying itself as the dev-box-only manifest.
+
+The authority available at that basis also stated the topology plainly:
+`F-Deploy-1_Fix_Plan_v1.49.md:49` records the tag-targeted SSM path, and
+`F-Deploy-1_Fix_Plan_v1.49.md:68` records a dedicated development instance
+whose deploy path can no longer write to production. The costing did not reach
+that controlling evidence.
 
 Primary-source anchors at `c30b5d9c`:
 
@@ -36,6 +55,32 @@ Primary-source anchors at `c30b5d9c`:
 The prerequisite named in the costing as `separating the two environments'
 configuration surfaces` is therefore already satisfied by **distinct process
 environments on distinct instances with distinct PM2 manifests**.
+
+### 1.1 What remained true, and why it did not support the conclusion
+
+Several observations in the costing were literal reads but were assigned a
+topological meaning they could not carry:
+
+- Both manifests use `/home/ubuntu/episode-metadata` as `script` and `cwd`.
+  Those are identical path strings on different instances, not one filesystem
+  or one process environment.
+- Both manifests define a process named `episode-worker`. PM2 process names are
+  local to each instance's PM2 daemon. The dev-only manifest describes its
+  worker as a per-box instantiation.
+- `.github/scripts/deploy-production.sh` calls its production worker `shared`.
+  That comment describes the production manifest's logical worker policy; it
+  does not prove that the dev and prod deployments operate one physical worker
+  process. The dedicated dev workflow separately starts `episode-worker` from
+  the dev-only manifest.
+- The dev workflow still writes no `.env` and supplies no Cognito variables.
+  That correctly establishes an **unsourced dev Cognito environment**, not a
+  shared prod/dev environment.
+
+The error was the inference, not the existence of every underlying match.
+Sections 1 and 3, section 4's second term, section 5's prod-touching conclusion,
+section 6's absent-separation claim, and section 2 row 7 of the costing are
+superseded by this addendum. The remaining section 2 observations survive only
+at their literal scope.
 
 This does not close the section 7 item by itself. The dev Cognito values still
 have no declared source in the deployment path.
@@ -164,7 +209,7 @@ This document mints no FD, XK, or PE number and closes no finding.
 
 | Version | Date | Contents |
 |---|---|---|
-| 1.0 | 2026-08-24 | Re-derives the prerequisite at `c30b5d9c`; records that dedicated instance and manifest separation already exist; scopes the remaining explicit dev Cognito source; fixes P0-P9 sequencing; rejects production, `.env`, database-secret, variable-rename, and SSM-argument alternatives; performs no implementation or AWS operation. |
+| 1.0 | 2026-08-24 | Establishes that the costing was wrong at its own `f6a6933f` basis; separates literal path/name matches from the false shared-environment inference; re-derives the prerequisite at `c30b5d9c`; records that dedicated instance and manifest separation already existed; scopes the remaining explicit dev Cognito source; fixes P0-P9 sequencing; rejects production, `.env`, database-secret, variable-rename, and SSM-argument alternatives; performs no implementation or AWS operation. |
 
 ---
 
