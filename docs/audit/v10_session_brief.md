@@ -1,3 +1,38 @@
+> **POINTER BANNER - HISTORICAL DOCUMENT, NOT CURRENT GUIDANCE
+> (added 2026-08-24, additive).**
+>
+> **This is a pickup brief for authoring handoff v10, dated 2026-05-16. The
+> current handoff is v24.** Every instruction in it - the section 4 authoring
+> workflow, the section 5 deferred-item list, the section 6 checklist - is
+> addressed to a session that closed fourteen versions ago. It is a record of
+> what was true on 2026-05-16, and it is not a source of present state. Read
+> `Prime_Studios_Audit_Handoff_v24.md` for that.
+>
+> Three specifics a reader should not carry forward unchecked:
+>
+> **1. Section 3's `"All other keystones unchanged"` is an affirmative
+> assertion, not an omission.** Its window is closed and past - v9 authoring
+> (2026-05-15) to this brief (2026-05-16) - so it does not go stale so much as
+> it stays unverifiable: the brief records no examination of the keystones it
+> vouches for. Do not read it as evidence that they were checked.
+>
+> **2. Section 3's `Decision #97 (F-Deploy-1 as 8th keystone) - unchanged`
+> records a count of eight at 2026-05-16.** Later material records nine
+> keystones standing. **This banner does not assert that the two conflict**,
+> and does not resolve which is right: a ninth arriving after 2026-05-16 would
+> reconcile them without either being wrong. The question is open and is not
+> resolved here.
+>
+> **3. The closing line says the brief is `"not committed to repo by default"`,
+> and the brief is committed** - at this path, by `a402a718` (PR `#702`,
+> *"add v10 session brief as permanent artifact"*), the same day it was
+> written. The qualifier *by default* survives that: it was committed by
+> explicit decision rather than by default, so the line is **misleading about
+> the file's status rather than false.** It was not updated when the decision
+> was taken.
+>
+> **This banner points; it does not carry.** No body text is edited.
+
 # Prime Studios Audit Handoff v10 — Session Brief
 
 **Purpose:** Pickup document for the v10 handoff authoring session. Written 2026-05-16 immediately after F-Deploy-1 Fix Plan v1.0 + Session PE Roster updates merged to main. Captures state changes since v9 (authored 2026-05-15) while context is fresh.
