@@ -40,22 +40,98 @@ This is the squash-merge convention operating **as designed**. Squash discards t
 
 ## §3 What the branches record, and what deletion would remove
 
+> **Amended 2026-08-25**, basis `main` at `8fe3a8a3`. The table below previously
+> carried one author per branch, and the closing paragraph reported **six**
+> `angelcreator113`-authored commits against the carried item's four. Both were
+> wrong. The corrected count is **four**; the cause is recorded in §3.1, a
+> second-order defect in §3.2, and the superseded open question in §3.3.
+>
+> **Scope of this amendment is §3 alone.** §1's whole-repository author table
+> covers a different and much larger population and was **not re-measured**.
+> §9's second bound ("§3 records a count discrepancy it does not resolve") and
+> the version block's basis line are **stale as of this amendment and are not
+> corrected here**, being outside the authorized scope. Both are named so the
+> omission is deliberate and findable rather than an oversight.
+
 On the merged-but-undeleted branches specifically:
 
-| Branch | Author of its commits | Commits ahead |
+| Branch | Commits ahead | Authors, counted per commit |
 |---|---|---|
-| `claude/branch-a-costing` | angelcreator113 | 1 |
-| `claude/branch-a-selection-record` | angelcreator113 | 1 |
-| `claude/pe65-topology-pointer-banner` | angelcreator113 | 1 |
-| `docs/f-auth-branch-a-prerequisite` | angelcreator113 | 3 |
-| `claude/check-cannot-fail-class` | Claude | 1 |
-| `claude/dim3-token-acquisition` | Claude | 1 |
-| `claude/rollback-scope-p6` | Claude | 2 |
-| `claude/v25-sec6-prep-1cu9c0` | Claude | 1 |
+| `claude/branch-a-costing` | 1 | angelcreator113 ×1 |
+| `claude/branch-a-selection-record` | 1 | angelcreator113 ×1 |
+| `claude/pe65-topology-pointer-banner` | 1 | angelcreator113 ×1 |
+| `docs/f-auth-branch-a-prerequisite` | 3 | **angelcreator113 ×1, Evoni ×2** |
+| `claude/check-cannot-fail-class` | 1 | Claude ×1 |
+| `claude/dim3-token-acquisition` | 1 | Claude ×1 |
+| `claude/rollback-scope-p6` | 2 | Claude ×2 |
+| `claude/v25-sec6-prep-1cu9c0` | 1 | Claude ×1 |
+| **Total** | **11** | **angelcreator113 ×4, Claude ×5, Evoni ×2** |
 
-The branches do not merely preserve authorship in general. **They preserve the only signal that distinguishes an API-authored commit from a locally-authored one** — the distinction the carried item is about. On `main` both appear identically. Delete the branches and the distinction is not degraded; it is gone, with no record that it ever existed.
+Commits-ahead counts are identical at the original basis `f77829fb` and at
+`8fe3a8a3`; the correction is to authorship attribution, not to branch state.
 
-**Not established here:** whether all six `angelcreator113`-authored commits above arose from the API-transport period, or whether some predate it. The carried item says four; six are visible on these four branches. **The discrepancy is recorded, not resolved**, and no commit is individually classified.
+The branches do not merely preserve authorship in general. **They preserve the
+only signal that distinguishes an API-authored commit from a locally-authored
+one** — the distinction the carried item is about. On `main` both appear
+identically. Delete the branches and the distinction is not degraded; it is
+gone, with no record that it ever existed.
+
+### §3.1 The six was a schema defect, not a miscount
+
+The superseded table paired one **Author of its commits** with a **Commits
+ahead** count per branch. Summing that column across the `angelcreator113` rows
+gave six.
+
+`docs/f-auth-branch-a-prerequisite` is authorship-heterogeneous **inside the
+branch** — one commit authored `angelcreator113`, two authored `Evoni`. A
+one-author-per-row schema cannot express that, so the row attributed all three
+of its commits to a single author and the column over-counted by exactly two.
+Six minus two is four.
+
+**The durable finding is the schema, not the arithmetic.** Any table pairing a
+single author with a per-branch commit count fails the same way on the first
+heterogeneous branch it meets, and it fails *silently*: the row is well-formed,
+the column sums correctly from it, and nothing in the output indicates that a
+branch carried more than one author. The corrected table counts authors per
+commit, which is the granularity the claim actually requires.
+
+### §3.2 The section under-represented the distinction it exists to defend
+
+This section argues that branches preserve authorship signal `main` destroys.
+**Its own table erased `Evoni` from the merged-but-undeleted population.** Two
+commits authored `Evoni` were reported as authored `angelcreator113`, in the one
+section of this document whose purpose is to establish that branch-level
+authorship is heterogeneous where `main`'s is uniform.
+
+That is a sharper defect than a wrong total. A wrong total is visibly a number
+and invites checking. A table rendering a mixed-authorship branch as
+single-authored reproduces, at smaller scale, precisely the flattening §2
+attributes to squash-merge — and it did so inside the argument against that
+flattening.
+
+### §3.3 The superseded open question, and the population it was asked about
+
+The superseded text asked whether all six `angelcreator113`-authored commits
+arose from the API-transport period, or whether some predate it.
+
+**Answer: none predate it.** The four are authored 2026-08-24, 19:20–22:18 UTC.
+The five `Claude`-authored commits in the same population begin at 22:37 UTC the
+same day. The recorded attribution changes between 22:18 and 22:37 UTC; all four
+sit before that boundary, and none is separated from the others by it.
+
+**But the question was posed about six commits, two of which are not in the
+set.** A reader resolving it without noticing that the population changed
+obtains a correct answer to a question about the wrong population. The question
+is closed **as restated here, over four commits** — not as originally written.
+
+**Bound.** The count of four is established by direct measurement. **The
+classification of any individual commit as API-authored is inference, not
+proof.** It rests on four mutually corroborating signals — recorded author
+identity, author-email domain class, timezone offset, and position before the
+22:18–22:37 UTC boundary — none of which independently establishes how a given
+commit was produced. **No commit is individually classified here.**
+
+**The carried item needs no correction.** It read four; four is right.
 
 ## §4 Two sound conventions, jointly destructive
 
