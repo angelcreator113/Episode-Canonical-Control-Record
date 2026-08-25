@@ -1635,6 +1635,14 @@ disabled, or edited. No FD minted. Prod FROZEN.*
 **Status:** OPEN. **Trigger condition UNEVALUATED.**
 **Basis:** `main` at `a3002064`, read at filing. No deployed host contacted.
 
+> **AMENDMENT 3 - EXTERNALITY SUBQUESTION RESOLVED BY AUTHORIZED READ AND
+> OPERATOR ATTESTATION (added 2026-08-25, additive).**
+> `F-AUTH-1_PE64_Identity_Ownership_Resolution_2026-08-25.md` supersedes
+> Amendment 1's **NOT ESTABLISHED** externality ruling for the three counted
+> accounts. Read that document for the scoped read, precommitted interpretation,
+> aggregate result, attestation, and surviving bounds. This amendment points;
+> it does not carry. PE #64's overall status and severity are not re-ruled here.
+>
 > **AMENDMENT 2 — enumeration is CLOSED, not deferred. The remedy defect is filed as PE #65 (added 2026-08-21, after `3769db64`, additive).**
 > **Amendments on this entry are read newest-first. Where two disagree the later governs; where an amendment and the entry body disagree the amendment governs.**
 >
