@@ -43,6 +43,12 @@ recognize a squash integration.
 At this basis all nine branch tips are absent from `--merged origin/main` and
 present in `--no-merged origin/main`:
 
+**Measurement precondition.** A row is measurable only if the measuring clone
+holds the remote ref. `git show-ref --verify refs/remotes/origin/<branch>` must
+pass for that row before its ancestry result is read. Where the ref is absent,
+both switches return nothing for that branch - `--merged: 0` and
+`--no-merged: 0` - and that pair is not a measurement.
+
 | Remote branch | Ancestry result | Integration evidence |
 |---|---|---|
 | `claude/branch-a-costing` | not merged | merged PR `#1121` |
@@ -63,6 +69,35 @@ positive integration evidence is blob identity for
 **Established for these nine:** their work is integrated on `main`, while their
 tips are not ancestors of `main`. The ancestry filters classify all nine
 consistently and cannot report the integration fact.
+
+### 2.1 The absent-ref result is the class again
+
+During verification of this document at this basis, one row -
+`docs/f-auth-pe64-ownership-resolution` - returned `0` from **both** switches in
+a clone whose fetch predated that branch's creation. That pair is not a
+disagreement with the table above; it is no coverage. Read quickly, `0/0` is
+consistent with absence from `--merged` and passes as agreement.
+
+`git ls-remote origin refs/heads/docs/f-auth-pe64-ownership-resolution` returned
+`60948767`, establishing the ref at the remote. After fetching it, the row
+measures `0` and `1` as tabled.
+
+This is an instance of the filed class arising inside the verification of a
+document about that class: the instrument returned a clean, internally
+consistent result from a check that had nothing to classify. The precondition
+above is the positive control for it.
+
+### 2.2 The evidence column's own instrument reports false
+
+The Integration evidence column cites merged PRs. At this basis the GitHub API
+returns `"merged": false` for all nine cited PRs, while their `merged_at`
+timestamps are populated and their squash commits are present on `main` -
+`2deaa485` is `#1129`'s squash commit.
+
+The merges are real; the boolean relied on to report them is not. The evidence
+for each row above therefore rests on the populated `merged_at` together with
+the squash commit on `main`, not on that field. Same genus as the ancestry
+defect, different tool.
 
 ---
 
@@ -137,6 +172,12 @@ demonstrate.
 - The correct integration or deletion-safety oracle is not specified here.
 - The v25 branch's evidence is content identity, not a same-head merged PR. No
   broader claim about all commits on differently headed PRs is made.
+- **Each row's ancestry result is valid only for a ref present in the measuring
+  clone at measurement time.** A clone whose fetch predates a branch's creation
+  reproduces that row as `0/0`, which is no coverage, not agreement. See
+  section 2.1.
+- The GitHub pull-request `merged` boolean is not load-bearing for the evidence
+  column. See section 2.2.
 
 ---
 
@@ -164,6 +205,7 @@ demonstrate.
 | Population | Nine named surviving remote branches |
 | Mints | Nothing |
 | Operations performed | Read-only Git and GitHub metadata reads |
+| Verification instances | Sections 2.1 and 2.2, observed while verifying this document |
 
 ---
 
