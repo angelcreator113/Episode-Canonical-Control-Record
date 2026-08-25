@@ -1,3 +1,11 @@
+> **ADDITIVE POINTER - SECTION 4.1 EXTERNALITY TERM RESOLVED (added
+> 2026-08-25).**
+> `F-AUTH-1_PE64_Identity_Ownership_Resolution_2026-08-25.md` supersedes
+> section 4.1's composition-unknown/externality term for the three counted
+> accounts. The client-flow finding and password-currency bound remain.
+> Read the resolution document for the scoped read, operator attestation, and
+> exact surviving bounds. This banner points; it does not carry.
+
 # F-AUTH-1 — dimension 3 token acquisition: disposition and a finding on identity nature — 2026-08-24
 
 | | |
