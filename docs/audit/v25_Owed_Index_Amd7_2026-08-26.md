@@ -18,6 +18,18 @@ face reads; not re-derived here.**
 **Basis:** `origin/main` at `8fe3a8a3`, 2026-08-26. **Derived and filed in the
 same sitting; no derivation-to-filing gap opened.**
 
+**AMENDED ON-BRANCH BEFORE LANDING, 2026-08-26.** §G2.1 was added at
+`origin/main` = `6aea0f73`, after this document's own basis. **The first draft of
+§G2 stated a derivation without stating its reach — the defect this document is
+about, present in this document.** The amendment is made on the branch, **before
+this document is merged or absorbed**, so no landed revision ever carried it.
+
+**Recorded in-body rather than left to git history, per
+`v25_Owed_Index_2026-08-22.md` §3:** a document describing its own carriage is
+changed by any relocation, and **a later reader cannot recover from the diff that
+the correction preceded landing rather than followed it.** The order is a fact
+about this document's content, so it is stated here.
+
 **Author**
 
 Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni — Prime Studios.
@@ -100,6 +112,36 @@ in the listing:**
 tracks content correctly; the ordering does not read the number.
 
 **Standing: verified at `8fe3a8a3` this sitting.**
+
+## §G2.1 The reach of this derivation, and what it excluded
+
+**§G2's maxima were derived from `.md` files only.** The first draft did not say
+so. **Stated here because §G5.1 states its own reach and §G2 did not — the same
+omission, in the same document, about the same kind of claim.**
+
+**`.docx` revisions exist in this corpus, and three are `.md`-less.**
+`v25_Draft_Material_Item2_2026-08-24.md` §10 records `F-AUTH-1` `v2.9`, `v2.17`
+and `v2.19` as `.docx` with no `.md` sibling, contents unread. **Three of the
+eight draft-material documents exclude `.docx` from their sweeps
+independently.**
+
+**Checked at `origin/main` = `6aea0f73`: no `.docx` maximum exceeds its `.md`
+counterpart.**
+
+| family | `.md` maximum | `.docx` maximum |
+|---|---|---|
+| `F-AUTH-1_Fix_Plan` | **`v2.68`** | `v2.37` |
+| `F-Deploy-1_Fix_Plan` | **`v1.49`** | none |
+| `F-Stats-1_Fix_Plan` | **`v1.60`** | `v1.2` |
+| `F-App-1_Fix_Plan` | **`v1.1`** | `v1.1` |
+| `Prime_Studios_Audit_Handoff` | **`v24`** | `v11` |
+
+**§G2's table is therefore correct and its reach was unstated.** Those are
+different defects and only the second was present.
+
+**What remains unestablished:** whether the three `.md`-less revisions carry
+content absent from the `.md` chain. **Unread. Not asserted in either
+direction.**
 
 ---
 
