@@ -1,3 +1,35 @@
+> **ABSORBED — VOID ON v25 LANDING (added 2026-08-26, additive; nothing below is
+> removed or edited).**
+>
+> **`Prime_Studios_Audit_Handoff_v25.md` exists in this tree and carries this
+> document's material.** Both are created in one commit, so a reader of this
+> banner always has v25 in the same tree. **That is co-location, not
+> authority.**
+>
+> **The absorption condition fires on v25 landing on `main`, which has NOT
+> occurred at this commit.** This document is VOID on that landing, **not
+> before**, and v25 is not authority until then.
+>
+> **It is not authority and was never a chain link.** It supersedes nothing and
+> holds no place in any Fix Plan chain. **This banner marks absorption, not
+> supersession** — the distinction is `v25_Draft_Material_Item2_2026-08-24.md`
+> §4's, and is kept because three of the eight state they are superseded by
+> nothing.
+>
+> **The material lives at `Prime_Studios_Audit_Handoff_v25.md`:**
+> Sec 4.5 (the detector that could not distinguish the outcomes it existed
+> to distinguish; post-submission mutation of a gated artifact; `#NNN`
+> autolinking); Sec 5.6 (bare `#NNN`).
+> **This banner points and carries nothing.**
+>
+> **Retained rather than deleted** so the in-body author line survives at HEAD
+> and forward pointers to this path continue to resolve.
+> `Finding_Authorship_Record_Preservation_2026-08-24.md` §7; that finding
+> requests retention of nothing and this is not filed under it.
+>
+> Mints nothing. Changes no gate, finding, severity, owner, or disposition.
+> Prod FROZEN.
+
 # v25 Draft Material — Publication-Surface Findings
 
 | | |
