@@ -166,6 +166,12 @@ notion of filing — where a banner is not "filed" until some later point — it
 be true, and that notion is undefined.** **This document does not choose between
 them.**
 
+**Both counts above are basis-dependent, and the adjacency does not signal it.**
+The ten-document residual includes two files created during this session; the
+`_DRAFT` set last grew on 2026-08-23, four days before this basis. **A later
+re-run will differ from both**, and neither number is a fixed property of the
+corpus.
+
 ## §I4.1 The class is left ambiguous and counted under neither
 
 - **Broad** — *assertions about commit history contradicted by commit history*.
@@ -203,7 +209,8 @@ pattern that quietly cannot match what it was written to find.** **(a) is not** 
 nothing prevented the match; the scope of the claim exceeded the scope of the
 read.
 
-**The case-insensitive residual is resolved, not left open.** 62 − 52 = 10, and
+**The case-insensitive residual is resolved at this basis, not left open.**
+62 − 52 = 10, and
 all ten are `Draft_Material` documents — a distinct instrument, not a third
 draft-marker variant. **Stated because an unexplained residual in a count is how
 the two errors above began.**
