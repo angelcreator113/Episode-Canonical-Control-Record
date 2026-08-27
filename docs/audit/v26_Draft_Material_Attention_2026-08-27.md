@@ -1,8 +1,8 @@
-# v26 Draft Material — Attention: Two Incidents About Where Verification Effort Does Not Go
+# v26 Draft Material — Attention: Two Incidents at n = 1, and Four Generalisations Withdrawn From Them
 
 | | |
 |---|---|
-| **Purpose** | Two incidents about which checks get run at all. Draft material for the v26 author. |
+| **Purpose** | Two incidents about which checks get run at all, and the four generalisations drawn from them and withdrawn. Draft material for the v26 author. |
 | **Created** | 2026-08-27 |
 | **Basis** | Session of 2026-08-27, against `origin/main` at `1233791328b7df865c388c6c09661ef82745df36` — the commit at which `v26_Draft_Material_Perennials_2026-08-27.md`, cited below, is on `main`. **This document was held until that was true rather than hedged against it being false.** |
 | **Absorption condition** | **Draft material, not a chain link.** Void on v26 landing. Supersedes nothing, superseded by nothing, holds no place in any chain. |
@@ -20,10 +20,17 @@ are separate files because the subjects are different: one is about what an
 instrument does when you point it at something, the other is about what nobody
 points an instrument at.
 
-**Each is one occurrence and generalises to nothing.** Each carried a
-generalising title in an earlier draft; **both were withdrawn when the supporting
-sample was counted honestly, and both withdrawals are recorded in place rather
-than deleted.** No class is named, and no pattern is asserted across the two.
+**Each is one occurrence and generalises to nothing.** **Four generalisations
+were drawn from these two events across three revisions and all four were
+withdrawn**, each when the supporting sample was counted. **The withdrawals are
+recorded in place rather than deleted, and §4 lists them with what defeated
+each.** No class is named, and no pattern is asserted across the two.
+
+**That makes this document, as it stands, more a record of four withdrawals than
+a carrier of two findings.** The title says so. **Whether that is worth a v26
+author's time is not claimed here** — the withdrawals are checkable against the
+samples that defeated them, and that is all this document asserts about its own
+usefulness.
 
 > **THE OBSERVER IS THE SUBJECT. This is the document's principal weakness and
 > it is stated first rather than in a bound at the end.**
@@ -82,7 +89,7 @@ generalise.**
 
 ---
 
-## §3 Incident 2 — an empty accepted because it agreed with the conclusion in progress
+## §3 Incident 2 — an empty result was accepted without a second pattern
 
 **An empty search result carries no information about why it is empty.** The
 reader supplies that, and in both instances below **the reader supplied the
@@ -107,7 +114,8 @@ demonstration are at `v26_Draft_Material_Perennials_2026-08-27.md` §5; the
 underlying instrument hazard is filed at
 `Prime_Studios_Audit_Handoff_v25.md` Sec 4.3.
 
-**(b) — the near-miss, and the positive control.** While reviewing a document that cited two sections of the
+**(b) — the near-miss, and the positive control.** While reviewing a document
+that cited two sections of the
 owed-index chain, a scan for those sections returned nothing. **Reporting that
 as absence would have removed a correct clause from a correct document.** The
 sections exist; the scan was scoped to the wrong files. The citation was right
@@ -126,9 +134,15 @@ document, where the correct use found while hunting the hazard is what makes the
 mechanism legible. **What (a) and (b) share is the direction the empty pointed;
 what separates them is whether anyone looked.**
 
-**An empty result is cheapest to accept exactly when it agrees with you** — and it
+**An empty result may be cheapest to accept when it agrees with you**, and it
 agrees silently, because an empty carries no argument to disagree with. **That is
-stated as the reading of one occurrence, not as a finding.**
+a reading of one occurrence, not a finding.**
+
+**An earlier draft titled this section *"an empty accepted because it agreed with
+the conclusion in progress."* That title asserted a cause, and is removed.**
+Attributing cause needs a case where the reason was absent and the acceptance did
+not happen; **there is no such case here.** The title is now descriptive of the
+event only.
 
 **Bound.** `n = 1`, one person, one session. **An earlier draft of this section
 claimed two instances**, first by role — falsified by (a) — and then by direction
@@ -140,7 +154,23 @@ on the same reasoning that demoted §2.
 
 ## §4 Standing
 
-**Two incidents. Neither generalises. No class named.**
+**Two incidents at `n = 1`. Neither generalises. No class named.**
+
+**Four generalisations were drawn and withdrawn.** Each is recorded at its site;
+collected here so the set is countable in one place, and so that a reader can
+check each withdrawal against the thing that defeated it rather than take the
+count on trust.
+
+| # | generalisation | where | what defeated it |
+|---|---|---|---|
+| 1 | *"the remedy is the part nobody re-derives"* — §2's original title | §2 | `n = 1`. One recommendation, one opportunity to check it. *"Remedies are under-checked"* and *"this remedy was checked late, once"* are not distinguishable, so the second is the null and is not rejected. |
+| 2 | an empty result's default reading depends on **role** — author vs reviewer | §3 | Instance **(a)**: an author met an empty and accepted it without a second pattern, which is the reviewer default in the author role. The section's own instance was the counterexample. |
+| 3 | **two instances** of an empty accepted because it agreed with the direction of travel | §3 | Instance **(b)** was interrogated, not accepted — §5 records what produced the doubt. One instance, not two. |
+| 4 | an empty was accepted **because** it agreed — §3's causal title | §3 | Cause is not establishable at `n = 1`. It needs a case where the reason was absent and the acceptance did not happen; there is none. |
+
+**Three of the four were defeated by counting the sample; the fourth by noticing
+that a cause had been asserted where only an event was observed.** No
+generalisation replaced any of them.
 
 **No corpus search was performed, and none is available.** The sibling's zero was
 *reached* — a near-miss found, inspected, and confirmed a correct use. **This
@@ -214,8 +244,12 @@ from it.
 
 ## §6 What this does not do
 
-- **Does not name a class.** Two incidents, and **two further incidents carried
-  only as reach** — §5's fourth and fifth.
+- **Does not name a class.** Two incidents, and **three further incidents carried
+  only as reach** — §5's fourth, its fifth, and **the sixth recorded inside the
+  fourth's block**: the line-wrap failure that recurred while reviewing §3. It is
+  numbered here because it is a distinct occurrence, different party and different
+  moment, and folding it into the fourth unnumbered was an undercount of the same
+  kind the fourth exists to record.
 - **Does not propose a checklist item, a procedure, or a rule.** Proposing a
   remedy here would be this document committing §2, and **an unchecked remedy is
   what §2 is.**
@@ -224,8 +258,10 @@ from it.
 - **Does not assert a role-dependent effect.** §3's earlier role framing is
   recorded as falsified by its own instance (a) and is not carried.
 - **Does not assert a direction-of-travel effect either.** §3's second framing is
-  recorded as falsified by (b), which was interrogated. **Both are kept as
-  withdrawn framings, not as findings.**
+  recorded as falsified by (b), which was interrogated.
+- **Does not assert that agreement caused the acceptance in §3(a).** The causal
+  title is withdrawn; `n = 1` supports no cause. **All withdrawn framings are kept
+  in place, as withdrawals rather than findings.**
 - **Does not exclude the conservative reading of §2.** It adopts it: at `n = 1`
   the conservative reading is the null and is not rejected.
 - **Does not amend `v26_Draft_Material_Perennials_2026-08-27.md`**, which stands.
