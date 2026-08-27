@@ -1,8 +1,8 @@
-# v26 Draft Material — Attention: One Incident and One Observation About Where Verification Effort Does Not Go
+# v26 Draft Material — Attention: Two Incidents About Where Verification Effort Does Not Go
 
 | | |
 |---|---|
-| **Purpose** | One incident and one observation about which checks get run at all. Draft material for the v26 author. |
+| **Purpose** | Two incidents about which checks get run at all. Draft material for the v26 author. |
 | **Created** | 2026-08-27 |
 | **Basis** | Session of 2026-08-27, against `origin/main` at `1233791328b7df865c388c6c09661ef82745df36` — the commit at which `v26_Draft_Material_Perennials_2026-08-27.md`, cited below, is on `main`. **This document was held until that was true rather than hedged against it being false.** |
 | **Absorption condition** | **Draft material, not a chain link.** Void on v26 landing. Supersedes nothing, superseded by nothing, holds no place in any chain. |
@@ -12,7 +12,7 @@
 
 ## §1 What this carries, and how it differs from its sibling
 
-**One incident and one observation. The subject is attention, not instruments.**
+**Two incidents. The subject is attention, not instruments.**
 
 `v26_Draft_Material_Perennials_2026-08-27.md` records instruments that fail
 without signalling. **This document records checks that were never run.** The two
@@ -20,9 +20,10 @@ are separate files because the subjects are different: one is about what an
 instrument does when you point it at something, the other is about what nobody
 points an instrument at.
 
-**§2 is one occurrence and generalises to nothing. §3 has two instances, which
-is askable, not answered.** No class is named. Whether either constitutes a
-pattern is a judgment and is not made here.
+**Each is one occurrence and generalises to nothing.** Each carried a
+generalising title in an earlier draft; **both were withdrawn when the supporting
+sample was counted honestly, and both withdrawals are recorded in place rather
+than deleted.** No class is named, and no pattern is asserted across the two.
 
 > **THE OBSERVER IS THE SUBJECT. This is the document's principal weakness and
 > it is stated first rather than in a bound at the end.**
@@ -81,7 +82,7 @@ generalise.**
 
 ---
 
-## §3 Observation 1 — an empty result is accepted when it agrees with the conclusion in progress
+## §3 Incident 2 — an empty accepted because it agreed with the conclusion in progress
 
 **An empty search result carries no information about why it is empty.** The
 reader supplies that, and in both instances below **the reader supplied the
@@ -96,8 +97,7 @@ reading that agreed with the conclusion already in progress.**
 > framing explains one and is contradicted by the other. **It is also the less
 > flattering reading, which is some evidence for it.**
 
-**Two instances this session. In each, the empty pointed the way the reader was
-already going.**
+**One instance, and one near-miss retained as a positive control.**
 
 **(a)** A scan for a formulation in the corpus returned zero files.
 The zero was about to ground a recommendation. It was defective — the pattern's
@@ -107,28 +107,40 @@ demonstration are at `v26_Draft_Material_Perennials_2026-08-27.md` §5; the
 underlying instrument hazard is filed at
 `Prime_Studios_Audit_Handoff_v25.md` Sec 4.3.
 
-**(b)** While reviewing a document that cited two sections of the
+**(b) — the near-miss, and the positive control.** While reviewing a document that cited two sections of the
 owed-index chain, a scan for those sections returned nothing. **Reporting that
 as absence would have removed a correct clause from a correct document.** The
 sections exist; the scan was scoped to the wrong files. The citation was right
 and the review was wrong.
 
-**The common form.** In (a) the empty **grounded the recommendation being
-written**; in (b) it **confirmed a citation that already looked broken.** Neither
-empty was interrogated, and in both the unexamined reading was the one pointing
-where the reader was already headed. **An empty result is cheapest to accept
-exactly when it agrees with you** — and it agrees silently, because an empty
-carries no argument to disagree with.
+**(b) was interrogated. That is the difference, and it is why the count is one.**
+In (a) the empty **grounded the recommendation being written** and was accepted
+without a second pattern. In (b) the empty **would have confirmed a citation that
+already looked broken** — and was doubted instead, which is how the cited sections
+were found. §5 records what produced that doubt, and it was a domain prior rather
+than a method.
 
-**Bound.** Both instances are **one person, one session**. This is not evidence
-about anyone else, and it is two occurrences in a sample that exists only because
-they happened to be caught. **Two is askable, not answered.**
+**So (b) is not a second instance of the acceptance. It is the control against
+it** — the same role `v25_Draft_Material_2026-08-24.md:402` plays in the sibling
+document, where the correct use found while hunting the hazard is what makes the
+mechanism legible. **What (a) and (b) share is the direction the empty pointed;
+what separates them is whether anyone looked.**
+
+**An empty result is cheapest to accept exactly when it agrees with you** — and it
+agrees silently, because an empty carries no argument to disagree with. **That is
+stated as the reading of one occurrence, not as a finding.**
+
+**Bound.** `n = 1`, one person, one session. **An earlier draft of this section
+claimed two instances**, first by role — falsified by (a) — and then by direction
+of travel, **falsified by (b), which was interrogated.** Both framings are
+recorded above rather than removed. **One occurrence, no basis to generalise**,
+on the same reasoning that demoted §2.
 
 ---
 
 ## §4 Standing
 
-**One incident and one observation. Askable, not answered. No class named.**
+**Two incidents. Neither generalises. No class named.**
 
 **No corpus search was performed, and none is available.** The sibling's zero was
 *reached* — a near-miss found, inspected, and confirmed a correct use. **This
@@ -167,13 +179,23 @@ form was already known, making absence implausible. **That is a domain prior, no
 a method.** A reviewer without that context would have had no reason to doubt the
 empty.
 
-**A fourth, from this document's own audit.** A consistency check on this file —
-whether §2's and §5's counts of the same review rounds agreed — returned nothing,
-because the phrase it searched for is split across a line break and the pattern
-could not span it. **They did not agree.** The disagreement was found only by
-searching for the bare word `round` instead. **Same family as §3(a) and as
-`Prime_Studios_Audit_Handoff_v25.md` Sec 4.3: a pattern that cannot match,
-returning an empty that reads as agreement.**
+**A fourth, from this document's own audit, against a state of the file that no
+longer exists.** A consistency check — whether §2's and §5's counts of the same
+review rounds agreed — returned nothing, because the phrase it searched for was
+split across a line break and the pattern could not span it. **They did not
+agree.** The disagreement was found only by searching for the bare word `round`.
+**Both counts have since been removed** — §2 now gives none, for the reason stated
+there — **so a reader following this item will find nothing to compare. The item
+records a defect in an earlier state of this file, not its current one.**
+
+**Same family as §3(a) and as `Prime_Studios_Audit_Handoff_v25.md` Sec 4.3: a
+pattern that cannot match, returning an empty that reads as agreement.** **The
+same failure recurred while reviewing this section** — an exact-phrase search for
+§3's *"Neither empty was interrogated"* returned nothing, the phrase being
+line-wrapped, and the contradiction it was checking for was real. **Recorded
+because a reach paragraph about patterns that cannot match, which was itself
+found by a pattern that could not match, is the document's subject arriving in
+its own machinery.**
 
 **A fifth, recorded as reach rather than as an entry.** A shell check in
 this session errored (exit 2, an unsupported regex construct) and printed a
@@ -192,15 +214,18 @@ from it.
 
 ## §6 What this does not do
 
-- **Does not name a class.** One incident, one observation, and **two further
-  incidents carried only as reach** — the consistency check at §5 and the shell
-  check at §5.
+- **Does not name a class.** Two incidents, and **two further incidents carried
+  only as reach** — §5's fourth and fifth.
 - **Does not propose a checklist item, a procedure, or a rule.** Proposing a
-  remedy here would be this document committing §2.
+  remedy here would be this document committing §2, and **an unchecked remedy is
+  what §2 is.**
 - **Does not claim these generalise** beyond one session and one observer. §1's
-  banner, §2's null, and §3's bound state the limitation; none is a formality.
+  banner and both incidents' bounds state the limitation; none is a formality.
 - **Does not assert a role-dependent effect.** §3's earlier role framing is
   recorded as falsified by its own instance (a) and is not carried.
+- **Does not assert a direction-of-travel effect either.** §3's second framing is
+  recorded as falsified by (b), which was interrogated. **Both are kept as
+  withdrawn framings, not as findings.**
 - **Does not exclude the conservative reading of §2.** It adopts it: at `n = 1`
   the conservative reading is the null and is not rejected.
 - **Does not amend `v26_Draft_Material_Perennials_2026-08-27.md`**, which stands.
