@@ -1,6 +1,22 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 8** *A measurement failure with four expressions, its inheritor, and two attribution defects in the same table.* |
 | --- |
 
+> **POINTER BANNER — AMENDMENT 9, 2026-08-27. This banner points and carries
+> nothing.**
+>
+> **Nothing in this document is amended, withdrawn, or superseded by this
+> banner.** The at-filing record stands unedited below.
+>
+> **§H6's item — *"Does not read the four inventory commits… Named as runnable,
+> not run"* — is DISCHARGED at `v25_Owed_Index_Amd9_2026-08-27.md` §I1–§I3.**
+> **That statement is not corrected.** It is an accurate account of what this
+> document did, and it remains accurate; Amendment 9 discharges the item it
+> names without amending the naming.
+>
+> All of it lives at `v25_Owed_Index_Amd9_2026-08-27.md`. This banner points and
+> carries nothing.
+
+
 # v25 Owed Index — Amendment 8
 
 **Document version**
