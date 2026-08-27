@@ -1,6 +1,25 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 7** *Filename sort is not an authority instrument. Three defeaters, three mechanisms, one instrument.* |
 | --- |
 
+> **POINTER BANNER — AMENDMENT 8, 2026-08-27. This banner points and carries
+> nothing.**
+>
+> **Nothing in this document is amended, withdrawn, or superseded by this
+> banner.** The at-filing record stands unedited below.
+>
+> **§G5.1's ancestry premise is corrected at
+> `v25_Owed_Index_Amd8_2026-08-27.md` §H1**, which governs it.
+> `76a7f1ac8e975f5740fbea879ec7e8f4833782af` is a two-parent merge commit and
+> **is** an ancestor of `origin/main`. §G6 repeats the same premise as a
+> non-action and is corrected with it.
+>
+> **§G5's conclusion is not discharged.** Amendment 8 §H1.1 relocates the hedge
+> and leaves the conclusion exactly as defeasible as this document stated.
+>
+> All of it lives at `v25_Owed_Index_Amd8_2026-08-27.md`. This banner points and
+> carries nothing.
+
+
 # v25 Owed Index — Amendment 7
 
 **Document version**
