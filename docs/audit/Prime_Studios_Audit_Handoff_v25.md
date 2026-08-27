@@ -10,6 +10,50 @@
 
 ---
 
+> **CORRECTION MARKER — AMD7 HAS MERGED; SEC 4.1's AND SEC 8's UNMERGED
+> FRAMING IS OVERTAKEN (added 2026-08-27, after `782d3b48`, additive).**
+>
+> **Correction authority:** `5ecbff113f79f7ebc6f35dfd5a6d39977cbe0b51`, PR #1134,
+> which merged `docs/audit/v25_Owed_Index_Amd7_2026-08-26.md` to `main`. Present
+> at `782d3b48`, blob `a3e02cb272f19c16c3afe17c9ce4f777b52e092b`.
+> **`5ecbff113f79f7ebc6f35dfd5a6d39977cbe0b51` is an ancestor of `origin/main` at
+> `782d3b48`, verified by `git merge-base --is-ancestor`.**
+>
+> **Two passages in the body below are overtaken:**
+>
+> - **Sec 4.1** closes: *"That document is on a branch and unmerged at this basis;
+>   its disposition is open."* It is on `main`.
+> - **Sec 8** records: *"Does not resolve Amd7's disposition. Sec 4.1 cites its
+>   content; it is on a branch, unmerged, and may merge or be absorbed."* It
+>   merged as a standalone document. It was not absorbed.
+>
+> **Both statements were true at v25's basis `6aea0f73` and neither is an error.**
+> Amd7 merged three commits later, at the second of the three commits separating
+> `6aea0f73` from `782d3b48`.
+>
+> **This marker does not make Amd7 authority.** Amd7's own header states that it
+> rules nothing and mints nothing. Sec 4.1's citation hedge has two halves —
+> *"on a branch and unmerged"* and *"cited for content, not as authority."*
+> **The merge discharges the first. The second is untouched and is not settled
+> here.**
+>
+> **Unaffected:** Sec 4.1's three defeaters, each verified at its own basis and
+> none resting on Amd7; Sec 1's authority table and its blob column; Sec 8's
+> remaining bullets; every gate, finding, severity, owner, and disposition.
+> **Nothing is minted and nothing is ruled.**
+>
+> **This marker moves this document's blob.** `v25.md` was
+> `226be252a62fe3001f4eb088b94e4e14271c2501` at `782d3b48`; adding this marker
+> changes it while the revision number stays `v25`. **That is Sec 4.1 defeater 3
+> occurring in this document.** It is disclosed banner-forwarding in Sec 5.5's
+> sense, not an undisclosed in-place amendment, and the v26 author's item 2
+> baseline comparison should read it as such. **The body below is unedited; only
+> this marker is added.**
+>
+> The original v25 body remains below as the at-filing record.
+
+---
+
 > **SCOPE-STALENESS NOTICE — v24's COMPLETION BANNER SURVIVES THIS SUPERSESSION
 > AND ITS SCOPE IS STALE.**
 >
