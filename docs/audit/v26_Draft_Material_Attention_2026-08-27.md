@@ -22,7 +22,8 @@ points an instrument at.
 
 **Each is one occurrence and generalises to nothing.** **Four generalisations
 were drawn from these two events across three revisions and all four were
-withdrawn**, each when the supporting sample was counted. **The withdrawals are
+withdrawn** — **three when the supporting sample was counted, one when a cause
+was noticed where only an event had been observed.** **The withdrawals are
 recorded in place rather than deleted, and §4 lists them with what defeated
 each.** No class is named, and no pattern is asserted across the two.
 
