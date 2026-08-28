@@ -2140,3 +2140,179 @@ make the branch-base decision explicitly.
 
 *Filed 2026-08-22. Basis `d58e074a`. Git/reflog/GitHub metadata only. No
 deployed host contacted. Prod FROZEN.*
+
+---
+
+### PE #68 — an agent harness injects a git credential that authorizes write to this repository, and whose identity was asserted and withdrawn; a live third candidate for the standing autonomous-PR pattern (P2, OPEN, NEW 2026-08-28)
+
+**Date filed:** 2026-08-28
+**Severity:** P2 — no incident is established and no unauthorized change is
+alleged. The finding is that **an audit trail cannot discriminate a
+proxy-mediated action from a direct one**, which degrades the evidentiary value
+of every attribution resting on an actor field without producing a defect of its
+own.
+**Status:** OPEN. The identifying question is answerable and was not answered;
+see *What was not established*.
+**Basis:** `main` at `54d163bd`. Derived from live HTTP reads, local Git config,
+and GitHub API metadata. No deployed host contacted. No credential value read,
+decoded, or stored.
+
+#### What is established, per channel
+
+**The channels are separate and must be reported separately. Conflating them is
+what produced the withdrawn claim below.**
+
+| channel | established |
+|---|---|
+| git write channel is authorized | **yes** — `info/refs?service=git-receive-pack` returns HTTP 200 with `agent=github/spokes-receive-pack-…` and genuine ref data including `main` at `54d163bd…`; GitHub returns 401 to anonymous |
+| REST identity is `angelcreator113` | **yes** — `api.github.com/user` HTTP 200, `Server: github.com`, `X-Github-Request-Id` present, id `212567798`, `type: User` |
+| MCP identity is `angelcreator113` | **yes** — `get_me`, same login and id |
+| **git write channel acts as `angelcreator113`** | **NO — asserted, then withdrawn** |
+
+**The credential is injected at the proxy, not the clone.** `gitConfigInjection:
+true`; the clone has **no credential helper**, no `http.extraheader`, and
+`credential.interactive=false`. The only `url.*.insteadOf` rewrites point SSH at
+the same HTTPS URL. **Nothing in the working copy carries the secret**, which is
+also why the identity could not be settled locally.
+
+**Token shape:** `X-OAuth-Scopes` empty, rate limit **15000/hr**. Consistent with
+a GitHub App user-to-server token rather than a classic PAT, which enumerates
+scopes. **That shape produces `is_bot: false` carrying a human login.**
+
+#### The withdrawn claim, carried because the withdrawal is the finding
+
+**Asserted:** that the git write channel acts as `angelcreator113`.
+
+**Ground given:** `api.github.com/user` returned that login.
+
+**Why it does not follow:** `/user` is the REST channel. The identity of the git
+transport was never read. **The two were treated as one instrument.**
+
+**A second error compounded it.** `api.github.com/repos/…` returns **HTTP 403**,
+and that was first read as evidence the channels differ — which would have made
+the bridge unestablished for the stated reason. **The 403 carries no
+`Server: github.com` and no `X-Github-Request-Id`: it is synthesized by the
+proxy and never reaches GitHub.** So the over-correction rested on a response
+whose provenance had not been checked, and the "different channels" ground is
+not available either.
+
+**Where that leaves it.** Two of three readable channels report
+`angelcreator113`. Nothing indicates the git channel differs, and nothing
+establishes that it does not. **The claim is neither established nor refuted,
+and this entry asserts neither.**
+
+#### What was not established, and how it could be
+
+**Conclusive tests exist and were declined, not attempted and failed:**
+
+1. **A real push.** Outward-facing and reserved to the account holder under
+   Rule 7. Not performed.
+2. **Reading the injected credential.** The proxy adds it transparently in
+   transit; obtaining it would mean going after the secret itself. Not
+   performed, and not recommended as the route.
+
+**Either settles it. Neither is a repository read, which is why this entry files
+the question open rather than deferring it.**
+
+#### Both sessions' postures — the contrast is the operational content
+
+Two agent sessions on this repository, same day, opposite credential postures:
+
+```
+container A    core limit 60,     /user 403,  receive-pack 401           uniformly anonymous
+container B    core limit 15000,  /user 200,  /repos 403,  rp 200        mixed
+```
+
+**"Agent sessions hold credentials" is false. "Agent sessions hold no
+credentials" is also false.** Container A's four reads agree with each other;
+container B's disagree. **The disagreement is what made the conflation available
+at all** — a session where `/user` answers and `/repos` does not is one where
+"the channel" is not a single thing.
+
+**The discriminator, and it is cheap:** `core limit` **60 means anonymous;
+5000 or 15000 means authenticated**. One request. **Neither party ran it until
+seven exchanges into the session in which both had already reasoned from an
+assumed posture.**
+
+#### What survives independently of the withdrawn bridge
+
+**Across all 76 runs of workflow `224506683`, in the 60 parsed at this basis,
+`actor` and `triggering_actor` are the single pair
+`('angelcreator113', 212567798)`.**
+
+**Consequence, stated at its own reach:** the run history **cannot discriminate**
+a proxy-mediated action from a direct one **if mediation occurred**. **It does
+not establish that any occurred.** The earlier formulation — that no field
+separates them — was built partly on the withdrawn bridge and is not the claim
+filed here.
+
+**A reader looking for the discriminator in merge metadata will not find it
+there.** Merges on `main` carry author `angelcreator113
+<evonifoster@yahoo.com>`, committer `GitHub <noreply@github.com>`, and a
+web-flow signature under key `B5690EEEBB952194`. **That shape is produced
+server-side by a squash merge regardless of who initiates it**, and **the branch
+push that precedes a merge is a separate act that leaves no trace in the merge
+commit.**
+
+**Commit *committer* names, by contrast, do vary and do record agent sessions.**
+Across `main`: `Claude` 1733, `TySteamTest` 1578, `GitHub` 1115,
+`github-actions[bot]` 707, `Evoni` 80, `copilot-swe-agent[bot]` 14,
+`angelcreator113` 1. **This entry's claim is scoped to push attribution and to
+workflow-run `actor` fields, and is deliberately narrower than "no field
+discriminates" — which the table above falsifies.** **A commit object records
+the session that created it. Neither records who pushed it.**
+
+#### The pattern this belongs to
+
+The register carries a standing pattern: an actor authenticating as
+`angelcreator113` with `is_bot: false` opening pull requests from `claude/**`
+branches with no explicit `gh pr create` in any transcript. Prior candidates
+were the VS Code GitHub extension and Copilot Workspace.
+
+**This is a third candidate and it is live rather than hypothesized** — the
+mechanism is present in a session on this repository at this basis. **It is not
+a confirmed mechanism**, and confirming it requires the identity question above.
+
+#### Cascade reach, bounded
+
+**Three independent brakes stand between a `claude/**` push and any deployment,
+and none of them is the freeze:**
+
+1. `auto-merge-to-dev.yml` is `disabled_manually`. **A setting, re-enablable by
+   anyone with write access.**
+2. Its `[skip-automerge]` check reads `github.event.head_commit.message`.
+   **Per-commit; protects only commits that carry the token.**
+3. `deploy-dev.yml` carries **no `push` trigger** — `workflow_dispatch:` alone.
+   **Structural.**
+
+**`auto-merge-to-dev.yml` references neither `main` nor production and its only
+push is `git push origin dev`. No path from a `claude/**` push reaches
+production.** Production is reachable only by `workflow_dispatch` on a
+`disabled_manually` workflow.
+
+#### Disclosure
+
+**This entry was drafted by the session holding the credential it documents.**
+Recorded in the form `v25_Owed_Index_Amd8_2026-08-27.md` §H4.1 uses for reach:
+the disclosure is what makes the account checkable; **it is not what makes it
+safe.** Every figure above is reproducible by the checks named beside it, and
+the two conclusive tests it declines are named rather than elided.
+
+#### What this entry does not do
+
+- **Does not assert that the git write channel acts as `angelcreator113`.** That
+  claim was asserted and withdrawn; the entry carries the withdrawal.
+- **Does not assert that any past pull request or workflow run was
+  proxy-mediated.** No instance is alleged.
+- **Does not resolve the standing autonomous-PR pattern.** It adds a candidate.
+- **Does not read, decode, store, or transmit any credential value.**
+- **Does not push, and does not recommend a push as the identifying test**
+  without the account holder's decision under Rule 7.
+- **Does not propose re-enabling, disabling, or altering any workflow.** The
+  three brakes are recorded as found.
+- **Mints no FD or XK. Changes no gate, severity, owner, or disposition.
+  Contacts no deployed host.**
+
+*Filed 2026-08-28. Basis `54d163bd`. Live HTTP metadata, local Git config and
+GitHub API only. No credential value read. No deployed host contacted. Prod
+FROZEN.*
