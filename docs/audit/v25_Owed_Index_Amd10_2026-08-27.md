@@ -1,6 +1,39 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 10** *Two filed count/instrument errors corrected, three owed items routed, and one citation carried out of a document scheduled to void.* |
 | --- |
 
+> **POINTER BANNER — AMENDMENT 11, 2026-08-28. This banner points and carries
+> nothing.**
+>
+> **Amendment 11 discharges §J6's three NOT PERFORMED entries and corrects the
+> reason §J6 gives for them.** `v25` Sec 6 items **1(c)**, **7**, and **13's API
+> half** were recorded unperformed here because `api.github.com` returned HTTP
+> 403 with `core: 0/60`. **A later session held an authenticated capability and
+> performed all three.**
+>
+> **The dispositions stand; the stated cause does not.** The 403 was
+> **per-request, not per-session** — the egress pool rotates per request and
+> each member carries its own anonymous per-IP budget — and **a retry loop
+> obtained the full population.** `core: 0/60` was a property of one pool
+> member at one moment, not of this session, and the reads were available on
+> retry throughout. **§J6 is wrong about why, not about what.** §J6 is not
+> amended in place; Amendment 11 §K2.4 is the correction authority.
+>
+> **It further records two wrong figures in
+> `.github/workflows/deploy-production.yml`'s "READ BEFORE RE-ENABLING"
+> header**, which no register document addresses: the last successful run is
+> **2026-05-11** (run #75), not 2026-05-09 — **four successful runs postdate the
+> filed date** — and the interval to the box's 2026-06-27 file dates is **six
+> weeks and five days**, not six weeks. **It does not edit that file**;
+> replacement text is proposed at §K1.3 and applying it is a separate decision.
+> **The freeze is untouched; each of the block's three standing grounds is
+> independent of both figures.**
+>
+> It also verifies §J1's nine, §J2.3's `v2.68` trap, and §J3's three supplier
+> attributions independently, each at the structure's own bounds.
+>
+> All of it lives at `v25_Owed_Index_Amd11_2026-08-28.md`. This banner points
+> and carries nothing.
+
 # v25 Owed Index — Amendment 10
 
 **AMENDMENT 10 to `v25_Owed_Index_2026-08-22.md`.** Six items. Adds §J0–§J6.
