@@ -11,13 +11,14 @@
 # What remains true, and is why this block is not deleted:
 #
 #   * PRODUCTION IS ROUGHLY THREE MONTHS BEHIND main. The last successful run
-#     of this workflow was 2026-05-09. Running it now is a large change, not a
-#     routine deploy, and production is under freeze.
+#     of this workflow was 2026-05-11 (run #75, 2026-05-11T13:09:45Z). Running
+#     it now is a large change, not a routine deploy, and production is under
+#     freeze.
 #
 #   * THE CODE ON PRODUCTION DID NOT COME FROM THIS WORKFLOW. Files on the box
-#     are dated 2026-06-27, six weeks after that last successful run. What
-#     wrote them is NOT ESTABLISHED. Anything reasoning from "the deployed SHA"
-#     is reasoning about this record, not about the box.
+#     are dated 2026-06-27, six weeks and five days after that last successful
+#     run. What wrote them is NOT ESTABLISHED. Anything reasoning from "the
+#     deployed SHA" is reasoning about this record, not about the box.
 #
 #   * GITHUB-HOSTED RUNNERS CANNOT REACH THE HOST ON PORT 22. Inbound SSH was
 #     scoped to a single address on 2026-08-22, so this workflow will fail at
