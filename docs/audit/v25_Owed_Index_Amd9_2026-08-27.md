@@ -1,6 +1,28 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 9** *The four inventory commits, read. A citation wrong about what its source says and right about what its source is.* |
 | --- |
 
+> **POINTER BANNER — AMENDMENT 10, 2026-08-27. This banner points and carries
+> nothing.**
+>
+> **Amendment 10 corrects two filed items this chain rests on:**
+> `v25_Owed_Index_Amd8_2026-08-27.md` **§H4.1's `seven-row` count** (the table at
+> `F-AUTH-1_Fix_Plan_v2.60.md:309–317` has **nine** data rows) and **§H3's row 4**
+> (`v2.62`–`v2.68` "D3 only" is not a Status-face measurement; **no revision in
+> that range carries any dimension on its Status face, and four have no
+> `**Status**` marker at all**).
+>
+> **§H3's holding is untouched and strengthened.** §H4's supplier attribution is
+> untouched. **Neither §H3 nor §H4.1 is amended in place**; Amendment 10 is the
+> correction authority.
+>
+> It further routes three owed items to `v26`'s Sec 6 — item 5's rewrite, Amd6's
+> absent pointer banner, and item 1's history-scoped/commit-scoped warning,
+> **whose substance it carries out of `v26_Draft_Material_Perennials_2026-08-27.md`
+> because that document voids on `v26` landing.**
+>
+> All of it lives at `v25_Owed_Index_Amd10_2026-08-27.md`. This banner points and
+> carries nothing.
+
 # v25 Owed Index — Amendment 9
 
 **Document version**
