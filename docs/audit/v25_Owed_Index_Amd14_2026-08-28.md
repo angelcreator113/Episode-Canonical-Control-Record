@@ -1,6 +1,19 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 14** *The gate was not advertise-stage only. A write completed, then a merge did. And the instrument H1 requires you to paste changes what the instrument returns.* |
 | --- |
 
+> **POINTER BANNER — AMENDMENT 15, 2026-08-28. This banner points and carries
+> nothing.**
+>
+> **Amendment 15 records the authenticated repository-settings read that closes
+> Amd13 §M4.2.** `dependabot_security_updates.status` was read as `disabled` in
+> `angelcreator113/Episode-Canonical-Control-Record`; the conditional resolves
+> negative. **Amd15 is the amending authority for that closure.**
+>
+> **Nothing in this document is amended.** Amd14's account of its own writes,
+> its unresolved items, and its status remains as filed. The read is
+> unverifiable by either agent session, but was performed through the
+> repository administrator's authenticated GitHub channel.
+
 # v25 Owed Index — Amendment 14
 
 > **NAMING COLLISION, STATED ON THIS DOCUMENT'S FACE.**
