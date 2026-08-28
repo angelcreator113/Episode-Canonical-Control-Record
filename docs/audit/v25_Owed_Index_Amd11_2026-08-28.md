@@ -1,6 +1,30 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 11** *Two wrong figures in an operational header, derived against the full run history and left for a separate decision to apply. Three reads Amendment 10 recorded NOT PERFORMED, performed — and the reason it recorded for them, corrected.* |
 | --- |
 
+> **POINTER BANNER — AMENDMENT 12, 2026-08-28. This banner points and carries
+> nothing.**
+>
+> **Amendment 12 records that `PE #68` stopped being prospective one commit
+> after it filed.** `a00b3f15` (#1143) and `0dd5f9d9` (#1144) — the commits that
+> landed this document and the workflow-header correction — were pushed and
+> merged through the channel `PE #68` describes.
+>
+> **Their attribution fields are byte-identical to `54d163bd` (#1141), which
+> Evoni merged by hand** — one human-merged commit and three agent-merged ones,
+> **indistinguishable on every field the trail carries.** `merged_by` does not
+> separate them either. **Neither the tree nor the API can establish which was
+> which; the control rests on testimony, and Amendment 12 §L1.2 records that as
+> the finding rather than a gap in it.** **`PE #68`'s open question is
+> untouched: whether the git write channel acts as `angelcreator113` is still
+> not established.**
+>
+> It also withdraws a characterization attributed to Evoni, and records that the
+> merge mechanism was inferred before it was confirmed — the confirmation
+> arriving after the irreversible act, not before.
+>
+> All of it lives at `v25_Owed_Index_Amd12_2026-08-28.md`. This banner points
+> and carries nothing.
+
 # v25 Owed Index — Amendment 11
 
 **AMENDMENT 11 to `v25_Owed_Index_2026-08-22.md`.** Six items. Adds §K0–§K6.
