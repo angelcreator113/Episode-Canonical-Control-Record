@@ -1,6 +1,34 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 13** *A true scoped claim was widened once, reproduced twice, and widened again. Item 7 already forbade it.* |
 | --- |
 
+> **POINTER BANNER — AMENDMENT 14, 2026-08-28. This banner points and carries
+> nothing.**
+>
+> **Amendment 14 corrects §M8.5 of this document.** §M8.5 records the observed
+> write gate as *"advertise-stage only"*, explicitly not establishing that a
+> push would complete. **A push completed — `ce5c28c9` — and then a squash-merge
+> completed — PR #1146, landing `5b8e46e8`.** §M8.5's other content stands.
+>
+> **Amendment 14 also amends `PE #68`** with the demonstrated write access, an
+> author-identity override disclosed by the session that made it, and a
+> nine-pair attribution control. **It mints no PE number and
+> `Session_PE_Roster.md` is not edited in place.**
+>
+> **Nothing in this document is amended.** Amendment 14 is the amending
+> authority for §M8.5, per route (a) — the carriage Evoni ruled at §M8.1.
+>
+> **`v25_Owed_Index_Amd14_2026-08-28.md` exists.** §M1.4 of this document
+> records a dangling pointer to that path, and **that record remains correct as
+> filed**: at this document's basis `bed437b1` the path did not exist.
+> Amendment 14 was written afterwards and says so on its own face. **A reader
+> must not conclude the pointer §M1.4 recorded was real.**
+>
+> **This banner moves this document's blob under an unchanged filename** —
+> `v25` Sec 4.1 defeater 3, disclosed banner-forwarding in Sec 5.5's sense. Its
+> pre-banner value was `92057ca688b826d4fd90f279b39d9451ebfcddd4`; the
+> post-banner value is recorded in Amendment 14's footer, **measured after
+> placement, not predicted.**
+
 # v25 Owed Index — Amendment 13
 
 **Ruled in full by Evoni, 2026-08-28. Five decisions at §M8 — §M8.1 through
