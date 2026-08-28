@@ -1,6 +1,28 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 15** *The repository-settings read performed; §M4.2 resolves negative.* |
 | --- |
 
+> **POINTER BANNER — AMENDMENT 16, 2026-08-28. This banner points and carries
+> nothing.**
+>
+> **Amendment 16 records that `v25` Sec 6 item 12 is CLOSED** — Evoni selected
+> Branch B for the Cognito pool topology on 2026-08-28. **It is the first of
+> Sec 6's four Evoni-gated items to close; items 8, 9 and 11 remain gated and
+> NOT PERFORMED.**
+>
+> **Amendment 16 points and carries nothing.** All substance — the branch
+> ruling, the Branch A re-costing, the §9.10 re-specification and the pointer
+> decision — is at **`F-AUTH-1_PE65_Resolution_BranchB_2026-08-28.md`**.
+>
+> **Nothing in this document is amended.** Per the carriage ruling, no banner is
+> placed on `Prime_Studios_Audit_Handoff_v25.md`, `Session_PE_Roster.md`, or
+> `F-AUTH-1_Decision_CognitoPoolTopology_2026-08-22.md`; their blobs do not move.
+>
+> **This banner moves this document's blob under an unchanged filename** —
+> `v25` Sec 4.1 defeater 3, disclosed banner-forwarding in Sec 5.5's sense. Its
+> pre-banner value was `af8acdab9bdec4dd56be43a24a8bb38085a41573`; the
+> post-banner value is recorded in Amendment 16's footer, **measured after
+> placement, not predicted.**
+
 # v25 Owed Index — Amendment 15
 
 **Document version**
