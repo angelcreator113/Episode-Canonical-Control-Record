@@ -1,6 +1,26 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 12** *PE #68 stopped being prospective one commit after it filed, and the commits that did it are a positive control whose ground truth exists only as testimony.* |
 | --- |
 
+> **POINTER BANNER — AMENDMENT 13, 2026-08-28. This banner points and carries
+> nothing.**
+>
+> **Amendment 13 withdraws a false claim this chain carried.**
+> `v25_Owed_Index_Amd11_2026-08-28.md` §K2.2 line 382 — *"`auto-merge-to-dev.yml`
+> is the only workflow in the repository with an automatic `push` trigger"* — is
+> **withdrawn**. `.github/workflows/validate.yml` carries `push` and
+> `pull_request` on `[main, dev]` and is `active`.
+>
+> **Nothing in this document is amended.** Amendment 13 is the amending
+> authority for that clause and for `Prime_Studios_Audit_Handoff_v25.md`
+> Sec 3.4's `Validate` trigger cell. Per Evoni's carriage ruling — route (a) —
+> **no banner is placed on `v25` or on `Amd11`, and neither blob moves.**
+>
+> **This banner moves this document's blob under an unchanged filename** —
+> `v25` Sec 4.1 defeater 3, disclosed banner-forwarding in Sec 5.5's sense. Its
+> pre-banner value was `34f9ac0df1105fa0d074ced2ced4fad59aea0c66`; the
+> post-banner value is recorded at Amendment 13 §M8.4, **measured after
+> placement, not predicted.**
+
 # v25 Owed Index — Amendment 12
 
 **AMENDMENT 12 to `v25_Owed_Index_2026-08-22.md`.** Three items. Adds §L0–§L3.
