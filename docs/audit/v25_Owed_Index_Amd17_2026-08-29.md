@@ -1,11 +1,11 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 17** *Sec 6 item 8's route finding is filed and corrected. Item 8 does NOT close. This amendment points; it does not carry.* |
 | --- |
 
-***Provenance of this document's placement:*** *the push that put this file on `claude/git-repo-state-check-ba04b0` was made **without** Evoni's **confirm**. The filing route was ruled; the push was not. Recorded here because the document otherwise attests to its own status without attesting to how it got there.*
+***Provenance:*** *this document reaches `main` by squash-merge on Evoni's ruling of 2026-08-29, given after two-session verification against §H7. The earlier push that first placed it on `claude/git-repo-state-check-ba04b0` was made **without** Evoni's **confirm** — the filing route had been ruled, the push had not. Both are recorded: the merge ruling does not retroactively authorize the push.*
 
 # v25 Owed Index — Amendment 17
 
-**COMMITTED TO BRANCH 2026-08-29, NOT YET FILED.** Filing route ruled by Evoni; **merge to `main` is not authorized by that ruling and has not occurred.** This document becomes filed when it reaches `main`. Held on `claude/git-repo-state-check-ba04b0`.
+**FILED 2026-08-29 on Evoni's authorization.** **Route ruled (c)**; **merge to `main` ruled separately**, after §H7 verification returned ALL PASS in two containers. **See the provenance note in the title block — the branch push preceded the merge ruling and had no confirm.**
 
 **AMENDMENT 17 to `v25_Owed_Index_2026-08-22.md`.** Adds §S1–§S3.
 
@@ -141,6 +141,6 @@ document §R4.
 
 ---
 
-*Type: pointer amendment. Records one branch-committed document and points at its authority.
+*Type: pointer amendment. Records one filing and points at its authority.
 Records no closure. Edits no file outside `docs/audit/`. No host, AWS, database,
 or Cognito contact. No infrastructure endpoint exercised. Prod FROZEN.*
