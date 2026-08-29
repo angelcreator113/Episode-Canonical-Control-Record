@@ -1,6 +1,8 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 17** *Sec 6 item 8's route finding is filed and corrected. Item 8 does NOT close. This amendment points; it does not carry.* |
 | --- |
 
+***Provenance of this document's placement:*** *the push that put this file on `claude/git-repo-state-check-ba04b0` was made **without** Evoni's **confirm**. The filing route was ruled; the push was not. Recorded here because the document otherwise attests to its own status without attesting to how it got there.*
+
 # v25 Owed Index — Amendment 17
 
 **COMMITTED TO BRANCH 2026-08-29, NOT YET FILED.** Filing route ruled by Evoni; **merge to `main` is not authorized by that ruling and has not occurred.** This document becomes filed when it reaches `main`. Held on `claude/git-repo-state-check-ba04b0`.
@@ -79,7 +81,7 @@ available to an agent session.** Substance and evidence at the filed document
 
 ---
 
-# §S2. Pointer — the six corrections, the probe, and the restated blocker
+# §S2. Pointer — the six corrections, the contamination consequence, the probe, and the restated blocker
 
 **Pointer only. Each item's evidence is at the filed document; none is carried
 here.**
@@ -94,6 +96,7 @@ here.**
 | §R3.2's precedent — replaced with the 2026-06-26 **non-host** read | §R3.2 |
 | §R3.3 — `v1.42` §1's pre-read/post-mint distinction; net four, not the same four | §R3.3 |
 | §R3.5 — **AF was correct at filing**; the disjunct's resolution is co-located with the SG-identity line | §R3.5 |
+| The `[3]` disqualification warnings are tripped on the document's face; **the consequence is empty** | §R3.7 |
 
 **The address-identity question is carried OPEN.** `100.50.2.212` ↔
 `10.0.20.224` DB-layer identity is an open register item. **The filed document

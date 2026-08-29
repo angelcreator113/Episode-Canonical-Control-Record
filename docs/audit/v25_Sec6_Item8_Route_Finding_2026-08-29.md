@@ -1,9 +1,11 @@
 | **PRIME STUDIOS** **`v25` SEC 6 ITEM 8 — THE ROUTE FINDING (CORRECTED)** *Supersedes `Item8_Route_Finding_2026-08-28.md`. Disposition unchanged: NOT PERFORMED.* |
 | --- |
 
+***Provenance of this document's placement:*** *the push that put this file on `claude/git-repo-state-check-ba04b0` was made **without** Evoni's **confirm**. The filing route was ruled; the push was not. Recorded here because the document otherwise attests to its own status without attesting to how it got there.*
+
 # `v25` Sec 6 item 8 — the route finding: why the FD-66 infrastructure read was not performed
 
-**COMMITTED TO BRANCH 2026-08-29, NOT YET FILED.** Filing route ruled by Evoni; **merge to `main` is not authorized by that ruling and has not occurred.** This document becomes filed when it reaches `main`. Held on `claude/git-repo-state-check-ba04b0`. Filing route ruled: standalone
+**COMMITTED TO BRANCH 2026-08-29, NOT YET FILED.** Filing route ruled by Evoni; **merge to `main` is not authorized by that ruling and has not occurred.** This document becomes filed when it reaches `main`. Held on `claude/git-repo-state-check-ba04b0`. **Route ruled (c):** standalone
 carrying the substance, plus a pointer-only amendment at the chain tail
 (`v25_Owed_Index_Amd17_2026-08-29.md`).
 
@@ -378,6 +380,44 @@ Item8_Route_Finding_2026-08-28.md
 across two sessions because they differ; the drafting session's probe is
 asserted, not denied; and this session's own credential-presence check is
 disclosed rather than covered by a blanket *"none sought."*
+
+
+## §R3.7 The contamination warnings are tripped on this document's face, and the consequence is empty
+
+**Recorded because this document cites a warned file twice and would otherwise
+say nothing about it.**
+
+Two files in the corpus carry disqualification warnings for priming or closing
+the `[3]` combined-restart window:
+
+- `F-Deploy-1_Phase2A-Step3_Complete_Handoff_2026-06-25.md`
+- `F-Deploy-1_2026-06-26_Sec5_ReVerify_Evidence.md`
+
+**Both were read in the drafting sequence and the warnings were tripped.** **This
+document cites the second at §R2.1 and again at §R3.2** — it is the source of the
+06-26 non-host precedent and of the `transaction_read_only` self-check. **So the
+warning is tripped on this document's own face, twice, and a successor who
+notices the citation is owed what follows.**
+
+**The consequence was reported as live. It is not.**
+
+```
+F-Deploy-1_Fix_Plan_v1.20.md:10   "FD-31 — CLOSED by this revision. Restart-to-align + save."
+F-Deploy-1_Fix_Plan_v1.48.md:111  "all satisfied -> G2 CLOSED -> Phase B CLOSED -> keystone CLOSED."
+F-Deploy-1_[3]_Known-Benign_Baseline.md, prepended 2026-07-31:
+  "THIS DOCUMENT IS VOID FOR EXECUTION... The [3] window is not open."
+```
+
+**The disqualification is accurate as a rule and empty in effect. There is no
+open `[3]` window to be disqualified from.**
+
+**The sting is §H6's own, and it is carried, not softened.** Reporting the
+disqualification as a live carried consequence **was itself a stale-state claim,
+made by both sessions, in the course of correcting stale-state claims.**
+
+**Scope.** This states that the `[3]` window is not open. It does **not** reopen,
+re-scope, or re-rate FD-31, Phase B, G2, or the keystone, and it does not lift
+the warnings themselves — they remain accurate as rules.
 
 ---
 
