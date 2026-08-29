@@ -3,7 +3,7 @@
 
 # v25 Owed Index — Amendment 17
 
-**FILED 2026-08-29 on Evoni's authorization.**
+**COMMITTED TO BRANCH 2026-08-29, NOT YET FILED.** Filing route ruled by Evoni; **merge to `main` is not authorized by that ruling and has not occurred.** This document becomes filed when it reaches `main`. Held on `claude/git-repo-state-check-ba04b0`.
 
 **AMENDMENT 17 to `v25_Owed_Index_2026-08-22.md`.** Adds §S1–§S3.
 
@@ -138,6 +138,6 @@ document §R4.
 
 ---
 
-*Type: pointer amendment. Records one filing and points at its authority.
+*Type: pointer amendment. Records one branch-committed document and points at its authority.
 Records no closure. Edits no file outside `docs/audit/`. No host, AWS, database,
 or Cognito contact. No infrastructure endpoint exercised. Prod FROZEN.*
