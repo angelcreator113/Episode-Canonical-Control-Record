@@ -1,6 +1,22 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 17** *Sec 6 item 8's route finding is filed and corrected. Item 8 does NOT close. This amendment points; it does not carry.* |
 | --- |
 
+> ## ⚠ STATUS UPDATE — §S1's non-performance is SUPERSEDED as to the read.
+>
+> **§S1 below records `v25` Sec 6 item 8 as Evoni-gated and NOT PERFORMED, with
+> no route used. That was true at this amendment's basis and is no longer true.**
+> The read was performed on **2026-08-29** over the operator-workstation route
+> identified at the route finding §R1.1. **See `v25_Owed_Index_Amd18_2026-08-30.md`
+> §T1.**
+>
+> **§S1's text is retained unaltered.** **Item 8's DISPOSITION remains OPEN and
+> Evoni-gated** — the read is discharged, the remediation question is not.
+> **Items 9 and 11 remain NOT PERFORMED** and must not be inferred from this
+> banner. **Everything else in this amendment stands**, including its §S2
+> pointers and the address-identity question carried OPEN.
+>
+> *Banner added 2026-08-30 on Evoni's ruling. Not a supersede.*
+
 ***Provenance:*** *this document reaches `main` by squash-merge on Evoni's ruling of 2026-08-29, given after two-session verification against §H7. The earlier push that first placed it on `claude/git-repo-state-check-ba04b0` was made **without** Evoni's **confirm** — the filing route had been ruled, the push had not. Both are recorded: the merge ruling does not retroactively authorize the push.*
 
 # v25 Owed Index — Amendment 17
