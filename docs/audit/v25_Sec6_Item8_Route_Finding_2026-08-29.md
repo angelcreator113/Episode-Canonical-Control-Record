@@ -1,6 +1,3 @@
-| **PRIME STUDIOS** **`v25` SEC 6 ITEM 8 — THE ROUTE FINDING (CORRECTED)** *Supersedes `Item8_Route_Finding_2026-08-28.md`. Disposition unchanged: NOT PERFORMED.* |
-| --- |
-
 > ## ⚠ STATUS UPDATE — the disposition below is SUPERSEDED. Read this first.
 >
 > **The read this document explains the non-performance of HAS SINCE BEEN
@@ -10,8 +7,8 @@
 > at `EvidenceNote_Canon_Schema_Capture_2026-08-29.txt`.
 >
 > **Every `NOT PERFORMED` statement about `v25` Sec 6 item 8 in this document —
-> the title block above, the heading below, §R1's quoted disposition block, and
-> the closing list — is stale as to the READ.** They were true when written and
+> the title block immediately below, the heading under it, §R1's quoted
+> disposition block, and the closing list — is stale as to the READ.** They were true when written and
 > are retained unaltered, because a control record is not edited to look
 > correct in hindsight.
 >
@@ -24,6 +21,8 @@
 > *Banner added 2026-08-30 on Evoni's ruling. This document is not superseded,
 > and this banner is not a supersede.*
 
+| **PRIME STUDIOS** **`v25` SEC 6 ITEM 8 — THE ROUTE FINDING (CORRECTED)** *Supersedes `Item8_Route_Finding_2026-08-28.md`. Disposition unchanged: NOT PERFORMED.* |
+| --- |
 ***Provenance:*** *this document reaches `main` by squash-merge on Evoni's ruling of 2026-08-29, given after two-session verification against §H7. The earlier push that first placed it on `claude/git-repo-state-check-ba04b0` was made **without** Evoni's **confirm** — the filing route had been ruled, the push had not. Both are recorded: the merge ruling does not retroactively authorize the push.*
 
 # `v25` Sec 6 item 8 — the route finding: why the FD-66 infrastructure read was not performed
