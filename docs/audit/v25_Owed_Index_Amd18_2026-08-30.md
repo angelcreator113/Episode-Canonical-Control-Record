@@ -73,11 +73,30 @@ docs/audit/EvidenceNote_Canon_Schema_Capture_2026-08-29.txt    2764 lines / 2760
 docs/audit/EvidenceNote_Canon_pgmigrations_2026-08-29.txt        18 lines /   14 rows
 ```
 
-**Both sit on `docs/canon-schema-capture-2026-08-29` at
+**Both sat on `docs/canon-schema-capture-2026-08-29` at
 `cb693277501182ddf99c252debe65934fe8f4d69`** — `main` plus exactly those two
 files, +2782 lines, nothing else touched. **Evoni ruled on 2026-08-30 that this
-branch merges to `main`.** Until that merge lands, the citations in §T2–§T5 are
-reproducible by SHA but are **not yet authority on `main`**.
+branch merges to `main`.**
+
+**The merge has landed.** PR #1151, squash-merged 2026-08-30, all four checks
+green (`Tests`, `Frontend Tests`, `Route Validation`, `Cost Exposure Audit`), no
+review threads, `mergeable_state: clean`. **`main` advanced `7a788f3c` →
+`6fb8a07b5e372908ce462c99dd01120f1a62b23f`.** The citations in §T2–§T5 are
+authority on `main` from that commit.
+
+**This amendment's basis is deliberately NOT re-pointed at `6fb8a07`.** The
+analysis was derived against `7a788f3c` and is stated against it. **The H1
+tails pasted above survive the advance unchanged** — the two merged evidence
+files contribute **0 occurrences of `FD-70`, 0 lines of `XK-4`, 0 lines of
+`PE #69`**, measured. A successor re-deriving at `6fb8a07` should still read
+34 / 12 / 12 and should attribute any movement to Amd18 itself (**+3 / +3 / +3**,
+all from the instrument block and its unit note), not to the merge.
+
+**What the merge does NOT do.** `main` now carries **both** Amd17 §S1's
+`NOT PERFORMED` **and** the evidence that contradicts it. **The gap is closed on
+the evidence side and open on the register side.** This amendment is the
+correction, and **its own merge is unruled** — until it lands, a reader of `main`
+finds a live self-contradiction with no document reconciling it.
 
 **The gap this closes, named plainly.** Between the read occurring and this
 amendment, the control record asserted a non-performance that had ceased to be
