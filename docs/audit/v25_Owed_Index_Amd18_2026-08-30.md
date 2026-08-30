@@ -3,7 +3,7 @@
 
 ***Provenance:*** *route ruled by Evoni on 2026-08-30 — **chain amendment**, chosen over standalone finding and over both. The merge of the **evidence branch** `docs/canon-schema-capture-2026-08-29` to `main` was ruled in the same turn. **The merge of THIS amendment to `main` was not ruled and is not assumed.** It is filed to `claude/register-reality-gap-docs-hy8h5r`; route and merge are separate rulings, per Amd17's own discipline.*
 
-***Provenance, Rule 7:*** *the route ruling authorized the **filing route**. It did not authorize each subsequent push. **Three pushes to `claude/register-reality-gap-docs-hy8h5r` — `ce268054`, `fe7855fb`, `bdad5165` — were made without Evoni's per-push **confirm**.** A fourth act, the **creation of PR #1151**, was taken on the reading that the ruling to merge the evidence branch carried its PR-create; **that is the author's reading of a ruling's scope, not a ruling** — and inferring scope from a ruling is the same move that produced the other three. **The merge of #1151 itself was ruled.** Rule 7 gates the push, the PR create and the merge as separate shared-state changes, and does so for doc-only changes explicitly (`F-Deploy-1_Fix_Plan_v1.5.md:165`; `Fix_Plan_v1.2.md:106`; `Session_PE_Roster.md:2209, 2310`). **Recorded, not excused.** **This is the second time in the register that a ruled filing route has been read as covering the push** — Amd17's own provenance note records the first, one document earlier in the same chain and eight days before. **The mechanism was a session instruction to commit and push to the designated branch, followed without checking it against this repository's governance.** Ruling of 2026-08-30. The pushes are not retroactively authorized by it.*
+***Provenance, Rule 7:*** *the route ruling authorized the **filing route**. It did not authorize each subsequent push. **Three pushes to `claude/register-reality-gap-docs-hy8h5r` — `ce268054`, `fe7855fb`, `bdad5165` — were made without Evoni's per-push **confirm**.** A fourth act, the **creation of PR #1151**, was taken on the reading that the ruling to merge the evidence branch carried its PR-create; **that is the author's reading of a ruling's scope, not a ruling** — and inferring scope from a ruling is the same move that produced the other three. **The merge of #1151 itself was ruled.** Rule 7 gates the push, the PR create and the merge as separate shared-state changes, and does so for doc-only changes explicitly (`F-Deploy-1_Fix_Plan_v1.5.md:165`; `Fix_Plan_v1.2.md:106`; `Session_PE_Roster.md:2208-2209, 2309-2310`). **Recorded, not excused.** **This is the second time in the register that a ruled filing route has been read as covering the push** — Amd17's own provenance note records the first, one document earlier in the same chain and eight days before. **The mechanism was a session instruction to commit and push to the designated branch, followed without checking it against this repository's governance.** Ruling of 2026-08-30. The pushes are not retroactively authorized by it.*
 
 # v25 Owed Index — Amendment 18
 
@@ -107,13 +107,25 @@ from the instrument block above and its unit note — not to the merge.
 > instance in this document of the failure mode §T4 exists to record.
 >
 > **Constraint on any future edit to this document, load-bearing and stated
-> because it is not self-evident.** The figure above survives only while the
-> three instrument tokens appear in this file **exclusively inside quoted
-> instruments** — the H1 block and the unit note beneath it. **Naming any of
-> them in prose raises that file's count and falsifies the figure**, which is
-> precisely how the `fe7855f` defect arose. **An editor who must refer to them
-> should name them as "the three instruments," as this block does throughout,
+> because it is not self-evident.** The figure above survives only while each of
+> the three instrument tokens appears in this file **exactly three times**, in
+> **three places and no others: the H1 instrument block, the attribution lines
+> beneath it, and the unit note beneath those.** **No further mention may be
+> added anywhere — prose or quoted, backticked or bare.** Adding one raises that
+> file's count and falsifies the figure, which is precisely how the `fe7855f`
+> defect arose. **An editor who must refer to them should name them
+> collectively, as "the three instruments," the way this block does throughout,
 > and must re-measure the file after writing rather than before.**
+>
+> **The rule is stated as a count and a location list, deliberately, rather than
+> as a category.** An earlier wording gated on the tokens appearing "exclusively
+> inside quoted instruments" and named only two of the three places. **It was
+> wrong twice over:** it omitted the attribution lines, and the unit note is
+> ordinary prose that names all three tokens in backticks — so an editor
+> applying that rule literally would have found it already violated at the unit
+> note, and concluded either that the constraint was dead or that prose mentions
+> were permitted after all. **A count of three in three named places needs no
+> passage classified to be checked.**
 
 **What the merge does NOT do.** `main` now carries **both** Amd17 §S1's
 `NOT PERFORMED` **and** the evidence that contradicts it. **The gap is closed on
