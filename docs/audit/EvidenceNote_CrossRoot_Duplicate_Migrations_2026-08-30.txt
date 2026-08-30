@@ -1,0 +1,58 @@
+EVIDENCE NOTE — cross-root duplicate migration basenames
+Prime Studios · v25 Sec 6 item 8 line of work · 2026-08-30
+Basis: origin/main 3cef134d9d2ccfcde97ee0e9c102170cc16b77d8
+Derived from the repository tree ONLY. No database read. No host contact.
+Completes the sample at v25_Owed_Index_Amd23_2026-08-30.md §Y4.2.
+
+== ROOTS AND POPULATION (.js only; a Sequelize ledger entry cannot name .sql) ==
+src/migrations                      211
+scripts/migrations                  169
+migrations                           19
+migrations/sequelize-migrations      16
+TOTAL                               415
+
+.sequelizerc migrations-path:
+  migrations-path': path.resolve('./src/migrations'),
+
+== THE NINE CROSS-ROOT DUPLICATE BASENAMES ==
+VERDICT     PAIRED ROOTS                                    BASENAME
+DIFFERS     migrations/sequelize-migrations <-> src/migrations 20260127000001-add-thumbnail-compositions-deleted-at.js
+DIFFERS     migrations/sequelize-migrations <-> src/migrations 20260216000001-asset-wardrobe-system.js
+IDENTICAL   migrations/sequelize-migrations <-> src/migrations 20260220000003-create-storyteller-books.js
+IDENTICAL   migrations/sequelize-migrations <-> src/migrations 20260220000004-create-character-registry.js
+IDENTICAL   migrations/sequelize-migrations <-> src/migrations 20260226000001-add-registry-sync-fields.js
+IDENTICAL   migrations/sequelize-migrations <-> src/migrations 20260226100001-add-book-structure-fields.js
+IDENTICAL   migrations <-> src/migrations                   20260302120000-story-social-assembler.js
+IDENTICAL   migrations <-> src/migrations                   20260307100000-create-character-sparks-and-story-eval-columns.js
+IDENTICAL   migrations <-> src/migrations                   20260311120000-enhanced-social-profiles-network.js
+
+Pairing tally:
+        3 migrations src/migrations 
+        6 migrations/sequelize-migrations src/migrations 
+
+== THE TWO THAT DIFFER ==
+
+-- 20260127000001-add-thumbnail-compositions-deleted-at.js --
+   Two different migration FRAMEWORKS under one basename.
+   migrations/sequelize-migrations/20260127000001-add-thumbnail-compositions-deleted-at.js lines=30   pgm.*=4  queryInterface.*=0 
+   src/migrations/20260127000001-add-thumbnail-compositions-deleted-at.js lines=33   pgm.*=0  queryInterface.*=4 
+   NOTE: the directory NAMED sequelize-migrations holds the node-pg-migrate copy;
+         the Sequelize copy is in src/migrations. Directory name misleads.
+
+-- 20260216000001-asset-wardrobe-system.js --
+   Structural divergence. Constraints exist in one copy and not the other.
+   FILE                                                             lines  ENUM  VARCHAR(50)  REFERENCES-episodes  idx_assets_category
+   migrations/sequelize-migrations/20260216000001-asset-wardrobe-system.js 371    4     1            2                    2
+   src/migrations/20260216000001-asset-wardrobe-system.js           385    6     3            0                    0
+
+   CONSEQUENCE: foreign keys to episodes(id) and idx_assets_category exist ONLY in
+   the copy under migrations/sequelize-migrations, which .sequelizerc does not read.
+   If the src/migrations copy ran, assets carries neither. One ledger entry names
+   both files; nothing in SequelizeMeta records which ran, and their effects differ
+   in constraints — the class Amd22 §X4 established the ledger cannot adjudicate.
+
+== WHAT THIS NOTE DOES NOT DO ==
+   Does not decide which root is canon. Does not assert which copy ran.
+   Does not infer anything about the two-ledger-era finding at Amd22 §X3; the dates
+   sit near the pgmigrations stop, which is suggestive and NOT shown.
+   Does not read the database. Prod FROZEN.
