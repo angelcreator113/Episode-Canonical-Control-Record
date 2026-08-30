@@ -415,13 +415,44 @@ record no longer supports, and would leave a successor waiting on conclusions
 that are not coming. **Closed states what is true: the comparison did not
 happen, and §T2–§T4 stand permanently without an independent check.**
 
-**§T2's figures do not depend on the comparison** — they are parsed from the
-capture at `cb693277` and re-derived from the tree at `7a788f3c`, and both are
-reproducible by anyone with the SHAs. **What is permanently missing is the
-independent check**, which is exactly what §H4 existed to supply. **A successor
-must treat every finding in §T2–§T4 as single-sourced to this author and
-unverified by a second reading**, and must not cite the closure as though it
-were a passed check.
+**§T2's figures do not depend on the comparison.** **What is permanently
+missing is the independent check**, which is exactly what §H4 existed to supply.
+**A successor must not cite the closure as though it were a passed check.**
+
+**§T6.1 — what is single-sourced, and what is not.** The warning is worth
+splitting, because asking a successor to distrust everything equally means they
+will distrust nothing.
+
+| | Status |
+| --- | --- |
+| **The parse** — table and column extraction from the capture, and the model-side derivation at §T3 | **Deterministic and reproducible by anyone.** Capture on `main` at blob `1353ca6f196d47cda9528a624afee669b01ec83a`; model side re-derivable from `src/models/` at `7a788f3c`. **Re-run it; do not take it on trust and do not treat re-running it as the missing check.** |
+| **The judgment** — which divergences matter, and what they imply about FD-66 §6.4.1 | **Single-sourced to this author, permanently unchecked.** This is what §T6 closes, and **it is the part that would carry into a remedy decision.** |
+
+**§T6.2 — why this session's clean record on substance is silence, not a pass.**
+**Recorded because the author drew the wrong inference from it once already, in
+the message reporting §T6's own guard.**
+
+Four defects were found in this document before it merged — two at §T4, the
+self-falsifying tally at §T1, and two wrapped citations. **All four were in
+tallies, pointers, or citations. None was in the schema analysis.** **That
+asymmetry is not evidence the analysis is sound.**
+
+Every instrument applied in this session — re-running a count, diffing the model
+set against the capture, resolving a citation to its line — is **mechanically
+capable of finding bookkeeping error and mechanically incapable of finding
+substance error.** Nothing run here could have detected a wrong reading of
+`thumbnails`, a reversed reading of `decision_log` against `decision_logs`, or a
+wrong inference from the January ledger ceiling. **The four findings and the
+zero findings are one instrument reporting from where it works and silent where
+it does not — not two results to be compared.**
+
+**§T6.3 — the closure is structural, not a scheduling problem.** Both readers
+who worked this document formed or reviewed the reading inside this session and
+are **contaminated for §H4 by construction, permanently, for this document.** A
+later session of either **reads its own conclusions**, which is the thing §H4
+existed to prevent. **§H4 on Amd18 cannot be discharged by any successor of this
+authorship line.** It requires a reader working from the evidence with this
+reading withheld.
 
 ---
 
