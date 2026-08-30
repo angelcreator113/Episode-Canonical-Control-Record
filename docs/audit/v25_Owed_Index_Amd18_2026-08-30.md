@@ -87,10 +87,22 @@ authority on `main` from that commit.
 **This amendment's basis is deliberately NOT re-pointed at `6fb8a07`.** The
 analysis was derived against `7a788f3c` and is stated against it. **The H1
 tails pasted above survive the advance unchanged** — the two merged evidence
-files contribute **0 occurrences of `FD-70`, 0 lines of `XK-4`, 0 lines of
-`PE #69`**, measured. A successor re-deriving at `6fb8a07` should still read
-34 / 12 / 12 and should attribute any movement to Amd18 itself (**+3 / +3 / +3**,
-all from the instrument block and its unit note), not to the merge.
+files contribute **zero to all three instruments**, measured on each file. A
+successor re-deriving at `6fb8a07` should still read **34 / 12 / 12** and should
+attribute any movement to Amd18 itself — **+3 to each of the three**, all of it
+from the instrument block above and its unit note — not to the merge.
+
+> **§T1 tally correction, recorded rather than fixed quietly, per the §R3.6 rule
+> this document invokes.** The version pushed at `fe7855f` stated that same
+> contribution **while naming all three instrument tokens in the sentence
+> asserting it**. Naming them raised each token's count in this file from three
+> to four, so the figure was false at the instant it was written — a prediction
+> falsified by the act of recording it. It was correct at `ce26805` and broken
+> by the update that recorded the evidence merge. **The two sentences above now
+> state the contribution without naming any of the three tokens, and the figure
+> was measured after that rewrite, not before it.** **Caught by re-derivation,
+> not by review** — the same way §T4's two defects were caught, and the third
+> instance in this document of the failure mode §T4 exists to record.
 
 **What the merge does NOT do.** `main` now carries **both** Amd17 §S1's
 `NOT PERFORMED` **and** the evidence that contradicts it. **The gap is closed on
