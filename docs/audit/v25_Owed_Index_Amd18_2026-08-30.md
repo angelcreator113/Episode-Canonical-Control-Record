@@ -1,0 +1,395 @@
+| **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 18** *Sec 6 item 8's read was PERFORMED, over the operator route §R1.1 established. The register said it was not. This amendment carries.* |
+| --- |
+
+***Provenance:*** *route ruled by Evoni on 2026-08-30 — **chain amendment**, chosen over standalone finding and over both. The merge of the **evidence branch** `docs/canon-schema-capture-2026-08-29` to `main` was ruled in the same turn. **The merge of THIS amendment to `main` was not ruled and is not assumed.** It is filed to `claude/register-reality-gap-docs-hy8h5r`; route and merge are separate rulings, per Amd17's own discipline.*
+
+# v25 Owed Index — Amendment 18
+
+**FILED 2026-08-30 on Evoni's authorization.** **Route ruled: chain amendment.**
+**Merge to `main` UNRULED.**
+
+**AMENDMENT 18 to `v25_Owed_Index_2026-08-22.md`.** Adds §T1–§T7.
+
+**Basis:** `origin/main` at `7a788f3c2b7bb480a9e2b37a8885ad87a62ed12d`, 2026-08-30.
+
+**Author**
+
+Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni — Prime Studios.
+
+**Status**
+
+**This amendment carries.** Amd17 pointed; this one carries substance — the
+schema reconciliation is stated here, not deferred to a companion document.
+Ships no code. Prod **FROZEN**.
+
+**Tails re-derived at this basis, not carried. Instruments and outputs pasted,
+per H1:**
+
+```
+grep -ro 'FD-70' docs/audit/ | wc -l     34
+grep -r  'XK-4'  docs/audit/ | wc -l     12
+grep -r  'PE #69' docs/audit/ | wc -l    12
+Session_PE_Roster.md highest entry       PE #68
+Owed Index chain tail (pre-Amd18)        v25_Owed_Index_Amd17_2026-08-29.md
+```
+
+**All three tails have moved since Amd17** (29→34, 12 from 8, 12 from 8).
+**The movement is the two files `7a788f3c` added entering the tree, and is not a
+new mint.** Attributed rather than asserted:
+
+```
+FD-70   +5 = Amd17 (5 occurrences);            Route_Finding contributes 0
+XK-4    +4 = Amd17 (4 lines);                  Route_Finding contributes 0
+PE #69  +4 = Amd17 (4 lines);                  Route_Finding contributes 0
+```
+
+**Fully accounted; no unexplained residue.** **Note on the two instruments,
+carried from Amd17 because it is still live:** `FD-70` is counted with `grep -o`
+(occurrences); `XK-4` and `PE #69` with `grep -r | wc -l` (matching lines).
+**They are not the same unit** and must not be compared to each other.
+
+---
+
+# §T1. `v25` Sec 6 item 8 — the read was **PERFORMED**. The register said it was not.
+
+**Stated first because it is the register's defect, not the schema's.**
+
+Amd17 §S1 records `v25` Sec 6 item 8 — the FD-66 infrastructure read — as
+**Evoni-gated and NOT PERFORMED**, and records the filed route finding as using
+**no route**. Both statements were true at `7a788f3c`.
+
+**The read has since occurred**, over the one established non-host route the
+route finding itself identified at §R1.1 — **the operator's workstation**, with
+the operator running the query. **No agent session touched the instance. No
+host action, no AWS call, no VPN, no bastion, no SSH tunnel, no SSM port
+forwarding, no endpoint probe.** The route finding's restated blocker at §R4 —
+*the established route requires the operator to run the query* — was satisfied
+in the only way it can be: the operator ran it.
+
+**Evidence, two files:**
+
+```
+docs/audit/EvidenceNote_Canon_Schema_Capture_2026-08-29.txt    2764 lines / 2760 rows
+docs/audit/EvidenceNote_Canon_pgmigrations_2026-08-29.txt        18 lines /   14 rows
+```
+
+**Both sit on `docs/canon-schema-capture-2026-08-29` at
+`cb693277501182ddf99c252debe65934fe8f4d69`** — `main` plus exactly those two
+files, +2782 lines, nothing else touched. **Evoni ruled on 2026-08-30 that this
+branch merges to `main`.** Until that merge lands, the citations in §T2–§T5 are
+reproducible by SHA but are **not yet authority on `main`**.
+
+**The gap this closes, named plainly.** Between the read occurring and this
+amendment, the control record asserted a non-performance that had ceased to be
+true, and the evidence contradicting it sat on a branch with **no pull request —
+zero open PRs repo-wide, confirmed live at this basis**. **A register is not
+wrong for lagging; it is wrong for being cited while it lags.** This is the same
+class as the §R3.6 rule adopted on 2026-08-28 — *no non-performance attestation
+ships without being checked against the session's own disclosures* — extended
+here to the inverse case: **a standing non-performance attestation must be
+re-checked when the performance occurs, not only when it is drafted.**
+
+**Item 8's closure is NOT ruled here.** See §T7.
+
+---
+
+# §T2. What the capture establishes — **canon is a third schema**
+
+**Carried, not pointed. Every figure below is parsed from the capture at
+`cb693277`.**
+
+The capture is **2760 rows across 143 tables**, `public` schema only. (The
+"2764" figure that has circulated is the file's **line** count, not its row
+count — the difference is the header, rule, and `(2760 rows)` trailer.)
+
+### §T2.1 The decisive case: `thumbnails`
+
+FD-66 §6.3.3 records `Thumbnail` as the sole `underscored: false` model and the
+migrations as building the table camelCase. **Re-derived at this basis and
+confirmed:** `grep -rn "underscored: *false" src/models/` returns exactly one
+hit, `Thumbnail.js:168`, commented *"Table uses camelCase columns."* The model
+declares `episodeId`, `s3Bucket`, `s3Key`, `fileSizeBytes`, `mimeType`.
+
+**Canon's `thumbnails` is 19 columns, every one snake_case, zero camelCase:**
+
+```
+id episode_id url size_bytes created_at updated_at thumbnail_type s3_bucket
+s3_key file_size_bytes width height position_seconds generated_at
+quality_rating mime_type width_pixels height_pixels format
+```
+
+**The model cannot read a single column of canon's `thumbnails` but the primary
+key.** This is not a broken publish route — it is a wholly non-functional model.
+
+**Canon carries 8 camelCase columns in the entire `public` schema**, enumerated
+exhaustively:
+
+```
+episode_templates . createdAt, updatedAt, createdBy, isPublic, thumbnailUrl, defaultMetadata
+hair_library      . is_justAWoman_style
+makeup_library    . is_justAWoman_style
+```
+
+Migrations produce camelCase for `thumbnails`. Sync from the current model
+produces camelCase. **Canon has neither.** This is whole-table naming
+divergence, not a column-level gap, and it is not explicable as *"migrations
+plus historical sync."*
+
+### §T2.2 The ledger stops in January; the schema does not
+
+`pgmigrations` has **14 surviving rows**, ids `1–9, 298, 497–500`, last `run_on`
+**2026-01-22** — roughly 486 sequence values consumed, 14 surviving. Yet canon
+carries `ui_overlay_types` with `lifecycle`, `opens_screen`, `is_home` — the
+July OVERLAY_TYPES migration and later.
+
+**Post-January schema reached canon by a path `pgmigrations` does not record.**
+`SequelizeMeta` exists on canon, but **only its `name` column was captured, not
+its rows.** That is the single highest-value value the capture does not contain,
+and it is what would identify the path.
+
+### §T2.3 FD-66 §6.4.1 — conclusion survives, stated mechanism falsified
+
+The claim under test: *a deployed database is built by migrations, the same path
+as the measured schema*, therefore the routes are broken *"in exactly the way
+they are broken in CI."*
+
+| Route | On canon | Same way as CI? |
+| --- | --- | --- |
+| `POST /thumbnails/:id/publish` | Broken. Every camelCase attribute absent, not merely the 8 publish columns | **No** — worse, and for a different reason |
+| `GET /audit-logs` | Broken. Different column set entirely — see §T4.1 | **No** |
+| `POST /decision-logs` | Broken harder — the relation does not exist. See §T2.4 | **No** |
+
+**Direction right, mechanism wrong.** *"Deployed is likely broken"* holds.
+*"Same path, exactly the same way"* does not, and any successor reasoning from
+the migrated schema to canon inherits a false premise.
+
+### §T2.4 The ruled pilot at §7.1.1 does not stand against canon
+
+**`decision_logs` does not exist on canon.** `decision_log` does — 11 columns,
+no model bound to it, and no `deleted_at`:
+
+```
+id type episode_id show_id user_id context_json decision_json
+alternatives_json confidence source created_at
+```
+
+That shape matches the F-App-1 Path B hardcoded literal. **All five Path B
+literals are present on canon** — `world_events`, `character_state`,
+`character_state_history`, `decision_log`, `career_goals` — **but only three of
+the five carry a model.** `character_state_history` and `decision_log` are
+canon-only. F-App-1 closed the write path; **canon still carries the schema that
+path created, and two of its tables answer to no model at all.**
+
+A migration *"add `deleted_at` to `decision_logs`"* run against canon either
+fails on a missing relation or creates a second, empty table beside an existing
+one. **Row counts were not captured**, so whether `decision_log` holds rows is
+unestablished — which is precisely what decides how bad that outcome is.
+
+### §T2.5 Both defect populations move
+
+- **3a inverts.** `processing_queue` — the model's declared name — **exists** on
+  canon (6 columns). `processing_queues`, what the migrations build, **does
+  not**.
+- **Three of the four "ALTERed but never created" tables exist on canon:**
+  `wardrobe_library` (38 columns), `continuity_beats`, `scene_set_episodes`.
+  Only `layer_assets` is absent.
+- **Two of five bucket-3 exemplars exist:** `outfit_sets`,
+  `wardrobe_usage_history`.
+- **Bucket 2 partially dissolves.** Axis-A columns are *present* on canon for
+  `scene_angles`, `storyteller_books`, `scene_sets`, `assets`, `episode_assets`,
+  `storyteller_chapters`, `registry_characters`, and 7 of 8 for
+  `metadata_storage`. They hold for `episode_scripts` (canon has `content`, not
+  `script_text`; no `show_id`) and for `thumbnails`.
+- **Axis N reproduces exactly:** `is_justAWoman_style` on canon. **Axis P
+  largely holds**, with `scene_library` a dissenter.
+
+**Neither 28 nor 38 transfers to canon.** Both require re-measurement against
+this capture. That changes what §7.1 steps 2–3 must account for: **a baseline
+must reproduce a 143-table schema with at least three provenances, one of them a
+code path that no longer exists.**
+
+---
+
+# §T3. The model-side reconciliation — **measured at this basis, not inherited**
+
+**Disclosure of method, because the predecessor reading did not have this.** The
+comparison filed on 2026-08-29 took its model-side facts from **FD-66 §6.3
+without re-derivation**, and filled one of FD-66's blanks by guessing. **Those
+facts are re-derived here directly from `src/models/` at `7a788f3c`.** Two
+consequences are at §T4.
+
+**Model code targets 154 distinct tables:** 151 declared across
+`src/models/*.js`, plus `raw_footage` defined inline at
+`src/models/index.js:268`, plus `files` and `jobs` — which are **not Sequelize
+models at all** but raw-SQL classes using `static tableName`.
+
+| | Count |
+| --- | --- |
+| Distinct tables targeted by model code | **154** |
+| Present on canon | **124** |
+| **Absent from canon** | **30** |
+| **Canon tables with no model** | **19** (17 real + `SequelizeMeta` + `pgmigrations`) |
+| Canon total | **143** = 124 + 19 ✓ |
+
+**This 154 is not in contradiction with FD-66 §6.3's 146.** FD-66 counts
+**Sequelize models checked** (§122); this counts **distinct tables targeted by
+model code**, which admits `raw_footage`, `files` and `jobs` and collapses
+nothing. **Different units. Neither figure corrects the other.**
+
+**The 30 absent from canon:**
+
+```
+FileStorages       decision_patterns   scene_footage_links
+ai_edit_plans      edit_maps           scene_layer_configuration
+ai_revisions       editing_decisions   script_edit_history
+ai_training_data   files               script_learning_profiles
+audio_clips        jobs                script_metadata
+beats              layer_assets        script_suggestions
+brain_documents    layer_presets       script_templates
+character_clips    layers              show_configs
+character_profiles markers             user_decisions
+decision_logs      raw_footage         video_processing_jobs
+```
+
+**The 17 real canon orphans:**
+
+```
+asset_label_map                    intimate_scenes
+character_relationships_extended   scene_continuations
+character_state_history            script_edits
+decision_log                       search_history
+ecosystem_previews                 stories
+episode_outfit_items               template_studio
+episode_outfits                    video_compositions
+episode_todo_lists                 world_character_batches
+financial_transactions
+```
+
+**A finding not in FD-66 §6.3, and benign.** Nineteen models omit the
+`underscored` key entirely and therefore inherit Sequelize's `false` default —
+the same setting that breaks `Thumbnail`. **All nineteen write their attributes
+snake_case directly**, so the omission has no effect. FD-66's framing survives
+measurement: **`Thumbnail` is the only model that actually maps to camelCase
+columns.**
+
+---
+
+# §T4. Two corrections to the reading of 2026-08-29
+
+**Both are defects in the predecessor reading, caught by the re-derivation at
+§T3 and not by review. Recorded rather than silently fixed.**
+
+### §T4.1 There is no `audit_logs` table, and there is no `AuditLog` model
+
+The 2026-08-29 reading attributed the `GET /audit-logs` analysis to a canon
+table it called **`audit_logs`**. **No such table exists on canon**, and no
+`AuditLog` model exists in the tree. The route at `src/routes/auditLogs.js`
+binds to **`models.ActivityLog`** → table **`activity_logs`** (lines 34, 76, 87,
+98, 133, 140).
+
+**The route disposition and the column analysis were correct; the table name was
+not.** Restated on measured values:
+
+```
+ActivityLog declares (underscored: true, timestamps: false):
+  id  userId  actionType  resourceType  resourceId
+  oldValues  newValues  ipAddress  userAgent  timestamp
+
+canon activity_logs (7 columns):
+  id  user_id  action  resource_type  resource_id  changes  created_at
+```
+
+**Canon supplies 4 of the 10 the model expects** — `id`, `user_id`,
+`resource_type`, `resource_id`. **Six are absent**: `action_type`, `old_values`,
+`new_values`, `ip_address`, `user_agent`, `timestamp`. **Canon carries three the
+model does not know**: `action`, `changes`, `created_at`. A `SELECT` naming the
+six absent columns fails with `column ... does not exist`. **`action_type` is
+Axis N on canon where FD-66 has it as Axis A.**
+
+**One sub-claim is withdrawn.** The 2026-08-29 reading listed the absence of
+`deleted_at` among this table's defects. `ActivityLog` sets `timestamps: false`
+and is **not paranoid** — `deleted_at` is not expected here and its absence is
+not a defect.
+
+### §T4.2 The `asset_usage_log` "wrong guess" was avoidable, and was not a defect in canon
+
+The 2026-08-29 reading self-reported one guess as wrong — *"canon has
+`asset_usage_log`, not `asset_usage_logs`"* — and attributed the guess to FD-66
+having left the name blank.
+
+**Both halves are wrong, in opposite directions.** `src/models/AssetUsageLog.js:57`
+declares `tableName: 'asset_usage_log'`; model and canon agree, so **the table
+is not a defect at all**. And **FD-66 did not leave it blank** — it names
+`asset_usage_log` correctly at lines 64, 99 and 101. **The guess was avoidable
+by reading the source that was already cited.**
+
+**The disclosure's substance stands.** That whole group was flagged unverified
+for a reason; §T3 is the re-derivation that retires the flag.
+
+---
+
+# §T5. What the capture cannot answer
+
+- **Columns, types, nullability only.** No constraints, PK/FK, indexes,
+  defaults, enums, sequences, triggers, or views. **The `character_state`
+  uniqueness question is not testable from this file.**
+- **`SequelizeMeta` rows absent.** Only the `name` column was captured. Without
+  the rows, the post-January path of §T2.2 stays unidentified.
+- **No row counts.** §T2.4's severity turns on this.
+- **`public` schema only.**
+- **One database.** FD-66 §6.4.1 speaks of deployed environment**s**; dev and
+  staging remain unmeasured.
+- **The address-identity question is untouched.** `100.50.2.212` ↔
+  `10.0.20.224` DB-layer identity remains the OPEN register item Amd17 §S2
+  carries, from a voided carrier. **This amendment takes no position in either
+  direction.**
+
+---
+
+# §T6. The §H4 comparison — **NOT PERFORMED**
+
+**Recorded because its absence is a fact about this amendment, not an omission
+from it.**
+
+The reading at §T2 was derived **before** requesting the withheld conclusions,
+and was gated on their arrival for the §H4 blind comparison. **They were not
+sent.** The §H4 comparison is therefore **NOT PERFORMED**, and nothing in §T2–§T4
+should be read as having survived it.
+
+**§T2's figures do not depend on the comparison** — they are parsed from the
+capture and re-derived from the tree. **What is missing is the independent
+check**, which is exactly what §H4 exists to supply.
+
+---
+
+# §T7. What this amendment does not do
+
+- **Does not close `v25` Sec 6 item 8.** It records the read as **PERFORMED and
+  discharged**; the disposition — what remediation the reconciliation requires —
+  is **open and Evoni-gated**.
+- **Does not split item 8** into read/disposition halves on the item 10-A/10-B
+  precedent, and **does not amend `v25` Sec 6's item count.** Fifteen entries
+  stand. **The split is available and is reserved to Evoni.**
+- **Does not close items 9, 11 or 13.** All remain Evoni-gated and NOT
+  PERFORMED. **None is inferred.** **Item 8's discharge is not transitive.**
+- **Does not perform the §H4 comparison.** See §T6.
+- **Does not re-measure the FD-66 defect populations.** §T2.5 establishes that
+  28 and 38 do not transfer; **it does not supply their replacements.**
+- **Does not close the `100.50.2.212` / `10.0.20.224` identity question**, and
+  takes no position on it.
+- **Does not rule its own merge to `main`.** Route was ruled; merge was not.
+- **Does not merge the evidence branch.** Evoni ruled that it merges; the
+  amendment records the ruling and does not execute it as an authority.
+- **Does not mint.** No FD, XK, or PE number.
+- **Does not supersede** `v25_Sec6_Item8_Route_Finding_2026-08-29.md`. That
+  document's §R1.1 route analysis is what made this read possible and stands
+  unamended.
+- **Does not authorize a host session, an AWS call, a VPN, a bastion, an SSH
+  tunnel, or SSM port forwarding.**
+
+---
+
+*Type: carrying amendment. Records one performance, carries its reconciliation,
+and corrects two defects in the predecessor reading. Records no closure. Edits
+no file outside `docs/audit/`. No host, AWS, database, or Cognito contact by any
+agent session. No infrastructure endpoint exercised. Prod FROZEN.*
