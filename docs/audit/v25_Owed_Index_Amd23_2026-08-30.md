@@ -1,6 +1,30 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 23** *§X7.2's population was derived over 51% of the tree. Re-derived over all of it, one direction is confirmed and the other is unmeasured. The check was unsound and its answer was right.* |
 | --- |
 
+> ## ⚠ STATUS UPDATE — §Y3's "no new read required" is UNSUPPORTED. Read this first.
+>
+> **§Y3 below states that filing the `SequelizeMeta` listing requires no new
+> database read, because the listing was already produced at Amd22 §X2. Nothing
+> establishes that any party still HOLDS it.** §Y3 itself records, thirteen lines
+> earlier, that the listing *"was never filed as an evidence note"* and that this
+> amendment's author holds the nine reported entries, **not the listing**.
+> **Produced is not held.** See `v25_Owed_Index_Amd26_2026-08-31.md` §AB2.
+>
+> **Measured:** no file on `origin/main` holds the 219-entry listing. The densest
+> holder of migration-timestamp tokens carries 49. A filename search returns
+> nothing. §AB2.2 states the instrument and threshold.
+>
+> **What is NOT superseded.** **Availability of the listing is UNMEASURED, not
+> disproved** — a terminal scrollback or an untracked local file could hold it,
+> and neither was measured. **Discharging §Y3 may therefore require a fresh read
+> under Addendum A's gate**, which §Y3 says it does not. **Everything else in
+> this amendment stands**, including §X7.2's population correction and the
+> remainder of §Y3's closure conditions.
+>
+> **§Y3's text is retained unaltered.**
+>
+> *Banner added 2026-09-01 on Evoni's ruling. Not a supersede.*
+
 ***Provenance:*** *route ruled by Evoni on 2026-08-30 — **chain amendment, additive-supersede against merged §X7.2**. **Push and merge are NOT ruled and are not assumed.** Rule 7 gates the push, the PR create and the merge separately, for doc-only changes explicitly (`F-Deploy-1_Fix_Plan_v1.5.md:165`; `Fix_Plan_v1.2.md:106`; `Session_PE_Roster.md:2208-2209, 2309-2310`).*
 
 # v25 Owed Index — Amendment 23

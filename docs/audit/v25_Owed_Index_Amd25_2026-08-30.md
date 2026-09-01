@@ -1,6 +1,29 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 25** *Two method findings. One is measured on `main` and traps a careful reader; the other is attested only, and says so.* |
 | --- |
 
+> ## ⚠ STATUS UPDATE — §AA4's "no database read" clause is UNSUPPORTED. Read this first.
+>
+> **§AA4 below restates Amd23 §Y3's inference: that filing the `SequelizeMeta`
+> listing is an act requiring no database read, since that output already exists
+> from the admissible run at Amd22 §X2. Nothing establishes that any party still
+> HOLDS that output.** Amd23 §Y3 itself records that the listing was never filed
+> as an evidence note. **Produced is not held.** See
+> `v25_Owed_Index_Amd26_2026-08-31.md` §AB2, which convicts both documents on the
+> same ground.
+>
+> **Measured:** no file on `origin/main` holds the 219-entry listing.
+>
+> **What is NOT superseded.** **§AA1's standing scheme stands**, and is the
+> instrument later amendments use. **§AA2's squash-ancestry finding stands.**
+> **§AA3 stands at its filed ATTESTED standing.** **The rest of §AA4's
+> does-not list stands** — the clause corrected here is the parenthetical
+> justification, not the entry it qualifies. **Availability of the listing is
+> UNMEASURED, not disproved.**
+>
+> **§AA4's text is retained unaltered.**
+>
+> *Banner added 2026-09-01 on Evoni's ruling. Not a supersede.*
+
 ***Provenance:*** *route ruled by Evoni on 2026-08-30 — **chain amendment, method-only, both findings with standing marked**. **Push and merge are NOT ruled and are not assumed.** Rule 7 gates the push, the PR create and the merge separately, for doc-only changes explicitly (`F-Deploy-1_Fix_Plan_v1.5.md:165`; `Fix_Plan_v1.2.md:106`; `Session_PE_Roster.md:2208-2209, 2309-2310`).*
 
 # v25 Owed Index — Amendment 25
