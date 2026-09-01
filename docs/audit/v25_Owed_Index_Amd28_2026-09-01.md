@@ -1,6 +1,35 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 28** *Item 8 is recorded NOT PERFORMED as a read of canon, with the reason. The blocker is credential location, not authorization and not a failed gate. Two findings about how the register reached the conclusion that the credential is unreachable, one of which is that it has not fully checked.* |
 | --- |
 
+> ## ⚠ STATUS UPDATE — §AD2's disposition is CORRECTED. Read this first.
+>
+> **§AD2 below records `v25` Sec 6 item 8's read as NOT PERFORMED. That is
+> wrong.** The read was performed on **2026-08-29** by the operator, over the
+> operator-workstation route identified at the route finding §R1.1, with evidence
+> at `docs/audit/EvidenceNote_Canon_Schema_Capture_2026-08-29.txt`. **See
+> `v25_Owed_Index_Amd18_2026-08-30.md` §T1 and
+> `v25_Owed_Index_Amd29_2026-09-01.md` §AE1.**
+>
+> **What was not performed is the Addendum A/B FOLLOW-UP reads** — a distinct
+> instrument, authorized separately on 2026-09-01, blocked by credential
+> location. **This amendment collapsed the two.** The Status block's unqualified
+> *"No canon read was performed"* is wrong on the same terms and for the same
+> reason.
+>
+> **Corrected position:** item 8's read **PERFORMED 2026-08-29, DISCHARGED**; the
+> Addendum A/B follow-up reads **AUTHORIZED and NOT PERFORMED**; item 8's
+> **DISPOSITION remains OPEN and Evoni-gated**.
+>
+> **What is NOT superseded.** **§AD3 stands** — SSM Parameter Store is unchecked.
+> **§AD4 stands** — §R1.1 established reachability and never addressed
+> authentication. **§AD5 stands.** **§AD2.1's reason stands as to the FOLLOW-UP
+> reads**, and **§AD2.2 and §AD2.3 stand.** **Whether the 2026-08-29 read scores
+> Dimensions 4 and 5 is NOT decided by this banner** and remains open.
+>
+> **§AD2's text is retained unaltered.**
+>
+> *Banner added 2026-09-01 on Evoni's ruling. Not a supersede.*
+
 ***Provenance:*** *route ruled by Evoni on 2026-09-01 — **chain amendment, one disposition and two findings, no register number.** **Push, PR create and merge are NOT ruled and are not assumed.** Rule 7 gates each separately.*
 
 # v25 Owed Index — Amendment 28
