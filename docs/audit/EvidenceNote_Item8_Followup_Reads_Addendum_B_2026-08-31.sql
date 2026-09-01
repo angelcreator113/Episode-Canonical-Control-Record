@@ -1,0 +1,225 @@
+-- v25 Sec 6 item 8 — follow-up reads, ADDENDUM B, 2026-08-31
+--
+-- ===================== RUN THIS FILE. DO NOT RUN ADDENDUM A ALONE. ========
+--     psql -f docs/audit/EvidenceNote_Item8_Followup_Reads_Addendum_B_2026-08-31.sql
+--
+-- This file supersedes QUERY 0a and then INCLUDES Addendum A via \ir, so the
+-- gate and the findings execute in ONE session. Running Addendum A by itself
+-- omits this gate; such a run is NOT ADMISSIBLE under this addendum, and the
+-- pre-Addendum-B reading applies to it.
+-- ==========================================================================
+--
+-- ADDENDUM to the frozen instrument
+--   docs/audit/EvidenceNote_Item8_Followup_Reads_Instrument_2026-08-30.sql
+--   sha256 dbdadcc5272640f4811da17f4910e7856cd12510b325ae95251f9dbfacb7ec3b
+--   170 lines, rev 4, frozen 2026-08-30.
+--
+-- and to
+--   docs/audit/EvidenceNote_Item8_Followup_Reads_Addendum_A_2026-08-30.sql
+--   sha256 fe55aa55d878720fab35340fef4a56816796dccdf848cc19ca12945c1972eb50
+--   102 lines, 2026-08-30.
+--
+-- Both hashes measured at basis, not carried.
+--
+-- NEITHER FILE IS EDITED. Addendum A's supersession of QUERY 0 and its
+-- addition of QUERY 3 stand. This file supersedes ONLY QUERY 0a, by adding
+-- ONE column. QUERY 0b, QUERY 1, QUERY 2 and QUERY 3 are untouched and their
+-- readings are unchanged.
+--
+-- Addendum A's own QUERY 0a re-executes when A is included. That is expected.
+-- The duplicate identity output is a within-session consistency check, and it
+-- is SCOPED TO THE COLUMNS BOTH STATEMENTS SELECT:
+--
+--     COMPARE   database, server_addr, server_port
+--               -> if these disagree between the two rows, the run is VOID
+--                  and must be repeated.
+--     IGNORE    read_at. now() is transaction_timestamp(), and in psql
+--               autocommit each statement is its own transaction, so read_at
+--               ADVANCES BY CONSTRUCTION. Measured 2026-08-31: identity
+--               columns identical, read_at differing by the elapsed interval.
+--               A differing read_at is NOT a disagreement.
+--     N/A       client_addr. It exists only in 0a-prime and has no counterpart
+--               in Addendum A's 0a.
+--
+-- Stated at this length because an unscoped "if the rows disagree" rule voids
+-- every run, including a correct one.
+--
+-- Basis: origin/main at 9cd34c734f8bab0cf756740f4c7c15c334be8a5e, 2026-08-31.
+--
+-- Author: Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni — Prime Studios.
+--
+-- Status: doc plus one superseded read. Mints nothing — no FD, XK or PE
+-- number. Ships no code. Rules nothing on v25 Sec 6 item 8, whose disposition
+-- remains OPEN and Evoni-gated. READ-ONLY: no writes, no DDL. Same
+-- operator-workstation route; no new authorization class. Prod FROZEN. No
+-- host, AWS or database contact by any agent session.
+--
+-- NO DATA HAS BEEN SEEN. Written BEFORE the connection is made and before any
+-- output exists. Filed rather than spoken so that the FACT of pre-registration
+-- rests on a committed object, not on a session transcript that no second
+-- party can audit.
+--
+-- ================= WHY THIS EXISTS =================
+-- The frozen instrument's admissibility gate, at :36-39, reads:
+--
+--     If QUERY 0 is missing from the output, THE RUN IS NOT ADMISSIBLE AS A
+--     READ OF CANON and must be re-run, whatever QUERY 1 and 2 returned.
+--
+-- THE GATE FIRES ON ABSENCE OF OUTPUT, NOT ON EMPTINESS OF OUTPUT. A QUERY 0a
+-- that succeeds and returns a NULL address produces output, satisfies the gate
+-- as written, and establishes no identity. The gate looks like it covers the
+-- case and does not.
+--
+-- The tokens NULL, pooler and pgbouncer occur ZERO times in the frozen
+-- instrument and ZERO times in Addendum A. Measured at basis.
+--
+-- Two distinct ways identity is lost, and 0a as written catches neither:
+--   (1) a pooler returns NULL for inet_server_addr(). Detectable.
+--   (2) a pooler returns ITS OWN address for inet_server_addr(). NOT
+--       detectable from inet_server_addr() alone — indistinguishable from the
+--       instance answering directly.
+--
+-- inet_client_addr() resolves (2). It returns the address the SERVER sees the
+-- client arriving from: the workstation on a direct connection, the pooler's
+-- own address through an intermediary. This is why 0a is SUPERSEDED rather
+-- than annotated — the remedy Addendum A itself applied to QUERY 0.
+--
+-- This repository documents the underlying behaviour independently of this
+-- audit: scripts/diagnose-db.js prints the server address as
+--     info.addr || '(pooler)'
+-- and, on a related failure, advises "using a direct (non-pooler) connection."
+--
+-- ================= EXECUTION, MEASURED =================
+-- \ir was chosen over repeated -f so that single-session execution is
+-- STRUCTURAL rather than dependent on the operator's psql version.
+-- Measured on psql 16.15, 2026-08-31, on a throwaway local cluster sharing
+-- nothing with any Prime Studios resource:
+--
+--     psql -f B -f A          FILE B pid 3171 | FILE A pid 3171 | timeout 30s
+--     \ir, invoked from /     INCLUDER pid 3174 | FILE A pid 3174 | timeout 30s
+--
+-- Same backend pid across files in both forms; a session GUC set in one file
+-- is visible in the next; \ir resolves relative to the INCLUDING FILE and so
+-- survives being run from any working directory. \ir has existed since 9.2.
+--
+-- QUERY 3's finding requires that ONE session saw both the ledger and the
+-- schema. A gate proving directness of a DIFFERENT session than the one that
+-- ran QUERY 3 would prove nothing while appearing to. \ir removes that risk.
+--
+-- ================= PRE-REGISTERED READINGS, ADDENDUM B =================
+-- Written BEFORE this run. Supersedes QUERY 0a's reading. Adds no outcome
+-- branch to QUERY 0b, QUERY 1, QUERY 2 or QUERY 3.
+--
+-- ---- inet_server_addr() ----
+--
+--   (A) Returns an address.
+--       Identity established to the extent an address establishes it, SUBJECT
+--       TO the client-address reading below. NOT SUFFICIENT ALONE.
+--
+--   (B) Returns NULL.
+--       THE GATE HAS FAILED. Identity is NOT established. Same failure class
+--       as the 2026-08-30 run — identity evidence lost at the gate — reached
+--       through a different door. NOT cured by QUERY 0a returning successfully
+--       or by current_database() being populated. A database NAME is not
+--       identity; the register carries the 100.50.2.212 / 10.0.20.224 question
+--       open for exactly that reason.
+--
+-- ---- inet_client_addr() — TWO TESTS THAT DO DIFFERENT WORK ----
+--
+--   THE RANGE TEST IS A SCREEN. IT CONVICTS AND CANNOT ACQUIT.
+--   THE §R1.1 COMPARISON IS THE DECIDER. IT IS THE ONLY THING THAT ACQUITS.
+--   Reading the screen as sufficient reproduces the exact defect this file
+--   exists to correct: a check that fires on one condition, mistaken for a
+--   check that closes the question.
+--
+--   (C1) SCREEN — CONVICTS. Requires no value.
+--        THE RULE: any address that is not globally-routable unicast is read
+--        as (C1). The ranges below are those EXPECTED ON THIS ROUTE, not the
+--        limit of the rule — an address outside them that is still not
+--        globally-routable unicast is (C1) all the same.
+--            10.0.0.0/8      172.16.0.0/12    192.168.0.0/16    (RFC 1918)
+--            100.64.0.0/10                     (RFC 6598 carrier-grade NAT;
+--                                               used inside AWS)
+--            127.0.0.0/8     169.254.0.0/16    (loopback, link-local)
+--            ::1/128         fc00::/7          fe80::/10         (IPv6)
+--        -> AN INTERMEDIARY IS PROVEN. THE GATE HAS FAILED, on the same terms
+--           as (B).
+--
+--   (C2) DECIDER — ACQUITS. Requires the value.
+--        inet_client_addr() equals the operator-workstation address recorded
+--        at §R1.1 of docs/audit/v25_Sec6_Item8_Route_Finding_2026-08-29.md.
+--        -> the connection is DIRECT; case (2) above is closed affirmatively.
+--        The OPERATOR performs this comparison. The value is NOT reproduced in
+--        this file, and no filing of these results needs to reproduce it.
+--
+--   (C3) NEITHER — UNRESOLVED, AND THIS IS NOT A PASS.
+--        A globally-routable address that is NOT the §R1.1 value. A proxy or
+--        pooler reachable on a public address returns a public address, so
+--        (C1) does not convict and (C2) does not acquit.
+--        -> IDENTITY IS UNESTABLISHED, on the same terms as (B). Re-run from a
+--           connection known to be direct.
+--
+--   (D) inet_client_addr() returns NULL.
+--       THE GATE HAS FAILED, same terms as (B). Measured 2026-08-31: a
+--       unix-socket connection returns NULL for BOTH inet_client_addr() and
+--       inet_server_addr(). Not reachable for a remote connection, and
+--       pre-registered anyway — adding a column without a reading for its
+--       empty return would reintroduce the defect this file corrects.
+--
+-- ---- WHAT SURVIVES A FAILED GATE ----
+--
+--   Under (B), (C1), (C3) or (D):
+--
+--   SURVIVES — QUERY 3's within-session contradiction. It establishes that ONE
+--     session saw both the ledger and the schema. That does not depend on
+--     knowing WHICH instance answered.
+--
+--   DOES NOT SURVIVE — any filing of case (d) or case (e1) as a read of CANON.
+--     They may be filed only as a read of an UNIDENTIFIED instance, and
+--     Amd18 §T1's dependence on identity is unmet.
+--
+-- ================= A SECOND REASON TO PREFER A DIRECT ENDPOINT ============
+-- Under a pooler in transaction pooling mode, a session-level SET may not
+-- persist to subsequent statements, and the run's 30s bound on statement
+-- duration would not be in force. Recorded as a REASON, not a reading: no
+-- outcome branch turns on it, and it is not measured here.
+--
+-- ================= LIMITS =================
+-- Establishes READINGS, not outcomes. Predicts nothing about which case occurs.
+--
+-- Does NOT establish that a passed gate proves this session's instance is the
+-- one the 2026-08-29 capture read. Addendum A's limit stands unchanged: QUERY 3
+-- establishes that one session saw both the ledger and the schema; it does not
+-- establish that this session's instance is the capture's, and the capture
+-- carries no identity values against which to compare.
+--
+-- Does NOT rule on item 8's disposition, the 8-A/8-B split, or whether the run
+-- proceeds.
+--
+-- Does NOT edit, supersede or re-rate the frozen instrument, or any part of
+-- Addendum A other than QUERY 0a.
+--
+-- Does NOT authorize a host session, an AWS call, a VPN, a bastion, an SSH
+-- tunnel, or SSM port forwarding.
+-- =====================================================================
+
+SET statement_timeout = '30s';
+
+\echo ''
+\echo '===== QUERY 0a-prime: IDENTITY — supersedes Addendum A QUERY 0a ====='
+\echo '-- Own statement. If this fails, nothing below is admissible.'
+\echo '-- client_addr: a private/CGNAT/loopback range CONVICTS (intermediary);'
+\echo '--              only the R1.1 comparison ACQUITS; NULL is a failed gate.'
+SELECT current_database()  AS database,
+       inet_server_addr()  AS server_addr,
+       inet_client_addr()  AS client_addr,
+       inet_server_port()  AS server_port,
+       now()               AS read_at;
+
+\echo ''
+\echo '===== Including Addendum A — SAME SESSION (\ir) ====='
+\echo '-- Its QUERY 0a re-executes; duplicate output is a consistency check.'
+\echo '-- Compare database/server_addr/server_port only. If those disagree,'
+\echo '-- the run is VOID. read_at advances by construction and is not a'
+\echo '-- disagreement; client_addr has no counterpart in Addendum A 0a.'
+\ir EvidenceNote_Item8_Followup_Reads_Addendum_A_2026-08-30.sql
