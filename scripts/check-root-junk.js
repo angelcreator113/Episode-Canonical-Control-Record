@@ -12,12 +12,12 @@ const { execSync } = require("child_process");
 // tmp_audit.js, tmp_check_db.js) is EXCLUDED so re-staging them also blocks.
 // Maintain this set as the repo legitimately grows.
 const ALLOWED_ROOT = new Set([
-  ".claude", ".dockerignore", ".env.example", ".env.production.template",
+  ".claude", ".dockerignore", ".env.example", ".env.production.template", ".mcp.json",
   ".eslintignore", ".eslintrc.js", ".gitattributes", ".githooks", ".github",
   ".gitignore", ".pgmrc.json", ".prettierrc.js", ".sequelizerc",
-  "CLAUDE.md", "CONTRIBUTING.md", "Dockerfile", "Dockerfile.parity",
+  "CLAUDE.md", "CONTRIBUTING.md", "DEVELOPMENT_WORKFLOW.md", "Dockerfile", "Dockerfile.parity",
   "Dockerfile.prod", "F-Deploy-1_INCIDENT_2026-05-30_prod-autodeploy.md",
-  "F-Deploy-1_PROD_SplitBrain_HAZARD.md", "Mvp", "README.md",
+  "F-Deploy-1_PROD_SplitBrain_HAZARD.md", "Mvp", "PROJECT_CONTEXT.md", "README.md",
   "SESSION_HANDOFF.md", "START_APP.bat", "START_APP.ps1", "VERSION.txt",
   "app.js", "backups", "docker-compose.parity.yml", "docker-compose.test.yml",
   "docker-compose.yml", "docs", "ecosystem.config.js", "ecosystem.dev.config.js", "frontend",

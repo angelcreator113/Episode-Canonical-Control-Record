@@ -1,61 +1,56 @@
-# Episode Canonical Control Record
+# Episode Canonical Control Record (Prime Studios)
 
-Literary fiction platform for "Before Lala" — a memoir-style novel with AI-assisted writing tools.
-Core character: JustAWoman. World: the LalaVerse.
+Read `PROJECT_CONTEXT.md` first; it is the current state of the code and of the audit register. Start every session with `/wake-up`. The workflow is in `DEVELOPMENT_WORKFLOW.md`.
 
-## Tech Stack
+## What this is
 
-- Backend: Node.js/Express, Sequelize ORM, PostgreSQL (Neon cloud DB)
-- Frontend: React 18 + Vite, vanilla CSS (no Tailwind/CSS-in-JS)
-- AI: Anthropic Claude (claude-sonnet-4-6), via `anthropic` SDK
-- Infra: EC2 (PM2), S3 assets, nginx reverse proxy
-- DB: Sequelize with global `paranoid: true` (all tables need `deleted_at`)
+Solo-operator "franchise OS" for the LalaVerse: the show *Styling Adventures with Lala* (Producer Mode), the memoir novel *Before Lala* (JustAWoman; WriteMode + Story Engine), and the franchise tier (Show Bible, DREAM cities, the Feed, Character Registry). Owner: Evoni (`angelcreator113`).
 
-## Architecture
+## Non-negotiables
+
+- **Production is FROZEN.** No `ssh`, `scp`, `pm2`, `aws`, RDS connections, server `.env` edits, or workflow enable/dispatch from any agent session, ever. Evoni does those herself. See `F-Deploy-1_PROD_SplitBrain_HAZARD.md`.
+- **Rule 7:** push, PR create, merge, force-push, branch delete each need an explicit yes.
+- **Register is immutable:** never edit a merged file under `docs/audit/`; corrections are new amendments or additive newest-first banners (`/audit-file`).
+- **Git:** `claude/<slug>` from `origin/main`; explicit-path `git add`; subject ends ` [skip-automerge]`; body references issues as plain text `Task: #N`; never push to `main` or `dev`; squash-merge + delete.
+- **Evidence:** paste the command and its raw output; "passed" is not evidence.
+
+## Stack (measured at `433b1f22`)
+
+- Backend: Node 20, Express 5, Sequelize 6, PostgreSQL 15 on **AWS RDS** (canon instance is misleadingly named `episode-control-dev`; not Neon). `src/app.js` composes everything. PM2 on EC2, nginx.
+- Frontend: React 18 + Vite 7 (`frontend/`), dev port **5174**, proxies `/api` to `127.0.0.1:3002`. Vanilla CSS per page plus a thin Tailwind v4 import; `--lala-*` tokens (parchment `#FAF7F0`, gold `#B8962E`, ink `#2C2C2C`; Lora prose, DM Mono UI); lucide-react for new icons.
+- AI: `@anthropic-ai/sdk`; primary `claude-sonnet-4-6`, Haiku 4.5 for side calls; every call is logged and budget-gated by `src/services/aiCostTracker.js`.
+
+## Layout
 
 ```
-src/routes/          # Express routes — memories.js is ~12K lines
-src/models/          # Sequelize models (100+)
-src/services/        # Business logic
-src/middleware/      # Auth (optionalAuth), error handling
-frontend/src/pages/  # Route-level React components
-frontend/src/components/  # Shared components
+src/app.js                 mounts (~160), middleware, static SPA
+src/routes/memories/       AI writing hub (10 files; memories.js no longer exists)
+src/routes/                world/feed/production routes (worldEvents, worldStudio, socialProfileRoutes, episodes, sceneSetRoutes, wardrobe, uiOverlayRoutes …)
+src/services/              105 services (aiCostTracker, feedScheduler, sceneGenerationService, phoneRuntime …)
+src/models/                151 Sequelize models; index.js registers 149
+src/migrations/            the ONLY migration tree that runs (211 files); four other trees are dead
+frontend/src/pages/        route-level pages (WorldAdmin = Producer Mode, WriteMode, UIOverlaysTab = Phone Hub)
+docs/audit/                the audit register (keystones, findings, Owed Index chain) — read newest-first
 ```
+
+## Conventions
+
+- Writes: `requireAuth` (or `requireAuth + authorize(['ADMIN'])`); public catalog GETs: `optionalAuth` with a `// PUBLIC:` comment; AI handlers add `aiRateLimiter`. Never demote `requireAuth`.
+- AI: `const MODELS = ['claude-sonnet-4-6']` with the two-attempt retry loop; SSE sets `X-Accel-Buffering: no`; context loaders return `null` and are injected conditionally; `characterKey` is the slug, not the PK.
+- Errors: try/catch + `console.error` + JSON; every `catch` logs (`scripts/lint-silent-catches.sh`).
+- Migrations: new files only under `src/migrations/`, always `deleted_at`, never `Model.sync()` or inline `CREATE TABLE`.
+- Frontend: hooks only; one CSS file per page; test at 375px; new routes need a Sidebar entry or in-app link.
 
 ## Commands
 
 ```bash
-# Backend
-npm run dev              # nodemon on port 3002
-node -c src/routes/memories.js  # Quick syntax check
-
-# Frontend
-cd frontend && npm run dev      # Dev server on port 5173
-cd frontend && npx vite build   # Production build
-
-# Validate & Test
-npm run validate         # Routes + lint + route-health tests + cost audit
-npm test                 # Jest with coverage
+npm run dev                      # backend (set PORT=3002)
+cd frontend && npm run dev       # Vite on 5174
+/validate                        # route registration, silent-catch lint, cost audit, root-junk guard, node -c
+npm test                         # Jest; needs TEST_DATABASE_URL (docker compose up -d postgres)
+cd frontend && npx vite build    # production build
 ```
 
-## Key Conventions
+## Stale files (do not follow)
 
-- Route auth: use `optionalAuth` middleware (not `requireAuth`)
-- AI model fallback: `const MODELS = ['claude-sonnet-4-6'];` with retry loop
-- SSE streaming: `Content-Type: text/event-stream`, `X-Accel-Buffering: no`
-- Context loaders return `null` when no data — conditionally inject into prompts
-- Error handling: try/catch with `console.error` + JSON response, never crash
-- Frontend design tokens: parchment `#FAF7F0`, gold `#B8962E`, ink `#2C2C2C`
-- Typography: `Lora` 17.5px for prose, `DM Mono` for UI/labels
-- Icons: `lucide-react` exclusively
-- API base: `/api/v1/memories/` for AI/story endpoints
-- State: React hooks only — no Redux/Zustand
-- All models soft-delete (paranoid mode); always include `deleted_at` in migrations
-- JSONB fields: `voice_signature`, `relationships_map`, `evolution_tracking`, `extra_fields`
-- Mobile-first: test at 375px, use CSS media queries
-
-## Deploy
-
-- Dev: `dev.primepisodes.com` → EC2, PM2 managed
-- DB: Neon PostgreSQL, pooling enabled
-- See `ecosystem.config.js` for PM2 config
+`README.md` (Jan 2026 plan), `SESSION_HANDOFF.md` (Apr 2026), `.github/copilot-instructions.md`, `.github/agents/deploy.agent.md` and `.github/prompts/deploy-dev.prompt.md` (instruct SSH + pm2 on the frozen prod box), most of `docs/*.md`. `PROJECT_CONTEXT.md` §9 has the full list.

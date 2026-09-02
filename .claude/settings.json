@@ -1,4 +1,59 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm run validate)",
+      "Bash(npm run lint)",
+      "Bash(npm run validate:*)",
+      "Bash(node scripts/validate-routes.js)",
+      "Bash(bash scripts/lint-silent-catches.sh)",
+      "Bash(bash scripts/audit-cost-exposure.sh)",
+      "Bash(node scripts/check-root-junk.js)",
+      "Bash(node -c *)",
+      "Bash(cd frontend && npx vite build)",
+      "Bash(git status *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git diff)",
+      "Bash(git log *)",
+      "Bash(git fetch *)",
+      "Bash(git rev-parse *)",
+      "Bash(git rev-list *)",
+      "Bash(git ls-remote *)",
+      "Bash(git branch *)",
+      "Bash(git show *)"
+    ],
+    "deny": [
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(sftp *)",
+      "Bash(pm2 *)",
+      "Bash(aws *)",
+      "Bash(gh workflow run *)",
+      "Bash(gh workflow enable *)",
+      "Bash(git push * main)",
+      "Bash(git push * dev)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "PowerShell(ssh *)",
+      "PowerShell(scp *)",
+      "PowerShell(pm2 *)",
+      "PowerShell(aws *)",
+      "PowerShell(gh workflow run *)",
+      "PowerShell(gh workflow enable *)",
+      "PowerShell(git push * main)",
+      "PowerShell(git push * dev)",
+      "PowerShell(git push --force *)",
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.production)",
+      "Read(./frontend/.env)",
+      "Read(./backups/**)",
+      "Read(./docs/cognito-ids.txt)",
+      "Read(./docs/connect-to-ec2.txt)",
+      "Read(./docs/rds-endpoint-dev.txt)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -6,6 +61,18 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-dangerous-commands.js\"",
+            "timeout": 10
           }
         ]
       }

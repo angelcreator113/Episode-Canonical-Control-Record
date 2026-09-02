@@ -1,0 +1,29 @@
+name: "Bug"
+description: "Something in the app or the toolchain is broken."
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Route, page, or command. Paste raw output where you have it (H1 rule - a claim without the command and its output is not evidence).
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - local dev (laptop, docker postgres)
+        - dev.primepisodes.com
+        - primepisodes.com (prod - FROZEN, observe only)
+        - CI (GitHub Actions)
+    validations:
+      required: true
