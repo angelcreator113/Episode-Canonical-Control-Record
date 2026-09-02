@@ -1,0 +1,71 @@
+name: "Claude Code task"
+description: "A unit of work for a Claude Code session to execute on a branch and return as a PR."
+title: "[task] "
+labels: ["claude-task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One issue = one branch = one PR. Keep it small enough to review on a phone.
+        Prod is FROZEN. Nothing in this issue may ask an agent session to SSH, run pm2, run aws, touch RDS, or edit a server .env.
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Lane
+      description: Which execution lane should run this?
+      options:
+        - cloud (claude.ai/code session from phone or browser)
+        - laptop (Claude Code CLI on the Windows laptop)
+        - either
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - backend/routes
+        - backend/services
+        - backend/models+migrations
+        - frontend
+        - tests/ci
+        - docs
+        - audit register (docs/audit)
+        - tooling (.claude, .github)
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should be true when this is done? One or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Prompt for Claude Code
+      description: Paste the full prompt (from the Claude Desktop project). It must name files, the validation commands to run, and the branch name.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance checks
+      description: Commands or observations that prove it is done. Default is `npm run validate` plus any test named here.
+      value: |
+        - [ ] `node scripts/validate-routes.js` clean
+        - [ ] `bash scripts/lint-silent-catches.sh` clean
+        - [ ] `bash scripts/audit-cost-exposure.sh` clean
+        - [ ] Frontend: `cd frontend && npx vite build` succeeds (if frontend touched)
+        - [ ] PR title carries `[skip-automerge]`
+  - type: checkboxes
+    id: guardrails
+    attributes:
+      label: Guardrails
+      options:
+        - label: This task needs no host, AWS, database, or Cognito contact from the agent session.
+          required: true
+        - label: This task is inside the locked fix sequence or is explicitly approved product work (see PROJECT_CONTEXT.md).
+          required: false

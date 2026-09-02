@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Prime Studios project context
+    url: https://github.com/angelcreator113/Episode-Canonical-Control-Record/blob/main/PROJECT_CONTEXT.md
+    about: Read this before filing work. Prod is FROZEN; see the freeze rules there.
