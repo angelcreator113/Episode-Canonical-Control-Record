@@ -1,6 +1,6 @@
 # PROJECT CONTEXT — Prime Studios / Episode Canonical Control Record
 
-**Basis:** `origin/main` at `433b1f22` (2026-09-01). Derived from a full read of the repository, the GitHub API, and the audit register. Facts are MEASURED (checkable in the repo) unless marked ASSERTED (the register says so; requires host/AWS/DB contact to verify, which agent sessions never make).
+**Basis:** `origin/main` at `a4544c37` (2026-09-02). Derived from a full read of the repository, the GitHub API, and the audit register. Facts are MEASURED (checkable in the repo) unless marked ASSERTED (the register says so; requires host/AWS/DB contact to verify, which agent sessions never make).
 
 **How to use this file:** it is the knowledge file for the Claude Desktop project and the first thing a Claude Code session should read after `/wake-up`. It replaces the stale facts in the old `CLAUDE.md`, `README.md`, `.github/copilot-instructions.md`, and `SESSION_HANDOFF.md`. When a fact here changes, the change lands as a task through the workflow in `DEVELOPMENT_WORKFLOW.md`, not by hand.
 
@@ -71,7 +71,7 @@ The intended keystone, **F-Franchise-1 / Director Brain**, is that the franchise
 
 - **Stack:** Node 20, Express 5.2, Sequelize 6.37 on PostgreSQL 15, `@anthropic-ai/sdk` 0.74, `aws-jwt-verify`, Bull + Redis (optional), Socket.io, sharp, fluent-ffmpeg, canvas, multer. 706 files under `src/`, ~190k lines.
 - **Composition:** `src/app.js` (1,744 lines) is the whole HTTP composition; `src/server.js` (293) owns the process. Boot order: `dotenv` (cwd-relative at `server.js:7`; the PM2 ecosystem files load `.env` by explicit path, which is why a bare `pm2 start src/server.js` failed on 2026-06-01) → `services/aiCostTracker` and `services/aiResponseCache` monkey-patch the Anthropic SDK → `require('./models')` (fatal on failure) → async DB authenticate → middleware → ~160 route mounts → static SPA serving from `frontend/dist` → 404/error handlers. Two in-process schedulers start at boot: CFO agent every 6h, feed scheduler every 4h (`app.js:666–675`, skipped in test).
-- **Middleware order:** `trust proxy=1` → `/ping` → CORS (hard-coded allowlist incl. raw EC2 IPs, plus LAN IPs) → helmet with CSP off → JSON 10 MB → app-wide `optionalAuth` (`app.js:236`, deliberately retained per F-AUTH-1 v2.65) → `attachRBAC` → `captureResponseData` → rate limiters (500 req/15 min/IP on `/api`, 60 writes/min/IP) → `/health` → routes.
+- **Middleware order:** `trust proxy=1` → `/ping` → CORS (hard-coded allowlist incl. raw EC2 IPs, plus LAN IPs) → helmet with CSP off → JSON 10 MB → (F-AUTH-1 FD-67 Option 1, PR #1185 / `7a1eb427c`, merged 2026-09-02: the app-wide `optionalAuth` mount that used to run here at `app.js:236` is removed; every route that relied on it for optional identity now carries its own explicit `optionalAuth`) → `attachRBAC` → `captureResponseData` → rate limiters (500 req/15 min/IP on `/api`, 60 writes/min/IP) → `/health` → routes.
 - **Mount table (highlights):** `/api/v1/memories` hosts seven routers (the `memories/` hub plus six more); bare `/api/v1` hosts sixteen (markers, export, beats, evaluation, world, worldEvents, worldStudio, careerGoals, arcRoutes, …); `/api/v1/episodes` hosts eleven. Mount order is the only arbiter of param-route shadowing. Legacy unversioned mounts survive: `/api/scripts`, `/api/footage`, `/api/scene-links`, `/api/decision-analytics`, `/api/youtube`. Full table: `src/app.js:425–1551`.
 - **Route loading:** ~30 modules use `trackRouteLoad()` (failure → 500 "Routes not available" and visible at `/api/v1/debug/routes`); ~100 use inline try/catch (failure → prefix silently 404s). `npm run validate` statically checks every route file is registered.
 - **Auth model:** dual verifier by JWT `alg` (`src/middleware/auth.js`): RS256 → Cognito (`aws-jwt-verify`, lazily built; missing/placeholder config → `500 AUTH_CONFIG_MISSING`), HS256 → `tokenService` with `JWT_SECRET` (≥32 chars). Both yield an equally trusted `req.user`. `requireAuth` is on ~1,400 handler declarations across 133 route files; `optionalAuth` survives on ~64 public catalog GETs (Tier 4) and two "degrade on infra failure" routes (Tier 3). `authorize(['ADMIN'])` guards ~35 sites; a separate lowercase `rbac.js` scheme guards four legacy files. `/api/v1/auth/login` is disabled; `/refresh`, `/logout`, `/me`, `/validate` remain (HS256 only).
@@ -209,7 +209,7 @@ The show-tier production stack is the January–February 2026 metadata/CMS/video
 
 | Keystone | What it is | Standing at `433b1f22` | Authority file |
 |---|---|---|---|
-| **F-AUTH-1** | Codebase-wide auth bypass on writes (three sub-forms) | **REOPENED-QUALIFIED.** Backend sweep done (12 CPs, ~700–750 handlers, May 2026); reopened at FD-63; 95 more handlers promoted Aug 17. Gate G3 partially discharged: limb 1 (confirm-not-re-derive audit of 129 recorded CP dispositions) defined, not performed; limb 3 (five-dimension production-readiness) NOT COMPLETED (D1 PASS, D2 PASS, D3 not performed, D4 FAIL, D5 not performed). G4 never entered; G5 blocked; prod frozen. FD-63, FD-64, FD-67 OPEN; FD-65 and FD-68 CLOSED (v25 wrongly lists FD-68 open); FD-69 retired as duplicate. | `docs/audit/F-AUTH-1_Fix_Plan_v2.68.md` |
+| **F-AUTH-1** | Codebase-wide auth bypass on writes (three sub-forms) | **REOPENED-QUALIFIED.** Backend sweep done (12 CPs, ~700–750 handlers, May 2026); reopened at FD-63; 95 more handlers promoted Aug 17. Gate G3 partially discharged: limb 1 (confirm-not-re-derive audit of 129 recorded CP dispositions) defined, not performed; limb 3 (five-dimension production-readiness) NOT COMPLETED (D1 PASS, D2 PASS, D3 not performed, D4 FAIL, D5 not performed). G4 never entered; G5 blocked; prod frozen. FD-63 OPEN; FD-64 fixed at `65cbe7013` (spelling) and `2e5dbdf28` (`where` clause) — close not recorded in a Fix Plan revision; FD-67 shipped at `7a1eb427c` (Option 1, PR #1185) — checked `v2.68`, the newest Fix Plan on `main`, and no revision closes it, so close not recorded; FD-65 and FD-68 CLOSED (v25 wrongly lists FD-68 open); FD-69 retired as duplicate. | `docs/audit/F-AUTH-1_Fix_Plan_v2.68.md` |
 | **F-Deploy-1** | Deploy pipeline + autonomous-merge failure modes (37 lettered findings A–AK) | **CLOSED** at v1.48 (2026-07-22), carriage-corrected at v1.49. Dev box + SSM `workflow_dispatch` deploy path live; prod deploy path still SSH-based and disabled. Owed after close: AD (no instance profile on prod), AE (four SG ports still open; `/32` on port 22 needs re-scoping), fork RDS teardown, dev DNS repoint, `deploy-production.yml` SSM migration, PE #62 ownership. | `docs/audit/F-Deploy-1_Fix_Plan_v1.49.md` |
 | **F-App-1** | Schema-as-JS auto-repair in `app.js` | SHIPPED 2026-05-14 (out of sequence); residue = PE #62 (five inline `CREATE TABLE` + eleven `Model.sync()` sites) and FD-66. | `docs/audit/F-App-1_Fix_Plan_v1.1.md` |
 | **F-Stats-1** | `character_state` model + raw-SQL writers | Phase B live: raw SQL → ORM PRs 1–4f landed Aug 1–4; items 23 and 36 closed; open item 40 became XK-1. | `docs/audit/F-Stats-1_Fix_Plan_v1.60.md` |
@@ -247,7 +247,7 @@ Reconciled from Handoff v25 Sec 6, the v25 Owed Index chain through Amd30, F-Sta
 | v25 item 8 **disposition**: what the canon-schema reconciliation requires. The read itself was PERFORMED 2026-08-29 (2,760 rows / 143 tables; canon is a "third schema"; `SequelizeMeta` does not record what the database contains). Precondition: which of the four migration roots is canon (two cross-root duplicates change schema: `20260127000001`, `20260216000001`). | Amd18, Amd22–24, Amd29 |
 | Addendum A/B follow-up canon reads: authorized 2026-09-01, NOT PERFORMED; blocked on credential location (both DB passwords exist only on the frozen box; Secrets Manager and SSM hold nothing under `/episode-metadata/`). | Amd28 §AD2, Amd30 §AF2 |
 | `JWT_SECRET` dev/prod environment read (item 9). | v25 Sec 6 |
-| FD-67 / FD-68 remedy authorization (item 11); FD-68 vs FD-65 severity. | v25 Sec 6 |
+| FD-68 vs FD-65 severity (item 11). FD-67's own remedy is authorized and shipped at `7a1eb427c` (Option 1, PR #1185); close status is not recorded by a Fix Plan revision. | v25 Sec 6 |
 | F-AUTH-1 limb 3 dimensions 3 and 5 (host and shared-Cognito reads). | F-AUTH-1 v2.68 |
 | PE #64 severity re-rule; PE #65 Branch B costing and sequencing; re-recording §9.10's P1 in a Fix Plan revision. | PE roster, Amd16 |
 | PE #68: whether the injected git credential acts as `angelcreator113` (only a real push or reading the credential settles it). | Amd12, Amd14 |
@@ -273,7 +273,7 @@ Reconciled from Handoff v25 Sec 6, the v25 Owed Index chain through Amd30, F-Sta
 
 | Item | Source |
 |---|---|
-| FD-64: `getRolesForshow` → `getRolesForShow`; `Model.update()` without `where` at `AssetRoleService.js:152`. | F-AUTH-1 v2.6x |
+| FD-64: fixed — `getRolesForshow` → `getRolesForShow` at `65cbe7013`; `Model.update()` `where` clause added at `AssetRoleService.js:151` at `2e5dbdf28`. Close not recorded in a Fix Plan revision. | F-AUTH-1 v2.6x |
 | FD-66 disposition and a baseline migration sequence (after item 8; Evoni rules, a PR executes). | FD-66 DRAFT |
 | 28 `claude/**` branch tips lack `[skip-automerge]` while `auto-merge-to-dev.yml` still carries the push trigger in YAML (re-enable decision is gated; the fix is a branch-cleanup ruling, not a code change). | Amd26 §AB3 |
 
@@ -343,7 +343,7 @@ Declined or bounded non-actions (do not reopen without a reason): fourteen in-pl
 
 Inside the locked sequence and safe for agent sessions:
 1. Limb 1 per-CP confirmation passes (repo-only, decomposable, cannot-tell first-class).
-2. FD-64 fix: rename `getRolesForshow` → `getRolesForShow` and the `Model.update()` without `where` in `AssetRoleService.js:152`.
+2. ~~FD-64 fix: rename `getRolesForshow` → `getRolesForShow` and the `Model.update()` without `where` in `AssetRoleService.js:152`.~~ Done — `65cbe7013` and `2e5dbdf28`; close not recorded in a Fix Plan revision.
 3. Register hygiene tasks: place the owed banner on Amd28 §AD3; reconcile v25's FD-68 status; PE tail correction.
 4. Retire the dangerous Copilot deploy prompts (replace with a pointer to the freeze).
 5. Redact the surviving staging RDS password literal in the two February audit docs (§9).
