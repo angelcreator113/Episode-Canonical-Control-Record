@@ -1715,6 +1715,7 @@ const db = {
     Show,
     Scene,
     AssetLabel,
+    AssetRole,
     // AssetUsage, // Table doesn't exist
     EpisodeAsset,
     ShowAsset,

@@ -17,7 +17,7 @@ router.get('/', optionalAuth, async (req, res) => {
       });
     }
 
-    const roles = await AssetRoleService.getRolesForshow(showId);
+    const roles = await AssetRoleService.getRolesForShow(showId);
 
     res.json({
       status: 'SUCCESS',
