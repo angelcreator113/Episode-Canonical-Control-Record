@@ -22,9 +22,9 @@ export default defineConfig(({ mode }) => {
       include: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
     },
     server: {
+      host: true,
       port: 5174,
       hmr: {
-        host: 'localhost',
         port: 5175,
         clientPort: 5175,
         protocol: 'ws',
