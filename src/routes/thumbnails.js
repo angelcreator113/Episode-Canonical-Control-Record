@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const thumbnailController = require('../controllers/thumbnailController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -18,16 +18,16 @@ const { asyncHandler } = require('../middleware/errorHandler');
 
 // PUBLIC: thumbnail catalog reads are Tier 4 (no req.user consumption); 7 bare GETs below per CP12 §5.21 13th instance
 // List thumbnails (viewer permission)
-router.get('/', asyncHandler(thumbnailController.listThumbnails));
+router.get('/', optionalAuth, asyncHandler(thumbnailController.listThumbnails));
 
 // Get single thumbnail (viewer permission)
-router.get('/:id', asyncHandler(thumbnailController.getThumbnail));
+router.get('/:id', optionalAuth, asyncHandler(thumbnailController.getThumbnail));
 
 // Get thumbnail S3 URL (viewer permission)
-router.get('/:id/url', asyncHandler(thumbnailController.getThumbnailUrl));
+router.get('/:id/url', optionalAuth, asyncHandler(thumbnailController.getThumbnailUrl));
 
 // Prepare thumbnail download (viewer permission)
-router.get('/:id/download', asyncHandler(thumbnailController.prepareThumbnailDownload));
+router.get('/:id/download', optionalAuth, asyncHandler(thumbnailController.prepareThumbnailDownload));
 
 // Create thumbnail (requires authentication + editor role)
 router.post(
@@ -62,10 +62,10 @@ router.delete(
 );
 
 // Get all thumbnails for specific episode
-router.get('/episode/:episodeId', asyncHandler(thumbnailController.getEpisodeThumbnails));
+router.get('/episode/:episodeId', optionalAuth, asyncHandler(thumbnailController.getEpisodeThumbnails));
 
 // Get primary thumbnail for episode
-router.get('/episode/:episodeId/primary', asyncHandler(thumbnailController.getPrimaryThumbnail));
+router.get('/episode/:episodeId/primary', optionalAuth, asyncHandler(thumbnailController.getPrimaryThumbnail));
 
 /**
  * Phase 2.6 Publishing Workflow Routes
@@ -135,6 +135,7 @@ router.post(
 // Get thumbnails by episode (new method for gallery)
 router.get(
   '/episode/:episodeId',
+  optionalAuth,
   asyncHandler(async (req, res) => {
     try {
       const ThumbnailService = require('../services/ThumbnailService');

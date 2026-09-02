@@ -229,11 +229,12 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // ============================================================================
 const { attachRBAC } = require('./middleware/rbac');
 const { captureResponseData } = require('./middleware/auditLog');
-const { optionalAuth, requireAuth, authorize } = require('./middleware/auth');
+const { requireAuth, authorize } = require('./middleware/auth');
 
-// Optional auth for all routes (user info attached if valid token provided)
-// Real Cognito authentication enabled
-app.use(optionalAuth);
+// F-AUTH-1 FD-67 Option 1 (ruled 2026-09-02): the global optionalAuth mount
+// that used to run here for every request was removed. Every route that
+// relied on it for optional identity now carries its own explicit
+// optionalAuth — see docs/audit/F-AUTH-1_FD67_Remedy_Implementation_2026-09-02.md.
 
 // DEV MODE (uncomment to bypass authentication for testing)
 // app.use((req, res, next) => {

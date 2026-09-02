@@ -15,8 +15,8 @@ const path = require('path');
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'scripts.js'), 'utf8');
 
 describe('Step 3 CP9 — scripts.js mixed Tier 1+4 + legacy authenticateToken conversion', () => {
-  test('imports requireAuth (legacy authenticateToken alias eliminated from active code)', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+  test('imports requireAuth + optionalAuth (legacy authenticateToken alias eliminated; optionalAuth added by FD-67 Option 1)', () => {
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*optionalAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
     // No active import of authenticateToken (only allowed in comment-block prose)
     expect(SRC).not.toMatch(/const\s*\{[^}]*\bauthenticateToken\b[^}]*\}\s*=\s*require/);
   });
@@ -26,18 +26,18 @@ describe('Step 3 CP9 — scripts.js mixed Tier 1+4 + legacy authenticateToken co
     expect(SRC).toMatch(/6th cumulative instance/);
   });
 
-  describe('Tier 4 PUBLIC GETs (4 catalog reads — D2)', () => {
-    test('GET / (list) is no-middleware (Tier 4 PUBLIC)', () => {
-      expect(SRC).toMatch(/router\.get\('\/',\s*asyncHandler/);
+  describe('Tier 4 PUBLIC GETs (4 catalog reads — D2; explicit optionalAuth per FD-67 Option 1)', () => {
+    test('GET / (list) carries explicit optionalAuth (Tier 4 PUBLIC)', () => {
+      expect(SRC).toMatch(/router\.get\('\/',\s*optionalAuth,\s*asyncHandler/);
     });
-    test('GET /search (catalog search) is no-middleware (Tier 4 PUBLIC)', () => {
-      expect(SRC).toMatch(/router\.get\('\/search',\s*asyncHandler/);
+    test('GET /search (catalog search) carries explicit optionalAuth (Tier 4 PUBLIC)', () => {
+      expect(SRC).toMatch(/router\.get\('\/search',\s*optionalAuth,\s*asyncHandler/);
     });
-    test('GET /:scriptId (single read) is no-middleware (Tier 4 PUBLIC)', () => {
-      expect(SRC).toMatch(/router\.get\('\/:scriptId',\s*asyncHandler/);
+    test('GET /:scriptId (single read) carries explicit optionalAuth (Tier 4 PUBLIC)', () => {
+      expect(SRC).toMatch(/router\.get\('\/:scriptId',\s*optionalAuth,\s*asyncHandler/);
     });
-    test('GET /:scriptId/history is no-middleware (Tier 4 PUBLIC)', () => {
-      expect(SRC).toMatch(/router\.get\('\/:scriptId\/history',\s*asyncHandler/);
+    test('GET /:scriptId/history carries explicit optionalAuth (Tier 4 PUBLIC)', () => {
+      expect(SRC).toMatch(/router\.get\('\/:scriptId\/history',\s*optionalAuth,\s*asyncHandler/);
     });
   });
 
@@ -62,7 +62,9 @@ describe('Step 3 CP9 — scripts.js mixed Tier 1+4 + legacy authenticateToken co
     });
   });
 
-  test('no optionalAuth references (file is Tier 1 + Tier 4-by-omission only)', () => {
-    expect(SRC).not.toMatch(/\boptionalAuth\b/);
+  test('optionalAuth present on the 4 Tier 4 catalog reads only, not on the 6 Tier 1 writes (FD-67 Option 1)', () => {
+    const optionalAuthCount = (SRC.match(/\boptionalAuth\b/g) || []).length;
+    // 1 import + 4 route declarations
+    expect(optionalAuthCount).toBe(5);
   });
 });

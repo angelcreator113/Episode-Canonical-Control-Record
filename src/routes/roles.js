@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const AssetRoleService = require('../services/AssetRoleService');
+const { optionalAuth } = require('../middleware/auth');
 
 /**
  * GET /api/v1/roles
  * Get all roles for show
  */
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const showId = req.query.show_id || req.user?.show_id;
 
@@ -36,7 +37,7 @@ router.get('/', async (req, res) => {
  * GET /api/v1/roles/stats
  * Get role usage statistics
  */
-router.get('/stats', async (req, res) => {
+router.get('/stats', optionalAuth, async (req, res) => {
   try {
     const showId = req.query.show_id || req.user?.show_id;
 
@@ -65,7 +66,7 @@ router.get('/stats', async (req, res) => {
  * GET /api/v1/roles/:roleKey
  * Get specific role
  */
-router.get('/:roleKey', async (req, res) => {
+router.get('/:roleKey', optionalAuth, async (req, res) => {
   try {
     const { roleKey } = req.params;
     const showId = req.query.show_id || req.user?.show_id;
@@ -95,7 +96,7 @@ router.get('/:roleKey', async (req, res) => {
  * POST /api/v1/roles
  * Create custom role
  */
-router.post('/', async (req, res) => {
+router.post('/', optionalAuth, async (req, res) => {
   try {
     const showId = req.body.show_id || req.user?.show_id;
 
@@ -125,7 +126,7 @@ router.post('/', async (req, res) => {
  * PUT /api/v1/roles/:roleKey
  * Update role (label, required flag, etc.)
  */
-router.put('/:roleKey', async (req, res) => {
+router.put('/:roleKey', optionalAuth, async (req, res) => {
   try {
     const { roleKey } = req.params;
     const showId = req.body.show_id || req.user?.show_id;
@@ -150,7 +151,7 @@ router.put('/:roleKey', async (req, res) => {
  * DELETE /api/v1/roles/:roleKey
  * Delete role (only if unused)
  */
-router.delete('/:roleKey', async (req, res) => {
+router.delete('/:roleKey', optionalAuth, async (req, res) => {
   try {
     const { roleKey } = req.params;
     const showId = req.query.show_id || req.user?.show_id;
@@ -175,7 +176,7 @@ router.delete('/:roleKey', async (req, res) => {
  * POST /api/v1/roles/bulk-assign
  * Bulk assign roles to assets
  */
-router.post('/bulk-assign', async (req, res) => {
+router.post('/bulk-assign', optionalAuth, async (req, res) => {
   try {
     const { assignments } = req.body; // [{ assetId, roleKey }, ...]
 
@@ -205,7 +206,7 @@ router.post('/bulk-assign', async (req, res) => {
  * GET /api/v1/roles/:roleKey/assets
  * Get assets assigned to a role
  */
-router.get('/:roleKey/assets', async (req, res) => {
+router.get('/:roleKey/assets', optionalAuth, async (req, res) => {
   try {
     const { roleKey } = req.params;
     const showId = req.query.show_id || req.user?.show_id;
@@ -236,7 +237,7 @@ router.get('/:roleKey/assets', async (req, res) => {
  * POST /api/v1/roles/validate-required
  * Validate required roles for composer export
  */
-router.post('/validate-required', async (req, res) => {
+router.post('/validate-required', optionalAuth, async (req, res) => {
   try {
     const { providedRoles } = req.body; // { HOST: assetId, ... }
     const showId = req.body.show_id || req.user?.show_id;

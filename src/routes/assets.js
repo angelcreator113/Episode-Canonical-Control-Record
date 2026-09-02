@@ -13,7 +13,7 @@ const express = require('express');
 const multer = require('multer');
 const AssetService = require('../services/AssetService');
 const { models } = require('../models');
-const { requireAuth, authorize } = require('../middleware/auth');
+const { requireAuth, authorize, optionalAuth } = require('../middleware/auth');
 const { validateAssetUpload, validateUUIDParam } = require('../middleware/requestValidation');
 
 const router = express.Router();
@@ -73,7 +73,7 @@ const VALID_ASSET_TYPES = [
  * GET /api/v1/assets
  * List all assets (with optional filters)
  */
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const {
       limit = 500,
@@ -242,7 +242,7 @@ router.get('/', async (req, res) => {
  *  - episodeId: Episode UUID (optional, includes episode-scoped assets)
  *  - approvalStatus: Filter by approval status (default: APPROVED)
  */
-router.get('/eligible', async (req, res) => {
+router.get('/eligible', optionalAuth, async (req, res) => {
   try {
     const { role, showId, episodeId, approvalStatus = 'APPROVED' } = req.query;
 
@@ -346,7 +346,7 @@ router.get('/eligible', async (req, res) => {
  *  - episodeId: Episode UUID (optional)
  *  - approvalStatus: Filter by approval status (default: APPROVED)
  */
-router.get('/by-folder', async (req, res) => {
+router.get('/by-folder', optionalAuth, async (req, res) => {
   try {
     const { folders, showId, episodeId, approvalStatus = 'APPROVED' } = req.query;
 
@@ -456,7 +456,7 @@ router.get('/by-folder', async (req, res) => {
  * GET /api/v1/assets/approved/:type
  * Get approved assets by type
  */
-router.get('/approved/:type', async (req, res) => {
+router.get('/approved/:type', optionalAuth, async (req, res) => {
   try {
     const { type } = req.params;
 
@@ -494,7 +494,7 @@ router.get('/approved/:type', async (req, res) => {
  * GET /api/v1/assets/pending
  * List pending assets
  */
-router.get('/pending', async (req, res) => {
+router.get('/pending', optionalAuth, async (req, res) => {
   try {
     const assets = await AssetService.getPendingAssets();
 
@@ -518,7 +518,7 @@ router.get('/pending', async (req, res) => {
  * GET /api/v1/assets/labels
  * Get all available labels
  */
-router.get('/labels', async (req, res) => {
+router.get('/labels', optionalAuth, async (req, res) => {
   try {
     const labels = await AssetService.getAllLabels();
 
@@ -736,7 +736,7 @@ router.post('/search', requireAuth, async (req, res) => {
  * GET /api/v1/assets/:id
  * Get asset by ID
  */
-router.get('/:id', validateUUIDParam('id'), async (req, res) => {
+router.get('/:id', optionalAuth, validateUUIDParam('id'), async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await AssetService.getAsset(id);
@@ -1157,7 +1157,7 @@ router.delete('/:id/labels/:labelId', validateUUIDParam('id'), requireAuth, asyn
  * GET /api/v1/assets/:id/usage
  * Get asset usage information
  */
-router.get('/:id/usage', validateUUIDParam('id'), async (req, res) => {
+router.get('/:id/usage', optionalAuth, validateUUIDParam('id'), async (req, res) => {
   try {
     const { id } = req.params;
     const usages = await AssetService.getAssetUsage(id);
@@ -1181,7 +1181,7 @@ router.get('/:id/usage', validateUUIDParam('id'), async (req, res) => {
  * Generate pre-signed download URL for asset
  * @param {string} type - 'raw' or 'processed'
  */
-router.get('/:id/download/:type', validateUUIDParam('id'), async (req, res) => {
+router.get('/:id/download/:type', optionalAuth, validateUUIDParam('id'), async (req, res) => {
   try {
     const { id, type } = req.params;
 
@@ -1320,7 +1320,7 @@ router.post('/process', requireAuth, async (req, res) => {
  * GET /api/v1/assets/config/check
  * Check AWS and API configuration (for debugging)
  */
-router.get('/config/check', async (req, res) => {
+router.get('/config/check', optionalAuth, async (req, res) => {
   try {
     const hasRemoveBgProvider = !!(
       process.env.REMOVEBG_API_KEY

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const metadataController = require('../controllers/metadataController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -20,19 +20,19 @@ const { asyncHandler } = require('../middleware/errorHandler');
 
 // PUBLIC: metadata catalog reads are Tier 4 (no req.user consumption); 5 bare GETs below per CP12 §5.21 14th instance
 // List metadata (viewer permission)
-router.get('/', asyncHandler(metadataController.listMetadata));
+router.get('/', optionalAuth, asyncHandler(metadataController.listMetadata));
 
 // Get all metadata - special route for /ALL
-router.get('/ALL', asyncHandler(metadataController.listMetadata));
+router.get('/ALL', optionalAuth, asyncHandler(metadataController.listMetadata));
 
 // Get single metadata (viewer permission)
-router.get('/:id', asyncHandler(metadataController.getMetadata));
+router.get('/:id', optionalAuth, asyncHandler(metadataController.getMetadata));
 
 // Get metadata summary (lightweight, viewer permission)
-router.get('/:id/summary', asyncHandler(metadataController.getMetadataSummary));
+router.get('/:id/summary', optionalAuth, asyncHandler(metadataController.getMetadataSummary));
 
 // Get metadata for specific episode (viewer permission)
-router.get('/episode/:episodeId', asyncHandler(metadataController.getMetadataForEpisode));
+router.get('/episode/:episodeId', optionalAuth, asyncHandler(metadataController.getMetadataForEpisode));
 
 // Create or update metadata (requires authentication + editor role)
 router.post(
