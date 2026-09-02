@@ -148,7 +148,7 @@ class AssetRoleService {
       throw new Error('Asset not found');
     }
 
-    await models.Asset.update({ role_key: roleKey });
+    await models.Asset.update({ role_key: roleKey }, { where: { id: assetId } });
     console.log(`✅ Assigned role ${roleKey} to asset ${assetId}`);
     return asset;
   }

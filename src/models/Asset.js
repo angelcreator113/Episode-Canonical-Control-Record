@@ -25,6 +25,11 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: 'Canonical role - hierarchical (e.g., CHAR.HOST.LALA, UI.ICON.CLOSET)',
       },
+      role_key: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Per-show custom role key (asset_roles.role_key) assigned via AssetRoleService. Not the same as asset_role.',
+      },
       asset_group: {
         type: DataTypes.ENUM('LALA', 'SHOW', 'GUEST', 'EPISODE', 'WARDROBE'),
         allowNull: true,
