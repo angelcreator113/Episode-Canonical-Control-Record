@@ -4,8 +4,8 @@ const path = require('path');
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'thumbnails.js'), 'utf8');
 
 describe('CP12 — thumbnails.js §5.21 13th 3-TIER (2nd architectural first)', () => {
-  test('imports requireAuth (G6 closure)', () => {
-    expect(SRC).toMatch(/const \{ requireAuth \} = require\(['"]\.\.\/middleware\/auth['"]\)/);
+  test('imports requireAuth + optionalAuth (G6 closure; optionalAuth added by FD-67 Option 1)', () => {
+    expect(SRC).toMatch(/const \{ requireAuth, optionalAuth \} = require\(['"]\.\.\/middleware\/auth['"]\)/);
   });
   test('§5.41 G6: authenticateToken alias absent', () => {
     expect(SRC).not.toMatch(/authenticateToken/);
@@ -31,7 +31,7 @@ describe('CP12 — thumbnails.js §5.21 13th 3-TIER (2nd architectural first)', 
   test('Tier 1 POST /:id/set-primary carries requireAuth (no requirePermission)', () => {
     expect(SRC).toMatch(/router\.post\(\s*\n?\s*'\/:id\/set-primary',\s*\n?\s*requireAuth,/);
   });
-  test('Tier 4 PUBLIC bare GET / unchanged', () => {
-    expect(SRC).toMatch(/router\.get\('\/', asyncHandler/);
+  test('Tier 4 PUBLIC bare GET / now carries explicit optionalAuth (FD-67 Option 1)', () => {
+    expect(SRC).toMatch(/router\.get\('\/', optionalAuth, asyncHandler/);
   });
 });

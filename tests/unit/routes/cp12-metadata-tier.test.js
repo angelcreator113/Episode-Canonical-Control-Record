@@ -4,8 +4,8 @@ const path = require('path');
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'metadata.js'), 'utf8');
 
 describe('CP12 — metadata.js §5.21 14th NEW shape (Tier 2-eq + Tier 4)', () => {
-  test('imports requireAuth (G6 closure)', () => {
-    expect(SRC).toMatch(/const \{ requireAuth \} = require\(['"]\.\.\/middleware\/auth['"]\)/);
+  test('imports requireAuth + optionalAuth (G6 closure; optionalAuth added by FD-67 Option 1)', () => {
+    expect(SRC).toMatch(/const \{ requireAuth, optionalAuth \} = require\(['"]\.\.\/middleware\/auth['"]\)/);
   });
   test('§5.41 G6: authenticateToken alias absent', () => {
     expect(SRC).not.toMatch(/authenticateToken/);
@@ -22,8 +22,8 @@ describe('CP12 — metadata.js §5.21 14th NEW shape (Tier 2-eq + Tier 4)', () =
   test('Tier 2-equivalent DELETE /:id preserves requirePermission delete', () => {
     expect(SRC).toMatch(/requireAuth,\s*\n?\s*requirePermission\('metadata', 'delete'\)/);
   });
-  test('Tier 4 PUBLIC bare GETs unchanged (asyncHandler only)', () => {
-    expect(SRC).toMatch(/router\.get\('\/', asyncHandler/);
-    expect(SRC).toMatch(/router\.get\('\/:id', asyncHandler/);
+  test('Tier 4 PUBLIC bare GETs now carry explicit optionalAuth (FD-67 Option 1 — global mount removed)', () => {
+    expect(SRC).toMatch(/router\.get\('\/', optionalAuth, asyncHandler/);
+    expect(SRC).toMatch(/router\.get\('\/:id', optionalAuth, asyncHandler/);
   });
 });

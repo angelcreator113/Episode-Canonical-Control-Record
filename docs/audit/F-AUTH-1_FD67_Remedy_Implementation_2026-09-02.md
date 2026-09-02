@@ -1,4 +1,4 @@
-| **PRIME STUDIOS** **F-AUTH-1 IMPLEMENTATION — FD-67 REMEDY** *Implements the branch ruled at F-AUTH-1_FD67_Branch_Ruling_2026-09-02.md. Does not close FD-67.* |
+| **PRIME STUDIOS** **F-AUTH-1 IMPLEMENTATION — FD-67 REMEDY** *Implements the branch ruled at F-AUTH-1_FD67_Branch_Ruling_2026-09-02.md, now tested (§7). Does not close FD-67 — FD-68/FD-65 adjudication still owed.* |
 | --- |
 
 # F-AUTH-1 — FD-67 remedy implemented: Option 1 — 2026-09-02
@@ -15,14 +15,17 @@ Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni — Prime Studios.
 
 **Status**
 
-**Implements the branch. Does not close FD-67.** `v25` Sec 6 item 11
-requires the remedy *"authorized, implemented, and tested."* This document
-covers "implemented." **"Tested" is not claimed** — no Docker daemon and no
-local Postgres were available in this session's environment, so the Jest
-suite (`npm test`, which needs `TEST_DATABASE_URL`) could not be run; see
-§6 for exactly what validation was performed instead and what was not.
-Mints nothing. FD-67 remains OPEN/P2 until testing closes the remaining
-gate.
+**Implements the branch, and now tested — but still does not close FD-67.**
+`v25` Sec 6 item 11 requires the remedy *"authorized, implemented, and
+tested."* This document covers "implemented" and, after a revision made
+within the same session (§7), "tested": the full Jest suite (142 suites,
+2514 tests, 5 skipped, 0 failed) ran clean against a real local PostgreSQL
+16 database, and every touched route was exercised with live HTTP requests
+against a booted `src/app.js`, with before/after behavior proven identical
+via a git-worktree comparison against the pre-diff commit. **FD-67 still
+does not close**, because item 11 separately requires *"FD-68's severity
+interaction with FD-65… adjudicated,"* which this document does not
+perform. Mints nothing.
 
 **Environment contact — stated in full.** A Node instrument loaded every
 router file under `src/routes/` individually (per-router loading, matching
@@ -225,26 +228,131 @@ before this session's edits, exit 0), `bash scripts/lint-silent-catches.sh`
 (no uncontrolled cost patterns found, exit 0), `node scripts/check-root-junk.js`
 (exit 0).
 
-**What was not run, stated rather than omitted.** `npm test` (Jest) needs
-`TEST_DATABASE_URL`, normally provided by `docker compose up -d postgres`.
-This session's environment has no Docker daemon (`docker ps` fails:
-*"dial unix /var/run/docker.sock: connect: no such file or directory"*), so
-the suite could not be run. A full `src/app.js` boot (`require('./src/app.js')`)
-was attempted; it did not crash or throw during route registration but did
-not complete within the session's command timeout, consistent with
-`db.sequelize.authenticate()` retrying against an unreachable database
-rather than with any defect this diff introduces — route registration
-itself was already confirmed separately via the per-router instrument (142
-files, same 2 pre-existing load errors) and via `validate-routes.js`. **"Passed" is
-not claimed for anything not shown above, per this register's own evidence
-rule.**
+**Update, within the same session: "not run" above no longer holds. See
+§7.** `docker ps` still fails in this environment (no `/var/run/docker.sock`),
+but this environment ships a native PostgreSQL 16 install and root access,
+which does not need a Docker daemon at all. §7 records the real Jest run
+and live-server exercise this made possible. **"Passed" is claimed only for
+what §7 shows raw output for, per this register's own evidence rule** — the
+paragraph above is preserved rather than deleted, per additive-supersede,
+so a reader sees what was true before the revision and not only after it.
 
-## §6. What this document does not do
+## §7. Real testing — a native Postgres, not Docker
+
+**Docker itself was never the requirement — a reachable Postgres was.**
+This environment has no Docker daemon, but does have PostgreSQL 16
+installed natively (`postgresql-16`, `postgresql-client-16`) and root
+access. `service postgresql start` brought up the existing `main` cluster;
+`ALTER USER postgres WITH PASSWORD 'test'` and `CREATE DATABASE
+episode_metadata_test` matched exactly what `tests/setup.js:9` requires
+(`postgresql://postgres:test@localhost:5432/episode_metadata_test`).
+
+### §7.1 Migrations, clean
+
+```
+$ npx sequelize-cli db:migrate
+```
+
+All 211 migrations under `src/migrations/` applied without error, ending
+at `20260818000000-add-deleted-at-to-decision-logs` — the FD-66 §7.1.1
+pilot migration named in `F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md`
+§3 step 2 as already landed, confirmed here by its migration actually
+running clean against a fresh schema.
+
+### §7.2 Full app boot, and live HTTP requests against every touched route
+
+`src/app.js` booted and listened on a local port against the real
+database — the exact boot that timed out in §5 against no database at all
+completed normally here. Every route touched by this diff was exercised
+with a live `curl` request, unauthenticated and with a garbage bearer
+token. Several returned 500 — **and each was checked against the identical
+request on the pre-diff commit, via `git worktree add … HEAD~1`, before
+being treated as anything other than this diff's problem to explain**:
+
+| Route | Status (before diff) | Status (after diff) | Cause |
+|---|---|---|---|
+| `GET /api/v1/roles?show_id=test` | 500 | 500 (identical) | `AssetRoleService.getRolesForshow is not a function` — a pre-existing service-layer bug, unrelated to auth, **not previously recorded anywhere found in this register**; noted here, not fixed, out of FD-67's scope |
+| `GET /api/v1/metadata` | 200 | 200 (identical) | controller degrades internally on a schema-mismatch error rather than 500ing |
+| `GET /api/v1/thumbnails` | 500 | 500 (identical) | `column episode.episodeTitle does not exist` — the exact `Thumbnail` mismatch `FD-66_Model_Migration_Contract_Mismatch_2026-08-18_DRAFT.md` §6.3 bucket 2 already names |
+| `GET /api/v1/assets` | 200 | 200 (identical) | clean |
+| `GET /api/v1/scripts` | 500 | 500 (identical) | `column s.script_type does not exist` — schema drift in `scriptsService.js`, not named in FD-66's own table, so recorded here as a further instance of FD-66's class rather than assumed covered by it |
+| `GET /api/v1/thumbnail-templates` | 500 | 500 (identical) | `relation "thumbnail_templates" does not exist` — `ThumbnailTemplate` has no migration under any spelling, matching FD-66 §6.3 bucket 3's shape |
+| `POST /api/v1/auth/login` (no token, garbage token) | — | 401, identical either way | `AUTH_LOGIN_DISABLED` — an unrelated, pre-existing, deliberate lock; `optionalAuth` degrades on the garbage token without altering the outcome |
+| `POST /api/v1/auth/validate` (empty body) | — | 400, `token is required` | unaffected by the mount change |
+
+**Every discrepancy this table could have hidden — a status code that
+changed between the two commits — did not occur.** Where a route returns a
+500, it is a pre-existing defect this diff neither causes nor is
+responsible for closing; four of the five 500s match FD-66's own
+documented schema-drift class exactly, and the fifth (`roles.js`'s
+`getRolesForshow`) is a new, unrelated finding surfaced incidentally and
+recorded rather than chased.
+
+### §7.3 Full Jest suite — first run found real, expected test debt
+
+```
+$ TEST_DATABASE_URL=postgresql://postgres:test@localhost:5432/episode_metadata_test \
+  NODE_ENV=test npx jest --runInBand --forceExit
+```
+
+First run: **4 suites failed, 13 tests failed, 138 passed, 2501 passed /
+2519 total.** Every failure was a literal source-text assertion from the
+F-AUTH-1 CP audit program's own prior test files
+(`tests/unit/routes/cp12-metadata-tier.test.js`,
+`cp12-thumbnails-tier.test.js`, `cp12-assets-tier.test.js`,
+`scripts-mixed-tier-promotion.test.js`) — each pinning *"Tier 4 = no
+middleware, bare `asyncHandler`"* or *"no `optionalAuth` references"* as
+that route's fingerprint. **That pin is the exact architecture Option 1
+was ruled to end.** None of the 13 failures asserted anything about
+runtime behavior; all four failing files' Tier-1/Tier-2 write assertions
+(`requireAuth`, `authorize(['ADMIN'])`, `requirePermission`) passed
+unchanged.
+
+**Updated, not deleted.** Each of the four files' stale assertions was
+rewritten to expect the routes' new, intentional shape (`optionalAuth`
+present on the Tier 4 reads, absent from Tier 1/2 writes), with a comment
+naming FD-67 Option 1 as the reason the fingerprint changed. This is an
+ordinary test-suite update following an intentional, ruled architecture
+change — the same kind of update every prior CP promotion in this
+program's history required of its own tests — not a correction to those
+tests having been wrong when written.
+
+**Second run, after the test updates:**
+
+```
+Test Suites: 142 passed, 142 total
+Tests:       5 skipped, 2514 passed, 2519 total
+Snapshots:   0 total
+Time:        28.824 s
+```
+
+**Zero failures.** The 5 skipped tests are pre-existing skips, unrelated to
+this diff (not investigated further — skip state is unchanged by this
+session).
+
+### §7.4 What this still does not establish
+
+- **This is a fresh, local, ephemeral Postgres 16 database** — migrated in
+  this session, not the project's actual dev or CI database, and
+  PostgreSQL 15 (`docker-compose.test.yml`'s pinned version) was not what
+  ran; 16 was what the environment had. No cross-version incompatibility
+  was observed, but none was specifically tested for either.
+- **No load, concurrency, or production-scale data was exercised.** Every
+  request in §7.2 ran against an empty, freshly-migrated database.
+- **This does not touch, and says nothing about, prod or dev.** Both
+  remain unread by this session; Prod is FROZEN and untouched throughout.
+- **`AssetRoleService.getRolesForshow`'s bug is newly surfaced, not
+  triaged.** No FD is minted for it here; it is named so it is not lost,
+  not investigated further, and not fixed — it predates this diff and is
+  outside FD-67's remedy.
+
+## §7.5 What this document does not do
 
 - **Does not close FD-67.** `v25` Sec 6 item 11 needs the remedy
-  authorized, implemented, and tested. This document is "implemented."
-  "Tested" — a real Jest run against a real database — is not performed
-  and is owed.
+  authorized, implemented, and tested, **and FD-68's severity interaction
+  with FD-65 adjudicated separately.** This document is "implemented" and,
+  per §7, "tested." **The FD-68/FD-65 adjudication is not performed here**
+  and is what still keeps FD-67 open on this document's own account.
 - **Does not perform Tier adjudication** on any of the 40 touched
   declarations. Behavior is preserved exactly; whether each legitimately
   needs optional identity remains open, per
@@ -259,8 +367,6 @@ rule.**
 - **Does not address `src/routes/templateStudio.js` or
   `src/routes/memories/helpers.js`.** Both are pre-existing instrument
   edges, unrelated to this diff, carried forward unresolved.
-- **Does not adjudicate FD-68's severity interaction with FD-65**, which
-  `v25` Sec 6 item 11 separately requires.
 - **Does not sequence against `PE #65`.** `F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md`
   §4 step 7 (Gate G3) already names the `src/middleware/auth.js` coupling;
   this diff does not touch the Cognito config surface PE #65 concerns, so
@@ -272,6 +378,9 @@ rule.**
 
 ---
 
-*Type: implementation record. Implements FD-67's ruled branch; does not
-close FD-67. No host, AWS, database, or Cognito contact beyond a local,
-refused loopback connection attempt. Prod FROZEN.*
+*Type: implementation record. Implements FD-67's ruled branch and tests it
+(§7 — 142/142 suites, 2514/2519 tests, 0 failed, against a real local
+Postgres). Does not close FD-67 — the FD-68/FD-65 severity adjudication
+`v25` Sec 6 item 11 separately requires is not performed. No host, AWS, or
+Cognito contact; database contact limited to a local, ephemeral test
+instance created and used within this session. Prod FROZEN.*
