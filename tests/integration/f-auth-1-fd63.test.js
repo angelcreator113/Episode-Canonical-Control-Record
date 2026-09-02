@@ -196,13 +196,14 @@ const SHAPES = [
   // parameter this test would pass on the missing-parameter guard rather than
   // on the absence of auth.
   //
-  // NOTE: this currently green-lights on a 500, not a working handler.
-  // roles.js:19 calls AssetRoleService.getRolesForshow — lowercase `show`,
-  // against an exported getRolesForShow — so the request throws past the
-  // show_id guard. The assertion is still load-bearing: promoting roles.js
-  // would produce 401/AUTH_REQUIRED and trip it either way. Once the casing is
-  // fixed this should start passing on a 200 instead; that is not a reason to
-  // relax the assertion.
+  // NOTE: this previously green-lit on a 500, not a working handler.
+  // roles.js:19 called AssetRoleService.getRolesForshow — lowercase `show`,
+  // against an exported getRolesForShow — so the request threw past the
+  // show_id guard. Fixed incidentally during F-AUTH-1 FD-67 Option 1's
+  // testing (unrelated to auth; a plain method-name typo, not gated by the
+  // XK-3 hold below). Now passes on a 200. The assertion remains
+  // load-bearing regardless: promoting roles.js would produce
+  // 401/AUTH_REQUIRED and trip it either way.
   describe('roles.js — HELD under XK-3, deliberately unpromoted', () => {
     test('anonymous request is not rejected by auth', async () => {
       const res = await request(app).get('/api/v1/roles?show_id=held-under-xk-3');

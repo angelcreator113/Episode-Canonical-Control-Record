@@ -121,7 +121,7 @@ class AssetRoleService {
    * Get usage statistics for roles
    */
   async getRoleUsageStats(showId) {
-    const roles = await this.getRolesForshow(showId);
+    const roles = await this.getRolesForShow(showId);
 
     const stats = await Promise.all(
       roles.map(async (role) => {
