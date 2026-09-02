@@ -87,6 +87,23 @@ cd frontend; npm run dev   # Vite on 5174, proxies /api to 127.0.0.1:3002
 
 `npm test` needs `TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/episode_metadata_test` (create the DB first). CI does the same in `.github/workflows/validate.yml`. (That URL matches `docker compose up -d postgres` from `docker-compose.yml`; if you use `docker-compose.test.yml` instead, its Postgres is on host port 5433.) Note that `tests/setup.js` refuses to start any backend test, even DB-free ones, without this variable.
 
+**Testing from a phone on the same wifi.** `frontend/vite.config.js` binds the
+dev server to all interfaces, so a phone on the same network can reach it
+directly — no extra flag needed.
+
+1. Both dev servers must be running: `npm run dev` (backend, :3002) and
+   `cd frontend; npm run dev` (Vite, :5174).
+2. Find the laptop's LAN IP on Windows: `ipconfig` in a new terminal, then
+   read the `IPv4 Address` under the adapter you're connected through (Wi-Fi
+   or Ethernet) — looks like `192.168.x.x` or `10.x.x.x`.
+3. On the phone's browser, load `http://<laptop-lan-ip>:5174` (the port
+   does not change).
+4. The backend's CORS allowlist detects the laptop's current LAN IP at
+   startup (`getLocalNetworkOrigins()` in `src/app.js`) — restart `npm run
+   dev` (backend) if you reconnect to a different network, since **the LAN
+   IP can change on reconnect** and the allowlist is only as current as the
+   backend process's last start.
+
 ### 2.4 Project-level Claude configuration (already committed)
 
 When you first run `claude` in the repo it asks you to trust the folder and to approve the project MCP server in `.mcp.json`. Say yes to both. What is in the repo:
