@@ -16,7 +16,7 @@ Live beats docs beats memory. Do these in order and PASTE each command with its 
 4. POSITION: `git rev-parse HEAD` and `git rev-parse origin/main`. Note whether they match.
 5. COMPLETENESS: `git rev-parse --is-shallow-repository`. If `true`, run `git fetch --unshallow origin main` before any ancestry, range, or history claim, then re-assert.
 6. If POSITION differs, `git rev-list --left-right --count origin/main...HEAD`. Nonzero *behind* is the stale-worktree hazard. Nonzero *ahead* with zero behind is your own unmerged work; do not discard it.
-7. Confirm the freeze from the register, not from memory: read the newest `docs/audit/Prime_Studios_Audit_Handoff_v<N>.md` (numeric sort, `ls docs/audit | grep -E 'Audit_Handoff_v[0-9]+\.md' | sort -t v -k3 -n | tail -1`) Sec 2 and Sec 3.4, and the newest `docs/audit/v25_Owed_Index_Amd<N>_*.md`. Prod is FROZEN unless that register says otherwise.
+7. Confirm the freeze from the register, not from memory: read the newest `docs/audit/Prime_Studios_Audit_Handoff_v<N>.md` (version sort, `ls docs/audit | grep -E 'Audit_Handoff_v[0-9]+\.md' | sort -V | tail -1` — do NOT use `sort -t v -k3 -n`: that key has no field 3 on these filenames, so sort falls back to lexical and ranks v8 above v25) Sec 2 and Sec 3.4, and the newest `docs/audit/v25_Owed_Index_Amd<N>_*.md`. Prod is FROZEN unless that register says otherwise.
 
 Then report, in one short block: basis SHA, open PRs, position result, shallow result, register tail files read. Stop there and wait for the task.
 
