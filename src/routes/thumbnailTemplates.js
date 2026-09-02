@@ -7,6 +7,7 @@
 const express = require('express');
 const { ThumbnailTemplate } = require('../models');
 const { Op } = require('sequelize');
+const { optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ const router = express.Router();
  * Query params:
  *  - showId: Filter templates by show
  */
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const { showId } = req.query;
 
@@ -52,7 +53,7 @@ router.get('/', async (req, res) => {
  * GET /api/v1/thumbnail-templates/:id
  * Get a specific thumbnail template by ID
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
 

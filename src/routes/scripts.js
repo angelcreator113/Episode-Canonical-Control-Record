@@ -9,7 +9,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 // are Tier 1. Legacy authenticateToken alias converted to requireAuth per
 // v2.33 §5.53 (5 instances; 2nd legacy-alias conversion in CP-zone work after
 // franchiseBrainRoutes:560 @ CP7).
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, optionalAuth } = require('../middleware/auth');
 
 /**
  * Scripts Routes
@@ -17,8 +17,8 @@ const { requireAuth } = require('../middleware/auth');
  */
 
 // PUBLIC: scripts catalog endpoints (Tier 4); no req.user consumption.
-router.get('/', asyncHandler(scriptsController.getAllScripts));
-router.get('/search', asyncHandler(scriptsController.searchScripts));
+router.get('/', optionalAuth, asyncHandler(scriptsController.getAllScripts));
+router.get('/search', optionalAuth, asyncHandler(scriptsController.searchScripts));
 
 // POST /api/v1/scripts/bulk-delete - Bulk delete scripts
 router.post(
@@ -28,7 +28,7 @@ router.post(
 );
 
 // PUBLIC: single-script + history catalog reads (Tier 4); no req.user consumption.
-router.get('/:scriptId', asyncHandler(scriptsController.getScriptById));
+router.get('/:scriptId', optionalAuth, asyncHandler(scriptsController.getScriptById));
 
 // PATCH /api/v1/scripts/:scriptId - Update script
 router.patch(
@@ -59,7 +59,7 @@ router.post(
 );
 
 // PUBLIC: edit history catalog read (Tier 4); no req.user consumption.
-router.get('/:scriptId/history', asyncHandler(scriptsController.getEditHistory));
+router.get('/:scriptId/history', optionalAuth, asyncHandler(scriptsController.getEditHistory));
 
 // POST /api/v1/scripts/:scriptId/parse-scenes - Parse scenes from script (Tier 1)
 router.post('/:scriptId/parse-scenes', requireAuth, asyncHandler(scriptsController.parseScenes));

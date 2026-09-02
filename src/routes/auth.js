@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const TokenService = require('../services/tokenService');
 const { authenticateJWT } = require('../middleware/jwtAuth');
+const { optionalAuth } = require('../middleware/auth');
 const {
   validateLoginRequest,
   validateRefreshRequest,
@@ -38,7 +39,7 @@ const refreshLimiter = rateLimit({
  * Developer/test endpoint to get a JWT token
  * In production, this would integrate with Cognito
  */
-router.post('/login', loginLimiter, validateLoginRequest, async (req, res) => {
+router.post('/login', optionalAuth, loginLimiter, validateLoginRequest, async (req, res) => {
   // FD-65 ISSUANCE HALF, closed 2026-08-22. This route issued a signed token
   // to any caller supplying a well-formed email and any 6-character password;
   // no credential was ever verified. v2.49 minted FD-65 with two halves and
@@ -123,7 +124,7 @@ router.post('/login', loginLimiter, validateLoginRequest, async (req, res) => {
  * POST /api/v1/auth/refresh
  * Refresh access token using refresh token
  */
-router.post('/refresh', refreshLimiter, validateRefreshRequest, async (req, res) => {
+router.post('/refresh', optionalAuth, refreshLimiter, validateRefreshRequest, async (req, res) => {
   try {
     const { refreshToken } = req.body;
 
@@ -226,7 +227,7 @@ router.get('/me', authenticateJWT, (req, res) => {
  * POST /api/v1/auth/validate
  * Validate a JWT token
  */
-router.post('/validate', validateTokenRequest, async (req, res) => {
+router.post('/validate', optionalAuth, validateTokenRequest, async (req, res) => {
   try {
     const { token } = req.body;
 
