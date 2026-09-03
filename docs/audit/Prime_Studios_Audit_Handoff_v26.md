@@ -10,6 +10,69 @@
 
 ---
 
+> **CORRECTION BANNER — TWO METHOD-NOTE PASSAGES ARE CARRIED IN-BAND HERE
+> BECAUSE THEY ARE ABSENT FROM THE MERGED COMMIT (added 2026-09-03,
+> additive).**
+>
+> **Discrepancy, established:**
+>
+> ```
+> $ git log --oneline origin/main -- docs/audit/Prime_Studios_Audit_Handoff_v26.md
+> b8c40b54c docs(audit): file Prime_Studios_Audit_Handoff_v26 [skip-automerge] (#1203)
+>
+> $ git rev-parse origin/main:docs/audit/Prime_Studios_Audit_Handoff_v26.md
+> d423660fbc85e8c6e4c76b02ce3e5a33064970c7
+> ```
+>
+> Three commits were pushed to the PR #1203 branch — the initial filing, a
+> round addressing scope/FD-ceiling/API-standing review notes, and a third
+> round addressing two further review notes on Sec 6.A items 5 and 12. The
+> single squash commit above carries the first two rounds' content. **The
+> third round's two passages are not present in the body below.** Both
+> were reviewed and approved before the merge; their absence is a carriage
+> gap between the reviewed PR branch and the merged commit, not a
+> withdrawal of either.
+>
+> **This banner carries text, not rulings.** It changes no standing, mints
+> nothing, closes nothing, and does not reopen any question v26 answered.
+> **No other line of the document below is affected** — this prepend is
+> the entirety of the correction.
+>
+> **(a) Carried in full — Sec 3's reconciliation, originally placed after
+> the "Only limb 1 has moved since v25" sentence closing Sec 3's dimension
+> table:**
+>
+> > **One table, cited two ways, reconciled.** Sec 6.A item 5's quoted
+> > instruction (Amendment 10 §J3's verbatim text) tells the next author to
+> > take dispositions from *"`v25_Owed_Index_Amd8_2026-08-27.md` §H4's
+> > table."* This section's table is copied from Amendment 10 §J3's own
+> > table, not §H4's directly. **They are not two sources — §J3's table is
+> > a restatement of §H4's, independently verified against `v2.59:198`,
+> > `v2.59:127`, and `v2.60:303`** (Amendment 10 §J3, closing line). §H4 is
+> > the original; §J3 is a checked copy of it. Item 5 points a future
+> > author at the original; this section's table is the checked copy.
+> > **Recorded here so a reader does not take the two citations as
+> > disagreeing or as independent corroboration — they are the same table
+> > at two removes.**
+>
+> **(b) Carried in full — Item 12's attribution, originally replacing the
+> unattributed closing clause of Sec 6.A item 12:**
+>
+> > **Item 12 — PE #65.** Advanced (costed and sequenced), not closed —
+> > see Sec 3.1. "A decision specification is not a decision" now reads:
+> > an execution sequence is not a closure either — per
+> > `F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md` §7's own statement
+> > that whether its filing discharges the closing criterion *"is for a
+> > ratifying revision or for Evoni directly… not asserted by this
+> > filing,"* not this document's inference.
+>
+> **A reader relying on Sec 3 or Sec 6.A item 12 should read both passages
+> above as if they appeared at the locations named**, until a future
+> revision carries them in body. This banner does not edit the body to
+> place them there; it is additive, per the register's immutability rule.
+
+---
+
 ## No `v26` pre-existed at this basis
 
 ```
