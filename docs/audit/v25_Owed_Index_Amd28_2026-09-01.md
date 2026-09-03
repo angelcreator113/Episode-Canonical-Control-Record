@@ -1,6 +1,10 @@
 | **PRIME STUDIOS** **V25 OWED INDEX — AMENDMENT 28** *Item 8 is recorded NOT PERFORMED as a read of canon, with the reason. The blocker is credential location, not authorization and not a failed gate. Two findings about how the register reached the conclusion that the credential is unreachable, one of which is that it has not fully checked.* |
 | --- |
 
+> **BANNER — §AD3.3's STATUS LINE IS SUPERSEDED** (added 2026-09-03, additive). §AD3.3 records SSM Parameter Store as NEVER CHECKED at this amendment's basis. That is no longer accurate: an authorized `describe-parameters` enumeration was run 2026-09-01 and is recorded at `v25_Owed_Index_Amd30_2026-09-01.md` §AF2 — four parameters exist, none under `/episode-metadata/`. **This banner corrects §AD3.3's status line only.** §AD3's finding is unaffected and stands as filed. Amd30 §AF3.1 states this directly: "Amd30 does NOT overturn §AD3. It confirms it" — the finding is recorded there as "STILL TRUE, and now VINDICATED." Two stores were enumerated, not three — the route at §AD4 is not a credential store. This banner is separate from §AD2's disposition-status banner and does not extend it. This banner points; it does not carry.
+>
+> Provenance: this banner's wording was proposed by the drafting session and approved by Evoni, not composed by her. The substitution of Amd30 §AF3.1's quoted language in place of a paraphrase was Evoni's. Disclosed per the same test `F-AUTH-1_Fix_Plan_v2.69.md`'s Ruling 2 note and correction banner apply.
+
 > ## ⚠ STATUS UPDATE — §AD2's disposition is CORRECTED. Read this first.
 >
 > **§AD2 below records `v25` Sec 6 item 8's read as NOT PERFORMED. That is
