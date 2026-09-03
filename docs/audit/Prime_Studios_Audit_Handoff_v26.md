@@ -230,6 +230,18 @@ and the dispositions above are copied from its table, which this document
 did not re-derive independently, only re-cite. **Only limb 1 has moved since
 v25.**
 
+**One table, cited two ways, reconciled.** Sec 6.A item 5's quoted
+instruction (Amendment 10 §J3's verbatim text) tells the next author to
+take dispositions from *"`v25_Owed_Index_Amd8_2026-08-27.md` §H4's table."*
+This section's table is copied from Amendment 10 §J3's own table, not §H4's
+directly. **They are not two sources — §J3's table is a restatement of
+§H4's, independently verified against `v2.59:198`, `v2.59:127`, and
+`v2.60:303`** (Amendment 10 §J3, closing line). §H4 is the original;
+§J3 is a checked copy of it. Item 5 points a future author at the
+original; this section's table is the checked copy. **Recorded here so a
+reader does not take the two citations as disagreeing or as independent
+corroboration — they are the same table at two removes.**
+
 ## Sec 3.1 FD-67 and FD-68, and PE #65 — re-checked
 
 **FD-67: branch ruled and implemented, not closed.** `F-AUTH-1_FD67_Branch_Ruling_2026-09-02.md`
@@ -368,7 +380,11 @@ adjudication.
 
 **Item 12 — PE #65.** **Advanced (costed and sequenced), not closed** — see
 Sec 3.1. "A decision specification is not a decision" now reads: an
-execution sequence is not a closure either.
+execution sequence is not a closure either — per
+`F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md` §7's own statement that
+whether its filing discharges the closing criterion *"is for a ratifying
+revision or for Evoni directly… not asserted by this filing,"* not this
+document's inference.
 
 ## Sec 6.B Owed and open items, verified at this basis
 
