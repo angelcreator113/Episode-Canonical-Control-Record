@@ -1,3 +1,22 @@
+> **BANNER — RULING 1'S PROVENANCE IS PARTIAL, NOT FULL** (added
+> 2026-09-03, additive). §6 Ruling 1's Rationale contains two clauses
+> whose wording originated with the drafting session rather than with
+> Evoni: the classification of the itemized audit as a `v27` Sec 6.B
+> register entry (not an FD), and its framing as owed pending explicit
+> authorization rather than sitting in the default task loop. Evoni
+> approved the assembled text; the clauses were not composed by her. The
+> remainder of Ruling 1 — the discharge itself and its distinguishing
+> sentences — is her own composition. Rulings 3, 4, and 5 were verified
+> against the record and carry no such clauses; Ruling 2's own disclosure
+> is unchanged. This banner applies the same test as that disclosure:
+> wording that originated session-side is labeled, regardless of who
+> approved it. This document's landing issue (#1210) stated that Rulings
+> 1, 3, 4, and 5 were Evoni's own words, given directly — accurate for 3,
+> 4, and 5; incorrect for Ruling 1's two clauses. Noted here because the
+> issue itself is not a register document and cannot be corrected by
+> amendment. This banner points; it does not carry. The Rationale text is
+> unedited.
+
 | **PRIME STUDIOS** **F-AUTH-1 FIX-PLANNING DOCUMENT** *Discharges limb 1. Closes FD-64. Closes PE #65. Leaves FD-67 open on a named gap. Declines to mint FD-70.* |
 | --- |
 
