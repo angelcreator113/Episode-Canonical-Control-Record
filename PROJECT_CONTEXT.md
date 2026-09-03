@@ -1,6 +1,6 @@
 # PROJECT CONTEXT — Prime Studios / Episode Canonical Control Record
 
-**Basis:** `origin/main` at `dd5e6ce4` (2026-09-02). Derived from a full read of the repository, the GitHub API, and the audit register. Facts are MEASURED (checkable in the repo) unless marked ASSERTED (the register says so; requires host/AWS/DB contact to verify, which agent sessions never make). §6.1, §6.5 and §10 items 1–11 were re-checked against this basis 2026-09-03 (Task #1196); unmarked facts elsewhere were carried, not re-verified.
+**Basis:** `origin/main` at `ee522f1c7` (2026-09-03). Derived from a full read of the repository, the GitHub API, and the audit register. Facts are MEASURED (checkable in the repo) unless marked ASSERTED (the register says so; requires host/AWS/DB contact to verify, which agent sessions never make). §6.1, §6.3, §6.5, §9 and §10 were re-checked against this basis 2026-09-03 (Task #1204, following #1196); unmarked facts elsewhere were carried, not re-verified.
 
 **How to use this file:** it is the knowledge file for the Claude Desktop project and the first thing a Claude Code session should read after `/wake-up`. It replaces the stale facts in the old `CLAUDE.md`, `README.md`, `.github/copilot-instructions.md`, and `SESSION_HANDOFF.md`. When a fact here changes, the change lands as a task through the workflow in `DEVELOPMENT_WORKFLOW.md`, not by hand.
 
@@ -205,7 +205,9 @@ The show-tier production stack is the January–February 2026 metadata/CMS/video
 
 ## 6. The audit register — what the conversation has been about
 
-### 6.1 Keystones and standing (Handoff v25, basis `6aea0f73`, plus later amendments)
+### 6.1 Keystones and standing (Handoff v26, basis `9250b60e`, plus a 2026-09-03 correction banner — see below)
+
+`Prime_Studios_Audit_Handoff_v26.md` is now the newest handoff by numeric sort (`ls docs/audit | grep -E 'Audit_Handoff_v[0-9]+\.md' | sort -V | tail -1`), superseding v25 Sec 1/2/3/6; v25's Sec 0/4/5/7/8 still stand. **v26 itself carries a correction banner** (added 2026-09-03, PR #1206), prepended above its body per the register's newest-first convention: two method-note passages (a table-provenance note in its Sec 3, and a citation in Sec 6.A item 12) were reviewed and approved on the PR branch but dropped from the squash-merged commit; the banner carries them in-band. Read the banner before the body.
 
 | Keystone | What it is | Standing at `433b1f22` | Authority file |
 |---|---|---|---|
@@ -230,7 +232,7 @@ The show-tier production stack is the January–February 2026 metadata/CMS/video
 
 ### 6.3 Register tails and numbering
 
-FD tail **FD-69** (retired; **FD-70** next, unminted). XK tail **XK-3**. PE tail **PE #68** (v25 says #67; the roster carries #68 from 2026-08-28). Notation warning: `§AD`, `§AE`, `§AF` in the Owed Index amendments collide with finding letters AD/AE/AF.
+FD tail **FD-69** (retired; **FD-70** next, unminted). XK tail **XK-3**. PE tail **PE #68** (v25 says #67; the roster carries #68 from 2026-08-28). **Re-confirmed by v26 Sec 1** with a second instrument (cross-revision scan of the last three F-AUTH-1 Fix Plan revisions, onboarding §4 rule 4) — both instruments agree, corroborated further by this file and the PE #65 execution-sequence document. v26 Sec 1 also flags that `grep`-counting mentions of `FD-70`/`XK-4`/`PE #69` returns dozens of hits that are all "next-available, unminted" citations, not mints — don't derive a tail by mention count. Notation warning: `§AD`, `§AE`, `§AF` in the Owed Index amendments collide with finding letters AD/AE/AF.
 
 ### 6.4 The v25 Owed Index chain (Amd1–Amd30, Aug 22 → Sep 1)
 
@@ -238,7 +240,7 @@ Carries rulings made in session but not yet held by a revision. Highlights: the 
 
 ### 6.5 What is owed / open (consolidated, with owner)
 
-Reconciled from Handoff v25 Sec 6, the v25 Owed Index chain through Amd30, F-Stats-1 v1.60, the Cross-Keystone Register and `Session_PE_Roster.md`. "Evoni-gated" items are never agent tasks; agent sessions record them NOT PERFORMED.
+Reconciled from Handoff v26 Sec 6.A/6.B (which itself rebuilt from Handoff v25 Sec 6 and the v25 Owed Index chain through Amd30), F-Stats-1 v1.60, the Cross-Keystone Register and `Session_PE_Roster.md`. "Evoni-gated" items are never agent tasks; agent sessions record them NOT PERFORMED.
 
 **Evoni-gated (host, AWS, DB, Cognito, GitHub settings, or a ruling)**
 
@@ -246,14 +248,14 @@ Reconciled from Handoff v25 Sec 6, the v25 Owed Index chain through Amd30, F-Sta
 |---|---|
 | **STILL OWED** (the read itself is DONE). v25 item 8 **disposition**: what the canon-schema reconciliation requires. The read itself was PERFORMED 2026-08-29 (2,760 rows / 143 tables; canon is a "third schema"; `SequelizeMeta` does not record what the database contains). Precondition: which of the four migration roots is canon (two cross-root duplicates change schema: `20260127000001`, `20260216000001`). | Amd18, Amd22–24, Amd29 |
 | **STILL OWED**, unchanged at this basis. Addendum A/B follow-up canon reads: authorized 2026-09-01, NOT PERFORMED; blocked on credential location (both DB passwords exist only on the frozen box; Secrets Manager and SSM hold nothing under `/episode-metadata/`). | Amd28 §AD2, Amd30 §AF2 |
-| **STILL OWED.** `JWT_SECRET` dev/prod environment read (item 9). | v25 Sec 6 |
-| **STILL OWED** (severity adjudication). FD-68 vs FD-65 severity (item 11). FD-67's own remedy is authorized and shipped at `7a1eb427c` (Option 1, PR #1185); close status is not recorded by a Fix Plan revision. | v25 Sec 6 |
+| **STILL OWED.** `JWT_SECRET` dev/prod environment read (item 9). | v26 Sec 6.A item 9 |
+| **STILL OWED** (severity adjudication). FD-68 vs FD-65 severity (item 11). FD-67's own remedy is authorized (branch ruled `F-AUTH-1_FD67_Branch_Ruling_2026-09-02.md`, Option 1) and shipped at `7a1eb427c` (PR #1185); close status is not recorded by a Fix Plan revision — v26 Sec 6.A item 11 records this as advanced, not closed. | v26 Sec 6.A item 11, Sec 3.1 |
 | **STILL OWED.** F-AUTH-1 limb 3 dimensions 3 and 5 (host and shared-Cognito reads). | F-AUTH-1 v2.68 |
 | **MIXED.** PE #64 severity re-rule — **STILL OWED**. PE #65 Branch B costing — **DONE** (`F-AUTH-1_PE65_Resolution_BranchB_2026-08-28.md`); its ordered execution sequence is now also **DONE** (`F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md`, filed 2026-09-02, derived entirely from documents already on `main`); whether PE #65 itself closes is explicitly left open by that document (§7: "not decided here… a ratifying revision or Evoni directly") — **STILL OWED**. Re-recording §9.10's P1 in a Fix Plan revision — **STILL OWED** (that same document confirms §9.10 occurs zero times in `v2.68` as of 2026-09-02). | PE roster, Amd16; F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md |
 | **CANNOT-TELL** — by the item's own terms, only a real push or reading the credential settles it, and neither is repo-derivable. PE #68: whether the injected git credential acts as `angelcreator113`. | Amd12, Amd14 |
 | **STILL OWED**, unchanged at this basis. F-Deploy-1 post-close: AD (no instance profile), AE (open SG ports; `/32` on 22 re-scoping), AF (RDS SG `0.0.0.0/0:5432`), fork-RDS teardown, dev DNS repoint or retire, prod transport to SSM, credential rotations, the prod reconciliation session. | F-Deploy-1 v1.49 |
 | **STILL OWED** — newest evidence note on file is still 2026-07-07. Branch-protection bypass disposition (enforce / accept / PR-required for `docs/audit/**`). | Finding_Main_BranchProtection_Bypass |
-| **STILL OWED, all sub-items** — confirmed unplaced/unfiled at this basis: no banner text found on `v25_Owed_Index_Amd28_2026-09-01.md` beyond its own §AD2 status update; no `Prime_Studios_Audit_Handoff_v26*.md` exists. Rulings owed on the register itself: v25 item 5 replacement text; Amd6's missing pointer banner; the status banner on Amd28 §AD3.3; whether measurement corrections need ratification (XK-1); the VENDOR DOCUMENTATION source class; attribution-gap remedies (ALB access logs, actor on write paths); minting the production-provenance mechanism; the `deploy-production.yml` header figures; the authorship-record preservation choice. | Amd10, Amd13, Amd30, drafts of 2026-08-22/24 |
+| **MIXED, re-checked against `Prime_Studios_Audit_Handoff_v26.md`, which now exists.** v25 item 5 replacement text — **DONE** (v26 Sec 6.A item 5 supplies Amendment 10 §J3's replacement text verbatim; whether to *ratify* it into a future revision's own face is still Evoni's). Amd6's missing pointer banner — **STILL OWED**, and now has a named entry: v26 Sec 6.A carries a one-time OPEN item stating which forward pointer must be ruled first (Amendment 7 §G6), a ruling v26 explicitly declines to make. Confirmed unplaced/unfiled at this basis: no banner text on `v25_Owed_Index_Amd28_2026-09-01.md` beyond its own §AD2 status update — **STILL OWED**. Remaining sub-items **STILL OWED, unchanged**: whether measurement corrections need ratification (XK-1); the VENDOR DOCUMENTATION source class; attribution-gap remedies (ALB access logs, actor on write paths); minting the production-provenance mechanism; the `deploy-production.yml` header figures; the authorship-record preservation choice. | Amd10, Amd13, Amd30, drafts of 2026-08-22/24; v26 Sec 6.A |
 
 **Register work an agent session can do (repo-only, filed with `/audit-file`, pushed and merged under Rule 7)**
 
@@ -263,7 +265,7 @@ Reconciled from Handoff v25 Sec 6, the v25 Owed Index chain through Amd30, F-Sta
 | **STILL OWED**, unchanged — newest F-Stats-1 authority is still `v1.60`. F-Stats-1 owed: the reads slice (since v1.49 §52.6); read F-App-1 §12.11 to close the PE #62 overlap (the eleventh sync is `workers/sceneGenerationWorker.js:235`); §35.5 classes 2–6 homing; the second-shape mint decision (40 sites / 39 handlers / 20 files; Evoni rules); StorytellerMemory references; `worldStudio.js:1838–1859` transactionality; `worldEvents.js:570`, `:1973`, `worldStudio.js:3121` unread. | v1.60 §63.5 |
 | **STILL OWED.** XK-1 admission status after reach collapsed to F-Stats-1 alone (limb 2 boot-path reading); XK-2 extent census (20 of 22 `:showId` files unprobed); XK-3 full `authorize` call-site population (Gate 3 needs a live DB: Evoni). | CKR |
 | **STILL OWED** — FD-70 remains next-available and unminted per `F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md` §8. Route-shadowing FD decision for the six dead declarations (item 10-B, under limb 1). | Route_Shadowing_Survey |
-| **STILL OWED** — no `Prime_Studios_Audit_Handoff_v26*.md` exists at this basis. v26 handoff: supersede v25 Sec 1/2/3/6, carry Amd10 §J3/§J4/§J5 and the v26 draft material; F-Stats-1's "Phase B live" face read needs re-derivation. | v26_Draft_Material_* |
+| **DONE.** `Prime_Studios_Audit_Handoff_v26.md` filed (PR #1203, 2026-09-03), superseding v25 Sec 1/2/3/6 and carrying Amd10 §J3/§J4/§J5 in the form Amendment 10 proposed; the two v26 draft-material documents are void per their own absorption condition. F-Stats-1's "Phase B live" face was re-derived (v26 Sec 1/2) and found unchanged — still `v1.60`, blob identical. **A correction banner landed on v26 after merge** (PR #1206, 2026-09-03) restoring two method-note passages dropped from the squash commit — see §6.1. v26 does not ratify limb 1's discharge or close FD-64/FD-67/PE #65; that needs `F-AUTH-1_Fix_Plan_v2.69`, Evoni's to rule. | `Prime_Studios_Audit_Handoff_v26.md`; PR #1203, #1206 |
 | **STILL OWED** — `Session_PE_Roster.md` last touched 2026-08-27 (PE #68 mint), before this window's activity. Roster hygiene: closed index omits PE #63 and #66; PE #64's status line is superseded by its amendments; the `§AD/§AE/§AF` letter collision. | PE roster, Amd29/30 |
 | **STILL OWED.** F-Sec-3 cold items: `socialProfileRoutes.js:1010` classification; `evaluation.js` frontend key audit; history-table consolidation; the `financialPressureService.js:208` ledger mutation. | F-Sec-3 inventory §5 |
 | **STILL OWED.** F-Tools-1 opens: stop hook, deploy-hook noise, deploy-production hardening, GitHub App identity inventory (PE #59); PE #67 fail-closed branch-base gate script. | F-Tools-1 §4 |
@@ -322,7 +324,7 @@ Declined or bounded non-actions (do not reopen without a reason): fourteen in-pl
 
 | File | Problem |
 |---|---|
-| `.github/agents/deploy.agent.md`, `.github/prompts/deploy-dev.prompt.md` | Instruct SSH to 54.163.229.144 (the frozen prod box), `git pull`, `pm2 restart` — the exact actions the hazard doc forbids. |
+| `.github/agents/deploy.agent.md`, `.github/prompts/deploy-dev.prompt.md` | **Retired 2026-09-03 (PR #1201).** Both files still exist and Copilot still resolves them by path (frontmatter untouched), but their bodies now carry a freeze notice — production is FROZEN, deploys are Evoni-only via `workflow_dispatch`, agent sessions never run `ssh`/`scp`/`pm2`/`aws` — in place of the old SSH-to-`54.163.229.144`/`git pull`/`pm2 restart` procedure this table used to flag. Kept as a row rather than dropped so this table doesn't go silent on files it once warned about. |
 | `.github/copilot-instructions.md`, old `CLAUDE.md` | Neon DB, `memories.js` single file, `optionalAuth` convention, port 5173, "no Tailwind". |
 | `.github/instructions/memories-routes.instructions.md` | `applyTo: src/routes/memories.js` with a line map of a deleted file; `optionalAuth` scaffold. |
 | `.github/agents/story-engine.agent.md` | Names deleted `StoryEngine.jsx`; "12K-line memories.js". |
@@ -342,10 +344,10 @@ Declined or bounded non-actions (do not reopen without a reason): fourteen in-pl
 ## 10. Suggested work for the loop (Evoni chooses; nothing here is ruled)
 
 Inside the locked sequence and safe for agent sessions:
-1. **DONE (confirmation sweep); ratification STILL OWED.** ~~Limb 1 per-CP confirmation passes (repo-only, decomposable, cannot-tell first-class).~~ All 12/12 CPs confirmed (`F-AUTH-1_Limb1_CP1…CP12_Confirmation_2026-09-02.md`, CP10 committed 2026-09-01, the rest 2026-09-02): 127 recorded dispositions, 120 agree / 2 disagree / 5 cannot-tell. See §6.1. A handoff revision ratifying the discharge is still owed — CP12's "Limb 1 discharges" is its own claim, not a ruling.
+1. **DONE (confirmation sweep and exceptions consolidated); ratification STILL OWED.** ~~Limb 1 per-CP confirmation passes (repo-only, decomposable, cannot-tell first-class).~~ All 12/12 CPs confirmed (`F-AUTH-1_Limb1_CP1…CP12_Confirmation_2026-09-02.md`, CP10 committed 2026-09-01, the rest 2026-09-02): 127 recorded dispositions, 120 agree / 2 disagree / 5 cannot-tell. The 2 disagree + 5 cannot-tell rows are consolidated with re-verified code reads at `F-AUTH-1_Limb1_Exceptions_Consolidated_2026-09-03.md`. See §6.1. **A handoff had the chance and declined**: `Prime_Studios_Audit_Handoff_v26.md` Sec 8 explicitly states it does not ratify limb 1's discharge — CP12's "Limb 1 discharges" is its own claim, not a ruling, and v26 does not convert it into one. Ratification now requires `F-AUTH-1_Fix_Plan_v2.69`, Evoni's to rule.
 2. ~~FD-64 fix: rename `getRolesForshow` → `getRolesForShow` and the `Model.update()` without `where` in `AssetRoleService.js:152`.~~ **DONE** — `65cbe7013` and `2e5dbdf28`; close not recorded in a Fix Plan revision (**STILL OWED**).
 3. Register hygiene tasks — **MIXED**: place the owed banner on Amd28 §AD3 — **STILL OWED** (confirmed unplaced at this basis: `v25_Owed_Index_Amd28_2026-09-01.md` carries only its own §AD2 status-update banner); reconcile v25's FD-68 status — **DONE** (§6.1 already carries "FD-65 and FD-68 CLOSED (v25 wrongly lists FD-68 open)"); PE tail correction — **DONE** (§6.3 already carries "PE tail PE #68").
-4. **STILL OWED** — both files unchanged at this basis (`.github/agents/deploy.agent.md`, `.github/prompts/deploy-dev.prompt.md` still present, still listed in §9). Retire the dangerous Copilot deploy prompts (replace with a pointer to the freeze).
+4. **DONE** — PR #1201 (2026-09-03). Both files still exist (Copilot resolution requires the path) and still listed in §9, now noted there as carrying freeze notices instead of the SSH/pm2 procedure.
 5. **STILL OWED** — confirmed still present in both files at this basis. Redact the surviving staging RDS password literal in the two February audit docs (§9).
 6. **STILL OWED** — no `eslint` reference in `.github/workflows/validate.yml` at this basis. Add ESLint to the CI Validate workflow after clearing the 38 pre-existing errors in 23 `src/` files (§4.8), or record why not.
 
