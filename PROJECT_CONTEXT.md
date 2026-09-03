@@ -1,6 +1,6 @@
 # PROJECT CONTEXT — Prime Studios / Episode Canonical Control Record
 
-**Basis:** `origin/main` at `a4544c37` (2026-09-02). Derived from a full read of the repository, the GitHub API, and the audit register. Facts are MEASURED (checkable in the repo) unless marked ASSERTED (the register says so; requires host/AWS/DB contact to verify, which agent sessions never make).
+**Basis:** `origin/main` at `dd5e6ce4` (2026-09-02). Derived from a full read of the repository, the GitHub API, and the audit register. Facts are MEASURED (checkable in the repo) unless marked ASSERTED (the register says so; requires host/AWS/DB contact to verify, which agent sessions never make). §6.1, §6.5 and §10 items 1–11 were re-checked against this basis 2026-09-03 (Task #1196); unmarked facts elsewhere were carried, not re-verified.
 
 **How to use this file:** it is the knowledge file for the Claude Desktop project and the first thing a Claude Code session should read after `/wake-up`. It replaces the stale facts in the old `CLAUDE.md`, `README.md`, `.github/copilot-instructions.md`, and `SESSION_HANDOFF.md`. When a fact here changes, the change lands as a task through the workflow in `DEVELOPMENT_WORKFLOW.md`, not by hand.
 
@@ -209,7 +209,7 @@ The show-tier production stack is the January–February 2026 metadata/CMS/video
 
 | Keystone | What it is | Standing at `433b1f22` | Authority file |
 |---|---|---|---|
-| **F-AUTH-1** | Codebase-wide auth bypass on writes (three sub-forms) | **REOPENED-QUALIFIED.** Backend sweep done (12 CPs, ~700–750 handlers, May 2026); reopened at FD-63; 95 more handlers promoted Aug 17. Gate G3 partially discharged: limb 1 (confirm-not-re-derive audit of 129 recorded CP dispositions) defined, not performed; limb 3 (five-dimension production-readiness) NOT COMPLETED (D1 PASS, D2 PASS, D3 not performed, D4 FAIL, D5 not performed). G4 never entered; G5 blocked; prod frozen. FD-63 OPEN; FD-64 fixed at `65cbe7013` (spelling) and `2e5dbdf28` (`where` clause) — close not recorded in a Fix Plan revision; FD-67 shipped at `7a1eb427c` (Option 1, PR #1185) — checked `v2.68`, the newest Fix Plan on `main`, and no revision closes it, so close not recorded; FD-65 and FD-68 CLOSED (v25 wrongly lists FD-68 open); FD-69 retired as duplicate. | `docs/audit/F-AUTH-1_Fix_Plan_v2.68.md` |
+| **F-AUTH-1** | Codebase-wide auth bypass on writes (three sub-forms) | **REOPENED-QUALIFIED.** Backend sweep done (12 CPs, ~700–750 handlers, May 2026); reopened at FD-63; 95 more handlers promoted Aug 17. Gate G3 partially discharged: limb 1 (confirm-not-re-derive audit of recorded CP dispositions) **PARTIAL** — all 12/12 CPs now have a filed confirmation pass (`docs/audit/F-AUTH-1_Limb1_CP1_Confirmation_2026-09-02.md` through `…CP12_Confirmation_2026-09-02.md`; CP10 committed 2026-09-01, the other eleven 2026-09-02), confirming **127** recorded dispositions (120 agree, 2 disagree, 5 cannot-tell) — re-derived from the twelve CP documents' own header lines, correcting the previously carried 129. CP12's own text asserts *"Limb 1 discharges,"* but that is the confirming document's own claim, not a handoff ruling, so it is carried here as partial pending a ratifying revision; limb 3 (five-dimension production-readiness) NOT COMPLETED (D1 PASS, D2 PASS, D3 not performed, D4 FAIL, D5 not performed). G4 never entered; G5 blocked; prod frozen. FD-63 OPEN; FD-64 fixed at `65cbe7013` (spelling) and `2e5dbdf28` (`where` clause) — close not recorded in a Fix Plan revision; FD-67 shipped at `7a1eb427c` (Option 1, PR #1185) — checked `v2.68`, the newest Fix Plan on `main`, and no revision closes it, so close not recorded; FD-65 and FD-68 CLOSED (v25 wrongly lists FD-68 open); FD-69 retired as duplicate. | `docs/audit/F-AUTH-1_Fix_Plan_v2.68.md` |
 | **F-Deploy-1** | Deploy pipeline + autonomous-merge failure modes (37 lettered findings A–AK) | **CLOSED** at v1.48 (2026-07-22), carriage-corrected at v1.49. Dev box + SSM `workflow_dispatch` deploy path live; prod deploy path still SSH-based and disabled. Owed after close: AD (no instance profile on prod), AE (four SG ports still open; `/32` on port 22 needs re-scoping), fork RDS teardown, dev DNS repoint, `deploy-production.yml` SSM migration, PE #62 ownership. | `docs/audit/F-Deploy-1_Fix_Plan_v1.49.md` |
 | **F-App-1** | Schema-as-JS auto-repair in `app.js` | SHIPPED 2026-05-14 (out of sequence); residue = PE #62 (five inline `CREATE TABLE` + eleven `Model.sync()` sites) and FD-66. | `docs/audit/F-App-1_Fix_Plan_v1.1.md` |
 | **F-Stats-1** | `character_state` model + raw-SQL writers | Phase B live: raw SQL → ORM PRs 1–4f landed Aug 1–4; items 23 and 36 closed; open item 40 became XK-1. | `docs/audit/F-Stats-1_Fix_Plan_v1.60.md` |
@@ -244,40 +244,40 @@ Reconciled from Handoff v25 Sec 6, the v25 Owed Index chain through Amd30, F-Sta
 
 | Item | Source |
 |---|---|
-| v25 item 8 **disposition**: what the canon-schema reconciliation requires. The read itself was PERFORMED 2026-08-29 (2,760 rows / 143 tables; canon is a "third schema"; `SequelizeMeta` does not record what the database contains). Precondition: which of the four migration roots is canon (two cross-root duplicates change schema: `20260127000001`, `20260216000001`). | Amd18, Amd22–24, Amd29 |
-| Addendum A/B follow-up canon reads: authorized 2026-09-01, NOT PERFORMED; blocked on credential location (both DB passwords exist only on the frozen box; Secrets Manager and SSM hold nothing under `/episode-metadata/`). | Amd28 §AD2, Amd30 §AF2 |
-| `JWT_SECRET` dev/prod environment read (item 9). | v25 Sec 6 |
-| FD-68 vs FD-65 severity (item 11). FD-67's own remedy is authorized and shipped at `7a1eb427c` (Option 1, PR #1185); close status is not recorded by a Fix Plan revision. | v25 Sec 6 |
-| F-AUTH-1 limb 3 dimensions 3 and 5 (host and shared-Cognito reads). | F-AUTH-1 v2.68 |
-| PE #64 severity re-rule; PE #65 Branch B costing and sequencing; re-recording §9.10's P1 in a Fix Plan revision. | PE roster, Amd16 |
-| PE #68: whether the injected git credential acts as `angelcreator113` (only a real push or reading the credential settles it). | Amd12, Amd14 |
-| F-Deploy-1 post-close: AD (no instance profile), AE (open SG ports; `/32` on 22 re-scoping), AF (RDS SG `0.0.0.0/0:5432`), fork-RDS teardown, dev DNS repoint or retire, prod transport to SSM, credential rotations, the prod reconciliation session. | F-Deploy-1 v1.49 |
-| Branch-protection bypass disposition (enforce / accept / PR-required for `docs/audit/**`). | Finding_Main_BranchProtection_Bypass |
-| Rulings owed on the register itself: v25 item 5 replacement text; Amd6's missing pointer banner; the status banner on Amd28 §AD3.3; whether measurement corrections need ratification (XK-1); the VENDOR DOCUMENTATION source class; attribution-gap remedies (ALB access logs, actor on write paths); minting the production-provenance mechanism; the `deploy-production.yml` header figures; the authorship-record preservation choice. | Amd10, Amd13, Amd30, drafts of 2026-08-22/24 |
+| **STILL OWED** (the read itself is DONE). v25 item 8 **disposition**: what the canon-schema reconciliation requires. The read itself was PERFORMED 2026-08-29 (2,760 rows / 143 tables; canon is a "third schema"; `SequelizeMeta` does not record what the database contains). Precondition: which of the four migration roots is canon (two cross-root duplicates change schema: `20260127000001`, `20260216000001`). | Amd18, Amd22–24, Amd29 |
+| **STILL OWED**, unchanged at this basis. Addendum A/B follow-up canon reads: authorized 2026-09-01, NOT PERFORMED; blocked on credential location (both DB passwords exist only on the frozen box; Secrets Manager and SSM hold nothing under `/episode-metadata/`). | Amd28 §AD2, Amd30 §AF2 |
+| **STILL OWED.** `JWT_SECRET` dev/prod environment read (item 9). | v25 Sec 6 |
+| **STILL OWED** (severity adjudication). FD-68 vs FD-65 severity (item 11). FD-67's own remedy is authorized and shipped at `7a1eb427c` (Option 1, PR #1185); close status is not recorded by a Fix Plan revision. | v25 Sec 6 |
+| **STILL OWED.** F-AUTH-1 limb 3 dimensions 3 and 5 (host and shared-Cognito reads). | F-AUTH-1 v2.68 |
+| **MIXED.** PE #64 severity re-rule — **STILL OWED**. PE #65 Branch B costing — **DONE** (`F-AUTH-1_PE65_Resolution_BranchB_2026-08-28.md`); its ordered execution sequence is now also **DONE** (`F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md`, filed 2026-09-02, derived entirely from documents already on `main`); whether PE #65 itself closes is explicitly left open by that document (§7: "not decided here… a ratifying revision or Evoni directly") — **STILL OWED**. Re-recording §9.10's P1 in a Fix Plan revision — **STILL OWED** (that same document confirms §9.10 occurs zero times in `v2.68` as of 2026-09-02). | PE roster, Amd16; F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md |
+| **CANNOT-TELL** — by the item's own terms, only a real push or reading the credential settles it, and neither is repo-derivable. PE #68: whether the injected git credential acts as `angelcreator113`. | Amd12, Amd14 |
+| **STILL OWED**, unchanged at this basis. F-Deploy-1 post-close: AD (no instance profile), AE (open SG ports; `/32` on 22 re-scoping), AF (RDS SG `0.0.0.0/0:5432`), fork-RDS teardown, dev DNS repoint or retire, prod transport to SSM, credential rotations, the prod reconciliation session. | F-Deploy-1 v1.49 |
+| **STILL OWED** — newest evidence note on file is still 2026-07-07. Branch-protection bypass disposition (enforce / accept / PR-required for `docs/audit/**`). | Finding_Main_BranchProtection_Bypass |
+| **STILL OWED, all sub-items** — confirmed unplaced/unfiled at this basis: no banner text found on `v25_Owed_Index_Amd28_2026-09-01.md` beyond its own §AD2 status update; no `Prime_Studios_Audit_Handoff_v26*.md` exists. Rulings owed on the register itself: v25 item 5 replacement text; Amd6's missing pointer banner; the status banner on Amd28 §AD3.3; whether measurement corrections need ratification (XK-1); the VENDOR DOCUMENTATION source class; attribution-gap remedies (ALB access logs, actor on write paths); minting the production-provenance mechanism; the `deploy-production.yml` header figures; the authorship-record preservation choice. | Amd10, Amd13, Amd30, drafts of 2026-08-22/24 |
 
 **Register work an agent session can do (repo-only, filed with `/audit-file`, pushed and merged under Rule 7)**
 
 | Item | Source |
 |---|---|
-| F-AUTH-1 limb 1: per-CP confirmation passes over the 129 recorded dispositions (decomposable; "cannot tell" is a first-class answer). | v2.68 |
-| F-Stats-1 owed: the reads slice (since v1.49 §52.6); read F-App-1 §12.11 to close the PE #62 overlap (the eleventh sync is `workers/sceneGenerationWorker.js:235`); §35.5 classes 2–6 homing; the second-shape mint decision (40 sites / 39 handlers / 20 files; Evoni rules); StorytellerMemory references; `worldStudio.js:1838–1859` transactionality; `worldEvents.js:570`, `:1973`, `worldStudio.js:3121` unread. | v1.60 §63.5 |
-| XK-1 admission status after reach collapsed to F-Stats-1 alone (limb 2 boot-path reading); XK-2 extent census (20 of 22 `:showId` files unprobed); XK-3 full `authorize` call-site population (Gate 3 needs a live DB: Evoni). | CKR |
-| Route-shadowing FD decision for the six dead declarations (item 10-B, under limb 1). | Route_Shadowing_Survey |
-| v26 handoff: supersede v25 Sec 1/2/3/6, carry Amd10 §J3/§J4/§J5 and the v26 draft material; F-Stats-1's "Phase B live" face read needs re-derivation. | v26_Draft_Material_* |
-| Roster hygiene: `Session_PE_Roster` closed index omits PE #63 and #66; PE #64's status line is superseded by its amendments; the `§AD/§AE/§AF` letter collision. | PE roster, Amd29/30 |
-| F-Sec-3 cold items: `socialProfileRoutes.js:1010` classification; `evaluation.js` frontend key audit; history-table consolidation; the `financialPressureService.js:208` ledger mutation. | F-Sec-3 inventory §5 |
-| F-Tools-1 opens: stop hook, deploy-hook noise, deploy-production hardening, GitHub App identity inventory (PE #59); PE #67 fail-closed branch-base gate script. | F-Tools-1 §4 |
-| F-Deploy-1 amendment recording that the SSM rewrite also closed cross-environment write. | Production_State_Provenance §8 |
+| **DONE (confirmation sweep); ratification STILL OWED.** F-AUTH-1 limb 1: per-CP confirmation passes now filed for all 12/12 CPs, confirming 127 recorded dispositions (120 agree, 2 disagree, 5 cannot-tell), not 129. See §6.1 for the count and §11's note. Ratifying the discharge in a handoff revision is not this table's item, and is not done. | CP1–CP12 confirmations, 2026-09-01/02; v2.68 |
+| **STILL OWED**, unchanged — newest F-Stats-1 authority is still `v1.60`. F-Stats-1 owed: the reads slice (since v1.49 §52.6); read F-App-1 §12.11 to close the PE #62 overlap (the eleventh sync is `workers/sceneGenerationWorker.js:235`); §35.5 classes 2–6 homing; the second-shape mint decision (40 sites / 39 handlers / 20 files; Evoni rules); StorytellerMemory references; `worldStudio.js:1838–1859` transactionality; `worldEvents.js:570`, `:1973`, `worldStudio.js:3121` unread. | v1.60 §63.5 |
+| **STILL OWED.** XK-1 admission status after reach collapsed to F-Stats-1 alone (limb 2 boot-path reading); XK-2 extent census (20 of 22 `:showId` files unprobed); XK-3 full `authorize` call-site population (Gate 3 needs a live DB: Evoni). | CKR |
+| **STILL OWED** — FD-70 remains next-available and unminted per `F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md` §8. Route-shadowing FD decision for the six dead declarations (item 10-B, under limb 1). | Route_Shadowing_Survey |
+| **STILL OWED** — no `Prime_Studios_Audit_Handoff_v26*.md` exists at this basis. v26 handoff: supersede v25 Sec 1/2/3/6, carry Amd10 §J3/§J4/§J5 and the v26 draft material; F-Stats-1's "Phase B live" face read needs re-derivation. | v26_Draft_Material_* |
+| **STILL OWED** — `Session_PE_Roster.md` last touched 2026-08-27 (PE #68 mint), before this window's activity. Roster hygiene: closed index omits PE #63 and #66; PE #64's status line is superseded by its amendments; the `§AD/§AE/§AF` letter collision. | PE roster, Amd29/30 |
+| **STILL OWED.** F-Sec-3 cold items: `socialProfileRoutes.js:1010` classification; `evaluation.js` frontend key audit; history-table consolidation; the `financialPressureService.js:208` ledger mutation. | F-Sec-3 inventory §5 |
+| **STILL OWED.** F-Tools-1 opens: stop hook, deploy-hook noise, deploy-production hardening, GitHub App identity inventory (PE #59); PE #67 fail-closed branch-base gate script. | F-Tools-1 §4 |
+| **STILL OWED** — the DRAFT still reads "Nothing records that it also closed cross-environment write." F-Deploy-1 amendment recording that the SSM rewrite also closed cross-environment write. | Production_State_Provenance §8 |
 
 **Code PRs (small, inside or adjacent to the sequence)**
 
 | Item | Source |
 |---|---|
-| FD-64: fixed — `getRolesForshow` → `getRolesForShow` at `65cbe7013`; `Model.update()` `where` clause added at `AssetRoleService.js:151` at `2e5dbdf28`. Close not recorded in a Fix Plan revision. | F-AUTH-1 v2.6x |
-| FD-66 disposition and a baseline migration sequence (after item 8; Evoni rules, a PR executes). | FD-66 DRAFT |
-| 28 `claude/**` branch tips lack `[skip-automerge]` while `auto-merge-to-dev.yml` still carries the push trigger in YAML (re-enable decision is gated; the fix is a branch-cleanup ruling, not a code change). | Amd26 §AB3 |
+| **DONE (code); recording STILL OWED.** FD-64: fixed — `getRolesForshow` → `getRolesForShow` at `65cbe7013`; `Model.update()` `where` clause added at `AssetRoleService.js:151` at `2e5dbdf28`. Close not recorded in a Fix Plan revision. | F-AUTH-1 v2.6x |
+| **STILL OWED.** FD-66 disposition and a baseline migration sequence (after item 8; Evoni rules, a PR executes). | FD-66 DRAFT |
+| **STILL OWED.** 28 `claude/**` branch tips lack `[skip-automerge]` while `auto-merge-to-dev.yml` still carries the push trigger in YAML (re-enable decision is gated; the fix is a branch-cleanup ruling, not a code change). | Amd26 §AB3 |
 
-**Session PE roster (PE #27–#68).** Closed: #37, #41, #48, #58, #63, #66. P0 open: #51, #52 (F-AUTH-1 pre-flight inventories). P1 open: #27 (prod smoke test accepts 502/503), #38, #40, #42–#47 (npm audit; prod-RDS column drift), #49 (50% AI error rate), #54, #55, #64. P2 open: #31, #39, #50, #53, #56, #57, #59–#62, #65, #67, #68. PE #1–#26 and #28–#36 live in F-AUTH-1's Track 8 roster, not here.
+**Session PE roster (PE #27–#68), carried unchanged — see the roster-hygiene item above for what is stale in it.** Closed: #37, #41, #48, #58, #63, #66. P0 open: #51, #52 (F-AUTH-1 pre-flight inventories). P1 open: #27 (prod smoke test accepts 502/503), #38, #40, #42–#47 (npm audit; prod-RDS column drift), #49 (50% AI error rate), #54, #55, #64. P2 open: #31, #39, #50, #53, #56, #57, #59–#62, #65, #67, #68. PE #1–#26 and #28–#36 live in F-AUTH-1's Track 8 roster, not here.
 
 Declined or bounded non-actions (do not reopen without a reason): fourteen in-place-amended documents outside the chain; three `.docx`-only handoff revisions; bare `#NNN` in 279 documents; Amd4's ruling that the second-party observation is not an operating assumption.
 
@@ -342,19 +342,19 @@ Declined or bounded non-actions (do not reopen without a reason): fourteen in-pl
 ## 10. Suggested work for the loop (Evoni chooses; nothing here is ruled)
 
 Inside the locked sequence and safe for agent sessions:
-1. Limb 1 per-CP confirmation passes (repo-only, decomposable, cannot-tell first-class).
-2. ~~FD-64 fix: rename `getRolesForshow` → `getRolesForShow` and the `Model.update()` without `where` in `AssetRoleService.js:152`.~~ Done — `65cbe7013` and `2e5dbdf28`; close not recorded in a Fix Plan revision.
-3. Register hygiene tasks: place the owed banner on Amd28 §AD3; reconcile v25's FD-68 status; PE tail correction.
-4. Retire the dangerous Copilot deploy prompts (replace with a pointer to the freeze).
-5. Redact the surviving staging RDS password literal in the two February audit docs (§9).
-6. Add ESLint to the CI Validate workflow after clearing the 38 pre-existing errors in 23 `src/` files (§4.8), or record why not.
+1. **DONE (confirmation sweep); ratification STILL OWED.** ~~Limb 1 per-CP confirmation passes (repo-only, decomposable, cannot-tell first-class).~~ All 12/12 CPs confirmed (`F-AUTH-1_Limb1_CP1…CP12_Confirmation_2026-09-02.md`, CP10 committed 2026-09-01, the rest 2026-09-02): 127 recorded dispositions, 120 agree / 2 disagree / 5 cannot-tell. See §6.1. A handoff revision ratifying the discharge is still owed — CP12's "Limb 1 discharges" is its own claim, not a ruling.
+2. ~~FD-64 fix: rename `getRolesForshow` → `getRolesForShow` and the `Model.update()` without `where` in `AssetRoleService.js:152`.~~ **DONE** — `65cbe7013` and `2e5dbdf28`; close not recorded in a Fix Plan revision (**STILL OWED**).
+3. Register hygiene tasks — **MIXED**: place the owed banner on Amd28 §AD3 — **STILL OWED** (confirmed unplaced at this basis: `v25_Owed_Index_Amd28_2026-09-01.md` carries only its own §AD2 status-update banner); reconcile v25's FD-68 status — **DONE** (§6.1 already carries "FD-65 and FD-68 CLOSED (v25 wrongly lists FD-68 open)"); PE tail correction — **DONE** (§6.3 already carries "PE tail PE #68").
+4. **STILL OWED** — both files unchanged at this basis (`.github/agents/deploy.agent.md`, `.github/prompts/deploy-dev.prompt.md` still present, still listed in §9). Retire the dangerous Copilot deploy prompts (replace with a pointer to the freeze).
+5. **STILL OWED** — confirmed still present in both files at this basis. Redact the surviving staging RDS password literal in the two February audit docs (§9).
+6. **STILL OWED** — no `eslint` reference in `.github/workflows/validate.yml` at this basis. Add ESLint to the CI Validate workflow after clearing the 38 pre-existing errors in 23 `src/` files (§4.8), or record why not.
 
 Product-adjacent, small, and reversible (would need Evoni's "scope creep" waiver, since the onboarding doc forbids feature work during the fix cycle):
-7. Normalize model IDs (`claude-sonnet-4-20250514` → `claude-sonnet-4-6`; delete the invalid `claude-sonnet-4-5-20250514`; route `iconCueGeneratorService` through the SDK so it is budget-tracked).
-8. Fix stale navigation targets and delete orphan frontend files listed in §4.6.
-9. Decide the Story Engine backend's fate (retire, keep as API, or rebuild UI).
-10. Archive `docs/*.md` phase reports into `docs/archive/` with an index, keeping the few live guides; remove `backups/staging/*.sql` and the three identifier `.txt` files from the tree.
-11. Test hygiene: lift the `TEST_DATABASE_URL` gate for DB-free unit tests, surface the 20 silently excluded files, fix the `docker-compose.test.yml` 5433 / README 5432 mismatch.
+7. **STILL OWED** — 61 occurrences of the stale model IDs remain under `src/` at this basis. Normalize model IDs (`claude-sonnet-4-20250514` → `claude-sonnet-4-6`; delete the invalid `claude-sonnet-4-5-20250514`; route `iconCueGeneratorService` through the SDK so it is budget-tracked).
+8. **STILL OWED** — §4.6 still lists the same stale nav targets and orphan files, unchanged. Fix stale navigation targets and delete orphan frontend files listed in §4.6.
+9. **STILL OWED** — `src/routes/storyEvaluationRoutes.js` still present, no disposition document found. Decide the Story Engine backend's fate (retire, keep as API, or rebuild UI).
+10. **STILL OWED** — no `docs/archive/` directory exists at this basis. Archive `docs/*.md` phase reports into `docs/archive/` with an index, keeping the few live guides; remove `backups/staging/*.sql` and the three identifier `.txt` files from the tree.
+11. **STILL OWED** — no evidence found of the gate being lifted or the mismatch being fixed at this basis. Test hygiene: lift the `TEST_DATABASE_URL` gate for DB-free unit tests, surface the 20 silently excluded files, fix the `docker-compose.test.yml` 5433 / README 5432 mismatch.
 
 Evoni-only (never an agent task): everything in §6.5 marked Evoni, and the prod reconciliation session.
 
