@@ -54,7 +54,10 @@ register:
 - **The dangerous SSH/pm2 deploy prompts were retired**
   (`.github/agents/deploy.agent.md`, `.github/prompts/deploy-dev.prompt.md`,
   PR #1201) — freeze notices in place of the SSH/`git pull`/`pm2 restart`
-  procedures; §10 item 4's carry from `PROJECT_CONTEXT.md` is now discharged.
+  procedures. **Recorded here as a fact about the repository; whether
+  `PROJECT_CONTEXT.md` §10 item 4 is closed is that document's own refresh
+  to state, not this handoff's — this document rules nothing, including
+  what another document's checklist item means by its own terms.**
 - **`PROJECT_CONTEXT.md`** was refreshed 2026-09-03 to carry the same limb 1
   re-derivation and to re-check every item in its own §6.5 and §10 against
   `origin/main` — Sec 6.B below draws on that work and independently
@@ -132,9 +135,35 @@ $ grep -oE '^### PE #[0-9]+' docs/audit/Session_PE_Roster.md | grep -oE '[0-9]+'
 68
 ```
 
+**FD-ceiling rule (onboarding §4 rule 4), applied as a second instrument.**
+A filename scan alone understates the ceiling — FDs born closed are often
+never restated in their own file. Cross-revision scan, last three F-AUTH-1
+Fix Plan revisions:
+
+```
+$ ls docs/audit | grep -E '^F-AUTH-1_Fix_Plan_v[0-9.]+\.md$' | sort -V | tail -3
+F-AUTH-1_Fix_Plan_v2.66.md
+F-AUTH-1_Fix_Plan_v2.67.md
+F-AUTH-1_Fix_Plan_v2.68.md
+
+$ for f in v2.66 v2.67 v2.68; do grep -oE 'FD-[0-9]+' docs/audit/F-AUTH-1_Fix_Plan_$f.md | sort -t- -k2 -n -u | tail -1; done
+FD-68   (v2.66's own max; v2.66 also carries FD-63)
+FD-69   (v2.67's own max)
+FD-69   (v2.68's own max; v2.68 also carries FD-63)
+```
+
+**Both instruments agree at FD-69.** The filename scan (highest filed
+`FD-NN_*.md`) and the cross-revision scan (highest `FD-\d+` mentioned across
+the last three Fix Plan revisions) land on the same number, and it is
+further corroborated by two independently-filed documents that were not
+consulted to derive it here — `PROJECT_CONTEXT.md` §6.3 and
+`F-AUTH-1_PE65_Execution_Sequence_2026-09-02.md` §8, both of which state
+the same tail. **Corroborated by three sources, not derived from filenames
+alone.**
+
 | tail | value | method |
 |---|---|---|
-| FD | **FD-69**, retired (spent on a duplicate). **FD-70 is next-available and unminted.** | Highest filed `FD-NN_*.md` |
+| FD | **FD-69**, retired (spent on a duplicate). **FD-70 is next-available and unminted.** Corroborated by both instruments above. | Highest filed `FD-NN_*.md`, cross-checked against the last three F-AUTH-1 Fix Plan revisions |
 | XK | **XK-3** | `Cross_Keystone_Register.md` face, highest `### XK-` heading |
 | PE | **PE #68** | `Session_PE_Roster.md` face, highest `### PE #` heading |
 
@@ -219,6 +248,14 @@ discharges PE #65's closing criterion *"is for a ratifying revision or for
 Evoni directly… not asserted by this filing."* Not asserted here either.
 
 ## Sec 3.2 The Actions path, re-derived live
+
+**Standing note.** Both reads below are GitHub Actions API calls, not `git
+show` against the cloned repository. **They are MEASURED, but on a
+different basis than every other MEASURED claim in this document**: a
+reader holding only a clone of `origin/main` cannot reproduce them without
+also holding API access to this repository (or an equivalent, e.g. the
+`gh` CLI authenticated against it). Repo-external, re-checkable by anyone
+with that access, not by clone alone.
 
 ```
 $ [github API] list_workflows → 5 workflows:
