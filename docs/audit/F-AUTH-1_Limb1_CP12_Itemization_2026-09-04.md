@@ -1,3 +1,28 @@
+> **BANNER — §7 AND §8 CARRY THIS DOCUMENT'S OWN INFERENCE, NOT CP12'S
+> RECORD** (added 2026-09-04, additive). This document's task authorization —
+> issue #1230's Do-not list — was to record the three measured deltas and
+> stop. Three passages exceed that: §7's clause "§3 already recorded why this
+> is not incidental," §8's clause "which is what rows 7 and 9's exact matches
+> suggest was the right call for at least two of the three classes," and §8's
+> clause "this document's results are consistent with that stated reason." All
+> three connect the delta pattern (rows 7 and 9 exact, row 1 not) to a causal
+> account of why it holds — reasoning constructed by the drafting session, not
+> a statement CP12's own confirmation document makes. §3's citations of CP12's
+> confirmation document (§2.2's own wording on the 20-file cluster mixing
+> this-commit and prior-state handlers) are accurate quotation and are NOT in
+> question; §3's closing forward pointer to §8 is structurally what sets the
+> inference up, but §3 itself does not make it. **This banner does not rule on
+> whether the inference is correct.** If Evoni finds it persuasive, it belongs
+> in her ruling on the three deltas, not standing here as if measured. **The
+> itemization is unaffected**: §4's 17 cross-checked handlers, §5's three
+> tables (142+28+25=195), and §6's accounting to 212 are citation and direct
+> count, not argument, and this banner does not touch them. This banner
+> points; it does not carry.
+>
+> *Provenance: this banner's wording was proposed by the drafting session and
+> approved by Evoni, not composed by her. Disclosed per the same test it
+> applies.*
+
 | **PRIME STUDIOS** **F-AUTH-1 LIMB 1 — CP12 ITEMIZATION** *Itemizes CP12's three aggregate cannot-tell rows to real addresses. Does not confirm, re-derive, or rule. Does not reopen limb 1.* |
 | --- |
 
