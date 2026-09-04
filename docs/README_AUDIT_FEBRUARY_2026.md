@@ -107,7 +107,7 @@ npm test
 
 ### Credential Rotation (URGENT)
 - [ ] RDS development password: `<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>`
-- [ ] RDS staging password: `[REDACTED — see PROJECT_CONTEXT.md §9]`N0hBI*3Plg:i!>`
+- [ ] RDS staging password: `[REDACTED — see PROJECT_CONTEXT.md §9]`
 - [ ] AWS Cognito credentials
 - [ ] OpenSearch credentials
 - [ ] Generate secure JWT_SECRET
