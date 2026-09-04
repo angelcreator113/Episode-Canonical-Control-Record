@@ -1,3 +1,28 @@
+> **BANNER — §5's PASTED OUTPUT FOR `UiOverlayType`'S MIGRATION CHECK IS
+> WRONG** (added 2026-09-04, additive). §5 pastes
+> `20260723000002-overlay-lifecycle.js` as the output of `git show --name-only
+> --format='' 35ba9c2a83fec8a9e5ec4cd57e6524e83b341083 | grep -i migration`.
+> Re-run live, that command returns
+> `src/migrations/20260721000000-create-ui-overlay-types.js`. The pasted line
+> belongs to a different commit (`204a8c67`, `ShowArc`'s adding commit, which
+> touches both `20260723000002-overlay-lifecycle.js` and
+> `20260723000003-create-show-arcs.js`) — a transcription mix-up during
+> drafting, not a re-run or a substance change. **§5's own conclusion is
+> unaffected**: `UiOverlayType` does have a migration present in the tree, and
+> §8 already cites the correct filename
+> (`20260721000000-create-ui-overlay-types.js`) independently, quoting the
+> commit's own description of it. This banner corrects the mismatched pasted
+> output only; no table, count, or classification in §4, §6, or §9 is
+> affected. **Found by checking one clause's precision against the source for
+> an unrelated task (a `PROJECT_CONTEXT.md` refresh citing this document), not
+> by a broad re-read of §5 itself** — worth recording as the mechanism that
+> catches this class of error, since re-reading a section for its own sake did
+> not.
+>
+> *Provenance: this banner's wording was proposed by the drafting session and
+> approved by Evoni, not composed by her. Disclosed per the same test
+> `F-AUTH-1_Fix_Plan_v2.69.md`'s Ruling 2 note and correction banner apply.*
+
 | **PRIME STUDIOS** **F-AUTH-1 — UNWIRED MODELS HISTORY** *Traces the git history of the six models `F-AUTH-1_Models_Subset_Enumeration_2026-09-04.md` found unwired or guard-referenced. Records history. Does not judge, rule, or fix.* |
 | --- |
 
