@@ -9,7 +9,7 @@
 | File | Exposed Information | Action Required |
 |------|---------------------|-----------------|
 | `.env.development` | Database password: `<REDACTED — see GitHub Actions secret PROD_DB_PASSWORD>` | ✅ Removed from tracking, **ROTATE IMMEDIATELY** |
-| `.env.aws-staging` | Database password: `[REDACTED — see PROJECT_CONTEXT.md §9]`N0hBI*3Plg:i!>` | ✅ Removed from tracking, **ROTATE IMMEDIATELY** |
+| `.env.aws-staging` | Database password: `[REDACTED — see PROJECT_CONTEXT.md §9]` | ✅ Removed from tracking, **ROTATE IMMEDIATELY** |
 | `.env.aws-staging` | AWS Account ID: `637423256673` | ✅ Removed from tracking, Consider rotating |
 | `.env.development` | Cognito User Pool ID | ✅ Removed from tracking, **ROTATE POOL** |
 | `.env.development` | Cognito Client IDs | ✅ Removed from tracking, **ROTATE CLIENTS** |
