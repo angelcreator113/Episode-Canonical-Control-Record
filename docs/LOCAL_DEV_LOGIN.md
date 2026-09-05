@@ -125,6 +125,13 @@ they don't need to be set at all if left at defaults on both sides.
 - **Postgres** — `docker-compose.yml:4-12`: image `postgres:15-alpine`,
   `POSTGRES_USER=postgres`, `POSTGRES_PASSWORD=postgres`,
   `POSTGRES_DB=episode_metadata`, host port **5432** (`'5432:5432'`).
+- **If 5432 is already bound** on the host machine (a system Postgres,
+  another project's compose stack, etc.), remap the host side in
+  `docker-compose.yml` — e.g. `'55432:5432'` — and set `DB_PORT` to match
+  on the app side. This is an example remap specific to a machine where
+  5432 is taken, not a fixed or required value. Whatever the shell has
+  exported doesn't matter here: `.env` supplies these values regardless
+  of shell exports, which is what actually resolved this for a real run.
 - **The app's own runtime pool** (`src/config/database.js:30-34`) defaults to
   exactly that: `DB_HOST=127.0.0.1`, `DB_PORT=5432`, `DB_NAME=episode_metadata`,
   `DB_USER=postgres`, `DB_PASSWORD=''` (empty — must be overridden to match
@@ -204,6 +211,83 @@ they don't need to be set at all if left at defaults on both sides.
 8. **Reload the page.** `AuthContext` re-checks on mount, finds `authToken`,
    and renders authenticated — no backend call is involved in that check
    (§2 above).
+
+---
+
+## The dev-token-carrier method (supersedes steps 7-8 above)
+
+**This is the method to use now, not a phone-only alternative.** Steps 7-8
+above work by opening browser devtools and pasting into the console — that
+only works from a machine with a devtools console open on the running app.
+The carrier route replaces steps 7-8 entirely: mint the token exactly as
+in step 6, then load one URL. Fall back to the console-paste steps only
+when the dev server isn't running a build new enough to have the carrier
+— see the dependency note below.
+
+**Route and fragment shape**, read fresh from `frontend/src/pages/DevTokenCarrier.jsx`
+on `origin/main`:
+
+```js
+const hash = window.location.hash.replace(/^#/, '');
+const params = new URLSearchParams(hash);
+const authToken = params.get('authToken');
+const refreshToken = params.get('refreshToken');
+const user = params.get('user');
+```
+
+The route is `/__dev-token-carrier`, gated behind `import.meta.env.DEV` so
+it does not exist in a production build (`frontend/src/App.jsx:23-24, 280-283`).
+It reads three keys from the URL fragment — `authToken`, `refreshToken`,
+`user` — and writes them straight into the same `localStorage` keys steps
+7-8 set by hand, then reloads.
+
+**Example, the literal shape that produced an authenticated
+`dev@localhost` / Logout render** (real token values replaced with
+placeholders; replace `192.168.68.52:5174` with your own machine's address
+and port — everything from the `#` on is the exact shape to reproduce):
+
+```text
+http://192.168.68.52:5174/__dev-token-carrier#authToken=<accessToken>&refreshToken=<refreshToken>&user=%7B%22id%22%3A%22local-dev-user%22%2C%22email%22%3A%22dev%40localhost%22%2C%22name%22%3A%22Local+Dev%22%2C%22groups%22%3A%5B%22USER%22%2C%22EDITOR%22%5D%2C%22role%22%3A%22USER%22%7D
+```
+
+The `user` value there is `URLSearchParams`-encoded JSON (spaces as `+`),
+decoding to:
+
+```json
+{"id":"local-dev-user","email":"dev@localhost","name":"Local Dev","groups":["USER","EDITOR"],"role":"USER"}
+```
+
+**`groups` there is self-asserted, not an authorization model.** As §3
+above already notes for the mint-and-console-paste method, this only works
+because the token is minted under a local-only `JWT_SECRET` — anyone who
+controls minting can put any value in `groups`. `["USER","EDITOR"]` is one
+example that happened to be used, not a specification of which groups a
+local session needs; reaching an `authorize(['ADMIN'])`-gated route
+requires `'ADMIN'` in the list instead. This is not a pattern to carry
+anywhere a real credential authority exists.
+
+**Set `JWT_EXPIRY` before minting.** Quoted fresh, clause 7 of
+`docs/audit/F-AUTH-1_Tier5_DevTokenCarrier_Ruling_2026-09-05.md`:
+
+> Token lifetime. tokenService reads JWT_EXPIRY from env at mint time
+> (default 1h). A laptop-local JWT_EXPIRY is permitted and does not
+> change any shared configuration. It must not be set on any deployed
+> environment. A longer local expiry is the answer to the re-minting
+> problem; a backend token endpoint is not.
+
+Set it in the same shell/env as step 6, e.g. `export JWT_EXPIRY=7d`, before
+running `generateTokenPair`, so a carried-in session doesn't expire after
+the default hour.
+
+**Dependency on `#1269`.** The carrier route requires the `PRE_AUTH_PATHS`
+exemption merged in PR #1269 (`ee334ad566e440763efc1c4a1a49f07182572a15`
+on `main`). A checkout older than that commit redirects away from
+`/__dev-token-carrier` before the carrier's own effect can write anything
+— update the checkout before troubleshooting further if the route appears
+to do nothing.
+
+**Why this route is permitted at all** is ruled, not restated here — see
+`docs/audit/F-AUTH-1_Tier5_DevTokenCarrier_Ruling_2026-09-05.md`.
 
 ---
 
