@@ -29,11 +29,11 @@ const token = localStorage.getItem('authToken') || localStorage.getItem('token')
 
 The primary key is **`authToken`**; `token` is a fallback the interceptor
 also accepts. The app's own login/refresh code only ever writes `authToken`
-(`frontend/src/services/authService.js:29`, `:139`; `frontend/src/services/api.js:62`)
+(`frontend/src/services/authService.js:31`, `:134`; `frontend/src/services/api.js:62`)
 — `token` exists in the interceptor's read but nothing in the tree writes it.
 **Use `authToken`.**
 
-`frontend/src/services/authService.js:29-31` also writes two more keys on a
+`frontend/src/services/authService.js:31-33` also writes two more keys on a
 successful login response:
 
 ```js
@@ -54,9 +54,9 @@ cannot-tell — its gating mechanism is fully local and traced end to end.
 - `isAuthenticated` initializes from `!!localStorage.getItem('authToken')`
   (`AuthContext.jsx:24-26`) and is re-derived on mount via
   `authService.isAuthenticated()`.
-- `authService.isAuthenticated()` (`authService.js:87-89`) is `!!this.getToken()`
+- `authService.isAuthenticated()` (`authService.js:92-93`) is `!!this.getToken()`
   — a synchronous local read, **no network call**.
-- `authService.getProfile()` (`authService.js:78-80`) returns
+- `authService.getProfile()` (`authService.js:85-86`) returns
   `JSON.parse(localStorage.getItem('user'))` — also local only.
 
 **So the three keys that matter are `authToken`, `user`, and (only if a
@@ -69,7 +69,7 @@ anything on mount; the gate is satisfied entirely by what's in
 `src/middleware/auth.js:2`: `verifyHs256Token` is `TokenService.verifyToken`,
 imported directly (`const { verifyToken: verifyHs256Token } = require('../services/tokenService');`).
 
-`src/services/tokenService.js:108-114`, the required-claims check inside
+`src/services/tokenService.js:113-114`, the required-claims check inside
 `verifyToken`:
 
 ```js
@@ -80,12 +80,12 @@ if (!decoded.sub || !decoded.email) {
 
 **`sub` and `email` are required; the call throws otherwise.** `groups` is
 not enforced by `verifyToken` itself, but `requireAuth`
-(`src/middleware/auth.js:563-565`) puts `decoded.groups || []` on
-`req.user.groups`, and any route behind `authorize([...])` 403s if that
-array doesn't intersect the required list — so for a session that needs to
-reach admin-gated routes, `groups` must be set too.
+(`src/middleware/auth.js:570`) puts `decoded.groups || []` on
+`req.user.groups`, and `authorize([...])` (`src/middleware/auth.js:502`)
+403s if that array doesn't intersect the required list — so for a session
+that needs to reach admin-gated routes, `groups` must be set too.
 
-`src/middleware/auth.js:563-572`, what lands on `req.user`:
+`src/middleware/auth.js:566-576`, what lands on `req.user`:
 
 ```js
 req.user = {
@@ -104,10 +104,15 @@ req.user = {
 `token_use` is Cognito-specific and will be `undefined` for a local HS256
 token — harmless, nothing reads it as a gate.
 
-**Also required, from `verifyToken`'s own options** (`tokenService.js:94-97`):
+**This procedure self-asserts `groups` in the minted token** (step 6 below)
+to reach `authorize(['ADMIN'])`-gated routes locally. That is fine on a
+laptop with no path to a deployed host; it is not a pattern to carry
+anywhere a real credential authority exists.
+
+**Also required, from `verifyToken`'s own options** (`tokenService.js:95-97`):
 when `NODE_ENV !== 'test'`, `issuer`/`audience` are checked against
 `TOKEN_ISSUER`/`TOKEN_AUDIENCE` (default `episode-metadata-api` /
-`episode-metadata-app`). `generateToken` (`tokenService.js:47-50`) applies
+`episode-metadata-app`). `generateToken` (`tokenService.js:52-55`) applies
 the same defaults under the same condition, so minting and running the
 server with the same environment (both non-test, no custom
 `TOKEN_ISSUER`/`TOKEN_AUDIENCE`, or both set identically) is sufficient —
@@ -120,7 +125,7 @@ they don't need to be set at all if left at defaults on both sides.
 - **Postgres** — `docker-compose.yml:4-12`: image `postgres:15-alpine`,
   `POSTGRES_USER=postgres`, `POSTGRES_PASSWORD=postgres`,
   `POSTGRES_DB=episode_metadata`, host port **5432** (`'5432:5432'`).
-- **The app's own runtime pool** (`src/config/database.js:29-33`) defaults to
+- **The app's own runtime pool** (`src/config/database.js:30-34`) defaults to
   exactly that: `DB_HOST=127.0.0.1`, `DB_PORT=5432`, `DB_NAME=episode_metadata`,
   `DB_USER=postgres`, `DB_PASSWORD=''` (empty — must be overridden to match
   compose's `postgres`).
@@ -134,7 +139,7 @@ they don't need to be set at all if left at defaults on both sides.
 - **Backend port** — `npm run dev` runs `src/server.js`
   (`package.json:8`), whose own default is **3000** (`src/server.js:19`,
   `const PORT = process.env.PORT || 3000;`). Vite's dev proxy targets
-  `http://127.0.0.1:3002` (`frontend/vite.config.js:33`) — so `PORT=3002`
+  `http://127.0.0.1:3002` (`frontend/vite.config.js:34`) — so `PORT=3002`
   must be set when starting the backend, or the proxy has nothing to reach.
 - **Frontend port** — `frontend/vite.config.js:26`: `5174`.
 
