@@ -236,7 +236,7 @@ function AppContent() {
   // Also check localStorage directly to survive React state races on refresh
   useEffect(() => {
     const hasToken = !!localStorage.getItem('authToken');
-    if (!loading && !isAuthenticated && !hasToken && location.pathname !== '/login' && location.pathname !== '/' && !isNavigatingRef.current) {
+    if (!loading && !isAuthenticated && !hasToken && location.pathname !== '/login' && location.pathname !== '/' && location.pathname !== '/__dev-token-carrier' && !isNavigatingRef.current) {
       console.log('[AppContent] User not authenticated, redirecting to landing...');
       isNavigatingRef.current = true;
       navigate('/', { replace: true });
