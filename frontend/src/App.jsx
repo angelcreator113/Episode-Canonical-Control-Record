@@ -12,6 +12,18 @@ import Login from './pages/Login';
 import LandingPage from './pages/LandingPage';
 import Home from './pages/Home';
 
+// Dev-only token carrier (Shape A) — ruled at
+// docs/audit/F-AUTH-1_Tier5_DevTokenCarrier_Ruling_2026-09-05.md clause 4.
+// The dynamic import is only reachable when import.meta.env.DEV is true;
+// Vite inlines that as a build-time constant, so in a production build this
+// whole expression dead-code-eliminates to null before Rollup's chunking
+// pass ever sees the import() call — the component and its chunk are
+// absent from dist, not merely unrendered. Verified empirically against
+// this exact build setup before writing this line.
+const DevTokenCarrier = import.meta.env.DEV
+  ? lazy(() => import('./pages/DevTokenCarrier'))
+  : null;
+
 // Lazy-loaded: all other pages (code-split into separate chunks)
 const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail'));
 const CreateEpisode = lazy(() => import('./pages/CreateEpisode'));
@@ -256,6 +268,16 @@ function AppContent() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
+        {import.meta.env.DEV && (
+          <Route
+            path="/__dev-token-carrier"
+            element={
+              <Suspense fallback={null}>
+                <DevTokenCarrier />
+              </Suspense>
+            }
+          />
+        )}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
