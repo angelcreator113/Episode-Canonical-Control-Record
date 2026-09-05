@@ -12,12 +12,11 @@
  */
 
 const express = require('express');
-const { Sequelize } = require('sequelize');
 const { requireAuth } = require('../middleware/auth');
-const sequelize = new Sequelize(process.env.DATABASE_URL, {
-  dialect: 'postgres',
-  logging: false,
-});
+
+async function getModels() {
+  try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
+}
 
 const router = express.Router();
 
@@ -28,6 +27,9 @@ const router = express.Router();
  */
 router.get('/', requireAuth, async (req, res) => {
   try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
     const { status, locked, format, name, limit = 50, offset = 0 } = req.query;
 
     let whereClause = '';
@@ -74,7 +76,7 @@ router.get('/', requireAuth, async (req, res) => {
       LIMIT $${params.length - 1} OFFSET $${params.length}
     `;
 
-    const [templates] = await sequelize.query(query, { bind: params });
+    const [templates] = await models.sequelize.query(query, { bind: params });
 
     const countQuery = `
       SELECT COUNT(*) as total
@@ -82,7 +84,7 @@ router.get('/', requireAuth, async (req, res) => {
       ${whereClause}
     `;
 
-    const [countResult] = await sequelize.query(countQuery, {
+    const [countResult] = await models.sequelize.query(countQuery, {
       bind: params.slice(0, -2),
     });
 
@@ -109,9 +111,12 @@ router.get('/', requireAuth, async (req, res) => {
  */
 router.get('/:id', requireAuth, async (req, res) => {
   try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
     const { id } = req.params;
 
-    const [templates] = await sequelize.query(
+    const [templates] = await models.sequelize.query(
       `
       SELECT * FROM template_studio WHERE id = $1
     `,
@@ -143,6 +148,9 @@ router.get('/:id', requireAuth, async (req, res) => {
  */
 router.post('/', requireAuth, async (req, res) => {
   try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
     const {
       name,
       description,
@@ -176,7 +184,7 @@ router.post('/', requireAuth, async (req, res) => {
       });
     }
 
-    const [result] = await sequelize.query(
+    const [result] = await models.sequelize.query(
       `
       INSERT INTO template_studio (
         name, description, version, status, locked,
@@ -223,6 +231,9 @@ router.post('/', requireAuth, async (req, res) => {
  */
 router.put('/:id', requireAuth, async (req, res) => {
   try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
     const { id } = req.params;
     const {
       name,
@@ -236,7 +247,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     } = req.body;
 
     // Check if template exists and is editable
-    const [existing] = await sequelize.query(
+    const [existing] = await models.sequelize.query(
       `
       SELECT id, status, locked FROM template_studio WHERE id = $1
     `,
@@ -313,7 +324,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 
     values.push(id);
 
-    const [result] = await sequelize.query(
+    const [result] = await models.sequelize.query(
       `
       UPDATE template_studio
       SET ${updates.join(', ')}
@@ -343,9 +354,12 @@ router.put('/:id', requireAuth, async (req, res) => {
  */
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
     const { id } = req.params;
 
-    const [existing] = await sequelize.query(
+    const [existing] = await models.sequelize.query(
       `
       SELECT id, status, locked FROM template_studio WHERE id = $1
     `,
@@ -364,7 +378,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
       });
     }
 
-    await sequelize.query(
+    await models.sequelize.query(
       `
       DELETE FROM template_studio WHERE id = $1
     `,
@@ -390,9 +404,12 @@ router.delete('/:id', requireAuth, async (req, res) => {
  */
 router.post('/:id/clone', requireAuth, async (req, res) => {
   try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
     const { id } = req.params;
 
-    const [existing] = await sequelize.query(
+    const [existing] = await models.sequelize.query(
       `
       SELECT * FROM template_studio WHERE id = $1
     `,
@@ -408,7 +425,7 @@ router.post('/:id/clone', requireAuth, async (req, res) => {
     const original = existing[0];
 
     // Get next version number for this template name
-    const [versionCheck] = await sequelize.query(
+    const [versionCheck] = await models.sequelize.query(
       `
       SELECT MAX(version) as max_version
       FROM template_studio
@@ -419,7 +436,7 @@ router.post('/:id/clone', requireAuth, async (req, res) => {
 
     const nextVersion = (versionCheck[0].max_version || 0) + 1;
 
-    const [result] = await sequelize.query(
+    const [result] = await models.sequelize.query(
       `
       INSERT INTO template_studio (
         name, description, version, status, locked,
@@ -470,9 +487,12 @@ router.post('/:id/clone', requireAuth, async (req, res) => {
  */
 router.post('/:id/publish', requireAuth, async (req, res) => {
   try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
     const { id } = req.params;
 
-    const [existing] = await sequelize.query(
+    const [existing] = await models.sequelize.query(
       `
       SELECT id, status FROM template_studio WHERE id = $1
     `,
@@ -491,7 +511,7 @@ router.post('/:id/publish', requireAuth, async (req, res) => {
       });
     }
 
-    const [result] = await sequelize.query(
+    const [result] = await models.sequelize.query(
       `
       UPDATE template_studio
       SET status = 'PUBLISHED', published_at = NOW()
@@ -521,9 +541,12 @@ router.post('/:id/publish', requireAuth, async (req, res) => {
  */
 router.post('/:id/lock', requireAuth, async (req, res) => {
   try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
     const { id } = req.params;
 
-    const [existing] = await sequelize.query(
+    const [existing] = await models.sequelize.query(
       `
       SELECT id, locked FROM template_studio WHERE id = $1
     `,
@@ -542,7 +565,7 @@ router.post('/:id/lock', requireAuth, async (req, res) => {
       });
     }
 
-    const [result] = await sequelize.query(
+    const [result] = await models.sequelize.query(
       `
       UPDATE template_studio
       SET locked = true, locked_at = NOW()
@@ -572,9 +595,12 @@ router.post('/:id/lock', requireAuth, async (req, res) => {
  */
 router.post('/:id/archive', requireAuth, async (req, res) => {
   try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
     const { id } = req.params;
 
-    const [existing] = await sequelize.query(
+    const [existing] = await models.sequelize.query(
       `
       SELECT id, status FROM template_studio WHERE id = $1
     `,
@@ -593,7 +619,7 @@ router.post('/:id/archive', requireAuth, async (req, res) => {
       });
     }
 
-    const [result] = await sequelize.query(
+    const [result] = await models.sequelize.query(
       `
       UPDATE template_studio
       SET status = 'ARCHIVED'
