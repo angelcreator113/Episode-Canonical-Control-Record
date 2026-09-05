@@ -104,7 +104,7 @@ npm run format          # Format code with Prettier
 
 ### Testing
 
-Tests require local PostgreSQL and Redis services running. If you completed the Local Development Setup above (using `docker-compose up -d`), these are already running. The test runner also requires the `TEST_DATABASE_URL` environment variable to be set explicitly, typically `postgresql://postgres:postgres@localhost:5432/episode_metadata_test` for local development.
+Tests use a separate database stack from local development — start it with `docker-compose -f docker-compose.test.yml up -d`, which exposes Postgres on port 5433 (distinct from the main dev database on 5432). The test runner also requires the `TEST_DATABASE_URL` environment variable to be set explicitly, typically `postgresql://postgres:postgres@localhost:5433/episode_metadata_test` for local development.
 
 ```bash
 npm test                # Run all tests with coverage
@@ -265,11 +265,11 @@ Set the environment variable:
 
 Bash:
 ```bash
-export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/episode_metadata_test
 ```
 PowerShell:
 ```powershell
-$env:TEST_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/episode_metadata_test"
+$env:TEST_DATABASE_URL = "postgresql://postgres:postgres@localhost:5433/episode_metadata_test"
 ```
 
 **Redis connection refused on port 6379:**
