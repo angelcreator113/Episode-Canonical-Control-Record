@@ -28,7 +28,8 @@ module.exports = {
   //   Outside testMatch (1, not under tests/unit/ or tests/integration/):
   //     tests/api/endpoints.test.js
   //
-  //   Dropped by testPathIgnorePatterns below (19):
+  //   Dropped by testPathIgnorePatterns below (19), listed in the same
+  //   order as the patterns below, so the two read in parallel:
   //     tests/unit/controllers/jobController.test.js
   //     tests/unit/models/job.test.js
   //     tests/unit/models/file.test.js
