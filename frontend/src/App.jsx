@@ -24,6 +24,13 @@ const DevTokenCarrier = import.meta.env.DEV
   ? lazy(() => import('./pages/DevTokenCarrier'))
   : null;
 
+// Paths exempt from the pre-auth redirect below. The carrier path is only
+// ever appended when import.meta.env.DEV is true; Vite inlines that as a
+// build-time constant, so in a production build the spread resolves to an
+// empty array and the string literal itself is dropped by Rollup's
+// dead-code elimination — same mechanism as DevTokenCarrier above.
+const PRE_AUTH_PATHS = ['/login', '/', ...(import.meta.env.DEV ? ['/__dev-token-carrier'] : [])];
+
 // Lazy-loaded: all other pages (code-split into separate chunks)
 const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail'));
 const CreateEpisode = lazy(() => import('./pages/CreateEpisode'));
@@ -236,7 +243,7 @@ function AppContent() {
   // Also check localStorage directly to survive React state races on refresh
   useEffect(() => {
     const hasToken = !!localStorage.getItem('authToken');
-    if (!loading && !isAuthenticated && !hasToken && location.pathname !== '/login' && location.pathname !== '/' && location.pathname !== '/__dev-token-carrier' && !isNavigatingRef.current) {
+    if (!loading && !isAuthenticated && !hasToken && !PRE_AUTH_PATHS.includes(location.pathname) && !isNavigatingRef.current) {
       console.log('[AppContent] User not authenticated, redirecting to landing...');
       isNavigatingRef.current = true;
       navigate('/', { replace: true });
