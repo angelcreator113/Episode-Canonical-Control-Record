@@ -2316,3 +2316,177 @@ the two conclusive tests it declines are named rather than elided.
 *Filed 2026-08-28. Basis `54d163bd`. Live HTTP metadata, local Git config and
 GitHub API only. No credential value read. No deployed host contacted. Prod
 FROZEN.*
+
+---
+
+## Roster hygiene banner — 2026-09-05 (additive; files no PE, re-rules nothing)
+
+**Basis:** `origin/main` at `7375eb18705c20912d027aa6a76232636b69c60f`, 2026-09-05.
+
+**Disclosure.** Session-drafted. Additive only — no existing line above this
+banner is edited, reflowed, or deleted. Mints no PE, FD, or XK. Where a point
+below touches a severity or a disposition, it names the re-rule as
+Evoni-gated and STILL OWED rather than performing it. Re-derived from this
+file's own text and from the cited amendment's own text, not carried from
+`PROJECT_CONTEXT.md` §6.5's summary line, which is the owed item this banner
+responds to:
+
+```
+$ grep -n "closed index omits PE #63" PROJECT_CONTEXT.md
+276:| **STILL OWED** — `Session_PE_Roster.md` last touched 2026-08-27 (PE #68 mint), before this window's activity. Roster hygiene: closed index omits PE #63 and #66; PE #64's status line is superseded by its amendments; the `§AD/§AE/§AF` letter collision. | PE roster, Amd29/30 |
+```
+
+### Point A — MEASURED. The closed index omits PE #63 and PE #66.
+
+`## Closed findings` above indexes four PE numbers by name:
+
+```
+$ grep -n '^## Closed findings' docs/audit/Session_PE_Roster.md
+1302:## Closed findings
+$ grep -n '^- \*\*PE #' docs/audit/Session_PE_Roster.md
+1306:- **PE #37** — DB_NAME=postgres mismatch on prod EC2 .env (RESOLVED 2026-05-12, mid-session correction)
+1307:- **PE #41** — aiRateLimiter.js IPv6 key generation boot-blocking (RESOLVED 2026-05-15, PR #694)
+1308:- **PE #48** — Dev migration missing `version` column (RESOLVED 2026-05-15, PR #694)
+1309:- **PE #58** — Local-tooling identity drift status unknown — original CLOSED 2026-05-21 (wrong mechanism), REOPENED 2026-05-22 morning (wrong framing), **re-CLOSED 2026-05-22 afternoon with corrected mechanism** — was never local-tooling drift; actual mechanism is GitHub App attribution on workflow-performed squash-merges. See PE #58 entry in Active findings for full investigation outcome.
+```
+
+PE #63 and PE #66 each carry their own "AMENDMENT 1" blockquote recording
+closure, in their own entry bodies:
+
+```
+$ grep -n 'AMENDMENT 1 — PE #63 RETIRED\|AMENDMENT 1 — CLOSED 2026-08-22' docs/audit/Session_PE_Roster.md
+1523:> **AMENDMENT 1 — PE #63 RETIRED; CLOSED BY RULING 2026-08-22 at
+1922:> **AMENDMENT 1 — CLOSED 2026-08-22 at `0a084079` basis; authority surfaces
+```
+
+Neither PE number appears in the closed index above. Each entry's own header
+and `**Status:**` line still read `OPEN`, unchanged by the amendment that
+closes it:
+
+```
+$ sed -n '1521p;1568p' docs/audit/Session_PE_Roster.md
+### PE #63 — `[skip-automerge]` compliance against F-Deploy-1 v1.26 §3.4: 2 of 40 recent commits carry the required token (P2, OPEN, NEW 2026-08-19)
+**Status:** OPEN
+
+$ sed -n '1920p;1954p' docs/audit/Session_PE_Roster.md
+### PE #66 — `docs/cognito-ids.txt` names two Cognito pools that do not exist, under an abandoned three-environment topology (P2, OPEN, NEW 2026-08-21)
+**Status:** OPEN
+```
+
+Recorded as a mismatch, not corrected here: the closed index, both headers,
+and both `Status:` lines are pre-existing lines and this banner edits none
+of them.
+
+### Point B — MEASURED. PE #64's status line is superseded by its own amendments.
+
+PE #64's header and `**Status:**` line read:
+
+```
+$ sed -n '1631p;1635p' docs/audit/Session_PE_Roster.md
+### PE #64 — Cognito User Pool shared between dev and prod: F-AUTH-1 Fix Plan v1.5 §9.10's P1 has been unrecorded since v2.38 (P1, OPEN, NEW 2026-08-21)
+**Status:** OPEN. Trigger condition UNEVALUATED.
+```
+
+**PE #64's entry runs 1631–1812**, measured against the next `### PE #`
+header rather than assumed:
+
+```
+$ grep -n '^### PE #' docs/audit/Session_PE_Roster.md | awk -F: '$1>1631' | head -1
+1813:### PE #65 — F-AUTH-1 v1.5 §9.10's remedy is unspecifiable as written: plan and trigger describe different operations, and the pool it retains does not exist (P2, OPEN, NEW 2026-08-21)
+```
+
+**Within that measured span the entry carries three amendments, not one,
+and the file order is not filing order:**
+
+```
+$ sed -n '1631,1812p' docs/audit/Session_PE_Roster.md | grep -n 'AMENDMENT [0-9]'
+8:> **AMENDMENT 3 - EXTERNALITY SUBQUESTION RESOLVED BY AUTHORIZED READ AND
+16:> **AMENDMENT 2 — enumeration is CLOSED, not deferred. The remedy defect is filed as PE #65 (added 2026-08-21, after `3769db64`, additive).**
+27:> **AMENDMENT 1 — the trigger condition is PARTIALLY EVALUATED: neither UNEVALUATED nor FIRED (added 2026-08-21, after `ebbee94f`, additive).**
+```
+
+(offsets are relative to line 1631, PE #64's own header; absolute lines
+1638, 1646, 1657.) Amendment 3 precedes Amendment 1 in the file because
+Amendment 2's own block states the reading order — a rule an amendment
+asserts, not one the entry body carries outside any amendment:
+
+```
+$ grep -n 'newest-first' docs/audit/Session_PE_Roster.md
+1647:> **Amendments on this entry are read newest-first. Where two disagree the later governs; where an amendment and the entry body disagree the amendment governs.**
+```
+
+Amendment 1 supersedes the Status line's "UNEVALUATED" reading ("the trigger
+condition is PARTIALLY EVALUATED: neither UNEVALUATED nor FIRED"); Amendment
+3 supersedes part of Amendment 1 in turn ("supersedes Amendment 1's **NOT
+ESTABLISHED** externality ruling for the three counted accounts", quoted at
+its own line 1641 above). Amendment 2 addresses a different sub-question
+(closing the enumeration read and re-filing the remedy defect as PE #65) and
+does not touch the trigger wording. None of the three edits the Status line
+itself; it still carries the pre-Amendment-1 wording quoted above.
+
+**Severity is P1 throughout the entry, and no amendment reassesses it —
+bounded to the entry's own span, not a single matching phrase:**
+
+```
+$ sed -n '1631,1812p' docs/audit/Session_PE_Roster.md | grep -n 'Severity'
+4:**Severity:** P1 — retained from the origin finding, not reassessed
+23:> - **Trigger status is unchanged at PARTIALLY EVALUATED**, and it stays there. **Severity P1 unchanged.** What changes is that no further reading is owed against the trigger.
+49:> **OPEN. Trigger condition PARTIALLY EVALUATED. Severity P1 — still not reassessed**, because the evidence gathered bears on remedy cost, not on exposure severity.
+91:**The trigger governs remedy cost, not exposure severity.** Severity is
+```
+
+(absolute lines 1634, 1653, 1679, 1721.) All four say the same thing — P1,
+retained, not reassessed — and no fifth occurrence in the span says
+otherwise. **PE #64's severity re-rule remains Evoni-gated and STILL OWED**
+(`PROJECT_CONTEXT.md` §6.5, Evoni-gated table) — not performed by this
+banner.
+
+### Point C — MEASURED. The §AD/§AE/§AF notation collision (reader warning; not a defect in this file).
+
+This collision lives in `v25_Owed_Index_Amd30_2026-09-01.md`, not in this
+file — grouped here only because `PROJECT_CONTEXT.md` §6.5 carries it on the
+same owed-item line as Points A and B above. That document discloses it on
+its own face:
+
+```
+$ grep -n 'NOTATION WARNING' -A3 docs/audit/v25_Owed_Index_Amd30_2026-09-01.md
+37:**NOTATION WARNING.** Sections are **§AF1–§AF5**, continuing `AA`…`AE`. **`AD`,
+38-`AE` and `AF` are all names of security finding classes.** **§AF2 is not finding
+39-AF.** Amd29 recorded this collision at `AE`; it now spans three consecutive
+40-letters and is recorded, not resolved.
+
+$ grep -n 'Does not resolve the' docs/audit/v25_Owed_Index_Amd30_2026-09-01.md
+348:- **Does not resolve the `§AD` / `§AE` / `§AF` notation collision.**
+```
+
+The finding-letter class it collides with is F-Deploy-1's own AD/AE/AF,
+carried in `PROJECT_CONTEXT.md` §6.5:
+
+```
+$ grep -n 'AD (no instance profile)' PROJECT_CONTEXT.md
+263:| **STILL OWED**, unchanged at this basis. F-Deploy-1 post-close: AD (no instance profile), AE (open SG ports; `/32` on 22 re-scoping), AF (RDS SG `0.0.0.0/0:5432`), fork-RDS teardown, dev DNS repoint or retire, prod transport to SSM, credential rotations, the prod reconciliation session. | F-Deploy-1 v1.49 |
+```
+
+Recorded here as a cross-reference only, so a reader following
+`PROJECT_CONTEXT.md` §6.5's line to this file finds the citation rather than
+nothing. This banner adds no fact beyond Amd30's own disclosure and does not
+resolve the collision.
+
+### What this banner does not do
+
+- **Does not edit, reflow, or delete any existing line in this file.** Every
+  quoted line above is reproduced, not changed.
+- **Does not close PE #63 or PE #66 in the index**, or correct either
+  entry's header or `Status:` line. That edit is left for whoever next
+  touches the closed index.
+- **Does not re-rule PE #64's severity.** Evoni-gated, STILL OWED per
+  `PROJECT_CONTEXT.md` §6.5.
+- **Does not resolve the §AD/§AE/§AF notation collision** — recorded as a
+  reader warning, matching Amd30 §AF5's own disclosure.
+- **Mints no PE, FD, or XK. Changes no gate, severity, owner, or
+  disposition.**
+- **Contacts no host, AWS, database, or Cognito. Prod FROZEN.**
+
+*Filed 2026-09-05. Basis `origin/main` at
+`7375eb18705c20912d027aa6a76232636b69c60f`. Additive only. No AWS call
+issued. No deployed host contacted. No workflow dispatched. Prod FROZEN.*
