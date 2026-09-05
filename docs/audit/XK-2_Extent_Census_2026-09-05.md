@@ -66,9 +66,12 @@ $ grep -rl ":showId" src/routes/ | sort | nl
     22  src/routes/worldEvents.js
 ```
 
-**22 files. This agrees with the register's own figure — independently
-derived, not carried.** Subtracting the two already-probed files
-(`worldEvents.js`, `arcRoutes.js`) leaves the 20 named in this task's
+**22 files. The count matches the register's own figure — derived fresh
+here, not carried from it.** Whether it is the *same 22 files*, and not
+merely the same count reached by a similarly-shaped method, is a separate
+question this document could not settle — see §4. Subtracting the two
+already-probed files (`worldEvents.js`, `arcRoutes.js`) leaves the 20 named
+in this task's
 title.
 
 **A qualification this derivation surfaced, not resolved by it — see §4.**
@@ -76,10 +79,11 @@ The command above matches the literal substring `:showId` anywhere in a
 file: comments, SQL bind-parameter names inside `sequelize.query()`, and
 local JS variable names all match it, in addition to actual Express route
 path parameters. Three of the 22 files carry no genuine `:showId` Express
-route parameter at all (§4). This document keeps them in the population as
-derived — the same method the register itself used to reach "22" — and
-records what was actually found in each, rather than quietly re-deriving a
-smaller population of its own.
+route parameter at all (§4) — and §4 finds evidence the register's own
+method may have been more careful than this literal grep, not the same
+method. This document keeps all three in the population as derived here,
+rather than quietly excluding them on its own judgment, and records what
+was actually found in each.
 
 ---
 
@@ -155,10 +159,25 @@ determine fully from the route file alone. That file's population
 membership is a separate question, flagged at §4, not folded into its
 verdict.
 
-**Cannot-tell is a first-class result here, not a gap in the method.**
-Three genuine cannot-tells out of twenty is what a route layer built
-heavily on service delegation should produce; a census that came back with
-zero would be the signal to distrust, not this one.
+**The three cannot-tells are one fact, not three.** Every one of them
+resolves to the same sentence: the write happens inside a `services/*`
+function this census did not read, because its stated scope is
+`src/routes/**`. That is a boundary of this census's own method, not a
+property of `feedEnhancedRoutes.js`, `feedPipelineRoutes.js`, or
+`opportunityRoutes.js` individually — nothing about those three files
+makes them harder to determine than any other file that happens to
+delegate its write to a service. A later reader should take "3
+cannot-tells" as "1 known blind spot, 3 files behind it," not as three
+separately-undeterminable properties. Resolving them means reading
+`src/services/feedEventPipelineService.js`, `feedPostGeneratorService.js`,
+and `careerPipelineService.js` — out of this census's scope, not out of
+reach.
+
+**Cannot-tell is still a first-class result here, not a gap in the
+method.** A route layer built heavily on service delegation should produce
+exactly this: a known, named scope boundary with files behind it, not
+zero. A census that came back with zero cannot-tells would be the signal
+to distrust, not this one.
 
 ---
 
@@ -180,17 +199,48 @@ coincidental reason:
   (`router.get('/:id', ...)`) — `showId` is a local variable
   (`const showId = show.id`) for readability in SQL replacements.
 
-**This is not resolved here.** The register's own "22" figure was reached
-by the same literal-grep method (this census's independent derivation at
-§1 agrees with it), which means the register's population may already
-include these three for the same coincidental reason — not verified
-against the register's own working, only against this census's own
-derivation. Whether "22 `:showId` route files" was always meant as
-"matches this grep" or as "declares a `:showId` path parameter" is a
-question about the register's own prior usage that this document does not
-adjudicate — it only names the ambiguity so a future reader doesn't treat
-"22" as a settled fact about route-parameter declarations without
-re-checking which sense was meant.
+**Checked, not just asserted:** whether this census's "22" and the
+register's "22" are the same 22 files, or two different sets that happen
+to have the same size.
+
+```
+$ git show origin/main:docs/audit/F-Stats-1_Fix_Plan_v1.44.md | sed -n '55,74p'
+```
+
+§47.1 of that document (the revision that first established "22 route
+files carry `:showId`; that is the population") records that its own
+method was **route-path-aware, not a blind string grep**: its §47.2
+explicitly excludes `worldStudio.js` (52 `sequelize.query` sites, the
+second-largest in the file) from the population *"because it has no
+`:showId` in any of its 53 routes"* — the scoping model was checked
+before the file was probed, specifically to avoid manufacturing a finding
+from a file the class cannot apply to. `F-Stats-1_Fix_Plan_v1.49.md` §52.5
+repeats the same population figure (*"120 route files, 22 carrying
+`:showId`"*) and again excludes `worldStudio.js` "on principle," alongside
+`characterRegistry.js`, `universe.js`, and `relationships.js`, for the same
+reason.
+
+**This is evidence, not proof, and it doesn't fully resolve the
+question.** A method careful enough to exclude `worldStudio.js` for
+having zero `:showId` anywhere in its routes would plausibly apply the
+same test to `evaluation.js` and `phonePlaythroughRoutes.js` (also zero,
+by the same test) and exclude them too — which would mean the register's
+22 is NOT the same set as this census's naive-grep 22, and the count
+matching is more coincidence than agreement. `shows.js` is a closer call
+than either: unlike `worldStudio.js`, it addresses shows directly by their
+own primary key (`:id`) and `showId` is only ever a local variable name —
+whether the register's method would count that as "carrying `:showId`" the
+way it counted `arcRoutes.js` or `worldEvents.js` is not established by
+anything read here. **No document found in this repository enumerates the
+register's 22 files by name** (`F-Stats-1_Fix_Plan_v1.44.md`,
+`v1.45.md`, `v1.46.md`, `v1.49.md` and `Cross_Keystone_Register.md` were
+checked; none lists them). Without that list, this census cannot confirm
+or rule out that its population and the register's are the same files
+under different derivations. **This is itself a cannot-tell, about the
+population rather than about any single file's pattern:** the numeric
+agreement at §1 should be read as "this census's grep reproduces the
+register's stated count," not as "two independent methods confirm the
+same 22 files."
 
 ---
 
