@@ -39,13 +39,56 @@
  * the FD-65 suite makes explicit.
  */
 const crypto = require('crypto');
+const { execSync } = require('child_process');
 const request = require('supertest');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const { DecisionLog } = require('../../src/models');
 
+// Synchronous TCP reachability probe. Must be synchronous because the
+// describe.skip/describe choice below is made at module-evaluation time,
+// before Jest runs any async beforeAll. Node has no synchronous socket API,
+// so this shells out to a throwaway `node -e` one-liner and blocks on it —
+// no new dependency, just Node's own child_process + net built-ins.
+function isDatabaseReachable(databaseUrl, timeoutMs = 1500) {
+  if (!databaseUrl) return false;
+  let host;
+  let port;
+  try {
+    const parsed = new URL(databaseUrl);
+    host = parsed.hostname || 'localhost';
+    port = parsed.port || '5432';
+  } catch {
+    return false;
+  }
+  try {
+    execSync(
+      `node -e "const net=require('net');const s=net.createConnection({host:${JSON.stringify(host)},port:${Number(port)}},()=>{s.destroy();process.exit(0);});s.setTimeout(${timeoutMs});s.on('timeout',()=>{s.destroy();process.exit(1);});s.on('error',()=>process.exit(1));"`,
+      { stdio: 'ignore', timeout: timeoutMs + 500 }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Mirrors the guard in auth.integration.test.js — never run against RDS.
-const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com');
+// Short-circuits before the reachability probe below: an amazonaws.com URL
+// must never be dialed, reachable or not.
+//
+// The reachability half exists because DATABASE_URL is not reliably unset
+// just because TEST_DATABASE_URL is (tests/setup.js, issue #1276): under
+// --runInBand every test file in this run shares one process.env, and
+// tests/unit/route-health.test.js:17 unconditionally sets
+// `process.env.DATABASE_URL = 'postgres://localhost:5432/test'` at its own
+// module load — a leak into any suite that runs after it in the same
+// process, this one included. Run standalone (no leak, DATABASE_URL
+// genuinely undefined), this suite instead hangs against Sequelize's own
+// discrete-host-var fallback (src/config/sequelize.js) rather than failing
+// fast. Both shapes are covered by probing the URL directly rather than
+// trusting its mere presence.
+const shouldSkip =
+  process.env.DATABASE_URL?.includes('amazonaws.com') || !isDatabaseReachable(process.env.DATABASE_URL);
 
 const DECISION_LOGS_URL = '/api/v1/decision-logs';
 const ME_URL = '/api/v1/auth/me';
