@@ -258,12 +258,8 @@ router.post('/', requireAuth, async (req, res) => {
       if (template_studio_id) {
         console.log('🎨 Using Template Studio template:', template_studio_id);
 
-        // Fetch template from template_studio
-        const { Sequelize } = require('sequelize');
-        const sequelize = new Sequelize(process.env.DATABASE_URL, {
-          dialect: 'postgres',
-          logging: false,
-        });
+        // Fetch template from template_studio through the shared connection.
+        const { sequelize } = require('../models');
 
         const [templates] = await sequelize.query(
           `

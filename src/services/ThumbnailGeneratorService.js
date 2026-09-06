@@ -370,12 +370,8 @@ class ThumbnailGeneratorService {
         return null;
       }
 
-      // Fetch template from database
-      const { Sequelize } = require('sequelize');
-      const sequelize = new Sequelize(process.env.DATABASE_URL, {
-        dialect: 'postgres',
-        logging: false,
-      });
+      // Fetch template from database through the shared connection.
+      const { sequelize } = require('../models');
 
       const [templates] = await sequelize.query(
         `
