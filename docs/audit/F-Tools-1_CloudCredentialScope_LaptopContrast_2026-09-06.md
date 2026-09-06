@@ -98,15 +98,38 @@ together deliberately, not merged into one.
 ## §2.2 The durable record, re-confirmed
 
 **PR #1288, cited by Evoni as "the durable record of the work," is
-independently confirmed still on `main`** — its squash-merge commit
-`7dc11f82de630ae45b9e255e0de5865f91e28e31`'s content is not affected by the
-source branch's deletion; this matches the byte-identical verification this
-session's own predecessor work already performed against this exact branch
-before recommending its deletion (see the branch-delete authorization
-exchange earlier in this conversation, not re-derived here). Deleting the
-branch after its content is durably merged loses nothing — the same finding
-this session reached independently before Evoni's own laptop-side action,
-now consistent with that action's result.
+independently confirmed still on `main`, re-derived fresh for this document
+rather than carried from an earlier claim:**
+
+```
+$ git log --oneline --all --grep="(#1288)"
+8642533e0 fix(db): reuse shared Sequelize connection in Template Studio paths [skip-automerge] (#1288)
+```
+
+`8642533e07151a3f9991b362e4466a8615b4cc83` is PR #1288's actual squash-merge
+commit on `main`. `claude/issue-1279-shared-sequelize`'s own pre-merge tip
+(`7dc11f82de630ae45b9e255e0de5865f91e28e31`) is a different commit — the
+branch's last commit before GitHub squashed it into the one above. An
+earlier draft of this document named the latter as "PR #1288's squash-merge
+commit," which conflates the two; corrected here before this document's own
+first merge, not carried forward as an error and banner-corrected after.
+
+The branch-tip-to-`main` comparison itself was re-run fresh for this
+document, not carried from memory of an earlier claim in this conversation:
+
+```
+$ git diff --name-only 364bda1ad4cf3c6e09b1c28f7f44a09cd4e83f7e 7dc11f82de630ae45b9e255e0de5865f91e28e31
+src/routes/compositions.js
+src/services/ThumbnailGeneratorService.js
+$ git diff --quiet origin/main:src/routes/compositions.js 7dc11f82de630ae45b9e255e0de5865f91e28e31:src/routes/compositions.js && echo MATCH
+MATCH
+$ git diff --quiet origin/main:src/services/ThumbnailGeneratorService.js 7dc11f82de630ae45b9e255e0de5865f91e28e31:src/services/ThumbnailGeneratorService.js && echo MATCH
+MATCH
+```
+
+Both files the branch touched are byte-identical to their current `main`
+content. Deleting the branch after its content is durably merged loses
+nothing.
 
 ---
 
