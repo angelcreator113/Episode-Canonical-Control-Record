@@ -1,5 +1,27 @@
 # API Documentation
 
+> **HISTORICAL — NOT AUTHORITATIVE FOR CURRENT ROUTES.** Added 2026-09-06,
+> basis `origin/main` at `89acc3d7fc49720c8ccfd7e3865cb5339689769d`. This
+> document was written January–March 2026. At this basis it documents **3**
+> route groups (Authentication, Episodes, Assets) against **97** distinct
+> `/api/v1` prefixes mounted in `src/app.js` — a live count derived by grep
+> against that file at this basis, not carried from `PROJECT_CONTEXT.md`.
+> For the current route list, read `src/app.js` directly; this document
+> does not reflect it.
+>
+> **97 is an upper bound, not a count of distinct route areas.** 137
+> `app.use('/api/v1…')` statements in `src/app.js` resolve to 97 distinct
+> prefix strings; 17 of those 97 are the bare literal `/api/v1` — 17
+> different routers mounted at the same root path, with each router's real
+> sub-paths defined inside its own file, invisible to a mount-file grep.
+>
+> **This document's own Table of Contents is stale against its own body.**
+> The Table of Contents below lists six route groups (Authentication,
+> Episodes, Assets, Thumbnails, Metadata, Processing Queue); three of them
+> — Thumbnails, Metadata, Processing Queue — have no corresponding section
+> anywhere in the body. Confirmed via `grep -nE '^##[^#]' docs/API_REFERENCE.md`
+> against the actual headings present.
+
 ## Episode Metadata API - Complete Reference
 
 **Version:** v1  
