@@ -68,6 +68,7 @@ jest.mock('cloudinary', () => ({
 
 const axios = require('axios');
 const fs = require('fs').promises;
+const path = require('path');
 const cloudinary = require('cloudinary').v2;
 
 const {
@@ -341,7 +342,7 @@ describe('PostProcessingService', () => {
         timeout: 120000,
       });
       expect(fs.writeFile).toHaveBeenCalledWith(
-        '/tmp/scene-postproc-abc123/input.mp4',
+        path.join('/tmp/scene-postproc-abc123', 'input.mp4'),
         expect.any(Buffer)
       );
     });
