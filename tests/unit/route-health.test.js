@@ -14,8 +14,22 @@ process.env.NODE_ENV = 'test';
 process.env.AWS_ACCESS_KEY_ID = 'test-access-key';
 process.env.AWS_SECRET_ACCESS_KEY = 'test-secret-key';
 process.env.AWS_REGION = 'us-east-1';
+
+// Captured before this suite's own override so it can be restored once every
+// test in this file has run — otherwise the override leaks into whichever
+// suite runs next in the same --runInBand process (see
+// tests/integration/f-auth-1-g3-clause3.test.js's comment on this exact leak).
+const ORIGINAL_DATABASE_URL = process.env.DATABASE_URL;
 process.env.DATABASE_URL = 'postgres://localhost:5432/test';
 process.env.JWT_SECRET = 'test-secret';
+
+afterAll(() => {
+  if (ORIGINAL_DATABASE_URL === undefined) {
+    delete process.env.DATABASE_URL;
+  } else {
+    process.env.DATABASE_URL = ORIGINAL_DATABASE_URL;
+  }
+});
 
 // Mock heavy external dependencies so route files load fast
 jest.mock('@aws-sdk/credential-providers', () => ({
