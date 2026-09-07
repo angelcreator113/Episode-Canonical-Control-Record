@@ -39,11 +39,28 @@
  * the FD-65 suite makes explicit.
  */
 const crypto = require('crypto');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const request = require('supertest');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const { DecisionLog } = require('../../src/models');
+
+// The nested probe script reads host/port from its own argv rather than
+// having them interpolated into the source text. That's what actually fixes
+// the Windows bug this replaced: the old version built a `node -e "..."`
+// *string* and ran it through execSync, which shells out via cmd.exe on
+// Windows — cmd.exe's quote parsing strips the double quotes around
+// JSON.stringify(host), so the nested script saw a bare `localhost`
+// identifier and threw before ever opening a socket. execFileSync spawns
+// node.exe directly (no shell, no cmd.exe quote mangling) and passes host/
+// port as separate argv elements, so there is no string to mis-quote.
+const PROBE_SCRIPT =
+  "const net=require('net');" +
+  'const s=net.createConnection({host:process.argv[1],port:Number(process.argv[2])},' +
+  '()=>{s.destroy();process.exit(0);});' +
+  's.setTimeout(Number(process.argv[3]));' +
+  "s.on('timeout',()=>{s.destroy();process.exit(1);});" +
+  "s.on('error',()=>process.exit(1));";
 
 // Synchronous TCP reachability probe. Must be synchronous because the
 // describe.skip/describe choice below is made at module-evaluation time,
@@ -68,10 +85,10 @@ function isDatabaseReachable(databaseUrl, timeoutMs = 1500) {
     return false;
   }
   try {
-    execSync(
-      `node -e "const net=require('net');const s=net.createConnection({host:${JSON.stringify(host)},port:${Number(port)}},()=>{s.destroy();process.exit(0);});s.setTimeout(${timeoutMs});s.on('timeout',()=>{s.destroy();process.exit(1);});s.on('error',()=>process.exit(1));"`,
-      { stdio: 'ignore', timeout: timeoutMs + 500 }
-    );
+    execFileSync(process.execPath, ['-e', PROBE_SCRIPT, host, String(Number(port)), String(timeoutMs)], {
+      stdio: 'ignore',
+      timeout: timeoutMs + 500,
+    });
     return true;
   } catch {
     return false;
