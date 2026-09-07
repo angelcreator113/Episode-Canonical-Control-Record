@@ -61,6 +61,12 @@ function isDatabaseReachable(databaseUrl, timeoutMs = 1500) {
   } catch {
     return false;
   }
+  // The probe may only ever contact loopback; any other host is treated as
+  // unverifiable, not dialed. This session never opens a socket to a
+  // non-loopback host under any circumstance.
+  if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
+    return false;
+  }
   try {
     execSync(
       `node -e "const net=require('net');const s=net.createConnection({host:${JSON.stringify(host)},port:${Number(port)}},()=>{s.destroy();process.exit(0);});s.setTimeout(${timeoutMs});s.on('timeout',()=>{s.destroy();process.exit(1);});s.on('error',()=>process.exit(1));"`,
