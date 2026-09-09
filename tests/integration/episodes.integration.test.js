@@ -10,8 +10,9 @@ const TokenService = require('../../src/services/tokenService');
 
 // Skip integration tests if using production database or no DB available
 const shouldSkip =
-  process.env.DATABASE_URL?.includes('amazonaws.com') ||
-  !process.env.DATABASE_URL?.includes('episode_metadata_test');
+  !process.env.DATABASE_URL ||
+  process.env.DATABASE_URL.includes('amazonaws.com') ||
+  !process.env.DATABASE_URL.includes('episode_metadata_test');
 
 (shouldSkip ? describe.skip : describe)('Episodes API Integration Tests', () => {
   const authGet = (path) => request(app).get(path).set('Authorization', `Bearer ${global.accessToken}`);
