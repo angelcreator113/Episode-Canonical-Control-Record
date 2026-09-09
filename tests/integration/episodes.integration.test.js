@@ -10,6 +10,7 @@ const TokenService = require('../../src/services/tokenService');
 
 // Skip integration tests if using production database or no DB available
 const shouldSkip =
+  !process.env.DATABASE_URL ||
   process.env.DATABASE_URL?.includes('amazonaws.com') ||
   !process.env.DATABASE_URL?.includes('episode_metadata_test');
 

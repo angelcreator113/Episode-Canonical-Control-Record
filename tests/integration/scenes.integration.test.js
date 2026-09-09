@@ -8,8 +8,9 @@ const { generateToken } = require('../../src/services/tokenService');
  * Tests all 11 scene endpoints with authentication
  */
 
-// Skip integration tests if using production database (not using test DB)
+// Skip integration tests if using production database (not using test DB) or no DB available
 const shouldSkip =
+  !process.env.DATABASE_URL ||
   process.env.DATABASE_URL?.includes('amazonaws.com') ||
   !process.env.DATABASE_URL?.includes('episode_metadata_test');
 
