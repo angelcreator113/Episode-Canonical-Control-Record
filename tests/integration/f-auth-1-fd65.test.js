@@ -32,7 +32,7 @@ const TokenService = require('../../src/services/tokenService');
 
 // Mirrors the guard in auth.integration.test.js — never run against RDS, and
 // skip when no DB is configured rather than fail on an ECONNREFUSED.
-const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes('amazonaws.com');
+const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includes('amazonaws.com');
 
 // FD-65 ISSUANCE HALF CLOSED 2026-08-22. POST /login now returns 401 before any
 // other logic runs, so the assertions below that reach the privilege half

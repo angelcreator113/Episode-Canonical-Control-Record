@@ -30,8 +30,8 @@ const TokenService = require('../../src/services/tokenService');
 
 const shouldSkip =
   !process.env.DATABASE_URL ||
-  process.env.DATABASE_URL.includes('amazonaws.com') ||
-  !process.env.DATABASE_URL.includes('episode_metadata_test');
+  process.env.DATABASE_URL?.includes('amazonaws.com') ||
+  !process.env.DATABASE_URL?.includes('episode_metadata_test');
 
 const SHOW_ID = '11111111-1111-1111-1111-111111111111';
 

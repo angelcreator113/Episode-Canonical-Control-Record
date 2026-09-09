@@ -9,7 +9,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 
 // Skip integration tests if no DB is configured or if using production database
-const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes('amazonaws.com');
+const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includes('amazonaws.com');
 
 (shouldSkip ? describe.skip : describe)('Authentication API Integration Tests', () => {
   let accessToken, refreshToken, user;
