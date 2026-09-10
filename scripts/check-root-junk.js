@@ -5,6 +5,11 @@
 // main by imprecise `git add`, with no commit-time debris guard. The cost
 // hook does not catch this class. Allowlist-based: known root entries pass,
 // anything else loose at root blocks. Node-based (no bash dependency).
+//
+// --untracked: opt-in mode, added for the pre-push hook (issue #1348). Scans
+// untracked, non-ignored files at root instead of staged ones. Default (no
+// flag) behavior is unchanged - this is a separate scan, not a widening of
+// the staged-file check below, which stays pre-commit's alone.
 const { execSync } = require("child_process");
 
 // Legit root entries from verified origin/main (2026-06-26). Files inside
@@ -27,28 +32,41 @@ const ALLOWED_ROOT = new Set([
   "test-assets", "test-images", "tests"
 ]);
 
-let staged;
+const untrackedMode = process.argv.includes("--untracked");
+
+let files;
 try {
-  staged = execSync("git diff --cached --name-only --diff-filter=AM", { encoding: "utf8" })
+  const cmd = untrackedMode
+    ? "git ls-files --others --exclude-standard"
+    : "git diff --cached --name-only --diff-filter=AM";
+  files = execSync(cmd, { encoding: "utf8" })
     .split("\n").map(s => s.trim()).filter(Boolean);
 } catch (e) {
-  console.error("[root-junk] could not read staged files: " + e.message);
+  console.error("[root-junk] could not read " + (untrackedMode ? "untracked" : "staged") + " files: " + e.message);
   process.exit(1);
 }
 
-const rootStaged = staged.filter(p => !p.includes("/"));
-const offenders = rootStaged.filter(p => !ALLOWED_ROOT.has(p));
+const rootFiles = files.filter(p => !p.includes("/"));
+const offenders = rootFiles.filter(p => !ALLOWED_ROOT.has(p));
 
 if (offenders.length === 0) process.exit(0);
 
 console.error("");
-console.error("[root-junk] Commit blocked - unrecognized file(s) staged at repo root:");
+console.error(
+  untrackedMode
+    ? "[root-junk] Push blocked - unrecognized untracked file(s) at repo root:"
+    : "[root-junk] Commit blocked - unrecognized file(s) staged at repo root:"
+);
 for (const f of offenders) console.error("  - " + f);
 console.error("");
 console.error("Repo root is allowlisted. If this is scratch/debris:");
 console.error("  - move it into a subdir (scripts/, docs/, tests/, ...), or");
 console.error("  - add it to .gitignore, or");
-console.error("  - unstage it:  git restore --staged <file>");
+console.error(
+  untrackedMode
+    ? "  - delete it:  rm <file>"
+    : "  - unstage it:  git restore --staged <file>"
+);
 console.error("If it is a legitimate new root file, add it to ALLOWED_ROOT");
 console.error("in scripts/check-root-junk.js.");
 console.error("");
