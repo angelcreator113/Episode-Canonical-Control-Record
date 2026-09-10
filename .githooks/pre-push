@@ -4,6 +4,14 @@
 
 echo "[pre-push] Running full validation suite..."
 
+# Untracked root-junk guard (opt-in mode; pre-commit checks staged files
+# only — see scripts/check-root-junk.js's --untracked comment, issue #1348)
+if ! node scripts/check-root-junk.js --untracked; then
+  echo ""
+  echo "Push blocked — untracked root-level junk above."
+  exit 1
+fi
+
 # Cost audit (fast — no npm needed)
 if ! bash scripts/audit-cost-exposure.sh; then
   echo ""
