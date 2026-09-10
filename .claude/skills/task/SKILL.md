@@ -12,7 +12,7 @@ Preconditions: `/wake-up` has been run this session. If not, run it first.
 
 1. Read the issue with the GitHub MCP tools (issue_read, method get, owner angelcreator113, repo Episode-Canonical-Control-Record, issue_number $issue) or `gh issue view $issue`. Quote its "Prompt for Claude Code" and "Acceptance checks" sections back verbatim before doing anything.
 2. Refuse and stop if the issue asks for any of: SSH, pm2, aws, RDS or Cognito contact, server .env edits, enabling or dispatching workflows, editing an already-merged `docs/audit/*` file in place, editing a migration that has already run. Say which line triggered the refusal.
-3. Branch: `git checkout -b claude/issue-$issue-<short-kebab-slug>` from `origin/main` (never from `dev`). If you are already on a `claude/**` branch the session was given, keep it.
+3. Branch: `git checkout -b claude/issue-$issue-<short-kebab-slug>` from `origin/main` (never from `dev`). If you are already on a `claude/**` branch the session was given, keep it. If the issue itself names a branch, that name is the task's contract and overrides the assigned branch: create and check out the issue's named branch from `origin/main` instead. If creating or checking out that branch is not possible, stop and say so rather than substituting a different branch silently.
 4. Restate the plan in five lines or fewer: files to touch, validation to run, what the PR will contain. Then execute.
 5. Conventions that apply to every change (from CLAUDE.md and .github/instructions/*):
    - routes use `optionalAuth` unless the F-AUTH-1 tier promotion for that route file says `requireAuth`; do not demote a `requireAuth` handler
