@@ -10,6 +10,7 @@
 node scripts/validate-routes.js
 bash scripts/lint-silent-catches.sh
 bash scripts/audit-cost-exposure.sh
+node scripts/check-root-junk.js
 ```
 
 ## Guardrails
