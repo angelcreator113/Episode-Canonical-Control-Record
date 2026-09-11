@@ -259,6 +259,12 @@ the two unit health suites fail because `/health` reports `database` as
 not assert how those suites behave when host TCP database authentication is
 working.
 
+The same `/health` body's `config` block names `DB_HOST` as `127.0.0.1` and
+`DB_NAME` as `episode_metadata`, while the local reproduction env shown above
+set both `DATABASE_URL` and `TEST_DATABASE_URL` to
+`postgresql://postgres:postgres@localhost:5433/episode_metadata_test`. This
+mismatch is recorded, not explained.
+
 ## Prior issue #1356 baseline, not same SHA
 
 Issue #1356's laptop baseline was taken before PR #1357's merge commit. It is a
