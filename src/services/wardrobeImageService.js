@@ -127,7 +127,7 @@ async function generateThumbnail(inputBuffer, options = {}) {
 
   const _inputMeta = await sharp(inputBuffer).metadata();
 
-  let pipeline = sharp(inputBuffer)
+  const pipeline = sharp(inputBuffer)
     .rotate() // Auto-orient
     .resize(size, size, {
       fit: 'cover', // Crop to fill square

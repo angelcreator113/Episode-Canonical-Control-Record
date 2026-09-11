@@ -126,7 +126,7 @@ ${pieces.map(w => `  - ${w.name} (${w.clothing_category || 'piece'}${w.brand ? `
 ${brands.length > 0 ? `  Brands: ${brands.join(', ')}` : ''}
 ${tiers.includes('elite') ? '  → She came to KILL. Elite-tier outfit — expect jealousy, compliments, and "who styled her?" posts.' : tiers.includes('luxury') ? '  → Luxury look — creators will notice the pieces and comment on her taste.' : '  → Accessible look — relatable, followers can actually shop this.'}${styleNote}`;
   } else if (event?.outfit_pieces) {
-    let outfitPieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : event.outfit_pieces;
+    const outfitPieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : event.outfit_pieces;
     if (outfitPieces?.length > 0) {
       wardrobeContext = `LALA'S OUTFIT: ${outfitPieces.map(p => `${p.name}${p.brand ? ` (${p.brand})` : ''}`).join(', ')}`;
     }

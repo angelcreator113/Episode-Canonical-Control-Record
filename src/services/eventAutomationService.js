@@ -389,7 +389,7 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
 
     // Get more candidates than needed, then diversify
     // Exclude untouchable profiles from guest lists
-    let guestWhere = {
+    const guestWhere = {
       status: { [Op.in]: ['finalized', 'generated'] },
       feed_layer: 'lalaverse',
       is_justawoman_record: { [Op.ne]: true },  // Never include JustAWoman as guest

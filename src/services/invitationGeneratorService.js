@@ -375,7 +375,7 @@ async function generateInvitation(eventId, models, showId) {
   const rawBackgroundUrl = await uploadToS3(backgroundBuffer, eventId, `v${version}-bg`, 'image/jpeg');
 
   // Step 3: Composite invitation text server-side (guaranteed readability).
-  let finalBuffer = await compositeInvitation(backgroundBuffer, event, invitationContent);
+  const finalBuffer = await compositeInvitation(backgroundBuffer, event, invitationContent);
   if (!finalBuffer) {
     throw new Error('Invitation text compositing failed');
   }
