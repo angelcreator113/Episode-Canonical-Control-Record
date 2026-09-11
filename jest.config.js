@@ -18,17 +18,18 @@ module.exports = {
       statements: 0,
     },
   },
-  testMatch: ['**/tests/unit/**/*.test.js', '**/tests/integration/**/*.test.js'],
-  // 162 *.test.js files exist under tests/; 142 are collected by testMatch
+  testMatch: [
+    '**/tests/unit/**/*.test.js',
+    '**/tests/integration/**/*.test.js',
+    '**/tests/api/endpoints.test.js',
+  ],
+  // 162 *.test.js files exist under tests/; 144 are collected by testMatch
   // minus testPathIgnorePatterns. Derived fresh via
   // `npx jest --listTests` diffed against `find tests -name '*.test.js'`
-  // (both counts and the 20-file diff re-verified at this basis) — the 20
+  // (both counts and the 18-file diff re-verified at this basis) — the 18
   // uncollected files are:
   //
-  //   Outside testMatch (1, not under tests/unit/ or tests/integration/):
-  //     tests/api/endpoints.test.js
-  //
-  //   Dropped by testPathIgnorePatterns below (19), listed in the same
+  //   Dropped by testPathIgnorePatterns below (18), listed in the same
   //   order as the patterns below, so the two read in parallel:
   //     tests/unit/controllers/jobController.test.js
   //     tests/unit/models/job.test.js
@@ -37,7 +38,6 @@ module.exports = {
   //     tests/unit/controllers/notification.test.js
   //     tests/unit/controllers/presence.test.js
   //     tests/unit/controllers/socket.test.js
-  //     tests/unit/controllers/fileController.test.js
   //     tests/integration/jobs.test.js
   //     tests/integration/files.test.js
   //     tests/integration/notifications.integration.test.js
@@ -60,7 +60,6 @@ module.exports = {
     'notification.test.js',
     'presence.test.js',
     'socket.test.js',
-    'fileController.test.js',
     'jobs.test.js',
     'files.test.js',
     'notifications.integration.test.js',
