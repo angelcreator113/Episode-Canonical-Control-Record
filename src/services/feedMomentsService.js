@@ -17,8 +17,6 @@
  * Content is filtered through the show's content lens.
  */
 
-const { v4: uuidv4 } = require('uuid');
-
 // ─── SHOW CONTENT LENSES ────────────────────────────────────────────────────
 // Each show type filters what kinds of feed content appear on screen
 
@@ -181,9 +179,6 @@ async function generateFeedMoments(event, beats, guestProfiles, models, options 
 }
 
 function generateMomentContent(beat, config, lens, event, hostName, triggerHandle, triggerProfile, guests) {
-  const focusTopic = lens.focus[Math.floor(Math.random() * lens.focus.length)];
-  const dramaType = lens.drama_types[Math.floor(Math.random() * lens.drama_types.length)];
-
   // Content templates by beat phase + screen type
   const TEMPLATES = {
     notification: {
@@ -355,7 +350,7 @@ function generateMomentContent(beat, config, lens, event, hostName, triggerHandl
 // ─── GENERATE B-STORY FEED ACTIVITY ─────────────────────────────────────────
 // What's happening on the feed WHILE the episode is happening
 
-function generateBStoryActivity(event, guestProfiles, lens) {
+function generateBStoryActivity(event, guestProfiles, _lens) {
   const auto = event.canon_consequences?.automation || {};
   const guests = guestProfiles || auto.guest_profiles || [];
   const hostName = auto.host_display_name || event.host || 'the host';

@@ -125,7 +125,7 @@ async function suggestLinkedScreens(showId, iconName, models) {
     .filter(s => s.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
-    .map(({ score, ...s }) => s);
+    .map(({ score: _score, ...s }) => s);
 }
 
 // ── SUGGEST OVERLAYS FOR AN EVENT ───────────────────────────────────────────

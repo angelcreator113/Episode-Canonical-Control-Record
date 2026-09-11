@@ -14,7 +14,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 
-const { calculateVelocity, detectViralTier, VIRAL_THRESHOLDS } = require('./feedEngagementService');
+const { detectViralTier } = require('./feedEngagementService');
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 let client = null;
