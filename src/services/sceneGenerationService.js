@@ -717,11 +717,9 @@ async function generateBaseScene(sceneSet, models) {
         ? { uri: sceneSet.style_reference_url, weight: 0.7 }
         : undefined;
 
-      let stillOutputUrl, stillSeed;
-
       const { imageUrl } = await startTextToImage(prompt, { styleReference });
-      stillOutputUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, 'base');
-      stillSeed = null;
+      const stillOutputUrl = await downloadAndStoreStill(imageUrl, sceneSet.id, 'base');
+      const stillSeed = null;
       stillCredits = 0.04;
 
       stillUrl = stillOutputUrl;
