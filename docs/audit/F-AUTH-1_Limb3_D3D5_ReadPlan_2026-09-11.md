@@ -152,11 +152,34 @@ definition under FD-51. The status phrase is not converted into a definition.
 
 ### 2.2 Supplier source and outcome
 
-v25 Owed Index Amd8 §H4 names `v2.61` as both the supplier and last restater
-for Dimension 5. The supplier is therefore the same source just read. It also
-has no D5 definition. No second source is authorized by the task rule, and no
-definition may be reconstructed from earlier revisions or neighboring
-dimensions.
+The fallback supplier read required by step 4 was performed against Amd8 §H4:
+
+```text
+COMMAND
+git show origin/main:docs/audit/v25_Owed_Index_Amd8_2026-08-27.md | Select-Object -Skip 198 -First 28
+
+RAW OUTPUT
+# §H4. `Prime_Studios_Audit_Handoff_v25.md` Sec 3 — supplier and restater in one column
+
+| dim | disposition | supplied at | last restated |
+|---|---|---|---|
+| 5 | NOT PERFORMED | `v2.61` | `v2.61` |
+```
+
+The focused supplier-row read was:
+
+```text
+COMMAND
+git show origin/main:docs/audit/v25_Owed_Index_Amd8_2026-08-27.md | Select-String -Pattern '^\| 5 \||Dimension 5'
+
+RAW OUTPUT
+| 5 | NOT PERFORMED | `v2.61` | `v2.61` |
+```
+
+The Amd8 §H4 supplier therefore resolves back to `v2.61`, not to a second
+revision. The supplier read was still required and is shown here; it also
+contains no D5 definition. No definition may be reconstructed from earlier
+revisions or neighboring dimensions.
 
 **Result:** `CANNOT-TELL` as to the definition, target class, read command,
 expected output shape, and outcome-to-disposition mapping for Dimension 5.
