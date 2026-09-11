@@ -255,7 +255,7 @@ not performed here.
   or any other filed document.
 - Does not advance F-Stats-1 Phase B beyond this measurement.
 
-## Method note — one drafting error disclosed
+## Method note — two corrections disclosed
 
 Per the register's practice of naming derivation errors rather than smoothing
 them out of the record (cf. v1.60 §63.6), two corrections were made to this
