@@ -255,6 +255,38 @@ not performed here.
   or any other filed document.
 - Does not advance F-Stats-1 Phase B beyond this measurement.
 
+## Method note — one drafting error disclosed
+
+Per the register's practice of naming derivation errors rather than smoothing
+them out of the record (cf. v1.60 §63.6), two corrections were made to this
+note's evidence between first draft and the version filed here:
+
+1. **A fabricated hybrid in Step 3's heading search, caught before the first
+   commit.** An early draft of "§12 numbering generally" combined two
+   separately-run `grep` commands by hand into one presented block, and
+   added an invented "+2 line offset" note to explain away a discrepancy
+   that draft had introduced itself: the parent heading `# 12. Findings
+   Beyond Scope` was mis-cited at line 647 (the actual first child heading's
+   line) rather than its real line, 643. That combined block and its
+   fabricated offset explanation were never committed — self-review caught
+   the mismatch, both source commands were re-run, and Step 3 above now
+   quotes the single command (`grep -n '^#\+ *§12\|^#\+ 12\.' ...v1.md`)
+   whose real, unedited output carries the parent heading at its correct
+   line (643) and all ten children in one pass. No git history ever
+   contained the fabricated version; it is disclosed here because it
+   happened, not because a commit records it.
+2. **A marked elision in Step 4, filed once and then completed.** The
+   version first committed to this PR (`ef1a1fcf8`) truncated
+   `F-App-1_G1_Audit_Report.md`'s `sync(` grep with two `...` markers.
+   Every line it showed matched the real command verbatim — this was an
+   honest omission, not a fabrication — but it was not the complete raw
+   output H1 calls for. A follow-up commit (`27ababb4b`) replaced it with
+   the full 24-line output before this note was read.
+
+Neither correction changes anything below: the located candidate, its line
+number, and its wording are the same in both the corrected and the
+never-committed draft.
+
 ## Author declaration
 
 Type: standalone measurement note. Rules nothing. Mints no FD, no XK, no PE
