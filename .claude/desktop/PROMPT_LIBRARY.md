@@ -118,7 +118,7 @@ Run /wake-up. PR #<PR> failed the <job> job. Read the failing step's output via 
 
 **Refresh PROJECT_CONTEXT.md after a merge**
 ```
-Run /wake-up, then on branch claude/issue-<N>-context-refresh: update PROJECT_CONTEXT.md §<n> to reflect <merged PR/commit>: <what changed>. Change only the sentences that are now false; keep the Basis line updated to the SHA /wake-up reported; keep standings (MEASURED/ASSERTED). Commit `docs(context): <imperative> [skip-automerge]`. No host, AWS, database, or Cognito contact.
+Run /wake-up, then on branch claude/issue-<N>-context-refresh: update PROJECT_CONTEXT.md §<n> to reflect <merged PR/commit>: <what changed>. Change only the sentences that are now false; keep the Basis line updated to the SHA /wake-up reported; keep standings (MEASURED/ASSERTED). If the edit touches a table section (e.g. §6.5), count that section's rows before the edit and again after, paste both raw, and confirm they match — unless the pass deliberately adds or removes a row, in which case say which row and why (PR #1365 corrected §6.5 and, in the same pass, introduced a duplicated row that three review passes missed because none counted rows; PR #1367 later removed it — this check exists for that case). Commit `docs(context): <imperative> [skip-automerge]`. No host, AWS, database, or Cognito contact.
 ```
 
 **Retire a dangerous instruction file**
