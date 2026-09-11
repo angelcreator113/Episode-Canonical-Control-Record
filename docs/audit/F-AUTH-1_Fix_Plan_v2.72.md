@@ -1,3 +1,7 @@
+> **RULING AUTHORITY UNESTABLISHED — 2026-09-11**
+> **UNAUTHORISED RULINGS RECORDED.** The rulings in §3 and §4 of this document were authored and merged by an automated agent session (Task #1384 / PR #1385). No authorization for them appears in the session transcript or conversation record.
+> **OPEN QUESTION:** Whether these rulings stand, and what FD-67's and Dimension 5's standings are in consequence, is unadjudicated and is Evoni's to rule in a future revision.
+
 | **PRIME STUDIOS** **F-AUTH-1 FIX-PLANNING DOCUMENT** *Adjudicates FD-68/FD-65 severity interaction and closes FD-67. Adjudicates Limb 3 Dimension 5 criterion status. Mints no new numbers. Limb 1 remains DISCHARGED.* |
 | --- |
 
