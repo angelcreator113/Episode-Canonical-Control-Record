@@ -38,18 +38,19 @@ definition of what Dimension 3 asks. The focused absence check was:
 
 ```text
 COMMAND
-git show origin/main:docs/audit/F-AUTH-1_Fix_Plan_v2.68.md | Select-String -Pattern 'Dimension 3 asks|Dimension 3 —|Dimension 5 asks|Dimension 5 —'
+git show origin/main:docs/audit/F-AUTH-1_Fix_Plan_v2.68.md | Select-String -CaseSensitive -Pattern 'Dimension 3|\bD3\b'
 
 RAW OUTPUT
-GIT_SHOW_EXIT=0
-MATCH_OUTPUT_BEGIN
-MATCH_OUTPUT_END
-SELECT_MATCH_EXIT=1
+**PE #67**. Dimension 3 remains **NOT PERFORMED**; limb 3 open; G4 not
+- Does not advance Dimension 3, discharge limb 3, enter G4, or alter the
+freeze.
 ```
 
-`git show` exited zero; the empty match output is therefore evidence of no
-matching definition under FD-51. The status hits found by the broader grep do
-not supply a definition and are not treated as one.
+`git show` exited zero and the case-sensitive whole-file scan returned only
+status/non-advancement lines. It returned no D3 definition. The scan is broad
+enough not to depend on the later supplier's phrasing. Under FD-51, the
+non-empty output is still not a definition and is recorded as
+`MEASURED-ABSENT` for the named definition.
 
 **Result for the named source:** `MEASURED-ABSENT` for a D3 definition.
 
@@ -90,14 +91,16 @@ other infrastructure identifier is part of this plan.
 nginx -T
 ss -ltnp
 ps -fp <listener-pid>
-pm2 id <listener-pid>
-pm2 describe <process-id>
+pm2 jlist
+pm2 describe <pm2-id>
 uptime
 free -m
 ```
 
-The listener PID must be derived from `nginx -T` and `ss`; the process identity
-must then be followed to the PM2 id. Process names are not identity evidence.
+The listener PID must be derived from `nginx -T` and `ss`. Read the PM2 JSON
+from `pm2 jlist`, match the listener PID to the JSON `pid` field, and carry
+the resulting PM2 id to `pm2 describe`. Process names are not identity
+evidence.
 The G4 operation checks themselves must be run only under separately recorded
 authority and must not create, mutate, or refresh identity records.
 
@@ -136,17 +139,17 @@ The focused absence check was:
 
 ```text
 COMMAND
-git show origin/main:docs/audit/F-AUTH-1_Fix_Plan_v2.61.md | Select-String -Pattern 'Dimension 5 asks|Dimension 5 —|Dimension 5 requires'
+git show origin/main:docs/audit/F-AUTH-1_Fix_Plan_v2.61.md | Select-String -CaseSensitive -Pattern 'Dimension 5|\bD5\b'
 
 RAW OUTPUT
-GIT_SHOW_EXIT=0
-MATCH_OUTPUT_BEGIN
-MATCH_OUTPUT_END
-SELECT_MATCH_EXIT=1
+Dimension 2 PASS; Dimension 3 NOT PERFORMED; Dimension 4 FAIL; Dimension 5 NOT
+PERFORMED. **G4 — not enterable.**
 ```
 
-`git show` exited zero; the empty match output is evidence of no D5
-definition under FD-51. The status phrase is not converted into a definition.
+`git show` exited zero and the case-sensitive whole-file scan returned only the
+status face. It returned no D5 definition. The scan is broad enough not to
+depend on a guessed definition phrase. The status phrase is not converted
+into a definition.
 
 **Result for the named source:** `MEASURED-ABSENT` for a D5 definition.
 
