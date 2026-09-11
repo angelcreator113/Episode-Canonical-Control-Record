@@ -156,7 +156,9 @@ across all three `.md` family members:
 ```
 $ grep -n -i 'sync(' docs/audit/F-App-1_G1_Audit_Report.md
 403:### Step 5 — `model.sync()` calls outside the gated `ENABLE_DB_SYNC` branch
-...
+416:src\migrations\20260217000002-fix-episode-number-nullable.js:8: * sequelize.sync() that created the table.
+417:src\migrations\20260218000001-fix-scenes-timeline-schema-gaps.js:9: * (the DB was created by sequelize.sync() with a subset of columns).
+418:src\migrations\20260218000002-fix-wardrobe-defaults-table.js:9: * because the DB was created by sequelize.sync().
 419:src\models\index.js:1797:      await sequelize.sync({ ...defaultOptions, ...options });
 420:src\routes\memories\engine.js:2434:    await db.StoryTaskArc.sync();
 421:src\routes\memories\engine.js:3183:      await db.StoryTaskArc.sync();
@@ -171,9 +173,18 @@ $ grep -n -i 'sync(' docs/audit/F-App-1_G1_Audit_Report.md
 430:src\workers\sceneGenerationWorker.js:235:    await GenerationJob.sync();
 431:src\app.js:87:          await db.sequelize.sync(syncOptions);
 432:src\app.js:114:                  await model.sync();
-...
+440:    - `src/app.js:87` — `db.sequelize.sync(syncOptions)` inside the `ENABLE_DB_SYNC=true` branch. Preserved per F-App-1 plan §9.3.
+441:    - `src/app.js:114` — `model.sync()` inside Path A of the auto-repair. F-App-1 deletes this.
+447:    - `src/models/index.js:1797` — `sequelize.sync({ ...defaultOptions, ...options })` inside the model loader. Model loader files should not run schema operations. Needs investigation in follow-up plan.
 449:- **Pattern 40 Variant A sites — `model.sync()` inside routes and workers (11 hits across 5 files, 7+ distinct models):**
+450:    - `routes/memories/engine.js:2434, 3183, 3470, 3662` — `StoryTaskArc.sync()` called four times in the same file
+452:    - `routes/franchiseBrainRoutes.js:66` — `FranchiseKnowledge.sync()`
+453:    - `routes/sceneSetRoutes.js:52` and `workers/sceneGenerationWorker.js:235` — `GenerationJob.sync()` in two separate processes (race risk)
+502:5. ✅ Auto-repair block contains the only `model.sync()` call touching the five tables (Step 5)
+514:- **§12.11** — Pattern 40 sites discovered across Steps 4–5: 6 Variant B sites (inline `CREATE TABLE` SQL) covering 3 tables (`video_compositions`, `chapter_versions`, `ecosystem_previews`), plus 11 Variant A sites (`model.sync()` calls inside routes/workers) covering 7+ models (`StoryTaskArc`, `ContinuityTimeline`, `ContinuityCharacter`, `ContinuityBeat`, `ContinuityBeatCharacter`, `FranchiseKnowledge`, `GenerationJob`). Plus a suspicious `sequelize.sync()` call inside the model loader (`src/models/index.js:1797`). Out of F-App-1 scope. Follow-up plan recommended.
 ```
+
+(Full, unelided output — 24 lines. No line was dropped or reordered.)
 
 And, at the literal string "§12.11", found only in this same file:
 
