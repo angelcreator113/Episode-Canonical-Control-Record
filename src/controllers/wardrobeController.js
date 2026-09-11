@@ -2013,7 +2013,7 @@ module.exports = {
    */
   async bulkEnhance(req, res) {
     try {
-      const { itemIds, options = {} } = req.body;
+      const { itemIds } = req.body;
 
       if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
         return res.status(400).json({ error: 'itemIds array is required' });

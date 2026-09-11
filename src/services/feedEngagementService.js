@@ -69,7 +69,7 @@ function detectViralTier(likes, velocity) {
  * Returns trending topics, viral posts, audience sentiment, and momentum score.
  */
 async function analyzeEventEngagement(eventId, models) {
-  const { FeedPost, sequelize } = models;
+  const { FeedPost } = models;
 
   const posts = await FeedPost.findAll({
     where: { event_id: eventId, deleted_at: null },

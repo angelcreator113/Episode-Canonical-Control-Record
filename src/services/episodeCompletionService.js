@@ -23,7 +23,6 @@ const {
   computeStatDeltas,
   applyDeltas,
   generateNarrativeLine,
-  DEFAULT_STATS,
   FORMULA_VERSION,
 } = require('../utils/evaluationFormula');
 

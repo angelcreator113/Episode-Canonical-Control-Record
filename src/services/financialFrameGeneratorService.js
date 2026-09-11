@@ -19,7 +19,6 @@
  */
 
 const { generateImageUrl } = require('./imageGenerationService');
-const { v4: uuidv4 } = require('uuid');
 
 const BRAND_PALETTE = {
   pink:  '#FBCFE8',

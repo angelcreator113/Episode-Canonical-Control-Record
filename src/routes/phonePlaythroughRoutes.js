@@ -119,7 +119,7 @@ router.get('/', requireAuth, async (req, res) => {
 router.post('/tap', requireAuth, async (req, res) => {
   try {
     const models = require('../models');
-    const { zone_id, screen_id } = req.body || {};
+    const { zone_id } = req.body || {};
     if (!zone_id) return res.status(400).json({ success: false, error: 'zone_id is required' });
 
     const { state, showId, error } = await loadOrCreateState(models, {

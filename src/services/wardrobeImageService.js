@@ -125,7 +125,7 @@ async function generateThumbnail(inputBuffer, options = {}) {
     quality = 80,
   } = options;
 
-  const inputMeta = await sharp(inputBuffer).metadata();
+  const _inputMeta = await sharp(inputBuffer).metadata();
 
   let pipeline = sharp(inputBuffer)
     .rotate() // Auto-orient
@@ -601,7 +601,7 @@ async function normalizeColors(inputBuffer, options = {}) {
  */
 async function enhanceTexture(inputBuffer, options = {}) {
   const {
-    clarity = 1.3,        // Local contrast boost
+    clarity: _clarity = 1.3, // Local contrast boost
     detailSharpen = 1.5,  // Detail enhancement
     microContrast = 1.1,  // Fine texture pop
   } = options;
@@ -610,7 +610,7 @@ async function enhanceTexture(inputBuffer, options = {}) {
   console.log(`[WardrobeImage] TextureEnhance: Processing ${inputMeta.width}x${inputMeta.height}`);
 
   // Step 1: Create a slightly blurred version for local contrast
-  const blurred = await sharp(inputBuffer)
+  const _blurred = await sharp(inputBuffer)
     .blur(30) // Large-radius blur for "local" reference
     .toBuffer();
 
