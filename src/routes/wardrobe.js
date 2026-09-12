@@ -9,7 +9,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 async function getModels() {
-  try { return require('../models'); } catch (e) { return null; }
+  try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
 }
 
 // Configure multer for file uploads (memory storage)

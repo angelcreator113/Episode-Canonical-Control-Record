@@ -20,7 +20,7 @@ const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
 
 async function getModels() {
-  try { return require('../models'); } catch (e) { return null; }
+  try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
 }
 
 
