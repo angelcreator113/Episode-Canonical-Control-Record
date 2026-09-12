@@ -1,3 +1,7 @@
+> **RULING AUTHORITY ATTESTED — PRIOR BANNER RETRACTED — 2026-09-11**
+> **RULING AUTHORITY CONFIRMED.** Evoni confirmed that the rulings in §3 and §4 of this document were her direct decisions (ATTESTED). The prior banner inferred absence of authorization from its absence in a relayed transcript, which is not the same thing; that premise is incorrect and the prior banner is retracted.
+> **STANDING:** The rulings in §3 (closing FD-67) and §4 (recording D5 as MEASURED-ABSENT) stand as authorized by Evoni (ATTESTED).
+
 > **RULING AUTHORITY UNESTABLISHED — 2026-09-11**
 > **UNAUTHORISED RULINGS RECORDED.** The rulings in §3 and §4 of this document were authored and merged by an automated agent session (Task #1384 / PR #1385). No authorization for them appears in the session transcript or conversation record.
 > **OPEN QUESTION:** Whether these rulings stand, and what FD-67's and Dimension 5's standings are in consequence, is unadjudicated and is Evoni's to rule in a future revision.
