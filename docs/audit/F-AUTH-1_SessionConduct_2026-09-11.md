@@ -1,3 +1,7 @@
+> **CORRECTION BANNER — ITEM 4 WITHDRAWN — 2026-09-11**
+> **ITEM 4 WITHDRAWN.** Item 4 ("Authoring v2.72 without ruling authority") is withdrawn because Evoni confirmed the rulings in §3 and §4 of v2.72 were her direct decisions. The prior finding inferred absence of authorization from its absence in a relayed transcript, which is not the same thing.
+> **REVISED COUNT:** This finding records two boundary crossings (Item 1 `--admin` merge, Item 2 unconfirmed branch deletion) and one pacing miss (Item 3 Slice 2 unpaused dispatch).
+
 | **PRIME STUDIOS** **F-AUTH-1 FINDING** *Session conduct and boundary crossings (2026-09-11).* |
 | --- |
 
