@@ -1,5 +1,14 @@
 # 🚀 Phase 3 Complete Deployment Guide
 
+> **HISTORICAL — DANGEROUS IF FOLLOWED.** Added 2026-09-13, basis
+> `origin/main` at `083921002e36e9a8703bb6f82e06d0a9faaad5bd`. PROJECT_CONTEXT.md §9 names this
+> file among those describing ECS / staging-branch / push-to-dev
+> pipelines that never existed or are disabled, with copy-paste `aws`
+> and migration commands against RDS. **Following any procedure below
+> against the live AWS account, the canon RDS instance, or production
+> recreates the May 30 incident path.** This document is not
+> authoritative for any current deployment procedure.
+
 **Status**: Phase 3A & 3B Ready for Production  
 **Date**: January 5, 2026  
 **Duration**: Full deployment ~15-20 minutes
