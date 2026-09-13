@@ -4,9 +4,9 @@
 > `origin/main` at
 > `83a3683ce5405cc541b5848fcb98e5769c8cd19f`.
 > This file describes security-group configuration against the canon
-> RDS instance; it was ruled into this deployment-family banner by
-> Evoni via the 2026-09-13 census disposition, not named at
-> PROJECT_CONTEXT.md §9.
+> RDS instance; it was ruled into this banner by Evoni, 2026-09-13, on
+> the disposition of `docs/audit/Docs_Archive_Census_2026-09-13.md`,
+> not named at PROJECT_CONTEXT.md §9.
 > **Following any procedure below against the live AWS account, the
 > canon RDS instance, or production recreates the May 30 incident
 > path.** This document is not authoritative for any current
