@@ -1,5 +1,16 @@
 # AWS RDS Security Group Configuration Checklist
 
+> **HISTORICAL — DANGEROUS IF FOLLOWED.** Added 2026-09-13, basis
+> `origin/main` at
+> `83a3683ce5405cc541b5848fcb98e5769c8cd19f`.
+> PROJECT_CONTEXT.md §9 names this file among those describing ECS /
+> staging-branch / push-to-dev pipelines that never existed or are
+> disabled, with copy-paste `aws` and migration commands against RDS.
+> **Following any procedure below against the live AWS account, the
+> canon RDS instance, or production recreates the May 30 incident
+> path.** This document is not authoritative for any current
+> deployment procedure.
+
 ## Current Status
 
 ### Development Database ✅
