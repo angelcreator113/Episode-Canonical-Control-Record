@@ -1,13 +1,15 @@
 # GitHub Actions Automatic Deployment Setup
 
 > **HISTORICAL — DANGEROUS IF FOLLOWED.** Added 2026-09-13, basis
-> `origin/main` at `083921002e36e9a8703bb6f82e06d0a9faaad5bd`. PROJECT_CONTEXT.md §9 names this
-> file among those describing ECS / staging-branch / push-to-dev
-> pipelines that never existed or are disabled, with copy-paste `aws`
-> and migration commands against RDS. **Following any procedure below
-> against the live AWS account, the canon RDS instance, or production
-> recreates the May 30 incident path.** This document is not
-> authoritative for any current deployment procedure.
+> `origin/main` at
+> `083921002e36e9a8703bb6f82e06d0a9faaad5bd`.
+> PROJECT_CONTEXT.md §9 names this file among those describing ECS /
+> staging-branch / push-to-dev pipelines that never existed or are
+> disabled, with copy-paste `aws` and migration commands against RDS.
+> **Following any procedure below against the live AWS account, the
+> canon RDS instance, or production recreates the May 30 incident
+> path.** This document is not authoritative for any current
+> deployment procedure.
 
 This guide will enable automatic deployments to your EC2 instance when you push to specific branches.
 
