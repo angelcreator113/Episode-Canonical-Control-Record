@@ -1,5 +1,15 @@
 # 🔒 Security Audit Findings - February 2026
 
+> **HISTORICAL — REDACTION NOTE.** Added 2026-09-13, basis
+> `origin/main` at
+> `083921002e36e9a8703bb6f82e06d0a9faaad5bd`.
+> PROJECT_CONTEXT.md §9 names this file: a staging RDS password
+> literal once printed in this file's rotation list was redacted
+> from `main` (PR #1224, 2026-09-04). **Redaction removes the
+> literal from `main` going forward; it does not remove it from git
+> history, where it remains readable.** This banner does not state
+> whether the underlying credential has been rotated.
+
 ## ⚠️ CRITICAL ISSUES IDENTIFIED
 
 ### 1. **EXPOSED CREDENTIALS IN GIT HISTORY** ⚠️ HIGH PRIORITY

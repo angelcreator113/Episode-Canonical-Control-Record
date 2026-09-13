@@ -1,5 +1,16 @@
 # CloudShell Migration Execution - Updated Instructions
 
+> **HISTORICAL — DANGEROUS IF FOLLOWED.** Added 2026-09-13, basis
+> `origin/main` at
+> `083921002e36e9a8703bb6f82e06d0a9faaad5bd`.
+> PROJECT_CONTEXT.md §9 names this file among those describing ECS /
+> staging-branch / push-to-dev pipelines that never existed or are
+> disabled, with copy-paste `aws` and migration commands against RDS.
+> **Following any procedure below against the live AWS account, the
+> canon RDS instance, or production recreates the May 30 incident
+> path.** This document is not authoritative for any current
+> deployment procedure.
+
 ## GitHub Push Issue Resolution
 
 The project code is ready but cannot be pushed to GitHub due to GitHub's secret scanning detecting AWS credentials in historical commits. **This does NOT prevent migrations from running** - we have 3 ways to execute migrations in CloudShell.
