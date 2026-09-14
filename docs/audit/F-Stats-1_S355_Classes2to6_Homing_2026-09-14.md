@@ -170,14 +170,38 @@ docs/audit/F-Stats-1_PhaseB_OwedScoping_2026-09-10.md:152:**To close:** run the 
 docs/audit/F-Stats-1_PhaseB_OwedScoping_2026-09-10.md:305:- **Item 3** (§35.5 classes 2–6 homing) traces to the **Carries forward**
 docs/audit/F-Stats-1_PhaseB_OwedScoping_2026-09-10.md:321:- Does not run the §35.5 cross-route-file reach probe.
 ```
-81 lines total, 70 of them (all lines above the `F-Stats-1_PhaseB_OwedScoping`
-block's own file) fall in 21 pre-existing family files (v1.33 through v1.60
-plus `OwedScoping`); the remaining 11 lines (not shown in the pasted block
-above — reproducible with `grep -n '35\.5' docs/audit/F-Stats-1_S355_Classes2to6_Homing_2026-09-14.md`)
-are this document's own self-references, since this file now exists in the
-directory the command scans and necessarily quotes "§35.5" itself. Excluded
-from the pasted block above to avoid quoting this document inside itself;
-their count is stated so the arithmetic (81 total, 70 + 11) is checkable.
+81 lines total when this command was run (2026-09-14, after this document's
+own commit to this branch): 70 of them fall in 21 pre-existing family files
+(v1.33 through v1.60 plus `OwedScoping`); the remaining 11 are this
+document's own self-references, since this file now exists in the directory
+the glob `F-Stats-1_*.md` scans and necessarily quotes "§35.5" itself.
+Excluded from the pasted block above to avoid quoting this document inside
+itself.
+
+**The 81/70/11 split is not reproducible against a moving target** — this
+document's own text will keep changing as amendments are drafted before
+merge (as it already has, once, between the two commits on this branch),
+so its self-match count will not stay 11 on a later re-run even though
+nothing else about it changed. **The 70-line family count is reproducible
+regardless**, because it names the pre-existing files explicitly rather
+than relying on the glob to exclude this one — those files are filed and
+immutable per the register's carriage rules, so this instrument's count
+does not move even as this document's own does:
+
+```
+$ grep -n '35\.5' docs/audit/F-Stats-1_Fix_Plan_v1.*.md docs/audit/F-Stats-1_PhaseB_OwedScoping_2026-09-10.md | wc -l
+70
+```
+
+This is the same 70-line set pasted above (verified identical by construction:
+the explicit file list names exactly the 21 pre-existing `Fix_Plan` revisions
+that matched plus `OwedScoping`, the same 22 files the glob-based command
+matched minus this document). **Anyone re-running this exact command, at
+any point after this document exists, gets 70** — it is the instrument this
+document's classes-2–6 disposition in §3 actually rests on, not the 81/11
+self-inclusive glob figures above, which are read-time artifacts of when
+the command happened to be run relative to this file's own drafting.
+
 The hits relevant to classes 2–6 specifically (as opposed to class 1, which
 has its own homing history — see §2 below) are quoted where they matter in
 §3.
@@ -211,7 +235,87 @@ carried, not re-run here).
 `head -1` does not itself establish earliest revision** (`ls`/`grep -l`'s default glob order on `v1.*` sorts
 `v1.1` before `v1.10` before `v1.2`, a string order, not a numeric one — so
 an unsorted `head -1` can return the alphabetically-first match rather than
-the chronologically-earliest one). Numeric sort applied explicitly:
+the chronologically-earliest one). Numeric sort applied explicitly, shown
+first over the full `.md` population (`.docx` copies excluded — they are
+not greppable text, and the sort key `-t. -k2 -n` would otherwise read
+their field 2 the same way) so the ordering itself is checkable by eye
+before any filtering:
+
+```
+$ ls docs/audit/F-Stats-1_Fix_Plan_v1.*.md | grep -v '\.docx$' | sort -t. -k2 -n
+docs/audit/F-Stats-1_Fix_Plan_v1.0.md
+docs/audit/F-Stats-1_Fix_Plan_v1.1.md
+docs/audit/F-Stats-1_Fix_Plan_v1.2.md
+docs/audit/F-Stats-1_Fix_Plan_v1.3.md
+docs/audit/F-Stats-1_Fix_Plan_v1.4.md
+docs/audit/F-Stats-1_Fix_Plan_v1.5.md
+docs/audit/F-Stats-1_Fix_Plan_v1.6.md
+docs/audit/F-Stats-1_Fix_Plan_v1.7.md
+docs/audit/F-Stats-1_Fix_Plan_v1.8.md
+docs/audit/F-Stats-1_Fix_Plan_v1.9.md
+docs/audit/F-Stats-1_Fix_Plan_v1.10.md
+docs/audit/F-Stats-1_Fix_Plan_v1.11.md
+docs/audit/F-Stats-1_Fix_Plan_v1.12.md
+docs/audit/F-Stats-1_Fix_Plan_v1.13.md
+docs/audit/F-Stats-1_Fix_Plan_v1.14.md
+docs/audit/F-Stats-1_Fix_Plan_v1.15.md
+docs/audit/F-Stats-1_Fix_Plan_v1.16.md
+docs/audit/F-Stats-1_Fix_Plan_v1.17.md
+docs/audit/F-Stats-1_Fix_Plan_v1.18.md
+docs/audit/F-Stats-1_Fix_Plan_v1.19.md
+docs/audit/F-Stats-1_Fix_Plan_v1.20.md
+docs/audit/F-Stats-1_Fix_Plan_v1.21.md
+docs/audit/F-Stats-1_Fix_Plan_v1.22.md
+docs/audit/F-Stats-1_Fix_Plan_v1.23.md
+docs/audit/F-Stats-1_Fix_Plan_v1.24.md
+docs/audit/F-Stats-1_Fix_Plan_v1.25.md
+docs/audit/F-Stats-1_Fix_Plan_v1.26.md
+docs/audit/F-Stats-1_Fix_Plan_v1.27.md
+docs/audit/F-Stats-1_Fix_Plan_v1.28.md
+docs/audit/F-Stats-1_Fix_Plan_v1.29.md
+docs/audit/F-Stats-1_Fix_Plan_v1.30.md
+docs/audit/F-Stats-1_Fix_Plan_v1.31.md
+docs/audit/F-Stats-1_Fix_Plan_v1.32.md
+docs/audit/F-Stats-1_Fix_Plan_v1.33.md
+docs/audit/F-Stats-1_Fix_Plan_v1.34.md
+docs/audit/F-Stats-1_Fix_Plan_v1.35.md
+docs/audit/F-Stats-1_Fix_Plan_v1.36.md
+docs/audit/F-Stats-1_Fix_Plan_v1.37.md
+docs/audit/F-Stats-1_Fix_Plan_v1.38.md
+docs/audit/F-Stats-1_Fix_Plan_v1.39.md
+docs/audit/F-Stats-1_Fix_Plan_v1.40.md
+docs/audit/F-Stats-1_Fix_Plan_v1.41.md
+docs/audit/F-Stats-1_Fix_Plan_v1.42.md
+docs/audit/F-Stats-1_Fix_Plan_v1.43.md
+docs/audit/F-Stats-1_Fix_Plan_v1.44.md
+docs/audit/F-Stats-1_Fix_Plan_v1.45.md
+docs/audit/F-Stats-1_Fix_Plan_v1.46.md
+docs/audit/F-Stats-1_Fix_Plan_v1.47.md
+docs/audit/F-Stats-1_Fix_Plan_v1.48.md
+docs/audit/F-Stats-1_Fix_Plan_v1.49.md
+docs/audit/F-Stats-1_Fix_Plan_v1.50.md
+docs/audit/F-Stats-1_Fix_Plan_v1.51.md
+docs/audit/F-Stats-1_Fix_Plan_v1.52.md
+docs/audit/F-Stats-1_Fix_Plan_v1.53.md
+docs/audit/F-Stats-1_Fix_Plan_v1.54.md
+docs/audit/F-Stats-1_Fix_Plan_v1.55.md
+docs/audit/F-Stats-1_Fix_Plan_v1.56.md
+docs/audit/F-Stats-1_Fix_Plan_v1.57.md
+docs/audit/F-Stats-1_Fix_Plan_v1.58.md
+docs/audit/F-Stats-1_Fix_Plan_v1.59.md
+docs/audit/F-Stats-1_Fix_Plan_v1.60.md
+```
+
+`v1.0` through `v1.60` in true numeric order — `v1.9` before `v1.10`,
+`v1.19` before `v1.20`, `v1.59` before `v1.60` throughout, not the
+lexicographic order (`v1.1, v1.10, v1.11, ... v1.19, v1.2, v1.20, ...`)
+the unsorted glob would give. `sort -t. -k2 -n`'s key is field 2 of each
+`.`-delimited name — `33` for `v1.33.md` — and works here only because
+every file in this population shares the `v1.` prefix and a plain
+numeric suffix; that precondition is checkable directly in the 61-line
+list above.
+
+Filtered to matches, same sort order preserved:
 
 ```
 $ ls docs/audit/F-Stats-1_Fix_Plan_v1.*.md | grep -v '\.docx$' | sort -t. -k2 -n | xargs grep -l '§35\.5' 2>/dev/null
@@ -238,12 +342,12 @@ docs/audit/F-Stats-1_Fix_Plan_v1.59.md
 docs/audit/F-Stats-1_Fix_Plan_v1.60.md
 ```
 
-The list is already `sort -t. -k2 -n`'d (input list) and matched in that
-same numeric order by `xargs grep -l` (which preserves argument order); the
-first line, `v1.33`, is both the alphabetically- and the numerically-first
-match — the two orders happen to agree here since nothing in the 1–32
-range matches. `v1.33` is confirmed earliest by revision number, not by
-an unsorted `head -1`.
+`xargs grep -l` preserves the input order, so this is the 61-line list
+above with the 40 non-matching files (`v1.0`–`v1.32`, `v1.36`–`v1.40`,
+`v1.42`–`v1.43`) dropped and nothing reordered. `v1.33` is the first line
+of both the full numeric list restricted to matches and this filtered
+output — confirmed earliest by revision number and visible as such in
+the unfiltered list above, not asserted from an unsorted `head -1`.
 
 **Every later hit for classes 2–6 specifically is a mention, not a
 restatement, with one partial exception.** `F-Stats-1_Fix_Plan_v1.41.md`
