@@ -19,7 +19,6 @@ const {
   computeOutfitMatch: _computeOutfitMatch,
   computeAccessoryMatch: _computeAccessoryMatch,
   computeStatDeltas,
-  applyDeltas,
   validateOverride,
   generateNarrativeLine,
   DEFAULT_STATS,

@@ -2251,7 +2251,7 @@ router.get('/world/:showId/events/:eventId/affordability', requireAuth, async (r
 // POST /world/:showId/events/:eventId/decline — Decline event and track as missed opportunity
 router.post('/world/:showId/events/:eventId/decline', requireAuth, async (req, res) => {
   try {
-    const { showId, eventId } = req.params;
+    const { eventId } = req.params;
     const { reason } = req.body;
     const models = await getModels();
 
@@ -2674,7 +2674,7 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', requireA
 // GET /world/:showId/events/:eventId/outfit — get current outfit + score
 router.get('/world/:showId/events/:eventId/outfit', requireAuth, async (req, res) => {
   try {
-    const { showId, eventId } = req.params;
+    const { eventId } = req.params;
     const models = await getModels();
 
     const [rows] = await models.sequelize.query(
@@ -3343,12 +3343,6 @@ router.post('/world/:showId/episodes/:episodeId/generate-title-overlay', require
       });
     }
 
-    // Load event for context
-    const [event] = await sequelize.query(
-      `SELECT name, prestige, host_brand FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
-      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
-    ).catch(() => []);
-
     const { getStylePrefix } = require('../services/uiOverlayService');
     const { generateImageUrl } = require('../services/imageGenerationService');
 
@@ -3827,7 +3821,7 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
     const { showId } = req.params;
     const { from_episode_id: fromEpisodeId } = req.query;
     const models = require('../models');
-    const { sequelize, WorldEvent, EpisodeBrief, Episode } = models;
+    const { sequelize, WorldEvent, EpisodeBrief } = models;
 
     // ── 1. Live character state ──
     // character_key is 'justawoman' (matches episodeCompletionService:176).

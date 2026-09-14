@@ -882,7 +882,6 @@ router.post('/:id/redecorate-finance-app', requireAuth, async (req, res) => {
     const showId = show.id;
     const assets = await generateAppAssets(app_key, showId);
 
-    const { Asset } = require('../models');
     // Update screen
     if (assets.frame_url) {
       await sequelize.query(
