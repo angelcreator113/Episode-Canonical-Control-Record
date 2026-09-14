@@ -23,12 +23,12 @@ jest.mock('../../../src/services/imageGenerationService', () => ({
   generateImageUrl: jest.fn().mockResolvedValue('https://example.com/background.png'),
 }));
 
-const compositeInvitationMock = jest.fn().mockResolvedValue(Buffer.from('final-png'));
+const mockCompositeInvitation = jest.fn().mockResolvedValue(Buffer.from('final-png'));
 
 jest.mock('../../../src/services/invitationCompositingService', () => ({
   detectTheme: jest.fn(() => 'honey luxe'),
   buildInvitationContent: jest.fn().mockResolvedValue(null),
-  compositeInvitation: (...args) => compositeInvitationMock(...args),
+  compositeInvitation: (...args) => mockCompositeInvitation(...args),
   compositeInvitationPDF: jest.fn(),
 }));
 
@@ -64,8 +64,8 @@ describe('invitationGeneratorService.generateInvitation', () => {
 
     const result = await generateInvitation('evt-1', models, 'show-1');
 
-    expect(compositeInvitationMock).toHaveBeenCalledTimes(1);
-    expect(compositeInvitationMock).toHaveBeenCalledWith(
+    expect(mockCompositeInvitation).toHaveBeenCalledTimes(1);
+    expect(mockCompositeInvitation).toHaveBeenCalledWith(
       expect.any(Buffer),
       event,
       expect.objectContaining({ eventName: 'Golden Hour Gala' })
