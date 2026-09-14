@@ -126,8 +126,24 @@ The unconditional return, lines 52–56:
 
 This `return` is unconditional — no guarding `if`, no branch — and precedes
 every statement that follows it inside the same function body. The
-unreachable region is everything after it and before the handler's closing
-`});`: **lines 57–121**.
+unreachable region is the `try`/`catch` it precedes: **lines 57–120**. Line
+121, `});`, is the route callback's own close — the argument list of the
+`router.post(...)` call opened at line 42 — not part of the `try`/`catch`
+and not itself unreachable code; MEASURED by inspection of the tail:
+
+```
+$ sed -n '115,122p' src/routes/auth.js
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: error.message,
+      code: 'AUTH_LOGIN_ERROR',
+    });
+  }
+});
+```
+
+(blank after) — line 120 (`  }`) closes the `catch`; line 121 (`});`) closes
+`router.post(...)`.
 
 ESLint's own flag, raw command and output:
 
@@ -140,7 +156,7 @@ $ npx eslint src/routes/auth.js
 ```
 
 The flag lands on line 57 — the `try {` immediately following the
-unconditional return — consistent with the stated 57–121 extent.
+unconditional return — consistent with the stated 57–120 extent.
 
 ## 4. What the unreachable region does, itemized by line — MEASURED
 
