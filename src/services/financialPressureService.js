@@ -187,7 +187,7 @@ function buildFinancialPressureContext(balance, recentTransactions = [], decline
 /**
  * Log a financial transaction and update Lala's balance.
  */
-async function logTransaction(models, showId, { type, amount, source, source_id, description }) {
+async function logTransaction(models, showId, { type, amount, source: _source, source_id: _source_id, description: _description }) {
   // Update character state coins
   try {
     const delta = type === 'income' ? amount : -amount;
