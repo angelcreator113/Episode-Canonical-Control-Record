@@ -43,5 +43,13 @@ module.exports = {
         'no-unused-vars': ['error', { argsIgnorePattern: '^_|^Sequelize$', varsIgnorePattern: '^_' }],
       },
     },
+    {
+      // down() rollback catch blocks are idempotent teardown — the column may
+      // already be gone, so there's nothing to do about a failed removeColumn.
+      files: ['src/migrations/**/*.js'],
+      rules: {
+        'no-empty': ['error', { allowEmptyCatch: true }],
+      },
+    },
   ],
 };
