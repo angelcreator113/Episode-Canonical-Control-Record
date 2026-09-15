@@ -51,28 +51,39 @@ describe('cognitoPasswordAuthService', () => {
   });
 
   describe('computeSecretHash', () => {
-    test('HMAC-SHA256(key=clientSecret, message=username+clientId), base64 — known fixture', () => {
-      const result = computeSecretHash(
-        'testuser@example.com',
-        '1example23456clientid789',
-        'test-client-secret-value'
-      );
+    const username = 'testuser@example.com';
+    const clientId = '1example23456clientid789';
+    const clientSecret = 'test-client-secret-value';
 
-      expect(result).toBe('r5z71eSu245W5tonWxCLba5o90V2XHb9RFMh3Q1S0bA=');
+    // Independently derived: built here with Node's crypto module directly,
+    // NOT by calling computeSecretHash. This is the ONLY thing that makes
+    // the assertions below meaningful — if computeSecretHash's fixture were
+    // instead produced by calling computeSecretHash itself, a bug in its
+    // argument order would reproduce itself in the "expected" value too and
+    // no test could ever fail.
+    const correctlyOrderedHash = crypto
+      .createHmac('sha256', clientSecret)
+      .update(username + clientId)
+      .digest('base64');
+    const reversedOrderHash = crypto
+      .createHmac('sha256', clientSecret)
+      .update(clientId + username)
+      .digest('base64');
+
+    // Fixed here as a regression guard once independence is established
+    // above — if this ever needs to change, recompute it from
+    // correctlyOrderedHash, not by hand.
+    test('sanity: the two independently-computed orderings are not equal', () => {
+      expect(correctlyOrderedHash).not.toBe(reversedOrderHash);
     });
 
-    test('argument order matters — username+clientId is not clientId+username', () => {
-      const correctOrder = computeSecretHash(
-        'testuser@example.com',
-        '1example23456clientid789',
-        'test-client-secret-value'
-      );
-      const reversedOrder = crypto
-        .createHmac('sha256', 'test-client-secret-value')
-        .update('1example23456clientid789' + 'testuser@example.com')
-        .digest('base64');
+    test('matches the independently-computed username+clientId ordering', () => {
+      expect(computeSecretHash(username, clientId, clientSecret)).toBe(correctlyOrderedHash);
+      expect(correctlyOrderedHash).toBe('r5z71eSu245W5tonWxCLba5o90V2XHb9RFMh3Q1S0bA=');
+    });
 
-      expect(correctOrder).not.toBe(reversedOrder);
+    test('does NOT match the reversed clientId+username ordering', () => {
+      expect(computeSecretHash(username, clientId, clientSecret)).not.toBe(reversedOrderHash);
     });
   });
 
