@@ -374,7 +374,7 @@ This is the case described in §1.3: every route file that appears to use `async
 
 ## 8. Shadowed route registrations
 
-Every `router.<method>('<path>'` registration in source order was extracted from all 142 files under `src/routes/` (recursive, includes `src/routes/memories/`), and any method+path registered more than once inside the same file was flagged:
+Every `router.<method>('<path>'` registration in source order was extracted from all 142 files under `src/routes/` (recursive, includes `src/routes/memories/`), and any method+path registered more than once inside the same file was flagged. The extraction pattern allows whitespace — including a newline — between the method's opening paren and the path string (`router\.(get|post|put|patch|delete|all|use)\(\s*['"]([^'"]*)['"]`, where `\s` matches `\n`), so a registration whose call is wrapped across lines (`router.get(\n  '/path',\n  ...)`) is still captured with its path. **This is a method detail that matters, not just an implementation footnote:** a registration regex anchored to a single line — one that requires the path's opening quote on the same line as `router.<method>(` — will silently skip any wrapped call and undercount duplicates. §10 below names a specific case where that distinction changes the result.
 
 ```
 $ grep -n "router\.put(\s*'/:id'" src/routes/compositions.js
@@ -436,7 +436,29 @@ The known five are a small fraction of what a from-scratch, corrected sweep turn
 
 ---
 
-## 10. Closing
+## 10. Differences from #1453
+
+Issue #1453 has no report on the record at this basis: `mcp__github__issue_read` (method `get_comments`) on #1453 returns an empty list, and no pull request exists for its branch (`mcp__github__list_pull_requests`, filtered to `head: claude/issue-1453-unreachable-code-sweep`, returns empty), checked again as of this basis. Evoni has relayed a summary of that session in conversation — three headline numbers (169 named-export findings, one shadowed-route file, six traced collisions) — but that summary is a session record, not a pasteable command-and-output artifact, and this note does not treat it as MEASURED. What follows is this sweep's own numbers and method, with the three specific points Evoni raised addressed against them directly, not reconciled set-against-set against figures that can't be checked from here.
+
+**1. Shadowed-route count: 2 files here, versus 1 reported.** This sweep's own method (§8) explains the gap without needing #1453's working: the second file, `src/routes/thumbnails.js`, has its `GET /episode/:episodeId` duplicate's second registration wrapped across lines —
+
+```
+136: router.get(
+137:   '/episode/:episodeId',
+138:   optionalAuth,
+```
+
+— while the first registration is on one line (`src/routes/thumbnails.js:65`). This sweep's extraction pattern tolerates the newline between `router.get(` and the path string; a registration regex anchored to require the path on the same line as the method call would match line 65 but never see line 136, and would report `compositions.js` as the only duplicate across all 142 route files without knowing it had skipped a shape of registration it couldn't parse. Re-verified directly against the file (`express.Router()` once at line 2, `module.exports = router` once at the tail, `app.use('/api/v1/thumbnails', ...)` once in `src/app.js`) — single-router, single-mount, not cannot-tell. If #1453 used a single-line-anchored pattern, "132/132 files, one duplicate" was an undercount stated with more confidence than the method supported; there is no way to confirm that from here, only to show this sweep's own pattern does not have that blind spot.
+
+**2. Collision-trace count: 26 status changes here, versus 6 reported.** The 26 in §1.3 is already a status-change count, not a raw appears-twice count — it is incremented only when a name's traced reach (post-require-trace) differs from its raw reach (pre-trace), which by construction can only ever move a name from "raw-reached" to "unreached," never the other way. Of the 26, several are collisions across more than two files: `checkRateLimit` alone is independently defined five times (`src/services/imageRestyleService.js:37`, `src/services/inpaintingService.js:117`, `src/services/objectGenerationService.js:46`, `src/routes/socialProfileRoutes.js:273`, `src/services/depthEstimationService.js:44` — each confirmed by reading its own definition, not by name alone) and every one of the raw hits against each of the first three resolves to one of the other four, not to the file being checked. If #1453's trace found six, either its collision surface was narrower by construction (checked fewer names, or stopped at the first confirmed collision per name instead of tracing every raw hit) or it used a different definition of "changed status" — that distinction is exactly the thing its working would need to show, and it isn't on the record to check.
+
+**3. The five known cases: agreement, not a third reading.** §2 already places `optionalJWTAuth` and `rbac.js`'s `requireRole` in tier iii (reached only by their own unit test) rather than tier i (fully unreached). Evoni's account of #1453 also found both reached by their own tests. That reads as the same underlying fact — src-vs-test reach — surfaced by both sweeps; this note's tier split (§1.4) is what gives it a name (tier iii, not tier i) rather than leaving it as an unlabeled "reached" that could be misread as fully wired in.
+
+None of the above is a claim that #1453 was wrong in a way this note can prove — only that its numbers can't be checked from this repository state, while every number in this note can be, by the commands pasted alongside it.
+
+---
+
+## 11. Closing
 
 This note is a measurement, not a disposition. It mints no FD number, no XK entry, and no PE roster line. It rules nothing. It recommends no removal, consolidation, or rename for any entry in any tier, in the whole-module results, or in the shadowed-registration table — a removal is a separate decision to be made per item, by Evoni, outside this note. No entry here should be read as "safe to delete": several entries are dead by construction (the shadowed route registrations, the `logTransaction`/`requireRole` name collisions) but even those are reported as what they are, not as what to do about them.
 
