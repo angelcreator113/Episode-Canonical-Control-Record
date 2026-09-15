@@ -27,24 +27,48 @@
  */
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
+
+// Task #1456 replaced /login's unconditional-401 disable with a real Cognito
+// InitiateAuth exchange. Mocked here so this file makes no Cognito, AWS, or
+// host contact — mirrors tests/integration/auth.integration.test.js.
+jest.mock('../../src/services/cognitoPasswordAuthService', () => ({
+  initiatePasswordAuth: jest.fn(),
+}));
+
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
+const cognitoPasswordAuthService = require('../../src/services/cognitoPasswordAuthService');
 
 // Mirrors the guard in auth.integration.test.js — never run against RDS, and
 // skip when no DB is configured rather than fail on an ECONNREFUSED.
 const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includes('amazonaws.com');
 
-// FD-65 ISSUANCE HALF CLOSED 2026-08-22. POST /login now returns 401 before any
-// other logic runs, so the assertions below that reach the privilege half
-// THROUGH /login can no longer observe it.
+afterEach(() => {
+  cognitoPasswordAuthService.initiatePasswordAuth.mockReset();
+});
+
+// FD-65 ISSUANCE HALF CLOSED 2026-08-22 — no longer current. Task #1456
+// (2026-09-15) re-enabled /login against real Cognito, under Evoni's ruling
+// (a) in F-AUTH-1_AuthIssuanceSurface_Read_2026-09-15.md; the "returns 401
+// and no accessToken, whatever is supplied" claim this banner used to
+// describe is gone — see the rewritten describe block below instead.
 //
-// They are SKIPPED, NOT DELETED. The property they assert -- that
-// caller-supplied `groups`/`role` are ignored -- still holds in code: 75ac05f0
-// removed those inputs from the handler. It is simply unobservable over HTTP
-// while the route is disabled. Deleting them would quietly discard the only
-// direct evidence of the privilege half's closure.
+// LOGIN_DISABLED, despite its name, no longer means "/login is disabled" —
+// it now gates only whether THIS FILE exercises /login's response over a
+// real signature-verified HTTP round trip. That still doesn't happen here:
+// this file's mock (above) never returns a token shaped so that auth.js's
+// verifier would accept it (a genuine Cognito access token is RS256, signed
+// by Cognito's own key, which this file cannot fabricate without live
+// Cognito contact), so the assertions gated by LOGIN_DISABLED remain
+// skipped, unchanged from before this PR. Re-enabling them is separate work:
+// deciding how (or whether) to fabricate an acceptable token for this
+// specific end-to-end check without contacting Cognito.
 //
-// If /login is ever re-enabled, set this to false and the assertions return.
+// The property those skipped assertions exist to check — that
+// caller-supplied `groups`/`role` are ignored — still holds in code
+// (75ac05f0 removed those inputs from the handler; Task #1456's rewrite
+// reads only `email`/`password` from the request body, per the active test
+// below) and is asserted there without needing a verifiable token.
 const LOGIN_DISABLED = true;
 const describeLogin = LOGIN_DISABLED ? describe.skip : describe;
 const testLogin = LOGIN_DISABLED ? test.skip : test;
@@ -58,20 +82,39 @@ const ADMIN_GATED_URL = '/api/v1/audit-logs';
 const anonymousLogin = (body) => request(app).post('/api/v1/auth/login').send(body);
 
 (shouldSkip ? describe.skip : describe)('F-AUTH-1 FD-65 — privilege half', () => {
-  // The issuance half, closed 2026-08-22. v2.49 minted FD-65 with both halves;
-  // v2.50 closed the privilege half only and said so. This is the other one.
-  describe('POST /login issues no token at all', () => {
-    test('returns 401 and no accessToken, whatever is supplied', async () => {
-      const res = await anonymousLogin({
+  // The issuance half was closed 2026-08-22, then re-enabled by Task #1456
+  // (2026-09-15) against real Cognito. This block no longer tests "issues no
+  // token at all" — that claim is gone along with the disable. What it tests
+  // instead, and what remains true regardless: caller-supplied `groups`/
+  // `role` in the request body cannot reach the Cognito exchange, because
+  // src/routes/auth.js's handler destructures only `{ email, password }`
+  // from req.body. Structural, not behavioral — this doesn't depend on what
+  // Cognito (mocked here) does with a genuine email/password pair.
+  describe('POST /login structurally ignores caller-supplied privilege', () => {
+    test('groups/role in the request body never reach the Cognito exchange', async () => {
+      cognitoPasswordAuthService.initiatePasswordAuth.mockResolvedValue({
+        accessToken: 'a',
+        refreshToken: 'r',
+        expiresIn: 3600,
+        tokenType: 'Bearer',
+        user: { id: 'escalate-user', email: 'escalate@example.test', name: 'Escalate', groups: ['USER'] },
+      });
+
+      await anonymousLogin({
         email: 'escalate@example.test',
         password: 'password123',
         groups: ['ADMIN'],
         role: 'admin',
       });
 
-      expect(res.status).toBe(401);
-      expect(res.body).toHaveProperty('code', 'AUTH_LOGIN_DISABLED');
-      expect(res.body.data).toBeUndefined();
+      // toHaveBeenCalledWith checks the exact argument list — this fails if
+      // groups/role were forwarded as extra positional arguments, not only
+      // if email/password were wrong.
+      expect(cognitoPasswordAuthService.initiatePasswordAuth).toHaveBeenCalledWith(
+        'escalate@example.test',
+        'password123'
+      );
+      expect(cognitoPasswordAuthService.initiatePasswordAuth).toHaveBeenCalledTimes(1);
     });
   });
 
