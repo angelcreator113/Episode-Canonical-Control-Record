@@ -5,8 +5,17 @@
  */
 
 const request = require('supertest');
+
+// POST /login now calls Cognito's InitiateAuth (Task #1456). Mocked here so
+// this integration file makes no Cognito, AWS, or host contact regardless of
+// whether DATABASE_URL is configured in the environment running it.
+jest.mock('../../src/services/cognitoPasswordAuthService', () => ({
+  initiatePasswordAuth: jest.fn(),
+}));
+
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
+const cognitoPasswordAuthService = require('../../src/services/cognitoPasswordAuthService');
 
 // Skip integration tests if no DB is configured or if using production database
 const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includes('amazonaws.com');
@@ -30,28 +39,56 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
   });
 
   describe('POST /api/v1/auth/login', () => {
-    // FD-65 issuance half, closed 2026-08-22. This route previously issued a
-    // signed token to any caller supplying a well-formed email and any
-    // six-character password. It now fails closed before any other logic.
-    //
-    // The former 'successfully login with valid credentials' test asserted the
-    // defect as if it were the contract, and is replaced rather than removed:
-    // there were never valid credentials to supply, because nothing was
-    // verified.
-    it('is disabled and issues no token', async () => {
+    beforeEach(() => {
+      cognitoPasswordAuthService.initiatePasswordAuth.mockReset();
+    });
+
+    // Task #1456: FD-65's issuance half's dev-only local-HS256 path (closed
+    // 2026-08-22, disabled 401) is replaced by a real Cognito InitiateAuth
+    // exchange. Mocked at the service boundary — see the jest.mock above —
+    // so this test makes no Cognito, AWS, or host contact.
+    it('exchanges valid credentials for Cognito tokens and mints no local HS256 token', async () => {
+      cognitoPasswordAuthService.initiatePasswordAuth.mockResolvedValue({
+        accessToken: 'cognito-access-token',
+        refreshToken: 'cognito-refresh-token',
+        expiresIn: 3600,
+        tokenType: 'Bearer',
+        user: { id: 'cognito-sub', email: 'test@example.com', name: 'Test', groups: ['USER'] },
+      });
+
       const res = await request(app).post('/api/v1/auth/login').send({
         email: 'test@example.com',
         password: 'password123',
       });
 
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual({
+        accessToken: 'cognito-access-token',
+        refreshToken: 'cognito-refresh-token',
+        expiresIn: 3600,
+        tokenType: 'Bearer',
+        user: { id: 'cognito-sub', email: 'test@example.com', name: 'Test', groups: ['USER'] },
+      });
+    });
+
+    it('maps a Cognito NotAuthorizedException to 401 without disclosing account existence', async () => {
+      const err = new Error('Incorrect username or password.');
+      err.name = 'NotAuthorizedException';
+      cognitoPasswordAuthService.initiatePasswordAuth.mockRejectedValue(err);
+
+      const res = await request(app).post('/api/v1/auth/login').send({
+        email: 'test@example.com',
+        password: 'wrong-password',
+      });
+
       expect(res.status).toBe(401);
-      expect(res.body).toHaveProperty('code', 'AUTH_LOGIN_DISABLED');
+      expect(res.body).toHaveProperty('code', 'AUTH_INVALID_CREDENTIALS');
       expect(res.body.data).toBeUndefined();
     });
 
     // Still 400. validateLoginRequest is mounted AHEAD of the handler, so a
-    // malformed request never reaches the FD-65 disable. Only well-formed
-    // requests get 401. This assertion is unchanged by the disable.
+    // malformed request never reaches Cognito. This assertion is unchanged
+    // by the implementation swap.
     it('should reject login with missing email', async () => {
       const res = await request(app).post('/api/v1/auth/login').send({
         password: 'password123',
@@ -92,15 +129,27 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
     });
 
     it('still reaches the route with the rate limiter mounted', async () => {
-      // Rate limiting is skipped in development/test, so this only asserts the
-      // request reaches the handler. It formerly asserted 200; the FD-65
-      // disable makes that 401. It does NOT assert that rate limiting works.
+      // Rate limiting is skipped in development/test, so this only asserts
+      // the request reaches the handler and the Cognito exchange is invoked.
+      // It does NOT assert that rate limiting works.
+      cognitoPasswordAuthService.initiatePasswordAuth.mockResolvedValue({
+        accessToken: 'a',
+        refreshToken: 'r',
+        expiresIn: 60,
+        tokenType: 'Bearer',
+        user: { id: 'u', email: 'test@example.com', name: 'Test', groups: [] },
+      });
+
       const res = await request(app).post('/api/v1/auth/login').send({
         email: 'test@example.com',
         password: 'password123',
       });
 
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(200);
+      expect(cognitoPasswordAuthService.initiatePasswordAuth).toHaveBeenCalledWith(
+        'test@example.com',
+        'password123'
+      );
     });
   });
 
