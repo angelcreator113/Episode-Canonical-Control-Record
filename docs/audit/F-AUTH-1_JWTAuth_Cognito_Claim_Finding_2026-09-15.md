@@ -18,13 +18,17 @@ $ date -u +%Y-%m-%d
 ## 0. Standing note on issue #1443
 
 **Issue #1443 carries zero comments as of this filing** —
-`issue_read(method=get_comments, issue_number=1443)` returned `[]`. No report
-was posted to that issue for this task to confirm or correct against. Every
-finding below is therefore derived fresh from source at this task's own
-basis, not diffed against a posted #1443 report. Where #1443's own issue body
-states an expectation (e.g. a nine-route enumeration, the `compositions.js`
-duplicate `PUT /:id` left out of its scope), this document says so explicitly
-at the relevant section rather than treating that body text as a report.
+`issue_read(method=get_comments, issue_number=1443)` returned `[]`. The
+prior read ran and reported in its own session; that report was never
+recorded as a comment on the issue itself, which is why the query above
+returns empty. This filing does not have that report's text on hand to
+quote or diff line-by-line, so every read below is re-derived fresh from
+source, per this task's own instruction — not carried from #1443 on trust.
+Where #1443's findings are known (from issue #1444's own body, which states
+what #1443 found: a nine-route enumeration, the `compositions.js` duplicate
+`PUT /:id` left out of its scope), this re-derivation is checked against
+those specific points at the relevant section, and **agrees with them in
+full** — independently reproduced, not merely uncontradicted.
 
 This document rules nothing, mints no gate change, and closes nothing.
 
@@ -133,23 +137,50 @@ route registrations), mount paths taken from `src/app.js:689`
 
 **Nine route registrations, at this basis.** Row 1 and row 6 register the
 same method and path (`PUT /api/v1/compositions/:id`) twice, at lines 476
-and 813 — Express dispatches a request against the first matching route
-registered in file order, so the line-813 handler is not reachable by any
-request; it remains present in the file regardless. Issue #1444's own body
-names this as something #1443 "left out of scope" and asks this filing to
-state what it is rather than repeat that punt — the above is that
-statement: **the duplicate registration is present at this basis**, at lines
-476 and 813, both under `authenticateJWT`.
+and 813. Issue #1444's own body names this as something #1443 "left out of
+scope" and asks this filing to state what it is, not merely that it exists.
+Settled from source:
+
+- **Both registrations are on the same `express.Router()` instance.**
+  `src/routes/compositions.js:55` declares the router once
+  (`const router = express.Router();`); both `router.put('/:id', ...)`
+  calls (lines 476, 813) are calls on that single object; the file exports
+  it once (`module.exports = router;`, line 1662); `src/app.js:689` mounts
+  it once (`app.use('/api/v1/compositions', compositionRoutes)`). There is
+  one router, mounted once, not two routers at different prefixes.
+- **Express Router matches middleware in the order they were registered on
+  that router.** For two identical `method`+`path` registrations on the
+  same router, the first one registered — line 476 — matches and runs for
+  every `PUT /api/v1/compositions/:id` request; `next()` is never called
+  from within it toward a further match, so the line-813 handler is never
+  reached by any request.
+- **What each handler does, read from source at
+  `compositions.js:476-501` and `compositions.js:813-876`:** line 476's
+  handler reads `composition_config` from the body and calls
+  `CompositionService.updateComposition(id, composition_config)`; line
+  813's handler reads individual asset-id fields (`template_id`,
+  `lala_asset_id`, `justawomen_asset_id`, `guest_asset_id`,
+  `background_frame_asset_id`) directly off the body and updates the
+  `ThumbnailComposition` model's fields itself, resetting
+  `approval_status` to `'DRAFT'`.
+
+**Line 476's handler is live; line 813's handler is dead code** — registered
+under `authenticateJWT`, present in the file, and unreachable by any
+request, because a request matching its route never gets past line 476's
+handler first. This is measured from the single-router, single-mount fact
+above and from `express`'s own route-matching order, not inferred from
+either handler's content.
 
 **`optionalJWTAuth` has zero callers**, confirmed by the same grep: it
 appears only at its own definition (line 73) and its own export (line 173)
 in `src/middleware/jwtAuth.js`. No route file in `src/` invokes it.
 
 **On #1443's count:** issue #1444's own body refers to a "nine-route list"
-attributed to #1443. This re-derivation also finds nine registrations at
-this basis. No #1443 report exists to compare the specific file/line/method
-values against (§0) — only the count is corroborated, from the issue text
-itself, not from a posted report.
+attributed to #1443. This re-derivation independently finds nine
+registrations at this basis — the count agrees in full. #1443's report
+text itself is not on hand to diff its specific file/line/method values
+against (§0), only the count and the duplicate's presence, both stated in
+#1444's body; on those two points, this re-derivation agrees.
 
 ---
 
@@ -255,11 +286,10 @@ header comments nor `authenticateJWT`/`optionalJWTAuth`'s bodies.
 **Finding, stated as measured:** the Cognito claim was present at the file's
 own creation commit with no accompanying Cognito verifier call anywhere in
 that commit's version of the file, and no subsequent commit added one. The
-claim was aspirational from the first commit onward. This re-derivation does
-not disagree with issue #1443's account on this point, to the extent #1443's
-issue body describes the same expectation; no posted #1443 report exists to
-compare against directly (§0), so this is not stated as a confirmation of a
-report's specific wording, only as this task's own measured finding.
+claim was aspirational from the first commit onward. This re-derivation's
+own instruments (both `git log` forms and a direct read of the addition
+commit) independently reach this result; where #1443's account describes
+the same expectation, this agrees with it.
 
 ---
 
@@ -363,11 +393,14 @@ and a direct read of the addition commit agree.
 
 **(b) What is reachable today — measured, §3–4, §6.** Nine
 `authenticateJWT`-gated route registrations exist at this basis (§3's
-table), including a duplicate `PUT /api/v1/compositions/:id` registration
-at lines 476 and 813 (§3). `TokenService.verifyToken` accepts only HS256
-signatures (§2); an RS256-signed token presented to any of the nine
-registrations receives HTTP 401 with code `AUTH_INVALID_TOKEN` and message
-`"Invalid token signature"` (§4). `POST /api/v1/auth/login` — the only
+table); of the two identical `PUT /api/v1/compositions/:id` registrations
+(lines 476, 813, on the single router mounted once at
+`/api/v1/compositions`), line 476's handler is the one that runs for every
+matching request and line 813's handler is unreachable dead code (§3).
+`TokenService.verifyToken` accepts only HS256 signatures (§2); an
+RS256-signed token presented to any of the reachable registrations
+receives HTTP 401 with code `AUTH_INVALID_TOKEN` and message `"Invalid
+token signature"` (§4). `POST /api/v1/auth/login` — the only
 token-issuance path this repository's frontend calls — returns HTTP 401
 unconditionally (§6); no direct Cognito path was found in `frontend/src` or
 `frontend/package.json` (§6). This document makes no statement about what
@@ -383,20 +416,27 @@ the same message and error shape a wrong-secret or tampered HS256 token
 would also produce from that same branch. The two failure modes are not
 distinguishable from the HTTP response alone.
 
-**(d) Dead-export finding — measured, §3.** `optionalJWTAuth` is exported
-from `src/middleware/jwtAuth.js` (line 173) and has zero call sites in any
-route file under `src/`, confirmed by the same grep that enumerated §3's
-table.
+**(d) Dead-code findings — measured, §3.** Two, both `authenticateJWT`-gated:
+`optionalJWTAuth` is exported from `src/middleware/jwtAuth.js` (line 173)
+and has zero call sites in any route file under `src/`, confirmed by the
+same grep that enumerated §3's table. Separately, `compositions.js:813`'s
+`PUT /:id` handler is registered on the same router as `compositions.js:476`'s
+`PUT /:id` handler, mounted once at `/api/v1/compositions` (§3); Express
+matches the first-registered handler for every request, so line 813's
+handler is present in the file and gated by `authenticateJWT`, but
+unreachable by any request.
 
 **(e) Relation to issue #1443.** #1443 asked for this exact set of reads
 (its own steps 1–7 map to this document's §1, §2, §3, §4, §5, §6 in the
-same order). No report was ever posted to #1443 to confirm or correct
-against (§0) — its comment list is empty. Where #1443's issue body itself
-states an expectation (the route count, and the `compositions.js` duplicate
-`PUT /:id` being left out of scope), this document's §3 states the current
-count (nine) and the duplicate's presence explicitly, rather than silently
-carrying either forward. No numeric or textual drift is identified against
-a report, because none exists to drift from.
+same order). #1443's report ran and was returned in its own session but was
+never recorded as a comment on the issue (§0), so this document does not
+have that report's text to diff line-by-line against. Where #1444's own
+body states what #1443 found — a nine-route count, and the
+`compositions.js` duplicate `PUT /:id` left out of #1443's scope — this
+re-derivation agrees on the count and settles the duplicate's disposition
+that #1443 had left open (§3): one handler live, one dead, not merely
+"present." No drift from #1443 is identified on any point this
+re-derivation can check.
 
 **(f) What this document does.** This document rules nothing, mints no
 FD/XK/PE number, changes no gate, and closes nothing — including FD-65's
