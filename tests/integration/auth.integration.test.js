@@ -23,6 +23,15 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
 (shouldSkip ? describe.skip : describe)('Authentication API Integration Tests', () => {
   let accessToken, refreshToken, user;
 
+  // File-wide, not just the POST /login describe below: a mocked resolved/
+  // rejected value set by one test otherwise persists into any later test in
+  // this file that hits /login, which is exactly how the End-to-End
+  // Authentication Flow test below used to observe a stale 200 from a
+  // preceding login test's leftover mock state.
+  afterEach(() => {
+    cognitoPasswordAuthService.initiatePasswordAuth.mockReset();
+  });
+
   // Setup: Create test user tokens before each test
   beforeEach(() => {
     user = {
@@ -39,10 +48,6 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
   });
 
   describe('POST /api/v1/auth/login', () => {
-    beforeEach(() => {
-      cognitoPasswordAuthService.initiatePasswordAuth.mockReset();
-    });
-
     // Task #1456: FD-65's issuance half's dev-only local-HS256 path (closed
     // 2026-08-22, disabled 401) is replaced by a real Cognito InitiateAuth
     // exchange. Mocked at the service boundary — see the jest.mock above —
@@ -358,16 +363,18 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
 
   describe('End-to-End Authentication Flow', () => {
     it('should complete full auth cycle: token -> use -> refresh -> logout', async () => {
-      // 1. Obtain a token. FD-65's issuance half is closed, so /login no
-      //    longer mints one; the cycle below is unaffected by where the token
-      //    comes from, so it is minted directly. The disable itself is
-      //    asserted in the POST /login describe, not here.
-      const loginRes = await request(app).post('/api/v1/auth/login').send({
-        email: 'e2e@test.dev',
-        password: 'password123',
-      });
-      expect(loginRes.status).toBe(401);
-
+      // 1. Obtain a token. This flow is deliberately independent of how the
+      // token was issued — minted directly here rather than through /login,
+      // which Task #1456 changed from an unconditional-401 disable to a real
+      // (mocked-in-this-file) Cognito exchange. The old version of this test
+      // additionally called /login and asserted 401 here, "unaffected by
+      // where the token comes from" per this comment's prior wording — that
+      // call exercised nothing this test itself needs, and its unmocked
+      // result depended on execution order, since jest.fn()'s mocked
+      // resolved/rejected value from a different describe block persists
+      // across tests unless reset. Removed rather than fixed in place:
+      // /login's actual behavior is already covered by the dedicated
+      // POST /login describe block above.
       const e2eTokens = TokenService.generateTokenPair({
         id: 'e2e-user',
         email: 'e2e@test.dev',
