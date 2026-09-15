@@ -4,11 +4,12 @@
  */
 
 const _jwt = require('jsonwebtoken');
-const TokenService = require('../services/tokenService');
+const { verifyToken } = require('./auth');
 
 /**
  * Authenticate using JWT token (custom or Cognito)
- * Tries JWT first, falls back to Cognito
+ * Delegates verification to auth.js's dual-verifier verifyToken (F-AUTH-X1),
+ * so this middleware accepts both HS256 (local) and RS256 (Cognito) tokens.
  */
 const authenticateJWT = async (req, res, next) => {
   try {
@@ -34,18 +35,18 @@ const authenticateJWT = async (req, res, next) => {
     const token = parts[1];
 
     try {
-      // Try to verify as JWT token first
-      const decoded = TokenService.verifyToken(token);
+      const { payload: decoded, source, alg: _alg } = await verifyToken(token);
 
       req.user = {
         id: decoded.sub,
         email: decoded.email,
         name: decoded.name,
-        groups: decoded.groups || [],
-        role: decoded.role || 'USER',
-        tokenType: 'jwt',
-        source: 'jwt',
-        expiresAt: new Date(decoded.exp * 1000),
+        groups: decoded['cognito:groups'] || decoded.groups || [],
+        tokenUse: decoded.token_use,
+        issuedAt: decoded.iat,
+        expiresAt: decoded.exp,
+        source,
+        raw: decoded,
       };
 
       return next();
@@ -68,7 +69,8 @@ const authenticateJWT = async (req, res, next) => {
 
 /**
  * Optional JWT Authentication
- * Token is optional; user info attached if valid
+ * Token is optional; user info attached if valid. Same verifyToken delegation
+ * as authenticateJWT, so it is not a second divergent verifier.
  */
 const optionalJWTAuth = async (req, res, next) => {
   try {
@@ -88,16 +90,17 @@ const optionalJWTAuth = async (req, res, next) => {
     const token = parts[1];
 
     try {
-      const decoded = TokenService.verifyToken(token);
+      const { payload: decoded, source, alg: _alg } = await verifyToken(token);
       req.user = {
         id: decoded.sub,
         email: decoded.email,
         name: decoded.name,
-        groups: decoded.groups || [],
-        role: decoded.role || 'USER',
-        tokenType: 'jwt',
-        source: 'jwt',
-        expiresAt: new Date(decoded.exp * 1000),
+        groups: decoded['cognito:groups'] || decoded.groups || [],
+        tokenUse: decoded.token_use,
+        issuedAt: decoded.iat,
+        expiresAt: decoded.exp,
+        source,
+        raw: decoded,
       };
     } catch (error) {
       console.warn('Optional JWT auth failed:', error.message);
