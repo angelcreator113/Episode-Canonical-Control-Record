@@ -206,11 +206,15 @@ router.post('/logout', authenticateJWT, (req, res) => {
  */
 router.get('/me', authenticateJWT, (req, res) => {
   try {
+    // Contract: this endpoint returns exactly these four fields, independent
+    // of whichever middleware built req.user (jwtAuth.js delegates to
+    // auth.js's verifyToken, but /me does not expose req.user verbatim).
+    const { id, email, name, groups } = req.user;
     return res.status(200).json({
       success: true,
       message: 'User information retrieved',
       data: {
-        user: req.user,
+        user: { id, email, name, groups },
       },
     });
   } catch (error) {

@@ -250,14 +250,20 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
   });
 
   describe('GET /api/v1/auth/me', () => {
-    it('should return authenticated user info', async () => {
+    // Task #1451: /me returns an explicitly constructed object — exactly
+    // id, email, name, groups. `role` is a removal (auth.js's verifyToken
+    // path supplies no role field), not a rename.
+    it('should return authenticated user info as the four contracted fields', async () => {
       const res = await request(app)
         .get('/api/v1/auth/me')
         .set('Authorization', `Bearer ${accessToken}`);
 
       expect(res.status).toBe(200);
       expect(res.body.data.user.email).toBe(user.email);
-      expect(res.body.data.user.role).toBe(user.role);
+      expect(res.body.data.user.name).toBe(user.name);
+      expect(res.body.data.user.groups).toEqual(user.groups);
+      expect(Object.keys(res.body.data.user).sort()).toEqual(['email', 'groups', 'id', 'name']);
+      expect(res.body.data.user).not.toHaveProperty('role');
     });
 
     it('should reject request without authentication', async () => {
