@@ -1,0 +1,35 @@
+name: PR Validation Block Check
+
+# Fails a PR whose body carries the "## Validation run (paste raw output, H1)"
+# heading but not raw, machine-checkable output for the four required
+# commands (contract in scripts/check-pr-validation-block.js). A PR body with
+# no such heading passes unaffected — this does not require every PR to
+# paste validation output, only that a claimed one is real.
+#
+# Per FD-29 (see .github/workflows/auto-merge-to-dev.yml header): the PR body
+# is user-influenceable, so it is passed to the script via `env:`, never
+# inlined into the `run:` block via ${{ ... }} template substitution.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Validation Block
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check validation block
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/check-pr-validation-block.js
