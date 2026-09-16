@@ -121,6 +121,10 @@ const optionalJWTAuth = async (req, res, next) => {
  */
 const requireGroup = (requiredGroups) => {
   const groups = Array.isArray(requiredGroups) ? requiredGroups : [requiredGroups];
+  // Case-insensitive: Cognito group names are values this app doesn't control.
+  // Plain toLowerCase() (not toLocaleLowerCase()/localeCompare) -- locale-invariant
+  // per spec, avoiding the Turkish-I class of defect on a value containing 'i'.
+  const normalizedGroups = groups.map((group) => group.toLowerCase());
 
   return (req, res, next) => {
     if (!req.user) {
@@ -131,7 +135,10 @@ const requireGroup = (requiredGroups) => {
       });
     }
 
-    if (!req.user.groups || !req.user.groups.some((g) => groups.includes(g))) {
+    if (
+      !req.user.groups ||
+      !req.user.groups.some((g) => normalizedGroups.includes(g.toLowerCase()))
+    ) {
       return res.status(403).json({
         error: 'Forbidden',
         message: `User must be in one of these groups: ${groups.join(', ')}`,
