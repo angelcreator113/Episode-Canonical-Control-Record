@@ -16,8 +16,9 @@ what has changed around it.
 **Author**
 
 Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni — Prime Studios.
-**Ruling by Evoni**, given directly in session, transcribed verbatim
-below — see §2.
+**Ruling by Evoni** — drafted in session, reviewed clause by clause
+against the primary sources by her, confirmed as her ruling — transcribed
+verbatim below; see §2.
 
 **Status**
 
@@ -65,12 +66,16 @@ to `/login` or its response code anywhere in its text.
 
 # §2. The ruling
 
-**Composed by Evoni directly, in her own words, in this session's
-conversation — not proposed by the drafting session for her approval.
-The session's role was to verify the ruling's factual premises against
-the original ruling document's own text — read whole, from line 1 —
-before filing, not to draft its wording. Transcribed verbatim below; no
-word altered.**
+**Provenance, per the same disclosure test `F-AUTH-1_Fix_Plan_v2.69.md`
+Ruling 1 and the original Shape A ruling's own note both apply.** The
+wording below was drafted in this session's conversation, not composed
+by Evoni from a blank page. It is her ruling because of what happened
+next: Evoni reviewed the drafted wording against the original ruling
+document's own text — read whole, from line 1, per §1 above — and
+confirmed the result as her ruling. Approval-after-verification is not
+the same disclosure as approval of an assembled text taken on faith, and
+this document does not claim the latter. Transcribed verbatim below; no
+word altered from what she confirmed.
 
 > **Ruling (Evoni, 2026-09-16).** Clause 3's conclusion stands: the
 > dev-token carrier does not touch FD-65. The reason is clause 2's
@@ -115,5 +120,6 @@ nothing. No host, AWS, database, or Cognito contact. Prod FROZEN.*
 *Filing date: 2026-09-16. Basis: `origin/main` at
 `e01d6faf6cb17a8e660e8d0866cc6bb12ebcc793`.*
 *Authority: `F-AUTH-1_Tier5_DevTokenCarrier_Ruling_2026-09-05.md` (cited,
-not edited), Evoni's ruling at §2 (ATTESTED — composed and typed by her
-directly in this session's conversation).*
+not edited), Evoni's ruling at §2 (ATTESTED — drafted in session,
+reviewed against the primary sources and confirmed by her as her ruling;
+see §2's provenance note).*
