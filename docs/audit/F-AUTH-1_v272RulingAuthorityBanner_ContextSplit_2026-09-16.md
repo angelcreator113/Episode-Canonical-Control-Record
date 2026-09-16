@@ -75,6 +75,18 @@ stand.** This document cites that standing — ATTESTED, ascribed to banner
 #1392, not independently re-verified by any read performed here — rather
 than treating it as open.
 
+**Method, not self-criticism, for whoever reads a banner-stacked file
+next:** `sed -n '5,7p'` answers "what is at lines 5–7," not "what is at the
+top of this file." A register whose correction convention is
+newest-banner-first will put the newest fact at line 1; an offset read
+that starts past it will systematically miss exactly the correction that
+matters most. Read a file whose top might carry a banner whole, from line
+1 — `cat -n`, not a line-range guess. This basis's own
+`F-AUTH-1_FD65Halves_And_Tier5Carrier_Read_2026-09-16.md` does this
+correctly at its §2.2 (`cat -n docs/audit/F-AUTH-1_Fix_Plan_v2.67.md`,
+whole file); this document's first version did not, and that is the entire
+cause of the correction above.
+
 ---
 
 # §2. Why `PROJECT_CONTEXT.md` §6.1 and §6.5 disagree — staleness, not a live question — MEASURED
