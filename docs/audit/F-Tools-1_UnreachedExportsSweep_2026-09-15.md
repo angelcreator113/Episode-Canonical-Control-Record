@@ -2,7 +2,7 @@
 
 **Standing:** MEASURED (repo read; every count below is a paste-and-rerun command against this basis).
 
-**Basis:** `origin/main` at `e7311a25730d6bfdda21575666fc558ad9f40079`, committed 2026-09-15 (`git rev-parse origin/main`; `git log -1 --format='%ad' --date=iso-strict origin/main` → `2026-09-15T12:46:26-04:00`).
+**Basis:** `origin/main` at `531a87fe96d6f6da2ee4117a5caab4aa893a2bf3`, committed 2026-09-15 (`git rev-parse origin/main`; `git log -1 --format='%ad' --date=iso-strict origin/main` → `2026-09-15T23:05:52-04:00`). **Re-based from this note's original basis, `e7311a2573`** (the same-day `#1452` merge commit) — one commit landed in `src/services/`/`src/middleware/` between the two (`git log e7311a2573..531a87fe96 -- src/services/ src/middleware/` → one hit, `a37174b488` / PR #1457), adding `src/services/cognitoPasswordAuthService.js`. Every count below is re-derived at this basis, not carried from the original draft.
 
 **Filename date derivation:** the filename carries the filing date, not the basis commit date (the two happen to coincide here). Filing date is this session's date, `2026-09-15`, taken from the same wake-up read that established the basis SHA above — the environment's current-date value at the moment this note was drafted. Nothing about the filename date is inferred from repo content.
 
@@ -16,31 +16,33 @@ This note mints nothing, rules nothing, and recommends no removal. See "Closing"
 
 ### 1.1 Extraction — what counts as an export
 
-For every `.js` file under `src/services/` (108 files) and `src/middleware/` (10 files), 118 files total, the file's own `module.exports` statement was read and classed as one of:
+For every `.js` file under `src/services/` (109 files) and `src/middleware/` (10 files), 119 files total, the file's own `module.exports` statement was read and classed as one of:
 
 - **whole-module** — `module.exports = <expr>;` where `<expr>` is not an object literal (a class, a singleton instance, a bound function). The file itself is the reachable unit; there is no per-name grep for it.
 - **named** — `module.exports = { a, b, c: renamed, ... };`, exporting one or more identifiers. Multi-line object-literal exports were parsed by brace-depth tracking (a single-line `sed`/`grep` cannot reliably split a block export that spans dozens of lines), and one file (`src/services/tokenService.js`) uses repeated `module.exports.NAME = ...` statements instead of one block; both forms were counted as named exports.
 
-First-pass command that finds every export statement's start line (checkable directly, 118 hits, one per file):
+First-pass command that finds every export statement's start line:
 
 ```
 $ grep -n "^module.exports" src/services/*.js src/middleware/*.js
 ```
 
-Result: **419 named export names** across 80 files, **38 whole-module exports**. 419 + 38 = 457 export units checked.
+Result: **125 raw hits, not one per file.** 118 of the 119 files contribute exactly one hit each; `src/services/tokenService.js` alone contributes seven (one `module.exports = TokenService;` plus six `module.exports.NAME = ...bind(TokenService)` statements — the repeated-statement form named just above), so 118 + 7 = 125, confirmed directly (`grep -c "^module.exports" src/services/*.js src/middleware/*.js | awk -F: '$2>1'` returns only `tokenService.js`, at 7). A description of "one hit per file" would be wrong on its face against this file's own extraction rule in the paragraph above it — tokenService.js's multi-statement form is the reason the two numbers (119 files, 125 hits) don't match, not an error in either.
 
-For each named export, the definition line inside its own file was located by pattern (function declaration, arrow/function-expression `const`, class-method shorthand, or `static` class method — `tokenService.js`'s six exports are `TokenService.NAME.bind(TokenService)` re-exports of `static` class methods, and needed the `static NAME(` pattern to resolve a definition line). The definition's own line text was used to classify the export as **function** (338), **data** (74 — plain object/array/string/number literals, JSON-shaped constants, zod-style schema builders), or **class** (7 — `errorHandler.js`'s seven error subclasses). Classes are grouped with functions/middleware in the tier split below: like a function, a class's export is exercised by calling it (`new X(...)` / `throw new X(...)`), not by importing a data shape, so it answers the "nobody calls this" question, not the "nobody imports this shape" one.
+Result: **421 named export names** across 81 files, **38 whole-module exports**. 421 + 38 = 459 export units checked.
+
+For each named export, the definition line inside its own file was located by pattern (function declaration, arrow/function-expression `const`, class-method shorthand, or `static` class method — `tokenService.js`'s six exports are `TokenService.NAME.bind(TokenService)` re-exports of `static` class methods, and needed the `static NAME(` pattern to resolve a definition line). The definition's own line text was used to classify the export as **function** (340), **data** (74 — plain object/array/string/number literals, JSON-shaped constants, zod-style schema builders), or **class** (7 — `errorHandler.js`'s seven error subclasses). Classes are grouped with functions/middleware in the tier split below: like a function, a class's export is exercised by calling it (`new X(...)` / `throw new X(...)`), not by importing a data shape, so it answers the "nobody calls this" question, not the "nobody imports this shape" one.
 
 ### 1.2 Reach check — per-name grep, then a require trace
 
-For each of the 419 named exports, two raw word-boundary searches were run, excluding the defining file itself:
+For each of the 421 named exports, two raw word-boundary searches were run, excluding the defining file itself:
 
 ```
 $ grep -rlw '<name>' src tests --include='*.js' | grep -v '<definingFile>'      # combined
 $ grep -rlw '<name>' src --include='*.js'       | grep -v '<definingFile>'      # src-only
 ```
 
-706 files under `src/` and 165 under `tests/` (871 total) were the search universe (`find src tests -name '*.js' | wc -l`). All 419 names were run through both searches (838 raw greps); 293 of the 419 produced at least one raw combined hit and moved to the require-trace pass described next. Representative outputs, chosen to show a clean unreached case, a whole-module case, a false-positive caught by the trace, and a genuinely-reached case for contrast:
+707 files under `src/` and 167 under `tests/` (874 total) were the search universe (`find src tests -name '*.js' | wc -l`). All 421 names were run through both searches (842 raw greps); 295 of the 421 produced at least one raw combined hit and moved to the require-trace pass described next. Representative outputs, chosen to show a clean unreached case, a whole-module case, a false-positive caught by the trace, and a genuinely-reached case for contrast:
 
 ```
 $ grep -rlw "calculateCost" src tests --include='*.js' | grep -v "src/services/aiCostTracker.js"
@@ -71,17 +73,17 @@ $ grep -rlw "requireAuth" src/routes --include='*.js' | wc -l
 
 A raw hit only proves the string appears in another file, not that the file requires *this* file's export under that name. Two different files can export the same identifier (`requireRole` is defined independently in both `jwtAuth.js` and `rbac.js`), and a hit on the string doesn't say which one the hitting file actually uses.
 
-Every name with ≥1 raw combined hit (293 of 419) was traced: for each hit file, its `require(...)` statements were resolved to a file path (relative requires only — `src/services/` and `src/middleware/` files are never required by bare specifier), and the binding checked —
+Every name with ≥1 raw combined hit (295 of 421) was traced: for each hit file, its `require(...)` statements were resolved to a file path (relative requires only — `src/services/` and `src/middleware/` files are never required by bare specifier), and the binding checked —
 - a destructured require (`const { name } = require('./file')`) — the name must appear inside the braces; or
 - a default require (`const local = require('./file')`) — the file must then reference `local.name` somewhere.
 
-Only a confirmed binding counts as reach. **26 of the 293 traced names flipped from "raw-reached" to "unreached"** once traced — every one of them a same-name collision with an unrelated definition in the hit file (`requireRole` above is one; `logTransaction` above is another — both routes.js hits destructure `logTransaction` from `financialTransactionService.js`, confirmed by `grep -n "require.*financialTransactionService" src/routes/evaluation.js src/routes/wardrobe.js`, not from `financialPressureService.js`). No two-step `const x = require(...)` followed by a later `const { a } = x` destructure exists anywhere in `src/` or `tests/` (checked directly — zero matches), and no file does a bare `require('../services/x').name(...)` without an intermediate binding, so the two binding shapes above are exhaustive for this codebase; the trace does not need to handle either.
+Only a confirmed binding counts as reach. **26 of the 295 traced names flipped from "raw-reached" to "unreached"** once traced — every one of them a same-name collision with an unrelated definition in the hit file (`requireRole` above is one; `logTransaction` above is another — both routes.js hits destructure `logTransaction` from `financialTransactionService.js`, confirmed by `grep -n "require.*financialTransactionService" src/routes/evaluation.js src/routes/wardrobe.js`, not from `financialPressureService.js`). No two-step `const x = require(...)` followed by a later `const { a } = x` destructure exists anywhere in `src/` or `tests/` (checked directly — zero matches), and no file does a bare `require('../services/x').name(...)` without an intermediate binding, so the two binding shapes above are exhaustive for this codebase; the trace does not need to handle either.
 
 The same correction applies to whole-module checks, where it matters even more because the "name" being searched is a common English word. `src/middleware/asyncHandler.js` is a worked example: a raw combined search for `asyncHandler` returns dozens of files (it's used as a wrapper in nearly every route file), but resolving each hit's `require(...)` shows every one of them resolves to `src/middleware/errorHandler.js`'s own, separate, same-named `asyncHandler` export (`grep -n "asyncHandler" src/middleware/errorHandler.js` shows it's defined at line 182 and exported at line 295) — never to `src/middleware/asyncHandler.js` itself. Because of that, whole-module reach below was established by require-path resolution from the start, not by a raw text search.
 
 ### 1.4 Correction (b) — tests count as reach under a combined grep
 
-The sweep was run twice per name, as shown in 1.2: once against `src/` + `tests/` together, once against `src/` alone. Kept separate, this distinguishes "nothing calls it, including tests" from "only its own test file calls it, production code never does." **34 of the 419 named exports (25 function/middleware, 9 data) show zero src-only hits but ≥1 combined hit** — these are tier iii/iv below, not tier i/ii, and not lumped in with genuinely-reached names either.
+The sweep was run twice per name, as shown in 1.2: once against `src/` + `tests/` together, once against `src/` alone. Kept separate, this distinguishes "nothing calls it, including tests" from "only its own test file calls it, production code never does." **35 of the 421 named exports (26 function/middleware, 9 data) show zero src-only hits but ≥1 combined hit** — these are tier iii/iv below, not tier i/ii, and not lumped in with genuinely-reached names either.
 
 ### 1.5 Dynamic-reference search
 
@@ -291,7 +293,7 @@ Two of the five (`optionalJWTAuth`, `rbac.js`'s `requireRole`) land in tier iii 
 
 ## 5. Tier iii — functions and middleware reached only by their own test file (zero hits in src/)
 
-25 entries.
+26 entries.
 
 | Name | File | Def line | Export line |
 |---|---|---|---|
@@ -311,6 +313,7 @@ Two of the five (`optionalJWTAuth`, `rbac.js`'s `requireRole`) land in tier iii 
 | `sanitizeString` | src/middleware/requestValidation.js | 17 | 328 |
 | `validateEmail` | src/middleware/requestValidation.js | 7 | 326 |
 | `validateUUID` | src/middleware/requestValidation.js | 12 | 327 |
+| `computeSecretHash` | src/services/cognitoPasswordAuthService.js | 47 | 98 |
 | `cloudinaryEnhanceStill` | src/services/postProcessingService.js | 111 | 369 |
 | `ffmpegEnhanceVideo` | src/services/postProcessingService.js | 172 | 370 |
 | `sharpEnhanceStill` | src/services/postProcessingService.js | 45 | 368 |
@@ -320,6 +323,21 @@ Two of the five (`optionalJWTAuth`, `rbac.js`'s `requireRole`) land in tier iii 
 | `isPrivateMomentPosition` | src/services/textureLayerService.js | 100 | 738 |
 | `generateTestToken` | src/services/tokenService.js | 184 | 215 |
 | `generateToken` | src/services/tokenService.js | 20 | 210 |
+
+`computeSecretHash` is the one entry added by this basis's re-run (§1, basis note). Zero `src/` hits; its only reference outside its own file is a real (unmocked) require in the service's own unit test:
+
+```
+$ grep -rlw "computeSecretHash" src tests --include='*.js' | grep -v "src/services/cognitoPasswordAuthService.js"
+tests/unit/services/cognitoPasswordAuthService.test.js
+
+$ grep -n "computeSecretHash" tests/unit/services/cognitoPasswordAuthService.test.js
+21:const {
+22:  computeSecretHash,
+23:  initiatePasswordAuth,
+24:} = require('../../../src/services/cognitoPasswordAuthService');
+```
+
+The require is of the module itself, not a mock (only the AWS SDK is mocked in this test file, at the boundary — see the file's own header comment) — a confirmed binding, same standard as every other tier iii entry. Its sibling export, `initiatePasswordAuth`, is genuinely reached in production code (`src/routes/auth.js:99`, a default-require binding: `cognitoPasswordAuthService.initiatePasswordAuth(...)`) and is not a finding in any tier.
 
 ---
 
@@ -418,21 +436,21 @@ No other file among the 142 had a duplicate method+path registration.
 |---|---|
 | Tier i — unreached function/middleware | 103 |
 | Tier ii — unreached constant/data | 49 |
-| Tier iii — function/middleware, test-only reach | 25 |
+| Tier iii — function/middleware, test-only reach | 26 |
 | Tier iv — constant/data, test-only reach | 9 |
-| **Named-export tiers, total** | **186** (of 419 named exports checked) |
+| **Named-export tiers, total** | **187** (of 421 named exports checked) |
 | Whole-module, never required | 2 |
 | Whole-module, test-only required | 1 |
 | **Whole-module tiers, total** | **3** (of 38 whole-module exports checked) |
 | Route files with a shadowed method+path registration | 2 |
-| **All findings across every category** | **191** |
+| **All findings across every category** | **192** |
 
 **The five known cases as a fraction:**
-- Of the 186 named-export tier entries: 4 of the five are named exports (`logTransaction` and `jwtAuth.js`'s `requireRole` in tier i; `optionalJWTAuth` and `rbac.js`'s `requireRole` in tier iii) → **4/186 ≈ 2.2%**.
+- Of the 187 named-export tier entries: 4 of the five are named exports (`logTransaction` and `jwtAuth.js`'s `requireRole` in tier i; `optionalJWTAuth` and `rbac.js`'s `requireRole` in tier iii) → **4/187 ≈ 2.1%**.
 - Of the 2 route-duplicate files: 1 of the five (`compositions.js`) → **1/2 = 50%**.
-- Of all 191 findings in this note: **5/191 ≈ 2.6%**.
+- Of all 192 findings in this note: **5/192 ≈ 2.6%**.
 
-The known five are a small fraction of what a from-scratch, corrected sweep turns up; the large majority — 186 of 191 findings — is new at this basis.
+The known five are a small fraction of what a from-scratch, corrected sweep turns up; the large majority — 187 of 192 findings — is new at this basis.
 
 ---
 
