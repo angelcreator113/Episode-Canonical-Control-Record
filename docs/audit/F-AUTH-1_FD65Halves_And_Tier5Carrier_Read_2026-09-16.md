@@ -11,8 +11,20 @@ current source. **Mints no FD, XK, or PE. Rules nothing — both open
 questions this document surfaces are named at §5 and left to Evoni.**
 
 **Basis:** `origin/main` at `1367e4a1581d5ce0ed6866ec928eb03b01d8da12`,
-2026-09-16. All reads local git against that commit, plus one local
-`frontend` production build (no host, AWS, database, or Cognito contact).
+2026-09-15 (`git log -1 --format='%H %ad' --date=iso-strict
+1367e4a1581d5ce0ed6866ec928eb03b01d8da12` → `2026-09-15T21:06:52-04:00`
+— the commit's own date, not this document's filing date). All reads
+local git against that commit, plus one local `frontend` production
+build (no host, AWS, database, or Cognito contact).
+
+**Filing date:** `date -u +%Y-%m-%d` → `2026-09-16`, read at filing time
+in the same session as the basis SHA above. Filename dated 2026-09-16
+accordingly, per the register's convention that a note's filename carries
+when it was filed, not when the facts inside it were established
+(`F-AUTH-1_AuthIssuanceSurface_Read_2026-09-15.md` states the same
+convention for the same one-day gap). The gap here is not a midnight-UTC
+crossing — `1367e4a1` was itself committed 2026-09-15; this session ran
+past that date into the next.
 
 **Author**
 
