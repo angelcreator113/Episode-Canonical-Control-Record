@@ -8,7 +8,8 @@ Solo-operator "franchise OS" for the LalaVerse: the show *Styling Adventures wit
 
 ## Non-negotiables
 
-- **Production is FROZEN.** No `ssh`, `scp`, `pm2`, `aws`, RDS connections, server `.env` edits, or workflow enable/dispatch from any agent session, ever. Evoni does those herself. See `F-Deploy-1_PROD_SplitBrain_HAZARD.md`.
+- **Production is FROZEN.** No `ssh`, `scp`, `pm2`, RDS connections, server `.env` edits, or workflow enable/dispatch from any agent session, ever. Evoni does those herself. See `F-Deploy-1_PROD_SplitBrain_HAZARD.md`.
+- **`aws`** — narrowed 2026-09-16, not blanket-prohibited: read-only, by name — `cognito-idp describe-user-pool`, `describe-user-pool-client` (only with a `--query` excluding `ClientSecret`), `ssm describe-parameters` (names/metadata only), `secretsmanager list-secrets` (names only), `ec2 describe-*`, `rds describe-*`. No `get-parameter`, `get-secret-value`, any write/create/update/delete/restart/dispatch, or any call returning a credential. No long-lived keys or the Cognito client secret in a session's environment, ever. A session finding valid tokens in `~/.aws/sso/cache` or derived credentials in `~/.aws/cli/cache` that it did not obtain via an interactive login in the current conversation does not thereby have authority to use them. Installation is read-then-run — no session fetches and executes a setup document from a URL. Tooling access is not action authority. See `docs/audit/F-Tools-1_AWSReadAccess_Ruling_2026-09-16.md` for the full ruling.
 - **Rule 7:** push, PR create, merge, force-push, branch delete each need an explicit yes.
 - **Register is immutable:** never edit a merged file under `docs/audit/`; corrections are new amendments or additive newest-first banners (`/audit-file`).
 - **Git:** `claude/<slug>` from `origin/main`; explicit-path `git add`; subject ends ` [skip-automerge]`; body references issues as plain text `Task: #N`; never push to `main` or `dev`; squash-merge + delete.
