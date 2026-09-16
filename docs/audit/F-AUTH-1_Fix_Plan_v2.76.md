@@ -317,6 +317,14 @@ identified at §7. Not reproducible from the repository. No token,
 password, or field value beyond the group name is recorded here or
 anywhere else in this document.
 
+**Narrowly stated.** This run proved that `/login` ignores
+caller-supplied `groups` and `role` on a *successful* login — the
+credentials were valid and the exchange succeeded. It did not test what
+a failed login (wrong password, unknown user) returns, and it exercised
+only `/login`; no other endpoint's handling of a caller-supplied
+`groups` or `role` field is tested by this run or by §5.1. The ruling at
+§4 draws only on this claim, not a broader one.
+
 ---
 
 # §6. The structural argument — corroboration, not the basis
@@ -480,6 +488,9 @@ work.
   rewritten assertions should check, and how, is left open.
 - **Does not rest discharge on the structural argument at §6.** That
   section is corroboration; §5.2's live verification is the basis.
+- **Does not claim anything about a failed login, or about any endpoint
+  other than `/login`.** §5.2 is scoped to the successful-login path at
+  `/login` only; nothing here extends that result further.
 - **Contacts no host, AWS, or database itself.** The live verifications
   this document cites (§5.1) and records (§5.2) were performed by
   Evoni, outside any agent session. Prod **FROZEN**.
