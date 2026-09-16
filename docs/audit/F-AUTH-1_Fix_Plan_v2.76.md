@@ -1,12 +1,18 @@
-| **PRIME STUDIOS** **F-AUTH-1 FIX-PLANNING DOCUMENT** *Rules that `v2.67` §4 precondition 3 is discharged in purpose, not in letter, by the 2026-09-16 live verification `v2.75` §3 already carries. `LOGIN_DISABLED` stays `true`; the flip is not authorized here. Names the test-file rewrite as ordinary owed work, no precondition attached. Closes, reopens, and mints nothing.* |
+| **PRIME STUDIOS** **F-AUTH-1 FIX-PLANNING DOCUMENT** *Rules that `v2.67` §4 precondition 3 is discharged on direct evidence — a live request carrying caller-supplied `groups`/`role` against the real Cognito pool returned only the pool's real group. `LOGIN_DISABLED` stays `true`; the flip is not authorized here. Records, and corrects, a reasoning gap found in this document's own first draft. Closes, reopens, and mints nothing.* |
 | --- |
 
 **Document version**
 
 **v2.76 — FIX PLAN REVISION. Mints no new numbers. Discharges `v2.67`
-§4 precondition 3 in purpose, on Evoni's ruling.** This document records
-a ruling supplied directly by Evoni, at issue #1485, and transcribes it
-verbatim — see §4 for the ruling text and its provenance.
+§4 precondition 3 on direct evidence.** This document's first draft
+transcribed a ruling from issue #1485 verbatim, arguing precondition 3's
+purpose was already satisfied by inference from a differently-scoped
+live run. That argument did not hold for what the `LOGIN_DISABLED`-gated
+assertions actually test — §7 says so plainly. Evoni closed the gap
+directly instead of letting the unsound argument stand: a targeted live
+request against the real pool, carrying caller-supplied `groups`/`role`,
+returned only the pool's real group. §4 records the ruling drafted on
+that corrected basis.
 
 **Predecessor:** `F-AUTH-1_Fix_Plan_v2.75.md`. **v2.75's content stands
 and is not re-ruled here** — FD-65 closed entire (issuance half closed
@@ -65,15 +71,17 @@ Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni — Prime Studios.
 
 **Status**
 
-**Revision. Rules one matter, on Evoni's word.** `v2.67` §4 precondition
-3 is **discharged in purpose, not in letter**. `LOGIN_DISABLED` remains
-`true` in `tests/integration/f-auth-1-fd65.test.js`; the flip is not
-authorized by this document. The test file's rewrite is named as
-ordinary owed work, carrying no precondition and gating nothing. FD-65
-is untouched — CLOSED entire, as `v2.75` left it. FD tail remains
-**FD-69** (retired; FD-70 next-available, unminted); XK tail **XK-3**;
-PE tail **PE #68**. Prod **FROZEN** — no host, AWS, or database contact
-by this document.
+**Revision. Rules one matter, on Evoni's word and her own live
+verification.** `v2.67` §4 precondition 3 is **discharged, on direct
+evidence.** `LOGIN_DISABLED` remains `true` in
+`tests/integration/f-auth-1-fd65.test.js`; the flip is not authorized by
+this document. The test file's rewrite is named as ordinary owed work,
+carrying no precondition and gating nothing. FD-65 is untouched —
+CLOSED entire, as `v2.75` left it. FD tail remains **FD-69** (retired;
+FD-70 next-available, unminted); XK tail **XK-3**; PE tail **PE #68**.
+Prod **FROZEN** — no host, AWS, or database contact by this document
+itself; the live verifications it cites and records were Evoni's own
+actions, outside any agent session.
 
 ---
 
@@ -230,35 +238,51 @@ unverifiable token, not exercise the property they check.
 
 # §4. Evoni's ruling, 2026-09-16
 
-**Provenance.** The ruling text below originates with Evoni directly, as
-the "Prompt for Claude Code" step 5 of issue #1485
-(`github.com/angelcreator113/Episode-Canonical-Control-Record/issues/1485`),
-which she authored and filed on 2026-09-16 as the repository owner. This
-is a different disclosure than `v2.73`'s or `v2.75`'s — there, text was
-drafted in a live session and then reviewed clause-by-clause and
-confirmed by her; here, the text is hers from its first draft, transcribed
-into this document without alteration. Both are the register's standard:
-a ruling stated in Evoni's own words, not composed by an agent session
-and merely approved.
+**Provenance.** The ruling text below was revised from its first draft.
+That first draft transcribed, verbatim, a ruling from issue #1485's own
+"Prompt for Claude Code" step 5, which Evoni authored — arguing that the
+flip-and-pass method's purpose was already served by the live
+verification `v2.75` §3 cites. This document's own §7 found that
+argument unsound for what the `LOGIN_DISABLED`-gated assertions actually
+test: they check that caller-supplied `groups`/`role` are rejected,
+live, against the real pool, a claim the `v2.75` §3 account — an
+ordinary login carrying no such fields — does not cover. Evoni was shown
+that gap and closed it directly rather than letting the unsound
+argument stand: on 2026-09-16, outside any agent session, she sent a
+login request against the real pool with `groups`/`role` fields in the
+body and confirmed the response carried neither poisoned value (§5.2).
+The ruling below is drafted in this session's conversation on that
+corrected basis, reviewed by her against this document's own citations,
+and confirmed as her ruling — the same disclosure standard `v2.73` and
+`v2.75` carry. It supersedes the first draft's reasoning; it does not
+merely append to it.
 
-> **Ruling (Evoni, 2026-09-16).** Precondition 3 is discharged in
-> purpose, not in letter. `v2.67` §4 named a method — flip
-> `LOGIN_DISABLED`, pass the restored assertions — as the way to
-> demonstrate that preconditions 1 and 2 hold. That demonstration has
-> since been made directly, against the live pool, by an instrument
-> `v2.67` could not have named because it required access `v2.67`'s own
-> basis did not have. The purpose the method served is satisfied. The
-> method itself has not been performed and is not being waived:
-> `LOGIN_DISABLED` remains `true`, the assertions remain skipped, and
-> this document does not authorize flipping the constant.
+> **Ruling (Evoni, 2026-09-16).** Precondition 3 is discharged, on
+> direct evidence rather than on inference. `v2.67` §4 named a test as
+> the method for demonstrating that preconditions 1 and 2 hold. Both are
+> now demonstrated directly against the real pool: precondition 1 by the
+> ordinary-login verification at `v2.75` §3, precondition 2 by the
+> poisoned-body verification at §5.2 below — a login request carrying
+> `groups: ['ADMIN', 'superuser']` and `role: 'ADMIN'` returned a token
+> built only from the pool's real group, lowercase, from the id token's
+> claims; neither poisoned value appears, and `superuser` did not
+> survive at all. That is exactly what the `LOGIN_DISABLED`-gated
+> assertions were written to check, demonstrated live rather than
+> inferred from a differently-scoped run. The handler's structure — it
+> destructures only `{ email, password }` from the request body and
+> builds its response from the id token's claims — explains why the
+> poisoned fields were ignored; §6 records that as corroboration, not as
+> the basis for this ruling. The method `v2.67` §4 named — flip
+> `LOGIN_DISABLED`, pass the restored assertions — remains unperformed
+> and is not waived: the constant stays `true`, the assertions stay
+> skipped, and this document does not authorize flipping it. There is
+> nothing left for that method to prove.
 
 ---
 
-# §5. The live verification, cited by attestation — not restated
+# §5. The live verifications this ruling rests on — two, each covering a different precondition
 
-`v2.75` §3 already carries Evoni's account of the live verification this
-ruling rests on. It is cited here, not restated as this document's own
-finding, and no token, credential, or field value is repeated:
+## §5.1 Precondition 1 — cited from `v2.75` §3, not restated
 
 `docs/audit/F-AUTH-1_Fix_Plan_v2.75.md`, lines 137–145:
 
@@ -276,40 +300,51 @@ finding, and no token, credential, or field value is repeated:
 her own action, not reproducible from the repository, not re-derived or
 strengthened by this document.
 
+## §5.2 Precondition 2 — recorded here, ATTESTED, new to this document
+
+> On 2026-09-16, outside any agent session, I sent a login request
+> against the real Cognito pool with the request body carrying
+> caller-supplied `groups: ['ADMIN', 'superuser']` and `role: 'ADMIN'`.
+> The response returned only the pool's real group for that user —
+> `admin`, lowercase, sourced from the id token's claims. Neither
+> poisoned value appears in the response; `superuser` did not survive at
+> all. This record is ATTESTED — my account of my own action; no session
+> performed or witnessed it.
+
+**Standing: ATTESTED.** Performed by Evoni, outside any agent session,
+on 2026-09-16, in direct response to the gap this document's own draft
+identified at §7. Not reproducible from the repository. No token,
+password, or field value beyond the group name is recorded here or
+anywhere else in this document.
+
 ---
 
-# §6. Consequence
+# §6. The structural argument — corroboration, not the basis
 
-**Precondition 3 is no longer an open owed item against FD-65 or
-`v2.67`.** It does not block, gate, or reopen anything — FD-65 remains
-CLOSED entire, exactly as `v2.75` left it.
+`v2.73` §3 (quoted at §2 above) cites
+`F-AUTH-1_FD65Halves_And_Tier5Carrier_Read_2026-09-16.md` §5 for a code
+read: the handler performs a real Cognito `InitiateAuth` exchange, and
+its response is built from the id token's claims, never from the
+request body. That read explains *why* §5.2's poisoned `groups`/`role`
+fields were ignored — there is no code path by which a caller-supplied
+`groups` field could reach the token.
 
-**The test file's assertions remain worth rewriting.** Some were written
-against a login path that no longer exists (§3's comment, lines 50–54:
-the pre-Task-#1456 "returns 401 and no accessToken, whatever is
-supplied" claim). What they should test now, given `LOGIN_DISABLED`'s
-own comment that its name is no longer accurate (§3, lines 56–57), is a
-question this document does not answer. **That rewrite is ordinary
-technical debt from this point, carrying no precondition and gating
-nothing.** It is named here as owed; scoping it is not this document's
-work.
+**It is not, itself, this ruling's basis.** A code read shows the path
+is closed; §5.2's live request shows the closed path holds under an
+actual attempt against the real pool. §4's ruling rests on §5.2 for
+precondition 2 and on `v2.75` §3 for precondition 1. This section
+records that the structural picture and the live result agree — not as
+an alternative ground for discharge, and not as a substitute for either
+live verification.
 
 ---
 
-# §7. What could make this ruling wrong — checked against the assertions' own text
+# §7. The gap this document's own draft identified, and how it was closed
 
-The ruling rests on the live verification (§5) having demonstrated what
-the flip-and-pass method (§1) was meant to demonstrate — that
-preconditions 1 and 2 hold. If any of the assertions `LOGIN_DISABLED`
-gates tests a claim the live run's own account does not cover, that is a
-harder case for discharge, and it is stated directly here rather than
-left abstract.
-
-The three gated assertions, quoted from
+The three assertions `LOGIN_DISABLED` gates, quoted from
 `tests/integration/f-auth-1-fd65.test.js`:
 
-**`describeLogin` block, lines 121–133** (gated by `LOGIN_DISABLED` via
-`describeLogin`):
+**`describeLogin` block, lines 121–133:**
 
 ```
 121 describeLogin('POST /login ignores caller-supplied privilege', () => {
@@ -349,8 +384,7 @@ The three gated assertions, quoted from
 151 });
 ```
 
-**`testLogin`, lines 153–168** (gated by `LOGIN_DISABLED` via
-`testLogin`):
+**`testLogin`, lines 153–168:**
 
 ```
 153 describe('the resulting token against an ADMIN gate', () => {
@@ -371,52 +405,61 @@ The three gated assertions, quoted from
 168   });
 ```
 
-**What each one actually checks, stated plainly:** all three send a
-login request with caller-supplied `groups: ['ADMIN']` and `role:
-'admin'`, and check that the escalation attempt fails to take effect —
-the echoed groups, the signed token's groups and role, and the
-downstream `authorize(['ADMIN'])` gate's refusal. **This is FD-65's
-privilege half, stated directly and specifically: that `POST /login`
-issues no caller-supplied groups or roles, tested end to end against a
-real signature-verified token and a real authorization gate.**
+**What each one actually checks:** all three send a login request with
+caller-supplied `groups: ['ADMIN']` and `role: 'admin'`, and check that
+the escalation attempt fails to take effect — the echoed groups, the
+signed token's groups and role, and the downstream
+`authorize(['ADMIN'])` gate's refusal. This is FD-65's privilege half,
+tested end to end against a real signature-verified token and a real
+authorization gate.
 
-**The live verification's own account (§5) did not exercise this.**
-Evoni's cited account is of an ordinary login — `email`/`password`
-only, no `groups` or `role` field — followed by `GET /me`. Nothing in
-that account describes a login attempt carrying caller-supplied
-`groups: ['ADMIN']`, an inspection of the resulting token's `groups`
-claim, or a call against an ADMIN-gated route with that token. **The
-live run demonstrated that the issuance path works end to end; it did
-not demonstrate that caller-supplied privilege is rejected end to end.**
+**This document's first draft cited the live verification at `v2.75`
+§3 as satisfying the purpose these assertions serve. That was wrong.**
+`v2.75` §3's account is of an ordinary login — `email`/`password`
+only — followed by `GET /me`; nothing in it describes a login attempt
+carrying caller-supplied `groups` or `role`, an inspection of the
+resulting token's `groups` claim, or a call against an ADMIN-gated route
+with that token. The three assertions above test exactly that scenario,
+and an argument that a differently-scoped verification served their
+purpose does not hold. This document does not file that argument.
 
-**This is stated as the harder case for discharge, not softened.** The
-ruling at §4 holds that the *purpose* precondition 3's method served —
-demonstrating preconditions 1 and 2 — is satisfied by the live
-verification, on the reasoning that precondition 2 ("what the token
-carries, and that it is not caller-supplied") was independently
-confirmed **by code reading**, not by this live run: `v2.73` §3 (quoted
-at §2 above) cites `F-AUTH-1_FD65Halves_And_Tier5Carrier_Read_2026-09-16.md`
-§5 for that confirmation — "the handler performs a real Cognito
-`InitiateAuth` exchange, and its response is built from the id token's
-claims, never from the request body" — a claim about the code's shape,
-not about a live escalation attempt against the real pool. **The live
-verification's own contribution is to precondition 1** (that the
-mechanism succeeds against the real pool), which the three quoted
-assertions do not test at all — they test precondition 2's behavioral
-consequence, on a mocked exchange, not precondition 1. **A reader who
-holds that "how both are tested" in `v2.67` §4 item 3 requires a single
-live instrument exercising both preconditions together — not one
-instrument for each — would find this ruling does not reach that bar**:
-no cited evidence, live or code-read, is a single round trip that both
-authenticates against the real pool *and* attempts caller-supplied
-escalation in the same call. That gap is real and is not closed by
-anything cited above; the ruling at §4 rests on treating the two
-preconditions' confirmations as sufficient in combination, not on
-denying the gap exists.
+**What closes the gap is §5.2, not the first draft's reasoning.** The
+poisoned-body request performed on 2026-09-16 is a live round trip
+against the real pool carrying the caller-supplied `groups`/`role`
+values these assertions exist to check, and its result is what the
+assertions themselves assert: the poisoned values do not appear in the
+outcome. The gap this document's own draft identified — that no cited
+evidence, live or code-read, was a single instrument exercising
+precondition 2 directly — closes because a new, targeted instrument now
+covers it, on its own terms, not because separate confirmations are read
+as sufficient in combination.
+
+**Recorded plainly, not softened:** the ruling this document files is
+not the one issue #1485 first drafted. That draft's reasoning was
+unsound for what these three assertions test; this section says so
+rather than filing the correction silently.
 
 ---
 
-# §8. What this revision does not do
+# §8. Consequence
+
+**Precondition 3 is no longer an open owed item against FD-65 or
+`v2.67`.** It does not block, gate, or reopen anything — FD-65 remains
+CLOSED entire, exactly as `v2.75` left it.
+
+**The test file's assertions remain worth rewriting.** Some were written
+against a login path that no longer exists (§3's comment, lines 50–54:
+the pre-Task-#1456 "returns 401 and no accessToken, whatever is
+supplied" claim). What they should test now, given `LOGIN_DISABLED`'s
+own comment that its name is no longer accurate (§3, lines 56–57), is a
+question this document does not answer. **That rewrite is ordinary
+technical debt from this point, carrying no precondition and gating
+nothing.** It is named here as owed; scoping it is not this document's
+work.
+
+---
+
+# §9. What this revision does not do
 
 - **Does not close, reopen, or alter FD-65**, which is **CLOSED entire**
   at `v2.75` — the issuance half closed on live verification, the
@@ -433,24 +476,31 @@ denying the gap exists.
 - **Does not authorize any code or test change.** `LOGIN_DISABLED` stays
   `true`; the assertions at §7 stay skipped; `tests/integration/f-auth-1-fd65.test.js`
   is not edited by this document or by the ruling it records.
-- **Does not scope the test-file rewrite** named as owed at §6. What the
+- **Does not scope the test-file rewrite** named as owed at §8. What the
   rewritten assertions should check, and how, is left open.
-- **Contacts no host, AWS, or database itself.** The verification this
-  document cites was performed by Evoni, outside any agent session, per
-  `v2.75` §3. Prod **FROZEN**.
+- **Does not rest discharge on the structural argument at §6.** That
+  section is corroboration; §5.2's live verification is the basis.
+- **Contacts no host, AWS, or database itself.** The live verifications
+  this document cites (§5.1) and records (§5.2) were performed by
+  Evoni, outside any agent session. Prod **FROZEN**.
 
 ---
 
-*Type: Fix Plan revision. Rules `v2.67` §4 precondition 3 discharged in
-purpose, not in letter. Mints nothing. FD-65 untouched (CLOSED entire,
-per `v2.75`). Names the test-file rewrite as ordinary owed work, no
-precondition attached. No host, AWS, or database contact. Prod FROZEN.*
+*Type: Fix Plan revision. Rules `v2.67` §4 precondition 3 discharged on
+direct evidence — a live poisoned-body request against the real Cognito
+pool, recorded at §5.2, corrects a reasoning gap this document's own
+first draft carried. Mints nothing. FD-65 untouched (CLOSED entire, per
+`v2.75`). Names the test-file rewrite as ordinary owed work, no
+precondition attached. No host, AWS, or database contact by this
+document itself. Prod FROZEN.*
 
 *Author: Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni.*
 *Filing date: 2026-09-16. Basis: `origin/main` at
 `35d7d1d8c3342de88c1d5860ad427b7eaa57a2a7`.*
 *Authority: `F-AUTH-1_Fix_Plan_v2.67.md` §4 (cited, not re-ruled),
 `F-AUTH-1_Fix_Plan_v2.73.md` §3 and `F-AUTH-1_Fix_Plan_v2.75.md` §3
-(two-criteria structure and closure, cited not re-derived), and Evoni's
-ruling at §4 above (RULED — her own words, transcribed verbatim from
-issue #1485; see §4's provenance note).*
+(two-criteria structure and closure, cited not re-derived), Evoni's
+2026-09-16 ordinary-login verification (`v2.75` §3, cited, ATTESTED),
+and Evoni's 2026-09-16 poisoned-body verification and ruling at §4/§5.2
+above (RULED / ATTESTED — her own words and her own action, drafted in
+this session's conversation and confirmed by her as her ruling).*
