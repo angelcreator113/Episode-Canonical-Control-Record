@@ -34,9 +34,13 @@ pointed at between `F-AUTH-1_Fix_Plan_v2.72.md` and `PROJECT_CONTEXT.md`
 back to its source in a `/wake-up` + three-grep read; the issue was filed
 once the finding's shape was clear, so this document does not itself enter
 the register outside the normal issue→branch→PR loop). This note is that
-chase's writeup as a repo artifact rather than only a chat transcript. No
-FD, XK, or PE is
-minted. Prod **FROZEN**.
+chase's writeup as a repo artifact rather than only a chat transcript.
+**Rules nothing, on any of the four questions it touches: not whether
+`v2.72` §3/§4 stand (§1's own open question — the one this document
+surfaces, and the one a reader might expect it to answer here), not FD-67's
+standing (§3), not FD-65's issuance half (§4), not the Tier 5 carrier's
+Shape A clause 3 (§5). All four are named and left to Evoni.** No FD, XK,
+or PE is minted. Prod **FROZEN**.
 
 ---
 
