@@ -7,6 +7,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const TokenService = require('../services/tokenService');
+const cognitoPasswordAuthService = require('../services/cognitoPasswordAuthService');
 const { authenticateJWT } = require('../middleware/jwtAuth');
 const { optionalAuth } = require('../middleware/auth');
 const {
@@ -14,6 +15,48 @@ const {
   validateRefreshRequest,
   validateTokenRequest,
 } = require('../middleware/requestValidation');
+
+// Cognito exception name -> HTTP response. UserNotFoundException maps to the
+// same status/code/message as NotAuthorizedException so a caller cannot tell
+// a nonexistent account from a wrong password.
+const COGNITO_LOGIN_ERROR_MAP = {
+  NotAuthorizedException: {
+    status: 401,
+    error: 'Unauthorized',
+    code: 'AUTH_INVALID_CREDENTIALS',
+    message: 'Incorrect email or password.',
+  },
+  UserNotFoundException: {
+    status: 401,
+    error: 'Unauthorized',
+    code: 'AUTH_INVALID_CREDENTIALS',
+    message: 'Incorrect email or password.',
+  },
+  UserNotConfirmedException: {
+    status: 403,
+    error: 'Forbidden',
+    code: 'AUTH_USER_NOT_CONFIRMED',
+    message: 'This account has not been confirmed.',
+  },
+  PasswordResetRequiredException: {
+    status: 403,
+    error: 'Forbidden',
+    code: 'AUTH_PASSWORD_RESET_REQUIRED',
+    message: 'A password reset is required for this account.',
+  },
+  TooManyRequestsException: {
+    status: 429,
+    error: 'Too Many Requests',
+    code: 'AUTH_TOO_MANY_REQUESTS',
+    message: 'Too many login attempts. Please try again later.',
+  },
+  LimitExceededException: {
+    status: 429,
+    error: 'Too Many Requests',
+    code: 'AUTH_TOO_MANY_REQUESTS',
+    message: 'Too many login attempts. Please try again later.',
+  },
+};
 
 // Rate limiting for authentication endpoints
 const loginLimiter = rateLimit({
@@ -36,85 +79,55 @@ const refreshLimiter = rateLimit({
 
 /**
  * POST /api/v1/auth/login
- * Developer/test endpoint to get a JWT token
- * In production, this would integrate with Cognito
+ * Exchanges email/password for Cognito tokens via InitiateAuth
+ * (AuthFlow: USER_PASSWORD_AUTH). Removed: the unconditional 401 return
+ * that made this handler's try/catch (the FD-65-disabled body — a dev-only
+ * flow that minted a local HS256 token for any well-formed email and any
+ * 6-character password, without verifying either) unreachable dead code.
+ * Per F-AUTH-1_AuthIssuanceSurface_Read_2026-09-15.md and
+ * F-AUTH-1_LoginHandler_UnreachableRegion_Read_2026-09-14.md, Evoni ruled
+ * on 2026-09-14 (a) the fix-cycle scope restriction is waived for
+ * password-login implementation, (b) the local HS256 token family is
+ * narrowed to a controlled internal flow and must not remain the issuance
+ * path for user login, and (c) FD-65's issuance half closes on live
+ * verification against the real Cognito pool, not on implementation. This
+ * handler implements ruling (b); it does not, and cannot, discharge (c).
  */
 router.post('/login', optionalAuth, loginLimiter, validateLoginRequest, async (req, res) => {
-  // FD-65 ISSUANCE HALF, closed 2026-08-22. This route issued a signed token
-  // to any caller supplying a well-formed email and any 6-character password;
-  // no credential was ever verified. v2.49 minted FD-65 with two halves and
-  // v2.50 closed only the privilege half (75ac05f0, caller-supplied
-  // groups/role removed), explicitly leaving this one open at P0.
-  //
-  // Disabled rather than repaired: implementing real verification is a
-  // decision about whether password login should exist at all, given Cognito
-  // is the actual authentication path. Fails closed until that is ruled.
-  return res.status(401).json({
-    error: 'Unauthorized',
-    message: 'Password login is disabled.',
-    code: 'AUTH_LOGIN_DISABLED',
-  });
   try {
     const { email, password } = req.body;
+    const result = await cognitoPasswordAuthService.initiatePasswordAuth(email, password);
 
-    // Validate email
-    if (!email || !email.includes('@')) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Valid email required',
-        code: 'AUTH_INVALID_EMAIL',
-      });
-    }
-
-    // For development: accept any password (in production, verify against Cognito)
-    if (!password || password.length < 6) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Password must be at least 6 characters',
-        code: 'AUTH_INVALID_PASSWORD',
-      });
-    }
-
-    // Generate token pair
-    const user = {
-      id: `user-${email.split('@')[0]}-${Date.now()}`, // Generate ID for dev/test
-      email,
-      name: email.split('@')[0],
-      groups: ['USER'],
-      role: 'USER',
-    };
-
-    const tokens = TokenService.generateTokenPair(user);
-
-    // Store refresh token in secure httpOnly cookie (optional)
-    res.cookie('refreshToken', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    });
-
+    // Contract: this endpoint returns exactly these five fields, built from
+    // the id token's claims — never the raw Cognito response. No local
+    // HS256 token is minted on this path (TokenService.generateTokenPair is
+    // not called here).
     return res.status(200).json({
       success: true,
       message: 'Login successful',
       data: {
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        tokenType: tokens.tokenType,
-        expiresIn: tokens.expiresIn,
-        user: {
-          email: user.email,
-          name: user.name,
-          groups: user.groups,
-          role: user.role,
-        },
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        expiresIn: result.expiresIn,
+        tokenType: result.tokenType,
+        user: result.user,
       },
     });
   } catch (error) {
-    console.error('Login error:', error);
+    const mapped = COGNITO_LOGIN_ERROR_MAP[error.name];
+    // Never log or return the password, the Cognito client secret, or the
+    // raw Cognito error object — only the exception name.
+    console.error('Login error:', error.name || 'UnknownError');
+    if (mapped) {
+      return res.status(mapped.status).json({
+        error: mapped.error,
+        message: mapped.message,
+        code: mapped.code,
+      });
+    }
     return res.status(500).json({
       error: 'Internal Server Error',
-      message: error.message,
+      message: 'Login failed.',
       code: 'AUTH_LOGIN_ERROR',
     });
   }
