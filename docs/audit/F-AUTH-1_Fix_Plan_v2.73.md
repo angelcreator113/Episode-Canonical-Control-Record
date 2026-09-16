@@ -180,12 +180,11 @@ below was drafted in this session's conversation, not composed by Evoni
 from a blank page. It is her ruling because of what happened next:
 Evoni reviewed the drafted wording clause by clause against the primary
 sources this document cites at §1–§2 — `v2.67`'s own text, the current
-codebase, the cited read documents — corrected one point of framing
-before accepting it, and confirmed the result as her ruling.
-Approval-after-clause-by-clause-verification is a different disclosure
-than approval of an assembled text taken on faith, and this document
-does not claim the latter. Transcribed verbatim below; no word altered
-from what she confirmed.
+codebase, the cited read documents — and confirmed the result as her
+ruling. Approval-after-clause-by-clause-verification is a different
+disclosure than approval of an assembled text taken on faith, and this
+document does not claim the latter. Transcribed verbatim below; no word
+altered from what she confirmed.
 
 > **Ruling (Evoni, 2026-09-16).** FD-65's issuance half is **REOPENED**,
 > effective 2026-09-15, on the trigger `v2.67` §4 names: `POST
