@@ -326,6 +326,53 @@ describe('JWT Authentication Middleware (delegates to auth.js#verifyToken)', () 
     });
   });
 
+  describe('requireGroup() case-insensitive comparison (F-AUTH-1 group-case-mismatch fix)', () => {
+    test('requireGroup("ADMIN") passes for a real-shape lowercase "admin" group claim', async () => {
+      mockReq.headers.authorization = `Bearer ${HS256_TOKEN}`;
+      tokenService.verifyToken.mockReturnValue(
+        sampleClaims({ sub: 'hs-admin', 'cognito:groups': ['admin'] })
+      );
+
+      await authenticateJWT(mockReq, mockRes, mockNext);
+
+      const gateNext = jest.fn();
+      requireGroup('ADMIN')(mockReq, mockRes, gateNext);
+
+      expect(gateNext).toHaveBeenCalledTimes(1);
+      expect(mockRes.status).not.toHaveBeenCalled();
+    });
+
+    test('requireGroup("admin") still passes for a lowercase "admin" group claim -- the 13 already-correct sites are unaffected', async () => {
+      mockReq.headers.authorization = `Bearer ${HS256_TOKEN}`;
+      tokenService.verifyToken.mockReturnValue(
+        sampleClaims({ sub: 'hs-admin', 'cognito:groups': ['admin'] })
+      );
+
+      await authenticateJWT(mockReq, mockRes, mockNext);
+
+      const gateNext = jest.fn();
+      requireGroup('admin')(mockReq, mockRes, gateNext);
+
+      expect(gateNext).toHaveBeenCalledTimes(1);
+      expect(mockRes.status).not.toHaveBeenCalled();
+    });
+
+    test('requireGroup("ADMIN") does not match "editor" or "viewer" membership -- the collision case the enumeration ruled out but this pins', async () => {
+      mockReq.headers.authorization = `Bearer ${HS256_TOKEN}`;
+      tokenService.verifyToken.mockReturnValue(
+        sampleClaims({ sub: 'hs-editor', 'cognito:groups': ['editor', 'viewer'] })
+      );
+
+      await authenticateJWT(mockReq, mockRes, mockNext);
+
+      const gateNext = jest.fn();
+      requireGroup('ADMIN')(mockReq, mockRes, gateNext);
+
+      expect(gateNext).not.toHaveBeenCalled();
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+    });
+  });
+
   describe('Error handling', () => {
     test('should handle null authorization header', async () => {
       mockReq.headers.authorization = null;
