@@ -24,11 +24,12 @@ const getClient = () => {
 const getCognitoEnv = () => {
   const userPoolId = process.env.COGNITO_USER_POOL_ID?.trim();
   const clientId = process.env.COGNITO_CLIENT_ID?.trim();
-  const clientSecret = process.env.COGNITO_CLIENT_SECRET?.trim();
+  // Optional: only app clients configured WITH a secret need SECRET_HASH.
+  // Absence here is not a misconfiguration -- it means don't send one.
+  const clientSecret = process.env.COGNITO_CLIENT_SECRET?.trim() || null;
   const missingVariables = [];
   if (!userPoolId) missingVariables.push('COGNITO_USER_POOL_ID');
   if (!clientId) missingVariables.push('COGNITO_CLIENT_ID');
-  if (!clientSecret) missingVariables.push('COGNITO_CLIENT_SECRET');
   if (missingVariables.length > 0) {
     const err = new Error('Cognito password-login environment is not configured');
     err.code = 'AUTH_CONFIG_MISSING';
@@ -65,16 +66,17 @@ const decodeIdTokenClaims = (idToken) => {
  */
 const initiatePasswordAuth = async (email, password) => {
   const { clientId, clientSecret } = getCognitoEnv();
-  const secretHash = computeSecretHash(email, clientId, clientSecret);
+  const authParameters = { USERNAME: email, PASSWORD: password };
+  if (clientSecret) {
+    authParameters.SECRET_HASH = computeSecretHash(email, clientId, clientSecret);
+  } else {
+    console.log('[cognitoPasswordAuthService] no secret configured, SECRET_HASH omitted');
+  }
 
   const command = new InitiateAuthCommand({
     AuthFlow: 'USER_PASSWORD_AUTH',
     ClientId: clientId,
-    AuthParameters: {
-      USERNAME: email,
-      PASSWORD: password,
-      SECRET_HASH: secretHash,
-    },
+    AuthParameters: authParameters,
   });
 
   const response = await getClient().send(command);

@@ -175,5 +175,32 @@ describe('cognitoPasswordAuthService', () => {
       });
       expect(mockSend).not.toHaveBeenCalled();
     });
+
+    test('omits SECRET_HASH and does not throw AUTH_CONFIG_MISSING when COGNITO_CLIENT_SECRET is absent', async () => {
+      delete process.env.COGNITO_CLIENT_SECRET;
+      mockSend.mockResolvedValue({
+        AuthenticationResult: {
+          AccessToken: 'a',
+          RefreshToken: 'r',
+          IdToken: buildIdToken({ sub: 's', email: 'e@example.com', name: 'N' }),
+          ExpiresIn: 60,
+          TokenType: 'Bearer',
+        },
+      });
+
+      await initiatePasswordAuth('e@example.com', 'pw');
+
+      expect(InitiateAuthCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          AuthFlow: 'USER_PASSWORD_AUTH',
+          AuthParameters: {
+            USERNAME: 'e@example.com',
+            PASSWORD: 'pw',
+          },
+        })
+      );
+      const sentParams = InitiateAuthCommand.mock.calls[0][0].AuthParameters;
+      expect(sentParams).not.toHaveProperty('SECRET_HASH');
+    });
   });
 });
