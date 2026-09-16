@@ -6,8 +6,9 @@
 **v2.73 — FIX PLAN REVISION. Mints no new numbers. Reopens FD-65's
 issuance half, supersedes `v2.67`'s CLOSED-BY-REMOVAL standing, and
 establishes the path to its discharge and closure.** This document lands
-Evoni's ruling, given directly in session, transcribed verbatim below —
-see §3.
+Evoni's ruling — drafted in this session, reviewed clause by clause
+against the primary sources by Evoni, and confirmed by her as her ruling
+— transcribed verbatim below; see §3 for the provenance note in full.
 
 **Predecessor:** `F-AUTH-1_Fix_Plan_v2.72.md`. **v2.72's rulings stand and
 are not re-ruled here** — the FD-68/FD-65 severity-interaction
@@ -53,8 +54,9 @@ re-derivation.
 **Author**
 
 Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni — Prime Studios.
-**Ruling by Evoni**, given directly in session, transcribed verbatim
-below — see §3.
+**Ruling by Evoni** — drafted in session, reviewed clause by clause
+against the primary sources by her, confirmed as her ruling — transcribed
+verbatim below; see §3.
 
 **Status**
 
@@ -172,17 +174,18 @@ own findings, except where marked freshly re-checked.**
 
 # §3. The ruling
 
-**Composed by Evoni directly, in her own words, in this session's
-conversation — not proposed by the drafting session for her approval.**
-`F-AUTH-1_Fix_Plan_v2.69.md` Ruling 1's disclosure and the Shape A
-ruling's provenance note both apply the same test — did the drafting
-session originate any of the ruling's own wording? — and both answer
-yes for parts of their text. That test's answer here is no: none of
-this ruling's wording originated with the session; the paragraphs at §3
-below are Evoni's own, typed directly. The session's role was to verify
-the ruling's factual premises against primary sources — `v2.67`'s own
-text, the current codebase, the cited read documents — before filing,
-not to draft its wording. Transcribed verbatim below; no word altered.
+**Provenance, per the same disclosure test `F-AUTH-1_Fix_Plan_v2.69.md`
+Ruling 1 and the Shape A ruling's own note both apply.** The wording
+below was drafted in this session's conversation, not composed by Evoni
+from a blank page. It is her ruling because of what happened next:
+Evoni reviewed the drafted wording clause by clause against the primary
+sources this document cites at §1–§2 — `v2.67`'s own text, the current
+codebase, the cited read documents — corrected one point of framing
+before accepting it, and confirmed the result as her ruling.
+Approval-after-clause-by-clause-verification is a different disclosure
+than approval of an assembled text taken on faith, and this document
+does not claim the latter. Transcribed verbatim below; no word altered
+from what she confirmed.
 
 > **Ruling (Evoni, 2026-09-16).** FD-65's issuance half is **REOPENED**,
 > effective 2026-09-15, on the trigger `v2.67` §4 names: `POST
@@ -256,5 +259,6 @@ revision. Prod FROZEN.*
 *Filing date: 2026-09-16. Basis: `origin/main` at
 `e01d6faf6cb17a8e660e8d0866cc6bb12ebcc793`.*
 *Authority: `F-AUTH-1_Fix_Plan_v2.67.md` §§3–4 (cited, not re-derived
-except where marked fresh above), Evoni's ruling at §3 (ATTESTED —
-composed and typed by her directly in this session's conversation).*
+except where marked fresh above), Evoni's ruling at §3 (ATTESTED — drafted
+in session, reviewed clause by clause against the primary sources and
+confirmed by her as her ruling; see §3's provenance note).*
