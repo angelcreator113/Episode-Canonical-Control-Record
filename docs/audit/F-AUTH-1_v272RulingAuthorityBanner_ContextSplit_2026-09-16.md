@@ -3,14 +3,17 @@
 
 **Document version**
 
-v1.0 — **READ ONLY / DRAFT.** Files that `F-AUTH-1_Fix_Plan_v2.72.md` carries
+v1.0 — **READ ONLY.** Files that `F-AUTH-1_Fix_Plan_v2.72.md` carries
 an unresolved ruling-authority banner over its own §3 and §4, that
 `PROJECT_CONTEXT.md` names two different current F-AUTH-1 revisions with
 two different FD-67 outcomes in two different sections, and what already
 stands filed — cited, not re-derived — for the two consequences that follow
-if the banner's question resolves against v2.72. **Mints no FD, XK, or PE.
-Rules nothing — the open question this document surfaces at §1 is named
-and left to Evoni.**
+if the banner's question resolves against v2.72. **v2.72 §6's "FD-65
+remains CLOSED" is a reaffirmation, not a fresh check — it describes a
+world in which `POST /api/v1/auth/login` was still disabled, four days
+before the PR that changed that (§4 below dates both). Not wrong; predates
+its own trigger.** **Mints no FD, XK, or PE. Rules nothing — the open
+question this document surfaces at §1 is named and left to Evoni.**
 
 **Basis:** `origin/main` at `7f54c3fcf1a8ebf7fabebd1fb5d8be47581e3749`,
 2026-09-15 (`git log -1 --format='%H %ad %s' --date=short
@@ -25,11 +28,14 @@ Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni — Prime Studios.
 
 **Status**
 
-Standalone read, filed from live session synthesis — no dispatch issue.
-Chased a version-number mismatch Evoni pointed at
-(`F-AUTH-1_Fix_Plan_v2.72.md` vs. `PROJECT_CONTEXT.md`) back to its source
-in a `/wake-up` + three-grep read; this note is that chase's writeup as a
-repo artifact rather than only a chat transcript. No FD, XK, or PE is
+Standalone read, filed per issue #1463 (opened retroactively — the read
+began as live session synthesis, chasing a version-number mismatch Evoni
+pointed at between `F-AUTH-1_Fix_Plan_v2.72.md` and `PROJECT_CONTEXT.md`
+back to its source in a `/wake-up` + three-grep read; the issue was filed
+once the finding's shape was clear, so this document does not itself enter
+the register outside the normal issue→branch→PR loop). This note is that
+chase's writeup as a repo artifact rather than only a chat transcript. No
+FD, XK, or PE is
 minted. Prod **FROZEN**.
 
 ---
@@ -135,11 +141,13 @@ implementation ... no session has performed the verification itself."*
 **The dating matters for v2.72 specifically.** v2.72 was filed 2026-09-11
 (§1 above); PR #1457, the event `v2.67` §4 names as the reactivation
 trigger, landed 2026-09-15 — four days later. v2.72 §6's *"does not alter
-the closed standing of FD-64, FD-65, or FD-68"* is accurate to what it
-could have known at its own basis; it does not and could not speak to a
-precondition-check that didn't exist yet. Whether that makes v2.72 §6
-stale rather than wrong on FD-65 is a question this document does not
-answer.
+the closed standing of FD-64, FD-65, or FD-68"* is a reaffirmation, not a
+fresh check: a statement about a world in which `POST
+/api/v1/auth/login` was still disabled. **It is not wrong — it is accurate
+to what existed at its own basis — but it predates its own trigger.** It
+does not and could not speak to a precondition-check that didn't exist
+yet. Whether FD-65's issuance half is therefore open or closed now is a
+question this document does not answer.
 
 ---
 
