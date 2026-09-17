@@ -8,12 +8,12 @@ file(s) a grep hit. That grep was coarse — a "hit" could be a short-token fals
 `layers`, `markers`, `jobs`, `users` are also English words) or a column/comment/string match rather
 than real table access. This note re-derives each of the 56 to REAL (code would error against canon
 today if the table doesn't exist) or FALSE POSITIVE, with file:line evidence, and separately searches
-canon's 143 captured table names for near-name variants of each of the 56. It gives Evoni's hybrid
-(direction 3) ruling the exact list it needs. **It does not choose a schema, rule anything, or mint
-anything** (§7).
+canon's 143 captured table names for near-name variants of each of the 56. It is prep for Evoni's
+forthcoming schema-fork ruling — the exact list that ruling will act on, not itself. **It does not
+choose a schema, rule anything, or mint anything** (§7).
 
-Issue: #1508. Prompted by Evoni's ruling to hold direction 3 (hybrid reconciliation) until this
-note supplies the exact list.
+Issue: #1508. Filed as the prep work Evoni's forthcoming schema-fork ruling is waiting on; that
+ruling has not been filed and is not recorded anywhere in this note.
 
 ---
 
@@ -368,8 +368,8 @@ variant at all (§4); one of those two (`processing_queues`) is not a naming que
 ## §7. What this note does not do
 
 - **Does not choose a schema, propose a migration, or rule which direction (1/2/3) applies.**
-  Evoni's ruling (direction 3, hybrid) is already recorded elsewhere and held pending this note; this
-  note supplies its input, not its conclusion.
+  Evoni's schema-fork ruling has not been filed anywhere; this note is prep for it, supplying its
+  input, not its conclusion.
 - **Does not resolve the `decision_logs`/`decision_log` naming ambiguity** — handed to the ruling
   as-is, with column evidence attached, per §4. `processing_queues`/`processing_queue` is not a
   naming ambiguity (§4) — the model's own table name already matches canon's.
@@ -405,6 +405,6 @@ Unchanged from the census's own tail check (FD-66/FD-69, XK-2, PE #68) — nothi
 
 ---
 
-**Type:** MEASURED classification note, prep material for the v25 item 8 disposition / hybrid
-(direction 3) reconciliation ruling. **Rules:** nothing. **Mints:** nothing (see §7). **Host/AWS/DB
+**Type:** MEASURED classification note, prep material for the v25 item 8 disposition / Evoni's
+forthcoming schema-fork ruling. **Rules:** nothing. **Mints:** nothing (see §7). **Host/AWS/DB
 contact:** none — repo-only, against the existing 2026-08-29 capture file. **Prod FROZEN.**
