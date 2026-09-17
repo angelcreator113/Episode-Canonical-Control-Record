@@ -157,7 +157,7 @@ dev box pointed at either instance."
 
 **§3.4 Q3 is not answered here** — the `DEVELOPMENT_WORKFLOW.md:247` citation
 correction is a separate edit to a live document, not performed by this
-revision (§5).
+revision (§7).
 
 ## 3. Evidence — ATTESTED, Evoni's console read, outside any agent session
 
