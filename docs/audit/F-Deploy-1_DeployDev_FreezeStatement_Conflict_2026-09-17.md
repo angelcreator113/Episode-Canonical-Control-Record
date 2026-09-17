@@ -315,6 +315,42 @@ re-enablement regardless of what the workflow file now does. The hazard doc
 itself does not say, because it has not been touched since 2026-05-30 (§4
 below) — this is a textual absence, not a resolution.
 
+### 3.2b A second conflict: Sec 3 item 7 against the same PROJECT_CONTEXT.md line
+
+**Sec 3 item 7** (§1(a) above, line 88, dated 2026-05-30, never revised)
+states: *"Do **not** deploy the dev box pointed at either instance."*
+
+**PROJECT_CONTEXT.md §7 line 353** (§1(b) above, dated 2026-09-16) states,
+within *"What is safe today"*: *"dispatching `Deploy to Development` (Evoni,
+from a browser, Rule 7)."*
+
+**This is a conflict separate from §3.2's item 9 conflict.** Item 9's stated
+rationale is shared compute — *"They reach THIS box via shared compute; an
+untagged `claude/**` PR auto-deploys to prod"* — a rationale Fix Plan v1.49
+states the 2026-07-10 rewrite (Fix Plan v1.30, FD-57) addresses: the dev box
+is now a dedicated instance (`episode-dev-backend`), not the shared box.
+**Item 7's text carries no such rationale and does not depend on shared
+compute.** It says "the dev box pointed at either instance" — either RDS
+instance, `-dev` or `-prod` — a statement about which *database* a dev
+deploy is pointed at, not which *EC2 host* it runs on. Nothing in the
+2026-07-10 rewrite that separated the EC2 hosts speaks to which RDS instance
+the dev box's deploy targets.
+
+**What would resolve it is the same open question named at §3.4 item 2.**
+`F-Deploy-1_DeployDev_DispatchRead_2026-09-12.md` §7 states the on-box
+migration's actual database target — resolved at deploy time from the
+Secrets Manager secret `episode-metadata/dev/database` — is NOT VERIFIABLE
+FROM REPO, and `CLAUDE.md` line 19 separately records that the canon
+(production) RDS instance is *named* `episode-control-dev`. **Item 7's text
+names "either instance"** — the hazard doc's own Sec 2.2 and Sec 2.3 (same
+document as §1(a), not quoted there in full) name the two as
+`episode-control-dev` ("the real, live data store") and
+`episode-control-prod` ("verified EMPTY"); `PROJECT_CONTEXT.md` §7 (lines
+343–344, not quoted at §1(b) above) names the same two RDS instances by the
+same names. **If the dev secret resolves to either of those two, item 7's
+prohibition is implicated on dispatch; only a database that is neither of
+them falls outside its text.** This document does not resolve which.
+
 ### 3.3 The narrower, resolved-by-date sub-question: was the re-enablement itself ever recorded?
 
 `Prime_Studios_Audit_Handoff_v23.md` (2026-08-22) states the transition
