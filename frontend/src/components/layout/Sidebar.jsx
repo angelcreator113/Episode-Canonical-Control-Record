@@ -28,7 +28,7 @@ function buildNav(shows) {
       ],
     },
     {
-      zone: 'CREATE SHOW',
+      zone: 'PRODUCE',
       items: [
         ...(showId ? [
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=overview` },
@@ -41,7 +41,7 @@ function buildNav(shows) {
       items: [
         { icon: '✍️', label: 'Stories', route: '/stories' },
         { icon: '👥', label: 'Characters', route: '/character-registry?view=world' },
-        { icon: '🔗', label: 'Relationships', route: '/world-studio?tab=relationships' },
+        { icon: '🔗', label: 'Relationships', route: '/relationships' },
       ],
     },
     {
@@ -52,7 +52,7 @@ function buildNav(shows) {
       ],
     },
     {
-      zone: 'MANAGE',
+      zone: 'SYSTEM',
       items: [
         { icon: '💵', label: 'CFO Agent', route: '/cfo',
           children: [
