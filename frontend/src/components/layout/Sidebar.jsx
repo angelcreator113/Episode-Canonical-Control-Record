@@ -65,7 +65,6 @@ function buildNav(shows) {
         { icon: '🔍', label: 'Search', route: '/search' },
         { icon: '🛡️', label: 'Admin', route: '/admin',
           children: [
-            { icon: '📋', label: 'Audit Log', route: '/audit-log' },
             { icon: '🩺', label: 'Diagnostics', route: '/diagnostics' },
           ],
         },
@@ -143,7 +142,7 @@ function Sidebar({ isOpen, onClose }) {
 
   // Auto-expand Admin sub-nav
   useEffect(() => {
-    if (['/admin', '/audit-log', '/diagnostics'].some(p => location.pathname.startsWith(p))) {
+    if (['/admin', '/diagnostics'].some(p => location.pathname.startsWith(p))) {
       setAdminOpen(true);
     }
   }, [location.pathname]);
