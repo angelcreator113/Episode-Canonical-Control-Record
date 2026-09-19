@@ -56,6 +56,7 @@ const CHECKLIST_SECTIONS = [
     id: 'overlays',
     icon: '📱',
     label: "Lala's Phone",
+    unavailableReason: 'Phone missions not deployed yet (phone_missions absent from canon)',
     items: [
       { id: 'overlays_generated', label: 'Phone screens generated',   required: false },
     ],
@@ -80,7 +81,37 @@ const CHECKLIST_SECTIONS = [
   },
 ];
 
-function CheckItem({ item, checked, loading, onAction, actionLabel }) {
+// The endpoint census records phone_missions as absent from canon:
+// docs/audit/Checklist_Endpoint_Census_2026-09-18.md.
+export function computeSectionState(section, checks) {
+  if (section.unavailableReason) {
+    return { state: 'unavailable', why: section.unavailableReason };
+  }
+
+  const requiredItems = section.items.filter(item => item.required);
+  const checkedItems = section.items.filter(item => checks[item.id]);
+  const checkedRequired = requiredItems.filter(item => checks[item.id]);
+
+  if (requiredItems.length > 0 && checkedRequired.length === requiredItems.length) {
+    return { state: 'complete', why: 'All required items done' };
+  }
+  if (checkedItems.length > 0) {
+    return {
+      state: 'in_progress',
+      why: `${checkedRequired.length} of ${requiredItems.length} required items done`,
+    };
+  }
+  return { state: 'needs_setup', why: 'Nothing set up yet' };
+}
+
+const STATE_STYLES = {
+  complete: { label: 'Complete', color: '#16a34a', background: '#dcfce7' },
+  in_progress: { label: 'In progress', color: '#a16207', background: '#fef3c7' },
+  needs_setup: { label: 'Needs setup', color: '#64748b', background: '#f1f5f9' },
+  unavailable: { label: 'System unavailable', color: '#94a3b8', background: '#f8fafc' },
+};
+
+function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
@@ -109,10 +140,11 @@ function CheckItem({ item, checked, loading, onAction, actionLabel }) {
         )}
       </span>
       {!checked && onAction && (
-        <button onClick={onAction} style={{
+        <button onClick={onAction} disabled={unavailable} style={{
           padding: '2px 8px', borderRadius: 4, border: 'none',
-          background: '#B8962E', color: '#fff', fontSize: 9,
-          fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+          background: unavailable ? '#e2e8f0' : '#B8962E',
+          color: unavailable ? '#94a3b8' : '#fff', fontSize: 9,
+          fontWeight: 600, cursor: unavailable ? 'not-allowed' : 'pointer', flexShrink: 0,
         }}>{actionLabel || 'Fix'}</button>
       )}
     </div>
@@ -317,6 +349,11 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       </div>
 
       {CHECKLIST_SECTIONS.map(section => (
+        (() => {
+          const sectionStatus = computeSectionState(section, checks);
+          const stateStyle = STATE_STYLES[sectionStatus.state];
+
+          return (
         <div key={section.id} style={{
           background: '#fafaf7', border: '1px solid #f0ede6',
           borderRadius: 10, padding: '12px 14px', marginBottom: 8,
@@ -326,12 +363,23 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
             color: '#64748b', display: 'flex', alignItems: 'center', gap: 6,
           }}>
             {section.icon} {section.label}
+            <span style={{
+              marginLeft: 'auto', padding: '2px 7px', borderRadius: 999,
+              color: stateStyle.color, background: stateStyle.background,
+              fontSize: 10, fontWeight: 600,
+            }}>
+              {stateStyle.label}
+            </span>
           </h4>
+          <div style={{ marginBottom: 8, fontSize: 12, color: '#94a3b8' }}>{sectionStatus.why}</div>
           {section.items.map(item => (
             <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading}
-              onAction={actions[item.id]?.action} actionLabel={actions[item.id]?.label} />
+              onAction={actions[item.id]?.action} actionLabel={actions[item.id]?.label}
+              unavailable={sectionStatus.state === 'unavailable'} />
           ))}
         </div>
+          );
+        })()
       ))}
 
       <div style={{ marginTop: 16 }}>
