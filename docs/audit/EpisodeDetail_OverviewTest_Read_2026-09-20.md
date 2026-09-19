@@ -1,3 +1,88 @@
+| **CORRECTION BANNER — ADDED 2026-09-19, Task #1553. READ NEWEST-FIRST.** *This note's §10 states two things about its own tail contribution that are **FALSE**. Both are corrected below. **No other part of this note is affected**: the STALE TEST verdict, the order-dependence measurements and every §1–§9 finding stand as filed.* |
+| --- |
+
+## Correction banner (added 2026-09-19, #1553)
+
+**Additive. Nothing in the original body below is edited** — register
+immutability (CLAUDE.md; `/audit-file` rule 2). This banner is **prepended, not
+appended**, because the register's rule is newest-first: a correction placed
+after 793 lines is one a successor reads only after acting on the false claim.
+
+### The two false claims
+
+**FALSE CLAIM 1 — §10: "This document's own contribution to the tails: ZERO."**
+It is not zero, and never was. §10's own sentence names all three tokens in the
+course of claiming the document contains none of them. **That sentence is an
+occurrence of each token it denies.** The claim falsifies itself on its face.
+
+**FALSE CLAIM 2 — §10: "A successor re-deriving after this lands should read
+178 / 78 / 76 unchanged."** **This is the dangerous one.** A successor following
+it re-derives, gets different numbers, and has no way to tell whether the drift
+is theirs or this note's. **It is this note's.**
+
+### Instruments and raw output
+
+Measured at `origin/main` `071a740ae`, with this banner in place, after its text
+was final. **Every number below is pasted from the command above it; none is
+asserted.**
+
+```
+$ grep -ro 'FD-70' docs/audit/ | wc -l
+184
+$ grep -r 'XK-4' docs/audit/ | wc -l
+84
+$ grep -r 'PE #69' docs/audit/ | wc -l
+82
+$ grep -o 'FD-70' docs/audit/EpisodeDetail_OverviewTest_Read_2026-09-20.md | wc -l
+4
+$ grep -c 'XK-4' docs/audit/EpisodeDetail_OverviewTest_Read_2026-09-20.md
+4
+$ grep -c 'PE #69' docs/audit/EpisodeDetail_OverviewTest_Read_2026-09-20.md
+4
+```
+
+**Note on units, carried because it is still live.** The first instrument counts
+occurrences (`grep -o`); the second and third count matching lines
+(`grep -r | wc -l`). They are not the same unit.
+
+### The accounting
+
+| Source | each token |
+| --- | --- |
+| The original body, as filed under #1549 | 2 |
+| This correction banner | 2 |
+| **This file, total** | **4** |
+
+**A successor re-deriving after this banner lands should read 184 / 84 / 82 —
+not 178 / 78 / 76.** That supersedes §10's prediction.
+
+### This banner is self-referential too, and says so
+
+**It increments the counts it reports.** Its two occurrences of each token sit
+in the two instruments above. The file's contribution therefore rises from 2 of
+each to 4 of each **because this correction exists**. That is measured after the text was final, not predicted
+before it — which is the whole difference between this banner and the claim it
+corrects.
+
+### The worked example
+
+`docs/audit/CharacterStudio_Feasibility_2026-09-19.md`, section "Tails,
+re-derived at the verification HEAD", is the correct handling of this same trap:
+the count is taken after the text is final, the document's own contribution is
+measured rather than asserted, and the recursion is named on the face. **§10
+here did the opposite** — it asserted a contribution instead of measuring one,
+and was falsified by the very sentence making the assertion.
+
+### What this banner does not do
+
+**Changes no conclusion.** The verdict (STALE TEST, not a regression), the
+order-dependence evidence at §5, the mechanism at §7 and its INFERRED standing,
+and the §8 boundary statement all stand exactly as filed. **Mints nothing.
+Rules nothing. Edits no existing line.** No host, AWS, database or Cognito
+contact. **Prod FROZEN.**
+
+---
+
 | **PRIME STUDIOS** — **EPISODEDETAIL OVERVIEW-TEST READ** *Why `EpisodeDetail.test.jsx`'s "explicit overview tab still shows the Overview body" fails. Verdict: **STALE/DEFECTIVE TEST**, not a regression in the component's `?tab=overview` path. The failure is order-dependent: the same test passes 5/5 when it runs first and fails 5/5 when any prior `EpisodeDetail` render precedes it.* |
 | --- |
 
