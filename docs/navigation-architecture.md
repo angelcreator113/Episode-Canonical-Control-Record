@@ -50,6 +50,17 @@ The census section 4.4 routes whose immediate redirect target is `/`, and which 
 - `*` (authenticated)
 - `*` (unauthenticated)
 
+### Disposition pending
+
+The following census section 4.4 `/`-only routes remain undecided here. Their alias-versus-retire disposition is to be ruled in each route's cleanup PR, when its canonical successor (if any) is visible:
+
+- `/universe/knowledge`
+- `/episodes`
+- `/storyteller`
+- `/character-generator`
+- `/social-import`
+- `/world`
+
 Other measured redirects with meaningful successors remain aliases unless a later ruling changes them. This ruling does not delete routes.
 
 ## Stories hub
