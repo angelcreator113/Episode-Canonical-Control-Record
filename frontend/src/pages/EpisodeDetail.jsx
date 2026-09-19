@@ -18,7 +18,7 @@ const EpisodePhoneMissionsTab = lazy(() => import('../components/Episodes/Episod
 const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
 const EpisodeDistributionTab = lazy(() => import('../components/Episodes/EpisodeDistributionTab'));
 const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobeGameplay'));
-const EpisodeTodoList = lazy(() => import('../components/Episodes/EpisodeTodoList'));
+const EpisodeProductionChecklist = lazy(() => import('../components/Episodes/EpisodeProductionChecklist'));
 const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenesTab'));
 const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
@@ -85,7 +85,7 @@ const EpisodeDetail = () => {
       { key: 'scenes', label: 'Scenes' },
       { key: 'wardrobe', label: 'Wardrobe' },
       { key: 'phone', label: 'Phone' },
-      { key: 'checklist', label: 'Checklist' },
+      { key: 'checklist', label: 'Production Checklist' },
     ]},
     { key: 'results', icon: '👑', label: 'Results', subs: [
       { key: 'evaluation', label: 'Evaluation' },
@@ -175,7 +175,9 @@ const EpisodeDetail = () => {
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab) {
-      setActiveTabState(tab);
+      const [main, sub] = resolveEpTab(tab);
+      setActiveTabState(main);
+      if (sub) setEpSubTab(sub);
     }
   }, [searchParams]);
 
@@ -830,10 +832,9 @@ const EpisodeDetail = () => {
 
         {/* Checklist Tab */}
         {tabKey === 'production.checklist' && (
-          <EpisodeTodoList
-            episodeId={episode.id}
+          <EpisodeProductionChecklist
+            episode={episode}
             showId={episode?.show_id || episode?.showId}
-            onAllRequiredComplete={() => console.log('Episode ready!')}
           />
         )}
 

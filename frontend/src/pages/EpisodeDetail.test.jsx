@@ -20,6 +20,60 @@
  */
 
 import { vi, describe, beforeEach, test, expect } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ isAuthenticated: true, loading: false }),
+}));
+
+vi.mock('../components/ToastContainer', () => ({
+  useToast: () => ({ showError: vi.fn() }),
+}));
+
+vi.mock('../services/episodeService', () => ({
+  default: {
+    getEpisode: vi.fn().mockResolvedValue({
+      id: 'ep-1',
+      title: 'Episode One',
+      show_id: 'show-1',
+      show: { id: 'show-1' },
+    }),
+    updateEpisode: vi.fn(),
+  },
+}));
+
+vi.mock('../hooks/usePhonePlayback', () => ({
+  default: () => ({}),
+}));
+
+vi.mock('../components/Episodes/EpisodeOverviewTab', () => ({
+  default: () => null,
+}));
+
+vi.mock('../components/Episodes/NextEventSuggestionsOverlay', () => ({
+  default: () => null,
+}));
+
+vi.mock('../components/SceneLibraryPicker', () => ({
+  default: () => null,
+}));
+
+vi.mock('../components/Episodes/EpisodeProductionChecklist', () => ({
+  default: () => <div data-testid="episode-checklist">Production checklist body</div>,
+}));
+
+vi.mock('../components/Episodes/EpisodeTodoList', () => ({
+  default: () => <div data-testid="episode-todo-overlays">Episode to-do overlays</div>,
+}));
+
+vi.mock('../components/Episodes/EpisodeAssetsTab', () => ({ default: () => null }));
+vi.mock('../components/Episodes/EpisodePhoneMissionsTab', () => ({ default: () => null }));
+vi.mock('../components/Episodes/EpisodeScriptTab', () => ({ default: () => null }));
+vi.mock('../components/Episodes/EpisodeDistributionTab', () => ({ default: () => null }));
+vi.mock('../components/EpisodeWardrobeGameplay', () => ({ default: () => null }));
+vi.mock('../components/Episodes/EpisodeScenesTab', () => ({ default: () => null }));
+vi.mock('../components/PhonePreviewMode', () => ({ default: () => null }));
 
 vi.mock('../services/api', () => ({
   default: {
@@ -41,10 +95,26 @@ import {
   reorderEpisodeLibrarySceneApi,
   removeEpisodeLibrarySceneApi,
 } from './EpisodeDetail';
+import EpisodeDetail from './EpisodeDetail';
+
+const renderEpisodeDetail = (entry = '/episodes/ep-1') => render(
+  <MemoryRouter initialEntries={[entry]}>
+    <Routes>
+      <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
+    </Routes>
+  </MemoryRouter>,
+);
 
 describe('EpisodeDetail — Track 6 CP14 module-scope helpers', () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
+  });
+
+  test('?tab=checklist renders the production checklist', async () => {
+    renderEpisodeDetail('/episodes/ep-1?tab=checklist');
+
+    await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
+    expect(screen.queryByTestId('episode-todo-overlays')).toBeNull();
   });
 
   // ── Loaders ─────────────────────────────────────────────────────────────
