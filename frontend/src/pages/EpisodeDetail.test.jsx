@@ -48,7 +48,7 @@ vi.mock('../hooks/usePhonePlayback', () => ({
 }));
 
 vi.mock('../components/Episodes/EpisodeOverviewTab', () => ({
-  default: () => null,
+  default: () => <div data-testid="episode-overview">Overview body</div>,
 }));
 
 vi.mock('../components/Episodes/NextEventSuggestionsOverlay', () => ({
@@ -115,6 +115,20 @@ describe('EpisodeDetail — Track 6 CP14 module-scope helpers', () => {
 
     await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
     expect(screen.queryByTestId('episode-todo-overlays')).toBeNull();
+  });
+
+  test('rendering with no tab shows the checklist body', async () => {
+    renderEpisodeDetail();
+
+    await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
+    expect(screen.queryByTestId('episode-overview')).toBeNull();
+  });
+
+  test('explicit overview tab still shows the Overview body', async () => {
+    renderEpisodeDetail('/episodes/ep-1?tab=overview');
+
+    await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+    expect(screen.queryByTestId('episode-checklist')).toBeNull();
   });
 
   // ── Loaders ─────────────────────────────────────────────────────────────

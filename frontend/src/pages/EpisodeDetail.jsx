@@ -61,7 +61,7 @@ const EpisodeDetail = () => {
   const [episode, setEpisode] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTabState] = useState(searchParams.get('tab') || 'overview');
+  const [activeTab, setActiveTabState] = useState(searchParams.get('tab') || 'checklist');
   const [epSubTab, setEpSubTab] = useState(null);
 
   const [sceneView, setSceneView] = useState('composer');
@@ -129,7 +129,7 @@ const EpisodeDetail = () => {
 
   // Resolve initial tab on mount
   useEffect(() => {
-    const initial = searchParams.get('tab') || 'overview';
+    const initial = searchParams.get('tab') || 'checklist';
     const [main, sub] = resolveEpTab(initial);
     if (main !== initial) {
       setActiveTabState(main);
