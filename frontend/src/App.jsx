@@ -328,21 +328,20 @@ function AppContent() {
           <Route path="/universe/social-import" element={<UniverseSocialImportPage />} />
           <Route path="/universe/series" element={<SeriesPage />} />
           <Route path="/universe/production" element={<UniverseProductionPage />} />
-          <Route path="/universe/wardrobe" element={<Navigate to="/" replace />} />
           <Route path="/universe/assets" element={<Navigate to="/assets" replace />} />
           <Route path="/universe/world-state" element={<UniverseWorldStatePage />} />
           <Route path="/universe/tensions" element={<UniverseTensionsPage />} />
           <Route path="/universe/story-dashboard" element={<StoryDashboardPage />} />
           <Route path="/show-bible" element={<ShowBiblePage />} />
-          <Route path="/universe/knowledge" element={<Navigate to="/show-bible" replace />} />
+          <Route path="/universe/knowledge" element={<Navigate to="/show-bible?tab=knowledge" replace />} />
           <Route path="/intelligence/franchise-brain" element={<Navigate to="/show-bible?tab=decisions" replace />} />
           <Route path="/intelligence/show-brain" element={<Navigate to="/show-bible?tab=knowledge" replace />} />
           <Route path="/universe/writing-rhythm" element={<WritingRhythmPage />} />
 
           {/* ===== PRE-PRODUCTION ROUTES ===== */}
           
-          {/* Episodes — listing redirects to Universe Production page */}
-          <Route path="/episodes" element={<Navigate to="/universe/production" replace />} />
+          {/* Episodes — listing redirects to Shows */}
+          <Route path="/episodes" element={<Navigate to="/shows" replace />} />
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<QuickEpisodeCreator />} />
           <Route path="/episodes/:id/evaluate" element={<EvaluateEpisode />} />
@@ -388,13 +387,7 @@ function AppContent() {
           {/* ===== PRODUCTION ROUTES ===== */}
           
           {/* Wardrobe */}
-          <Route path="/wardrobe" element={<Navigate to="/" replace />} />
-          <Route path="/wardrobe/analytics" element={<Navigate to="/" replace />} />
-          <Route path="/wardrobe/outfits" element={<Navigate to="/" replace />} />
           <Route path="/wardrobe/calendar" element={<OutfitCalendar />} />
-          <Route path="/wardrobe-library" element={<Navigate to="/" replace />} />
-          <Route path="/wardrobe-library/upload" element={<Navigate to="/" replace />} />
-          <Route path="/wardrobe-library/:id" element={<Navigate to="/" replace />} />
           
           {/* Thumbnail Composer / Template Studio */}
           <Route path="/episodes/:episodeId/composer" element={<TemplateStudio />} />
@@ -434,7 +427,6 @@ function AppContent() {
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />
           <Route path="/character/:id" element={<CharacterProfile />} />
-          <Route path="/character-generator" element={<Navigate to="/world-studio" replace />} />
           <Route path="/setup" element={<SetupWizard />} />
           
           {/* PNOS Character Therapy — Psychological Narrative Engine */}
@@ -482,7 +474,7 @@ function AppContent() {
           <Route path="/culture-events" element={<CultureEvents />} />
 
           {/* Show Brain — Master Intelligence Document: identity, world rules, stats, economy, beats, 5 brains, canon */}
-          <Route path="/show-brain" element={<Navigate to="/intelligence/show-brain" replace />} />
+          <Route path="/show-brain" element={<Navigate to="/show-bible?tab=knowledge" replace />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
@@ -524,8 +516,8 @@ function AppContent() {
           {/* PNOS Social Import Pipeline — redirects to Universe page */}
           <Route path="/social-import" element={<Navigate to="/universe/social-import" replace />} />
 
-          {/* Franchise Brain — redirects to Universe page */}
-          <Route path="/franchise-brain" element={<Navigate to="/intelligence/franchise-brain" replace />} />
+          {/* Franchise Brain — redirects to Show Bible decisions */}
+          <Route path="/franchise-brain" element={<Navigate to="/show-bible?tab=decisions" replace />} />
           
           {/* PNOS Novel Assembler */}
           <Route path="/assembler" element={<NovelAssembler />} />
@@ -559,8 +551,8 @@ function AppContent() {
           {/* Recycle Bin */}
           <Route path="/recycle-bin" element={<RecycleBin />} />
 
-          {/* World View — redirect to merged Characters page */}
-          <Route path="/world" element={<Navigate to="/character-registry?view=world" replace />} />
+          {/* World View — redirects to World Dashboard */}
+          <Route path="/world" element={<Navigate to="/world-dashboard" replace />} />
 
           {/* If authenticated user tries to access login, redirect to home */}
           <Route path="/login" element={<Navigate to="/" replace />} />
