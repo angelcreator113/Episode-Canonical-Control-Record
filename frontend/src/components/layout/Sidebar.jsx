@@ -39,7 +39,13 @@ function buildNav(shows) {
     {
       zone: 'WRITE',
       items: [
-        { icon: '✍️', label: 'Stories', route: '/stories' },
+        { icon: '✍️', label: 'Stories', route: '/stories',
+          children: [
+            { icon: '🧱', label: 'Structure', route: '/story-engine' },
+            { icon: '🧵', label: 'Threads', route: '/story-threads' },
+            { icon: '📅', label: 'Calendar', route: '/story-calendar' },
+          ],
+        },
         { icon: '👥', label: 'Characters', route: '/character-registry?view=world' },
         { icon: '🔗', label: 'Relationships', route: '/relationships' },
       ],
@@ -126,7 +132,7 @@ function Sidebar({ isOpen, onClose }) {
     }
   }, [location.pathname]);
 
-  // Auto-expand Short Stories sub-nav
+  // Auto-expand Stories sub-nav
   useEffect(() => {
     if (['/story-engine', '/scene-proposer', '/assembler', '/continuity', '/narrative-control'].some(p => location.pathname.startsWith(p))) {
       setStoriesOpen(true);
@@ -279,20 +285,19 @@ function Sidebar({ isOpen, onClose }) {
                 // ── Expandable item with flat children ──
                 if (item.children) {
                   const isWorld = item.route === '/world-studio';
-                  const isStories = item.route === '/story-engine';
+                  const isStories = item.route === '/stories';
                   const isCfo = item.route === '/cfo';
                   const isAdmin = item.route === '/admin';
                   const groupOpen = isWorld ? worldOpen : isStories ? storiesOpen : isCfo ? cfoOpen : isAdmin ? adminOpen : false;
                   const setGroupOpen = isWorld ? setWorldOpen : isStories ? setStoriesOpen : isCfo ? setCfoOpen : isAdmin ? setAdminOpen : () => {};
                   const childRoutes = item.children.map(c => c.route);
                   const groupActive = isActive(item.route) || childRoutes.some(r => isActive(r));
-                  const toggleOnly = isStories; // Short Stories: toggle only, no navigate
                   return (
                     <div key={item.route} className="ps-item-group">
                       <div
                         className={`ps-nav-item ${groupActive ? 'ps-nav-item-active' : ''}`}
                         onClick={() => {
-                          if (!toggleOnly) go(item.route);
+                          go(item.route);
                           setGroupOpen(o => !o);
                         }}
                         title={collapsed ? item.label : undefined}
