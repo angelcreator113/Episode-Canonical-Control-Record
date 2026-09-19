@@ -27,8 +27,18 @@ vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({ isAuthenticated: true, loading: false }),
 }));
 
+// The toast object must be referentially stable across renders. EpisodeDetail's
+// `fetchEpisode` useCallback lists `toast` in its deps, and the episode-loading
+// effect lists `fetchEpisode` in turn — so a mock that returns a fresh object per
+// call makes that effect re-fire on every render and re-enter `setLoading(true)`
+// forever, leaving the component stuck on "Loading episode...". `vi.hoisted` is
+// what lets the (hoisted) `vi.mock` factory close over this one instance.
+const { mockToast } = vi.hoisted(() => ({
+  mockToast: { showError: vi.fn(), showSuccess: vi.fn() },
+}));
+
 vi.mock('../components/ToastContainer', () => ({
-  useToast: () => ({ showError: vi.fn() }),
+  useToast: () => mockToast,
 }));
 
 vi.mock('../services/episodeService', () => ({
