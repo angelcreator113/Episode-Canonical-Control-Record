@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import EpisodeTodoList from './EpisodeTodoList';
 
 /**
  * EpisodeAssetsTab — Production Readiness Checklist
@@ -240,6 +241,16 @@ function EpisodeAssetsTab({ episode, show }) {
           );
         })}
       </div>
+
+      <section style={{ marginTop: 24 }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
+          Episode To-Do Overlays
+        </h2>
+        <p style={{ margin: '0 0 12px', fontSize: 12, color: '#94a3b8' }}>
+          Show/game overlays the audience sees during the episode — not the production checklist.
+        </p>
+        <EpisodeTodoList episodeId={episode.id} showId={show.id} />
+      </section>
     </div>
   );
 }
