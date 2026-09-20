@@ -22,6 +22,7 @@ const {
 const {
   computeSecretHash,
   initiatePasswordAuth,
+  refreshWithCognito,
 } = require('../../../src/services/cognitoPasswordAuthService');
 
 const buildIdToken = (claims) => {
@@ -202,5 +203,71 @@ describe('cognitoPasswordAuthService', () => {
       const sentParams = InitiateAuthCommand.mock.calls[0][0].AuthParameters;
       expect(sentParams).not.toHaveProperty('SECRET_HASH');
     });
+  });
+
+  describe('refreshWithCognito — Task #1563 (F-AUTH-1 v2.77 §8(a))', () => {
+    test('sends REFRESH_TOKEN_AUTH with no SECRET_HASH when no client secret is configured, and returns only the three pinned fields', async () => {
+      delete process.env.COGNITO_CLIENT_SECRET;
+      mockSend.mockResolvedValue({
+        AuthenticationResult: {
+          AccessToken: 'new-access-token',
+          IdToken: buildIdToken({ sub: 's', email: 'e@example.com', name: 'N' }),
+          RefreshToken: 'should-not-be-returned',
+          ExpiresIn: 3600,
+          TokenType: 'Bearer',
+        },
+      });
+
+      const result = await refreshWithCognito('a-cognito-refresh-token');
+
+      expect(InitiateAuthCommand).toHaveBeenCalledWith({
+        AuthFlow: 'REFRESH_TOKEN_AUTH',
+        ClientId: '1example23456clientid789',
+        AuthParameters: { REFRESH_TOKEN: 'a-cognito-refresh-token' },
+      });
+      const sentParams = InitiateAuthCommand.mock.calls[0][0].AuthParameters;
+      expect(sentParams).not.toHaveProperty('SECRET_HASH');
+      expect(mockSend).toHaveBeenCalledTimes(1);
+
+      expect(result).toEqual({
+        accessToken: 'new-access-token',
+        expiresIn: 3600,
+        tokenType: 'Bearer',
+      });
+      expect(Object.keys(result).sort()).toEqual(['accessToken', 'expiresIn', 'tokenType'].sort());
+      expect(result).not.toHaveProperty('idToken');
+      expect(result).not.toHaveProperty('refreshToken');
+    });
+
+    test('fails closed with AUTH_CONFIG_MISSING when a client secret IS configured, without calling the SDK or guessing a username', async () => {
+      // COGNITO_CLIENT_SECRET is set by the top-level beforeEach.
+      await expect(refreshWithCognito('a-cognito-refresh-token')).rejects.toMatchObject({
+        code: 'AUTH_CONFIG_MISSING',
+      });
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    test('throws AUTH_CONFIG_MISSING when Cognito env vars are absent, without calling the SDK', async () => {
+      delete process.env.COGNITO_CLIENT_ID;
+
+      await expect(refreshWithCognito('a-cognito-refresh-token')).rejects.toMatchObject({
+        code: 'AUTH_CONFIG_MISSING',
+      });
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    test.each([['NotAuthorizedException'], ['TooManyRequestsException']])(
+      'propagates %s from the SDK unchanged by name',
+      async (exceptionName) => {
+        delete process.env.COGNITO_CLIENT_SECRET;
+        const sdkError = new Error('Cognito says no');
+        sdkError.name = exceptionName;
+        mockSend.mockRejectedValue(sdkError);
+
+        await expect(refreshWithCognito('bad-refresh-token')).rejects.toMatchObject({
+          name: exceptionName,
+        });
+      }
+    );
   });
 });

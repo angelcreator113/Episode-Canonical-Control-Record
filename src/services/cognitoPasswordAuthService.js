@@ -97,4 +97,43 @@ const initiatePasswordAuth = async (email, password) => {
   };
 };
 
-module.exports = { initiatePasswordAuth, computeSecretHash };
+/**
+ * Exchange a Cognito refresh token for a new access token via InitiateAuth
+ * (AuthFlow: REFRESH_TOKEN_AUTH). Per F-AUTH-1_Fix_Plan_v2.77.md §7/§8(a):
+ * non-rotation contract only — returns exactly { accessToken, expiresIn,
+ * tokenType }, never IdToken or RefreshToken.
+ *
+ * SECRET_HASH for a refresh exchange is keyed on the token's own subject,
+ * which this endpoint never receives. Per PR #1472's rule, a secret-less
+ * client sends none; a client WITH a secret configured fails closed rather
+ * than guess a username.
+ */
+const refreshWithCognito = async (refreshToken) => {
+  const { clientId, clientSecret } = getCognitoEnv();
+
+  if (clientSecret) {
+    console.log(
+      '[cognitoPasswordAuthService] client secret configured; refresh SECRET_HASH needs the user\'s sub, which this endpoint does not receive — failing closed'
+    );
+    const err = new Error('Cognito refresh requires a per-user SECRET_HASH, which this endpoint cannot compute');
+    err.code = 'AUTH_CONFIG_MISSING';
+    throw err;
+  }
+
+  const command = new InitiateAuthCommand({
+    AuthFlow: 'REFRESH_TOKEN_AUTH',
+    ClientId: clientId,
+    AuthParameters: { REFRESH_TOKEN: refreshToken },
+  });
+
+  const response = await getClient().send(command);
+  const { AccessToken, ExpiresIn, TokenType } = response.AuthenticationResult;
+
+  return {
+    accessToken: AccessToken,
+    expiresIn: ExpiresIn,
+    tokenType: TokenType,
+  };
+};
+
+module.exports = { initiatePasswordAuth, computeSecretHash, refreshWithCognito };
