@@ -294,10 +294,12 @@ persistence were the subject of a separate, already-shipped task (issue
 **Producer Mode** (`frontend/src/pages/WorldAdmin.jsx`, self-described in
 its own header comment as "Producer Mode Dashboard," `:1-16`) owns the
 *lifecycle* view: where every event and episode is, what's ready, what's
-next. Its seven tabs include "Events Library — Reusable event catalog
-(create, edit, inject)" and "Episode Ledger — All episodes with
-tier/score/deltas" (`:8-9`) — a catalog and a ledger, not a single
-episode's workspace.
+next. Its header comment lists seven tabs including "Events Library —
+Reusable event catalog (create, edit, inject)" and "Episode Ledger — All
+episodes with tier/score/deltas" (`:8-9`) — but that comment is itself
+stale against the actual tab set (`:173-175` names a `feed`-group with
+three sub-tabs the comment doesn't mention at all — see below). Either
+way: a catalog and a ledger, not a single episode's workspace.
 
 **Episode Detail** (`frontend/src/pages/EpisodeDetail.jsx`) owns the work
 for *one* episode. Its tabs (§2, PRODUCE) walk Overview → Script →
@@ -305,6 +307,51 @@ Production (Assets/Scenes/Wardrobe/Phone/Checklist) → Results
 (Evaluation/Story/Distribution) — the same page becomes that episode's
 permanent record as each stage's work lands on it, ending in the
 Evaluation tab once EVALUATE/ACCEPT has run.
+
+### Lala's Feed, Feed Events, and Events Library — three views, one dataset
+
+Producer Mode's `feed` tab has three sub-tabs
+(`frontend/src/pages/WorldAdmin.jsx:173-175`):
+
+```js
+{ key: 'feed-timeline', label: "Lala's Feed" },
+{ key: 'feed-events', label: 'Feed Events' },
+{ key: 'events', label: 'Events Library' },
+```
+
+**Lala's Feed** (`subTab === 'feed-timeline'`, `:1800-1804`) embeds
+`SocialProfileGenerator` — the component's own header comment names it
+plainly: *"SocialProfileGenerator.jsx — The Feed"*
+(`frontend/src/pages/SocialProfileGenerator.jsx:2`). **This is where
+`from-profile` is reachable from**: the component exports
+`createEventFromProfileApi`, which `POST`s
+`/world/:showId/events/from-profile` (`:35-36`) — the same route EVENT
+(§2) describes. It queries `SocialProfile` rows via `GET /api/v1/social-
+profiles` (`fetchProfiles`, `:38`, base path from
+`frontend/src/pages/feed/feedConstants.js:5`), and separately fetches the
+same events list Feed Events/Events Library use
+(`listWorldEventsApi` → `GET /world/:showId/events`, `:33-34`) to
+cross-reference which profiles already have an event.
+
+**Feed Events** and **Events Library** query nothing of their own —
+both read the single `worldEvents` state array Producer Mode fetches once
+via `GET /api/v1/world/:showId/events`
+(`src/routes/worldEvents.js:35`, called from
+`frontend/src/pages/WorldAdmin.jsx:507`) and then filter client-side:
+
+- Feed Events (`:1807-1814`, description at `:1812`: *"Create events from
+  templates or profiles. Complete the details here, then mark ready to
+  move to the Events Library."*) shows exactly
+  `worldEvents.filter(ev => ev.status === 'draft')` (`:1818`).
+- Events Library (`:3048-3053`) explicitly excludes the same set —
+  `if (ev.status === 'draft') return false; // Drafts shown in Feed
+  Events tab` (`:3051`) — then applies its own status/search sub-filters
+  on top.
+
+So the `status` field's `'draft'` value is not just a database default —
+it is the literal switch this UI uses to decide which of two tabs an
+event appears in. See §4 for what else this document found riding on
+`status` beyond the model's own four-value comment.
 
 ---
 
@@ -356,6 +403,30 @@ anywhere in the handler. A creator (or a bug) can `PUT` any string into
 `status`, including `'ready'` on an event missing every one of the four
 EVENT READY checks, or something outside the four-value comment
 entirely.
+
+**"Outside the four-value comment" is not hypothetical — this document
+found two more literal values actually written, and a third checked for
+but never written:**
+
+- `'filmed'` — `episodeCompletionService.js`'s `completeEpisode`
+  (`:122`) overwrites the linked event's `status` a second time, *after*
+  GENERATE EPISODE already set it to `'used'` (§2): `// ── 15. Update
+  event status to 'filmed' ──` / `` `UPDATE world_events SET status =
+  'filmed', ...`` (`:454-458`). So a single event's `status` legitimately
+  moves through at least three values across the pipeline —
+  `draft`/`ready` → `used` → `filmed` — not the four-state model the
+  comment describes.
+- `'declined'` — `financialPressureService.js`'s `recordDeclinedInvite`
+  (`:88`) sets `status: 'declined'` (`:119`) when Lala can't afford an
+  invite's cost.
+- `'scripted'` — checked for but never found written. Producer Mode's
+  Events Library filter treats it as equivalent to `used`/`filmed`
+  (`frontend/src/pages/WorldAdmin.jsx:3052`:
+  `eventStatusFilter === 'used' && (ev.status === 'used' || ev.status
+  === 'scripted' || ev.status === 'filmed')`), but a repo-wide search for
+  `status: 'scripted'` or `status = 'scripted'` in `src/` returns
+  nothing. The UI is prepared for a value this document found no writer
+  of.
 
 ### "Event Ready" (Producer Mode) — computed, not persisted
 
@@ -464,6 +535,14 @@ selection — an unowned, coin-locked item can be written into
 `world_events.outfit_pieces` via this path with no purchase ever
 occurring. Whether that's intentional (an outfit *plan* rather than an
 owned outfit) or a gap is not something this document decides.
+
+**Open question, recorded but not answered here:** "never calls the
+purchase path" is not the same guarantee as "only ever references
+clothes Lala owns." If an event can point at an `outfit_set_id` or
+`outfit_pieces` entry she never bought, the episode has her wearing
+something she can't afford — a canon and economy question (does the
+story treat this as an error, a debt, a narrative beat, or nothing at
+all?), not a code question this document's reads can settle. Left open.
 
 ---
 
