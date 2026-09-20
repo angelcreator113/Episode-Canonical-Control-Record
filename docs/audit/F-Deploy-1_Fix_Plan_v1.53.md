@@ -71,7 +71,7 @@ re-enabling the disabled workflows) are lifted by this ruling. **This
 ruling does not itself amend the hazard document** — the hazard document is
 immutable per the register's carriage rules (never edited in place); an
 additive banner pointing at this revision is named as owed, not performed,
-at §3 below.
+at §5 below.
 
 **Not re-opened by this ruling:** F-Deploy-1 remains CLOSED (v1.50, v1.52).
 Nothing here reopens the keystone, mints an FD/XK/PE, or re-enables `Deploy
@@ -254,6 +254,23 @@ would, after this deploy, be exchanged with Cognito for real. This is a
 repo-content observation; whether it behaves correctly against the live
 pool is F-AUTH-1 v2.77 §8(b)'s live verification, named as owed at §5
 below, not performed here.
+
+### §4(f) Frontend changes — MEASURED
+
+```
+$ git diff --stat 91193483fce433b85ec591a3811d138c7b3228a0..origin/main -- frontend/
+ frontend/src/App.jsx                               | 29 +++----
+ .../src/components/Episodes/EpisodeAssetsTab.jsx   | 11 +++
+ .../Episodes/EpisodeProductionChecklist.jsx        | 58 +++++++++++--
+ .../Episodes/EpisodeProductionChecklist.test.jsx   | 56 +++++++++++++
+ frontend/src/components/layout/Sidebar.jsx         | 24 +++---
+ frontend/src/pages/EpisodeDetail.jsx               | 17 ++--
+ frontend/src/pages/EpisodeDetail.test.jsx          | 94 ++++++++++++++++++++++
+ 7 files changed, 246 insertions(+), 43 deletions(-)
+```
+
+Frontend source changed in this range, so the served frontend must be
+rebuilt as part of the deploy — a procedure fact, not a ruling.
 
 ## §5. Owed items — named, not performed
 
