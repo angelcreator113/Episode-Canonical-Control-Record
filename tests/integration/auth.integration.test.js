@@ -9,8 +9,12 @@ const request = require('supertest');
 // POST /login now calls Cognito's InitiateAuth (Task #1456). Mocked here so
 // this integration file makes no Cognito, AWS, or host contact regardless of
 // whether DATABASE_URL is configured in the environment running it.
+// POST /refresh now exchanges via Cognito's InitiateAuth REFRESH_TOKEN_AUTH
+// (Task #1563, F-AUTH-1 v2.77 §8(a)) instead of TokenService's local HS256
+// refresh. Mocked here for the same reason as initiatePasswordAuth above.
 jest.mock('../../src/services/cognitoPasswordAuthService', () => ({
   initiatePasswordAuth: jest.fn(),
+  refreshWithCognito: jest.fn(),
 }));
 
 const app = require('../../src/app');
@@ -30,6 +34,7 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
   // preceding login test's leftover mock state.
   afterEach(() => {
     cognitoPasswordAuthService.initiatePasswordAuth.mockReset();
+    cognitoPasswordAuthService.refreshWithCognito.mockReset();
   });
 
   // Setup: Create test user tokens before each test
@@ -159,15 +164,44 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
   });
 
   describe('POST /api/v1/auth/refresh', () => {
-    it('should successfully refresh access token', async () => {
+    // Task #1563 (F-AUTH-1 v2.77 §8(a)): /refresh now exchanges via Cognito
+    // REFRESH_TOKEN_AUTH, not TokenService's local HS256 refresh — retired
+    // for user sessions, and /refresh is not made polymorphic on `alg`. A
+    // local HS256 refresh token (minted in the top-level beforeEach) is now
+    // just an arbitrary string handed to Cognito, which rejects it the same
+    // as any other unrecognized refresh token.
+    it('no longer accepts a local HS256 refresh token; rejects with 401 AUTH_REFRESH_FAILED', async () => {
+      const err = new Error('Invalid Refresh Token');
+      err.name = 'NotAuthorizedException';
+      cognitoPasswordAuthService.refreshWithCognito.mockRejectedValue(err);
+
       const res = await request(app).post('/api/v1/auth/refresh').send({
         refreshToken,
       });
 
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty('code', 'AUTH_REFRESH_FAILED');
+      expect(cognitoPasswordAuthService.refreshWithCognito).toHaveBeenCalledWith(refreshToken);
+    });
+
+    it('exchanges a Cognito refresh token for the pinned three-field contract', async () => {
+      cognitoPasswordAuthService.refreshWithCognito.mockResolvedValue({
+        accessToken: 'new-cognito-access-token',
+        expiresIn: 3600,
+        tokenType: 'Bearer',
+      });
+
+      const res = await request(app).post('/api/v1/auth/refresh').send({
+        refreshToken: 'a-cognito-refresh-token-that-is-long-enough-to-pass-validation',
+      });
+
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('success', true);
-      expect(res.body.data).toHaveProperty('accessToken');
-      expect(res.body.data.accessToken).not.toBe(accessToken);
+      expect(res.body.data).toEqual({
+        accessToken: 'new-cognito-access-token',
+        expiresIn: 3600,
+        tokenType: 'Bearer',
+      });
     });
 
     it('should reject refresh with missing token', async () => {
@@ -187,7 +221,10 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
     });
 
     it('should reject refresh with expired token', async () => {
-      // Create an expired token by manually crafting one
+      // A well-formed but expired local JWT is, like any other HS256
+      // refresh token post-#1563, just a string handed to Cognito — which
+      // rejects it. This no longer exercises TokenService's own expiry
+      // check (that remains covered directly in tokenService.test.js).
       const jwt = require('jsonwebtoken');
       const expiredToken = jwt.sign(
         {
@@ -208,6 +245,10 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
           algorithm: 'HS256',
         }
       );
+
+      const err = new Error('Invalid Refresh Token');
+      err.name = 'NotAuthorizedException';
+      cognitoPasswordAuthService.refreshWithCognito.mockRejectedValue(err);
 
       const res = await request(app).post('/api/v1/auth/refresh').send({
         refreshToken: expiredToken,
@@ -362,7 +403,7 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
   });
 
   describe('End-to-End Authentication Flow', () => {
-    it('should complete full auth cycle: token -> use -> refresh -> logout', async () => {
+    it('should complete full auth cycle: token -> use -> refresh (Cognito) -> logout', async () => {
       // 1. Obtain a token. This flow is deliberately independent of how the
       // token was issued — minted directly here rather than through /login,
       // which Task #1456 changed from an unconditional-401 disable to a real
@@ -383,7 +424,6 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
         role: 'USER',
       });
       const token1 = e2eTokens.accessToken;
-      const refresh1 = e2eTokens.refreshToken;
 
       // 2. Use token to access protected endpoint
       const meRes = await request(app)
@@ -393,32 +433,40 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
       expect(meRes.status).toBe(200);
       expect(meRes.body.data.user.email).toBe('e2e@test.dev');
 
-      // 3. Refresh token
+      // 3. Refresh token — Task #1563: /refresh is now a Cognito exchange
+      // (mocked at the service boundary, same as /login above), not
+      // TokenService's local HS256 refresh, so this step no longer reuses
+      // e2eTokens.refreshToken.
+      cognitoPasswordAuthService.refreshWithCognito.mockResolvedValue({
+        accessToken: 'e2e-cognito-access-token',
+        expiresIn: 3600,
+        tokenType: 'Bearer',
+      });
+
       const refreshRes = await request(app)
         .post('/api/v1/auth/refresh')
-        .send({ refreshToken: refresh1 });
+        .send({ refreshToken: 'a-cognito-refresh-token-that-is-long-enough-to-pass-validation' });
 
       expect(refreshRes.status).toBe(200);
-      const { accessToken: token2 } = refreshRes.body.data;
+      expect(refreshRes.body.data).toEqual({
+        accessToken: 'e2e-cognito-access-token',
+        expiresIn: 3600,
+        tokenType: 'Bearer',
+      });
 
-      // 4. Use new token
-      const meRes2 = await request(app)
-        .get('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${token2}`);
-
-      expect(meRes2.status).toBe(200);
-
-      // 5. Logout
+      // 4. Logout — the Cognito-issued access token isn't a local HS256 JWT
+      // this server can verify/revoke, so this step continues with token1,
+      // same as it did for step 2.
       const logoutRes = await request(app)
         .post('/api/v1/auth/logout')
-        .set('Authorization', `Bearer ${token2}`);
+        .set('Authorization', `Bearer ${token1}`);
 
       expect(logoutRes.status).toBe(200);
 
-      // 6. Try to use logged-out token (should fail)
+      // 5. Try to use logged-out token (should fail)
       const failRes = await request(app)
         .get('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${token2}`);
+        .set('Authorization', `Bearer ${token1}`);
 
       expect(failRes.status).toBe(401);
     });

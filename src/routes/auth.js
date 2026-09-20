@@ -77,6 +77,37 @@ const refreshLimiter = rateLimit({
   skip: (_req) => process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test',
 });
 
+// Cognito exception name -> HTTP response for POST /refresh, per
+// F-AUTH-1_Fix_Plan_v2.77.md §8(a) ruling 3's pinned error contract. Never
+// error.message or any provider text — fixed messages only.
+const COGNITO_REFRESH_ERROR_MAP = {
+  NotAuthorizedException: {
+    status: 401,
+    error: 'Unauthorized',
+    code: 'AUTH_REFRESH_FAILED',
+    message: 'Refresh token is invalid, expired, or revoked.',
+  },
+  TooManyRequestsException: {
+    status: 429,
+    error: 'Too Many Requests',
+    code: 'AUTH_REFRESH_RATE_LIMITED',
+    message: 'Too many token refresh attempts. Please try again later.',
+  },
+};
+
+// Same network-infra codes middleware/auth.js's F-Auth-3 classifier keys on
+// (not imported from there — that set isn't exported, and this route's
+// failure surface is InitiateAuth, not JWKS/verifyToken).
+const REFRESH_NETWORK_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+]);
+
 /**
  * POST /api/v1/auth/login
  * Exchanges email/password for Cognito tokens via InitiateAuth
@@ -135,7 +166,13 @@ router.post('/login', optionalAuth, loginLimiter, validateLoginRequest, async (r
 
 /**
  * POST /api/v1/auth/refresh
- * Refresh access token using refresh token
+ * Exchanges a Cognito refresh token for a new access token via InitiateAuth
+ * (AuthFlow: REFRESH_TOKEN_AUTH). Per F-AUTH-1_Fix_Plan_v2.77.md §7/§8(a):
+ * the local HS256 refresh path is retired for user sessions — this route is
+ * not made polymorphic on `alg`, so an HS256 refresh token is passed to
+ * Cognito the same as any other string and rejected on its own terms. This
+ * implements §8(a) only; it does not close the refresh work — §8(b),
+ * Evoni's live verification against the real pool, does.
  */
 router.post('/refresh', optionalAuth, refreshLimiter, validateRefreshRequest, async (req, res) => {
   try {
@@ -149,22 +186,53 @@ router.post('/refresh', optionalAuth, refreshLimiter, validateRefreshRequest, as
       });
     }
 
-    const newTokens = TokenService.refreshAccessToken(refreshToken);
+    const result = await cognitoPasswordAuthService.refreshWithCognito(refreshToken);
 
+    // Contract: exactly these three fields (v2.77 ruling 3) — never idToken,
+    // never refreshToken (non-rotation design; see §7).
     return res.status(200).json({
       success: true,
       message: 'Token refreshed',
       data: {
-        accessToken: newTokens.accessToken,
-        tokenType: newTokens.tokenType,
-        expiresIn: newTokens.expiresIn,
+        accessToken: result.accessToken,
+        expiresIn: result.expiresIn,
+        tokenType: result.tokenType,
       },
     });
   } catch (error) {
-    console.error('Token refresh error:', error);
+    // Never log or return the raw Cognito error object or its message —
+    // only the exception name/code, same discipline as POST /login above.
+    console.error('Token refresh error:', error.name || error.code || 'UnknownError');
+
+    if (error.code === 'AUTH_CONFIG_MISSING') {
+      return res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Authentication is not configured on this server.',
+        code: 'AUTH_CONFIG_MISSING',
+      });
+    }
+
+    const mapped = COGNITO_REFRESH_ERROR_MAP[error.name];
+    if (mapped) {
+      return res.status(mapped.status).json({
+        error: mapped.error,
+        message: mapped.message,
+        code: mapped.code,
+      });
+    }
+
+    const networkCode = error.code || error.cause?.code;
+    if (REFRESH_NETWORK_ERROR_CODES.has(networkCode)) {
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'Authentication service is temporarily unavailable.',
+        code: 'AUTH_SERVICE_UNAVAILABLE',
+      });
+    }
+
     return res.status(401).json({
       error: 'Unauthorized',
-      message: error.message,
+      message: 'Refresh token is invalid, expired, or revoked.',
       code: 'AUTH_REFRESH_FAILED',
     });
   }
