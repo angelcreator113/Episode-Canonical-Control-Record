@@ -93,6 +93,12 @@ const { verifyToken } = require('./auth');
  * so this middleware accepts both HS256 (local) and RS256 (Cognito) tokens.
  */
 const authenticateJWT = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+      return res.status(401).json({
+        error: 'Unauthorized',
 ```
 
 `jwtAuth.js:7` imports `verifyToken` from `src/middleware/auth.js` (not
@@ -138,6 +144,7 @@ $ sed -n '10,13p' src/services/tokenService.js
 class TokenService {
   // Token blacklist for revoked tokens (in production, use Redis)
   static tokenBlacklist = new Set();
+
 ```
 
 `tokenService.js:12` — `tokenBlacklist` is a `Set` held as a `static` class
@@ -206,16 +213,6 @@ $ sed -n '88,106p' src/services/tokenService.js
         throw new Error('Token has been revoked');
       }
 
-      // Verify token type if specified
-      if (type && decoded.type !== type) {
-        throw new Error(`Invalid token type. Expected: ${type}, Got: ${decoded.type}`);
-      }
-
-      // Verify required claims
-      if (!decoded.sub || !decoded.email) {
-        throw new Error('Missing required token claims');
-      )
-    }
 ```
 
 `tokenService.js:91` — `jwt.verify` is called with `algorithms: ['HS256']`
@@ -451,8 +448,28 @@ $ sed -n '167,201p' src/routes/auth.js
 router.post('/refresh', optionalAuth, refreshLimiter, validateRefreshRequest, async (req, res) => {
   try {
     const { refreshToken } = req.body;
-    ...
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Refresh token required',
+        code: 'AUTH_MISSING_REFRESH_TOKEN',
+      });
+    }
+
     const result = await cognitoPasswordAuthService.refreshWithCognito(refreshToken);
+
+    // Contract: exactly these three fields (v2.77 ruling 3) — never idToken,
+    // never refreshToken (non-rotation design; see §7).
+    return res.status(200).json({
+      success: true,
+      message: 'Token refreshed',
+      data: {
+        accessToken: result.accessToken,
+        expiresIn: result.expiresIn,
+        tokenType: result.tokenType,
+      },
+    });
 ```
 
 `auth.js:189` calls `cognitoPasswordAuthService.refreshWithCognito`
