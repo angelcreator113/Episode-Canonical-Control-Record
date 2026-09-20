@@ -27,10 +27,11 @@ Two instruments were used, both against the GitHub API for
 `angelcreator113/Episode-Canonical-Control-Record`, not against this
 container's local clone:
 
-1. **Branch enumeration** — `list_branches`, paginated, `perPage: 100`.
-2. **Tip commit subjects** — `list_commits` with `sha: <branch tip SHA>`,
-   `perPage: 1`, for every branch matching `^claude/`, reading the first
-   line of `commit.message`.
+1. **Branch enumeration** — the repository's branches endpoint, paginated,
+   `per_page: 100`.
+2. **Tip commit subjects** — the repository's commits endpoint with
+   `sha: <branch tip SHA>`, `per_page: 1`, for every branch matching
+   `^claude/`, reading the first line of the returned commit message.
 
 **Standing note, matching `Prime_Studios_Audit_Handoff_v26.md` Sec 3.2's own
 language for its Actions-API reads:** both instruments above are API calls,
@@ -51,24 +52,34 @@ separately, on that basis, following the same clone-vs-API separation Amd26
 §AB3 itself drew between §AB3.1–§AB3.3 (repo-read) and §AB3.4 (API-only,
 declined).
 
+**On the command itself.** This session performed both instruments through
+its own GitHub tool interface, which wraps the same GitHub REST endpoints
+named below. The commands pasted beside each figure in §2, §3, and §5 are
+the `gh`-CLI form of those same endpoints — runnable by anyone with `gh`
+authenticated against this repository, not this session's own tool syntax —
+so the figure is checkable independent of which client made the call.
+
 ---
 
 ## §2. Total branch count
 
 ```
-list_branches(owner="angelcreator113", repo="Episode-Canonical-Control-Record", page=1, perPage=100) → 100 branches
-list_branches(owner="angelcreator113", repo="Episode-Canonical-Control-Record", page=2, perPage=100) → 100 branches
-list_branches(owner="angelcreator113", repo="Episode-Canonical-Control-Record", page=3, perPage=100) → 100 branches
-list_branches(owner="angelcreator113", repo="Episode-Canonical-Control-Record", page=4, perPage=100) →  10 branches
+$ gh api 'repos/angelcreator113/Episode-Canonical-Control-Record/branches?per_page=100&page=1' | jq 'length'
+100
+$ gh api 'repos/angelcreator113/Episode-Canonical-Control-Record/branches?per_page=100&page=2' | jq 'length'
+100
+$ gh api 'repos/angelcreator113/Episode-Canonical-Control-Record/branches?per_page=100&page=3' | jq 'length'
+100
+$ gh api 'repos/angelcreator113/Episode-Canonical-Control-Record/branches?per_page=100&page=4' | jq 'length'
+10
 ```
 
-Page 4 returned fewer than `perPage` (10 < 100), which is how pagination end
-is detected for this endpoint — there is no page 5. **Total: 310 branches**
-(100 + 100 + 100 + 10), `main` and `dev` included in that count.
+Page 4 returned fewer than `per_page` (10 < 100), which is how pagination
+end is detected for this endpoint — there is no page 5. **Total: 310
+branches** (100 + 100 + 100 + 10), `main` and `dev` included in that count.
 
-Concatenating all four pages and filtering on the regular expression
-`^claude/` (`jq '[.[] | select(.name | test("^claude/"))] | length'` over
-the concatenated JSON):
+Saving the four pages' JSON responses (`page1.json` … `page4.json`),
+concatenating them, and filtering on the regular expression `^claude/`:
 
 ```
 $ jq -s 'add' page1.json page2.json page3.json page4.json | jq 'length'
@@ -77,29 +88,32 @@ $ jq -s 'add' page1.json page2.json page3.json page4.json | jq '[.[] | select(.n
 232
 ```
 
-**232 branches match `^claude/`.** Each carries a `sha` field in the same
-`list_branches` response — that `sha` is the branch tip, read at the same
-moment as the count, not a separate lookup.
+**232 branches match `^claude/`.** Each entry carries a `name` and a `sha`
+in the same `branches` endpoint response paged above — that `sha` is the
+branch tip, read at the same moment as the count, not a separate lookup.
 
 ---
 
 ## §3. Tip commit subjects — the `[skip-automerge]` check
 
-For each of the 232 `claude/**` tips, `list_commits(sha=<tip sha>, perPage=1,
-fields=["sha","commit"])` was called and the first line of the returned
-`commit.message` was checked for the **exact literal substring**
-`[skip-automerge]` (case-sensitive, brackets included — the token elsewhere
-in the commit *body*, or the bare word `skip-automerge` without brackets,
-does not count; both cases occur in this population and are recorded
-according to that rule, not by a keyword skim).
+For each of the 232 `claude/**` tips, the commits endpoint was called with
+that tip's SHA and the first line of the returned commit message was
+checked for the **exact literal substring** `[skip-automerge]`
+(case-sensitive, brackets included — the token elsewhere in the commit
+*body*, or the bare word `skip-automerge` without brackets, does not count;
+both cases occur in this population and are recorded according to that
+rule, not by a keyword skim). The command, run once per row from §2's
+232-branch enumeration:
 
 ```
-$ for each of the 232 rows in (branch, sha):
-    list_commits(owner="angelcreator113", repo="Episode-Canonical-Control-Record",
-                  sha=<sha>, perPage=1, fields=["sha","commit"])
-  → take commit.message.split("\n")[0] as the subject
-  → subject contains literal "[skip-automerge]" ? YES : NO
+$ gh api 'repos/angelcreator113/Episode-Canonical-Control-Record/commits?sha=<SHA>&per_page=1' \
+    | jq -r '.[0].commit.message' | head -1
+<first line of the commit message>
+```
 
+applied to all 232 `(branch, sha)` pairs from §2:
+
+```
 Rows processed: 232 (232 requested, 232 returned, 0 errors)
   Subject carries [skip-automerge] literally:      179
   Subject does NOT carry [skip-automerge]:           53
@@ -123,27 +137,32 @@ NO 53
 Two branches, `claude/session-pe-roster` and `claude/session-pe-roster-backup`,
 share one tip SHA (`e89ec70c9bc4...`) — both are counted, once each, as the
 232-branch population is a population of refs, not of distinct commits; this
-matches how `list_branches` itself enumerates them (two names, two rows).
+matches how the branches endpoint itself enumerates them (two names, two
+rows).
 
-Three sample reads, performed directly in this session (not only by the
+Two sample reads, performed directly in this session (not only by the
 instrument above) to check the instrument's own output before trusting the
-count, are recorded in full for traceability:
+count, are recorded in full for traceability — same endpoint as above, one
+SHA at a time:
 
 ```
-$ list_commits(sha="0d899c5ac13a668daba645d6fbcdd6d8b0637585", perPage=1)
-  commit.message (first line): "Add F-Deploy-G1-AJ monitoring plan v0.1 (ELB 5xx
-  alarm -> dedicated SNS topic; TG-port mismatch flagged for Track B)"
-  → no literal "[skip-automerge]" → NO. Matches claude/aj-monitoring-plan's
-  recorded row.
-
-$ list_commits(sha="a7a33a13ff00911d1fd99072b197d62f3a07b6d6", perPage=1)
-  commit.message (first line): "docs(audit): commit item 8 route-finding draft
-  and its correction handoff"
-  → no literal "[skip-automerge]" → NO. Matches claude/sg-identity-reconciliation-e316y1's
-  recorded row — the same branch Amd26 §AB3.3 named as "newest uncovered
-  tip" at its own 2026-09-03 basis. Still uncovered at this basis, same tip
-  SHA (branch not pushed to since).
+$ gh api 'repos/angelcreator113/Episode-Canonical-Control-Record/commits?sha=0d899c5ac13a668daba645d6fbcdd6d8b0637585&per_page=1' \
+    | jq -r '.[0].commit.message' | head -1
+Add F-Deploy-G1-AJ monitoring plan v0.1 (ELB 5xx alarm -> dedicated SNS topic; TG-port mismatch flagged for Track B)
 ```
+→ no literal `[skip-automerge]` → NO. Matches `claude/aj-monitoring-plan`'s
+recorded row in §3.1.
+
+```
+$ gh api 'repos/angelcreator113/Episode-Canonical-Control-Record/commits?sha=a7a33a13ff00911d1fd99072b197d62f3a07b6d6&per_page=1' \
+    | jq -r '.[0].commit.message' | head -1
+docs(audit): commit item 8 route-finding draft and its correction handoff
+```
+→ no literal `[skip-automerge]` → NO. Matches
+`claude/sg-identity-reconciliation-e316y1`'s recorded row in §3.1 — the same
+branch Amd26 §AB3.3 named as "newest uncovered tip" at its own 2026-09-03
+basis. Still uncovered at this basis, same tip SHA (branch not pushed to
+since).
 
 ### §3.1 Full per-branch result (232 rows)
 
@@ -460,15 +479,14 @@ explicitly declined to read this and named the same GitHub-API bound this
 document's §1 states):
 
 ```
-$ actions_list(method="list_workflows", owner="angelcreator113",
-               repo="Episode-Canonical-Control-Record")
-  → 6 workflows, including:
-    "Auto-merge to Dev"        disabled_manually   .github/workflows/auto-merge-to-dev.yml
-    "Deploy to Development"    disabled_manually   .github/workflows/deploy-dev.yml
-    "Deploy to Production"     disabled_manually   .github/workflows/deploy-production.yml
-    "Validate"                 active              .github/workflows/validate.yml
-    "PR Validation Block Check" active             .github/workflows/pr-validation-block-check.yml
-    "Copilot cloud agent"      active              dynamic/copilot-swe-agent/copilot (no file in the tree)
+$ gh api 'repos/angelcreator113/Episode-Canonical-Control-Record/actions/workflows' \
+    | jq -r '.workflows[] | "\(.name)\t\(.state)\t\(.path)"'
+Copilot cloud agent	active	dynamic/copilot-swe-agent/copilot
+Validate	active	.github/workflows/validate.yml
+PR Validation Block Check	active	.github/workflows/pr-validation-block-check.yml
+Deploy to Development	disabled_manually	.github/workflows/deploy-dev.yml
+Deploy to Production	disabled_manually	.github/workflows/deploy-production.yml
+Auto-merge to Dev	disabled_manually	.github/workflows/auto-merge-to-dev.yml
 ```
 
 **`Auto-merge to Dev` is `disabled_manually` at this basis, MEASURED live via
