@@ -548,6 +548,28 @@
   box-shadow: 0 4px 8px rgba(0,0,0,0.08);
 }
 
+.ed-btn-whats-next{
+  padding: 5px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #64748b;
+  font-size: var(--text-sm, 12px);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.ed-btn-whats-next:hover{
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #B8962E;
+}
+
 .ed-dropdown{
   position: absolute;
   top: calc(100% + 0.5rem);
@@ -2975,6 +2997,30 @@
     height: 30px;
     border-radius: 6px;
     font-size: var(--text-base);
+  }
+
+  /* Icon-only below tablet width, same treatment as ed-btn-play-phone
+     below — stays a visible, persistent button rather than being folded
+     into the "More actions" menu (most sessions on this page are on a
+     phone, so this is the primary case, not the edge case). */
+  .ed-btn-whats-next {
+    padding: 5px 8px;
+  }
+
+  .ed-btn-whats-next-label {
+    display: none;
+  }
+
+  /* "Play on Phone" was the single largest header-action button (137px,
+     unshrinkable) and the actual cause of the overflow that icon-only
+     alone didn't fix — trimmed to match, freeing the room the new button
+     needs instead of demoting it to a menu. */
+  .ed-btn-play-phone {
+    padding: 5px 8px !important;
+  }
+
+  .ed-btn-play-phone-label {
+    display: none;
   }
 
   .ed-btn-thumbnail {

@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { Compass } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
 // EpisodeOverviewTab is the default tab and the most-viewed surface — keep
 // it eager so the first paint doesn't flash a Suspense fallback. Same for
 // the always-mounted SceneLibraryPicker modal and the lightweight
-// NextEventSuggestionsOverlay (mounts conditionally on evaluated episodes).
+// NextEventSuggestionsOverlay (mounts only while showNextSuggestions is
+// true — the wrap transition or the header button, never on page load).
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
 import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggestionsOverlay';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
@@ -229,17 +231,49 @@ const EpisodeDetail = () => {
   }, [episodeId, episode]);
 
   // ── End-of-show suggestions overlay ──────────────────────────────────────
-  // Auto-opens once when an evaluated episode loads. The dismissal is per-
-  // episode (localStorage key includes the id) so closing on Episode 1
-  // doesn't suppress the overlay for Episode 2. Creators can re-open manually
-  // via the "🧭 What's next" button in the header.
+  // Auto-opens only on the WRAP TRANSITION — evaluation_status going to
+  // 'accepted' while this page stays mounted — never on page load or the
+  // initial episode fetch, even for an already-accepted episode.
+  //
+  // There is no "complete"/"wrapped" value in the Episode model's own
+  // `status` string (src/models/Episode.js:41 — free string, default
+  // 'draft'; the only enumerated values in use are draft/published/
+  // archived, per src/services/FilterService.js:47). `evaluation_status`
+  // is a separate field with exactly two literal values in use codebase-
+  // wide (src/routes/evaluation.js:382, src/services/episodeCompletionService.js:440,
+  // src/services/seasonRhythmValidator.js:61/309, src/routes/seasonRhythmRoutes.js:76):
+  // 'computed' — POST .../evaluate scores the episode but does NOT wrap it,
+  // it's a preview the creator can still send through POST .../override
+  // before accepting — and 'accepted', set only once stat deltas are
+  // applied and financials are finalized (episodeCompletionService.js's
+  // completeEpisode, which POST .../accept itself proxies to and which
+  // guards on `evaluation_status === 'accepted'` to refuse re-accepting).
+  // seasonRhythmValidator.js:6/57 independently documents the same
+  // reading: "evaluation_status = 'accepted' means stat changes have been
+  // applied." `evaluation_json` going non-null is NOT the same signal — it
+  // is set at the 'computed' stage too, before any accept — so watching it
+  // alone would open this modal while the creator is still adjusting
+  // overrides, not only once the episode has actually wrapped.
   const [showNextSuggestions, setShowNextSuggestions] = useState(false);
+  const prevEvaluationRef = useRef(null); // { episodeId, wasAccepted } | null
   useEffect(() => {
-    if (!episode?.id || !episode?.evaluation_json) return;
-    let dismissed = false;
-    try { dismissed = localStorage.getItem(`nextSuggestions:dismissed:${episode.id}`) === '1'; } catch {}
-    if (!dismissed) setShowNextSuggestions(true);
-  }, [episode?.id, episode?.evaluation_json]);
+    if (!episode?.id) return;
+    const isAccepted = episode?.evaluation_status === 'accepted';
+    const prev = prevEvaluationRef.current;
+    const sameEpisode = !!prev && prev.episodeId === episode.id;
+
+    if (sameEpisode && !prev.wasAccepted && isAccepted) {
+      let alreadyShown = false;
+      try {
+        alreadyShown = localStorage.getItem(`primeStudios.whatsNext.shown.${episode.id}`) === '1';
+      } catch (err) {
+        console.error('Failed to read What\'s next shown flag:', err);
+      }
+      if (!alreadyShown) setShowNextSuggestions(true);
+    }
+
+    prevEvaluationRef.current = { episodeId: episode.id, wasAccepted: isAccepted };
+  }, [episode?.id, episode?.evaluation_status]);
 
   // Handle episode updates from Overview tab
   const handleUpdateEpisode = async (updates) => {
@@ -524,22 +558,26 @@ const EpisodeDetail = () => {
         <div className="ed-header-actions">
           <button
             onClick={phone.start}
+            className="ed-btn-play-phone"
+            title="Play on Phone"
             style={{padding:'5px 12px', background:'linear-gradient(135deg,#B8962E,#8a6c1d)', border:'none', borderRadius:6, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontFamily:"'DM Mono', monospace", letterSpacing:0.3}}
           >
-            ▶ Play on Phone
+            ▶<span className="ed-btn-play-phone-label"> Play on Phone</span>
           </button>
-          {/* Re-open the end-of-show suggestions overlay. Only useful once
-              the episode has evaluated — before that there's no state to
-              base suggestions on. */}
-          {episode?.evaluation_json && (
-            <button
-              onClick={() => setShowNextSuggestions(true)}
-              title="Re-open the end-of-show next-event suggestions"
-              style={{padding:'5px 12px', background:'#fff', border:'1px solid #e2e8f0', borderRadius:6, color:'#64748b', fontSize:12, fontWeight:600, cursor:'pointer'}}
-            >
-              🧭 What's next
-            </button>
-          )}
+          {/* On-demand open of the next-event suggestions overlay — always
+              available, ignores the per-episode "already shown" flag that
+              only gates the automatic wrap-transition open above. Stays a
+              persistent, visible button at every width (icon-only below
+              tablet width) rather than being buried in the "More actions"
+              menu — most sessions on this page are on a phone. */}
+          <button
+            onClick={() => setShowNextSuggestions(true)}
+            title="What's next: ranked event suggestions from Lala's current state"
+            className="ed-btn-whats-next"
+          >
+            <Compass size={14} aria-hidden="true" />
+            <span className="ed-btn-whats-next-label">What's next</span>
+          </button>
           <Link
             to={`/episodes/${episode.id}/todo`}
             style={{padding:'5px 10px', background:'#FAF7F0', border:'1px solid #e8e0d0', borderRadius:6, color:'#B8962E', fontSize:12, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'4px'}}
@@ -1004,9 +1042,10 @@ const EpisodeDetail = () => {
         </Suspense>
       )}
 
-      {/* End-of-show next-event suggestions overlay. Auto-opens once per
-          evaluated episode (per-episode dismissal in localStorage); creator
-          can re-open via the "🧭 What's next" header button. */}
+      {/* End-of-show next-event suggestions overlay. Auto-opens only on the
+          wrap transition (see the effect above), at most once per episode
+          per the localStorage shown-flag; the header "What's next" button
+          reopens it on demand regardless of that flag. */}
       {showNextSuggestions && episode && (
         <NextEventSuggestionsOverlay
           episode={episode}
