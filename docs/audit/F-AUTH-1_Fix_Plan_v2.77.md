@@ -403,9 +403,8 @@ session.** This is her account of her own action. **No session performed
 it, witnessed it, or reproduced it**, and it is not derivable from this
 repository. It answers the live read that §4's point 4 asked for.
 
-> On 2026-09-19, outside any agent session, I read the app client's
-> configuration in the Cognito console and recorded the following
-> fields.
+Evoni supplied the values below in the planning conversation on 2026-09-19;
+the table reproduces them as she gave them.
 
 | field | value as read |
 |---|---|
