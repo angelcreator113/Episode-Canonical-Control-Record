@@ -548,6 +548,28 @@
   box-shadow: 0 4px 8px rgba(0,0,0,0.08);
 }
 
+.ed-btn-whats-next{
+  padding: 5px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #64748b;
+  font-size: var(--text-sm, 12px);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.ed-btn-whats-next:hover{
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #B8962E;
+}
+
 .ed-dropdown{
   position: absolute;
   top: calc(100% + 0.5rem);
@@ -2975,6 +2997,16 @@
     height: 30px;
     border-radius: 6px;
     font-size: var(--text-base);
+  }
+
+  /* Below tablet width the persistent button has nowhere to go without
+     pushing ed-header-actions past the viewport (confirmed: even an
+     icon-only version overflows at 375px alongside the other, already
+     unshrinkable header buttons). It moves into the existing "More
+     actions" (⋯) dropdown instead, which adds a "What's next" entry for
+     exactly this width range — reachable, zero width added to the row. */
+  .ed-btn-whats-next {
+    display: none;
   }
 
   .ed-btn-thumbnail {

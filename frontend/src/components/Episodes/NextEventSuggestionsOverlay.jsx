@@ -4,17 +4,20 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 
 /**
- * NextEventSuggestionsOverlay — end-of-show "what's next?" modal.
+ * NextEventSuggestionsOverlay — "what's next?" modal.
  *
  * Surfaces ranked event suggestions based on Lala's CURRENT character_state
  * (coins, reputation, stress, brand_trust). The deterministic scoring lives
  * server-side at GET /api/v1/world/:showId/events/next-suggestions; this
  * component renders the response.
  *
- * Trigger surface: EpisodeDetail mounts this when the episode has finished
- * (evaluation_json present) and the per-episode "seen" flag isn't set in
- * localStorage. Creator can dismiss with X or "Don't show again", or click
- * a suggestion to spin up the next episode.
+ * Trigger surface: EpisodeDetail mounts this either automatically, once,
+ * on the wrap transition (episode.evaluation_json going from absent to
+ * present while the page is mounted — never on page load), or on demand
+ * via the header's "What's next" button at any time. Closing the modal by
+ * any path (X, backdrop, or the Close button) sets the per-episode
+ * `primeStudios.whatsNext.shown.<episodeId>` localStorage flag, which the
+ * page checks before auto-opening again — the on-demand button ignores it.
  */
 
 function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) {
@@ -67,9 +70,16 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
     }
   };
 
-  const dismissForEpisode = (permanent) => {
-    if (permanent && episode?.id) {
-      try { localStorage.setItem(`nextSuggestions:dismissed:${episode.id}`, '1'); } catch {}
+  // Any close — X, backdrop click, or the Close button — marks this episode
+  // as shown so the page's wrap-transition effect won't auto-open it again;
+  // the header's on-demand button bypasses this flag entirely.
+  const closeAndMarkShown = () => {
+    if (episode?.id) {
+      try {
+        localStorage.setItem(`primeStudios.whatsNext.shown.${episode.id}`, '1');
+      } catch (err) {
+        console.error('Failed to persist What\'s next shown flag:', err);
+      }
     }
     onClose?.();
   };
@@ -129,14 +139,25 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
   const critical = coins < (data?.thresholds?.coins_critical || 100);
   const pressured = !critical && coins < (data?.thresholds?.coins_pressure || 250);
 
+  // "Wraps" is only true when this episode has actually been evaluated —
+  // opened on demand via the header button, an in-progress episode has no
+  // evaluation_json yet, so the heading must not claim a wrap that hasn't
+  // happened.
+  const isComplete = !!episode?.evaluation_json;
+  const episodeLabel = episode?.episode_number
+    ? `Episode ${episode.episode_number}`
+    : (episode?.title || episode?.episodeTitle || 'This episode');
+
   return (
-    <div style={S.backdrop} onClick={() => dismissForEpisode(false)}>
+    <div style={S.backdrop} onClick={closeAndMarkShown}>
       <div style={S.panel} onClick={(e) => e.stopPropagation()}>
-        <button style={S.closeBtn} onClick={() => dismissForEpisode(false)} aria-label="Close">×</button>
+        <button style={S.closeBtn} onClick={closeAndMarkShown} aria-label="Close">×</button>
 
         <h2 style={S.title}>🧭 What's next?</h2>
         <p style={S.subtitle}>
-          Episode {episode?.episode_number || '?'} wraps. Suggestions ranked by Lala's current state.
+          {isComplete
+            ? `${episodeLabel} wraps. Suggestions ranked by Lala's current state.`
+            : `Suggestions ranked by Lala's current state — ${episodeLabel} isn't wrapped yet.`}
           {critical && <span style={{ color: '#dc2626', fontWeight: 600 }}> Lala is broke — paid events are boosted.</span>}
           {pressured && <span style={{ color: '#B8962E', fontWeight: 600 }}> Lala is running low — paid events are favored.</span>}
         </p>
@@ -212,9 +233,11 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
           </>
         )}
 
-        <div style={S.footer}>
-          <button style={S.ghostBtn} onClick={() => dismissForEpisode(true)}>Don't show again for this episode</button>
-          <button style={S.ghostBtn} onClick={() => dismissForEpisode(false)}>Close</button>
+        {/* A single Close button — every close path marks this episode
+            shown (closeAndMarkShown), so a separate "don't show again"
+            action would now just duplicate it. */}
+        <div style={{ ...S.footer, justifyContent: 'flex-end' }}>
+          <button style={S.ghostBtn} onClick={closeAndMarkShown}>Close</button>
         </div>
       </div>
     </div>
