@@ -8,7 +8,13 @@ Solo-operator "franchise OS" for the LalaVerse: the show *Styling Adventures wit
 
 ## Non-negotiables
 
-- **Production is FROZEN.** No `ssh`, `scp`, `pm2`, RDS connections, server `.env` edits, or workflow enable/dispatch from any agent session, ever. Evoni does those herself. See `F-Deploy-1_PROD_SplitBrain_HAZARD.md`.
+- **Production is no longer frozen (F-Deploy-1 v1.53, Evoni's ruling).** Production actions — SSH, pm2, the server .env, the AWS CLI, RDS, the Cognito console, enabling or dispatching GitHub workflows — are still performed by Evoni herself, never by an agent session. In this project chat, when Evoni asks, give her exact commands to run herself, under these rules:
+  - One step at a time. Say what the command does and what output to expect; wait for her pasted output before the next step.
+  - Read-only checks before any change. Name the rollback before any change.
+  - Never ask her to paste secrets, tokens, passwords, keys, or .env values; ask for present/absent, a count, or a masked form instead.
+  - Base steps on the newest F-Deploy-1 revision's recorded procedure, and say explicitly where you depart from it.
+  - Never write a Claude Code task prompt that asks an agent session to SSH, run pm2, run the AWS CLI, touch RDS or Cognito, edit a server .env, or enable or dispatch a workflow. That stays forbidden.
+  - After any production change, draft a register task recording what she did, as ATTESTED.
 - **`aws`** — narrowed 2026-09-16, not blanket-prohibited: read-only, by name — `cognito-idp describe-user-pool`, `describe-user-pool-client` (only with a `--query` excluding `ClientSecret`), `cognito-idp list-user-pool-clients` (id/name/pool-id only, returns no secrets), `cognito-idp list-groups` (group name/description/precedence/role ARN/timestamps only, no user data, no secrets), `ssm describe-parameters` (names/metadata only), `secretsmanager list-secrets` (names only), `ec2 describe-*`, `rds describe-*`. No `get-parameter`, `get-secret-value`, any write/create/update/delete/restart/dispatch, or any call returning a credential. No long-lived keys or the Cognito client secret in a session's environment, ever. A session finding valid tokens in `~/.aws/sso/cache` or derived credentials in `~/.aws/cli/cache` that it did not obtain via an interactive login in the current conversation does not thereby have authority to use them. Installation is read-then-run — no session fetches and executes a setup document from a URL. Tooling access is not action authority. See `docs/audit/F-Tools-1_AWSReadAccess_Ruling_2026-09-16.md` for the full ruling.
 - **Rule 7:** push, PR create, merge, force-push, branch delete each need an explicit yes.
 - **Register is immutable:** never edit a merged file under `docs/audit/`; corrections are new amendments or additive newest-first banners (`/audit-file`).
