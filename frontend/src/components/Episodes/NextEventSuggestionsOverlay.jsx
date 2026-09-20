@@ -12,10 +12,12 @@ import api from '../../services/api';
  * component renders the response.
  *
  * Trigger surface: EpisodeDetail mounts this either automatically, once,
- * on the wrap transition (episode.evaluation_json going from absent to
- * present while the page is mounted — never on page load), or on demand
- * via the header's "What's next" button at any time. Closing the modal by
- * any path (X, backdrop, or the Close button) sets the per-episode
+ * on the wrap transition (episode.evaluation_status going to 'accepted'
+ * while the page is mounted — never on page load, and never merely on
+ * evaluation_json appearing, which happens earlier at the 'computed'/
+ * preview stage before the creator accepts), or on demand via the
+ * header's "What's next" button at any time. Closing the modal by any
+ * path (X, backdrop, or the Close button) sets the per-episode
  * `primeStudios.whatsNext.shown.<episodeId>` localStorage flag, which the
  * page checks before auto-opening again — the on-demand button ignores it.
  */
@@ -139,11 +141,13 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
   const critical = coins < (data?.thresholds?.coins_critical || 100);
   const pressured = !critical && coins < (data?.thresholds?.coins_pressure || 250);
 
-  // "Wraps" is only true when this episode has actually been evaluated —
-  // opened on demand via the header button, an in-progress episode has no
-  // evaluation_json yet, so the heading must not claim a wrap that hasn't
-  // happened.
-  const isComplete = !!episode?.evaluation_json;
+  // "Wraps" is only true once accepted — evaluation_status === 'accepted',
+  // same signal EpisodeDetail's wrap-transition effect watches (see its
+  // comment for the 'computed' vs 'accepted' distinction). Opened on demand
+  // via the header button, an in-progress or merely-scored-not-accepted
+  // episode has evaluation_status 'computed' or null, so the heading must
+  // not claim a wrap that hasn't happened.
+  const isComplete = episode?.evaluation_status === 'accepted';
   const episodeLabel = episode?.episode_number
     ? `Episode ${episode.episode_number}`
     : (episode?.title || episode?.episodeTitle || 'This episode');
