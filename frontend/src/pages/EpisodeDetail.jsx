@@ -556,40 +556,29 @@ const EpisodeDetail = () => {
           </div>
         </div>
         <div className="ed-header-actions">
-          <button
-            onClick={phone.start}
-            className="ed-btn-play-phone"
-            title="Play on Phone"
-            style={{padding:'5px 12px', background:'linear-gradient(135deg,#B8962E,#8a6c1d)', border:'none', borderRadius:6, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontFamily:"'DM Mono', monospace", letterSpacing:0.3}}
-          >
-            ▶<span className="ed-btn-play-phone-label"> Play on Phone</span>
-          </button>
-          {/* On-demand open of the next-event suggestions overlay — always
-              available, ignores the per-episode "already shown" flag that
-              only gates the automatic wrap-transition open above. Stays a
-              persistent, visible button at every width (icon-only below
-              tablet width) rather than being buried in the "More actions"
-              menu — most sessions on this page are on a phone. */}
-          <button
-            onClick={() => setShowNextSuggestions(true)}
-            title="What's next: ranked event suggestions from Lala's current state"
-            className="ed-btn-whats-next"
-          >
-            <Compass size={14} aria-hidden="true" />
-            <span className="ed-btn-whats-next-label">What's next</span>
-          </button>
-          <Link
-            to={`/episodes/${episode.id}/todo`}
-            style={{padding:'5px 10px', background:'#FAF7F0', border:'1px solid #e8e0d0', borderRadius:6, color:'#B8962E', fontSize:12, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'4px'}}
-          >
-            Todo List
-          </Link>
-          <Link
-            to={`/episodes/${episode.id}/evaluate`}
-            style={{padding:'5px 10px', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', borderRadius:6, color:'#fff', fontSize:12, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'4px'}}
-          >
-            Evaluate
-          </Link>
+          {/* Play on Phone, Todo List, and Evaluate relocated to the
+              Production sub-tabs that own that work (issue #1601) — the
+              header now carries only whole-episode actions: What's next
+              (once accepted) and the administrative ⋯ menu. */}
+          {/* On-demand open of the next-event suggestions overlay — shown
+              only once the episode is accepted (evaluation_status ===
+              'accepted'; issue #1601 narrows this from #1584's
+              always-visible button). When shown, ignores the per-episode
+              "already shown" flag that only gates the automatic
+              wrap-transition open above. Stays a persistent, visible
+              button at every width (icon-only below tablet width) rather
+              than being buried in the "More actions" menu — most sessions
+              on this page are on a phone. */}
+          {episode?.evaluation_status === 'accepted' && (
+            <button
+              onClick={() => setShowNextSuggestions(true)}
+              title="What's next: ranked event suggestions from Lala's current state"
+              className="ed-btn-whats-next"
+            >
+              <Compass size={14} aria-hidden="true" />
+              <span className="ed-btn-whats-next-label">What's next</span>
+            </button>
+          )}
           <div className="ed-more-menu">
             <button
               onClick={() => setShowMoreActions(!showMoreActions)}
@@ -610,26 +599,10 @@ const EpisodeDetail = () => {
                   <span>✏️</span>
                   <span>Edit Episode</span>
                 </button>
-                <button
-                  onClick={() => {
-                    navigate(`/episodes/${episode.id}/scene-composer`);
-                    setShowMoreActions(false);
-                  }}
-                  className="ed-dropdown-item"
-                >
-                  <span>🎨</span>
-                  <span>Create Thumbnail</span>
-                </button>
-                <button
-                  onClick={() => {
-                    navigate(`/episodes/${episode.id}/plan`);
-                    setShowMoreActions(false);
-                  }}
-                  className="ed-dropdown-item"
-                >
-                  <span>🎬</span>
-                  <span>Scene Planner</span>
-                </button>
+                {/* Create Thumbnail relocated to the Assets area, Scene
+                    Planner relocated to the Scenes sub-tab (which already
+                    had its own copy — issue #1601). The ⋯ menu now carries
+                    only administrative actions. */}
                 <button
                   onClick={async () => {
                     if (window.confirm('Delete this episode? This cannot be undone.')) {
@@ -865,7 +838,22 @@ const EpisodeDetail = () => {
             episode-specific missions, with inline active toggle and a jump
             into the existing MissionEditor for full CRUD. */}
         {tabKey === 'production.phone' && (
-          <EpisodePhoneMissionsTab episode={episode} />
+          <>
+            {/* Play on Phone — relocated from the Episode Detail header
+                (issue #1601). Same phone.start handler and overlay as
+                before; the mobile icon-only treatment it needed in the
+                header's tight row no longer applies here. */}
+            <div style={{ marginBottom: 16 }}>
+              <button
+                onClick={phone.start}
+                title="Play on Phone"
+                style={{padding:'5px 12px', background:'linear-gradient(135deg,#B8962E,#8a6c1d)', border:'none', borderRadius:6, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontFamily:"'DM Mono', monospace", letterSpacing:0.3}}
+              >
+                ▶ Play on Phone
+              </button>
+            </div>
+            <EpisodePhoneMissionsTab episode={episode} />
+          </>
         )}
 
         {/* Checklist Tab */}
