@@ -131,8 +131,7 @@ not via any page's UI.
 > navigates to `/episodes/${id}/thumbnail/${id}` (per this inventory's route
 > research), which also matches no declared `App.jsx` route. Recorded here
 > rather than re-verified line-by-line since it wasn't this document's
-> primary target; worth a maintainer look alongside the TemplateStudio one
-> above.
+> primary target.
 
 ### Management — writing (App.jsx:419-433)
 
@@ -516,6 +515,16 @@ Every page from §1 marked "URL only" (no Sidebar entry, no in-app
 found pointing at it), with a one-line description read from each
 component's own code (header comment or rendered heading, not the route
 name):
+
+**Count discrepancy with `PROJECT_CONTEXT.md`:** `PROJECT_CONTEXT.md` §4.6
+(`:133`) states "~23 feature pages reachable only by URL." This inventory
+found 42 (the table immediately below), plus 2 more reachable only by
+chaining through another URL-only page (table after it) — 44 total. This
+document does not resolve why the counts differ (a stricter or looser
+definition of "URL only," pages added since §4.6 was last written, or an
+undercount at the time) — recorded here as a discrepancy for
+`PROJECT_CONTEXT.md`'s own maintenance to resolve, not re-derived or ruled
+on by this document.
 
 | Route | Component | Description |
 |---|---|---|
