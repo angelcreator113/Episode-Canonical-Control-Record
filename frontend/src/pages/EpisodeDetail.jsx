@@ -14,7 +14,7 @@ import NextEventSuggestionsOverlay from '../components/Episodes/NextEventSuggest
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // Lazy-loaded tab bodies — each becomes its own JS chunk that's only
 // fetched when the user clicks into the tab. PhonePreviewMode is lazy
-// because the player overlay only mounts when "Play on Phone" is clicked.
+// because the player overlay only mounts when "Preview Phone" is clicked.
 const EpisodeAssetsTab = lazy(() => import('../components/Episodes/EpisodeAssetsTab'));
 const EpisodePhoneMissionsTab = lazy(() => import('../components/Episodes/EpisodePhoneMissionsTab'));
 const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
@@ -839,17 +839,19 @@ const EpisodeDetail = () => {
             into the existing MissionEditor for full CRUD. */}
         {tabKey === 'production.phone' && (
           <>
-            {/* Play on Phone — relocated from the Episode Detail header
-                (issue #1601). Same phone.start handler and overlay as
+            {/* Preview Phone — relocated from the Episode Detail header
+                (issue #1601), relabelled from "Play on Phone" (issue #1605,
+                a producer previews the phone experience, doesn't play it
+                for an audience). Same phone.start handler and overlay as
                 before; the mobile icon-only treatment it needed in the
                 header's tight row no longer applies here. */}
             <div style={{ marginBottom: 16 }}>
               <button
                 onClick={phone.start}
-                title="Play on Phone"
+                title="Preview Phone"
                 style={{padding:'5px 12px', background:'linear-gradient(135deg,#B8962E,#8a6c1d)', border:'none', borderRadius:6, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontFamily:"'DM Mono', monospace", letterSpacing:0.3}}
               >
-                ▶ Play on Phone
+                ▶ Preview Phone
               </button>
             </div>
             <EpisodePhoneMissionsTab episode={episode} />
@@ -1008,7 +1010,7 @@ const EpisodeDetail = () => {
         episodeId={episodeId}
       />
 
-      {/* ── Play on Phone overlay — state owned by usePhonePlayback. The
+      {/* ── Preview Phone overlay — state owned by usePhonePlayback. The
             preview component is lazy-loaded; Suspense renders nothing while
             the chunk arrives so the modal just appears (no janky fallback
             since it's already an overlay on top of the page). ─────────── */}

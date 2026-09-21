@@ -100,12 +100,12 @@ export default function EpisodeTodoPage() {
     } catch {}
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading todo list...</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Episode Run Sheet...</div>;
   if (error) return <div style={{ padding: 40, textAlign: 'center', color: '#dc2626' }}>Error: {error}</div>;
   if (!todoList && socialTasks.length === 0) {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
-        <div style={{ fontSize: 14, color: '#666', marginBottom: 12 }}>No todo list for this episode yet.</div>
+        <div style={{ fontSize: 14, color: '#666', marginBottom: 12 }}>No Episode Run Sheet for this episode yet.</div>
         <Link to={`/episodes/${episodeId}`} style={{ color: '#B8962E', fontWeight: 600, fontSize: 13 }}>Back to Episode</Link>
       </div>
     );
@@ -137,7 +137,7 @@ export default function EpisodeTodoPage() {
           ← Back to Episode
         </Link>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e', margin: '8px 0 4px', fontFamily: "'Lora', serif" }}>
-          {episode?.title || 'Episode'} — Todo List
+          {episode?.title || 'Episode'} — Episode Run Sheet
         </h1>
         {event && (
           <div style={{ fontSize: 12, color: '#64748b' }}>
