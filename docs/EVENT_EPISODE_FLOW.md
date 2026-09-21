@@ -915,7 +915,7 @@ Recorded as open. This document does not choose between them.
 `episodeGeneratorService.js`'s `phase` and `emotional_intent` fields
 survive as a layer on top of the canonical beats, mapped by content, not
 by position — proposed mapping pending Evoni's approval, not yet
-committed to code; see the open item (d) below and PR #<TBD>'s body for
+committed to code; see the open item (d) below and PR #1610's body for
 the full table. Single source of truth: `src/constants/canonicalBeats.js`
 (`CANONICAL_BEATS`, names/order/`typical_location`/description copied
 verbatim from `scenePlannerService.js`'s pre-existing `BEAT_STRUCTURE`,
@@ -986,7 +986,7 @@ moment, on the wrong canonical beat (e.g. canonical beat 3 "Welcome" is
 not an outfit beat; the old position 3 "The Closet" was). A proposed
 beat-by-beat mapping (content-matched, nulls where no genuine legacy
 equivalent exists, covering `phase`/`emotional_intent`/phone-moment
-content together as one table) was worked out in PR #<TBD>'s body for
+content together as one table) was worked out in PR #1610's body for
 Evoni's approval. `feedMomentsService.js` also hardcodes beat position in
 three more places beyond `BEAT_PHONE_MOMENTS` — an unconditional
 purchase-decision moment at position 3 (`:143-176`, display-only, no
