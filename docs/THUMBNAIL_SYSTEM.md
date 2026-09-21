@@ -21,7 +21,7 @@ after PR #1602).
 | `src/routes/compositions.js` | **Live.** Mounted, handles composition CRUD, asset assignment, generation triggers, versioning, search. | Route file itself; see §2 for what its handlers actually do. |
 | `src/services/ThumbnailGeneratorService.js` | **Live**, but reachable only from one branch. Uses `sharp` for real image compositing (`ThumbnailGeneratorService.js:6,134,196,424,521` — `sharp(...)` calls, not stubs). Only invoked when `CompositionService.generateThumbnails` takes its "legacy generator" branch (`composition.template_studio_id` falsy) — see §2g. |
 | `thumbnail_compositions` table (`ThumbnailComposition` model) | **Live, migrated in this repo.** `src/migrations/20260125000000-create-thumbnail-compositions.js` creates it; `20260127000001-add-thumbnail-compositions-deleted-at.js` follows on it. Modeled (`src/models/ThumbnailComposition.js`), actively read and written by `compositions.js`. |
-| `composition_assets` table (`CompositionAsset` model) | **Live on canon, absent from this repo's migration tree — same schema-gap shape as `template_studio` below.** `grep -rln "composition_assets" src/migrations/` returns nothing; `20260125000000-create-thumbnail-compositions.js` (the migration a name-based guess would point to) creates only `thumbnail_compositions`, no junction table. `docs/audit/EvidenceNote_Canon_Schema_Capture_2026-08-29.txt:422-429` shows `composition_assets` exists on canon with 8 columns, including a `deleted_at` the Sequelize model doesn't use (no `paranoid: true`, no `deleted_at` field in `src/models/CompositionAsset.js`). A fresh/local database migrated only from this repo's tree would have `thumbnail_compositions` but not `composition_assets` — meaning §2a's role-based asset-assignment path (`CompositionAsset.bulkCreate`) would fail on `relation "composition_assets" does not exist` outside canon. Whether canon has it *today*, re-verified live, is the same Evoni-gated question the cited census leaves open for `template_studio` — not re-checked here either. `src/models/CompositionAsset.js` itself: a junction table, `composition_id` → `thumbnail_compositions`, `asset_id` → `assets`, `asset_role` a free-text string, unique per `(composition_id, asset_role)`. |
+| `composition_assets` table (`CompositionAsset` model) | **Live on canon, absent from this repo's migration tree — same schema-gap shape as `template_studio` below, and already on record, though never singled out.** `docs/audit/Canon_TableExpectation_Census_2026-09-17.md:379` already carries this exact fact in its 193-table census: `composition_assets` — model: yes, migration: **no**, runtime-created: no, raw-SQL routes/services reference: no (that census's column (d) only greps for raw SQL; `compositions.js`'s access is through the `CompositionAsset` Sequelize model, so it doesn't trip that particular grep — not a contradiction, a scoping artifact of that column's own method, disclosed at that census's own §3's caveat for a different table), canon capture: **yes**. This document reproduced the migration-absence and canon-presence independently (`grep -rln "composition_assets" src/migrations/` returns nothing; `20260125000000-create-thumbnail-compositions.js`, the migration a name-based guess would point to, creates only `thumbnail_compositions`; `docs/audit/EvidenceNote_Canon_Schema_Capture_2026-08-29.txt:422-429` shows `composition_assets` on canon with 8 columns, including a `deleted_at` the Sequelize model doesn't use — no `paranoid: true`, no `deleted_at` field in `src/models/CompositionAsset.js`) before finding the prior census already had it — cited here rather than presented as newly discovered. **What genuinely hasn't happened**: `template_studio` got its own dedicated census (`TemplateStudio_SchemaGap_Census_2026-09-06.md`) and its own named line in `PROJECT_CONTEXT.md` §6.5; `composition_assets` has neither — it sits unremarked inside the 193-row table. A fresh/local database migrated only from this repo's tree would have `thumbnail_compositions` but not `composition_assets` — meaning §2a's role-based asset-assignment path (`CompositionAsset.bulkCreate`) would fail on `relation "composition_assets" does not exist` outside canon. Whether canon has it *today*, re-verified live, is the same Evoni-gated question the cited census leaves open for `template_studio` — not re-checked here either. `src/models/CompositionAsset.js` itself: a junction table, `composition_id` → `thumbnail_compositions`, `asset_id` → `assets`, `asset_role` a free-text string, unique per `(composition_id, asset_role)`. |
 | `TemplateStudio.jsx` | **Live page, dead onward path.** Fetches real templates from `/api/v1/template-studio` (`listTemplatesApi`) and lists them. Every action button (Edit → `/template-studio/designer/:id`, Clone/Publish/Lock/Archive/Delete → real API calls) works **except** `handleCreateNew`'s "+ New Template" navigates to `/template-studio/designer` (real — see `TemplateDesigner.jsx` below) and each **PUBLISHED** template's "Use Template" button navigates to `/composer?template=:id` (`TemplateStudio.jsx:357`) — **dead**, no matching route anywhere in `App.jsx` (verified: `grep -n "\"/composer\"" frontend/src/App.jsx` returns nothing). See §4. |
 | `TemplateDesigner.jsx` (not named in the issue, but is where Template Studio's actual layout editing happens — `TemplateStudio.jsx` is only the list) | **Live.** Builds/edits `role_slots` and `canvas_config` on a `template_studio` row via drag-and-drop; imports the same `CANONICAL_ROLES` taxonomy as the backend (`TemplateDesigner.jsx:5`, `import { CANONICAL_ROLES } from '../constants/canonicalRoles'`). Does not itself select per-episode assets — it positions role slots, not asset instances. |
 | `template_studio` table | **Live on canon, absent from this repo's migration tree.** Cited, not re-derived: `docs/audit/TemplateStudio_SchemaGap_Census_2026-09-06.md` §2 (MEASURED: zero hits for `template_studio` in `src/migrations/` or `src/models/`) and §4 (the table exists on canon RDS per a 2026-08-29 schema capture, all 18 columns matching what the code queries/inserts). That census's own caveat still applies: whether canon has it *today*, re-verified live, is Evoni-gated and not re-checked by this document. |
@@ -61,11 +61,14 @@ per `(composition_id, asset_role)` pair (`CompositionAsset.js:67-71`, a
 unique index).
 
 **This whole path depends on `composition_assets` existing, and that table
-has no migration in this repo's tree** (§1) — on a database migrated only
-from `src/migrations/`, `CompositionAsset.bulkCreate(...)` (`compositions.js:333`)
-would fail outright. Canon reportedly has the table (§1, citing the same
-prior census as `template_studio`), so this path may work in the one
-environment this repo's own tooling cannot reproduce locally.
+has no migration in this repo's tree — already on record, per §1**
+(`Canon_TableExpectation_Census_2026-09-17.md:379`, reproduced independently
+here) — on a database migrated only from `src/migrations/`,
+`CompositionAsset.bulkCreate(...)` (`compositions.js:333`) would fail
+outright. Canon reportedly has the table (§1, citing the same 2026-08-29
+capture `template_studio`'s own dedicated census cites), so this path may
+work in the one environment this repo's own tooling cannot reproduce
+locally.
 
 ### b–e. Uploaded episode image / Lala character asset / wardrobe visual / Phone screenshot — selectable?
 
@@ -218,8 +221,14 @@ and are not dead.
 This census answers what the code does today; it does not choose a remedy,
 per the issue's own scope. Left open, named rather than silently skipped:
 
-- Whether canon RDS still has `template_studio` right now — Evoni-gated,
-  cited not re-derived (§1).
+- Whether canon RDS still has `template_studio` and `composition_assets`
+  right now — Evoni-gated, cited not re-derived (§1).
+- Whether `composition_assets` earns the same dedicated treatment
+  `template_studio` already has (its own census, its own named line in
+  `PROJECT_CONTEXT.md` §6.5) — this document only establishes that the fact
+  is already on record in `Canon_TableExpectation_Census_2026-09-17.md:379`
+  and never individually surfaced since; whether that's enough or whether it
+  should be, is not this document's call to make (§1).
 - Whether the wardrobe-to-`assets` pipeline exists, and if so where (§2b–e).
 - Whether `CompositionService.setPrimary`'s apparent `.models` bug (§2h) has
   ever actually thrown in production, or whether some other code path
