@@ -78,10 +78,77 @@ A `SocialProfile` row (the Feed). Supplies `handle`, `display_name`,
   tiers of raw SQL if that fails, `:2163-2207`) with **`status: 'draft'`**
   (`:2160`).
 
-`source_profile_id` is set at `:2090`. This is the only from-profile
-creation path found; other writers create events from opportunities or
-momentum chains (§4 enumerates them — they also set a status, just not
+`source_profile_id` is set at `:2090` (reconfirmed at this document's
+current basis, `a29c1d8c`). This is the Feed's own path into EVENT; a
+second, independently-wired path exists — see "EVENT (calendar-driven)"
+below. Beyond those two, other writers create events from opportunities
+or momentum chains (§4 enumerates them — they also set a status, just not
 `'draft'`).
+
+### EVENT (calendar-driven)
+
+**Scope:** traced end to end only for `story_calendar_events` rows with
+`event_type: 'lalaverse_cultural'`. The same table also carries
+`'world_event'`, `'story_event'`, and `'character_event'` rows
+(`src/routes/calendarRoutes.js:531-536`'s `typeMap`) — this document does
+not resolve whether those three feed EVENT the same way; not ruled in,
+not ruled out.
+
+Two UI surfaces reach the same backend pipeline:
+
+- Producer Mode's "Auto-Fill This Month" button
+  (`frontend/src/pages/WorldAdmin.jsx:1823-1859`, duplicated verbatim as
+  an empty-state call-to-action at `:3313-3335`) calls `POST
+  /calendar/events/generate-seasonal`, then `POST
+  /calendar/events/:id/auto-spawn` once per calendar event it created.
+- Culture & Events' "Create Event" button
+  (`frontend/src/pages/CultureEvents.jsx:62-70`, `handleCreateEvent`)
+  calls the same `POST /calendar/events/:id/auto-spawn` endpoint
+  directly, against a `StoryCalendarEvent` row the page already has in
+  hand.
+
+`generate-seasonal` (`src/routes/calendarRoutes.js:699-719`) delegates to
+`seasonalEventService.generateSeasonalEvents`
+(`src/services/seasonalEventService.js:60`), which creates the
+`StoryCalendarEvent` rows this path runs on, each with `event_type:
+'lalaverse_cultural'` (`seasonalEventService.js:144`) — the same
+`event_type` Culture & Events' own Events tab reads
+(`docs/PAGE_INVENTORY.md` §4, cited there, not re-derived here).
+
+`auto-spawn` (`src/routes/calendarRoutes.js:625-693`) loads the
+`StoryCalendarEvent` by id and calls
+`eventAutomationService.spawnEventsFromCalendar` directly (`:645`) — the
+same function §4 already lists as a `status: 'ready'` writer
+(`eventAutomationService.js:600`), now with the page that reaches it
+identified (see §4's note on that row).
+
+`spawnEventsFromCalendar` (`eventAutomationService.js:478-611`) writes
+`source_calendar_event_id` onto the new `WorldEvent` (`:541`) — a real
+FK, not an incidental label: `GET /calendar/events/:id/spawned`
+(`calendarRoutes.js:599-618`) reads it straight back via
+`WorldEvent.findAll({ where: { source_calendar_event_id } })`.
+
+### HOST — recorded two different ways
+
+The two EVENT creation paths record HOST differently, and nothing in
+this document — or in either code path — reconciles them:
+
+- **from-profile** writes the durable, top-level
+  `WorldEvent.source_profile_id` column (`worldEvents.js:2090`, above).
+- **calendar-driven** finds a host via `findHostProfile`
+  (`eventAutomationService.js:106-119`, querying `models.SocialProfile`
+  — the same model HOST names above) but writes it only to
+  `canon_consequences.automation.host_profile_id`
+  (`eventAutomationService.js:532`) — the JSONB copy, never the
+  top-level column.
+
+So an event's host lives in a different place depending on which door it
+came through. Anything that reads `source_profile_id` to find an event's
+host — a report, a migration, a future feature — will silently miss
+every calendar-spawned event. This is the same class of problem §4
+already records for guests (`canon_consequences.automation.guest_profiles`
+vs. the separate top-level `guest_list` column) — recorded here at equal
+weight, not resolved, same as that one isn't.
 
 ### EVENT PACKAGE
 
@@ -390,6 +457,16 @@ setting the literal string `'ready'` at event-creation time as part of
 their own insert — not as a follow-up transition once some condition is
 met. None of the four EVENT READY checks (§2) feed into any of these
 writes.
+
+**One of these five now has a known page.** The `eventAutomationService.js:600`
+row above was listed as a writer with no page attached to it. §2's new
+"EVENT (calendar-driven)" subsection traces it to two: Producer Mode's
+"Auto-Fill This Month" button and Culture & Events' "Create Event"
+button — both call the same `auto-spawn` route, which calls this exact
+function. Whether the same gap holds for the other four rows
+(`feedEventPipelineService.js`'s two functions, `careerPipelineService.js`'s
+`convertOpportunityToEvent`, `eventGeneratorRoute.js`'s `POST
+/generate-events`) was not checked here.
 
 The event `PUT` route (`PUT /api/v1/world/:showId/events/:eventId`,
 `src/routes/worldEvents.js:284`) accepts `status` as one of its editable
