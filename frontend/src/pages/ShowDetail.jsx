@@ -144,7 +144,7 @@ function ShowDetail() {
   };
 
   const handleCreateEpisode = () => {
-    navigate(`/shows/${showId}/quick-episode`);
+    navigate(`/shows/${showId}/new-episode`);
   };
   
   const handleUpdateShow = async (updates) => {
@@ -318,7 +318,7 @@ function ShowDetail() {
                     </button>
                   ))}
                 </div>
-                <button onClick={() => navigate(`/shows/${showId}/quick-episode`)} style={{
+                <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={{
                   padding: '6px 16px', borderRadius: 6, border: 'none', background: '#B8962E', color: '#fff',
                   fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 }}>

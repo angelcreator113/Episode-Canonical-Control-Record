@@ -98,6 +98,14 @@ const BookToWriteRedirect = () => {
   if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'Lora,serif',color:'rgba(28,24,20,0.4)'}}>Opening book…</div>;
   return null;
 };
+// New Episode (Task #1628): Lala's Feed in choose-host mode. Reuses
+// SocialProfileGenerator wholesale rather than a bespoke page — picking or
+// creating a host builds the event automatically and opens it in Producer
+// Mode's existing event editor.
+const NewEpisodeChooseHost = () => {
+  const { showId } = useParams();
+  return <SocialProfileGenerator chooseHost showId={showId} defaultFeedLayer="lalaverse" />;
+};
 const CharacterRegistryPage = lazy(() => import('./pages/CharacterRegistryPage'));
 const ContinuityEnginePage = lazy(() => import('./pages/ContinuityEnginePage'));
 const UniversePage = lazy(() => import('./pages/UniversePage'));
@@ -358,6 +366,7 @@ function AppContent() {
           <Route path="/shows/:id/edit" element={<EditShow />} />
           <Route path="/shows/:id/world" element={<WorldAdmin />} />
           <Route path="/shows/:showId/quick-episode" element={<QuickEpisodeCreator />} />
+          <Route path="/shows/:showId/new-episode" element={<NewEpisodeChooseHost />} />
           <Route path="/shows/:id/settings" element={<ShowSettings />} />
           {/* Studio — universe-level entry points */}
           <Route path="/studio/timeline" element={<StudioTimelinePage />} />

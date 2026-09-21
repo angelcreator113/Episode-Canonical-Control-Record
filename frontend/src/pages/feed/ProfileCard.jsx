@@ -1,7 +1,7 @@
 import React from 'react';
 import { C, ARCHETYPE_LABELS, STATUS_LABELS, STATUS_COLORS, FEED_STATE_CONFIG, fp, lalaClass } from './feedConstants';
 
-export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode, isChecked, onSelect, onToggle }) {
+export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode, isChecked, onSelect, onToggle, chooseHost, onHostEvent, hosting }) {
   const d = fp(p);
   const isActive = selected?.id === p.id;
   const sc = p.current_state && FEED_STATE_CONFIG[p.current_state];
@@ -78,6 +78,15 @@ export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode,
             </div>
           </div>
         </div>
+        {chooseHost && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onHostEvent?.(p); }}
+            disabled={hosting}
+            style={{ marginTop: 10, width: '100%', padding: '9px 14px', borderRadius: C.radiusSm, fontSize: 13, fontWeight: 700, border: 'none', cursor: hosting ? 'not-allowed' : 'pointer', background: hosting ? C.border : C.lavender, color: hosting ? C.inkLight : '#fff', transition: 'all 0.15s' }}
+          >
+            {hosting ? 'Creating event…' : 'Host an Event'}
+          </button>
+        )}
       </div>
     </div>
   );
