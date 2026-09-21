@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
 import EpisodeTodoList from './EpisodeTodoList';
 
@@ -175,17 +175,28 @@ function EpisodeAssetsTab({ episode, show }) {
             {readiness.ready}/{readiness.total} assets ready — {pct}% complete
           </p>
         </div>
-        <div style={{
-          width: 48, height: 48, borderRadius: '50%',
-          background: `conic-gradient(${pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626'} ${pct * 3.6}deg, #f1f5f9 0deg)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <div style={{
-            width: 38, height: 38, borderRadius: '50%', background: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, fontWeight: 800, color: pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626',
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Create Thumbnail — relocated from the Episode Detail ⋯ menu
+              (issue #1601), same navigate target as before. */}
+          <button onClick={() => navigate(`/episodes/${episodeId}/scene-composer`)} style={{
+            padding: '5px 10px', borderRadius: 6, border: '1px solid #e8e0d0',
+            background: '#fff', color: '#6366f1', fontSize: 11, fontWeight: 600,
+            cursor: 'pointer', whiteSpace: 'nowrap',
           }}>
-            {pct}%
+            🎨 Create Thumbnail
+          </button>
+          <div style={{
+            width: 48, height: 48, borderRadius: '50%',
+            background: `conic-gradient(${pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626'} ${pct * 3.6}deg, #f1f5f9 0deg)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: '50%', background: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 800, color: pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626',
+            }}>
+              {pct}%
+            </div>
           </div>
         </div>
       </div>
@@ -243,12 +254,25 @@ function EpisodeAssetsTab({ episode, show }) {
       </div>
 
       <section style={{ marginTop: 24 }}>
-        <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
-          Episode To-Do Overlays
-        </h2>
-        <p style={{ margin: '0 0 12px', fontSize: 12, color: '#94a3b8' }}>
-          Show/game overlays the audience sees during the episode — not the production checklist.
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+          <div>
+            <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
+              Episode To-Do Overlays
+            </h2>
+            <p style={{ margin: '0 0 12px', fontSize: 12, color: '#94a3b8' }}>
+              Show/game overlays the audience sees during the episode — not the production checklist.
+            </p>
+          </div>
+          {/* Todo List — relocated from the Episode Detail header (issue
+              #1601), same route as before. */}
+          <Link to={`/episodes/${episode.id}/todo`} style={{
+            padding: '5px 10px', background: '#FAF7F0', border: '1px solid #e8e0d0',
+            borderRadius: 6, color: '#B8962E', fontSize: 11, fontWeight: 600,
+            textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            Todo List
+          </Link>
+        </div>
         <EpisodeTodoList episodeId={episode.id} showId={show.id} />
       </section>
     </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../services/api';
 
 /**
@@ -406,6 +407,21 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
             🎬 Scene Plan
           </button>
         </div>
+      </div>
+
+      {/* Final step — Evaluate Episode, relocated from the Episode Detail
+          header (issue #1601). Same route and handler (a plain navigation
+          link) as before; it now closes out the checklist instead of
+          competing for header space. */}
+      <div style={{ marginTop: 12 }}>
+        <Link to={`/episodes/${episode.id}/evaluate`} style={{
+          display: 'block', textAlign: 'center', padding: '12px 0',
+          borderRadius: 10, textDecoration: 'none',
+          background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+          color: '#fff', fontSize: 14, fontWeight: 700,
+        }}>
+          👑 Evaluate Episode
+        </Link>
       </div>
     </div>
   );

@@ -3011,17 +3011,10 @@
     display: none;
   }
 
-  /* "Play on Phone" was the single largest header-action button (137px,
-     unshrinkable) and the actual cause of the overflow that icon-only
-     alone didn't fix — trimmed to match, freeing the room the new button
-     needs instead of demoting it to a menu. */
-  .ed-btn-play-phone {
-    padding: 5px 8px !important;
-  }
-
-  .ed-btn-play-phone-label {
-    display: none;
-  }
+  /* "Play on Phone" moved out of the header to the Phone sub-tab (issue
+     #1601) — the overflow-driven shrink rules that used to apply here
+     (.ed-btn-play-phone / .ed-btn-play-phone-label) no longer have a
+     target and were removed with it. */
 
   .ed-btn-thumbnail {
     padding: 0.25rem 0.4rem;
