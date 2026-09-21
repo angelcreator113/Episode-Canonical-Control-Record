@@ -1076,7 +1076,7 @@ not invented, with `null` where no source settles a field. Sourcing:
   (`OPEN_LETTER_INVITE_OVERLAY` → Audience Overlay; `CLOSET_OPEN` →
   Closet UI; `STATS_UPDATE` matching the seeder's own "Milestone Recap
   Panels" language → Audience Overlay; etc.) — full reasoning per beat in
-  PR #1611's body. Left `null` for the other 8 (beats 1, 2, 3, 4, 6, 7, 9,
+  PR #1612's body. Left `null` for the other 8 (beats 1, 2, 3, 4, 6, 7, 9,
   10), where the source text doesn't clearly settle it — e.g. beat 2's
   "login overlay... world loads" (seeder) reads as a whole-episode
   meta/loading moment, not obviously Lala's own phone, and nothing pins
