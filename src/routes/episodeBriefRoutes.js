@@ -11,6 +11,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { EpisodeBrief, ScenePlan, Episode, SceneSet } = require('../models');
 const { generateScenePlan, getScenePlanForScriptGenerator } = require('../services/scenePlannerService');
+const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 
 // ── GET / CREATE BRIEF ────────────────────────────────────────────────────────
 
@@ -217,6 +218,12 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
       return res.status(400).json({ error: 'Episode Brief not found. Create the Brief first.' });
     }
 
+    const episodeForGuard = await Episode.findByPk(episodeId);
+    if (scriptOverwriteBlocked(episodeForGuard?.script_content, req.body)) {
+      console.warn(`[ScriptGen] Refused overwrite for episode ${episodeId}: existing script_content present, no confirmOverwrite flag.`);
+      return res.status(409).json(scriptOverwriteRefusalBody());
+    }
+
     console.log(`[ScriptGen] Generating grounded script for episode: ${episodeId}`);
 
     const { generateGroundedScript } = require('../services/groundedScriptGeneratorService');
@@ -225,7 +232,7 @@ router.post('/:episodeId/generate-script', requireAuth, aiRateLimiter, async (re
 
     // Save script to episode
     try {
-      const episode = await models.Episode.findByPk(episodeId);
+      const episode = episodeForGuard || await models.Episode.findByPk(episodeId);
       if (episode) {
         await episode.update({ script_content: script });
       }

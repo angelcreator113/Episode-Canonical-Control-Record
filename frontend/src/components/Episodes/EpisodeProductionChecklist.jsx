@@ -278,8 +278,21 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
 
   const handleGenerateScript = async () => {
     setGenerating(true);
+    const post = (confirmOverwrite) => api.post(`/api/v1/episode-brief/${episode.id}/generate-script`, {
+      showId, ...(confirmOverwrite ? { confirmOverwrite: true } : {}),
+    });
     try {
-      const res = await api.post(`/api/v1/episode-brief/${episode.id}/generate-script`, { showId });
+      let res;
+      try {
+        res = await post(false);
+      } catch (err) {
+        if (err.response?.status === 409 && err.response?.data?.code === 'SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED') {
+          if (!window.confirm('This episode already has a script. Replace it?')) return;
+          res = await post(true);
+        } else {
+          throw err;
+        }
+      }
       setToast({ msg: '✅ Script generated! Check the Script tab.', type: 'success' });
       setTimeout(() => setToast(null), 4000);
       if (onScriptGenerate) onScriptGenerate(res.data);

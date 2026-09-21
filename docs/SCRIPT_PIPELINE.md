@@ -112,16 +112,29 @@ Four code paths write one or the other (a fifth reads-and-writes
 `beat_outline`, a related but distinct field — see below):
 
 **Generator 1 — `episodeScriptWriterService.generateEpisodeScript`**
-(`src/services/episodeScriptWriterService.js:603`). The only generator
-that writes a versioned `EpisodeScript` row (`:653`
-`EpisodeScript.create({...})`), and also syncs `episode.script_content`
-for backwards compatibility (`:689-692`, comment: "Also save to
-episode.script_content for backwards compat"). Reads: the file's own
-header comment states its output is "Structured script_json + rendered
-script_text" (`:16`); `loadScriptContext` (exported alongside it,
-`:802`) is its context loader — not read in full this census, flagged as
-a follow-up if the design work needs its exact inputs. Called from
-exactly one route: `src/routes/episodeScriptWriterRoutes.js:36`.
+(`src/services/episodeScriptWriterService.js:603`). Attempts to write a
+versioned `EpisodeScript` row (`:653` `EpisodeScript.create({...})`),
+then syncs `episode.script_content` for backwards compatibility
+(`:689-692`, comment: "Also save to episode.script_content for backwards
+compat"). **Correction (Task #1622, superseding the "already versions
+scripts" claim this section made before):** issue #1619 found that
+canon's live `episode_scripts` table matches neither of its two
+`createTable` migrations and has no `script_text`/`script_json` columns
+at all — the two fields this `EpisodeScript.create()` call sends. That
+call is not wrapped in its own try/catch inside `generateEpisodeScript`;
+a failure there propagates uncaught out of the function, meaning the
+`:689-692` `episode.script_content` sync two lines later is never
+reached either. The route that calls this generator
+(`episodeScriptWriterRoutes.js:18-47`) does wrap the call in try/catch,
+so the failure is not silent — it surfaces as a 500 response and a
+`console.error` log — but as of #1619's finding, **this is the generator
+most likely to be non-functional against production today**, not the
+one other sections could safely assume already versions scripts. Reads:
+the file's own header comment states its output is "Structured
+script_json + rendered script_text" (`:16`); `loadScriptContext`
+(exported alongside it, `:802`) is its context loader — not read in full
+this census, flagged as a follow-up if the design work needs its exact
+inputs. Called from exactly one route: `src/routes/episodeScriptWriterRoutes.js:36`.
 
 **Generator 2 — `groundedScriptGeneratorService.generateGroundedScript`**
 (`src/services/groundedScriptGeneratorService.js:56`). Does **not**
@@ -172,14 +185,28 @@ the brief, read directly by `EpisodeOverviewTab.jsx:308`
 
 | Writer | Persists to | Creates `EpisodeScript`? | Reads `scene_plans`? |
 |---|---|---|---|
-| `episodeScriptWriterService.generateEpisodeScript` | `EpisodeScript` + `episode.script_content` (sync) | Yes | Not confirmed — follow-up |
+| `episodeScriptWriterService.generateEpisodeScript` | Attempts `EpisodeScript`, likely fails against canon (#1619); `episode.script_content` sync is unreached if it does | Attempts, likely fails | Not confirmed — follow-up |
 | `groundedScriptGeneratorService.generateGroundedScript` (via `episodeBriefRoutes.js`) | `episode.script_content` only | No | Not confirmed — follow-up |
 | `scriptSkeletonGenerator.generateScriptSkeleton` (via `worldEvents.js`, 3 call sites) | `episode.script_content` only | No | No — reads raw `world_event` only |
 | `worldEvents.js` `/inject` | `episode.script_content` only (tag append) | No | No |
 
 Three of the four writers can overwrite `episode.script_content`
 independently, with no versioning, no lock, and no mutual awareness of
-which one ran last or what beat structure it used.
+which one ran last or what beat structure it used. **Task #1622**
+closed the silent-loss risk that follows from that, without a schema
+change: each of those three (`episodeScriptWriterService.generateEpisodeScript`,
+`groundedScriptGeneratorService.generateGroundedScript`,
+`scriptSkeletonGenerator.generateScriptSkeleton`) now refuses to replace
+a non-empty `episode.script_content` unless the request carries an
+explicit `confirmOverwrite: true` flag, returning `409
+SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED` otherwise
+(`src/utils/scriptOverwriteGuard.js`). The fourth, `/inject`, was left
+unguarded on purpose — it modifies only its own `[EVENT:]`/
+`[LOCATION_HINT:]` tag lines and preserves the rest of the script, so it
+isn't the silent full-content-loss risk the other three are. This still
+doesn't version anything — declining an overwrite loses nothing, but
+confirming one still discards the prior text permanently, exactly as
+before.
 
 ---
 

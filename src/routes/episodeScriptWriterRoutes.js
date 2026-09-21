@@ -12,6 +12,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 
 // ── GENERATE SCRIPT ──────────────────────────────────────────────────────────
 // POST /api/v1/episode-scripts/:episodeId/generate
@@ -26,6 +27,11 @@ router.post('/:episodeId/generate', requireAuth, aiRateLimiter, async (req, res)
     const models = require('../models');
     const episode = await models.Episode.findByPk(episodeId);
     if (!episode) return res.status(404).json({ error: 'Episode not found' });
+
+    if (scriptOverwriteBlocked(episode.script_content, req.body)) {
+      console.warn(`[ScriptWriter] Refused overwrite for episode ${episodeId}: existing script_content present, no confirmOverwrite flag.`);
+      return res.status(409).json(scriptOverwriteRefusalBody());
+    }
 
     const brief = await models.EpisodeBrief.findOne({ where: { episode_id: episodeId } });
     if (!brief) return res.status(400).json({ error: 'Create an Episode Brief first' });

@@ -161,8 +161,21 @@ export default function EpisodeScriptWriterPage() {
     if (!showId) return;
     setGenerating(true);
     setError(null);
+    const post = (confirmOverwrite) => api.post(`/api/v1/episode-scripts/${episodeId}/generate`, {
+      showId, ...(confirmOverwrite ? { confirmOverwrite: true } : {}),
+    });
     try {
-      const r = await api.post(`/api/v1/episode-scripts/${episodeId}/generate`, { showId });
+      let r;
+      try {
+        r = await post(false);
+      } catch (err) {
+        if (err.response?.status === 409 && err.response?.data?.code === 'SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED') {
+          if (!window.confirm('This episode already has a script. Replace it?')) return;
+          r = await post(true);
+        } else {
+          throw err;
+        }
+      }
       const script = r.data.data;
       setActiveScript(script);
       loadScripts();
