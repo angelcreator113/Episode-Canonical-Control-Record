@@ -375,16 +375,20 @@ Production (Assets/Scenes/Wardrobe/Phone/Checklist) → Results
 permanent record as each stage's work lands on it, ending in the
 Evaluation tab once EVALUATE/ACCEPT has run.
 
-### Lala's Feed, Feed Events, and Events Library — three views, one dataset
+### Lala's Feed and Events — two views, one dataset
 
-Producer Mode's `feed` tab has three sub-tabs
-(`frontend/src/pages/WorldAdmin.jsx:173-175`):
+Producer Mode's `feed` tab has two sub-tabs
+(`frontend/src/pages/WorldAdmin.jsx:172-175`):
 
 ```js
 { key: 'feed-timeline', label: "Lala's Feed" },
-{ key: 'feed-events', label: 'Feed Events' },
-{ key: 'events', label: 'Events Library' },
+{ key: 'events', label: 'Events' },
 ```
+
+(Until PR #1590, Feed Events and Events Library were two separate
+sub-tabs here; that PR merged them into the single `events` sub-tab
+above. This section describes the merged structure as of this basis,
+superseding this document's own earlier text about a three-tab split.)
 
 **Lala's Feed** (`subTab === 'feed-timeline'`, `:1800-1804`) embeds
 `SocialProfileGenerator` — the component's own header comment names it
@@ -396,29 +400,33 @@ plainly: *"SocialProfileGenerator.jsx — The Feed"*
 (§2) describes. It queries `SocialProfile` rows via `GET /api/v1/social-
 profiles` (`fetchProfiles`, `:38`, base path from
 `frontend/src/pages/feed/feedConstants.js:5`), and separately fetches the
-same events list Feed Events/Events Library use
+same events list the Events sub-tab uses
 (`listWorldEventsApi` → `GET /world/:showId/events`, `:33-34`) to
 cross-reference which profiles already have an event.
 
-**Feed Events** and **Events Library** query nothing of their own —
-both read the single `worldEvents` state array Producer Mode fetches once
-via `GET /api/v1/world/:showId/events`
+**Events** (`subTab === 'events'`, `:1808` onward) queries nothing of its
+own — it reads the single `worldEvents` state array Producer Mode fetches
+once via `GET /api/v1/world/:showId/events`
 (`src/routes/worldEvents.js:35`, called from
-`frontend/src/pages/WorldAdmin.jsx:507`) and then filter client-side:
+`frontend/src/pages/WorldAdmin.jsx:508`), unfiltered by status at fetch
+time. Every event — draft included — lists here; `status` is now a
+client-side filter control on top of that one list, not a boundary
+between tabs:
 
-- Feed Events (`:1807-1814`, description at `:1812`: *"Create events from
-  templates or profiles. Complete the details here, then mark ready to
-  move to the Events Library."*) shows exactly
-  `worldEvents.filter(ev => ev.status === 'draft')` (`:1818`).
-- Events Library (`:3048-3053`) explicitly excludes the same set —
-  `if (ev.status === 'draft') return false; // Drafts shown in Feed
-  Events tab` (`:3051`) — then applies its own status/search sub-filters
-  on top.
+- The header stats line (`:1813-1819`) leads with `{worldEvents.length}
+  events` — the full count, drafts included.
+- A row of filter chips (`:2464-2482`) — All, Draft, Ready, Used, Filmed,
+  Declined, one per status value something actually writes (§4) — sets
+  `eventStatusFilter`.
+- The grid's own filter (`:3050`) is exactly
+  `eventStatusFilter === 'all' || ev.status === eventStatusFilter`: no
+  hard exclusion for any status; `'all'` shows everything.
 
-So the `status` field's `'draft'` value is not just a database default —
-it is the literal switch this UI uses to decide which of two tabs an
-event appears in. See §4 for what else this document found riding on
-`status` beyond the model's own four-value comment.
+So the `status` field's values are still the literal vocabulary this UI
+reads — but as of this basis they select a filter chip within one tab,
+not which of two tabs an event appears in. See §4 for what else this
+document found riding on `status` beyond the model's own four-value
+comment.
 
 ---
 
@@ -496,14 +504,16 @@ but never written:**
 - `'declined'` — `financialPressureService.js`'s `recordDeclinedInvite`
   (`:88`) sets `status: 'declined'` (`:119`) when Lala can't afford an
   invite's cost.
-- `'scripted'` — checked for but never found written. Producer Mode's
-  Events Library filter treats it as equivalent to `used`/`filmed`
-  (`frontend/src/pages/WorldAdmin.jsx:3052`:
-  `eventStatusFilter === 'used' && (ev.status === 'used' || ev.status
-  === 'scripted' || ev.status === 'filmed')`), but a repo-wide search for
-  `status: 'scripted'` or `status = 'scripted'` in `src/` returns
-  nothing. The UI is prepared for a value this document found no writer
-  of.
+- `'scripted'` — checked for but never found written. Until PR #1590,
+  Producer Mode's Events Library filter treated it as equivalent to
+  `used`/`filmed`; that PR replaced the grouped filter with literal
+  per-status chips (§3) and dropped the `'scripted'` grouping along with
+  it — there is no `'scripted'` chip, and nothing in
+  `frontend/src/pages/WorldAdmin.jsx` gives that value any special UI
+  treatment as of this basis. A repo-wide search for `status: 'scripted'`
+  or `status = 'scripted'` in `src/`, re-run at this basis, still returns
+  nothing. The value remains one this document found no writer of — and
+  now no reader of either.
 
 ### "Event Ready" (Producer Mode) — computed, not persisted
 

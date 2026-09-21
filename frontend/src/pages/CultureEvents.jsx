@@ -64,7 +64,7 @@ export default function CultureEvents() {
     if (!showId) { alert('No show found — create a show first'); return; }
     try {
       const d = await autoSpawnEventApi(ev.id, { show_id: showId, event_count: 1, max_guests: 6 });
-      if (d.success) flash(`Created "${d.data?.events?.[0]?.name || 'event'}" — check Events Library`);
+      if (d.success) flash(`Created "${d.data?.events?.[0]?.name || 'event'}" — check the Events tab`);
       else flash(d.error || 'Failed', 'error');
     } catch (e) { flash(e.message, 'error'); }
   }, [shows]);
