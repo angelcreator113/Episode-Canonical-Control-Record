@@ -646,3 +646,352 @@ all?), not a code question this document's reads can settle. Left open.
 - does not edit anything under `docs/audit/`, and is not itself an
   audit-register document;
 - mints no FD, XK, or PE number.
+
+---
+
+## 7. Decisions (Evoni, 2026-09-21)
+
+**These are product rulings, not verified facts.** Each one is recorded as
+Evoni stated it, followed by this document's own re-derivation of where
+current code already agrees or conflicts. Basis for the code citations in
+this section: `origin/main` at `c3ecff3ea5a579fa6169442603fca3530883c72f`
+(2026-09-21) — a later basis than §§1–6 above, which are not re-walked
+here.
+
+**1. The chain.** WORLD STATE → EVENT HOST → EVENT PACKAGE → START EPISODE
+→ EPISODE PLAN → SCRIPT → PRODUCE → REVIEW → EVALUATE → ACCEPT →
+AFTERMATH → NEXT EVENT.
+
+Code: §2's chain (`HOST → EVENT → EVENT PACKAGE → EVENT READY → GENERATE
+EPISODE → PRODUCE → EVALUATE/ACCEPT → AFTERMATH → NEXT EVENT`) is close
+but not the same list. Three differences, not reconciled here: (a) no
+distinct WORLD STATE stage exists ahead of HOST in the code's own
+sequence; (b) EPISODE PLAN and SCRIPT are not separate stages in the
+current tab flow — see item 7 below; (c) EVENT READY (§2's computed,
+non-gating indicator) and REVIEW/EVALUATE (§2's EVALUATE/ACCEPT, a
+genuine two-state gate) are not the same kind of thing, and this ruling's
+chain does not carry EVENT READY forward at all.
+
+**2. No blank SAL episodes.** New Episode starts at
+`/shows/:showId/new-episode` (the Feed in choose-host mode, step 1).
+Existing blank-creation routes are redirected later, not deleted now.
+
+Code: `/shows/:showId/new-episode` does not exist in
+`frontend/src/App.jsx`'s route table at this basis — this names a route
+not yet built. Blank-creation entry points found, none event-gated:
+
+- `POST /api/v1/episodes` (`episodeController.createEpisode`,
+  `src/routes/episodes.js:306-310`) — no `event_id`/host requirement in
+  the route itself.
+- `/episodes/create` → `CreateEpisode.jsx` (`frontend/src/App.jsx:345`),
+  which calls the route above via `episodeService.createEpisode`
+  (`frontend/src/services/episodeService.js:43-45`).
+- `/shows/:showId/quick-episode` → `QuickEpisodeCreator.jsx`
+  (`frontend/src/App.jsx:360`), whose own header comment
+  (`frontend/src/components/QuickEpisodeCreator.jsx:1-15`) describes a
+  different, self-contained path: "creates episode + event + injects
+  event + generates script skeleton" in one submit, calling
+  `POST /api/v1/episodes` (`:349`) and
+  `POST /api/v1/world/:showId/events/:eventId/inject` (`:341,382`)
+  directly rather than going through EVENT PACKAGE or GENERATE EPISODE at
+  all. The same component also mounts at `/episodes/:episodeId/edit`
+  (`App.jsx:346`) for edit mode.
+
+**3. Templates repeat; events happen; episodes record what happened.** A
+WorldEvent is one occurrence and starts at most one episode. Supersedes
+the earlier "events are reusable" rule.
+
+Code: reusable/inject language is still live, not just in stale comments.
+Found:
+- Comment: `frontend/src/pages/WorldAdmin.jsx:9` — "Events Library —
+  Reusable event catalog (create, edit, inject)" (already flagged stale
+  against the tab set by §3 above, for a different reason).
+- Comment: `src/migrations/20260219000003-world-events.js:4-5` — "Creates
+  world_events table for the reusable event catalog. Events can be
+  injected into episodes and feed the evaluation system." This is the
+  March-era design the migration itself still documents.
+- Column: `WorldEvent.times_used` (`src/models/WorldEvent.js:217`),
+  incremented on every injection — a counter has no reason to exist for a
+  fact that can only ever be 0 or 1.
+- Route: `POST /api/v1/world/:showId/events/:eventId/inject`
+  (`src/routes/worldEvents.js:588-662`) sets `used_in_episode_id`,
+  `status`, and increments `times_used` unconditionally on every call
+  (`:656-663`) — no check for an existing `used_in_episode_id` before
+  overwriting it. Calling it twice on the same event with two different
+  `episode_id` values re-points the event at the second episode; nothing
+  in this route rejects that.
+- **Live UI features that reassign, not just old code.**
+  `WorldAdmin.jsx`'s event-detail modal has a "Reassign" action that
+  calls this same `/inject` endpoint to move an event's
+  `used_in_episode_id` from one episode to another (`:918-934`,
+  `:810-811`), and a bulk swap that reassigns two events between two
+  episodes in one action (`:749-750`, both events' `used_in_episode_id`
+  set to the other's episode). These are reachable buttons, not dead
+  code — the clearest present-tense conflict with "at most one episode."
+
+**Old data may break the rule (owed, not investigated further here — see
+§9).** The `/inject` route's lack of a re-link guard means any
+`WorldEvent` this route (or the Reassign/swap actions) touched more than
+once already carries a `used_in_episode_id` that no longer matches its
+full history — a live code path, not a hypothetical one from the March
+design doc.
+
+**4. Event Package page.** `/shows/:showId/events/:eventId`, one page for
+create and edit, sections: Basics, People, Place, Invitation, Style &
+Deliverables, Review. Create Event opens it instead of the modal. The
+Event Package chooses only the event location; Episode → Scenes chooses
+all other locations.
+
+Code: no such route exists in `frontend/src/App.jsx` at this basis, and
+no "Event Package" component was found — nothing to conflict with since
+nothing occupies the name yet. The six named sections map loosely, not
+one-to-one, onto §2's five existing EVENT PACKAGE parts (Venue, Guests,
+Invitation, Requirements, Outfit) — People/Place split what §2 calls
+Venue+Guests differently, and Requirements has no obvious home in the
+six-section list. Left for whoever builds the page.
+
+**5. One home per truth — ownership table.** Event Host
+(`source_profile_id`), Venue (`WorldLocation`), Visual venue (`SceneSet`),
+Invitation, Outfit (`outfit_set_id`). Guests: canonical representation
+OPEN. Display names are derived, not separately editable.
+
+Code: matches §1 and §2 closely, field for field —
+`WorldEvent.source_profile_id` (`src/models/WorldEvent.js:76`, `:291-296`
+association) for Host; `venue_location_id` (§2 Venue) for Venue;
+`WorldEvent.scene_set_id` (`src/models/WorldEvent.js:61`, association
+`:264`) for Visual venue; `invitation_asset_id` (§2 Invitation,
+`WorldEvent.js:67`) for Invitation; `outfit_set_id`/`outfit_pieces` (§2
+Outfit, `WorldEvent.js:116-127`) for Outfit. Guests remaining OPEN matches
+§2's own finding that guests have two homes, not one
+(`canon_consequences.automation.guest_profiles` vs. the separate
+`guest_list` column) — this ruling does not resolve that, and neither did
+§2.
+
+**6. "Generate Episode" becomes "Start Episode." Read-only once started.**
+Services reading the event snapshot instead of the live row deferred to
+F-Stats-1 Phase B.
+
+Code: the current button is literally labeled "Generate Episode"
+(§2 GENERATE EPISODE, `frontend/src/pages/WorldAdmin.jsx:3256-3276`) — the
+rename has not happened. Read-only has not happened either, and this is
+more than a naming gap: item 3's Reassign/swap actions actively rewrite
+`used_in_episode_id` on events already marked `used`, and the event `PUT`
+route's `allowedFields` (§4 above, `worldEvents.js:307`) has no
+status-conditioned gate — nothing in `WorldAdmin.jsx` disables an event's
+edit fields once `status === 'used'` (checked: every `status === 'used'`
+reference in that file is a count, filter, or badge, not a `disabled`
+condition). An event stays editable, and reassignable, after it starts an
+episode.
+
+**7. Episode Plan precedes the script.** Context, title, wardrobe,
+locations, scene plan. "Write Script" with "Generate Draft" inside.
+
+Code: `EpisodeDetail.jsx`'s tab order is Overview → Script → Production
+(§2 PRODUCE, `frontend/src/pages/EpisodeDetail.jsx:82-97`) — no distinct
+"Episode Plan" step sits between them. A "Scene Planner" page exists
+(`frontend/src/pages/ScenePlannerPage.jsx`, route
+`/episodes/:episodeId/plan`, `App.jsx:372`) but is not wired into the
+Overview→Script→Production flow — it is a standalone route this document
+found no in-flow link to. `EpisodeScriptTab.jsx` calls
+`POST /api/v1/episode-brief/:episodeId/generate-script` (`:200`) but has
+no "Write Script" or "Generate Draft" labels at this basis (grepped the
+file; no hits) — the UI copy this ruling names does not exist yet.
+
+**8. Source vs presentation.** The Event Package owns source facts;
+Episode Production owns how they appear. Presentation never re-creates a
+source fact.
+
+Code: agrees with the one clear example already in this document. The
+Outfit model comment states the design intent directly — "Outfit chosen
+when the event is created. The episode reads this through
+`used_in_episode_id` so creators only pick wardrobe once (on the event)
+and every episode that uses the event inherits it" (§2 Outfit,
+`WorldEvent.js:116-127`). That is source-owns-fact,
+presentation-only-reads, exactly as this ruling states it — for outfit.
+This document did not check whether every other EVENT PACKAGE part
+(venue, invitation, guests) holds the same property at production time;
+only outfit's comment states it this plainly.
+
+**9. Open = orient. Continue = move forward.**
+
+Code: **conflicts.** `EpisodeCard.jsx`'s "Open" button
+(`frontend/src/components/EpisodeCard.jsx:109`) navigates to
+`/episodes/:episodeId` with no query string. `EpisodeDetail.jsx`'s own
+header comment calls `EpisodeOverviewTab` "the default tab"
+(`frontend/src/pages/EpisodeDetail.jsx:7`), but the component's actual
+default is `useState(searchParams.get('tab') || 'checklist')`
+(`:66`) — with no `?tab=` param, "Open" lands on Production → Production
+Checklist, not Overview. The comment and the code disagree with each
+other, and the code disagrees with this ruling. No "Continue" labeled
+control was found to check against the second half of the ruling.
+
+**10. Definitions.** Episode To-Do Overlays (audience-facing, authored in
+Assets); Episode Run Sheet (producer tracker, EpisodeTodoPage); Lala's
+Phone (the phone system) with Preview Phone as its preview action; Create
+Thumbnail (target decided after `docs/THUMBNAIL_SYSTEM.md`, not yet).
+
+Code: **agrees, as of the immediately preceding commit.**
+`EpisodeAssetsTab.jsx:258` reads "Episode To-Do Overlays" with the
+subheading "Show/game overlays the audience sees during the episode — not
+the production checklist" (`:261`) — the audience/production distinction
+this ruling draws, in the code's own words.
+`EpisodeTodoPage.jsx` titles itself "Episode Run Sheet" (`:140`, loading
+and empty states at `:103,108`). `EpisodeDetail.jsx` labels the button
+"Preview Phone" (`:851,854`) and comments describe it as the phone
+player's trigger (`:17,842,1013`). `UIOverlaysTab.jsx` names itself "Phone
+Hub" in its header comment (`:2`) and on-page heading (`:1294`). All four
+were renamed/split by the immediately preceding commit on this branch's
+basis (`c3ecff3ea refactor(frontend): separate Episode Run Sheet from
+To-Do Overlays, rename Preview Phone [skip-automerge] (#1606)`) — this
+ruling's naming and that commit are the same work. `docs/THUMBNAIL_SYSTEM.md`
+exists, matching the "decided after" plan. One thing not yet open: the
+"Create Thumbnail" button already has a target —
+`/episodes/:id/scene-composer` (`EpisodeDetail.jsx:476`) — so the code
+has moved past "not yet" on the destination even though the ruling frames
+it as still pending.
+
+**11. Money: Event Review shows a budget forecast only. Only acceptance
+mutates balances.**
+
+Code: no "Event Review" page or component was found at this basis — the
+forecast-only surface this ruling names does not exist yet, so nothing
+conflicts with that half directly. But "only acceptance mutates balances"
+already conflicts with a live path: wardrobe's select-time auto-purchase
+(§5(b) above, `src/routes/wardrobe.js:1229-1275`) and the standalone
+purchase endpoint (`:1323-1438`) both debit `character_state.coins`
+immediately (`:1251,1371`), independent of any episode's
+evaluate/accept state. The event-time outfit picker itself does not touch
+money (§5(b), confirmed no read/write of `character_state` in either of
+its handlers) — so within EVENT PACKAGE specifically, this ruling holds;
+the conflict is in the wider wardrobe purchase flow the ruling does not
+mention.
+
+**12. Aftermath orchestration at Accept belongs to F-Stats-1 Phase B.**
+
+Code: agrees with what §2's own AFTERMATH section and §5(a) already
+record, and does not resolve the mismatch either document leaves open.
+Character sync, opportunity generation, and feed activity all fire from
+inside `generateEpisodeFromEvent` at **generation** time
+(`src/services/episodeGeneratorService.js:865-889`), not at
+evaluate/accept. `careerPipelineService.onEpisodeCompleted`
+(`src/services/careerPipelineService.js:239-336`) is the one mechanism
+shaped like genuine post-completion aftermath, reachable at
+`POST /opportunities/:showId/episode-complete/:episodeId`
+(`src/routes/opportunityRoutes.js:302-309`) — and §2 already recorded
+finding no caller of that route anywhere under `frontend/src`, re-checked
+here with the same negative result. This ruling assigns the real
+orchestration work to F-Stats-1 Phase B rather than asking this document
+to resolve the existing mismatch, which is consistent with §5(a)'s own
+choice not to rule on it.
+
+**13. Creative laws (Evoni): stats are felt, never stated; failure stays
+elegant; nothing resets.**
+
+Code: the show-brain franchise-laws seeder
+(`src/seeders/20260312800000-show-brain-franchise-laws.js`) states
+related but not identically-worded rules. Stats: "Stats are NEVER
+displayed raw as a dashboard... The viewer feels it but never sees a
+number. This is the most powerful layer" (`:197,210`, Stat System entry)
+— a close match for "felt, never stated." Failure: "Failure episodes must
+never be softened. Failure has weight or the world has no rules." (`:536`,
+Locked Canon Rules) — related to "elegant" but not the same word choice;
+"never softened" is about weight/consequence, "elegant" is about how it's
+delivered, and this document does not treat them as interchangeable.
+Resets: the seeder states a narrower rule, not a universal one — Dream
+Fund "accumulates... never resets mid-season" (`:238`, Show Economy entry)
+and `character_state` is "per-show, not per-episode — one row tracks
+cumulative progression" (`:537`, Locked Canon Rules) — both support the
+spirit of "nothing resets" within their own scope, but neither states it
+as a general law the way this ruling does.
+
+---
+
+## 8. Open decisions
+
+Recorded as open. This document does not choose between them.
+
+**(a) The canonical 14-beat structure.** Three sources, side by side —
+none chosen:
+
+| Beat | `episodeGeneratorService.js` `BEAT_TEMPLATES` (`:253-267`) | `scenePlannerService.js` `BEAT_STRUCTURE` (`:22-37`) | show-brain seeder, Episode Architecture (`20260312800000-show-brain-franchise-laws.js:254-269`) |
+|---|---|---|---|
+| 1 | The Notification | Opening Ritual | Opening Ritual |
+| 2 | The Decision | Login Sequence | Login Sequence |
+| 3 | The Closet | Welcome | Welcome |
+| 4 | Getting Ready | Interruption Pulse 1 | Interruption Pulse #1 |
+| 5 | The Post | Reveal | Reveal |
+| 6 | The Arrival | Strategic Reaction | Strategic Reaction |
+| 7 | The Room Read | Interruption Pulse 2 | Interruption Pulse #2 |
+| 8 | The Encounter | Transformation Loop | Transformation Loop |
+| 9 | The Main Event | Reminder/Deadline | Reminder / Deadline Pulse |
+| 10 | The Complication | Event Travel | Event Travel |
+| 11 | The Content Moment | Event Outcome | Event Outcome |
+| 12 | The Exit | Deliverable Creation | Deliverable Creation |
+| 13 | The Aftermath | Recap Panel | Recap Panel |
+| 14 | The Recap | Cliffhanger | Cliffhanger |
+
+`scenePlannerService.js`'s `BEAT_STRUCTURE` and the show-brain seeder's
+14-beat list are the same structure — same 14 names, same order, same
+screen-state/production-mechanic framing (headphones, login overlay,
+transformation loop, deliverable export). `episodeGeneratorService.js`'s
+`BEAT_TEMPLATES` is a different structure entirely: a plain narrative
+"before/during/after" arc (Notification → Decision → Closet → ... →
+Recap) with no reference to login rituals, screen states, or the
+show-brain's UI mechanics, carrying its own `phase` and `emotional_intent`
+fields the other two don't have. Both are called "14 beats" / "14-beat
+structure" in their own code; they do not describe the same 14 things.
+Which one (or whether both, for different purposes) is canonical is not
+decided here.
+
+**(b) Guests' canonical representation.** Left OPEN by decision 5. §2
+already records the two existing homes
+(`canon_consequences.automation.guest_profiles` vs. the top-level
+`guest_list` column, itself flagged in `WorldEvent.js:64` as possibly not
+in the Sequelize model) without resolving which should be authoritative;
+this document does not resolve it either.
+
+**(c) Brand/entity hosts.** Not addressed by any decision above or by any
+code this document found. `source_profile_id` (item 5) points at
+`SocialProfile`, which §2's HOST section describes entirely in
+creator-profile terms (handle, `content_category`, `archetype`,
+`follower_tier`) — whether a brand or other non-creator entity can be a
+host through the same column, or needs a different one, is open.
+
+---
+
+## 9. Owed before enforcement
+
+Located, not investigated beyond locating them, per this issue's scope.
+
+- **Venue-name drift against `WorldLocation`.** `venue_name` is written
+  as a plain string copy of `venue.name` at event-creation time in at
+  least four places (`src/routes/worldEvents.js:2102,2122,2180-2183,2595`)
+  and again editable independently via the event `PUT` route's
+  `allowedFields` (`:312,347`). Nothing found ties `venue_name` back to
+  `WorldLocation.name` after creation — if a location is renamed, or an
+  event's `venue_name` is edited directly, the two can drift with no
+  reconciliation mechanism. Not counted; only located.
+- **`WorldEvent` rows linked to more than one episode.** No database read
+  was performed (none was available or in scope). Located instead as a
+  live code path: the `/inject` route (item 3 above,
+  `src/routes/worldEvents.js:588-662`) has no guard against being called
+  twice on the same event with two different `episode_id` values, and
+  `WorldAdmin.jsx`'s Reassign and swap actions (`:918-934`, `:749-750`)
+  call it for exactly that purpose. Any event either path has touched
+  more than once now carries a `used_in_episode_id` pointing at only the
+  most recent episode, with the earlier link gone from the row (though
+  `times_used`, `WorldEvent.js:217`, would still show more than one use).
+  Counting actual rows in this state is owed, not done here.
+- **What the Events-tab template cards are.** Located: a hardcoded
+  literal array in `frontend/src/pages/WorldAdmin.jsx:2051-2066` — three
+  objects (Creator Roast Night, Fashion Mystery Box, Creator Speed
+  Dating; `:2053-2055`), each with `name`/`category`/`icon`/`desc`/
+  `energy`/`venue_theme` fields. No `EventTemplate` model exists in
+  `src/models/` at this basis (checked). Clicking one calls
+  `POST /api/v1/world/:showId/events` directly (comment at `:2119`:
+  "Create world event directly from template — no calendar middleware")
+  to spawn a single `WorldEvent` — the card itself is not persisted or
+  reusable in the database sense; only its three hardcoded definitions in
+  this component are. Whether these are meant to become the reusable
+  templates decision 3 implies exist somewhere, or are something else
+  entirely, is not decided here.
