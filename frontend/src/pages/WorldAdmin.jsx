@@ -171,8 +171,7 @@ const TABS = [
   ]},
   { key: 'feed', icon: '🎭', label: 'Feed & Events', subs: [
     { key: 'feed-timeline', label: "Lala's Feed" },
-    { key: 'feed-events', label: 'Feed Events' },
-    { key: 'events', label: 'Events Library' },
+    { key: 'events', label: 'Events' },
   ]},
   { key: 'wardrobe', icon: '🎬', label: 'Assets', subs: [
     { key: 'scene-sets', label: 'Scene Sets' },
@@ -307,7 +306,9 @@ function WorldAdmin() {
       'season': ['episodes', 'season'],
       'episodes': ['episodes', 'episodes-ledger'],
       'feed': ['feed', 'feed-timeline'],
-      'feed-events': ['feed', 'feed-events'],
+      // Feed Events and Events Library merged into one 'events' sub-tab —
+      // both old ?tab= values now resolve to the same destination.
+      'feed-events': ['feed', 'events'],
       'events': ['feed', 'events'],
       'scene-sets': ['wardrobe', 'scene-sets'],
       'overlays': ['wardrobe', 'overlays-tab'],
@@ -1406,7 +1407,7 @@ The revised event should feel like a completely different experience from the si
             const noEpisodes = episodes.length === 0;
             const steps = [];
             if (noWardrobe) steps.push({ text: 'Upload wardrobe pieces', action: () => setActiveTab('wardrobe'), icon: '👗' });
-            if (noEvents) steps.push({ text: 'Create events from feed', action: () => setActiveTab('feed-events'), icon: '📅' });
+            if (noEvents) steps.push({ text: 'Create events from feed', action: () => setActiveTab('events'), icon: '📅' });
             if (!noEvents && noEpisodes) steps.push({ text: 'Generate first episode from an event', action: () => setActiveTab('events'), icon: '🎬' });
             if (steps.length === 0) return null;
             return (
@@ -1803,14 +1804,82 @@ The revised event should feel like a completely different experience from the si
         </Suspense>
       )}
 
-      {/* ════════════════════════ FEED EVENTS ════════════════════════ */}
-      {activeTab === 'feed' && subTab === 'feed-events' && (
+      {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
+      {activeTab === 'feed' && subTab === 'events' && (
         <div style={S.content}>
-          <div style={{ marginBottom: 16 }}>
-            <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Feed Events</h2>
-            <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
-              Create events from templates or profiles. Complete the details here, then mark ready to move to the Events Library.
-            </p>
+          {/* Header — simplified with primary auto-fill action */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Events</h2>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                {/* Feed Events and Events Library merged into this one tab
+                    (docs/PAGE_INVENTORY.md §4) — drafts and published events
+                    share the same list now, split by the status filter below
+                    instead of by tab. */}
+                {worldEvents.length} events · {worldEvents.filter(e => e.status === 'draft').length} draft · {worldEvents.filter(e => e.status === 'used').length} used · {worldEvents.filter(e => e.status === 'ready').length} available
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={async () => {
+                setAutoFilling(true);
+                setToast('🗓️ Generating events for this month...');
+                try {
+                  // Step 1: Generate seasonal calendar events
+                  const month = new Date().getMonth();
+                  console.log('[AutoFill] Starting for month', month, 'show', showId);
+                  const calRes = await api.post('/api/v1/calendar/events/generate-seasonal', { month, count: 3, show_id: showId });
+                  console.log('[AutoFill] Calendar response:', calRes.data);
+                  if (!calRes.data.success) throw new Error(calRes.data.error || 'Calendar generation failed');
+                  const seasonalCount = calRes.data.data?.count || 0;
+                  setToast(`📅 ${seasonalCount} seasonal events created. Spawning world events...`);
+
+                  // Step 2: Auto-spawn world events from each seasonal event
+                  const calEvents = calRes.data.data?.created || [];
+                  let spawned = 0;
+                  for (const ce of calEvents) {
+                    try {
+                      console.log('[AutoFill] Spawning from calendar event:', ce.id, ce.title);
+                      const spawnRes = await api.post(`/api/v1/calendar/events/${ce.id}/auto-spawn`, {
+                        show_id: showId, event_count: 1, max_guests: 6,
+                      });
+                      console.log('[AutoFill] Spawn result:', spawnRes.data);
+                      if (spawnRes.data.success) spawned += spawnRes.data.data?.events_created || 0;
+                    } catch (spawnErr) {
+                      console.error('[AutoFill] Spawn failed:', spawnErr.response?.data || spawnErr.message);
+                    }
+                  }
+                  setToast(`✅ Created ${seasonalCount} seasonal + ${spawned} world events with hosts & venues!`);
+                  loadData();
+                } catch (err) {
+                  console.error('[AutoFill] Error:', err.response?.data || err.message);
+                  setToast('❌ Auto-fill failed: ' + (err.response?.data?.error || err.message));
+                }
+                setAutoFilling(false);
+                setTimeout(() => setToast(null), 6000);
+              }} disabled={autoFilling} style={{ ...S.primaryBtn, background: '#B8962E' }}>
+                {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
+              </button>
+              <button onClick={openNewEvent} style={S.primaryBtn}>+ Create Event</button>
+              <button onClick={() => setShowTemplates(!showTemplates)} style={S.smBtn}>📋 Templates</button>
+              <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={S.smBtn}>{aiFixLoading ? '⏳...' : '✨ Enhance'}</button>
+              <button onClick={async () => {
+                if (!window.confirm('Delete ALL draft events? Ready/used events will be kept.')) return;
+                try {
+                  const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
+                  setToast(`Deleted ${res.data.deleted} draft events`);
+                  loadData();
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, color: '#dc2626', borderColor: '#fecaca' }}>Delete Drafts</button>
+              <button onClick={async () => {
+                if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
+                if (!window.confirm('Really delete everything? Type yes to confirm.')) return;
+                try {
+                  const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
+                  setToast(`Deleted ${res.data.deleted} events`);
+                  loadData();
+                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+              }} style={{ ...S.smBtn, color: '#dc2626', borderColor: '#fecaca' }}>Delete All</button>
+            </div>
           </div>
 
           {/* ── Draft Events Being Worked On ── */}
@@ -1821,7 +1890,7 @@ The revised event should feel like a completely different experience from the si
               <div style={{ marginBottom: 20 }}>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>Draft Events ({draftEvents.length})</span>
-                  <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'none', fontFamily: 'inherit' }}>Complete details and mark ready to move to Events Library</span>
+                  <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'none', fontFamily: 'inherit' }}>Complete details and mark ready</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {draftEvents.map(ev => {
@@ -2070,7 +2139,7 @@ The revised event should feel like a completely different experience from the si
                             const created = res.data.data || res.data;
                             setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'created', event: created } }));
                             loadData();
-                            setToast(`"${template.name}" created as draft — add host, venue, and details in Events Library`);
+                            setToast(`"${template.name}" created as draft — add host, venue, and details below`);
                           } else {
                             setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
                             setToast(res.data.error || 'Failed to create event');
@@ -2088,85 +2157,6 @@ The revised event should feel like a completely different experience from the si
                 </div>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
-      {activeTab === 'feed' && subTab === 'events' && (
-        <div style={S.content}>
-          {/* Header — simplified with primary auto-fill action */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
-            <div>
-              <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Events Library</h2>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                {worldEvents.filter(e => e.status !== 'draft').length} events · {worldEvents.filter(e => e.status === 'used').length} used · {worldEvents.filter(e => e.status === 'ready').length} available
-                {worldEvents.filter(e => e.status === 'draft').length > 0 && (
-                  <span> · <button onClick={() => setActiveTab('feed-events')} style={{ background: 'none', border: 'none', color: '#B8962E', fontWeight: 600, fontSize: 12, cursor: 'pointer', padding: 0 }}>{worldEvents.filter(e => e.status === 'draft').length} drafts in Feed Events</button></span>
-                )}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button onClick={async () => {
-                setAutoFilling(true);
-                setToast('🗓️ Generating events for this month...');
-                try {
-                  // Step 1: Generate seasonal calendar events
-                  const month = new Date().getMonth();
-                  console.log('[AutoFill] Starting for month', month, 'show', showId);
-                  const calRes = await api.post('/api/v1/calendar/events/generate-seasonal', { month, count: 3, show_id: showId });
-                  console.log('[AutoFill] Calendar response:', calRes.data);
-                  if (!calRes.data.success) throw new Error(calRes.data.error || 'Calendar generation failed');
-                  const seasonalCount = calRes.data.data?.count || 0;
-                  setToast(`📅 ${seasonalCount} seasonal events created. Spawning world events...`);
-
-                  // Step 2: Auto-spawn world events from each seasonal event
-                  const calEvents = calRes.data.data?.created || [];
-                  let spawned = 0;
-                  for (const ce of calEvents) {
-                    try {
-                      console.log('[AutoFill] Spawning from calendar event:', ce.id, ce.title);
-                      const spawnRes = await api.post(`/api/v1/calendar/events/${ce.id}/auto-spawn`, {
-                        show_id: showId, event_count: 1, max_guests: 6,
-                      });
-                      console.log('[AutoFill] Spawn result:', spawnRes.data);
-                      if (spawnRes.data.success) spawned += spawnRes.data.data?.events_created || 0;
-                    } catch (spawnErr) {
-                      console.error('[AutoFill] Spawn failed:', spawnErr.response?.data || spawnErr.message);
-                    }
-                  }
-                  setToast(`✅ Created ${seasonalCount} seasonal + ${spawned} world events with hosts & venues!`);
-                  loadData();
-                } catch (err) {
-                  console.error('[AutoFill] Error:', err.response?.data || err.message);
-                  setToast('❌ Auto-fill failed: ' + (err.response?.data?.error || err.message));
-                }
-                setAutoFilling(false);
-                setTimeout(() => setToast(null), 6000);
-              }} disabled={autoFilling} style={{ ...S.primaryBtn, background: '#B8962E' }}>
-                {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
-              </button>
-              <button onClick={openNewEvent} style={S.primaryBtn}>+ Create Event</button>
-              <button onClick={() => setShowTemplates(!showTemplates)} style={S.smBtn}>📋 Templates</button>
-              <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={S.smBtn}>{aiFixLoading ? '⏳...' : '✨ Enhance'}</button>
-              <button onClick={async () => {
-                if (!window.confirm('Delete ALL draft events? Ready/used events will be kept.')) return;
-                try {
-                  const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
-                  setToast(`Deleted ${res.data.deleted} draft events`);
-                  loadData();
-                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-              }} style={{ ...S.smBtn, color: '#dc2626', borderColor: '#fecaca' }}>Delete Drafts</button>
-              <button onClick={async () => {
-                if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
-                if (!window.confirm('Really delete everything? Type yes to confirm.')) return;
-                try {
-                  const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
-                  setToast(`Deleted ${res.data.deleted} events`);
-                  loadData();
-                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-              }} style={{ ...S.smBtn, color: '#dc2626', borderColor: '#fecaca' }}>Delete All</button>
-            </div>
           </div>
 
           {/* Templates panel */}
@@ -2472,10 +2462,16 @@ The revised event should feel like a completely different experience from the si
               style={{ flex: 1, minWidth: 180, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
             <div style={{ display: 'flex', gap: 3, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
               {[
-                { key: 'all', label: 'All', count: worldEvents.filter(e => e.status !== 'draft').length },
+                /* All + one chip per status value docs/EVENT_EPISODE_FLOW.md
+                   §4 confirms something actually writes (draft, ready, used,
+                   filmed, declined) — 'scripted' is checked by the UI
+                   elsewhere but written by nothing, so it gets no chip here;
+                   an event that somehow carries it still shows under "All". */
+                { key: 'all', label: 'All', count: worldEvents.length },
+                { key: 'draft', label: 'Draft', count: worldEvents.filter(e => e.status === 'draft').length },
                 { key: 'ready', label: 'Ready', count: worldEvents.filter(e => e.status === 'ready').length },
-                { key: 'used', label: 'Linked', count: worldEvents.filter(e => e.status === 'used' || e.status === 'scripted' || e.status === 'filmed').length },
-                { key: 'unlinked', label: 'Available', count: worldEvents.filter(e => e.status === 'ready' && !e.used_in_episode_id).length },
+                { key: 'used', label: 'Used', count: worldEvents.filter(e => e.status === 'used').length },
+                { key: 'filmed', label: 'Filmed', count: worldEvents.filter(e => e.status === 'filmed').length },
                 { key: 'declined', label: 'Declined', count: worldEvents.filter(e => e.status === 'declined').length },
               ].map(f => (
                 <button key={f.key} onClick={() => setEventStatusFilter(f.key)} style={{
@@ -3048,8 +3044,10 @@ The revised event should feel like a completely different experience from the si
             {worldEvents.filter(ev => {
               const q = eventSearch.toLowerCase();
               const matchSearch = !q || ev.name?.toLowerCase().includes(q) || ev.host?.toLowerCase().includes(q) || ev.dress_code?.toLowerCase().includes(q) || ev.location_hint?.toLowerCase().includes(q);
-              if (ev.status === 'draft') return false; // Drafts shown in Feed Events tab
-              const matchStatus = eventStatusFilter === 'all' || (eventStatusFilter === 'ready' && ev.status === 'ready') || (eventStatusFilter === 'used' && (ev.status === 'used' || ev.status === 'scripted' || ev.status === 'filmed')) || (eventStatusFilter === 'unlinked' && ev.status === 'ready' && !ev.used_in_episode_id) || (eventStatusFilter === 'declined' && ev.status === 'declined');
+              // Drafts now list here too (Feed Events merged into this tab) —
+              // the status filter chips above decide what's visible, not a
+              // hard exclusion.
+              const matchStatus = eventStatusFilter === 'all' || ev.status === eventStatusFilter;
               return matchSearch && matchStatus;
             }).sort((a, b) => {
               if (eventSort === 'prestige') return (b.prestige || 0) - (a.prestige || 0);
@@ -3303,7 +3301,7 @@ The revised event should feel like a completely different experience from the si
               </div>
               );
             })}
-            {worldEvents.filter(e => e.status !== 'draft').length === 0 && !editingEvent && (
+            {worldEvents.length === 0 && !editingEvent && (
               <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 12 }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>🗓️</div>
                 <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#2C2C2C' }}>No events yet</div>
@@ -4329,7 +4327,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       // (the backend also guards this, but skipping the call
                       // entirely saves a round-trip and makes the UX honest).
                       const hasVenue = !!(md.scene_set_id || md.venue_location_id);
-                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Save all fields\n• Generate social checklist\n${hasVenue ? '• Keep the attached venue (no regeneration)' : '• Generate venue images'}\n• Move to Events Library`;
+                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Save all fields\n• Generate social checklist\n${hasVenue ? '• Keep the attached venue (no regeneration)' : '• Generate venue images'}\n• Move out of Drafts`;
                       if (!window.confirm(summary)) return;
                       try {
                         // Save all hydrated fields + status in one PUT
