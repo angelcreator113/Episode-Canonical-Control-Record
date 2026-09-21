@@ -4,10 +4,12 @@
  * Single source of truth for the SAL 14-beat structure. Ruling:
  * docs/EVENT_EPISODE_FLOW.md §8(a) / §7 decision 1 — Evoni, 2026-09-21
  * (Task #1609): the show-brain seeder's names and order are canon.
- * Task #1611 (2026-09-21) completed the per-beat record and corrected
- * beat 5. This revision (same task, follow-up commit) adds `actor` and
- * the SAL interaction law (docs/EVENT_EPISODE_FLOW.md §8(f)) that makes
- * `actor` and `diegetic` two independent axes, not one.
+ * Task #1611 completed the per-beat record and corrected beat 5, and
+ * added `actor` plus the SAL interaction law (§8(f)) that makes `actor`
+ * and `diegetic` two independent axes, not one. Task #1613/#1614
+ * converted episodeGeneratorService.js and feedMomentsService.js to
+ * import this module. Task #1615 (2026-09-21) applies Evoni's ruling
+ * that Lala's phone is visible for the whole show — see `surface` below.
  *
  * Each beat carries:
  *   - name, typical_location, description  — pre-existing fields read by
@@ -26,25 +28,38 @@
  *     BEAT_TEMPLATES dicts.
  *   - actor — who performs this beat's screen action: 'justawoman',
  *     'lala', or 'none'. Evoni's ruling, 2026-09-21.
- *   - surface — where the screen action is presented: 'Host Environment',
- *     'Audience Overlay', 'Closet UI', "Lala's Phone", "Lala's
- *     Environment", or 'none'. ("Environment" renamed to "Lala's
- *     Environment" this revision, so it isn't confused with "Host
- *     Environment".)
+ *   - surface — where the screen action is presented. One of:
+ *     'Host Environment', 'Full Screen', "Lala's Phone", "Lala's
+ *     Environment", or 'none' — OR an ordered transition object
+ *     `{ start, end }` naming two of those, for a presentation that
+ *     moves between surfaces (see beat 5). Task #1615, Evoni's ruling:
+ *     Lala's phone is visible for the whole show; most icons live on it.
+ *     Renamed 'Audience Overlay' → 'Full Screen' (a presentation with no
+ *     phone frame around it at all, not specifically "for the audience"
+ *     — JustAWoman's own framing, beats 1-2, and Lala's own full-screen
+ *     stat card, beat 13, are both this surface). Folded 'Closet UI' into
+ *     "Lala's Phone" (the closet is an app on it, beat 8) — 'Closet UI'
+ *     no longer exists as a distinct surface. ("Environment" was renamed
+ *     to "Lala's Environment" in the prior revision, so it isn't confused
+ *     with "Host Environment".)
  *   - diegetic — whether Lala can perceive the presented RESULT. Not the
  *     same axis as `actor`: JustAWoman can be the actor (she clicks,
  *     chooses, operates the interface) while the result is still diegetic
  *     to Lala (she reads the same letter the audience saw enlarged) — see
  *     beat 5. Conversely JustAWoman can act on something Lala never
- *     perceives at all — see beat 8, the closet choice itself.
+ *     perceives at all. Task #1615 flips this for beat 8: JustAWoman
+ *     chooses in the closet, but Lala now sees that closet screen too (it
+ *     is her phone) and believes she is choosing — `diegetic` is now
+ *     `true`, not `false`.
  *   - phase, emotional_intent — for beats 4, 6, 8, 10, 11, 12, 13: the
  *     content-matched mapping proposed in PR #1610's body (from
  *     episodeGeneratorService.js's BEAT_TEMPLATES, matched by narrative
  *     content, never by position) — beat 10 paired with legacy "The
  *     Arrival" (during / awe_or_intimidation), dropped in the first
- *     #1611 commit and restored here. For beats 1, 2, 3, 5, 7, 9, 14: no
- *     legacy match existed, so these are Evoni's own direct rulings, not
- *     derived from episodeGeneratorService.js at all.
+ *     #1611 commit and restored in a later one. For beats 1, 2, 3, 5, 7,
+ *     9, 14: no legacy match existed, so these are Evoni's own direct
+ *     rulings, not derived from episodeGeneratorService.js at all. Not
+ *     touched by Task #1615.
  *
  * Three distinct states, never collapsed, for `actor`, `surface`, and
  * `diegetic` alike: `null` = not yet decided (EMPTY); the string `'none'`
@@ -54,12 +69,9 @@
  * presented result for Lala to perceive at all, a different claim from
  * "she doesn't perceive it."
  *
- * As of the 2026-09-21 follow-up ruling below, every field on every beat
- * is decided (a value or an explicit `'none'`) except `typical_location`,
- * which stays proposed-not-sourced for all 14 (see above).
- *
- * episodeGeneratorService.js and feedMomentsService.js are not converted
- * to import this module yet — see docs/EVENT_EPISODE_FLOW.md §8(d).
+ * Every field on every beat is decided (a value or an explicit `'none'`)
+ * except `typical_location`, which stays proposed-not-sourced for all 14
+ * (see above) — Task #1615 does not touch `typical_location`.
  */
 
 const CANONICAL_BEATS = [
@@ -84,7 +96,9 @@ const CANONICAL_BEATS = [
     narrative_purpose: 'Login overlay → typing animation → Enter. World loads.',
     screen_action: 'LOGIN',
     actor: 'justawoman',
-    surface: 'Audience Overlay',
+    // Full Screen — Task #1615, Evoni's ruling: JustAWoman entering her
+    // world, not on the phone at all. Renamed from 'Audience Overlay'.
+    surface: 'Full Screen',
     diegetic: false,
     phase: 'before',
     emotional_intent: 'threshold',
@@ -145,7 +159,12 @@ const CANONICAL_BEATS = [
     narrative_purpose: 'Lala reads the mail. Audience sees her unfiltered reaction.',
     screen_action: 'OPEN_LETTER_INVITE_OVERLAY',
     actor: 'justawoman',
-    surface: 'Audience Overlay',
+    // Transition — Task #1615, Evoni's ruling: the notification lives on
+    // her phone; tapping it lets the letter fill the screen. This is the
+    // clearest case of a presentation that moves between surfaces, which
+    // is why `surface` allows an ordered { start, end } here instead of
+    // one fixed value.
+    surface: { start: "Lala's Phone", end: 'Full Screen' },
     // diegetic: true — the actor (JustAWoman, clicking) and the perceiver
     // (Lala, reading) are different people; the result is still diegetic
     // because it's the same letter object Lala herself reads, just shown
@@ -191,11 +210,15 @@ const CANONICAL_BEATS = [
     description: 'Getting ready — the physical and mental transformation',
     narrative_purpose: 'Dopamine engine. Scroll → select → swap → check. Outfit is chosen.',
     screen_action: 'CLOSET_OPEN',
-    // JustAWoman chooses; Lala wears it. The closet UI itself is not
-    // something Lala perceives — she experiences only its outcome.
+    // Task #1615, Evoni's ruling, supersedes the #1611 comment this
+    // replaces ("JustAWoman chooses; Lala wears it... not something Lala
+    // perceives"): the closet is an app on Lala's phone. JustAWoman
+    // chooses, but Lala sees her closet and believes she is choosing —
+    // diegetic is now true, not false. 'Closet UI' folded into "Lala's
+    // Phone"; it no longer exists as a distinct surface.
     actor: 'justawoman',
-    surface: 'Closet UI',
-    diegetic: false,
+    surface: "Lala's Phone",
+    diegetic: true,
     phase: 'before',
     emotional_intent: 'transformation',
   },
@@ -206,10 +229,14 @@ const CANONICAL_BEATS = [
     description: 'Time pressure — the event is approaching, urgency builds',
     narrative_purpose: 'Pacing accelerates. Music intensifies. The clock is real.',
     screen_action: 'TODO_LIST',
-    // The overlay appears; nobody performs it. — Evoni's ruling.
+    // The overlay appears; nobody performs it. — Evoni's ruling, Task #1614.
     actor: 'none',
-    surface: 'Audience Overlay',
-    diegetic: false,
+    // Lala's Phone, diegetic true — Task #1615, Evoni's ruling: the
+    // to-do list is Lala's; she sees it on her phone. Previously
+    // 'Audience Overlay' (would have renamed to 'Full Screen' by default;
+    // this beat is a named exception, not the general rename).
+    surface: "Lala's Phone",
+    diegetic: true,
     phase: 'before',
     emotional_intent: 'urgency',
   },
@@ -219,15 +246,18 @@ const CANONICAL_BEATS = [
     typical_location: 'TRANSITION',
     description: 'Moving to the event — anticipation, anxiety, or excitement',
     narrative_purpose: 'Stylish wipe transition. New environment loads. World expands.',
-    // The LOCATION_ICON transition graphic itself renders on Audience
-    // Overlay and is not diegetic — but the travel it represents happens
-    // in Lala's Environment. Two different claims about the same beat;
-    // `surface`/`diegetic` below describe the rendered icon, not the
-    // underlying diegetic fact.
+    // Lala's Phone, diegetic true — Task #1615, Evoni's ruling: the
+    // travel icon is on her phone; it reads like her maps. Supersedes the
+    // #1611/#1613 comment this replaces, which read the icon as an
+    // audience-only, non-diegetic transition graphic (`surface:
+    // 'Audience Overlay'`, `diegetic: false`) separate from the
+    // underlying diegetic travel. Under the persistent-phone rule, the
+    // icon itself is what Lala sees — no separate underlying fact to
+    // distinguish from the rendered surface anymore.
     screen_action: 'LOCATION_ICON',
     actor: 'none',
-    surface: 'Audience Overlay',
-    diegetic: false,
+    surface: "Lala's Phone",
+    diegetic: true,
     // Restored — PR #1610's content-matched mapping already paired this
     // beat with legacy "The Arrival" (during / awe_or_intimidation); the
     // first #1611 commit dropped it in error. Evoni caught it.
@@ -269,9 +299,12 @@ const CANONICAL_BEATS = [
     description: 'Reflecting on what happened — audience engagement moment',
     narrative_purpose: 'Cinematic stat card. Coins changed. Brand trust updated. Dream Fund moved.',
     screen_action: 'STATS_UPDATE',
-    // The stats update is the system, not a person. — Evoni's ruling.
+    // The stats update is the system, not a person. — Evoni's ruling,
+    // Task #1614. Full Screen, diegetic no — Task #1615, Evoni's ruling:
+    // stats are felt, never stated (renamed from 'Audience Overlay';
+    // diegetic unchanged, already false).
     actor: 'none',
-    surface: 'Audience Overlay',
+    surface: 'Full Screen',
     diegetic: false,
     phase: 'after',
     emotional_intent: 'processing',
@@ -284,8 +317,9 @@ const CANONICAL_BEATS = [
     narrative_purpose: 'Next episode is seeded. The world keeps going.',
     screen_action: 'FADE_OUT',
     actor: 'none',
-    // CHANGED from 'None' (proposed) to 'Audience Overlay' — Evoni's ruling.
-    surface: 'Audience Overlay',
+    // Audience Overlay — Evoni's ruling, Task #1614 (was proposed 'None').
+    // Full Screen — Task #1615, Evoni's ruling (rename).
+    surface: 'Full Screen',
     diegetic: false,
     phase: 'after',
     emotional_intent: 'suspense',

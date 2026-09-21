@@ -850,6 +850,17 @@ exists, matching the "decided after" plan. One thing not yet open: the
 has moved past "not yet" on the destination even though the ruling frames
 it as still pending.
 
+**Amended — Task #1615, Evoni's ruling, 2026-09-21.** "Episode To-Do
+Overlays (audience-facing...)" is corrected: the lists are **Lala's**,
+and she sees them on her phone — consistent with the persistent-phone
+rule (§8(h)/(i)) and with beat 9's canonical `surface` ("Lala's Phone",
+`diegetic: true`; the to-do/reminder beat). Only their *presentation
+styling* — how they're rendered for the audience watching the show — is
+the show's. `EpisodeAssetsTab.jsx:261`'s own subheading, "Show/game
+overlays the audience sees during the episode," describes the styling
+layer accurately but reads as if the audience is the intended perceiver
+of the list itself, which this amendment corrects: Lala is.
+
 **11. Money: Event Review shows a budget forecast only. Only acceptance
 mutates balances.**
 
@@ -1185,7 +1196,76 @@ new standing rule:
    start/end model, are owed as a separate task** — not redesigned in
    Task #1614. Until that task lands, `BEAT_PHONE_MOMENTS`'s beats 10 and
    13 restored above are correct in outcome (Lala does see these) but
-   not yet expressed through an updated `surface` value.
+   not yet expressed through an updated `surface` value. **The `surface`
+   start/end model itself landed in Task #1615, below; `BEAT_PHONE_MOMENTS`
+   in `feedMomentsService.js` was not touched by that task and still
+   describes beats 10/13 without reference to it — see (i).**
+
+**(i) `surface` transitions and the persistent-phone rename (Evoni,
+2026-09-21, Task #1615).** Applies the standing rule from (h)(3) to
+`canonicalBeats.js` itself:
+
+- **`surface` can now be an ordered transition.** A beat's `surface` is
+  either one of the named surfaces below, the string `'none'`, or an
+  object `{ start, end }` naming two surfaces a presentation moves
+  between. Only beat 5 uses this so far: `{ start: "Lala's Phone", end:
+  'Full Screen' }` — the notification lives on her phone; tapping it lets
+  the letter fill the screen.
+- **`'Audience Overlay'` renamed to `'Full Screen'`.** The old name
+  implied "for the audience specifically," which wasn't true even before
+  this task — beat 13's stat card and beats 1-2's opening/login framing
+  were never about the audience as a category, just about a presentation
+  with no phone frame around it. Applies to beats 1 *(unchanged, "Host
+  Environment," not this surface)*, 2, 13, 14 — all now `'Full Screen'`.
+- **`'Closet UI'` folded into `"Lala's Phone"`.** The closet is an app on
+  it, per this ruling. `'Closet UI'` no longer exists as a surface value
+  anywhere in `canonicalBeats.js`.
+- **Six beats changed**, per Evoni's explicit per-beat rulings (every
+  other beat's fields are unchanged from the merged state):
+  - **Beat 2** (Login Sequence) — `'Full Screen'`, `diegetic: false`
+    (rename only; JustAWoman entering her world, not diegetic to Lala).
+  - **Beat 5** (Reveal) — `{ start: "Lala's Phone", end: 'Full Screen' }`,
+    `actor: 'justawoman'`, `diegetic: true` (transition modeled; actor
+    and diegetic unchanged from the merged state).
+  - **Beat 8** (Transformation Loop) — `"Lala's Phone"` (was `'Closet
+    UI'`), **`diegetic: true`** (was `false`) — the one real behavioral
+    reversal here: JustAWoman chooses, but Lala now sees her closet too
+    and believes she is choosing.
+  - **Beat 9** (Reminder/Deadline) — `"Lala's Phone"` (was `'Audience
+    Overlay'`), **`diegetic: true`** (was `false`) — the to-do list is
+    Lala's; she sees it on her phone (see the amended Definition, item
+    10 above).
+  - **Beat 10** (Event Travel) — `"Lala's Phone"` (was `'Audience
+    Overlay'`), **`diegetic: true`** (was `false`) — the travel icon is
+    on her phone; it reads like her maps. Supersedes the #1611/#1613
+    reasoning that split the rendered icon (non-diegetic) from an
+    underlying diegetic travel fact — under the persistent-phone rule
+    there is no such split; the icon itself is what she sees.
+  - **Beat 13** (Recap Panel) — `'Full Screen'` (rename only; `diegetic:
+    false` unchanged — stats are felt, never stated).
+  - **Beat 14** (Cliffhanger) — `'Full Screen'` (rename only; `diegetic:
+    false` unchanged).
+- **`typical_location` untouched.** It governs scene-set assignment (a
+  physical-location concept for `scenePlannerService.js`'s AI prompt),
+  independent of the phone/screen `surface` concept — out of this task's
+  scope, including for beat 8, whose `typical_location` stays `'CLOSET'`.
+- **No code reads `surface` today.** Grepped the whole repository for
+  `.surface` (no hits in `src/` or `frontend/src/`) and for the literal
+  strings `"Audience Overlay"`/`"Closet UI"` (5 files). Of those: this
+  file's own §8(e)/(h)/(i) prose (historical references, left as-is —
+  they describe what a past ruling said, not live code);
+  `feedMomentsService.js`'s code comments from Task #1614 (`:95,99,104`)
+  describe beats 5/8/9 using the pre-rename names — stale after this
+  task, **not fixed here** (out of scope: `feedMomentsService.js` is not
+  a file this task touches); `frontend/src/pages/WorldAdmin.jsx:4110`'s
+  `{ id: 'closet_ui', name: 'Closet UI', icon: '🚪' }` is an unrelated,
+  independent list of selectable episode-overlay asset types (Mail
+  Panel, Wardrobe List, Career List, ...) that coincidentally shares the
+  phrase — confirmed not a `canonicalBeats.js` consumer; the show-brain
+  seeder's own Screen States section (`20260312800000-show-brain-
+  franchise-laws.js:382`, `GAMEPLAY: 'Closet UI active...'`) is a
+  different "Screen States" concept (IDLE/ALERT/GAMEPLAY/...) for the
+  Editor Brain, also coincidental, and the seeder is off-limits regardless.
 
 ---
 
