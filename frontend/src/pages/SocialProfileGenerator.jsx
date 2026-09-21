@@ -6,6 +6,7 @@
  *   #d4789a (pink) · #7ab3d4 (blue) · #a889c8 (lavender)
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import apiClient from '../services/api';
 import FeedBulkImport from '../components/FeedBulkImport';
@@ -133,7 +134,9 @@ function ExportDropdown({ exporting, onExport }) {
 // lalaClass imported from ./feed/feedConstants; auth handled by apiClient interceptor (Track 3)
 
 // ══════════════════════════════════════════════════════════════════════
-export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId, onNavigateToTab }) {
+export default function SocialProfileGenerator({ embedded=false, worldTag, defaultFeedLayer, showId, onNavigateToTab, chooseHost=false }) {
+  const navigate = useNavigate();
+  const [hostingProfileId, setHostingProfileId] = useState(null);
   const [profiles,setProfiles]   = useState([]);
   const [selected,setSelected]   = useState(null);
   const [reactionsProfile,setReactionsProfile] = useState(null);
@@ -346,8 +349,25 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       const res=await generateProfileApi({handle:handle.trim(),platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...lvFields,...(hasAdv?{advanced_context:advFields}:{})});
       const data=res.data;
       setSelected(data.profile);setHandle('');setVibe('');setAdvFields({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});setShowAdvanced(false);setPage(1);
+      // New Episode choose-host mode (Task #1628): a newly created host
+      // continues straight into event creation, same as clicking
+      // "Host an Event" on an existing card — one step, not two.
+      if(chooseHost&&data.profile)await handleHostEvent(data.profile);
     }catch(err){setError(err.response?.data?.error||err.message||'Generation failed');}
     finally{setGenerating(false);}
+  };
+
+  // ── Choose-host mode: create the event and open it in Producer Mode ──
+  const handleHostEvent = async(profile)=>{
+    if(!showId||!profile?.id)return;
+    setHostingProfileId(profile.id);setError(null);
+    try{
+      const data=await createEventFromProfileApi(showId,{profile_id:profile.id,event_template:'Event'});
+      const ev=data.event;
+      if(ev?.id)navigate(`/shows/${showId}/world?tab=events&event=${ev.id}`);
+      else setError('Event created but no event id was returned.');
+    }catch(err){setError(err.response?.data?.error||err.message||'Failed to create event');}
+    finally{setHostingProfileId(null);}
   };
 
   const finalizeProfile = async id=>{try{const res=await finalizeProfileApi(id);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
@@ -608,8 +628,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
             <div className="spg-header-sub" style={{fontSize:13,color:C.inkLight}}>Parasocial Creator Profiles — {protagonist.context.name === 'Lala' ? "Lala's inherited digital world" : "JustAWoman's real-world online ecosystem"}</div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {/* Protagonist switcher — hidden when embedded in WorldStudio */}
-            {!embedded && <div style={{display:'flex',gap:4,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`}}>
+            {/* Protagonist switcher — hidden when embedded in WorldStudio, or in choose-host mode */}
+            {!embedded && !chooseHost && <div style={{display:'flex',gap:4,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`}}>
               {PROTAGONISTS.map(p=>(
                 <button key={p.key} onClick={()=>{setProtagonist(p);setFeedLayer(p.key==='lala'?'lalaverse':'real_world');setPage(1);}} style={{padding:'5px 12px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
                   background:protagonist.key===p.key?C.lavender:'transparent',
@@ -618,10 +638,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                 </button>
               ))}
             </div>}
-            <button onClick={()=>setView(view==='feed'?'bulk':'feed')} style={{padding:'7px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>
+            {!chooseHost && <button onClick={()=>setView(view==='feed'?'bulk':'feed')} style={{padding:'7px 14px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>
               {view==='feed'?'⊞ Bulk Import':'← Back to Feed'}
-            </button>
-            {view==='feed' && (
+            </button>}
+            {view==='feed' && !chooseHost && (
               <div style={{display:'flex',gap:4}}>
                 <button onClick={()=>setView('timeline')} style={{padding:'5px 10px',borderRadius:C.radiusSm,fontSize:10,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>Story Mode</button>
                 <button onClick={()=>setView('compare')} style={{padding:'5px 10px',borderRadius:C.radiusSm,fontSize:10,fontWeight:600,background:'transparent',color:C.inkMid,border:`1px solid ${C.border}`,cursor:'pointer'}}>Compare</button>
@@ -630,8 +650,14 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
             )}
           </div>
         </div>
-        {/* Feed layer switcher — hidden when embedded with a locked layer */}
-        {!(embedded && defaultFeedLayer) && <div className="spg-feed-switcher" style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
+        {/* New Episode step header — choose-host mode only */}
+        {chooseHost && (
+          <div style={{marginBottom:12,padding:'8px 14px',background:C.lavLight,border:`1px solid ${C.lavender}40`,borderRadius:C.radiusSm,fontSize:13,fontWeight:700,color:C.lavender}}>
+            New Episode · Step 1 of 4 — Choose Event Host
+          </div>
+        )}
+        {/* Feed layer switcher — hidden when embedded with a locked layer, or in choose-host mode with a locked layer */}
+        {!((embedded||chooseHost) && defaultFeedLayer) && <div className="spg-feed-switcher" style={{display:'flex',gap:4,marginBottom:12,background:C.surfaceAlt,borderRadius:C.radiusSm,padding:3,border:`1px solid ${C.border}`,alignSelf:'flex-start'}}>
           <button onClick={()=>{setFeedLayer('real_world');setPage(1);setProtagonist(PROTAGONISTS[0]);}} style={{padding:'6px 14px',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',
             background:feedLayer==='real_world'?C.blue:'transparent',color:feedLayer==='real_world'?'#fff':C.inkLight,transition:'all 0.15s'}}>
             JustAWoman's Feed <span style={{fontSize:10,fontWeight:600,opacity:0.8,marginLeft:4}}>{feedLayer==='real_world'?`${stats.total}/${feedCap}`:''}</span>
@@ -734,8 +760,67 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       )}
 
       {view==='feed' && <>
-        {/* ── Auto-Generate Bar ──────────────────────────────── */}
-        <div className="spg-autogen-bar" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:stats.total>0&&!activeJob?'0':'16px 24px'}}>
+        {/* ── Auto-Generate Bar (replaced by a compact "+ Create New Host" form in choose-host mode) ── */}
+        <div className="spg-autogen-bar" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:chooseHost?'12px 24px':(stats.total>0&&!activeJob?'0':'16px 24px')}}>
+        {chooseHost ? (
+          <div>
+            <button onClick={()=>setShowManualSpark(!showManualSpark)} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,fontWeight:700,color:C.lavender,display:'flex',alignItems:'center',gap:4,padding:'4px 0'}}>
+              <span style={{transition:'transform 0.2s',display:'inline-block',transform:showManualSpark?'rotate(90deg)':'none'}}>▸</span>
+              + Create New Host
+            </button>
+            {showManualSpark && (
+              <div style={{marginTop:10,padding:14,background:C.surfaceAlt,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
+                <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
+                    <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Handle</label>
+                    <input value={handle} onChange={e=>setHandle(e.target.value)} disabled={generating} placeholder="@username" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}/>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
+                    <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Platform</label>
+                    <select value={platform} onChange={e=>setPlatform(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                      {PLATFORMS.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:200}}>
+                    <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Vibe</label>
+                    <input value={vibe} onChange={e=>setVibe(e.target.value)} disabled={generating} placeholder="One sentence — who is this creator?" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}
+                      onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&generateProfile()}/>
+                  </div>
+                  <button onClick={generateProfile} disabled={generating||!handle.trim()||!vibe.trim()||!lvCity} style={{
+                    padding:'9px 20px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',cursor:generating||!handle.trim()||!vibe.trim()?'not-allowed':'pointer',
+                    background:generating||!handle.trim()||!vibe.trim()?C.border:C.lavender,color:generating||!handle.trim()||!vibe.trim()?C.inkLight:'#fff',
+                    display:'flex',alignItems:'center',gap:6,transition:'all 0.15s',
+                  }}>
+                    {generating?<><Spinner/> Creating…</>:'Create & Host Event'}
+                  </button>
+                </div>
+                <div style={{marginTop:12,display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:180}}>
+                    <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>City</label>
+                    <select value={lvCity} onChange={e=>setLvCity(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                      <option value="">Select city...</option>
+                      {LALAVERSE_CITIES.map(c=><option key={c.value} value={c.value}>{c.label} — {c.desc}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:160}}>
+                    <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>Lala's Relationship</label>
+                    <select value={lvRelationship} onChange={e=>setLvRelationship(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                      {LALA_RELATIONSHIPS.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
+                    <label style={{fontSize:11,fontWeight:600,color:C.lavender}}>Career Pressure</label>
+                    <select value={lvPressure} onChange={e=>setLvPressure(e.target.value)} disabled={generating} style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.lavender}40`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font}}>
+                      {CAREER_PRESSURES.map(p=><option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+            {error && <div style={{color:C.pink,marginTop:8,fontSize:12}}>{error}</div>}
+          </div>
+        ) : (
+        <>
           {/* Collapsed toggle when profiles exist and no active job */}
           {stats.total>0&&!activeJob&&(
             <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 24px'}}>
@@ -894,6 +979,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
           )}
           {error && <div style={{color:C.pink,marginTop:8,fontSize:12}}>{error}</div>}
         </div>}
+        </>
+        )}
         </div>
 
         {/* ── Content ─────────────────────────────────────────── */}
@@ -929,8 +1016,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
               ))}
             </div>
             <div className="spg-toolbar-controls" style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
-              {/* Export dropdown */}
-              <ExportDropdown exporting={exporting} onExport={exportProfiles}/>
+              {/* Export dropdown — hidden in choose-host mode */}
+              {!chooseHost && <ExportDropdown exporting={exporting} onExport={exportProfiles}/>}
               <input value={search} onChange={e=>handleSearch(e.target.value)} placeholder="Search handle or name…" style={{padding:'6px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,fontFamily:C.font,width:200,minWidth:0,flex:'1 1 120px'}}/>
               <select value={sortBy} onChange={e=>changeSort(e.target.value)} style={{padding:'6px 10px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:12,color:C.ink,background:C.surface}}>
                 <option value="score">Score ↓</option>
@@ -938,11 +1025,11 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                 <option value="oldest">Oldest</option>
                 <option value="handle">Handle A–Z</option>
               </select>
-              <button onClick={()=>{const e=!bulkMode;setBulkMode(e);setSelectedIds(new Set());if(e)setSelected(null);}} style={{padding:'6px 12px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',
+              {!chooseHost && <button onClick={()=>{const e=!bulkMode;setBulkMode(e);setSelectedIds(new Set());if(e)setSelected(null);}} style={{padding:'6px 12px',borderRadius:C.radiusSm,fontSize:12,fontWeight:600,cursor:'pointer',
                 background:bulkMode?'#fef2f2':'transparent',color:bulkMode?'#dc2626':C.inkLight,
                 border:`1.5px solid ${bulkMode?'#fecaca':C.border}`}}>
                 {bulkMode?'✕ Exit Select Mode':'☐ Select Multiple'}
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -1093,15 +1180,21 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                         ?'Generate the parasocial creators that populate Lala\'s inherited digital world. The AI builds full profiles — handles, vibes, metrics, and narrative tension.'
                         :'Generate the creators JustAWoman watches, follows, envies, and obsesses over. Each profile is a full parasocial character with metrics, voice, and story potential.'}
                     </div>
-                    <button onClick={()=>{setAutoGenCount(5);runAutoGenerate();}} disabled={autoGenRunning||!!activeJob} style={{
-                      padding:'12px 32px',borderRadius:C.radiusSm,fontSize:14,fontWeight:700,border:'none',
-                      cursor:autoGenRunning||activeJob?'not-allowed':'pointer',
-                      background:autoGenRunning||activeJob?C.border:C.lavender,color:autoGenRunning||activeJob?C.inkLight:'#fff',
-                      display:'flex',alignItems:'center',gap:8,transition:'all 0.15s',
-                    }}>
-                      {autoGenRunning||activeJob?<><Spinner/> Generating…</>:'✦ Generate First 5 Creators'}
-                    </button>
-                    <div style={{fontSize:11,color:C.inkLight,marginTop:4}}>or use the Auto-Generate bar above for more options</div>
+                    {chooseHost ? (
+                      <div style={{fontSize:13,color:C.inkLight}}>Use "+ Create New Host" above to add one.</div>
+                    ) : (
+                      <>
+                        <button onClick={()=>{setAutoGenCount(5);runAutoGenerate();}} disabled={autoGenRunning||!!activeJob} style={{
+                          padding:'12px 32px',borderRadius:C.radiusSm,fontSize:14,fontWeight:700,border:'none',
+                          cursor:autoGenRunning||activeJob?'not-allowed':'pointer',
+                          background:autoGenRunning||activeJob?C.border:C.lavender,color:autoGenRunning||activeJob?C.inkLight:'#fff',
+                          display:'flex',alignItems:'center',gap:8,transition:'all 0.15s',
+                        }}>
+                          {autoGenRunning||activeJob?<><Spinner/> Generating…</>:'✦ Generate First 5 Creators'}
+                        </button>
+                        <div style={{fontSize:11,color:C.inkLight,marginTop:4}}>or use the Auto-Generate bar above for more options</div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -1112,7 +1205,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                 {profiles.map(p=>(
                   <ProfileCard key={p.id} profile={p} selected={selected} feedLayer={feedLayer}
                     bulkMode={bulkMode} isChecked={selectAllPages||selectedIds.has(p.id)}
-                    onSelect={selectProfile} onToggle={toggleSelect}/>
+                    onSelect={selectProfile} onToggle={toggleSelect}
+                    chooseHost={chooseHost} onHostEvent={handleHostEvent} hosting={hostingProfileId===p.id}/>
                 ))}
               </div>
             )}

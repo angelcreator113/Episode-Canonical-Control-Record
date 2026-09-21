@@ -489,6 +489,23 @@ function WorldAdmin() {
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
   }, []);
+
+  // Deep-link: open one event's editor when navigated here with
+  // ?tab=events&event=<id> (Task #1628 — the New Episode choose-host flow
+  // lands here after creating an event). Waits for worldEvents to finish
+  // loading, then clears the param so it doesn't reopen on a later
+  // close/reopen of this same page.
+  useEffect(() => {
+    const eventId = searchParams.get('event');
+    if (!eventId || loading) return;
+    const ev = worldEvents.find((e) => e.id === eventId);
+    if (ev) {
+      setEventDetailModal(ev);
+      const next = new URLSearchParams(searchParams);
+      next.delete('event');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, loading, worldEvents]);
   useEffect(() => {
     if (successMsg) { const t = setTimeout(() => { setSuccessMsg(null); setLastGeneratedEpisodeId(null); }, 5000); return () => clearTimeout(t); }
   }, [successMsg]);
