@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import EpisodeTodoList from './EpisodeTodoList';
 
@@ -254,25 +254,12 @@ function EpisodeAssetsTab({ episode, show }) {
       </div>
 
       <section style={{ marginTop: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-          <div>
-            <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
-              Episode To-Do Overlays
-            </h2>
-            <p style={{ margin: '0 0 12px', fontSize: 12, color: '#94a3b8' }}>
-              Show/game overlays the audience sees during the episode — not the production checklist.
-            </p>
-          </div>
-          {/* Todo List — relocated from the Episode Detail header (issue
-              #1601), same route as before. */}
-          <Link to={`/episodes/${episode.id}/todo`} style={{
-            padding: '5px 10px', background: '#FAF7F0', border: '1px solid #e8e0d0',
-            borderRadius: 6, color: '#B8962E', fontSize: 11, fontWeight: 600,
-            textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-            Todo List
-          </Link>
-        </div>
+        <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
+          Episode To-Do Overlays
+        </h2>
+        <p style={{ margin: '0 0 12px', fontSize: 12, color: '#94a3b8' }}>
+          Show/game overlays the audience sees during the episode — not the production checklist.
+        </p>
         <EpisodeTodoList episodeId={episode.id} showId={show.id} />
       </section>
     </div>

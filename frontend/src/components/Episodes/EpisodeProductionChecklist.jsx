@@ -409,6 +409,21 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
         </div>
       </div>
 
+      {/* Episode Run Sheet — producer-facing tracker at /episodes/:id/todo
+          (issue #1605). Was duplicated beside the audience-facing To-Do
+          Overlays in Assets (issue #1602); lives here instead, alongside
+          the other producer-facing next-step link below. */}
+      <div style={{ marginTop: 12 }}>
+        <Link to={`/episodes/${episode.id}/todo`} style={{
+          display: 'block', textAlign: 'center', padding: '10px 0',
+          borderRadius: 10, textDecoration: 'none',
+          border: '1px solid #e0d9cc', background: '#fff',
+          color: '#666', fontSize: 13, fontWeight: 600,
+        }}>
+          📋 Episode Run Sheet
+        </Link>
+      </div>
+
       {/* Final step — Evaluate Episode, relocated from the Episode Detail
           header (issue #1601). Same route and handler (a plain navigation
           link) as before; it now closes out the checklist instead of
