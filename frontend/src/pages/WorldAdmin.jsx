@@ -1129,8 +1129,21 @@ The revised event should feel like a completely different experience from the si
   // ── Event → Script generation ──
   const handleGenerateScriptFromEvent = async (eventId, episodeId) => {
     setGenerating(true);
+    const post = (confirmOverwrite) => api.post(`/api/v1/world/${showId}/events/${eventId}/generate-script`, {
+      episode_id: episodeId, ...(confirmOverwrite ? { confirmOverwrite: true } : {}),
+    });
     try {
-      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-script`, { episode_id: episodeId });
+      let res;
+      try {
+        res = await post(false);
+      } catch (err) {
+        if (err.response?.status === 409 && err.response?.data?.code === 'SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED') {
+          if (!window.confirm('This episode already has a script. Replace it?')) return;
+          res = await post(true);
+        } else {
+          throw err;
+        }
+      }
       if (res.data.success) {
         setToast('✅ Script generated! Check the episode.');
         setTimeout(() => setToast(null), 4000);
@@ -1177,8 +1190,21 @@ The revised event should feel like a completely different experience from the si
 
   const generateScript = async (eventId, episodeId) => {
     setGenerating(true); setError(null);
+    const post = (confirmOverwrite) => api.post(`/api/v1/world/${showId}/events/${eventId}/generate-script`, {
+      episode_id: episodeId, ...(confirmOverwrite ? { confirmOverwrite: true } : {}),
+    });
     try {
-      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-script`, { episode_id: episodeId });
+      let res;
+      try {
+        res = await post(false);
+      } catch (err) {
+        if (err.response?.status === 409 && err.response?.data?.code === 'SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED') {
+          if (!window.confirm('This episode already has a script. Replace it?')) return;
+          res = await post(true);
+        } else {
+          throw err;
+        }
+      }
       if (res.data.success) {
         setLastGeneratedEpisodeId(episodeId);
         setSuccessMsg(`Script generated! ${res.data.beat_count} beats, ${res.data.line_count} lines.`);

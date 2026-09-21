@@ -22,6 +22,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -770,6 +771,18 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
     if (!events || events.length === 0) return res.status(404).json({ success: false, error: 'Event not found' });
     const event = events[0];
 
+    // If episode_id is provided, this call will save to it below — refuse
+    // before spending the generation work if it would silently replace an
+    // existing script.
+    let episodeForGuard = null;
+    if (episode_id) {
+      episodeForGuard = await models.Episode.findByPk(episode_id);
+      if (scriptOverwriteBlocked(episodeForGuard?.script_content, req.body)) {
+        console.warn(`[ScriptSkeleton] Refused overwrite for episode ${episode_id}: existing script_content present, no confirmOverwrite flag.`);
+        return res.status(409).json(scriptOverwriteRefusalBody());
+      }
+    }
+
     // Get character state for context-aware generation
     let characterState = {};
     try {
@@ -798,7 +811,7 @@ router.post('/world/:showId/events/:eventId/generate-script', requireAuth, aiRat
 
     // If episode_id provided, save to episode
     if (episode_id) {
-      const episode = await models.Episode.findByPk(episode_id);
+      const episode = episodeForGuard || await models.Episode.findByPk(episode_id);
       if (episode) {
         await episode.update({ script_content: script });
       }
@@ -1742,11 +1755,16 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
             includeAnimations: true,
           });
           if (skeleton && models.Episode) {
-            await models.Episode.update(
-              { script_content: skeleton },
-              { where: { id: result.episode.id } }
-            );
-            scriptDrafted = true;
+            const freshEpisode = await models.Episode.findByPk(result.episode.id);
+            if (scriptOverwriteBlocked(freshEpisode?.script_content, req.body)) {
+              console.warn(`[GenerateEpisode] Skipped script draft for episode ${result.episode.id}: existing script_content present, no confirmOverwrite flag.`);
+            } else {
+              await models.Episode.update(
+                { script_content: skeleton },
+                { where: { id: result.episode.id } }
+              );
+              scriptDrafted = true;
+            }
           }
         }
       } catch (scriptErr) {
@@ -1854,8 +1872,13 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
             includeAnimations: true,
           });
           if (skeleton && models.Episode) {
-            await models.Episode.update({ script_content: skeleton }, { where: { id: newEpisodeId } });
-            scriptDrafted = true;
+            const freshEpisode = await models.Episode.findByPk(newEpisodeId);
+            if (scriptOverwriteBlocked(freshEpisode?.script_content, req.body)) {
+              console.warn(`[generate-from-many] Skipped script draft for episode ${newEpisodeId}: existing script_content present, no confirmOverwrite flag.`);
+            } else {
+              await models.Episode.update({ script_content: skeleton }, { where: { id: newEpisodeId } });
+              scriptDrafted = true;
+            }
           }
         }
       } catch (scriptErr) {

@@ -196,8 +196,21 @@ export default function EpisodeScriptTab({ episode, show }) {
 
   const handleGenerate = async () => {
     setGenerating(true); setGenError(null); setGuardResult(null);
+    const post = (confirmOverwrite) => api.post(`/api/v1/episode-brief/${episodeId}/generate-script`, {
+      showId, ...(confirmOverwrite ? { confirmOverwrite: true } : {}),
+    });
     try {
-      const res = await api.post(`/api/v1/episode-brief/${episodeId}/generate-script`, { showId });
+      let res;
+      try {
+        res = await post(false);
+      } catch (err) {
+        if (err.response?.status === 409 && err.response?.data?.code === 'SCRIPT_OVERWRITE_CONFIRMATION_REQUIRED') {
+          if (!window.confirm('This episode already has a script. Replace it?')) return;
+          res = await post(true);
+        } else {
+          throw err;
+        }
+      }
       const script = res.data.script || res.data.script_text || '';
       setScriptText(script); setDevScript(script);
       try { await api.put(`/api/v1/episodes/${episodeId}`, { script_content: script }); } catch {}
