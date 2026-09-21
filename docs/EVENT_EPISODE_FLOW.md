@@ -8,7 +8,11 @@ meant to be edited in place through the normal task loop as the flow it
 describes changes. It rules nothing and mints no FD/XK/PE number. Where a
 claim below is verified against the code, it says so with a file:line;
 where something doesn't resolve from a repo read, it says that instead of
-guessing.
+guessing. New citations added to this document cite by stable name
+(component, function, `TABS` key) with any line number paired alongside
+it, not by line number alone — existing file:line-only citations above
+predate this rule and are converted opportunistically when their section
+is next edited, not swept in one pass.
 
 Basis for the file:line citations below: `origin/main` at
 `c8c4ec8b6a600be2f70f8621630878e6a02d8211` (2026-09-20).

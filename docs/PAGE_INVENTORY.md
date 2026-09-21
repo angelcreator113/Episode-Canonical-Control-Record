@@ -7,7 +7,10 @@ that document's own "Status" section). Not filed under `docs/audit/`, carries
 no basis-SHA immutability rule, meant to be edited in place as the frontend
 changes. It rules nothing and mints no FD/XK/PE number. Where a claim below
 is verified against the code it says so with a file:line; where something
-doesn't resolve, it says that instead of guessing.
+doesn't resolve, it says that instead of guessing. New citations added to
+this document cite by stable name (component, function, `TABS` key) with
+any line number paired alongside it, not by line number alone — this is
+the convention #1596 already followed here.
 
 Basis for the file:line citations below: `origin/main` at
 `5da8586faede835ff044dfc0ae3639e16920c865` (2026-09-20). All frontend paths

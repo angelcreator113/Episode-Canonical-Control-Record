@@ -14,6 +14,7 @@ Solo-operator "franchise OS" for the LalaVerse: the show *Styling Adventures wit
 - **Register is immutable:** never edit a merged file under `docs/audit/`; corrections are new amendments or additive newest-first banners (`/audit-file`).
 - **Git:** `claude/<slug>` from `origin/main`; explicit-path `git add`; subject ends ` [skip-automerge]`; body references issues as plain text `Task: #N`; never push to `main` or `dev`; squash-merge + delete.
 - **Evidence:** paste the command and its raw output; "passed" is not evidence.
+- **Citations:** living docs (outside `docs/audit/`) cite code by stable name — component, function, `TABS` key — line number optional, always paired with the name; `docs/audit/` docs cite `file:line` against their SHA. Names outlast the next UI change; line numbers don't (PRs #1590/#1593/#1595).
 
 ## Stack (measured at `433b1f22`)
 
