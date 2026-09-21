@@ -1025,13 +1025,14 @@ of sync with each other.
 of the 14 entries in `src/constants/canonicalBeats.js` records `name`,
 `narrative_purpose`, `typical_location`, `screen_action`, `actor`,
 `surface`, `diegetic`, `phase`, and `emotional_intent` — sourced by name
-or ruled directly by Evoni, not invented, with `null` where nothing
-settles a field yet. `actor` and `surface` use three distinct states,
-never collapsed: `null` = not yet decided; the string `'none'` = decided,
-intentionally nothing; any other value = decided. `diegetic` has no
-`'none'` state (inherently yes/no once known) — `true` / `false` / `null`
-only. See (f) below for the rule that makes `actor` and `diegetic`
-independent axes rather than one. Sourcing:
+or ruled directly by Evoni, not invented. `actor`, `surface`, and
+`diegetic` use three distinct states, never collapsed: `null` = not yet
+decided; the string `'none'` = decided, intentionally nothing; any other
+value = decided. As of the second follow-up ruling below, every field on
+every beat is decided (a value or an explicit `'none'`) except
+`typical_location`, which stays proposed-not-sourced for all 14. See (f)
+below for the rule that makes `actor` and `diegetic` independent axes
+rather than one. Sourcing:
 
 - `name`/`typical_location`/`description` — pre-existing fields
   `scenePlannerService.js`'s AI prompt actually reads; unchanged from
@@ -1074,29 +1075,31 @@ independent axes rather than one. Sourcing:
   line) — no disagreement to record between the two.
 - `actor`, `surface`, `diegetic` — nothing in the codebase names any of
   these concepts for beats; all three are ruled directly by Evoni,
-  2026-09-21 (follow-up commit to Task #1611, after reviewing this
-  document's first `surface`/`diegetic` proposal in PR #1612). Filled for
-  every beat except: `actor` — beats 9, 10, 11, 12, 13, 14 (not yet
-  stated); `diegetic` — beat 3 only (surface is `'none'` there, but
-  "no surface" and "diegetic: no" are not the same claim, and nothing
-  said so explicitly, so it stays `null` rather than inferred).
-  Two values changed from the session's original (unapproved) proposal
-  once the actor/diegetic axes were separated out: beat 5's `diegetic`
-  flips from `false` to `true` (JustAWoman is the *actor* who clicks —
-  Lala still perceives the *result*, the same letter, just shown
-  enlarged for the audience); beat 8's `diegetic` flips from `true` to
-  `false` (JustAWoman chooses in the Closet UI; Lala only perceives the
-  outcome — wearing it — not the choosing itself). Beat 14's `surface`
-  also changed, from the session's original proposed `'None'` to
-  `'Audience Overlay'`.
-- `phase`/`emotional_intent` — for beats 4, 6, 8, 11, 12, 13: the
+  2026-09-21, across two follow-up commits to Task #1611 (the first
+  filled `surface`/`diegetic` for 6 of 14 beats and added `actor`; the
+  second filled the remaining 8 cells — `actor` for beats 9–14, `diegetic`
+  for beat 3). Every beat now carries all three, a value or an explicit
+  `'none'`. Two values changed from the session's original (unapproved)
+  first-commit proposal once the actor/diegetic axes were separated out:
+  beat 5's `diegetic` flips from `false` to `true` (JustAWoman is the
+  *actor* who clicks — Lala still perceives the *result*, the same
+  letter, just shown enlarged for the audience); beat 8's `diegetic`
+  flips from `true` to `false` (JustAWoman chooses in the Closet UI; Lala
+  only perceives the outcome — wearing it — not the choosing itself).
+  Beat 14's `surface` also changed, from the session's original proposed
+  `'None'` to `'Audience Overlay'`. Beat 5's `description` — "the physical
+  letter shows on screen" — is Evoni's own wording, her ruling,
+  2026-09-21; not this document's, not either PR's.
+- `phase`/`emotional_intent` — for beats 4, 6, 8, 10, 11, 12, 13: the
   content-matched mapping from PR #1610's body (from
   `episodeGeneratorService.js`'s `BEAT_TEMPLATES`, matched by content,
-  never by position), unchanged here. For beats 1, 2, 3, 5, 7, 9, 14: no
-  legacy match existed in that mapping (all were `null`); Evoni supplied
-  these seven directly in the same follow-up ruling as `actor` — not
-  derived from `episodeGeneratorService.js` at all. Beat 10 remains
-  `null` (not yet stated). None of this is adopted by
+  never by position) — beat 10 paired with legacy "The Arrival" (during /
+  awe_or_intimidation), dropped by the session in the first #1611 commit
+  and restored in the second once Evoni caught the omission. For beats 1,
+  2, 3, 5, 7, 9, 14: no legacy match existed in that mapping (all were
+  `null`); Evoni supplied these seven directly, across the same two
+  follow-up rulings as `actor` — not derived from
+  `episodeGeneratorService.js` at all. None of this is adopted by
   `episodeGeneratorService.js` itself yet — see (d) above.
 
 **(f) The SAL interaction law (Evoni, 2026-09-21).** JustAWoman may act

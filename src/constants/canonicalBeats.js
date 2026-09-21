@@ -37,19 +37,26 @@
  *     to Lala (she reads the same letter the audience saw enlarged) — see
  *     beat 5. Conversely JustAWoman can act on something Lala never
  *     perceives at all — see beat 8, the closet choice itself.
- *   - phase, emotional_intent — for beats 4, 6, 8, 11, 12, 13: the
+ *   - phase, emotional_intent — for beats 4, 6, 8, 10, 11, 12, 13: the
  *     content-matched mapping proposed in PR #1610's body (from
  *     episodeGeneratorService.js's BEAT_TEMPLATES, matched by narrative
- *     content, never by position). For beats 1, 2, 3, 5, 7, 9, 14: no
+ *     content, never by position) — beat 10 paired with legacy "The
+ *     Arrival" (during / awe_or_intimidation), dropped in the first
+ *     #1611 commit and restored here. For beats 1, 2, 3, 5, 7, 9, 14: no
  *     legacy match existed, so these are Evoni's own direct rulings, not
- *     derived from episodeGeneratorService.js at all. Beat 10 remains
- *     unstated (EMPTY).
+ *     derived from episodeGeneratorService.js at all.
  *
- * Three distinct states, never collapsed, for `actor` and `surface`
- * (Evoni's rule): `null` = not yet decided (EMPTY); the string `'none'`
- * = decided, intentionally nothing; any other string = decided, that
- * value. `diegetic` has no `'none'` state — it's inherently a yes/no once
- * known, so it's `true` / `false` / `null` (not yet decided) only.
+ * Three distinct states, never collapsed, for `actor`, `surface`, and
+ * `diegetic` alike: `null` = not yet decided (EMPTY); the string `'none'`
+ * = decided, intentionally nothing; any other value = decided, that
+ * value. Beat 3 is the one case where `diegetic` takes `'none'` rather
+ * than `true`/`false` — its `surface` is also `'none'`, so there is no
+ * presented result for Lala to perceive at all, a different claim from
+ * "she doesn't perceive it."
+ *
+ * As of the 2026-09-21 follow-up ruling below, every field on every beat
+ * is decided (a value or an explicit `'none'`) except `typical_location`,
+ * which stays proposed-not-sourced for all 14 (see above).
  *
  * episodeGeneratorService.js and feedMomentsService.js are not converted
  * to import this module yet — see docs/EVENT_EPISODE_FLOW.md §8(d).
@@ -91,10 +98,10 @@ const CANONICAL_BEATS = [
     screen_action: 'WELCOME',
     actor: 'none',
     surface: 'none',
-    // diegetic not stated by Evoni's ruling — left EMPTY rather than inferred
-    // from surface: 'none', since "no surface" and "diegetic: no" are not
-    // the same claim and nothing said so explicitly.
-    diegetic: null,
+    // diegetic: 'none' — Evoni's ruling. Its surface is also 'none': there
+    // is no presented result at all for Lala to perceive, which is a
+    // different claim from "she doesn't perceive it" (that would be `false`).
+    diegetic: 'none',
     phase: 'before',
     emotional_intent: 'warmth_connection',
   },
@@ -129,6 +136,8 @@ const CANONICAL_BEATS = [
     // text (mail arrives, then she reads it) — not sourced, flagged for
     // Evoni same as the other unattributed locations.
     typical_location: 'HOME_BASE',
+    // "The physical letter shows on screen" is Evoni's own wording —
+    // her ruling, 2026-09-21, not this module's or either PR's phrasing.
     // JustAWoman clicks the notification; the physical letter shows on
     // screen and Lala reads it. One invitation object — any enlarged
     // audience-facing view is that same letter, not a separate asset.
@@ -197,8 +206,8 @@ const CANONICAL_BEATS = [
     description: 'Time pressure — the event is approaching, urgency builds',
     narrative_purpose: 'Pacing accelerates. Music intensifies. The clock is real.',
     screen_action: 'TODO_LIST',
-    // actor not stated by Evoni's ruling — left EMPTY.
-    actor: null,
+    // The overlay appears; nobody performs it. — Evoni's ruling.
+    actor: 'none',
     surface: 'Audience Overlay',
     diegetic: false,
     phase: 'before',
@@ -216,12 +225,14 @@ const CANONICAL_BEATS = [
     // `surface`/`diegetic` below describe the rendered icon, not the
     // underlying diegetic fact.
     screen_action: 'LOCATION_ICON',
-    actor: null,
+    actor: 'none',
     surface: 'Audience Overlay',
     diegetic: false,
-    // phase/emotional_intent not stated by Evoni's ruling — left EMPTY.
-    phase: null,
-    emotional_intent: null,
+    // Restored — PR #1610's content-matched mapping already paired this
+    // beat with legacy "The Arrival" (during / awe_or_intimidation); the
+    // first #1611 commit dropped it in error. Evoni caught it.
+    phase: 'during',
+    emotional_intent: 'awe_or_intimidation',
   },
   {
     number: 11,
@@ -230,8 +241,7 @@ const CANONICAL_BEATS = [
     description: 'The main event — what happens when Lala arrives and performs',
     narrative_purpose: 'The evaluation resolves. Pass or fail. Stats update.',
     screen_action: 'ARRIVAL',
-    // actor not stated by Evoni's ruling — left EMPTY.
-    actor: null,
+    actor: 'none',
     surface: "Lala's Environment",
     diegetic: true,
     phase: 'during',
@@ -244,8 +254,9 @@ const CANONICAL_BEATS = [
     description: 'Creating the content/product — the work output of the episode',
     narrative_purpose: 'Lala creates brand content. This exports as real Instagram stories.',
     screen_action: 'CONTENT_CREATE',
-    // actor not stated by Evoni's ruling — left EMPTY.
-    actor: null,
+    // CONTENT_CREATE is Lala filming content as a creator in her own
+    // world — Evoni's ruling.
+    actor: 'lala',
     surface: "Lala's Phone",
     diegetic: true,
     phase: 'during',
@@ -258,8 +269,8 @@ const CANONICAL_BEATS = [
     description: 'Reflecting on what happened — audience engagement moment',
     narrative_purpose: 'Cinematic stat card. Coins changed. Brand trust updated. Dream Fund moved.',
     screen_action: 'STATS_UPDATE',
-    // actor not stated by Evoni's ruling — left EMPTY.
-    actor: null,
+    // The stats update is the system, not a person. — Evoni's ruling.
+    actor: 'none',
     surface: 'Audience Overlay',
     diegetic: false,
     phase: 'after',
@@ -272,8 +283,7 @@ const CANONICAL_BEATS = [
     description: 'Unresolved thread — drives viewer to next episode',
     narrative_purpose: 'Next episode is seeded. The world keeps going.',
     screen_action: 'FADE_OUT',
-    // actor not stated by Evoni's ruling — left EMPTY.
-    actor: null,
+    actor: 'none',
     // CHANGED from 'None' (proposed) to 'Audience Overlay' — Evoni's ruling.
     surface: 'Audience Overlay',
     diegetic: false,
