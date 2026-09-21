@@ -930,6 +930,26 @@ below is approved and a follow-up task converts it and
 `feedMomentsService.js` together, so the two are never briefly out of
 sync with each other.
 
+**Beat 5 corrected — Task #1611, Evoni's ruling 2026-09-21.** Beat 5
+("Reveal") is the invitation/opportunity reveal — "Lala reads the mail.
+Audience sees her unfiltered reaction" (seeder, verbatim) — not an outfit
+reveal. `scenePlannerService.js`'s pre-#1610 `BEAT_STRUCTURE`, copied
+verbatim into `canonicalBeats.js` by #1610 without independently
+re-checking it against the seeder, had beat 5 at `typical_location:
+'CLOSET'` with description "The outfit/look reveal — wardrobe becomes
+part of the narrative." Same name and position as the seeder's beat 5,
+different content — #1610 verified names/order matched and didn't check
+descriptions past that. Corrected in `canonicalBeats.js` (`description`,
+`typical_location`); `scenePlannerService.js` needed no direct edit since
+it already reads both fields from the shared module (confirmed: grepped
+the file for every `beat`/`BEAT` reference — no beat-5-specific or
+`CLOSET`-specific special case exists there). This changes which scene
+set new scene plans assign to beat 5 going forward: `typical_location`
+drives `generateScenePlan`'s AI prompt (`scenePlannerService.js:148`),
+so beat 5 now prompts toward a `HOME_BASE`-type scene set instead of
+`CLOSET` for episodes generated after this task. No stored `scene_plans`
+rows are migrated.
+
 The three-way comparison that led to this ruling, kept for the record:
 
 | Beat | `episodeGeneratorService.js` `BEAT_TEMPLATES` (`:253-267`) | `scenePlannerService.js` `BEAT_STRUCTURE` (`:22-37`) | show-brain seeder, Episode Architecture (`20260312800000-show-brain-franchise-laws.js:254-269`) |
@@ -1000,6 +1020,108 @@ resolved here: converting `episodeGeneratorService.js` and
 position-hardcodes in `feedMomentsService.js`, is deferred to a follow-up
 task once the mapping is approved, so the two files are never briefly out
 of sync with each other.
+
+**(e) Every canonical beat carries nine fields (Task #1611).** Rule: each
+of the 14 entries in `src/constants/canonicalBeats.js` records `name`,
+`narrative_purpose`, `typical_location`, `screen_action`, `actor`,
+`surface`, `diegetic`, `phase`, and `emotional_intent` — sourced by name
+or ruled directly by Evoni, not invented. `actor`, `surface`, and
+`diegetic` use three distinct states, never collapsed: `null` = not yet
+decided; the string `'none'` = decided, intentionally nothing; any other
+value = decided. As of the second follow-up ruling below, every field on
+every beat is decided (a value or an explicit `'none'`) except
+`typical_location`, which stays proposed-not-sourced for all 14. See (f)
+below for the rule that makes `actor` and `diegetic` independent axes
+rather than one. Sourcing:
+
+- `name`/`typical_location`/`description` — pre-existing fields
+  `scenePlannerService.js`'s AI prompt actually reads; unchanged from
+  #1610 except beat 5 (above).
+- `narrative_purpose` — the seeder's own `desc` text, verbatim, for all
+  14 beats. Added as its own field rather than folded into `description`
+  because three more beats' existing `description` text (authored before
+  either #1610 or #1611, for the AI prompt) reads differently in
+  substance from the seeder's own words — not contradictions on the
+  scale of beat 5, but real differences, left uncorrected here since only
+  beat 5 was in this task's scope: beat 2 ("Checking phone/social —
+  receives the episode catalyst" vs. the seeder's "Login overlay →
+  typing animation → Enter. World loads." — a phone-check framing versus
+  a whole-episode meta/loading-screen framing, not obviously the same
+  mechanism); beat 11 ("what happens when Lala arrives and performs" vs.
+  the seeder's "the evaluation resolves. Pass or fail. Stats update." —
+  a live-performance framing versus a scoring/results framing); beat 13
+  ("audience engagement moment" vs. the seeder's "cinematic stat card.
+  Coins changed..." — the existing text doesn't mention the stat-card UI
+  moment the seeder names directly). Recorded here as found, not
+  resolved.
+- `typical_location` was never seeder-sourced for **any** beat, not only
+  beat 5 — the seeder
+  (`20260312800000-show-brain-franchise-laws.js:254-269`) has no location
+  field at all. Every value in `canonicalBeats.js` (all 14, beat 5
+  included) is carried from `scenePlannerService.js`'s own pre-existing,
+  unattributed `BEAT_STRUCTURE` — proposed, not sourced from the seeder
+  as this decision's own framing assumed going in.
+- Beat naming also drifts from the seeder in punctuation for three beats
+  — seeder: "Interruption Pulse #1", "Interruption Pulse #2", "Reminder /
+  Deadline Pulse"; code `name` field (unchanged, matches #1610): 
+  "Interruption Pulse 1", "Interruption Pulse 2", "Reminder/Deadline".
+  Same beats, same order, punctuation only — not corrected here since it
+  isn't beat 5 and changing `name` would change
+  `scenePlannerService.js`'s live AI-prompt text for those beats, outside
+  this task's no-other-behavior-change scope. Recorded, not resolved.
+- `screen_action` — the `ui` field from `episodeScriptWriterService.js`'s
+  and `groundedScriptGeneratorService.js`'s own `BEAT_TEMPLATES` dicts,
+  confirmed identical for all 14 beats at this basis (compared line by
+  line) — no disagreement to record between the two.
+- `actor`, `surface`, `diegetic` — nothing in the codebase names any of
+  these concepts for beats; all three are ruled directly by Evoni,
+  2026-09-21, across two follow-up commits to Task #1611 (the first
+  filled `surface`/`diegetic` for 6 of 14 beats and added `actor`; the
+  second filled the remaining 8 cells — `actor` for beats 9–14, `diegetic`
+  for beat 3). Every beat now carries all three, a value or an explicit
+  `'none'`. Two values changed from the session's original (unapproved)
+  first-commit proposal once the actor/diegetic axes were separated out:
+  beat 5's `diegetic` flips from `false` to `true` (JustAWoman is the
+  *actor* who clicks — Lala still perceives the *result*, the same
+  letter, just shown enlarged for the audience); beat 8's `diegetic`
+  flips from `true` to `false` (JustAWoman chooses in the Closet UI; Lala
+  only perceives the outcome — wearing it — not the choosing itself).
+  Beat 14's `surface` also changed, from the session's original proposed
+  `'None'` to `'Audience Overlay'`. Beat 5's `description` — "the physical
+  letter shows on screen" — is Evoni's own wording, her ruling,
+  2026-09-21; not this document's, not either PR's.
+- `phase`/`emotional_intent` — for beats 4, 6, 8, 10, 11, 12, 13: the
+  content-matched mapping from PR #1610's body (from
+  `episodeGeneratorService.js`'s `BEAT_TEMPLATES`, matched by content,
+  never by position) — beat 10 paired with legacy "The Arrival" (during /
+  awe_or_intimidation), dropped by the session in the first #1611 commit
+  and restored in the second once Evoni caught the omission. For beats 1,
+  2, 3, 5, 7, 9, 14: no legacy match existed in that mapping (all were
+  `null`); Evoni supplied these seven directly, across the same two
+  follow-up rulings as `actor` — not derived from
+  `episodeGeneratorService.js` at all. None of this is adopted by
+  `episodeGeneratorService.js` itself yet — see (d) above.
+
+**(f) The SAL interaction law (Evoni, 2026-09-21).** JustAWoman may act
+through the show's interface layer without Lala perceiving it; Lala
+experiences the canonical consequences as events in her world. Three
+layers, plus a fourth state for beats with no screen presentation at all:
+
+| Layer | Surfaces | Who acts |
+|---|---|---|
+| Host Environment | Host Environment | JustAWoman |
+| Interface | Audience Overlay, Closet UI | Either — presented to the audience or operated by JustAWoman; not automatically perceived by Lala |
+| Lala's World | Lala's Phone, Lala's Environment | Diegetic to Lala by construction — these are the surfaces where a presented result is something she perceives |
+| *(no surface)* | `'none'` | — |
+
+This is what makes `actor` and `diegetic` independent rather than
+redundant: `actor` says who *performs* the screen action (JustAWoman,
+Lala, or no one); `diegetic` says whether Lala *perceives the result*.
+Beat 5 (actor `justawoman`, surface Audience Overlay, diegetic `true`)
+and beat 8 (actor `justawoman`, surface Closet UI, diegetic `false`) are
+both JustAWoman-acted Interface-layer beats that land on opposite sides
+of `diegetic` — the law is what makes both readings coherent rather than
+contradictory.
 
 ---
 
