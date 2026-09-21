@@ -14,6 +14,7 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
+const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 
 // ─── SOCIAL MEDIA TASK TEMPLATES ─────────────────────────────────────────────
 // Tasks vary by event type and timing (before/during/after)
@@ -248,24 +249,21 @@ function buildSocialTasks(eventType, hostProfile = null, outfitPieces = [], cont
 }
 
 // ─── EPISODE BEAT TEMPLATES ──────────────────────────────────────────────────
-// Maps event timeline to 14 episode beats
-
-const BEAT_TEMPLATES = [
-  { beat: 1, label: 'The Notification', phase: 'before', emotional_intent: 'anticipation', description: 'Lala sees the invitation/opportunity on her feed' },
-  { beat: 2, label: 'The Decision', phase: 'before', emotional_intent: 'tension', description: 'Should she go? What does this mean for her?' },
-  { beat: 3, label: 'The Closet', phase: 'before', emotional_intent: 'creative_energy', description: 'Outfit selection — what does she wear to THIS event?' },
-  { beat: 4, label: 'Getting Ready', phase: 'before', emotional_intent: 'transformation', description: 'Hair, makeup, inner monologue. She becomes Lala-for-the-event.' },
-  { beat: 5, label: 'The Post', phase: 'before', emotional_intent: 'vulnerability', description: 'She posts her GRWM/outfit — first public commitment' },
-  { beat: 6, label: 'The Arrival', phase: 'during', emotional_intent: 'awe_or_intimidation', description: 'She arrives. First impression of the venue, the crowd, the energy.' },
-  { beat: 7, label: 'The Room Read', phase: 'during', emotional_intent: 'strategy', description: 'She reads the room — who is here, who is watching, where to position' },
-  { beat: 8, label: 'The Encounter', phase: 'during', emotional_intent: 'connection_or_conflict', description: 'She meets the host or key person — the relationship moment' },
-  { beat: 9, label: 'The Main Event', phase: 'during', emotional_intent: 'peak_experience', description: 'The core of the event — the thing everyone came for' },
-  { beat: 10, label: 'The Complication', phase: 'during', emotional_intent: 'surprise_or_tension', description: 'Something unexpected — drama, opportunity, or revelation' },
-  { beat: 11, label: 'The Content Moment', phase: 'during', emotional_intent: 'performance', description: 'She creates the key content — go live, film the moment, post' },
-  { beat: 12, label: 'The Exit', phase: 'during', emotional_intent: 'reflection', description: 'She leaves — what does she carry with her?' },
-  { beat: 13, label: 'The Aftermath', phase: 'after', emotional_intent: 'processing', description: 'Back home. Phone blowing up. She processes what happened.' },
-  { beat: 14, label: 'The Recap', phase: 'after', emotional_intent: 'narrative_control', description: 'She posts her version of the story — controls the narrative' },
-];
+// Canonical SAL 14-beat structure — single source of truth in
+// src/constants/canonicalBeats.js (Task #1609-#1612, docs/EVENT_EPISODE_FLOW.md
+// §8). Field names (beat, label, phase, emotional_intent, description) kept
+// for compatibility with the scene_plans insert, generateFeedMoments, and the
+// brief response below, all of which read this shape. Replaces the old
+// narrative beat list (The Notification, The Decision, The Closet, ...) —
+// see docs/EVENT_EPISODE_FLOW.md §8(a)/(d) for why the two disagreed and how
+// phase/emotional_intent were re-mapped by content, not position.
+const BEAT_TEMPLATES = CANONICAL_BEATS.map(b => ({
+  beat: b.number,
+  label: b.name,
+  phase: b.phase,
+  emotional_intent: b.emotional_intent,
+  description: b.description,
+}));
 
 // ─── ARCHETYPE MAPPING ───────────────────────────────────────────────────────
 

@@ -1014,12 +1014,9 @@ purchase-decision moment at position 3 (`:143-176`, display-only, no
 into `feedPostGeneratorService.js:347` and `FeedMoment.financial_context`)
 and two before/during/after splits keyed on `beat.beat <= 5`/`<= 12`
 (`:117-128`, `:250`, `:338`) — all of which assume the old position
-semantics and need the same content-based fix, not a positional one. Not
-resolved here: converting `episodeGeneratorService.js` and
-`feedMomentsService.js` to the canonical module, and fixing all four
-position-hardcodes in `feedMomentsService.js`, is deferred to a follow-up
-task once the mapping is approved, so the two files are never briefly out
-of sync with each other.
+semantics and need the same content-based fix, not a positional one.
+**Converted — Task #1613, see (g) below.** Both files now import
+`canonicalBeats.js`; the four position-hardcodes are gone.
 
 **(e) Every canonical beat carries nine fields (Task #1611).** Rule: each
 of the 14 entries in `src/constants/canonicalBeats.js` records `name`,
@@ -1122,6 +1119,49 @@ and beat 8 (actor `justawoman`, surface Closet UI, diegetic `false`) are
 both JustAWoman-acted Interface-layer beats that land on opposite sides
 of `diegetic` — the law is what makes both readings coherent rather than
 contradictory.
+
+**(g) Generation converted to canonical beats (Task #1613).**
+`episodeGeneratorService.js`'s `BEAT_TEMPLATES` now derives from
+`canonicalBeats.js` (`CANONICAL_BEATS.map(...)`, same field shape —
+`beat`/`label`/`phase`/`emotional_intent`/`description` — so the
+`scene_plans` insert, the `generateFeedMoments` call, and the brief
+response it feeds all carry canonical names automatically). Both writers
+of `scene_plans` (this file and `scenePlannerService.js`, since #1610)
+now write canonical `beat_name` values for new episodes; existing rows
+keep whatever they were generated with — no migration. The one frontend
+consumer of the brief's returned `beats` field,
+`frontend/src/pages/WorldAdmin.jsx:4997-5014` ("14 Beats Timeline"),
+reads `beat.label`/`beat.description`/`beat.phase`/`beat.emotional_intent`
+generically — no hardcoded old-name assumption found, so it displays
+canonical content automatically, no frontend change needed.
+
+`feedMomentsService.js` now imports `canonicalBeats.js`'s `phase` for
+all three of its former position-based before/during/after splits
+(`:117-128` trigger-profile selection, `:309` content-template
+selection, `:397` JustAWoman's own dialogue selection) and re-keys
+`BEAT_PHONE_MOMENTS` by canonical beat, proposed against each beat's own
+`actor`/`surface`/`diegetic` (full table and reasoning in PR #1613's
+body): moments proposed for beats 4, 6, 7, 12 (7 authored fresh, no
+legacy equivalent existed); explicit `null` — not a guessed default —
+for the other 10. The unconditional purchase-decision special case moved
+from the old hardcoded position 3 to canonical beat 8 (Transformation
+Loop — SAL's actual outfit/closet beat; position 3, "Welcome," has
+`surface: 'none'` and can host nothing). Two judgment calls flagged for
+Evoni in that PR: beats 10 and 13 both had strong legacy phone-moment
+content ("who posted from the venue," "phone blowing up") that a literal
+reading of their `diegetic: false` drops — proposed as `null` pending
+her call on whether the beat's underlying diegetic fact (the travel
+itself; the audience's own inferred reactions) should override the
+rendered surface's `diegetic` value for phone-moment purposes.
+
+**Owed, not touched by Task #1613** (still on their own beat lists, per
+its explicit scope): `episodeScriptWriterService.js`'s and
+`groundedScriptGeneratorService.js`'s local `BEAT_TEMPLATES` fallback
+dicts (§8(e) above — already agree with canonical names/order, used
+only when a stored `scene_plans` row lacks `beat_name`, so no urgency);
+`src/utils/scriptBeatParser.js`'s own `BEAT_TYPES` (§8(a)'s original
+research — a genuinely different, fourth structure, confirmed to never
+reach evaluation).
 
 ---
 

@@ -52,23 +52,71 @@ const CONTENT_LENSES = {
 };
 
 // ─── BEAT-TO-FEED-MOMENT MAPPING ────────────────────────────────────────────
-// Which beats naturally have phone moments, and what type
-
+// Which canonical beats (src/constants/canonicalBeats.js) naturally have
+// phone moments, and what type. Re-keyed to canonical beat numbers — Task
+// #1613, docs/EVENT_EPISODE_FLOW.md §8. Checked against each beat's own
+// actor/surface/diegetic: a moment only proposed where `diegetic` is true
+// and `surface` is a Lala's-World surface (Lala's Phone or, for beat 6,
+// Lala's Environment — she is the actor there, diegetic yes). `null` = no
+// fitting moment, checked and decided, not a fallback default.
+//
+// 4  Interruption Pulse 1 — surface Lala's Phone, diegetic yes, actor none:
+//    the mail/invite itself, on her phone. Carried from legacy "The
+//    Notification" (PR #1610's content match), unchanged content.
+// 6  Strategic Reaction — surface Lala's Environment, diegetic yes, actor
+//    lala: she performs this herself, in her own space; a phone-scroll
+//    while deciding fits. Carried from legacy "The Decision".
+// 7  Interruption Pulse 2 — surface Lala's Phone, diegetic yes, actor none.
+//    No legacy match existed (Evoni ruled phase/emotional_intent directly);
+//    this moment is proposed fresh here, from the beat's own
+//    narrative_purpose and its screen_action comment ("SIDE_QUEST reaches
+//    Lala as a DM, call, or message") — not carried from any legacy dict.
+// 12 Deliverable Creation — surface Lala's Phone, diegetic yes, actor lala:
+//    she is filming content, on her phone. Carried from legacy "The
+//    Content Moment".
+//
+// 1, 2 — actor justawoman, diegetic no: JustAWoman's own non-diegetic
+//   framing (opening ritual, login/loading). No moment Lala perceives.
+// 3 — surface none, diegetic none: no screen presentation at all.
+// 5 — diegetic yes, but surface is Audience Overlay (the invitation letter
+//   itself), not Lala's Phone — already has its own dedicated invitation-
+//   asset treatment (EVENT_EPISODE_FLOW.md §2); a generic phone/social
+//   moment here would be redundant with, not additive to, that letter.
+// 8 — actor justawoman, diegetic no (Closet UI): the purchase-decision
+//   special case below is this beat's moment; no generic entry needed.
+// 9 — diegetic no (Audience Overlay). No legacy match.
+// 10 — diegetic no on the rendered icon (Audience Overlay); the underlying
+//   travel is Lala's Environment per the beat's own code comment in
+//   canonicalBeats.js. Judgment call, flagged for Evoni: legacy "The
+//   Arrival" had a decent phone moment here ("who posted from the venue
+//   already?") that this drops by following `diegetic: false` literally.
+// 11 — diegetic no on STATS_UPDATE... no, diegetic yes but actor none,
+//   surface Lala's Environment; legacy "The Main Event" already had this
+//   moment functionally disabled (`type: null`, which the old code always
+//   skipped regardless of the likelihood roll) — "phone is away" during
+//   the main event. Kept disabled, consistent with that legacy intent.
+// 13 — diegetic no (Audience Overlay; Evoni: "the stats update is the
+//   system, not a person"). Judgment call, flagged for Evoni: legacy "The
+//   Aftermath" had a strong moment here ("phone blowing up") that this
+//   drops by following `diegetic: false` literally.
+// 14 — diegetic no; also, Evoni's own ruling on beat 14 vs. legacy "The
+//   Recap" is explicit that they are not the same moment (backward-looking
+//   recap vs. forward-looking cliffhanger) — not carried forward.
 const BEAT_PHONE_MOMENTS = {
-  1:  { likelihood: 0.95, type: 'notification', context: 'Lala sees the invite/opportunity on her phone' },
-  2:  { likelihood: 0.60, type: 'story', context: 'She checks who else is going — scrolls stories' },
-  3:  { likelihood: 0.80, type: 'post', context: 'She sees what the host or others are wearing — outfit pressure' },
-  4:  { likelihood: 0.40, type: 'dm', context: 'A friend texts about the event while she gets ready' },
-  5:  { likelihood: 0.90, type: 'post', context: 'She posts her GRWM/outfit — first reactions come in' },
-  6:  { likelihood: 0.30, type: 'story', context: 'Quick story check on arrival — who posted from the venue already?' },
-  7:  { likelihood: 0.70, type: 'live', context: 'Someone at the event is live — she sees herself or the crowd' },
-  8:  { likelihood: 0.20, type: 'dm', context: 'DM from someone about the person she just met' },
-  9:  { likelihood: 0.10, type: null, context: 'Main event — phone is away (mostly)' },
-  10: { likelihood: 0.50, type: 'notification', context: 'A post/comment disrupts the moment — drama notification' },
-  11: { likelihood: 0.85, type: 'live', context: 'She films the key content moment — go live, post, capture' },
-  12: { likelihood: 0.40, type: 'dm', context: 'Text from someone who left early or is watching from home' },
-  13: { likelihood: 0.90, type: 'notification', context: 'Phone blowing up — reactions, DMs, tagged posts flooding in' },
-  14: { likelihood: 0.95, type: 'post', context: 'She scrolls what everyone posted — curates her own recap' },
+  1: null,
+  2: null,
+  3: null,
+  4: { likelihood: 0.95, type: 'notification', context: 'Lala sees the invite/opportunity on her phone' },
+  5: null,
+  6: { likelihood: 0.60, type: 'story', context: 'She checks who else is going — scrolls stories' },
+  7: { likelihood: 0.70, type: 'dm', context: 'A brand deal, DM, or side-quest message arrives — tension compounds' },
+  8: null,
+  9: null,
+  10: null,
+  11: null,
+  12: { likelihood: 0.85, type: 'live', context: 'She films the key content moment — go live, post, capture' },
+  13: null,
+  14: null,
 };
 
 // ─── GENERATE FEED MOMENTS FOR AN EPISODE ───────────────────────────────────
@@ -105,20 +153,25 @@ async function generateFeedMoments(event, beats, guestProfiles, models, options 
   const moments = {};
 
   for (const beat of beats) {
-    const config = BEAT_PHONE_MOMENTS[beat.beat] || { likelihood: 0.3, type: 'notification', context: '' };
+    // Explicit `null` in BEAT_PHONE_MOMENTS means "checked, no fitting
+    // moment" — not the same as an unrecognized beat, and neither falls
+    // back to a guessed default.
+    const config = BEAT_PHONE_MOMENTS[beat.beat];
+    if (!config) continue;
+    if (!config.type) continue;
 
     // Roll against likelihood
     if (Math.random() > config.likelihood) continue;
-    if (!config.type) continue;
 
-    // Pick a trigger profile (host, guest, or general feed)
+    // Pick a trigger profile (host, guest, or general feed) — keyed on the
+    // canonical beat's own `phase`, not its position.
     let triggerProfile = null;
     let triggerHandle = '';
-    if (beat.beat <= 5) {
+    if (beat.phase === 'before') {
       // Before event — host or aspirational follow
       triggerProfile = guests.find(g => g.relationship === 'industry' || g.relationship === 'friend') || guests[0];
       triggerHandle = triggerProfile?.handle || hostName;
-    } else if (beat.beat <= 12) {
+    } else if (beat.phase === 'during') {
       // During event — attendees
       triggerProfile = guests[Math.floor(Math.random() * guests.length)] || null;
       triggerHandle = triggerProfile?.handle || 'someone at the event';
@@ -133,15 +186,21 @@ async function generateFeedMoments(event, beats, guestProfiles, models, options 
     moments[beat.beat] = moment;
   }
 
-  // ── Special: Purchase Decision Moment (Beat 3 — The Closet) ──
-  // JustAWoman checks the bank, picks an outfit, Lala reacts
+  // ── Special: Purchase Decision Moment (canonical beat 8 — Transformation
+  //    Loop) ── JustAWoman checks the bank, picks an outfit, Lala wears it.
+  // MOVED from the old hardcoded position 3 ("The Closet") — Task #1613.
+  // Canonical beat 3 ("Welcome") has surface: 'none', so nothing can be
+  // presented there at all; canonical beat 8 is SAL's actual closet/outfit
+  // beat (screen_action CLOSET_OPEN, actor justawoman, "JustAWoman chooses;
+  // Lala wears it" — docs/EVENT_EPISODE_FLOW.md §8), which is exactly this
+  // moment's own content and actor. Proposed, flagged for Evoni's approval.
   const prestige = event.prestige || 5;
   const outfitCost = prestige >= 8 ? 400 : prestige >= 6 ? 250 : prestige >= 4 ? 120 : 50;
   const canAfford = balance >= outfitCost;
   const afterPurchase = balance - outfitCost;
 
-  if (!moments[3]) {
-    moments[3] = {
+  if (!moments[8]) {
+    moments[8] = {
       trigger_profile: 'SYSTEM',
       trigger_action: 'wardrobe_purchase',
       on_screen: {
@@ -170,7 +229,7 @@ async function generateFeedMoments(event, beats, guestProfiles, models, options 
         justawoman_action: canAfford ? 'purchases outfit, adds to closet' : 'closes bank, looks at opportunities',
         direction: canAfford ? 'Lala puts on the outfit, confidence builds' : 'Lala stares at her closet, nothing feels right',
       },
-      beat_context: 'The Closet — outfit selection driven by financial reality',
+      beat_context: 'Transformation Loop — outfit selection driven by financial reality',
       financial: { balance, outfit_cost: outfitCost, affordable: canAfford, remaining: afterPurchase },
     };
   }
@@ -247,7 +306,7 @@ function generateMomentContent(beat, config, lens, event, hostName, triggerHandl
     },
   };
 
-  const phase = beat.beat <= 5 ? 'before' : beat.beat <= 12 ? 'during' : 'after';
+  const phase = beat.phase;
   const typeTemplates = TEMPLATES[config.type]?.[phase] || TEMPLATES.notification[phase] || [];
   const template = typeTemplates[Math.floor(Math.random() * typeTemplates.length)] || { content: `${triggerHandle} posted something`, action: 'posted' };
 
@@ -335,7 +394,7 @@ function generateMomentContent(beat, config, lens, event, hostName, triggerHandl
             `${triggerHandle} posted already?! We need to get our content up.`,
           ],
         };
-        const p = beat.beat <= 5 ? 'before' : beat.beat <= 12 ? 'during' : 'after';
+        const p = beat.phase;
         return JW[p][Math.floor(Math.random() * JW[p].length)];
       })(),
       lala_line: dialogue,              // spoken dialogue (character voice)
