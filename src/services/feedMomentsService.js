@@ -52,23 +52,79 @@ const CONTENT_LENSES = {
 };
 
 // ─── BEAT-TO-FEED-MOMENT MAPPING ────────────────────────────────────────────
-// Which beats naturally have phone moments, and what type
-
+// Which canonical beats (src/constants/canonicalBeats.js) naturally have
+// phone moments, and what type. Re-keyed to canonical beat numbers — Task
+// #1613, revised Task #1614, docs/EVENT_EPISODE_FLOW.md §8. `null` = no
+// fitting moment, checked and decided, not a fallback default.
+//
+// Evoni's ruling, 2026-09-21 (Task #1614): Lala's phone is visible for the
+// whole show; most icons live on it, and some overlays move between the
+// phone and full screen depending on the transition (beat 5 is the clear
+// case — the invitation notification lives on her phone, then the letter
+// fills the screen when tapped). This dict is NOT redesigned around that
+// ruling in Task #1614 — per-beat phone states for all 14 beats are owed
+// as a separate task (docs/EVENT_EPISODE_FLOW.md §8). The entries below
+// still reflect Task #1613's original actor/surface/diegetic table.
+//
+// 4  Interruption Pulse 1 — surface Lala's Phone, diegetic yes, actor none:
+//    the mail/invite itself, on her phone. Carried from legacy "The
+//    Notification" (PR #1610's content match), unchanged content.
+// 6  Strategic Reaction — surface Lala's Environment, diegetic yes, actor
+//    lala: she performs this herself, in her own space; a phone-scroll
+//    while deciding fits. Carried from legacy "The Decision".
+// 7  Interruption Pulse 2 — surface Lala's Phone, diegetic yes, actor none.
+//    No legacy match existed (Evoni ruled phase/emotional_intent directly);
+//    this moment is proposed fresh here, from the beat's own
+//    narrative_purpose and its screen_action comment ("SIDE_QUEST reaches
+//    Lala as a DM, call, or message") — not carried from any legacy dict.
+// 10 Event Travel — restored, Task #1614: legacy "The Arrival"'s moment
+//    ("who posted from the venue already?"). Task #1613 had dropped this
+//    reading the rendered icon's `diegetic: false` literally; Evoni's
+//    ruling is that Lala does see the travel icon, on her phone — it
+//    reads like her maps.
+// 12 Deliverable Creation — surface Lala's Phone, diegetic yes, actor lala:
+//    she is filming content, on her phone. Carried from legacy "The
+//    Content Moment".
+// 13 Recap Panel — restored, Task #1614: legacy "The Aftermath"'s moment
+//    ("phone blowing up"). Task #1613 had dropped this too, reading
+//    `diegetic: false` literally; Evoni's ruling restores it.
+//
+// 1, 2 — actor justawoman, diegetic no: JustAWoman's own non-diegetic
+//   framing (opening ritual, login/loading). No moment Lala perceives.
+// 3 — surface none, diegetic none: no screen presentation at all.
+// 5 — diegetic yes, but surface is Audience Overlay (the invitation letter
+//   itself), not Lala's Phone — already has its own dedicated invitation-
+//   asset treatment (EVENT_EPISODE_FLOW.md §2); a generic phone/social
+//   moment here would be redundant with, not additive to, that letter.
+// 8 — actor justawoman, diegetic no (Closet UI). The purchase-decision
+//   moment previously proposed here was removed, Task #1614: it is
+//   JustAWoman seeing the cost as she chooses the look, not a Lala
+//   moment. "Show cost in the closet at beat 8" is recorded as owed in
+//   docs/EVENT_EPISODE_FLOW.md §8.
+// 9 — diegetic no (Audience Overlay). No legacy match.
+// 11 — diegetic yes but actor none, surface Lala's Environment; legacy
+//   "The Main Event" already had this moment functionally disabled
+//   (`type: null`, which the old code always skipped regardless of the
+//   likelihood roll) — "phone is away" during the main event. Kept
+//   disabled, consistent with that legacy intent. Not revisited by #1614.
+// 14 — diegetic no; also, Evoni's own ruling on beat 14 vs. legacy "The
+//   Recap" is explicit that they are not the same moment (backward-looking
+//   recap vs. forward-looking cliffhanger) — not carried forward.
 const BEAT_PHONE_MOMENTS = {
-  1:  { likelihood: 0.95, type: 'notification', context: 'Lala sees the invite/opportunity on her phone' },
-  2:  { likelihood: 0.60, type: 'story', context: 'She checks who else is going — scrolls stories' },
-  3:  { likelihood: 0.80, type: 'post', context: 'She sees what the host or others are wearing — outfit pressure' },
-  4:  { likelihood: 0.40, type: 'dm', context: 'A friend texts about the event while she gets ready' },
-  5:  { likelihood: 0.90, type: 'post', context: 'She posts her GRWM/outfit — first reactions come in' },
-  6:  { likelihood: 0.30, type: 'story', context: 'Quick story check on arrival — who posted from the venue already?' },
-  7:  { likelihood: 0.70, type: 'live', context: 'Someone at the event is live — she sees herself or the crowd' },
-  8:  { likelihood: 0.20, type: 'dm', context: 'DM from someone about the person she just met' },
-  9:  { likelihood: 0.10, type: null, context: 'Main event — phone is away (mostly)' },
+  1: null,
+  2: null,
+  3: null,
+  4: { likelihood: 0.95, type: 'notification', context: 'Lala sees the invite/opportunity on her phone' },
+  5: null,
+  6: { likelihood: 0.60, type: 'story', context: 'She checks who else is going — scrolls stories' },
+  7: { likelihood: 0.70, type: 'dm', context: 'A brand deal, DM, or side-quest message arrives — tension compounds' },
+  8: null,
+  9: null,
   10: { likelihood: 0.50, type: 'notification', context: 'A post/comment disrupts the moment — drama notification' },
-  11: { likelihood: 0.85, type: 'live', context: 'She films the key content moment — go live, post, capture' },
-  12: { likelihood: 0.40, type: 'dm', context: 'Text from someone who left early or is watching from home' },
+  11: null,
+  12: { likelihood: 0.85, type: 'live', context: 'She films the key content moment — go live, post, capture' },
   13: { likelihood: 0.90, type: 'notification', context: 'Phone blowing up — reactions, DMs, tagged posts flooding in' },
-  14: { likelihood: 0.95, type: 'post', context: 'She scrolls what everyone posted — curates her own recap' },
+  14: null,
 };
 
 // ─── GENERATE FEED MOMENTS FOR AN EPISODE ───────────────────────────────────
@@ -79,46 +135,43 @@ const BEAT_PHONE_MOMENTS = {
  * @param {object} event - The world event
  * @param {object[]} beats - Array of BEAT_TEMPLATES
  * @param {object[]} guestProfiles - Profiles attending the event
- * @param {object} models - Sequelize models
+ * @param {object} _models - Sequelize models. Unused since the
+ *   purchase-decision moment (its only caller) moved out of this
+ *   function — Task #1614. Kept in the signature for compatibility with
+ *   episodeGeneratorService.js's positional call.
  * @param {object} options - { showType, contentLens }
  * @returns {object} Map of beat_number → feed_moment
  */
-async function generateFeedMoments(event, beats, guestProfiles, models, options = {}) {
+async function generateFeedMoments(event, beats, guestProfiles, _models, options = {}) {
   const showType = options.showType || 'styling_adventures';
   const lens = CONTENT_LENSES[showType] || CONTENT_LENSES.default;
   const auto = event.canon_consequences?.automation || {};
   const hostName = auto.host_display_name || event.host || 'the host';
   const guests = guestProfiles || auto.guest_profiles || [];
 
-  // Get Lala's balance for purchase decisions
-  let balance = 500;
-  try {
-    const [state] = await models.sequelize.query(
-      `SELECT state_json FROM character_state_history WHERE show_id = :showId ORDER BY created_at DESC LIMIT 1`,
-      { replacements: { showId: event.show_id }, type: models.sequelize.QueryTypes.SELECT }
-    );
-    const sj = typeof state?.state_json === 'string' ? JSON.parse(state.state_json) : state?.state_json;
-    balance = sj?.coins ?? 500;
-  } catch { /* use default */ }
-
   // Pick which beats get feed moments (based on likelihood)
   const moments = {};
 
   for (const beat of beats) {
-    const config = BEAT_PHONE_MOMENTS[beat.beat] || { likelihood: 0.3, type: 'notification', context: '' };
+    // Explicit `null` in BEAT_PHONE_MOMENTS means "checked, no fitting
+    // moment" — not the same as an unrecognized beat, and neither falls
+    // back to a guessed default.
+    const config = BEAT_PHONE_MOMENTS[beat.beat];
+    if (!config) continue;
+    if (!config.type) continue;
 
     // Roll against likelihood
     if (Math.random() > config.likelihood) continue;
-    if (!config.type) continue;
 
-    // Pick a trigger profile (host, guest, or general feed)
+    // Pick a trigger profile (host, guest, or general feed) — keyed on the
+    // canonical beat's own `phase`, not its position.
     let triggerProfile = null;
     let triggerHandle = '';
-    if (beat.beat <= 5) {
+    if (beat.phase === 'before') {
       // Before event — host or aspirational follow
       triggerProfile = guests.find(g => g.relationship === 'industry' || g.relationship === 'friend') || guests[0];
       triggerHandle = triggerProfile?.handle || hostName;
-    } else if (beat.beat <= 12) {
+    } else if (beat.phase === 'during') {
       // During event — attendees
       triggerProfile = guests[Math.floor(Math.random() * guests.length)] || null;
       triggerHandle = triggerProfile?.handle || 'someone at the event';
@@ -133,47 +186,13 @@ async function generateFeedMoments(event, beats, guestProfiles, models, options 
     moments[beat.beat] = moment;
   }
 
-  // ── Special: Purchase Decision Moment (Beat 3 — The Closet) ──
-  // JustAWoman checks the bank, picks an outfit, Lala reacts
-  const prestige = event.prestige || 5;
-  const outfitCost = prestige >= 8 ? 400 : prestige >= 6 ? 250 : prestige >= 4 ? 120 : 50;
-  const canAfford = balance >= outfitCost;
-  const afterPurchase = balance - outfitCost;
-
-  if (!moments[3]) {
-    moments[3] = {
-      trigger_profile: 'SYSTEM',
-      trigger_action: 'wardrobe_purchase',
-      on_screen: {
-        type: 'ui_interaction',
-        content: canAfford
-          ? `[Bank: ${balance} coins] → Purchase outfit (${outfitCost} coins) → [Remaining: ${afterPurchase} coins]`
-          : `[Bank: ${balance} coins] → Outfit costs ${outfitCost} coins → NOT ENOUGH`,
-        image_desc: canAfford ? 'Bank screen showing balance, purchase confirmation' : 'Bank screen showing insufficient funds, red warning',
-        asset_type: 'NOTIFICATION_OVERLAY',
-        asset_role: 'UI.OVERLAY.BANK',
-      },
-      script_lines: {
-        justawoman_line: canAfford
-          ? (afterPurchase < 100
-            ? `Oh this is so cute! But let me check the bank first... okay we have ${balance} coins, this outfit is ${outfitCost}... that leaves us with ${afterPurchase}. Cutting it close but she needs to look good tonight.`
-            : `Oh this is so freaking cute! Let me check the bank... we have ${balance} coins. This is ${outfitCost} — we can definitely do this! Adding it to Lala's closet.`)
-          : `Oh no... this outfit is perfect but it's ${outfitCost} coins and we only have ${balance}. We need to book more work before we can afford this. Let me see what opportunities are available...`,
-        lala_line: canAfford
-          ? (afterPurchase < 100
-            ? `This is worth it. But I'm going to need to hustle after this event. Can't keep spending like this.`
-            : `This is so cute, so worth the coins! If I wanna spend hard, I gotta work hard. I'm going to kill this event today.`)
-          : `I can't afford this. I literally cannot afford the outfit I need for this event. Something has to change.`,
-        lala_internal: canAfford
-          ? `The outfit makes me feel like I belong. For one night, the price tag doesn't matter.`
-          : `Everyone else will show up looking perfect. And I'll be the one who couldn't afford to play the part.`,
-        justawoman_action: canAfford ? 'purchases outfit, adds to closet' : 'closes bank, looks at opportunities',
-        direction: canAfford ? 'Lala puts on the outfit, confidence builds' : 'Lala stares at her closet, nothing feels right',
-      },
-      beat_context: 'The Closet — outfit selection driven by financial reality',
-      financial: { balance, outfit_cost: outfitCost, affordable: canAfford, remaining: afterPurchase },
-    };
-  }
+  // The purchase-decision special case that used to live here (moved to
+  // canonical beat 8 by Task #1613) is removed — Evoni's ruling, Task
+  // #1614: it is JustAWoman seeing the cost as she chooses the look at
+  // beat 8, not a Lala moment, so it does not belong in a service whose
+  // whole purpose is what Lala herself sees on her phone. "Show cost in
+  // the closet at beat 8" is recorded as owed in
+  // docs/EVENT_EPISODE_FLOW.md §8.
 
   return moments;
 }
@@ -247,7 +266,7 @@ function generateMomentContent(beat, config, lens, event, hostName, triggerHandl
     },
   };
 
-  const phase = beat.beat <= 5 ? 'before' : beat.beat <= 12 ? 'during' : 'after';
+  const phase = beat.phase;
   const typeTemplates = TEMPLATES[config.type]?.[phase] || TEMPLATES.notification[phase] || [];
   const template = typeTemplates[Math.floor(Math.random() * typeTemplates.length)] || { content: `${triggerHandle} posted something`, action: 'posted' };
 
@@ -335,7 +354,7 @@ function generateMomentContent(beat, config, lens, event, hostName, triggerHandl
             `${triggerHandle} posted already?! We need to get our content up.`,
           ],
         };
-        const p = beat.beat <= 5 ? 'before' : beat.beat <= 12 ? 'during' : 'after';
+        const p = beat.phase;
         return JW[p][Math.floor(Math.random() * JW[p].length)];
       })(),
       lala_line: dialogue,              // spoken dialogue (character voice)
