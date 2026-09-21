@@ -25,6 +25,7 @@ function buildNav(shows) {
         { icon: '🏗️', label: 'World Foundation', route: '/world-foundation', hint: 'DREAM map, cities, locations' },
         { icon: '⭐', label: 'Social Systems', route: '/social-systems', hint: 'Archetypes, legends, trends' },
         { icon: '📅', label: 'Culture & Events', route: '/culture-events', hint: 'Calendar, memory, legacy' },
+        { icon: '🎭', label: "Lala's Feed", route: '/feed?layer=lalaverse', hint: 'Who exists in her social world' },
       ],
     },
     {

@@ -1292,6 +1292,23 @@ relationship: multiple independent beat vocabularies and multiple writers
 of the same beat-shaped storage, none of them aware of each other or of
 this rule. That census records the gap; it does not close it.
 
+**(k) Producer Mode and Lala's Feed answer different questions (Evoni,
+2026-09-22, Task #1631).** Producer Mode answers what is in production,
+what is blocked, and what happens next. Lala's Feed answers who exists in
+Lala's social world. On this ruling, the Feed is not a Producer Mode
+sub-tab — it is its own destination, reached from the Sidebar
+(`frontend/src/components/layout/Sidebar.jsx`, FRANCHISE zone) and opening
+on the LalaVerse feed with the feed-layer switcher still available. New
+Episode (§8(j)'s generation contract has no bearing on this) continues to
+open the Feed in choose-host mode (`SocialProfileGenerator`'s `chooseHost`
+prop, Task #1628) rather than the standalone destination — choosing a host
+is a step inside episode creation, not a detour to browse the Feed.
+Producer Mode's own "Feed & Events" tab is renamed "Events"; the
+Feed → Opportunities → Events pipeline and everything else on that view is
+unchanged. `?tab=feed-timeline` (and the old bare `?tab=feed`) redirect to
+the standalone Feed rather than resolving to a local tab that no longer
+exists.
+
 ---
 
 ## 9. Owed before enforcement
