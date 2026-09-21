@@ -1140,7 +1140,7 @@ all three of its former position-based before/during/after splits
 (`:117-128` trigger-profile selection, `:309` content-template
 selection, `:397` JustAWoman's own dialogue selection) and re-keys
 `BEAT_PHONE_MOMENTS` by canonical beat, proposed against each beat's own
-`actor`/`surface`/`diegetic` (full table and reasoning in PR #1613's
+`actor`/`surface`/`diegetic` (full table and reasoning in PR #1614's
 body): moments proposed for beats 4, 6, 7, 12 (7 authored fresh, no
 legacy equivalent existed); explicit `null` — not a guessed default —
 for the other 10. The unconditional purchase-decision special case moved
