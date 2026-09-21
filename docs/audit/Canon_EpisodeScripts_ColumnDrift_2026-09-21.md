@@ -230,6 +230,19 @@ $ grep -n "^### PE #4[2-7]" docs/audit/Session_PE_Roster.md
 425:### PE #47 — ui_overlay_types relation drift (P1, OPEN, NEW 2026-05-15)
 ```
 
+**Where the issue's "#42–#47" framing itself traces to** — MEASURED:
+
+```
+$ grep -n "#42.*#47" PROJECT_CONTEXT.md
+358:**Session PE roster (PE #27–#68), carried unchanged — see the roster-hygiene item above for what is stale in it.** Closed: #37, #41, #48, #58, #63, #66. P0 open: #51, #52 (F-AUTH-1 pre-flight inventories). P1 open: #27 (prod smoke test accepts 502/503), #38, #40, #42–#47 (npm audit; prod-RDS column drift), #49 (50% AI error rate), #54, #55, #64. P2 open: #31, #39, #50, #53, #56, #57, #59–#62, #65, #67, #68. PE #1–#26 and #28–#36 live in F-AUTH-1's Track 8 roster, not here.
+```
+
+`PROJECT_CONTEXT.md:358` cites `#42–#47 (npm audit; prod-RDS column drift)` as one compound
+range spanning both labels in a single parenthetical — a reasonable, real source for the
+issue's "#42–#47" shorthand, not an unexplained number. The roster itself (quoted above)
+resolves that compound range into individual entries, and only there does it become visible
+that #42 carries the npm-audit label and #43–#47 carry the drift label.
+
 **Correction to this issue's own framing:** PE #42 is titled "7 critical/high npm audit
 vulnerabilities" — an npm dependency finding, not a schema-drift finding. It is not part of
 the production-column-drift pattern. **PE #43–#47, not #42–#47, are the schema-drift family**
