@@ -910,8 +910,27 @@ as a general law the way this ruling does.
 
 Recorded as open. This document does not choose between them.
 
-**(a) The canonical 14-beat structure.** Three sources, side by side —
-none chosen:
+**(a) The canonical 14-beat structure — RESOLVED (Evoni, 2026-09-21, Task
+#1609).** The show-brain seeder's names and order are canon.
+`episodeGeneratorService.js`'s `phase` and `emotional_intent` fields
+survive as a layer on top of the canonical beats, mapped by content, not
+by position — proposed mapping pending Evoni's approval, not yet
+committed to code; see the open item (d) below and PR #1610's body for
+the full table. Single source of truth: `src/constants/canonicalBeats.js`
+(`CANONICAL_BEATS`, names/order/`typical_location`/description copied
+verbatim from `scenePlannerService.js`'s pre-existing `BEAT_STRUCTURE`,
+which already matched the seeder exactly). `scenePlannerService.js` now
+imports it (`const { CANONICAL_BEATS: BEAT_STRUCTURE } =
+require('../constants/canonicalBeats')`) — a pure refactor, no behavior
+change. `episodeGeneratorService.js`'s `BEAT_TEMPLATES` is **not yet**
+converted to import it; it still writes its own narrative names
+(`The Notification`, `The Decision`, ...) into `scene_plans.beat_name` at
+generation time (`episodeGeneratorService.js:633-649`) until the mapping
+below is approved and a follow-up task converts it and
+`feedMomentsService.js` together, so the two are never briefly out of
+sync with each other.
+
+The three-way comparison that led to this ruling, kept for the record:
 
 | Beat | `episodeGeneratorService.js` `BEAT_TEMPLATES` (`:253-267`) | `scenePlannerService.js` `BEAT_STRUCTURE` (`:22-37`) | show-brain seeder, Episode Architecture (`20260312800000-show-brain-franchise-laws.js:254-269`) |
 |---|---|---|---|
@@ -938,10 +957,9 @@ transformation loop, deliverable export). `episodeGeneratorService.js`'s
 "before/during/after" arc (Notification → Decision → Closet → ... →
 Recap) with no reference to login rituals, screen states, or the
 show-brain's UI mechanics, carrying its own `phase` and `emotional_intent`
-fields the other two don't have. Both are called "14 beats" / "14-beat
-structure" in their own code; they do not describe the same 14 things.
-Which one (or whether both, for different purposes) is canonical is not
-decided here.
+fields the other two don't have. Both were called "14 beats" / "14-beat
+structure" in their own code; they did not describe the same 14 things.
+The ruling above picks the first two (already identical) as canon.
 
 **(b) Guests' canonical representation.** Left OPEN by decision 5. §2
 already records the two existing homes
@@ -956,6 +974,32 @@ code this document found. `source_profile_id` (item 5) points at
 creator-profile terms (handle, `content_category`, `archetype`,
 `follower_tier`) — whether a brand or other non-creator entity can be a
 host through the same column, or needs a different one, is open.
+
+**(d) The old-beat → canonical-beat content mapping (Task #1609).**
+Opened by resolving (a). `episodeGeneratorService.js`'s `phase` and
+`emotional_intent` fields, and `feedMomentsService.js`'s
+`BEAT_PHONE_MOMENTS` phone-moment content, were both built against the
+*old* narrative order (`episodeGeneratorService`'s `BEAT_TEMPLATES`
+positions), not the canonical one — matching by position instead of
+content would put the wrong emotional intent, and the wrong phone
+moment, on the wrong canonical beat (e.g. canonical beat 3 "Welcome" is
+not an outfit beat; the old position 3 "The Closet" was). A proposed
+beat-by-beat mapping (content-matched, nulls where no genuine legacy
+equivalent exists, covering `phase`/`emotional_intent`/phone-moment
+content together as one table) was worked out in PR #1610's body for
+Evoni's approval. `feedMomentsService.js` also hardcodes beat position in
+three more places beyond `BEAT_PHONE_MOMENTS` — an unconditional
+purchase-decision moment at position 3 (`:143-176`, display-only, no
+`character_state`/coin mutation — confirmed by reading the call chain
+into `feedPostGeneratorService.js:347` and `FeedMoment.financial_context`)
+and two before/during/after splits keyed on `beat.beat <= 5`/`<= 12`
+(`:117-128`, `:250`, `:338`) — all of which assume the old position
+semantics and need the same content-based fix, not a positional one. Not
+resolved here: converting `episodeGeneratorService.js` and
+`feedMomentsService.js` to the canonical module, and fixing all four
+position-hardcodes in `feedMomentsService.js`, is deferred to a follow-up
+task once the mapping is approved, so the two files are never briefly out
+of sync with each other.
 
 ---
 
