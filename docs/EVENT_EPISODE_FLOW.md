@@ -654,7 +654,7 @@ all?), not a code question this document's reads can settle. Left open.
 **These are product rulings, not verified facts.** Each one is recorded as
 Evoni stated it, followed by this document's own re-derivation of where
 current code already agrees or conflicts. Basis for the code citations in
-this section: `origin/main` at `c3ecff3ea5a579fa6169442603fca3530883c72`
+this section: `origin/main` at `c3ecff3ea5a579fa6169442603fca3530883c72f`
 (2026-09-21) — a later basis than §§1–6 above, which are not re-walked
 here.
 
