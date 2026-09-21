@@ -41,6 +41,7 @@ docs/audit/                the audit register (keystones, findings, Owed Index c
 - Errors: try/catch + `console.error` + JSON; every `catch` logs (`scripts/lint-silent-catches.sh`).
 - Migrations: new files only under `src/migrations/`, always `deleted_at`, never `Model.sync()` or inline `CREATE TABLE`.
 - Frontend: hooks only; one CSS file per page; test at 375px; new routes need a Sidebar entry or in-app link.
+- Docs: living docs (outside `docs/audit/`) cite code by stable name — component, function, `TABS` key — line number optional, always paired with the name; `docs/audit/` docs cite `file:line` against their SHA. Names outlast the next UI change; line numbers don't (PRs #1590/#1593/#1595).
 
 ## Commands
 
