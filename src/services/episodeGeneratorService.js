@@ -313,6 +313,91 @@ function calculateFinancials(event, wardrobeItems = []) {
   };
 }
 
+/**
+ * Create the 14 scene_plans rows for an episode, one per BEAT_TEMPLATES
+ * entry, and resolve the home/venue scene_set_id pair those rows (and the
+ * SceneSetEpisode junction step right after this call) use.
+ *
+ * Guards against duplicate scene_plans rows: this is a plain INSERT loop
+ * with no upsert semantics, unlike scenePlannerService.generateScenePlan
+ * (which destroys-then-recreates its own rows). Destroying here would risk
+ * erasing scene set assignments already made on existing rows, so on a
+ * repeat call for an episode that already has scene_plans rows, the insert
+ * is skipped entirely — existing rows are left untouched, and none are
+ * added — rather than duplicated or clobbered. See docs/SCRIPT_PIPELINE.md
+ * §2. The home/venue scene set lookup always runs, insert or not, because
+ * the SceneSetEpisode linking step after this call is itself idempotent
+ * and expected to run on every call, including regenerate.
+ *
+ * Cleanup of scene_plans rows a prior, unguarded run may already have
+ * duplicated, or that episode regeneration already orphaned, is a data
+ * question this guard does not answer — see docs/SCRIPT_PIPELINE.md §2.
+ *
+ * @param {object} episode — the just-created Episode instance
+ * @param {object} event — WorldEvent instance or plain object
+ * @param {object} models — Sequelize models
+ * @returns {Promise<{ scenePlanRows: object[], sceneSetIds: { home: string|null, venue: string|null } }>}
+ */
+async function createScenePlanRows(episode, event, models) {
+  const { ScenePlan } = models;
+  const scenePlanRows = [];
+  const sceneSetIds = { home: null, venue: null };
+  if (!ScenePlan) {
+    return { scenePlanRows, sceneSetIds };
+  }
+
+  try {
+    const [homeSets] = await models.sequelize.query(
+      `SELECT id FROM scene_sets WHERE scene_type = 'HOME_BASE' AND deleted_at IS NULL LIMIT 1`
+    );
+    sceneSetIds.home = homeSets?.[0]?.id || null;
+
+    if (event.scene_set_id) {
+      sceneSetIds.venue = event.scene_set_id;
+    }
+  } catch { /* scene_sets query failed — no scene sets linked */ }
+
+  let existingCount = 0;
+  try {
+    const [existingRows] = await models.sequelize.query(
+      `SELECT COUNT(*)::int AS count FROM scene_plans WHERE episode_id = :episode_id`,
+      { replacements: { episode_id: episode.id } }
+    );
+    existingCount = existingRows?.[0]?.count || 0;
+  } catch (existingErr) {
+    console.warn('[EpisodeGenerator] Scene plan existence check failed, proceeding with insert:', existingErr.message);
+  }
+
+  if (existingCount > 0) {
+    console.log(`[EpisodeGenerator] Skipped scene plan insert for episode ${episode.id}: ${existingCount} row(s) already exist.`);
+    return { scenePlanRows, sceneSetIds };
+  }
+
+  for (const beat of BEAT_TEMPLATES) {
+    const sceneSetId = beat.phase === 'before' || beat.phase === 'after'
+      ? sceneSetIds.home
+      : sceneSetIds.venue;
+
+    try {
+      const beatId = uuidv4();
+      await models.sequelize.query(
+        `INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, emotional_intent, scene_set_id, scene_context, sort_order, locked, ai_suggested, created_at, updated_at)
+         VALUES (:id, :episode_id, :beat_number, :beat_name, :emotional_intent, :scene_set_id, :scene_context, :sort_order, false, true, NOW(), NOW())`,
+        { replacements: {
+          id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label,
+          emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId || null,
+          scene_context: beat.description, sort_order: beat.beat,
+        } }
+      );
+      scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId });
+    } catch (beatErr) {
+      console.warn(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
+    }
+  }
+
+  return { scenePlanRows, sceneSetIds };
+}
+
 // ─── MAIN: GENERATE EPISODE FROM EVENT ───────────────────────────────────────
 
 /**
@@ -610,46 +695,9 @@ Return ONLY JSON.` }],
   }
 
   // ── 3. Create Scene Plan (14 beats) ──
-  const scenePlanRows = [];
   // Use a container object instead of bare identifiers so downstream
   // access is resilient even if a scope mutation slips in later edits.
-  const sceneSetIds = { home: null, venue: null };
-  if (ScenePlan) {
-    // Try to find scene sets for home and venue
-
-    try {
-      const [homeSets] = await models.sequelize.query(
-        `SELECT id FROM scene_sets WHERE scene_type = 'HOME_BASE' AND deleted_at IS NULL LIMIT 1`
-      );
-      sceneSetIds.home = homeSets?.[0]?.id || null;
-
-      if (event.scene_set_id) {
-        sceneSetIds.venue = event.scene_set_id;
-      }
-    } catch { /* scene_sets query failed — no scene sets linked */ }
-
-    for (const beat of BEAT_TEMPLATES) {
-      const sceneSetId = beat.phase === 'before' || beat.phase === 'after'
-        ? sceneSetIds.home
-        : sceneSetIds.venue;
-
-      try {
-        const beatId = require('uuid').v4();
-        await models.sequelize.query(
-          `INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, emotional_intent, scene_set_id, scene_context, sort_order, locked, ai_suggested, created_at, updated_at)
-           VALUES (:id, :episode_id, :beat_number, :beat_name, :emotional_intent, :scene_set_id, :scene_context, :sort_order, false, true, NOW(), NOW())`,
-          { replacements: {
-            id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label,
-            emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId || null,
-            scene_context: beat.description, sort_order: beat.beat,
-          } }
-        );
-        scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId });
-      } catch (beatErr) {
-        console.warn(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
-      }
-    }
-  }
+  const { scenePlanRows, sceneSetIds } = await createScenePlanRows(episode, event, models);
 
   // ── Link the chosen scene set(s) to the episode via SceneSetEpisode ──
   // Critical fix: scene_set_id was reaching scene_plans rows but never
@@ -901,6 +949,7 @@ Return ONLY JSON.` }],
 
 module.exports = {
   generateEpisodeFromEvent,
+  createScenePlanRows,
   buildSocialTasks,
   calculateFinancials,
   inferArchetype,
