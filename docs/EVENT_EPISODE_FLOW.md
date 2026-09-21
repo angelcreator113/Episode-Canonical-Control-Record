@@ -1267,6 +1267,31 @@ new standing rule:
   different "Screen States" concept (IDLE/ALERT/GAMEPLAY/...) for the
   Editor Brain, also coincidental, and the seeder is off-limits regardless.
 
+**(j) Canonical beats are the generation contract; the script is the
+performance of it (Evoni, 2026-09-21, Task #1617).** `canonicalBeats.js`
+holds structure and rules, never episode content — nothing about it
+changes under this ruling. What it settles is the relationship between
+that contract and the script:
+
+- **Generate Script instantiates all 14 canonical beats** from the
+  Episode Plan, the Event Package, and current episode state. It does not
+  invent its own beat count or boundaries.
+- **Every generated script beat keeps its canonical beat number and key.**
+  Downstream consumers — Scene Planning, the Phone, overlays, Character
+  Clips — read that number/key to know which canonical beat a given piece
+  of script fulfills, rather than re-deriving "which beat this is" from
+  prose, position, or a parallel naming scheme.
+- **The script generator does not invent its own beats.** Any script-side
+  structure (headers, tags, segmentation) is a rendering of the 14
+  canonical beats, not a competing beat count.
+
+This is a relationship ruling, not a schema change — no code changes
+under this task. `docs/SCRIPT_PIPELINE.md` (Task #1617) is the census of
+every place in the current codebase that does *not* yet follow this
+relationship: multiple independent beat vocabularies and multiple writers
+of the same beat-shaped storage, none of them aware of each other or of
+this rule. That census records the gap; it does not close it.
+
 ---
 
 ## 9. Owed before enforcement
