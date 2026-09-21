@@ -1143,25 +1143,49 @@ selection, `:397` JustAWoman's own dialogue selection) and re-keys
 `actor`/`surface`/`diegetic` (full table and reasoning in PR #1614's
 body): moments proposed for beats 4, 6, 7, 12 (7 authored fresh, no
 legacy equivalent existed); explicit `null` — not a guessed default —
-for the other 10. The unconditional purchase-decision special case moved
-from the old hardcoded position 3 to canonical beat 8 (Transformation
-Loop — SAL's actual outfit/closet beat; position 3, "Welcome," has
-`surface: 'none'` and can host nothing). Two judgment calls flagged for
-Evoni in that PR: beats 10 and 13 both had strong legacy phone-moment
-content ("who posted from the venue," "phone blowing up") that a literal
-reading of their `diegetic: false` drops — proposed as `null` pending
-her call on whether the beat's underlying diegetic fact (the travel
-itself; the audience's own inferred reactions) should override the
-rendered surface's `diegetic` value for phone-moment purposes.
+for the others. Two things Task #1613 got proposed but wrong, corrected
+by Evoni's ruling the same PR, second commit (h) below: the
+purchase-decision moment (removed, not moved to beat 8 — it was never a
+Lala moment) and beats 10/13 (restored, not dropped — see (h)).
 
-**Owed, not touched by Task #1613** (still on their own beat lists, per
-its explicit scope): `episodeScriptWriterService.js`'s and
+**Owed, not touched by Task #1613/#1614** (still on their own beat
+lists, per explicit scope): `episodeScriptWriterService.js`'s and
 `groundedScriptGeneratorService.js`'s local `BEAT_TEMPLATES` fallback
 dicts (§8(e) above — already agree with canonical names/order, used
 only when a stored `scene_plans` row lacks `beat_name`, so no urgency);
 `src/utils/scriptBeatParser.js`'s own `BEAT_TYPES` (§8(a)'s original
 research — a genuinely different, fourth structure, confirmed to never
 reach evaluation).
+
+**(h) Lala's phone is persistent; some overlays transition (Evoni,
+2026-09-21, Task #1614).** Two corrections to (g)'s proposal, and one
+new standing rule:
+
+1. **The purchase-decision moment is removed from `feedMomentsService.js`**,
+   not relocated. It was proposed at canonical beat 8 in (g) above on the
+   reasoning that beat 8's `actor` (justawoman) and content (choosing the
+   outfit) matched — but the moment itself is JustAWoman seeing the cost
+   as she chooses the look, never something Lala perceives, so it does
+   not belong in a service whose entire purpose is what Lala herself sees.
+   **Owed:** show the cost in the closet UI at beat 8 instead — a
+   JustAWoman-facing element, not a `feedMomentsService` phone moment.
+   Not designed or implemented here.
+2. **Beats 10 and 13's legacy phone moments are restored** ("who posted
+   from the venue already?"; "phone blowing up"). (g)'s proposal had
+   dropped both, reading their rendered surface's `diegetic: false`
+   literally. Overridden by the standing rule below.
+3. **Standing rule:** Lala's phone is visible for the whole show. Most
+   icons live on it. Some overlays move between the phone and full
+   screen depending on the transition — beat 5 is the clearest case: the
+   invitation notification lives on her phone; tapping it lets the
+   letter fill the screen. `surface` as a single fixed value per beat
+   (§8(e)) cannot express a transition — it needs a start and an end
+   (phone → full screen), not yet modeled in `canonicalBeats.js`.
+   **Per-beat phone states for all 14 beats, and the `surface`
+   start/end model, are owed as a separate task** — not redesigned in
+   Task #1614. Until that task lands, `BEAT_PHONE_MOMENTS`'s beats 10 and
+   13 restored above are correct in outcome (Lala does see these) but
+   not yet expressed through an updated `surface` value.
 
 ---
 

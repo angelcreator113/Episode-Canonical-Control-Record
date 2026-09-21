@@ -54,11 +54,17 @@ const CONTENT_LENSES = {
 // ─── BEAT-TO-FEED-MOMENT MAPPING ────────────────────────────────────────────
 // Which canonical beats (src/constants/canonicalBeats.js) naturally have
 // phone moments, and what type. Re-keyed to canonical beat numbers — Task
-// #1613, docs/EVENT_EPISODE_FLOW.md §8. Checked against each beat's own
-// actor/surface/diegetic: a moment only proposed where `diegetic` is true
-// and `surface` is a Lala's-World surface (Lala's Phone or, for beat 6,
-// Lala's Environment — she is the actor there, diegetic yes). `null` = no
+// #1613, revised Task #1614, docs/EVENT_EPISODE_FLOW.md §8. `null` = no
 // fitting moment, checked and decided, not a fallback default.
+//
+// Evoni's ruling, 2026-09-21 (Task #1614): Lala's phone is visible for the
+// whole show; most icons live on it, and some overlays move between the
+// phone and full screen depending on the transition (beat 5 is the clear
+// case — the invitation notification lives on her phone, then the letter
+// fills the screen when tapped). This dict is NOT redesigned around that
+// ruling in Task #1614 — per-beat phone states for all 14 beats are owed
+// as a separate task (docs/EVENT_EPISODE_FLOW.md §8). The entries below
+// still reflect Task #1613's original actor/surface/diegetic table.
 //
 // 4  Interruption Pulse 1 — surface Lala's Phone, diegetic yes, actor none:
 //    the mail/invite itself, on her phone. Carried from legacy "The
@@ -71,9 +77,17 @@ const CONTENT_LENSES = {
 //    this moment is proposed fresh here, from the beat's own
 //    narrative_purpose and its screen_action comment ("SIDE_QUEST reaches
 //    Lala as a DM, call, or message") — not carried from any legacy dict.
+// 10 Event Travel — restored, Task #1614: legacy "The Arrival"'s moment
+//    ("who posted from the venue already?"). Task #1613 had dropped this
+//    reading the rendered icon's `diegetic: false` literally; Evoni's
+//    ruling is that Lala does see the travel icon, on her phone — it
+//    reads like her maps.
 // 12 Deliverable Creation — surface Lala's Phone, diegetic yes, actor lala:
 //    she is filming content, on her phone. Carried from legacy "The
 //    Content Moment".
+// 13 Recap Panel — restored, Task #1614: legacy "The Aftermath"'s moment
+//    ("phone blowing up"). Task #1613 had dropped this too, reading
+//    `diegetic: false` literally; Evoni's ruling restores it.
 //
 // 1, 2 — actor justawoman, diegetic no: JustAWoman's own non-diegetic
 //   framing (opening ritual, login/loading). No moment Lala perceives.
@@ -82,23 +96,17 @@ const CONTENT_LENSES = {
 //   itself), not Lala's Phone — already has its own dedicated invitation-
 //   asset treatment (EVENT_EPISODE_FLOW.md §2); a generic phone/social
 //   moment here would be redundant with, not additive to, that letter.
-// 8 — actor justawoman, diegetic no (Closet UI): the purchase-decision
-//   special case below is this beat's moment; no generic entry needed.
+// 8 — actor justawoman, diegetic no (Closet UI). The purchase-decision
+//   moment previously proposed here was removed, Task #1614: it is
+//   JustAWoman seeing the cost as she chooses the look, not a Lala
+//   moment. "Show cost in the closet at beat 8" is recorded as owed in
+//   docs/EVENT_EPISODE_FLOW.md §8.
 // 9 — diegetic no (Audience Overlay). No legacy match.
-// 10 — diegetic no on the rendered icon (Audience Overlay); the underlying
-//   travel is Lala's Environment per the beat's own code comment in
-//   canonicalBeats.js. Judgment call, flagged for Evoni: legacy "The
-//   Arrival" had a decent phone moment here ("who posted from the venue
-//   already?") that this drops by following `diegetic: false` literally.
-// 11 — diegetic no on STATS_UPDATE... no, diegetic yes but actor none,
-//   surface Lala's Environment; legacy "The Main Event" already had this
-//   moment functionally disabled (`type: null`, which the old code always
-//   skipped regardless of the likelihood roll) — "phone is away" during
-//   the main event. Kept disabled, consistent with that legacy intent.
-// 13 — diegetic no (Audience Overlay; Evoni: "the stats update is the
-//   system, not a person"). Judgment call, flagged for Evoni: legacy "The
-//   Aftermath" had a strong moment here ("phone blowing up") that this
-//   drops by following `diegetic: false` literally.
+// 11 — diegetic yes but actor none, surface Lala's Environment; legacy
+//   "The Main Event" already had this moment functionally disabled
+//   (`type: null`, which the old code always skipped regardless of the
+//   likelihood roll) — "phone is away" during the main event. Kept
+//   disabled, consistent with that legacy intent. Not revisited by #1614.
 // 14 — diegetic no; also, Evoni's own ruling on beat 14 vs. legacy "The
 //   Recap" is explicit that they are not the same moment (backward-looking
 //   recap vs. forward-looking cliffhanger) — not carried forward.
@@ -112,10 +120,10 @@ const BEAT_PHONE_MOMENTS = {
   7: { likelihood: 0.70, type: 'dm', context: 'A brand deal, DM, or side-quest message arrives — tension compounds' },
   8: null,
   9: null,
-  10: null,
+  10: { likelihood: 0.50, type: 'notification', context: 'A post/comment disrupts the moment — drama notification' },
   11: null,
   12: { likelihood: 0.85, type: 'live', context: 'She films the key content moment — go live, post, capture' },
-  13: null,
+  13: { likelihood: 0.90, type: 'notification', context: 'Phone blowing up — reactions, DMs, tagged posts flooding in' },
   14: null,
 };
 
@@ -127,27 +135,19 @@ const BEAT_PHONE_MOMENTS = {
  * @param {object} event - The world event
  * @param {object[]} beats - Array of BEAT_TEMPLATES
  * @param {object[]} guestProfiles - Profiles attending the event
- * @param {object} models - Sequelize models
+ * @param {object} _models - Sequelize models. Unused since the
+ *   purchase-decision moment (its only caller) moved out of this
+ *   function — Task #1614. Kept in the signature for compatibility with
+ *   episodeGeneratorService.js's positional call.
  * @param {object} options - { showType, contentLens }
  * @returns {object} Map of beat_number → feed_moment
  */
-async function generateFeedMoments(event, beats, guestProfiles, models, options = {}) {
+async function generateFeedMoments(event, beats, guestProfiles, _models, options = {}) {
   const showType = options.showType || 'styling_adventures';
   const lens = CONTENT_LENSES[showType] || CONTENT_LENSES.default;
   const auto = event.canon_consequences?.automation || {};
   const hostName = auto.host_display_name || event.host || 'the host';
   const guests = guestProfiles || auto.guest_profiles || [];
-
-  // Get Lala's balance for purchase decisions
-  let balance = 500;
-  try {
-    const [state] = await models.sequelize.query(
-      `SELECT state_json FROM character_state_history WHERE show_id = :showId ORDER BY created_at DESC LIMIT 1`,
-      { replacements: { showId: event.show_id }, type: models.sequelize.QueryTypes.SELECT }
-    );
-    const sj = typeof state?.state_json === 'string' ? JSON.parse(state.state_json) : state?.state_json;
-    balance = sj?.coins ?? 500;
-  } catch { /* use default */ }
 
   // Pick which beats get feed moments (based on likelihood)
   const moments = {};
@@ -186,53 +186,13 @@ async function generateFeedMoments(event, beats, guestProfiles, models, options 
     moments[beat.beat] = moment;
   }
 
-  // ── Special: Purchase Decision Moment (canonical beat 8 — Transformation
-  //    Loop) ── JustAWoman checks the bank, picks an outfit, Lala wears it.
-  // MOVED from the old hardcoded position 3 ("The Closet") — Task #1613.
-  // Canonical beat 3 ("Welcome") has surface: 'none', so nothing can be
-  // presented there at all; canonical beat 8 is SAL's actual closet/outfit
-  // beat (screen_action CLOSET_OPEN, actor justawoman, "JustAWoman chooses;
-  // Lala wears it" — docs/EVENT_EPISODE_FLOW.md §8), which is exactly this
-  // moment's own content and actor. Proposed, flagged for Evoni's approval.
-  const prestige = event.prestige || 5;
-  const outfitCost = prestige >= 8 ? 400 : prestige >= 6 ? 250 : prestige >= 4 ? 120 : 50;
-  const canAfford = balance >= outfitCost;
-  const afterPurchase = balance - outfitCost;
-
-  if (!moments[8]) {
-    moments[8] = {
-      trigger_profile: 'SYSTEM',
-      trigger_action: 'wardrobe_purchase',
-      on_screen: {
-        type: 'ui_interaction',
-        content: canAfford
-          ? `[Bank: ${balance} coins] → Purchase outfit (${outfitCost} coins) → [Remaining: ${afterPurchase} coins]`
-          : `[Bank: ${balance} coins] → Outfit costs ${outfitCost} coins → NOT ENOUGH`,
-        image_desc: canAfford ? 'Bank screen showing balance, purchase confirmation' : 'Bank screen showing insufficient funds, red warning',
-        asset_type: 'NOTIFICATION_OVERLAY',
-        asset_role: 'UI.OVERLAY.BANK',
-      },
-      script_lines: {
-        justawoman_line: canAfford
-          ? (afterPurchase < 100
-            ? `Oh this is so cute! But let me check the bank first... okay we have ${balance} coins, this outfit is ${outfitCost}... that leaves us with ${afterPurchase}. Cutting it close but she needs to look good tonight.`
-            : `Oh this is so freaking cute! Let me check the bank... we have ${balance} coins. This is ${outfitCost} — we can definitely do this! Adding it to Lala's closet.`)
-          : `Oh no... this outfit is perfect but it's ${outfitCost} coins and we only have ${balance}. We need to book more work before we can afford this. Let me see what opportunities are available...`,
-        lala_line: canAfford
-          ? (afterPurchase < 100
-            ? `This is worth it. But I'm going to need to hustle after this event. Can't keep spending like this.`
-            : `This is so cute, so worth the coins! If I wanna spend hard, I gotta work hard. I'm going to kill this event today.`)
-          : `I can't afford this. I literally cannot afford the outfit I need for this event. Something has to change.`,
-        lala_internal: canAfford
-          ? `The outfit makes me feel like I belong. For one night, the price tag doesn't matter.`
-          : `Everyone else will show up looking perfect. And I'll be the one who couldn't afford to play the part.`,
-        justawoman_action: canAfford ? 'purchases outfit, adds to closet' : 'closes bank, looks at opportunities',
-        direction: canAfford ? 'Lala puts on the outfit, confidence builds' : 'Lala stares at her closet, nothing feels right',
-      },
-      beat_context: 'Transformation Loop — outfit selection driven by financial reality',
-      financial: { balance, outfit_cost: outfitCost, affordable: canAfford, remaining: afterPurchase },
-    };
-  }
+  // The purchase-decision special case that used to live here (moved to
+  // canonical beat 8 by Task #1613) is removed — Evoni's ruling, Task
+  // #1614: it is JustAWoman seeing the cost as she chooses the look at
+  // beat 8, not a Lala moment, so it does not belong in a service whose
+  // whole purpose is what Lala herself sees on her phone. "Show cost in
+  // the closet at beat 8" is recorded as owed in
+  // docs/EVENT_EPISODE_FLOW.md §8.
 
   return moments;
 }
