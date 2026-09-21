@@ -1021,11 +1021,17 @@ position-hardcodes in `feedMomentsService.js`, is deferred to a follow-up
 task once the mapping is approved, so the two files are never briefly out
 of sync with each other.
 
-**(e) Every canonical beat carries eight fields (Task #1611).** Rule:
-each of the 14 entries in `src/constants/canonicalBeats.js` records
-`name`, `narrative_purpose`, `typical_location`, `screen_action`,
-`surface`, `diegetic`, `phase`, and `emotional_intent` — sourced by name,
-not invented, with `null` where no source settles a field. Sourcing:
+**(e) Every canonical beat carries nine fields (Task #1611).** Rule: each
+of the 14 entries in `src/constants/canonicalBeats.js` records `name`,
+`narrative_purpose`, `typical_location`, `screen_action`, `actor`,
+`surface`, `diegetic`, `phase`, and `emotional_intent` — sourced by name
+or ruled directly by Evoni, not invented, with `null` where nothing
+settles a field yet. `actor` and `surface` use three distinct states,
+never collapsed: `null` = not yet decided; the string `'none'` = decided,
+intentionally nothing; any other value = decided. `diegetic` has no
+`'none'` state (inherently yes/no once known) — `true` / `false` / `null`
+only. See (f) below for the rule that makes `actor` and `diegetic`
+independent axes rather than one. Sourcing:
 
 - `name`/`typical_location`/`description` — pre-existing fields
   `scenePlannerService.js`'s AI prompt actually reads; unchanged from
@@ -1066,24 +1072,53 @@ not invented, with `null` where no source settles a field. Sourcing:
   and `groundedScriptGeneratorService.js`'s own `BEAT_TEMPLATES` dicts,
   confirmed identical for all 14 beats at this basis (compared line by
   line) — no disagreement to record between the two.
-- `surface`/`diegetic` — proposed, not sourced: nothing in the codebase
-  names a "surface" or "diegetic" concept for beats. Derived from each
-  beat's own `screen_action` name and `narrative_purpose` text against
-  Evoni's stated rule ("a screen moment is not automatically Lala's
-  Phone: Lala's Phone is diegetic — she sees it — audience overlays are
-  not"). Proposed for 6 of 14 (beats 5, 8, 11, 12, 13, 14), where a
-  `screen_action` name or the seeder's own text settled it clearly
-  (`OPEN_LETTER_INVITE_OVERLAY` → Audience Overlay; `CLOSET_OPEN` →
-  Closet UI; `STATS_UPDATE` matching the seeder's own "Milestone Recap
-  Panels" language → Audience Overlay; etc.) — full reasoning per beat in
-  PR #1612's body. Left `null` for the other 8 (beats 1, 2, 3, 4, 6, 7, 9,
-  10), where the source text doesn't clearly settle it — e.g. beat 2's
-  "login overlay... world loads" (seeder) reads as a whole-episode
-  meta/loading moment, not obviously Lala's own phone, and nothing pins
-  it down further.
-- `phase`/`emotional_intent` — the proposed mapping from PR #1610's body,
-  carried here as still-proposed (see (d) above); not yet approved, not
-  yet adopted by `episodeGeneratorService.js` itself.
+- `actor`, `surface`, `diegetic` — nothing in the codebase names any of
+  these concepts for beats; all three are ruled directly by Evoni,
+  2026-09-21 (follow-up commit to Task #1611, after reviewing this
+  document's first `surface`/`diegetic` proposal in PR #1612). Filled for
+  every beat except: `actor` — beats 9, 10, 11, 12, 13, 14 (not yet
+  stated); `diegetic` — beat 3 only (surface is `'none'` there, but
+  "no surface" and "diegetic: no" are not the same claim, and nothing
+  said so explicitly, so it stays `null` rather than inferred).
+  Two values changed from the session's original (unapproved) proposal
+  once the actor/diegetic axes were separated out: beat 5's `diegetic`
+  flips from `false` to `true` (JustAWoman is the *actor* who clicks —
+  Lala still perceives the *result*, the same letter, just shown
+  enlarged for the audience); beat 8's `diegetic` flips from `true` to
+  `false` (JustAWoman chooses in the Closet UI; Lala only perceives the
+  outcome — wearing it — not the choosing itself). Beat 14's `surface`
+  also changed, from the session's original proposed `'None'` to
+  `'Audience Overlay'`.
+- `phase`/`emotional_intent` — for beats 4, 6, 8, 11, 12, 13: the
+  content-matched mapping from PR #1610's body (from
+  `episodeGeneratorService.js`'s `BEAT_TEMPLATES`, matched by content,
+  never by position), unchanged here. For beats 1, 2, 3, 5, 7, 9, 14: no
+  legacy match existed in that mapping (all were `null`); Evoni supplied
+  these seven directly in the same follow-up ruling as `actor` — not
+  derived from `episodeGeneratorService.js` at all. Beat 10 remains
+  `null` (not yet stated). None of this is adopted by
+  `episodeGeneratorService.js` itself yet — see (d) above.
+
+**(f) The SAL interaction law (Evoni, 2026-09-21).** JustAWoman may act
+through the show's interface layer without Lala perceiving it; Lala
+experiences the canonical consequences as events in her world. Three
+layers, plus a fourth state for beats with no screen presentation at all:
+
+| Layer | Surfaces | Who acts |
+|---|---|---|
+| Host Environment | Host Environment | JustAWoman |
+| Interface | Audience Overlay, Closet UI | Either — presented to the audience or operated by JustAWoman; not automatically perceived by Lala |
+| Lala's World | Lala's Phone, Lala's Environment | Diegetic to Lala by construction — these are the surfaces where a presented result is something she perceives |
+| *(no surface)* | `'none'` | — |
+
+This is what makes `actor` and `diegetic` independent rather than
+redundant: `actor` says who *performs* the screen action (JustAWoman,
+Lala, or no one); `diegetic` says whether Lala *perceives the result*.
+Beat 5 (actor `justawoman`, surface Audience Overlay, diegetic `true`)
+and beat 8 (actor `justawoman`, surface Closet UI, diegetic `false`) are
+both JustAWoman-acted Interface-layer beats that land on opposite sides
+of `diegetic` — the law is what makes both readings coherent rather than
+contradictory.
 
 ---
 
