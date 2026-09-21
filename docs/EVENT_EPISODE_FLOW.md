@@ -930,6 +930,26 @@ below is approved and a follow-up task converts it and
 `feedMomentsService.js` together, so the two are never briefly out of
 sync with each other.
 
+**Beat 5 corrected — Task #1611, Evoni's ruling 2026-09-21.** Beat 5
+("Reveal") is the invitation/opportunity reveal — "Lala reads the mail.
+Audience sees her unfiltered reaction" (seeder, verbatim) — not an outfit
+reveal. `scenePlannerService.js`'s pre-#1610 `BEAT_STRUCTURE`, copied
+verbatim into `canonicalBeats.js` by #1610 without independently
+re-checking it against the seeder, had beat 5 at `typical_location:
+'CLOSET'` with description "The outfit/look reveal — wardrobe becomes
+part of the narrative." Same name and position as the seeder's beat 5,
+different content — #1610 verified names/order matched and didn't check
+descriptions past that. Corrected in `canonicalBeats.js` (`description`,
+`typical_location`); `scenePlannerService.js` needed no direct edit since
+it already reads both fields from the shared module (confirmed: grepped
+the file for every `beat`/`BEAT` reference — no beat-5-specific or
+`CLOSET`-specific special case exists there). This changes which scene
+set new scene plans assign to beat 5 going forward: `typical_location`
+drives `generateScenePlan`'s AI prompt (`scenePlannerService.js:148`),
+so beat 5 now prompts toward a `HOME_BASE`-type scene set instead of
+`CLOSET` for episodes generated after this task. No stored `scene_plans`
+rows are migrated.
+
 The three-way comparison that led to this ruling, kept for the record:
 
 | Beat | `episodeGeneratorService.js` `BEAT_TEMPLATES` (`:253-267`) | `scenePlannerService.js` `BEAT_STRUCTURE` (`:22-37`) | show-brain seeder, Episode Architecture (`20260312800000-show-brain-franchise-laws.js:254-269`) |
@@ -1000,6 +1020,70 @@ resolved here: converting `episodeGeneratorService.js` and
 position-hardcodes in `feedMomentsService.js`, is deferred to a follow-up
 task once the mapping is approved, so the two files are never briefly out
 of sync with each other.
+
+**(e) Every canonical beat carries eight fields (Task #1611).** Rule:
+each of the 14 entries in `src/constants/canonicalBeats.js` records
+`name`, `narrative_purpose`, `typical_location`, `screen_action`,
+`surface`, `diegetic`, `phase`, and `emotional_intent` — sourced by name,
+not invented, with `null` where no source settles a field. Sourcing:
+
+- `name`/`typical_location`/`description` — pre-existing fields
+  `scenePlannerService.js`'s AI prompt actually reads; unchanged from
+  #1610 except beat 5 (above).
+- `narrative_purpose` — the seeder's own `desc` text, verbatim, for all
+  14 beats. Added as its own field rather than folded into `description`
+  because three more beats' existing `description` text (authored before
+  either #1610 or #1611, for the AI prompt) reads differently in
+  substance from the seeder's own words — not contradictions on the
+  scale of beat 5, but real differences, left uncorrected here since only
+  beat 5 was in this task's scope: beat 2 ("Checking phone/social —
+  receives the episode catalyst" vs. the seeder's "Login overlay →
+  typing animation → Enter. World loads." — a phone-check framing versus
+  a whole-episode meta/loading-screen framing, not obviously the same
+  mechanism); beat 11 ("what happens when Lala arrives and performs" vs.
+  the seeder's "the evaluation resolves. Pass or fail. Stats update." —
+  a live-performance framing versus a scoring/results framing); beat 13
+  ("audience engagement moment" vs. the seeder's "cinematic stat card.
+  Coins changed..." — the existing text doesn't mention the stat-card UI
+  moment the seeder names directly). Recorded here as found, not
+  resolved.
+- `typical_location` was never seeder-sourced for **any** beat, not only
+  beat 5 — the seeder
+  (`20260312800000-show-brain-franchise-laws.js:254-269`) has no location
+  field at all. Every value in `canonicalBeats.js` (all 14, beat 5
+  included) is carried from `scenePlannerService.js`'s own pre-existing,
+  unattributed `BEAT_STRUCTURE` — proposed, not sourced from the seeder
+  as this decision's own framing assumed going in.
+- Beat naming also drifts from the seeder in punctuation for three beats
+  — seeder: "Interruption Pulse #1", "Interruption Pulse #2", "Reminder /
+  Deadline Pulse"; code `name` field (unchanged, matches #1610): 
+  "Interruption Pulse 1", "Interruption Pulse 2", "Reminder/Deadline".
+  Same beats, same order, punctuation only — not corrected here since it
+  isn't beat 5 and changing `name` would change
+  `scenePlannerService.js`'s live AI-prompt text for those beats, outside
+  this task's no-other-behavior-change scope. Recorded, not resolved.
+- `screen_action` — the `ui` field from `episodeScriptWriterService.js`'s
+  and `groundedScriptGeneratorService.js`'s own `BEAT_TEMPLATES` dicts,
+  confirmed identical for all 14 beats at this basis (compared line by
+  line) — no disagreement to record between the two.
+- `surface`/`diegetic` — proposed, not sourced: nothing in the codebase
+  names a "surface" or "diegetic" concept for beats. Derived from each
+  beat's own `screen_action` name and `narrative_purpose` text against
+  Evoni's stated rule ("a screen moment is not automatically Lala's
+  Phone: Lala's Phone is diegetic — she sees it — audience overlays are
+  not"). Proposed for 6 of 14 (beats 5, 8, 11, 12, 13, 14), where a
+  `screen_action` name or the seeder's own text settled it clearly
+  (`OPEN_LETTER_INVITE_OVERLAY` → Audience Overlay; `CLOSET_OPEN` →
+  Closet UI; `STATS_UPDATE` matching the seeder's own "Milestone Recap
+  Panels" language → Audience Overlay; etc.) — full reasoning per beat in
+  PR #1611's body. Left `null` for the other 8 (beats 1, 2, 3, 4, 6, 7, 9,
+  10), where the source text doesn't clearly settle it — e.g. beat 2's
+  "login overlay... world loads" (seeder) reads as a whole-episode
+  meta/loading moment, not obviously Lala's own phone, and nothing pins
+  it down further.
+- `phase`/`emotional_intent` — the proposed mapping from PR #1610's body,
+  carried here as still-proposed (see (d) above); not yet approved, not
+  yet adopted by `episodeGeneratorService.js` itself.
 
 ---
 
