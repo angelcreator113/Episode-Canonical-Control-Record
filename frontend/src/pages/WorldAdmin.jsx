@@ -66,7 +66,6 @@ export const uploadWardrobeApi = (formData) =>
 export const createOutfitSetApi = (payload) =>
   api.post('/api/v1/outfit-sets', payload).then((r) => r.data);
 
-const SocialProfileGenerator = lazy(() => import('./SocialProfileGenerator'));
 const SceneSetsTab = lazy(() => import('./SceneSetsTab'));
 const UIOverlaysTab = lazy(() => import('./UIOverlaysTab'));
 const ProductionOverlaysTab = lazy(() => import('./ProductionOverlaysTab'));
@@ -169,10 +168,9 @@ const TABS = [
     { key: 'season', label: 'Season Arc' },
     { key: 'episodes-ledger', label: 'Episode Ledger' },
   ]},
-  { key: 'feed', icon: '🎭', label: 'Feed & Events', subs: [
-    { key: 'feed-timeline', label: "Lala's Feed" },
-    { key: 'events', label: 'Events' },
-  ]},
+  // Lala's Feed moved out of Producer Mode into its own Sidebar destination
+  // (Task #1631) — this tab is Events only now, no sub-tabs.
+  { key: 'events', icon: '🎭', label: 'Events' },
   { key: 'wardrobe', icon: '🎬', label: 'Assets', subs: [
     { key: 'scene-sets', label: 'Scene Sets' },
     { key: 'overlays-tab', label: "Lala's Phone" },
@@ -305,11 +303,13 @@ function WorldAdmin() {
     const oldToNew = {
       'season': ['episodes', 'season'],
       'episodes': ['episodes', 'episodes-ledger'],
-      'feed': ['feed', 'feed-timeline'],
-      // Feed Events and Events Library merged into one 'events' sub-tab —
-      // both old ?tab= values now resolve to the same destination.
-      'feed-events': ['feed', 'events'],
-      'events': ['feed', 'events'],
+      // Feed Events and Events Library merged into one 'events' top-level tab —
+      // both old ?tab= values resolve to the same destination. 'feed' and
+      // 'feed-timeline' are NOT mapped here — Lala's Feed no longer lives in
+      // Producer Mode (Task #1631), so those two are redirected to the
+      // standalone Feed route by the mount effect below, before this
+      // function is even called.
+      'feed-events': ['events', null],
       'scene-sets': ['wardrobe', 'scene-sets'],
       'overlays': ['wardrobe', 'overlays-tab'],
       'overlays-tab': ['wardrobe', 'overlays-tab'],
@@ -322,8 +322,15 @@ function WorldAdmin() {
     return oldToNew[tab] || [tab, null];
   };
 
-  // On mount, resolve initial tab
+  // On mount, resolve initial tab. ?tab=feed and ?tab=feed-timeline are old
+  // deep-links into Lala's Feed, which no longer lives in Producer Mode
+  // (Task #1631) — redirect to its standalone Sidebar destination instead of
+  // resolving a local tab.
   useEffect(() => {
+    if (initialTab === 'feed' || initialTab === 'feed-timeline') {
+      navigate('/feed?layer=lalaverse', { replace: true });
+      return;
+    }
     const [main, sub] = resolveTab(initialTab);
     if (main !== initialTab) {
       setActiveTab(main);
@@ -1840,15 +1847,8 @@ The revised event should feel like a completely different experience from the si
         </div>
       )}
 
-      {/* ════════════════════════ LALA'S FEED ════════════════════════ */}
-      {activeTab === 'feed' && subTab === 'feed-timeline' && (
-        <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading Feed...</div>}>
-          <SocialProfileGenerator embedded showId={showId} defaultFeedLayer="lalaverse" onNavigateToTab={(tab, ev) => { setActiveTab(tab); if (ev) setEventDetailModal(ev); }} />
-        </Suspense>
-      )}
-
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
-      {activeTab === 'feed' && subTab === 'events' && (
+      {activeTab === 'events' && (
         <div style={S.content}>
           {/* Header — simplified with primary auto-fill action */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
@@ -1861,6 +1861,9 @@ The revised event should feel like a completely different experience from the si
                     instead of by tab. */}
                 {worldEvents.length} events · {worldEvents.filter(e => e.status === 'draft').length} draft · {worldEvents.filter(e => e.status === 'used').length} used · {worldEvents.filter(e => e.status === 'ready').length} available
               </div>
+              <Link to={`/shows/${showId}/new-episode`} style={{ fontSize: 12, color: '#6366f1', textDecoration: 'underline' }}>
+                Choose a host from Lala's Feed
+              </Link>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <button onClick={async () => {

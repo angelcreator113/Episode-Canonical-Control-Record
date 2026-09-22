@@ -13,7 +13,10 @@ any line number paired alongside it, not by line number alone — this is
 the convention #1596 already followed here.
 
 Basis for the file:line citations below: `origin/main` at
-`5da8586faede835ff044dfc0ae3639e16920c865` (2026-09-20). All frontend paths
+`6a3bdd9d27d1f5c9f05223d7999b724f5d76f7f8` (2026-09-21), refreshed for
+Task #1631 (Lala's Feed moved out of Producer Mode). Citations this task
+did not touch may still read against the prior basis above (2026-09-20)
+— unchanged since then, not re-verified by this pass. All frontend paths
 are relative to `frontend/src/` unless stated otherwise.
 
 This document does not move, rename, or edit any page. It recommends nothing
@@ -90,7 +93,7 @@ not via any page's UI.
 | `/phone-hub` | `pages/UIOverlaysTab.jsx` (App.jsx:371) | live | in-app link (`pages/Home.jsx:280`) |
 | `/episodes/:episodeId/plan` | `pages/ScenePlannerPage.jsx` (App.jsx:372) | live | in-app link (`components/Episodes/EpisodeScenesTab.jsx:401`; also `utils/workflowRouter.js:36`) |
 | `/episodes/:episodeId/script-writer` | `pages/EpisodeScriptWriterPage.jsx` (App.jsx:373) | live | in-app link (`components/Episodes/EpisodeOverviewTab.jsx:946`) |
-| `/shows/:showId/feed-timeline` | `pages/FeedTimelinePage.jsx` (App.jsx:374) | live | URL only — note: WorldAdmin's `feed-timeline` sub-tab key (§2) is an unrelated internal tab state, not this route |
+| `/shows/:showId/feed-timeline` | `pages/FeedTimelinePage.jsx` (App.jsx:374) | live | URL only — note: this is unrelated to WorldAdmin's former `feed-timeline` sub-tab key, removed entire by Task #1631 (§2) |
 | `/shows/:showId/feed-dashboard` | `pages/feed/EventFeedDashboard.jsx` (App.jsx:375) | live | in-app link (`pages/FeedTimelinePage.jsx:255`) — but the only known caller is itself URL only |
 | `/scene-library/:sceneId` | `pages/SceneDetail.jsx` (App.jsx:376) | live | in-app link (`pages/SceneLibrary.jsx:441`) |
 
@@ -184,7 +187,7 @@ not via any page's UI.
 | `/story-health` | `pages/StoryHealthDashboard.jsx` (App.jsx:501) | live | URL only (`CommandPalette.jsx:12-13` exports a `searchStoryHealthApi` helper hitting a *backend* search endpoint — not a frontend link to this route) |
 | `/world-studio` | `pages/WorldStudio.jsx` (App.jsx:504) | live | in-app link (`components/CharacterProfile.jsx:625`, `pages/CharacterProfilePage.jsx:844`, `pages/SceneStudio.jsx:163`) + Command Palette (`location` result → `/world-studio?tab=locations`, `CommandPalette.jsx:18`). Sidebar has dead expand logic referencing this route (see note below) but no live nav item for it. |
 | `/scene-studio` | `pages/SceneStudio.jsx` (App.jsx:507) | live | URL only (same Sidebar auto-expand-only note) |
-| `/feed` | `pages/SocialProfileGenerator.jsx` (App.jsx:510) | live | in-app link (`components/Episodes/EpisodeOverviewTab.jsx:700`) — **duplicate of WorldAdmin's "Lala's Feed" sub-tab, see §4** |
+| `/feed` | `pages/SocialProfileGenerator.jsx` via `FeedEntry` wrapper (App.jsx:510) | live | in-app link (`components/Episodes/EpisodeOverviewTab.jsx:700`) + Sidebar (FRANCHISE zone, `?layer=lalaverse`, `Sidebar.jsx`) — **no longer a duplicate of WorldAdmin's "Lala's Feed" sub-tab; that sub-tab is removed, see §4** |
 
 ### Management — franchise systems & admin (App.jsx:513-561)
 
@@ -256,8 +259,7 @@ sets `?tab=<its first sub's key>` (`switchTab`, `:333-339`).
 | `overview` | Overview | — (no subs) | — | `overview` |
 | `episodes` | Episodes | `season` | Season Arc | `season` |
 | `episodes` | Episodes | `episodes-ledger` | Episode Ledger | `episodes-ledger` |
-| `feed` | Feed & Events | `feed-timeline` | Lala's Feed | `feed-timeline` |
-| `feed` | Feed & Events | `events` | Events | `events` |
+| `events` | Events | — (no subs) | — | `events` |
 | `wardrobe` | Assets | `scene-sets` | Scene Sets | `scene-sets` |
 | `wardrobe` | Assets | `overlays-tab` | Lala's Phone | `overlays-tab` |
 | `wardrobe` | Assets | `production-overlays` | UI Overlays | `production-overlays` |
@@ -266,28 +268,36 @@ sets `?tab=<its first sub's key>` (`switchTab`, `:333-339`).
 | `characters` | Characters | `characters-list` | Character Stats | `characters-list` |
 | `characters` | Characters | `decisions` | Decision Log | `decisions` |
 
-(The `feed` tab used to have a third sub-tab here, `feed-events`/"Feed
-Events" — PR #1590 merged it into `events`, whose label also changed,
-"Events Library" → "Events." The table above is the tab set as it exists
-now, re-derived directly from `WorldAdmin.jsx`'s `TABS` constant at this
-task's own basis, not carried from the prior version of this document.)
+(The `feed` tab used to carry two sub-tabs here — `feed-timeline`/"Lala's
+Feed" and `events`/"Events" — with a third, `feed-events`, merged into
+`events` earlier by PR #1590. Task #1631 removed the `feed` tab and its
+`feed-timeline` sub-tab entire (Lala's Feed is no longer embedded in
+Producer Mode at all — see §4) and promoted the remaining `events` sub-tab
+to a top-level `TABS` entry with no subs. The table above is the tab set
+as it exists now, re-derived directly from `WorldAdmin.jsx`'s `TABS`
+constant at this task's own basis, not carried from the prior version of
+this document.)
 
-(Definitions: the `TABS` constant, `WorldAdmin.jsx:166-187`. Content
-render conditions — each is inline JSX with no function name of its own,
-so cited by the `activeTab`/`subTab` values they match, alongside the
-current line: `overview` `:1366`; `season` `:1468`; `episodes-ledger`
-`:1473`; `feed-timeline` `:1801`; `events` `:1808`; `scene-sets` `:5131`;
-`overlays-tab` `:5138`; `production-overlays` `:5145`; `wardrobe-items`
-`:5152`; `goals` `:4501`; `characters-list` `:7386`; `decisions` `:7532`.)
+(Definitions: the `TABS` constant, `WorldAdmin.jsx:165-185`; the `events`
+entry itself, `:173`. Content render conditions — each is inline JSX with
+no function name of its own, so cited by the `activeTab`/`subTab` values
+they match, alongside the current line: `overview` `:1416`; `season`
+`:1518`; `episodes-ledger` `:1523`; `events` `:1851` (no `subTab` check —
+the tab has no subs); `scene-sets` `:5177`; `overlays-tab` `:5184`;
+`production-overlays` `:5191`; `wardrobe-items` `:5198`; `goals` `:4547`;
+`characters-list` `:7432`; `decisions` `:7578`.)
 
-**Legacy `?tab=` aliases** (the `resolveTab` function, `WorldAdmin.jsx:294-323`,
-its `oldToNew` map at `:305-321`) still resolve to the leaves above for
+**Legacy `?tab=` aliases** (the `resolveTab` function, `WorldAdmin.jsx:292-323`,
+its `oldToNew` map at `:303-321`) still resolve to the leaves above for
 backward-compat deep links: `season`, `episodes` (→`episodes-ledger`),
-`feed` (→`feed-timeline`), `feed-events` (→`events` — this alias exists
-only because PR #1590 removed `feed-events` as a real `TABS` key; see §4),
-`events`, `scene-sets`, `overlays`/`overlays-tab`, `production-overlays`,
-`goals`, `wardrobe` (→`scene-sets`), `characters` (→`characters-list`),
-`decisions`.
+`feed-events` (→`events` — this alias exists only because PR #1590
+removed `feed-events` as a real `TABS` key; see §4), `scene-sets`,
+`overlays`/`overlays-tab`, `production-overlays`, `goals`, `wardrobe`
+(→`scene-sets`), `characters` (→`characters-list`), `decisions`. `feed`
+and `feed-timeline` are **not** in this map any more — a dedicated check
+in the mount effect, just before it calls `resolveTab` (`WorldAdmin.jsx:329-333`),
+redirects both to the standalone `/feed?layer=lalaverse` route instead of
+resolving a local tab, since no local tab exists for them post-#1631.
 
 **Orphan tab — not in `TABS` at all:** `activeTab === 'opportunities'`
 (`WorldAdmin.jsx:4495`) renders the `OpportunitiesTab` component
@@ -299,20 +309,25 @@ mention it either. It is reachable only by manually visiting
 `activeTab` straight to whatever unrecognized string is in the URL. It
 renders with no tab-bar highlight and no sub-tab bar.
 
-**Observation — several buttons set a sub-tab key on `activeTab` directly,**
-bypassing `switchTab()`, which won't match any `activeTab === 'feed' &&
-subTab === X` render condition: `WorldAdmin.jsx:1410`
-(`setActiveTab('events')`, Overview's "Create events from feed" nudge —
-this call read `setActiveTab('feed-events')` until PR #1590 changed the
-literal string; the underlying pattern, an invalid non-top-level key, is
-unchanged), `:1411` (`setActiveTab('events')`, the "Generate first episode
-from an event" nudge — untouched by #1590, same pre-existing bug), `:4639`,
-`:4641`, `:4645` (all `setActiveTab('events')`, the Career Goals
-"Suggested Events" buttons — also untouched by #1590). By contrast
-`setActiveTab('wardrobe')` (`:1409`) and `setActiveTab('episodes')`
-(`:5110`) use valid top-level keys and work. This inventory did not run
-the app to confirm the failure mode; it's a static-reading observation,
-not a confirmed bug report.
+**Observation — the "sub-tab key set directly on `activeTab`" bug this
+entry used to flag is now accidentally fixed by Task #1631, not by
+anyone repairing it.** Five buttons call `setActiveTab('events')`
+directly, bypassing `switchTab()`: `WorldAdmin.jsx:1460` (Overview's
+"Create events from feed" nudge — this call read
+`setActiveTab('feed-events')` until PR #1590 changed the literal string),
+`:1461` (the "Generate first episode from an event" nudge), `:4685`,
+`:4687`, `:4691` (the Career Goals "Suggested Events" buttons). Before
+#1631, `'events'` was only a sub-tab key nested under the top-level `feed`
+tab, so `setActiveTab('events')` alone set `activeTab` to a string no
+`TABS` entry matched — the render condition needed `activeTab === 'feed'
+&& subTab === 'events'`, and these calls never touched `subTab`. **Since
+#1631 promoted `events` to a real top-level `TABS` key with no subs,**
+the render condition is now bare `activeTab === 'events'` (`:1851`), which
+every one of these five calls satisfies directly. The buttons now work;
+this was not this task's own fix and is not claimed as tested — this
+inventory did not run the app to confirm it, either before or after. By
+contrast `setActiveTab('wardrobe')` (`:1459`) and `setActiveTab('episodes')`
+(`:5156`) used valid top-level keys and worked before and after.
 
 ---
 
@@ -347,39 +362,50 @@ line-numbered diff that document didn't attempt.
 
 | Comment says (line) | Actual location |
 |---|---|
-| "2. Episode Ledger" (`:8`) | sub-tab `episodes-ledger` under top-level `episodes`/"Episodes" (`:170`) |
-| "3. Events Library" (`:9`) | sub-tab `events`, now labeled "Events" (was "Events Library" before PR #1590), under top-level `feed`/"Feed & Events" (`:174`) |
-| "4. Career Goals" (`:10`) | sub-tab `goals` under top-level `wardrobe`/"Assets" (`:181`) |
-| "5. Wardrobe" (`:11`) | no top-level tab named "Wardrobe" exists; the item-grid content described is now sub-tab `wardrobe-items`/"Wardrobe" (`:180`) under top-level `wardrobe`/"Assets" |
-| "7. Decision Log" (`:13`) | sub-tab `decisions` under top-level `characters`/"Characters" (`:185`) |
+| "2. Episode Ledger" (`:8`) | sub-tab `episodes-ledger` under top-level `episodes`/"Episodes" (`:169`) |
+| "4. Career Goals" (`:10`) | sub-tab `goals` under top-level `wardrobe`/"Assets" (`:179`) |
+| "5. Wardrobe" (`:11`) | no top-level tab named "Wardrobe" exists; the item-grid content described is now sub-tab `wardrobe-items`/"Wardrobe" (`:178`) under top-level `wardrobe`/"Assets" |
+| "7. Decision Log" (`:13`) | sub-tab `decisions` under top-level `characters`/"Characters" (`:183`) |
 
-Comment items "1. Overview" (`:7`) and "6. Characters" (`:12`) do still match
-a real top-level tab (`overview` `:167`, `characters` `:183`) — not diff
-mismatches, though the comment collapses Characters' two sub-tabs into one
-line.
+Comment items "1. Overview" (`:7`) and "6. Characters" (`:12`) do still
+match a real top-level tab (`overview` `:166`, `characters` `:181`) — not
+diff mismatches, though the comment collapses Characters' two sub-tabs
+into one line. **"3. Events Library" (`:9`) has moved into this same
+bucket, as of Task #1631** — before, it named a sub-tab nested two levels
+deep (`events`, under top-level `feed`/"Feed & Events"); now `events` is
+itself the top-level tab (`:173`), matching the comment's flat
+one-tab-per-item assumption structurally, though the label still differs
+("Events Library" vs. today's "Events" — a PR #1590 change, not this
+task's).
 
 **B. Exists in the real tab set but the comment never mentions it:**
 
-- Top-level `episodes`/"Episodes" (`:168`) — the comment names "Episode
+- Top-level `episodes`/"Episodes" (`:167`) — the comment names "Episode
   Ledger" but never an "Episodes" parent.
-- Sub-tab `season`/"Season Arc" (`:169`).
-- Top-level `feed`/"Feed & Events" (`:172`) — not named at all.
-- Sub-tab `feed-timeline`/"Lala's Feed" (`:173`).
-- Top-level `wardrobe`/"Assets" (`:176`) — the label "Assets" itself isn't
+- Sub-tab `season`/"Season Arc" (`:168`).
+- Top-level `wardrobe`/"Assets" (`:174`) — the label "Assets" itself isn't
   in the comment.
-- Sub-tab `scene-sets`/"Scene Sets" (`:177`).
-- Sub-tab `overlays-tab`/"Lala's Phone" (`:178`).
-- Sub-tab `production-overlays`/"UI Overlays" (`:179`).
-- Sub-tab `characters-list`/"Character Stats" (`:184`).
+- Sub-tab `scene-sets`/"Scene Sets" (`:175`).
+- Sub-tab `overlays-tab`/"Lala's Phone" (`:176`).
+- Sub-tab `production-overlays`/"UI Overlays" (`:177`).
+- Sub-tab `characters-list`/"Character Stats" (`:182`).
 - The orphan `opportunities` panel (`:4495`/`:7999`) — not mentioned, and
   not wired into `TABS` either (see §2).
 
+**No longer in this bucket, as of Task #1631:** top-level `feed`/"Feed &
+Events" and its `feed-timeline`/"Lala's Feed" sub-tab. Both are removed
+from `TABS` entire — Lala's Feed is not embedded in Producer Mode at all
+any more (§4) — so there is nothing left here for the comment to have
+missed.
+
 **Summary:** the comment describes a flat 7-tab model that predates a
-restructuring into 5 top-level tabs with 11 nested sub-tab leaves (was 12
-before PR #1590 removed `feed-events`), plus one tab reachable only by
-hand-editing the URL. Only 2 of the 7 comment-named items ("Overview,"
-"Characters") still name a real top-level tab; the other 5 now live one
-level deeper, under a parent the comment never mentions.
+restructuring now at 5 top-level tabs with 9 nested sub-tab leaves (was 11
+after PR #1590 removed `feed-events`, 12 before it; Task #1631 removed
+`feed-timeline` entire and promoted `events` out of nesting, net -2),
+plus one tab reachable only by hand-editing the URL. 3 of the 7
+comment-named items ("Overview," "Events Library"/"Events," "Characters")
+now name a real top-level tab; the other 4 still live one level deeper,
+under a parent the comment never mentions.
 
 ---
 
@@ -392,14 +418,14 @@ Package's five sub-parts, §2 "EVENT PACKAGE"] → GENERATE EPISODE → PRODUCE
 
 | Stage | Page(s)/tab(s) | Notes |
 |---|---|---|
-| HOST | Standalone `/feed` (`pages/SocialProfileGenerator.jsx`) **and** WorldAdmin's `feed-timeline` sub-tab, which embeds the same component (`WorldAdmin.jsx:1800-1804`) | Duplicate — see §4 |
-| EVENT | WorldAdmin's merged `events` sub-tab, labeled "Events" (drafts and non-drafts both list here, split by a status filter chip, not a separate tab — PR #1590; §4) | One `worldEvents` fetch, unfiltered by status at fetch time; documented in `EVENT_EPISODE_FLOW.md` §3 — see §4 |
-| VENUE | WorldAdmin `events` sub-tab — event create/edit form field (`venue_location_id`, `WorldAdmin.jsx:2540-2547`) | No dedicated page; edited inline in the Events tab's event form |
-| GUESTS | WorldAdmin `events` sub-tab — read-only display of the auto-generated guest list (`WorldAdmin.jsx:1681,3116-3118,3528`) | No editable UI found anywhere for guests — see §5 |
-| INVITATION | WorldAdmin `events` sub-tab — `InvitationButton`/`InvitationStyleFields` (`pages/InvitationGenerator.jsx`, rendered from `WorldAdmin.jsx:3235,3862,2694,3847`) | Real UI exists — see §5 for endpoint-by-endpoint coverage |
-| REQUIREMENTS | WorldAdmin `events` sub-tab — event create/edit form field (`requirements.*`, `WorldAdmin.jsx:3009-3012`) | No dedicated page |
-| OUTFIT | WorldAdmin `events` sub-tab — event-detail modal's outfit picker (`GET .../wardrobe-options` calls at `WorldAdmin.jsx:3245,4080`) | No dedicated page. Distinct from the `wardrobe-items` sub-tab (general wardrobe browsing/purchase, a different money-path feature per `EVENT_EPISODE_FLOW.md` §5(b)) — not a duplicate, a genuinely different feature that happens to share the word "wardrobe" |
-| GENERATE EPISODE | WorldAdmin `events` sub-tab — "Generate Episode" button on the event card/modal (`WorldAdmin.jsx:3256-3276`, per `EVENT_EPISODE_FLOW.md` §2) | Same sub-tab as EVENT/VENUE/GUESTS/INVITATION/REQUIREMENTS/OUTFIT |
+| HOST | Standalone `/feed` (`pages/SocialProfileGenerator.jsx`) only, as of Task #1631 | No longer a duplicate — see §4 |
+| EVENT | WorldAdmin's merged `events` tab, labeled "Events" (drafts and non-drafts both list here, split by a status filter chip, not a separate tab — PR #1590; §4), promoted to top-level by Task #1631 | One `worldEvents` fetch, unfiltered by status at fetch time; documented in `EVENT_EPISODE_FLOW.md` §3 — see §4 |
+| VENUE | WorldAdmin `events` tab — event create/edit form field (`venue_location_id`, `WorldAdmin.jsx:2540-2547`) | No dedicated page; edited inline in the Events tab's event form |
+| GUESTS | WorldAdmin `events` tab — read-only display of the auto-generated guest list (`WorldAdmin.jsx:1681,3116-3118,3528`) | No editable UI found anywhere for guests — see §5 |
+| INVITATION | WorldAdmin `events` tab — `InvitationButton`/`InvitationStyleFields` (`pages/InvitationGenerator.jsx`, rendered from `WorldAdmin.jsx:3235,3862,2694,3847`) | Real UI exists — see §5 for endpoint-by-endpoint coverage |
+| REQUIREMENTS | WorldAdmin `events` tab — event create/edit form field (`requirements.*`, `WorldAdmin.jsx:3009-3012`) | No dedicated page |
+| OUTFIT | WorldAdmin `events` tab — event-detail modal's outfit picker (`GET .../wardrobe-options` calls at `WorldAdmin.jsx:3245,4080`) | No dedicated page. Distinct from the `wardrobe-items` sub-tab (general wardrobe browsing/purchase, a different money-path feature per `EVENT_EPISODE_FLOW.md` §5(b)) — not a duplicate, a genuinely different feature that happens to share the word "wardrobe" |
+| GENERATE EPISODE | WorldAdmin `events` tab — "Generate Episode" button on the event card/modal (`WorldAdmin.jsx:3256-3276`, per `EVENT_EPISODE_FLOW.md` §2) | Same tab as EVENT/VENUE/GUESTS/INVITATION/REQUIREMENTS/OUTFIT |
 | PRODUCE | `/episodes/:episodeId` (`pages/EpisodeDetail.jsx`), Production tab: Assets / Scenes / Wardrobe / Phone / Production Checklist (`EpisodeDetail.jsx:85-91`, per `EVENT_EPISODE_FLOW.md` §2) | — |
 | EVALUATE/ACCEPT | `/episodes/:id/evaluate` (`pages/EvaluateEpisode.jsx`) **and** `EpisodeDetail.jsx`'s own Results/Evaluation tab | Duplicate — see §4 |
 | AFTERMATH | No page found | Gap — see §5 |
@@ -419,17 +445,26 @@ mechanism (cited there, not re-derived here) and §2 above for this
 document's own re-derivation of the current tab set. There is no
 Feed-Events/Events-Library duplicate to record at this basis.
 
-**HOST is still served twice — confirmed independently of the #1590
-merge, which didn't touch this.** `SocialProfileGenerator.jsx` ("The
-Feed," per its own header comment) is rendered both as a full page at the
-standalone route `/feed` (App.jsx:510) and embedded inside WorldAdmin's
-`feed-timeline` sub-tab (`WorldAdmin.jsx:1800-1804` — re-verified at this
-task's basis; PR #1590's changes started later in the file, around the
-old `feed-events`/`events` boundary, and never reached this block). Same
-component, same data (`fetchProfiles`/`listWorldEventsApi`, per
-`EVENT_EPISODE_FLOW.md` §3), two separate routes a creator could land on.
-This finding is unrelated to the tab-merge finding above and is not
-resolved by it — it stands on its own.
+**HOST is no longer served twice — Task #1631 removed WorldAdmin's own
+copy.** This entry used to flag `SocialProfileGenerator.jsx` ("The Feed,"
+per its own header comment) as rendered both as a full page at the
+standalone route `/feed` and embedded inside WorldAdmin's `feed-timeline`
+sub-tab (`WorldAdmin.jsx:1800-1804` at that basis). Per Evoni's ruling
+(`docs/EVENT_EPISODE_FLOW.md` §8(k), 2026-09-22): Producer Mode answers
+production status, Lala's Feed answers who exists in Lala's social world
+— two different questions, so the Feed does not belong embedded in
+Producer Mode at all. WorldAdmin's `feed`/"Feed & Events" tab and its
+`feed-timeline` sub-tab are removed entire (not merged, unlike the
+Feed-Events/Events-Library case above); the remaining sub-tab, `events`,
+is promoted to its own top-level `TABS` entry, `{ key: 'events', label:
+'Events' }` (`WorldAdmin.jsx:166-170` at this task's basis), with no subs.
+The Feed's only route is now `/feed` (App.jsx), reached from the Sidebar's
+new FRANCHISE entry, "Lala's Feed" (`Sidebar.jsx`, `?layer=lalaverse`) —
+see §2 and §8 below for the tab-table and route-table updates. New
+Episode's choose-host mode (`SocialProfileGenerator`'s `chooseHost` prop,
+Task #1628) is a separate, still-embedded use of the same component,
+unaffected by this change — it renders inside episode creation, not
+inside Producer Mode's tab set.
 
 **EVALUATE/ACCEPT is served twice.** The standalone route
 `/episodes/:id/evaluate` (App.jsx:347, `pages/EvaluateEpisode.jsx`) and
@@ -442,7 +477,7 @@ two independent implementations of the same form — recorded as a duplicate
 page-count, with that deeper question left open.
 
 **Culture & Events (`/culture-events`, `pages/CultureEvents.jsx`) is not a
-duplicate of WorldAdmin's Events sub-tab** — it queries a different table.
+duplicate of WorldAdmin's Events tab** — it queries a different table.
 On initial mount it fires four fetches:
 
 - `usePageData('cultural_calendar', …)` and `usePageData('cultural_memory',
@@ -463,7 +498,7 @@ On initial mount it fires four fetches:
   Events tab.
 
 So Culture & Events' Events tab reads `story_calendar_events`, a table
-distinct from both `world_events` (WorldAdmin's merged Events sub-tab,
+distinct from both `world_events` (WorldAdmin's merged Events tab,
 above) and `feed_posts`. Worth noting for future work: `StoryCalendarEvent` `hasMany`
 `WorldEvent` (`src/models/StoryCalendarEvent.js:29-33`, via
 `source_calendar_event_id`), and Culture & Events' "Create Event" button
@@ -615,8 +650,7 @@ outside the flow entirely.
 
 | Stage | Page | Route | Component file | Reachable how |
 |---|---|---|---|---|
-| HOST | The Feed (standalone) | `/feed` | `pages/SocialProfileGenerator.jsx` | in-app link (`components/Episodes/EpisodeOverviewTab.jsx:700`) |
-| HOST | Lala's Feed (Producer Mode) | `/shows/:id/world?tab=feed-timeline` | `pages/WorldAdmin.jsx` (embeds `pages/SocialProfileGenerator.jsx`) | Sidebar → Producer Mode (`Sidebar.jsx:34`) |
+| HOST | The Feed (standalone; no longer duplicated in Producer Mode, Task #1631) | `/feed` (`?layer=lalaverse` opens on the LalaVerse feed) | `pages/SocialProfileGenerator.jsx` via `FeedEntry` wrapper | in-app link (`components/Episodes/EpisodeOverviewTab.jsx:700`) + Sidebar → FRANCHISE → "Lala's Feed" (`Sidebar.jsx`) |
 | EVENT | Events (Producer Mode) — drafts and non-drafts both, split by a status filter chip, not a separate tab | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx` | Sidebar → Producer Mode |
 | VENUE | Events tab event form | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx:2540-2547` | same as above |
 | GUESTS | Events tab event display (read-only) | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx:1681,3116-3118,3528` | same as above |

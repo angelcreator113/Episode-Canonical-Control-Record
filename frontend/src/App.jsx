@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import apiClient from './services/api';
 
@@ -105,6 +105,15 @@ const BookToWriteRedirect = () => {
 const NewEpisodeChooseHost = () => {
   const { showId } = useParams();
   return <SocialProfileGenerator chooseHost showId={showId} defaultFeedLayer="lalaverse" />;
+};
+// Lala's Feed, standalone (Task #1631). The Sidebar's FRANCHISE entry links
+// here with ?layer=lalaverse so it opens on the LalaVerse feed with the
+// switcher still available (unlike New Episode's choose-host mode, which
+// locks it); any other route to /feed keeps today's default layer.
+const FeedEntry = () => {
+  const [searchParams] = useSearchParams();
+  const layer = searchParams.get('layer');
+  return <SocialProfileGenerator defaultFeedLayer={layer === 'lalaverse' ? 'lalaverse' : undefined} />;
 };
 const CharacterRegistryPage = lazy(() => import('./pages/CharacterRegistryPage'));
 const ContinuityEnginePage = lazy(() => import('./pages/ContinuityEnginePage'));
@@ -516,7 +525,7 @@ function AppContent() {
           <Route path="/scene-studio" element={<SceneStudio />} />
 
           {/* The Feed — Parasocial Creator Profile Generator */}
-          <Route path="/feed" element={<SocialProfileGenerator />} />
+          <Route path="/feed" element={<FeedEntry />} />
 
           {/* Narrative Pressure Dashboard — Feed Nervous System */}
           <Route path="/pressure" element={<NarrativePressureDashboard />} />
