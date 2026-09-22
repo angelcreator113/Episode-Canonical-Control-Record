@@ -15,7 +15,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
-  Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2,
+  Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
 } from 'lucide-react';
 import api from '../services/api';
 import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate } from '../utils/eventReadiness';
@@ -73,6 +73,27 @@ export default function EventPackagePage() {
   const [customName, setCustomName] = useState('');
   const [nameSaving, setNameSaving] = useState(false);
 
+  // Venue + scene-set pickers (Task #1674). venueLocations is fetched once
+  // (null = not yet fetched) and reused by both pickers, since the same
+  // GET already nests each location's sceneSets — no separate scene-set
+  // fetch is needed.
+  const [venuePickerOpen, setVenuePickerOpen] = useState(false);
+  const [venueLocations, setVenueLocations] = useState(null);
+  const [venueLocationsLoading, setVenueLocationsLoading] = useState(false);
+  const [venueSearch, setVenueSearch] = useState('');
+  const [venueSaving, setVenueSaving] = useState(false);
+  const [locationCreateOpen, setLocationCreateOpen] = useState(false);
+  const [locationCreateName, setLocationCreateName] = useState('');
+  const [locationCreateCity, setLocationCreateCity] = useState('');
+  const [locationCreateSaving, setLocationCreateSaving] = useState(false);
+
+  const [scenePickerOpen, setScenePickerOpen] = useState(false);
+  const [scenePickerLocation, setScenePickerLocation] = useState(null);
+  const [sceneSaving, setSceneSaving] = useState(false);
+  const [sceneCreateOpen, setSceneCreateOpen] = useState(false);
+  const [sceneCreateName, setSceneCreateName] = useState('');
+  const [sceneCreateSaving, setSceneCreateSaving] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true); setLoadError(null);
     try {
@@ -106,6 +127,18 @@ export default function EventPackagePage() {
     }, 300);
     return () => clearTimeout(t);
   }, [hostPickerOpen, hostSearch]);
+
+  // Fetched once on first use (picker open or "change scene set" click),
+  // then cached — with only a handful of World Locations, no debounced
+  // server search is needed; both pickers filter this same client-side.
+  useEffect(() => {
+    if (!venuePickerOpen || venueLocations !== null) return;
+    setVenueLocationsLoading(true);
+    api.get('/api/v1/world/locations')
+      .then((res) => setVenueLocations(res.data?.locations || []))
+      .catch(() => setVenueLocations([]))
+      .finally(() => setVenueLocationsLoading(false));
+  }, [venuePickerOpen, venueLocations]);
 
   if (loading) {
     return (
@@ -205,6 +238,130 @@ export default function EventPackagePage() {
     }
   };
 
+  const closeVenuePicker = () => {
+    setVenuePickerOpen(false);
+    setVenueSearch('');
+    setLocationCreateOpen(false);
+    setLocationCreateName('');
+    setLocationCreateCity('');
+  };
+
+  const closeScenePicker = () => {
+    setScenePickerOpen(false);
+    setScenePickerLocation(null);
+    setSceneCreateOpen(false);
+    setSceneCreateName('');
+  };
+
+  // Selecting a venue always sets venue_location_id (never a typed name in
+  // its place, per Evoni's amendment to #1674), then moves straight into
+  // the scene-set step for that location — offering "+ Create Scene Set"
+  // there is what stops a scene set ever being created for a venue with no
+  // World Location.
+  const chooseVenue = async (location) => {
+    setVenueSaving(true);
+    try {
+      const address = [location.street_address, location.district, location.city].filter(Boolean).join(', ');
+      await api.put(`/api/v1/world/${showId}/events/${eventId}`, {
+        venue_location_id: location.id,
+        venue_name: location.name,
+        venue_address: address || null,
+      });
+      closeVenuePicker();
+      setToast(`Venue changed to ${location.name}`);
+      await load();
+      setScenePickerLocation(location);
+      setScenePickerOpen(true);
+    } catch (err) {
+      setToast(err.response?.data?.error || err.message || 'Failed to change venue');
+    } finally {
+      setVenueSaving(false);
+    }
+  };
+
+  const createLocation = async () => {
+    const name = locationCreateName.trim();
+    const city = locationCreateCity.trim();
+    if (!name || !city || locationCreateSaving) return;
+    setLocationCreateSaving(true);
+    try {
+      const res = await api.post('/api/v1/world/locations', { name, city });
+      const loc = res.data?.location;
+      if (loc) {
+        const locWithSets = { ...loc, sceneSets: [] };
+        setVenueLocations((prev) => (prev ? [...prev, locWithSets] : [locWithSets]));
+        await chooseVenue(locWithSets);
+      }
+    } catch (err) {
+      setToast(err.response?.data?.error || err.message || 'Failed to create location');
+    } finally {
+      setLocationCreateSaving(false);
+    }
+  };
+
+  // Used by the "Change/Choose scene set" link, which can be clicked
+  // before the venue picker has ever been opened — loads locations on
+  // demand rather than requiring the venue picker to have run first.
+  const openScenePickerForLocation = async (locationId, locationNameFallback) => {
+    let locations = venueLocations;
+    if (locations === null) {
+      setVenueLocationsLoading(true);
+      try {
+        const res = await api.get('/api/v1/world/locations');
+        locations = res.data?.locations || [];
+        setVenueLocations(locations);
+      } catch {
+        locations = [];
+        setVenueLocations(locations);
+      } finally {
+        setVenueLocationsLoading(false);
+      }
+    }
+    const loc = locations.find((l) => l.id === locationId) || { id: locationId, name: locationNameFallback, sceneSets: [] };
+    setScenePickerLocation(loc);
+    setScenePickerOpen(true);
+  };
+
+  const chooseSceneSet = async (set) => {
+    setSceneSaving(true);
+    try {
+      await api.put(`/api/v1/world/${showId}/events/${eventId}`, { scene_set_id: set.id });
+      closeScenePicker();
+      setToast(`Scene set changed to ${set.name}`);
+      await load();
+    } catch (err) {
+      setToast(err.response?.data?.error || err.message || 'Failed to change scene set');
+    } finally {
+      setSceneSaving(false);
+    }
+  };
+
+  const createSceneSet = async () => {
+    const name = sceneCreateName.trim();
+    if (!name || !scenePickerLocation || sceneCreateSaving) return;
+    setSceneCreateSaving(true);
+    try {
+      const res = await api.post('/api/v1/scene-sets', {
+        name,
+        scene_type: 'EVENT_LOCATION',
+        world_location_id: scenePickerLocation.id,
+        show_id: showId,
+      });
+      const set = res.data?.data;
+      if (set) {
+        const locationId = scenePickerLocation.id;
+        setVenueLocations((prev) => (prev
+          ? prev.map((l) => (l.id === locationId ? { ...l, sceneSets: [...(l.sceneSets || []), set] } : l))
+          : prev));
+        await chooseSceneSet(set);
+      }
+    } catch (err) {
+      setToast(err.response?.data?.error || err.message || 'Failed to create scene set');
+    } finally {
+      setSceneCreateSaving(false);
+    }
+  };
+
   const handleStartEpisode = async () => {
     if (!allReady || used || starting) return;
     setStarting(true);
@@ -223,6 +380,21 @@ export default function EventPackagePage() {
       setStarting(false);
     }
   };
+
+  const filteredVenueLocations = (venueLocations || []).filter((l) => {
+    if (!venueSearch.trim()) return true;
+    const q = venueSearch.trim().toLowerCase();
+    return (l.name || '').toLowerCase().includes(q) || (l.city || '').toLowerCase().includes(q);
+  });
+
+  // Prefer EVENT_LOCATION scene sets, per Evoni's amendment to #1674.
+  const sortedSceneSets = scenePickerLocation
+    ? [...(scenePickerLocation.sceneSets || [])].sort((a, b) => {
+        if (a.scene_type === 'EVENT_LOCATION' && b.scene_type !== 'EVENT_LOCATION') return -1;
+        if (b.scene_type === 'EVENT_LOCATION' && a.scene_type !== 'EVENT_LOCATION') return 1;
+        return 0;
+      })
+    : [];
 
   return (
     <div className="epp-page">
@@ -354,7 +526,14 @@ export default function EventPackagePage() {
         </section>
 
         <section className="epp-section">
-          <h2 className="epp-section-title">Place</h2>
+          <div className="epp-section-header">
+            <h2 className="epp-section-title">Place</h2>
+            {!used && (
+              <button className="epp-btn epp-btn-small" onClick={() => setVenuePickerOpen(true)}>
+                <MapPin size={14} /> {venueDate.venueLocationId ? 'Change venue' : 'Choose venue'}
+              </button>
+            )}
+          </div>
           <dl className="epp-fields">
             <div>
               <dt>Venue</dt>
@@ -362,6 +541,11 @@ export default function EventPackagePage() {
                 {venueDate.venueName || 'Not set'}
                 {venueDate.venueNameFromSavedCopy && (
                   <span className="epp-saved-copy" title="Not yet in the event's own fields — shown from its saved automation copy">saved copy</span>
+                )}
+                {!used && venueDate.venueName && !venueDate.venueLocationId && (
+                  <button type="button" className="epp-inline-link" onClick={() => setVenuePickerOpen(true)}>
+                    Pick a real location
+                  </button>
                 )}
               </dd>
             </div>
@@ -374,7 +558,20 @@ export default function EventPackagePage() {
                 )}
               </dd>
             </div>
-            <div><dt>Scene set</dt><dd>{sceneSet?.name || 'Not set'}</dd></div>
+            <div>
+              <dt>Scene set</dt>
+              <dd>
+                {sceneSet?.name || 'Not set'}
+                {!used && venueDate.venueLocationId && (
+                  <button
+                    type="button" className="epp-inline-link"
+                    onClick={() => openScenePickerForLocation(venueDate.venueLocationId, venueDate.venueName)}
+                  >
+                    {sceneSet ? 'Change scene set' : 'Choose scene set'}
+                  </button>
+                )}
+              </dd>
+            </div>
           </dl>
         </section>
 
@@ -487,6 +684,129 @@ export default function EventPackagePage() {
                 ))
               ) : (
                 <div className="epp-empty">No creators found</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {venuePickerOpen && (
+        <div className="epp-modal-backdrop" onClick={closeVenuePicker}>
+          <div className="epp-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="epp-modal-header">
+              <h3>Choose Venue</h3>
+              <button className="epp-icon-btn" onClick={closeVenuePicker} aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="epp-modal-search">
+              <Search size={14} />
+              <input
+                autoFocus
+                placeholder="Search locations…"
+                value={venueSearch}
+                onChange={(e) => setVenueSearch(e.target.value)}
+              />
+            </div>
+            <div className="epp-modal-results">
+              {venueLocationsLoading ? (
+                <div className="epp-empty">Loading locations…</div>
+              ) : filteredVenueLocations.length ? (
+                filteredVenueLocations.map((l) => (
+                  <button key={l.id} className="epp-modal-result" disabled={venueSaving} onClick={() => chooseVenue(l)}>
+                    <div>
+                      <div className="epp-host-name">{l.name}</div>
+                      <div className="epp-host-handle">{[fmtLabel(l.venue_type), l.city].filter(Boolean).join(' · ') || 'No details'}</div>
+                    </div>
+                    {venueDate.venueLocationId === l.id && <CheckCircle2 size={16} />}
+                  </button>
+                ))
+              ) : (
+                <div className="epp-empty">No locations found</div>
+              )}
+            </div>
+            <div className="epp-modal-footer">
+              {!locationCreateOpen ? (
+                <button type="button" className="epp-btn epp-btn-small" onClick={() => setLocationCreateOpen(true)}>
+                  <Plus size={14} /> Create New Location
+                </button>
+              ) : (
+                <div className="epp-inline-create">
+                  <input
+                    type="text" placeholder="Location name" value={locationCreateName}
+                    onChange={(e) => setLocationCreateName(e.target.value)} maxLength={80}
+                  />
+                  <input
+                    type="text" placeholder="City" value={locationCreateCity}
+                    onChange={(e) => setLocationCreateCity(e.target.value)} maxLength={80}
+                  />
+                  <div className="epp-inline-create-actions">
+                    <button
+                      type="button" className="epp-btn epp-btn-small epp-btn-primary"
+                      disabled={locationCreateSaving || !locationCreateName.trim() || !locationCreateCity.trim()}
+                      onClick={createLocation}
+                    >
+                      {locationCreateSaving ? 'Creating…' : 'Create & Select'}
+                    </button>
+                    <button type="button" className="epp-icon-btn" onClick={() => setLocationCreateOpen(false)} disabled={locationCreateSaving}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scenePickerOpen && scenePickerLocation && (
+        <div className="epp-modal-backdrop" onClick={closeScenePicker}>
+          <div className="epp-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="epp-modal-header">
+              <h3>Scene Set — {scenePickerLocation.name}</h3>
+              <button className="epp-icon-btn" onClick={closeScenePicker} aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="epp-modal-results">
+              {sortedSceneSets.length ? (
+                sortedSceneSets.map((s) => (
+                  <button key={s.id} className="epp-modal-result" disabled={sceneSaving} onClick={() => chooseSceneSet(s)}>
+                    <div>
+                      <div className="epp-host-name">{s.name}</div>
+                      <div className="epp-host-handle">{fmtLabel(s.scene_type)}</div>
+                    </div>
+                    {event.scene_set_id === s.id && <CheckCircle2 size={16} />}
+                  </button>
+                ))
+              ) : (
+                <div className="epp-empty">No scene sets for this location yet</div>
+              )}
+            </div>
+            <div className="epp-modal-footer">
+              {!sceneCreateOpen ? (
+                <button type="button" className="epp-btn epp-btn-small" onClick={() => setSceneCreateOpen(true)}>
+                  <Plus size={14} /> Create Scene Set
+                </button>
+              ) : (
+                <div className="epp-inline-create">
+                  <input
+                    type="text" placeholder="Scene set name" value={sceneCreateName}
+                    onChange={(e) => setSceneCreateName(e.target.value)} maxLength={80}
+                  />
+                  <div className="epp-inline-create-actions">
+                    <button
+                      type="button" className="epp-btn epp-btn-small epp-btn-primary"
+                      disabled={sceneCreateSaving || !sceneCreateName.trim()}
+                      onClick={createSceneSet}
+                    >
+                      {sceneCreateSaving ? 'Creating…' : 'Create & Select'}
+                    </button>
+                    <button type="button" className="epp-icon-btn" onClick={() => setSceneCreateOpen(false)} disabled={sceneCreateSaving}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>

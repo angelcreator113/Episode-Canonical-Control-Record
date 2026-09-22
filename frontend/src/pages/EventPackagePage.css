@@ -626,6 +626,47 @@
 .epp-modal-result:hover { background: var(--lala-parchment-2, #F4EFE4); }
 .epp-modal-result:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Venue / scene-set pickers (Task #1674) */
+.epp-modal-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--lala-parchment-3, #E8E0D0);
+}
+
+.epp-inline-create {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.epp-inline-create input {
+  padding: 6px 10px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--lala-surface, #FFFFFF);
+  color: var(--lala-ink, #2C2C2C);
+}
+.epp-inline-create-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.epp-inline-link {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  color: var(--lala-gold, #B8962E);
+  cursor: pointer;
+}
+.epp-inline-link:hover { color: var(--lala-gold-hover, #A68324); }
+
 /* 375px — single column, no horizontal overflow */
 @media (max-width: 480px) {
   .epp-page { padding: 14px 12px 96px; }
