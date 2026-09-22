@@ -1930,12 +1930,51 @@ file. Recorded here as proposed, not planned.
 **(b) Is Lala's role a fixed list or free text?** Not decided here.
 
 **(c) Do featured attendees resolve the existing two-homes guest problem,
-or wait for it?** §2 EVENT PACKAGE's "Guests" subsection above already
-records that problem (`canon_consequences.automation.guest_profiles` vs.
-the top-level `guest_list` column, neither ruled authoritative) — cited
-here, not restated. Whether "featured attendees" becomes a third home, a
-view over one of the two existing ones, or the occasion to finally pick
-one, is not decided here.
+or wait for it? — RESOLVED (Evoni, 2026-09-22; see (q) below).** §2 EVENT
+PACKAGE's "Guests" subsection above already records that problem
+(`canon_consequences.automation.guest_profiles` vs. the top-level
+`guest_list` column, neither ruled authoritative) — cited here, not
+restated. Whether "featured attendees" becomes a third home, a view over
+one of the two existing ones, or the occasion to finally pick one, is not
+decided here. **Resolved, not deleted — see (q) below: `guest_profiles`
+is the authority, `guest_list` is retired, and featured attendees are a
+narrower concept layered on top of `guest_profiles`, not a third home.**
+
+**(q) Guest ownership (Evoni, 2026-09-22, Task #1685).** Resolves §8(p)
+open question (c) above. Read that grounds this ruling:
+`docs/GUEST_OWNERSHIP_READ.md` — cited throughout, not restated.
+
+**1. `guest_profiles` is the authority; `world_events.guest_list` is
+retired.** Every writer and every reader `docs/GUEST_OWNERSHIP_READ.md`
+§3 found already uses `guest_profiles` — nothing needs to migrate.
+`guest_list` is retired as of this ruling: that read's §2 already found
+it functionally dead (the main creation route explicitly discards it;
+its one possible writer is the PUT route's untyped pass-through, and its
+one reader is `feedPostGeneratorService.js`). This ruling settles that
+remaining code as not sanctioned going forward — removing `guest_list`
+from the PUT route's `allowedFields` and retiring
+`feedPostGeneratorService.js`'s read of it is a later task, not done by
+this ruling. Dropping the column itself is a production schema change —
+Evoni's to decide and run, not proposed as a migration here.
+
+**2. A guest's Social Profile link is what lets it accumulate a
+relationship with Lala; a guest without one cannot.**
+`docs/GUEST_OWNERSHIP_READ.md` §4/§6 already found the mechanism
+(`characterSyncService.js`'s post-episode relationship-state update,
+gated on each guest's `profile_id`) and the gap: the opportunity-pipeline
+writer stores that same link under the key `id` instead, so every guest
+it creates silently carries no relationship — no error, just an absent
+key every `profile_id`-reading consumer steps over. Cited for detail,
+not restated; fixing the writer is Task #1686, tracked separately from
+this docs-only ruling.
+
+**3. Featured attendees are not the same as everyone invited.** The
+three to five Feed creators a story actually uses (§8(p) ruling 1's
+FEATURED ATTENDEES role) are a narrower, curated concept than the full
+assembled guest list `guest_profiles` holds — every entry today is
+presented identically; nothing distinguishes an invited guest from a
+featured one. Marking them (a per-guest flag, rank, or story reason) is
+a later task, not this one.
 
 ---
 
