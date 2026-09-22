@@ -1896,6 +1896,29 @@ column:
   EpisodeWardrobeGameplay.jsx:209,506` (wardrobe-gameplay context and an
   event tag chip).
 
+**Observation (Evoni, 2026-09-22), not a ruling.** Two follow-on notes on
+ruling 6's reader list above:
+
+1. Brand matching today is exact string or lower-cased substring
+   comparison, with no normalization, across the invitation style lookup
+   (`invitationGeneratorService.js:193,198`), wardrobe scoring
+   (`episodeOrchestrationRoute.js:68`, `wardrobeIntelligenceService.js:
+   286-288,361-363,556,734-736`, `wardrobe.js:1007,1051`), the
+   episode-completion brand-trust bonus (`episodeCompletionService.js:84`),
+   and cross-episode brand continuity (`worldEvents.js:4218-4220`). A
+   spelling or spacing difference between two `host_brand` values that
+   read as "the same" brand to a person silently breaks every one of
+   these matches — none of them normalize or fuzzy-match.
+2. `host_brand` is copied into
+   `canon_consequences.automation.host_brand` (`worldEvents.js:2391`),
+   with its own independent readers and `||` fallback chains
+   (`EpisodeOverviewTab.jsx:721,723`, `episodeGeneratorService.js:779`,
+   `wardrobeIntelligenceService.js:556`, `socialChecklistService.js:277`)
+   — the same two-homes pattern this document already records for host
+   (§2 "HOST — recorded two different ways"), venue (§2 EVENT PACKAGE's
+   "Venue" subsection — the top-level FK alongside the JSONB copy), and
+   guests (§2 EVENT PACKAGE's "Guests" subsection). Cited, not re-argued.
+
 **Open questions for Evoni:**
 
 **(a) The schema target.** `organizer_type` with `organizer_profile_id`
