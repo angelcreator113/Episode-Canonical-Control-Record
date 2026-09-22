@@ -9,6 +9,7 @@
  * POST   /api/v1/world/:showId/events/:eventId/generate-script — Generate full script skeleton
  * POST   /api/v1/world/:showId/events/:eventId/generate-invitation — Generate invitation card image
  * GET    /api/v1/world/:showId/events/:eventId/invitation — Check if invitation exists
+ * POST   /api/v1/world/:showId/events/:eventId/suggest-names — Three AI-written name options, writes nothing
  * POST   /api/v1/world/:showId/events/ai-fix — AI suggestions to diversify event plan
  * 
  * Location: src/routes/worldEvents.js
@@ -196,6 +197,163 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Get single event error:', error);
     return res.status(500).json({ success: false, error: 'Failed to load event', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/world/:showId/events/:eventId/suggest-names
+//
+// Three AI-written name options for an existing event, built from the
+// event's own facts. Writes nothing — Evoni picks one (or types her own)
+// through the existing PUT /world/:showId/events/:eventId route, whose
+// allowedFields already includes 'name' (:389 below), so no new write
+// path is added here. Task #1670.
+// ═══════════════════════════════════════════
+
+router.post('/world/:showId/events/:eventId/suggest-names', requireAuth, aiRateLimiter, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ success: false, error: 'ANTHROPIC_API_KEY not configured' });
+    }
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    const [rows] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId } }
+    );
+    const event = rows[0];
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    // Host — prefer the linked SocialProfile (durable source_profile_id,
+    // same field the single-event GET above reads, :158) for its name AND
+    // archetype; fall back to the event's own legacy `host` text field
+    // when there's no linked profile.
+    let hostLine = event.host ? `Host: ${event.host}` : null;
+    if (event.source_profile_id && models.SocialProfile) {
+      const profile = await models.SocialProfile.findByPk(event.source_profile_id, {
+        attributes: ['display_name', 'handle', 'archetype'],
+      }).catch(() => null);
+      if (profile) {
+        const hostName = profile.display_name || profile.handle;
+        hostLine = profile.archetype
+          ? `Host: ${hostName} (${String(profile.archetype).replace(/_/g, ' ')})`
+          : `Host: ${hostName}`;
+      }
+    }
+
+    let showName = null;
+    if (models.Show) {
+      const show = await models.Show.findByPk(showId, { attributes: ['name'] }).catch(() => null);
+      showName = show?.name || null;
+    }
+
+    // Every fact line is conditional — most events have almost none of
+    // these set today (no venue, no category, no format), so the prompt
+    // below tells the model explicitly not to invent what's missing
+    // rather than silently degrading to a generic prompt.
+    const facts = [
+      showName ? `Show: ${showName}` : null,
+      hostLine,
+      event.category ? `Category: ${String(event.category).replace(/_/g, ' ')}` : null,
+      event.format ? `Format: ${String(event.format).replace(/_/g, ' ')}` : null,
+      event.venue_name ? `Venue: ${event.venue_name}` : null,
+      event.event_date ? `Date: ${event.event_date}` : null,
+      event.event_time ? `Time: ${event.event_time}` : null,
+      event.dress_code ? `Dress code: ${event.dress_code}` : null,
+      typeof event.prestige === 'number' ? `Prestige: ${event.prestige}/10` : null,
+    ].filter(Boolean);
+
+    const factsBlock = facts.length > 0
+      ? facts.join('\n')
+      : 'No details recorded for this event yet beyond it existing — do not invent any.';
+
+    const prompt = `Suggest three short, creative names for this fictional social event, for a fashion/lifestyle content-creator show.
+
+${factsBlock}
+
+Rules:
+- Each name is under 40 characters.
+- No quotation marks in the name itself.
+- Do not invent facts (a venue, a guest, a theme, a location) the details above don't give you — when details are sparse, lean on tone and whatever you do have (host, category, format) instead of making something up.
+- Return three genuinely different options, not three variations on one phrase.
+
+Return ONLY this JSON, no other text:
+{"names": ["...", "...", "..."]}`;
+
+    // Model choice: cheapest tier that writes well for a short, low-stakes
+    // task (claude-haiku-4-5-20251001 — same model episodeGeneratorService.js
+    // already uses for AI episode titles, :520, one tier below the
+    // claude-sonnet-4-6 heavier generation routes like eventGeneratorRoute.js
+    // use). Retry pattern matches the existing two-attempt-per-model loop
+    // (e.g. src/routes/memories/interview.js:100-130): up to 2 attempts per
+    // model with a 2s backoff on 529/503, falling through to the next model
+    // (only one here) on repeated overload or a 404.
+    const MODELS = ['claude-haiku-4-5-20251001'];
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic();
+    let response;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          response = await client.messages.create({
+            model,
+            max_tokens: 300,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          succeeded = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            await new Promise((r) => setTimeout(r, 2000));
+            continue;
+          }
+          if (status === 529 || status === 503 || status === 404) break;
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!response) {
+      return res.status(503).json({ success: false, error: 'The AI service is temporarily overloaded. Please try again.' });
+    }
+
+    const text = response.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(500).json({ success: false, error: 'Claude returned no JSON', raw: text });
+
+    let parsed;
+    try {
+      parsed = JSON.parse(match[0]);
+    } catch {
+      return res.status(500).json({ success: false, error: 'Claude returned invalid JSON', raw: text });
+    }
+
+    // Strip any quote marks the model included anyway (straight and curly,
+    // single and double) and enforce the length rule defensively rather
+    // than trusting the prompt alone.
+    const names = Array.isArray(parsed.names)
+      ? parsed.names
+          .map((n) => String(n || '').replace(/["'‘’“”]/g, '').trim().slice(0, 40))
+          .filter(Boolean)
+          .slice(0, 3)
+      : [];
+
+    if (names.length === 0) {
+      return res.status(500).json({ success: false, error: 'No usable names returned', raw: text });
+    }
+
+    return res.json({ success: true, names });
+  } catch (err) {
+    console.error('[SuggestEventNames] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

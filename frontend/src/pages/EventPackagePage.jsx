@@ -15,7 +15,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
-  Search, X, CheckCircle2,
+  Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2,
 } from 'lucide-react';
 import api from '../services/api';
 import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate } from '../utils/eventReadiness';
@@ -63,6 +63,15 @@ export default function EventPackagePage() {
   const [hostResults, setHostResults] = useState([]);
   const [hostSearching, setHostSearching] = useState(false);
   const [hostSaving, setHostSaving] = useState(false);
+
+  // Suggest names (Task #1670). Nothing here fires on mount — only
+  // openNameSuggest, called from a click, ever requests suggestions.
+  const [nameSuggestOpen, setNameSuggestOpen] = useState(false);
+  const [nameSuggestions, setNameSuggestions] = useState([]);
+  const [nameSuggesting, setNameSuggesting] = useState(false);
+  const [nameSuggestError, setNameSuggestError] = useState(null);
+  const [customName, setCustomName] = useState('');
+  const [nameSaving, setNameSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setLoadError(null);
@@ -160,6 +169,42 @@ export default function EventPackagePage() {
     }
   };
 
+  const fetchNameSuggestions = async () => {
+    setNameSuggesting(true);
+    setNameSuggestError(null);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/suggest-names`);
+      setNameSuggestions(res.data?.names || []);
+    } catch (err) {
+      setNameSuggestError(err.response?.data?.error || err.message || 'Failed to suggest names');
+    } finally {
+      setNameSuggesting(false);
+    }
+  };
+
+  const openNameSuggest = () => {
+    setNameSuggestOpen(true);
+    if (nameSuggestions.length === 0 && !nameSuggesting) fetchNameSuggestions();
+  };
+
+  const saveEventName = async (newName) => {
+    const trimmed = (newName || '').trim();
+    if (!trimmed || nameSaving) return;
+    setNameSaving(true);
+    try {
+      await api.put(`/api/v1/world/${showId}/events/${eventId}`, { name: trimmed });
+      setToast(`Name changed to "${trimmed}"`);
+      setNameSuggestOpen(false);
+      setNameSuggestions([]);
+      setCustomName('');
+      await load();
+    } catch (err) {
+      setToast(err.response?.data?.error || err.message || 'Failed to save name');
+    } finally {
+      setNameSaving(false);
+    }
+  };
+
   const handleStartEpisode = async () => {
     if (!allReady || used || starting) return;
     setStarting(true);
@@ -200,7 +245,14 @@ export default function EventPackagePage() {
 
       <div className="epp-sections">
         <section className="epp-section">
-          <h2 className="epp-section-title">Basics</h2>
+          <div className="epp-section-header">
+            <h2 className="epp-section-title">Basics</h2>
+            {!used && !nameSuggestOpen && (
+              <button className="epp-btn epp-btn-small" onClick={openNameSuggest}>
+                <Sparkles size={14} /> Suggest names
+              </button>
+            )}
+          </div>
           <dl className="epp-fields">
             <div><dt>Name</dt><dd>{event.name}</dd></div>
             <div>
@@ -216,6 +268,54 @@ export default function EventPackagePage() {
             <div><dt>Category</dt><dd>{fmtLabel(event.category)}</dd></div>
             <div><dt>Format</dt><dd>{fmtLabel(event.format)}</dd></div>
           </dl>
+
+          {nameSuggestOpen && (
+            <div className="epp-name-suggest">
+              {nameSuggesting && (
+                <div className="epp-invitation-generating">
+                  <Loader2 size={14} className="epp-spin-icon" /> Thinking of names…
+                </div>
+              )}
+              {nameSuggestError && (
+                <div className="epp-invitation-error">
+                  <AlertCircle size={13} /> <span>{nameSuggestError}</span>
+                  <button type="button" className="epp-invitation-retry" onClick={fetchNameSuggestions} disabled={nameSuggesting}>Retry</button>
+                </div>
+              )}
+              {!nameSuggesting && nameSuggestions.length > 0 && (
+                <div className="epp-name-suggest-options">
+                  {nameSuggestions.map((n, i) => (
+                    <button
+                      key={`${n}-${i}`} type="button" className="epp-name-suggest-option"
+                      onClick={() => saveEventName(n)} disabled={nameSaving}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="epp-name-suggest-actions">
+                <button type="button" className="epp-btn epp-btn-small" onClick={fetchNameSuggestions} disabled={nameSuggesting || nameSaving}>
+                  <RefreshCw size={13} /> Regenerate
+                </button>
+                <input
+                  type="text" className="epp-name-suggest-input" placeholder="Or type your own"
+                  value={customName} onChange={(e) => setCustomName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveEventName(customName); }}
+                  maxLength={40}
+                />
+                <button
+                  type="button" className="epp-btn epp-btn-small epp-btn-primary"
+                  onClick={() => saveEventName(customName)} disabled={nameSaving || !customName.trim()}
+                >
+                  {nameSaving ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" className="epp-icon-btn" title="Close" onClick={() => setNameSuggestOpen(false)} disabled={nameSaving}>
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="epp-section">
