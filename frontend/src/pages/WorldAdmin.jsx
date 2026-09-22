@@ -416,6 +416,9 @@ function WorldAdmin() {
   // none; only one open at a time).
   const [eventsHeaderMenuOpen, setEventsHeaderMenuOpen] = useState(false);
   const [openEventMenuId, setOpenEventMenuId] = useState(null);
+  // Which open card menu is showing the "Change status" sub-list (null =
+  // none; the menu's normal item list otherwise).
+  const [statusMenuEventId, setStatusMenuEventId] = useState(null);
   const [aiRevising, setAiRevising] = useState(false);
   const [compareEvents, setCompareEvents] = useState(null); // [eventA, eventB]
   const [generating, setGenerating] = useState(false);
@@ -632,6 +635,27 @@ function WorldAdmin() {
   const copyEvent = (ev) => {
     setEventForm({ ...EMPTY_EVENT, ...ev, name: `${ev.name} (Copy)`, status: 'draft' });
     setEditingEvent('new');
+  };
+
+  // Manual status override (Task #1648 follow-up, before Evoni's go on
+  // #1649). advanceEventStatus never let anyone reach 'declined' or set
+  // status back to 'draft' — it only cycled forward through
+  // EVENT_STATUSES ('draft'→'ready'→'used'→'scripted'→'filmed'); this
+  // isn't a capability the card rewrite removed, it's a pre-existing gap.
+  // 'archived' is deliberately not offered here — EVENT_EPISODE_FLOW.md
+  // §4's census of every writer in the codebase found nothing that ever
+  // writes that value; offering it here would invent a status this app
+  // doesn't otherwise use, not restore one.
+  const STATUS_OVERRIDE_OPTIONS = ['draft', 'ready', 'used', 'declined', 'filmed'];
+  const changeEventStatus = async (ev, status) => {
+    try {
+      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { status });
+      if (res.data.success) {
+        setWorldEvents(prev => prev.map(e => e.id === ev.id ? { ...e, ...res.data.event, status } : e));
+        setToast(`${ev.name} → ${status}`);
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
   };
 
   const bulkInject = async (episodeId) => {
@@ -3097,15 +3121,28 @@ The revised event should feel like a completely different experience from the si
                   )}
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: 0, flex: 1 }}>{ev.name}</h3>
                   <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-                    <button onClick={() => setOpenEventMenuId(menuOpen ? null : ev.id)} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: '#94a3b8', borderRadius: 4 }} title="More actions" aria-label="More actions">
+                    <button onClick={() => { setOpenEventMenuId(menuOpen ? null : ev.id); setStatusMenuEventId(null); }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: '#94a3b8', borderRadius: 4 }} title="More actions" aria-label="More actions">
                       <MoreHorizontal size={16} />
                     </button>
                     {menuOpen && (
                       <>
-                        <div data-testid="event-menu-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpenEventMenuId(null)} />
+                        <div data-testid="event-menu-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => { setOpenEventMenuId(null); setStatusMenuEventId(null); }} />
                         <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 41, minWidth: 200, overflow: 'hidden' }}>
                           <button onClick={() => { setEventDetailModal(ev); setOpenEventMenuId(null); }} style={S.menuItem}>Edit details</button>
                           <button onClick={() => { copyEvent(ev); setOpenEventMenuId(null); }} style={S.menuItem}>Duplicate as New Event</button>
+                          {statusMenuEventId === ev.id ? (
+                            <div style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <div style={{ padding: '6px 14px 2px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Change status to…</div>
+                              {STATUS_OVERRIDE_OPTIONS.map(s => (
+                                <button key={s} disabled={s === ev.status} onClick={() => { changeEventStatus(ev, s); setStatusMenuEventId(null); setOpenEventMenuId(null); }}
+                                  style={{ ...S.menuItem, borderBottom: 'none', paddingLeft: 24, opacity: s === ev.status ? 0.4 : 1, cursor: s === ev.status ? 'default' : 'pointer' }}>
+                                  {s}{s === ev.status ? ' (current)' : ''}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <button onClick={() => setStatusMenuEventId(ev.id)} style={S.menuItem}>Change status…</button>
+                          )}
                           <div style={S.menuItem}><InvitationButton event={ev} showId={showId} onGenerated={() => loadData()} /></div>
                           <button onClick={async () => {
                             setOpenEventMenuId(null);
