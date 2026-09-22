@@ -12,13 +12,14 @@
  * later pieces replace these sections one at a time.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2,
 } from 'lucide-react';
 import api from '../services/api';
 import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel } from '../utils/eventReadiness';
+import { InvitationButton } from './InvitationGenerator';
 import './EventPackagePage.css';
 
 function fmtLabel(value) {
@@ -29,6 +30,20 @@ function fmtLabel(value) {
 export default function EventPackagePage() {
   const { showId, eventId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // One-time auto-generate flag (Task #1654): SocialProfileGenerator's
+  // handleHostEvent navigates here with ?autoInvite=1 right after creating
+  // a host-linked event. Captured once on mount, then the flag is stripped
+  // from the URL below so a reload can never re-trigger it — the value
+  // itself never changes again for the life of this mounted page.
+  const [autoInvite] = useState(() => searchParams.get('autoInvite') === '1');
+  useEffect(() => {
+    if (searchParams.get('autoInvite') === '1') {
+      navigate(`/shows/${showId}/events/${eventId}`, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -233,14 +248,13 @@ export default function EventPackagePage() {
 
         <section className="epp-section">
           <h2 className="epp-section-title">Invitation</h2>
-          {invitationAsset ? (
-            <div className="epp-invitation">
-              {invitationAsset.s3_url_processed && (
-                <img className="epp-invitation-preview" src={invitationAsset.s3_url_processed} alt="Invitation preview" />
-              )}
-              <div className="epp-fields-label">Status: {fmtLabel(invitationAsset.approval_status || 'pending')}</div>
-            </div>
-          ) : <div className="epp-empty">No invitation yet</div>}
+          <InvitationButton
+            mode="inline"
+            autoGenerate={autoInvite}
+            event={{ ...event, invitation_url: invitationAsset?.s3_url_processed || null }}
+            showId={showId}
+            onGenerated={() => load()}
+          />
         </section>
 
         <section className="epp-section">

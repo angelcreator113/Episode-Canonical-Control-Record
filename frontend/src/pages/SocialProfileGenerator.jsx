@@ -366,7 +366,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     try{
       const data=await createEventFromProfileApi(showId,{profile_id:profile.id,event_template:'Event'});
       const ev=data.event;
-      if(ev?.id)navigate(`/shows/${showId}/events/${ev.id}`);
+      // ?autoInvite=1 (Task #1654): a one-time flag the Event Package page
+      // reads on mount, then strips from the URL — triggers exactly one
+      // automatic invitation generation for this just-created host event.
+      if(ev?.id)navigate(`/shows/${showId}/events/${ev.id}?autoInvite=1`);
       else setError('Event created but no event id was returned.');
     }catch(err){setError(err.response?.data?.error||err.message||'Failed to create event');}
     finally{setHostingProfileId(null);}
