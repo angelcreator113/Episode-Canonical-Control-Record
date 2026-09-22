@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Loader2, RefreshCw, CheckCircle2, XCircle, Pencil, Mail, AlertCircle } from 'lucide-react';
+import { Loader2, RefreshCw, CheckCircle2, XCircle, Pencil, Mail, AlertCircle, ZoomIn, ExternalLink, X } from 'lucide-react';
 import api from '../services/api';
 
 // ─── THEME OPTIONS ────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ export const BORDER_OPTIONS = [
 
 // ─── INVITATION BUTTON COMPONENT ──────────────────────────────────────────────
 
-export function InvitationButton({ event, showId, onGenerated, mode = 'modal', autoGenerate = false }) {
+export function InvitationButton({ event, showId, onGenerated, mode = 'modal', autoGenerate = false, approvalInfo = null }) {
   const [generating, setGenerating]   = useState(false);
   const [approving, setApproving]     = useState(false);
   const [imageUrl, setImageUrl]       = useState(event.invitation_url || null);
@@ -47,6 +47,15 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
   const [toast, setToast]             = useState(null);
   const [versions, setVersions]       = useState([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
+  const [showZoom, setShowZoom]       = useState(false);
+
+  // Escape closes the zoom lightbox, matching its click-away dismiss below.
+  useEffect(() => {
+    if (!showZoom) return;
+    const onKey = (e) => { if (e.key === 'Escape') setShowZoom(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showZoom]);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -109,10 +118,18 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
     if (!pendingAssetId) return;
     setApproving(true);
     try {
-      await api.post(`/api/v1/world/${showId}/events/${event.id}/approve-invitation`, { assetId: pendingAssetId });
+      const res = await api.post(`/api/v1/world/${showId}/events/${event.id}/approve-invitation`, { assetId: pendingAssetId });
       setPendingAssetId(null);
       setShowPreview(false);
-      if (onGenerated) onGenerated(imageUrl, pendingAssetId);
+      // approve-invitation's own response already carries episodeId and
+      // placement_id (worldEvents.js:1360-1365) — no new endpoint needed.
+      // Passed up via onGenerated rather than kept in local state: the
+      // parent's own onGenerated handler here typically reloads the page
+      // data, which (in EventPackagePage) unmounts and remounts this
+      // component while loading — any state set here would be lost before
+      // the next render. The parent owns it instead.
+      const approvalDetail = { episodeId: res.data?.episodeId || null, placementId: res.data?.placement_id || null };
+      if (onGenerated) onGenerated(imageUrl, pendingAssetId, approvalDetail);
       showToast('Invitation approved');
     } catch (err) {
       setError(err.response?.data?.error || 'Approval failed');
@@ -260,6 +277,12 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
             {status === 'approved' && <CheckCircle2 size={12} />}
             {statusLabel}
           </span>
+          {status === 'approved' && (
+            <span className="epp-invitation-approval-detail">
+              Linked to event.
+              {approvalInfo?.placementId && ' Placed on the episode’s timeline.'}
+            </span>
+          )}
           {(imageUrl || hasInvitation) && !generating && (
             <div className="epp-invitation-actions-inline">
               <button
@@ -299,7 +322,38 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
         )}
 
         {imageUrl && (
-          <img className="epp-invitation-preview" src={imageUrl} alt="Invitation preview" />
+          <div className="epp-invitation-preview-wrap">
+            <img
+              className="epp-invitation-preview" src={imageUrl} alt="Invitation preview"
+              onClick={() => setShowZoom(true)} role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowZoom(true); } }}
+              title="Click to view full size"
+            />
+            <div className="epp-invitation-preview-actions">
+              <button type="button" className="epp-icon-btn" title="View full size" onClick={() => setShowZoom(true)}>
+                <ZoomIn size={13} />
+              </button>
+              <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="epp-icon-btn" title="Open in new tab">
+                <ExternalLink size={13} />
+              </a>
+            </div>
+          </div>
+        )}
+
+        {showZoom && imageUrl && (
+          <div className="epp-invitation-zoom-backdrop" onClick={() => setShowZoom(false)}>
+            <div className="epp-invitation-zoom-frame" onClick={(e) => e.stopPropagation()}>
+              <div className="epp-invitation-zoom-toolbar">
+                <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="epp-icon-btn" title="Open in new tab">
+                  <ExternalLink size={16} />
+                </a>
+                <button type="button" className="epp-icon-btn" title="Close" onClick={() => setShowZoom(false)}>
+                  <X size={16} />
+                </button>
+              </div>
+              <img className="epp-invitation-zoom-image" src={imageUrl} alt="Invitation, full size" />
+            </div>
+          </div>
         )}
 
         {!imageUrl && !hasInvitation && !generating && (

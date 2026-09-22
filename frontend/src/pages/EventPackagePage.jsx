@@ -50,6 +50,13 @@ export default function EventPackagePage() {
   const [loadError, setLoadError] = useState(null);
   const [starting, setStarting] = useState(false);
   const [toast, setToast] = useState(null);
+  // Owned here, not inside InvitationButton (Task #1668): load() below sets
+  // loading=true while it refetches, which unmounts this page's whole JSX
+  // subtree — including InvitationButton — until it resolves. Local state
+  // set inside that component right before an onGenerated-triggered reload
+  // would be wiped before the next render; this component's own state
+  // survives, since it's never itself unmounted by its own loading toggle.
+  const [invitationApprovalInfo, setInvitationApprovalInfo] = useState(null);
 
   const [hostPickerOpen, setHostPickerOpen] = useState(false);
   const [hostSearch, setHostSearch] = useState('');
@@ -278,7 +285,11 @@ export default function EventPackagePage() {
             autoGenerate={autoInvite}
             event={{ ...event, invitation_url: invitationAsset?.s3_url_processed || null }}
             showId={showId}
-            onGenerated={() => load()}
+            approvalInfo={invitationApprovalInfo}
+            onGenerated={(_url, _assetId, approvalDetail) => {
+              if (approvalDetail) setInvitationApprovalInfo(approvalDetail);
+              load();
+            }}
           />
         </section>
 
