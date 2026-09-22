@@ -18,7 +18,7 @@ import {
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
 } from 'lucide-react';
 import api from '../services/api';
-import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate } from '../utils/eventReadiness';
+import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
 import { InvitationButton } from './InvitationGenerator';
 import './EventPackagePage.css';
 
@@ -164,6 +164,7 @@ export default function EventPackagePage() {
   const used = !!event.used_in_episode_id;
   const { checks, allReady } = computeEventReadiness(event);
   const venueDate = resolveEventVenueAndDate(event);
+  const organizer = resolveEventOrganizer(event);
   const difficulty = calcEventDifficulty(event);
   const diffLabel = eventDifficultyLabel(difficulty);
 
@@ -497,6 +498,20 @@ export default function EventPackagePage() {
               <button className="epp-btn epp-btn-small" onClick={() => setHostPickerOpen(true)}>
                 <UserPlus size={14} /> Change Host
               </button>
+            )}
+          </div>
+          <div className="epp-organizer-line">
+            {organizer.hasOrganizer ? (
+              <>
+                <span className="epp-fields-label">Organized by</span>{' '}
+                <strong>{organizer.organizerKind === 'brand' ? organizer.brandName : organizer.creatorName}</strong>
+                <span className="epp-saved-copy">{organizer.organizerKind === 'brand' ? 'Brand' : 'Creator'}</span>
+                {organizer.organizerKind === 'brand' && organizer.hasCreator && (
+                  <span> · Hosted by: {organizer.creatorName}</span>
+                )}
+              </>
+            ) : (
+              <span className="epp-host-unlinked">No organizer set</span>
             )}
           </div>
           <div className="epp-host">

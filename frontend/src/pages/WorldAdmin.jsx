@@ -23,7 +23,7 @@ import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItem
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
-import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, computeEventState, EVENT_QUEUE_STATES, resolveEventVenueAndDate } from '../utils/eventReadiness';
+import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, computeEventState, EVENT_QUEUE_STATES, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
 import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles } from 'lucide-react';
 import './WorldAdmin.css';
 
@@ -3115,10 +3115,7 @@ The revised event should feel like a completely different experience from the si
               const isSelected = selectedEvents.has(ev.id);
               const state = computeEventState(ev);
               const stateCfg = EVENT_QUEUE_STATES[state];
-              const auto = ev.canon_consequences?.automation || {};
-              const hostName = (ev.source_profile_id || auto.host_profile_id)
-                ? (auto.host_display_name || ev.host || auto.host_handle || 'Linked host')
-                : null;
+              const organizer = resolveEventOrganizer(ev);
               const venueDate = resolveEventVenueAndDate(ev);
               const { checks } = computeEventReadiness(ev);
               const missing = checks.filter(c => !c.ok).map(c => c.label);
@@ -3210,7 +3207,17 @@ The revised event should feel like a completely different experience from the si
                   {stateCfg.icon} {stateCfg.label}
                 </span>
                 <div style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 10 }}>
-                  {hostName ? <div>Host: {hostName}</div> : <div style={{ color: '#dc2626' }}>No host linked</div>}
+                  {organizer.hasOrganizer ? (
+                    <div>
+                      Organized by: {organizer.organizerKind === 'brand' ? organizer.brandName : organizer.creatorName}
+                      <span style={S.savedCopyTag}>{organizer.organizerKind === 'brand' ? 'Brand' : 'Creator'}</span>
+                      {organizer.organizerKind === 'brand' && organizer.hasCreator && (
+                        <span> · Hosted by: {organizer.creatorName}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ color: '#dc2626' }}>No organizer linked</div>
+                  )}
                   {venueDate.venueName && (
                     <div>Venue: {venueDate.venueName}{venueDate.venueNameFromSavedCopy && <span style={S.savedCopyTag}>saved copy</span>}</div>
                   )}

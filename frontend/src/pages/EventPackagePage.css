@@ -247,6 +247,13 @@
   font-style: italic;
 }
 
+/* Organizer summary line (Task #1676/#1681) — creator or brand, marked
+   which, shown above the existing host block. */
+.epp-organizer-line {
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
 .epp-host {
   display: flex;
   align-items: flex-start;
