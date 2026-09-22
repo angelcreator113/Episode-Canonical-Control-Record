@@ -140,7 +140,8 @@ async function findHostProfile(calendarEvent, models, options = {}) {
       limit: 20,
       attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype',
         'follower_tier', 'lala_relevance_score', 'geographic_base', 'brand_partnerships',
-        'registry_character_id', 'revenue_streams', 'celebrity_tier', 'platform'],
+        'registry_character_id', 'revenue_streams', 'celebrity_tier', 'platform',
+        'city', 'frequent_venues'],
     });
   } catch {
     // Fallback if celebrity_tier column doesn't exist yet
@@ -150,7 +151,7 @@ async function findHostProfile(calendarEvent, models, options = {}) {
       limit: 20,
       attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype',
         'follower_tier', 'lala_relevance_score', 'geographic_base', 'brand_partnerships',
-        'registry_character_id', 'revenue_streams'],
+        'registry_character_id', 'revenue_streams', 'city', 'frequent_venues'],
     });
   }
 
