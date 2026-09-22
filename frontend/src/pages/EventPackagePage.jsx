@@ -18,7 +18,7 @@ import {
   Search, X, CheckCircle2,
 } from 'lucide-react';
 import api from '../services/api';
-import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel } from '../utils/eventReadiness';
+import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { InvitationButton } from './InvitationGenerator';
 import './EventPackagePage.css';
 
@@ -114,6 +114,7 @@ export default function EventPackagePage() {
   const { event, sourceProfile, sceneSet, invitationAsset, usedInEpisode } = data;
   const used = !!event.used_in_episode_id;
   const { checks, allReady } = computeEventReadiness(event);
+  const venueDate = resolveEventVenueAndDate(event);
   const difficulty = calcEventDifficulty(event);
   const diffLabel = eventDifficultyLabel(difficulty);
 
@@ -195,7 +196,15 @@ export default function EventPackagePage() {
           <h2 className="epp-section-title">Basics</h2>
           <dl className="epp-fields">
             <div><dt>Name</dt><dd>{event.name}</dd></div>
-            <div><dt>Date &amp; time</dt><dd>{event.event_date ? `${event.event_date}${event.event_time ? ` · ${event.event_time}` : ''}` : 'Not set'}</dd></div>
+            <div>
+              <dt>Date &amp; time</dt>
+              <dd>
+                {venueDate.eventDate ? `${venueDate.eventDate}${venueDate.eventTime ? ` · ${venueDate.eventTime}` : ''}` : 'Not set'}
+                {(venueDate.eventDateFromSavedCopy || venueDate.eventTimeFromSavedCopy) && (
+                  <span className="epp-saved-copy" title="Not yet in the event's own fields — shown from its saved automation copy">saved copy</span>
+                )}
+              </dd>
+            </div>
             <div><dt>Brand</dt><dd>{event.host_brand || 'Not set'}</dd></div>
             <div><dt>Category</dt><dd>{fmtLabel(event.category)}</dd></div>
             <div><dt>Format</dt><dd>{fmtLabel(event.format)}</dd></div>
@@ -240,8 +249,24 @@ export default function EventPackagePage() {
         <section className="epp-section">
           <h2 className="epp-section-title">Place</h2>
           <dl className="epp-fields">
-            <div><dt>Venue</dt><dd>{event.venue_name || 'Not set'}</dd></div>
-            <div><dt>Address</dt><dd>{event.venue_address || 'Not set'}</dd></div>
+            <div>
+              <dt>Venue</dt>
+              <dd>
+                {venueDate.venueName || 'Not set'}
+                {venueDate.venueNameFromSavedCopy && (
+                  <span className="epp-saved-copy" title="Not yet in the event's own fields — shown from its saved automation copy">saved copy</span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Address</dt>
+              <dd>
+                {venueDate.venueAddress || 'Not set'}
+                {venueDate.venueAddressFromSavedCopy && (
+                  <span className="epp-saved-copy" title="Not yet in the event's own fields — shown from its saved automation copy">saved copy</span>
+                )}
+              </dd>
+            </div>
             <div><dt>Scene set</dt><dd>{sceneSet?.name || 'Not set'}</dd></div>
           </dl>
         </section>
