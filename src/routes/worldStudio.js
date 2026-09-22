@@ -3432,9 +3432,12 @@ router.post('/world/state/timeline', requireAuth, async (req, res) => {
     try {
       const SCE = models.StoryCalendarEvent;
       if (SCE) {
-        await SCE.create({ title: event_name, event_type: event_type === 'world' ? 'world_event' : event_type === 'character' ? 'character_event' : 'story_event', start_datetime: story_date ? new Date(story_date) : new Date(), what_world_knows: event_description || '', what_only_we_know: (consequences || []).join('; '), logged_by: 'world_state' });
+        // logged_by must be one of the model's own enum values
+        // ('evoni' | 'amber' | 'system') — 'world_state' is not one of
+        // them and made this insert fail on every call.
+        await SCE.create({ title: event_name, event_type: event_type === 'world' ? 'world_event' : event_type === 'character' ? 'character_event' : 'story_event', start_datetime: story_date ? new Date(story_date) : new Date(), what_world_knows: event_description || '', what_only_we_know: (consequences || []).join('; '), logged_by: 'system' });
       }
-    } catch (_) { /* calendar sync is best-effort */ }
+    } catch (err) { console.warn('[world-studio] calendar sync error:', err?.message); }
 
     res.json({ event: evt });
   } catch (err) { res.status(500).json({ error: err.message }); }
