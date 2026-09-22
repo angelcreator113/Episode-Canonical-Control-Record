@@ -27,6 +27,11 @@ function fmtLabel(value) {
   return String(value).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Featured attendees (Task #1689) — a story role is optional, chosen from
+// this fixed set; no role is forced onto a featured guest.
+const STORY_ROLES = ['friend', 'tension', 'opportunity', 'wildcard', 'romantic', 'mentor', 'rival'];
+const MAX_FEATURED_GUESTS = 5;
+
 export default function EventPackagePage() {
   const { showId, eventId } = useParams();
   const navigate = useNavigate();
@@ -94,6 +99,15 @@ export default function EventPackagePage() {
   const [sceneCreateName, setSceneCreateName] = useState('');
   const [sceneCreateSaving, setSceneCreateSaving] = useState(false);
 
+  // Featured attendees (Task #1689). guestFeedResults mirrors the Change
+  // Host picker's debounced search exactly (same endpoint, same shape).
+  const [fullGuestListOpen, setFullGuestListOpen] = useState(false);
+  const [guestSaving, setGuestSaving] = useState(false);
+  const [guestFeedPickerOpen, setGuestFeedPickerOpen] = useState(false);
+  const [guestFeedSearch, setGuestFeedSearch] = useState('');
+  const [guestFeedResults, setGuestFeedResults] = useState([]);
+  const [guestFeedSearching, setGuestFeedSearching] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true); setLoadError(null);
     try {
@@ -127,6 +141,25 @@ export default function EventPackagePage() {
     }, 300);
     return () => clearTimeout(t);
   }, [hostPickerOpen, hostSearch]);
+
+  // Debounced creator search for "Add from Lala's Feed" — same endpoint
+  // and shape as the Change Host picker above, no show/series scoping,
+  // matching both that picker and assembleGuestList itself
+  // (eventAutomationService.js), neither of which scope by show either.
+  useEffect(() => {
+    if (!guestFeedPickerOpen) return;
+    setGuestFeedSearching(true);
+    const t = setTimeout(() => {
+      const qs = new URLSearchParams();
+      if (guestFeedSearch.trim()) qs.set('search', guestFeedSearch.trim());
+      qs.set('limit', '20');
+      api.get(`/api/v1/social-profiles?${qs.toString()}`)
+        .then((res) => setGuestFeedResults(res.data?.profiles || []))
+        .catch(() => setGuestFeedResults([]))
+        .finally(() => setGuestFeedSearching(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [guestFeedPickerOpen, guestFeedSearch]);
 
   // Fetched once on first use (picker open or "change scene set" click),
   // then cached — with only a handful of World Locations, no debounced
@@ -169,6 +202,9 @@ export default function EventPackagePage() {
   const diffLabel = eventDifficultyLabel(difficulty);
 
   const guestList = event.canon_consequences?.automation?.guest_profiles || [];
+  const featuredGuests = guestList
+    .map((guest, index) => ({ guest, index }))
+    .filter(({ guest }) => guest.featured);
   const outfitPieces = Array.isArray(event.outfit_pieces) ? event.outfit_pieces : [];
   const requirementEntries = event.requirements && typeof event.requirements === 'object'
     ? Object.entries(event.requirements).filter(([, v]) => v !== null && v !== undefined && v !== '')
@@ -201,6 +237,72 @@ export default function EventPackagePage() {
     } finally {
       setHostSaving(false);
     }
+  };
+
+  // Persists a whole new guest_profiles array through the existing event
+  // PUT route. canon_consequences is a plain JSONB column overwrite there
+  // (worldEvents.js's PUT allowedFields/jsonFields, confirmed in this
+  // task's PR body) — not a JSONB merge — so every write here sends the
+  // event's full canon_consequences with only automation.guest_profiles
+  // replaced, or every other automation field (host, venue, ...) would be
+  // wiped.
+  const saveGuestProfiles = async (newGuestProfiles, successMessage) => {
+    setGuestSaving(true);
+    try {
+      const updatedCC = {
+        ...(event.canon_consequences || {}),
+        automation: {
+          ...(event.canon_consequences?.automation || {}),
+          guest_profiles: newGuestProfiles,
+        },
+      };
+      await api.put(`/api/v1/world/${showId}/events/${eventId}`, { canon_consequences: updatedCC });
+      if (successMessage) setToast(successMessage);
+      await load();
+    } catch (err) {
+      setToast(err.response?.data?.error || err.message || 'Failed to update guests');
+    } finally {
+      setGuestSaving(false);
+    }
+  };
+
+  const toggleFeatured = (index) => {
+    const guest = guestList[index];
+    const name = guest.display_name || guest.handle || 'Guest';
+    if (!guest.featured && guestList.filter((g) => g.featured).length >= MAX_FEATURED_GUESTS) {
+      setToast(`Only ${MAX_FEATURED_GUESTS} guests can be featured at once — remove one first.`);
+      return;
+    }
+    const updated = guestList.map((g, i) => (i === index ? { ...g, featured: !g.featured } : g));
+    saveGuestProfiles(updated, guest.featured ? `Removed ${name} from Featured` : `${name} is now Featured`);
+  };
+
+  const setGuestStoryRole = (index, role) => {
+    const updated = guestList.map((g, i) => (i === index ? { ...g, story_role: role || null } : g));
+    saveGuestProfiles(updated);
+  };
+
+  const addGuestFromFeed = (profile) => {
+    if (guestList.some((g) => g.profile_id === profile.id)) {
+      setToast(`${profile.display_name || profile.handle} is already on the guest list.`);
+      return;
+    }
+    if (guestList.filter((g) => g.featured).length >= MAX_FEATURED_GUESTS) {
+      setToast(`Only ${MAX_FEATURED_GUESTS} guests can be featured at once — remove one first.`);
+      return;
+    }
+    // Same shape assembleGuestList writes (eventAutomationService.js) —
+    // profile_id, not id — so relationship-sync and every other
+    // profile_id-reading consumer finds this guest too (Task #1686).
+    const newGuest = {
+      profile_id: profile.id,
+      handle: profile.handle,
+      display_name: profile.display_name || profile.handle,
+      featured: true,
+      story_role: null,
+    };
+    setGuestFeedPickerOpen(false); setGuestFeedSearch(''); setGuestFeedResults([]);
+    saveGuestProfiles([...guestList, newGuest], `${newGuest.display_name} added and featured`);
   };
 
   const fetchNameSuggestions = async () => {
@@ -529,14 +631,73 @@ export default function EventPackagePage() {
             )}
           </div>
           <div className="epp-guests">
-            <div className="epp-fields-label">Guests</div>
-            {guestList.length ? (
-              <ul className="epp-guest-list">
-                {guestList.map((g, i) => (
-                  <li key={g.profile_id || g.handle || i}>{g.display_name || g.handle}</li>
+            <div className="epp-section-header">
+              <div className="epp-fields-label">Featured Attendees ({featuredGuests.length}/{MAX_FEATURED_GUESTS})</div>
+              {!used && (
+                <button className="epp-btn epp-btn-small" onClick={() => setGuestFeedPickerOpen(true)}>
+                  <UserPlus size={14} /> Add from Feed
+                </button>
+              )}
+            </div>
+            {featuredGuests.length ? (
+              <ul className="epp-featured-list">
+                {featuredGuests.map(({ guest, index }) => (
+                  <li key={guest.profile_id || guest.handle || index} className="epp-featured-item">
+                    <div className="epp-featured-info">
+                      <span className="epp-host-name">{guest.display_name || guest.handle}</span>
+                      {!used ? (
+                        <select
+                          className="epp-role-select"
+                          value={guest.story_role || ''}
+                          onChange={(e) => setGuestStoryRole(index, e.target.value)}
+                          disabled={guestSaving}
+                          aria-label={`Story role for ${guest.display_name || guest.handle}`}
+                        >
+                          <option value="">No role</option>
+                          {STORY_ROLES.map((r) => <option key={r} value={r}>{fmtLabel(r)}</option>)}
+                        </select>
+                      ) : guest.story_role ? (
+                        <span className="epp-saved-copy">{fmtLabel(guest.story_role)}</span>
+                      ) : null}
+                    </div>
+                    {!used && (
+                      <button type="button" className="epp-inline-link" onClick={() => toggleFeatured(index)} disabled={guestSaving}>
+                        Remove from Featured
+                      </button>
+                    )}
+                  </li>
                 ))}
               </ul>
-            ) : <div className="epp-empty">No guests yet</div>}
+            ) : <div className="epp-empty">No featured attendees yet</div>}
+
+            <button
+              type="button" className="epp-btn epp-btn-small epp-guest-list-toggle"
+              onClick={() => setFullGuestListOpen((o) => !o)}
+            >
+              {fullGuestListOpen ? 'Hide' : 'Show'} Full Guest List ({guestList.length})
+            </button>
+            {fullGuestListOpen && (
+              guestList.length ? (
+                <ul className="epp-guest-list">
+                  {guestList.map((g, i) => (
+                    <li key={g.profile_id || g.handle || i} className="epp-guest-list-item">
+                      <span>{g.display_name || g.handle}</span>
+                      {g.featured ? (
+                        <span className="epp-saved-copy">Featured</span>
+                      ) : !used && (
+                        <button
+                          type="button" className="epp-inline-link"
+                          onClick={() => toggleFeatured(i)}
+                          disabled={guestSaving || featuredGuests.length >= MAX_FEATURED_GUESTS}
+                        >
+                          Make Featured
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : <div className="epp-empty">No guests yet</div>
+            )}
           </div>
         </section>
 
@@ -697,6 +858,52 @@ export default function EventPackagePage() {
                     {sourceProfile?.id === p.id && <CheckCircle2 size={16} />}
                   </button>
                 ))
+              ) : (
+                <div className="epp-empty">No creators found</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {guestFeedPickerOpen && (
+        <div className="epp-modal-backdrop" onClick={() => setGuestFeedPickerOpen(false)}>
+          <div className="epp-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="epp-modal-header">
+              <h3>Add from Lala's Feed</h3>
+              <button className="epp-icon-btn" onClick={() => setGuestFeedPickerOpen(false)} aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="epp-modal-search">
+              <Search size={14} />
+              <input
+                autoFocus
+                placeholder="Search creators…"
+                value={guestFeedSearch}
+                onChange={(e) => setGuestFeedSearch(e.target.value)}
+              />
+            </div>
+            <div className="epp-modal-results">
+              {guestFeedSearching ? (
+                <div className="epp-empty">Searching…</div>
+              ) : guestFeedResults.length ? (
+                guestFeedResults.map((p) => {
+                  const alreadyGuest = guestList.some((g) => g.profile_id === p.id);
+                  return (
+                    <button
+                      key={p.id} className="epp-modal-result"
+                      disabled={guestSaving || alreadyGuest}
+                      onClick={() => addGuestFromFeed(p)}
+                    >
+                      <div>
+                        <div className="epp-host-name">{p.display_name || p.handle}</div>
+                        {p.handle && <div className="epp-host-handle">@{String(p.handle).replace(/^@/, '')}</div>}
+                      </div>
+                      {alreadyGuest && <CheckCircle2 size={16} />}
+                    </button>
+                  );
+                })
               ) : (
                 <div className="epp-empty">No creators found</div>
               )}

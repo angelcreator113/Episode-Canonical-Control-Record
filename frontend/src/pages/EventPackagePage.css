@@ -278,9 +278,62 @@
 }
 
 .epp-guest-list {
-  margin: 0;
-  padding-left: 18px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
   font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Featured attendees (Task #1689) */
+.epp-featured-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.epp-featured-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+  background: var(--lala-parchment-1, #FAF7F0);
+}
+.epp-featured-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.epp-role-select {
+  padding: 3px 8px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 5px;
+  font-size: 11px;
+  font-family: inherit;
+  background: var(--lala-surface, #FFFFFF);
+  color: var(--lala-ink, #2C2C2C);
+}
+
+.epp-guest-list-toggle {
+  margin-top: 10px;
+}
+
+.epp-guest-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
 }
 
 .epp-invitation-preview {
