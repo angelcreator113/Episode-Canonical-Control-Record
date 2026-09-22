@@ -642,11 +642,27 @@ function WorldAdmin() {
   // status back to 'draft' — it only cycled forward through
   // EVENT_STATUSES ('draft'→'ready'→'used'→'scripted'→'filmed'); this
   // isn't a capability the card rewrite removed, it's a pre-existing gap.
-  // 'archived' is deliberately not offered here — EVENT_EPISODE_FLOW.md
-  // §4's census of every writer in the codebase found nothing that ever
-  // writes that value; offering it here would invent a status this app
-  // doesn't otherwise use, not restore one.
-  const STATUS_OVERRIDE_OPTIONS = ['draft', 'ready', 'used', 'declined', 'filmed'];
+  //
+  // Narrowed to draft/ready only (Evoni's ruling, same task): the other
+  // three values each have their own writer with side effects a bare
+  // status PUT would skip —
+  //   - declined: only via "Decline Invite" (eventDetailModal), which
+  //     calls POST .../decline → financialPressureService.recordDeclinedInvite
+  //     for the decline bookkeeping. A raw PUT here would set the label
+  //     without that bookkeeping ever running.
+  //   - used: only by actually starting an episode (generate-episode/
+  //     inject), which also sets used_in_episode_id. Setting status:
+  //     'used' by itself here would make computeEventState's Used check
+  //     (used_in_episode_id || status === 'used'/'filmed') report a
+  //     linked episode that doesn't exist.
+  //   - filmed: only by completing an episode (episodeCompletionService),
+  //     which finalizes financials and stats. A raw PUT would mark an
+  //     event filmed without the completion it's supposed to represent.
+  // 'archived' was never offered — EVENT_EPISODE_FLOW.md §4's census of
+  // every writer in the codebase found nothing that ever writes that
+  // value; offering it here would invent a status this app doesn't
+  // otherwise use, not restore one.
+  const STATUS_OVERRIDE_OPTIONS = ['draft', 'ready'];
   const changeEventStatus = async (ev, status) => {
     try {
       const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { status });
