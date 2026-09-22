@@ -231,6 +231,27 @@ module.exports = (sequelize) => {
         },
       ],
       hooks: {
+        // Presigns thumbnail_url/video_asset_url for the response only.
+        // Task #1657: writing through the normal property setter (as this
+        // hook used to do — `scene.thumbnail_url = signedUrl`) calls
+        // Sequelize's Model#set, which marks the attribute dirty
+        // (Model#changed('thumbnail_url', true)) against the row's real
+        // stored value. A later write on the same instance can then
+        // persist that presigned, expiring URL over the real S3 key —
+        // confirmed for `scene.destroy()` (deleteLibraryScene's soft
+        // delete: Model#destroy's own save() has no field restriction and
+        // includes every currently-changed attribute); NOT confirmed for
+        // updateLibraryScene's `scene.update(updateData)` — Sequelize's
+        // Model#update excludes attributes that were already dirty before
+        // the update() call from the fields it saves, unless a
+        // beforeUpdate/beforeSave hook re-touches them (none exists here),
+        // so that specific call was not actually reproducible as a leak.
+        // Writing straight into `scene.dataValues` bypasses Model#set
+        // entirely — no setter, no `changed()` call — so the getter
+        // (`scene.thumbnail_url`, `scene.get('thumbnail_url')`,
+        // `scene.toJSON().thumbnail_url`) still returns the presigned
+        // link for every existing reader, but nothing Sequelize does
+        // later can identify it as a value to save back.
         afterFind: async (result) => {
           // Generate signed URLs for S3 assets
           const S3Service = require('../services/S3Service');
@@ -243,7 +264,7 @@ module.exports = (sequelize) => {
             // Generate signed URL for thumbnail (7 days expiry)
             if (scene.thumbnail_url && scene.thumbnail_url.startsWith('shows/')) {
               try {
-                scene.thumbnail_url = await S3Service.getPreSignedUrl(
+                scene.dataValues.thumbnail_url = await S3Service.getPreSignedUrl(
                   BUCKET_NAME,
                   scene.thumbnail_url,
                   604800 // 7 days
@@ -256,7 +277,7 @@ module.exports = (sequelize) => {
             // Generate signed URL for video (7 days expiry)
             if (scene.video_asset_url && scene.video_asset_url.startsWith('shows/')) {
               try {
-                scene.video_asset_url = await S3Service.getPreSignedUrl(
+                scene.dataValues.video_asset_url = await S3Service.getPreSignedUrl(
                   BUCKET_NAME,
                   scene.video_asset_url,
                   604800 // 7 days
