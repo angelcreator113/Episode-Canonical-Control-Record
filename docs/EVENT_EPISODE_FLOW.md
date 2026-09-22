@@ -1292,6 +1292,31 @@ relationship: multiple independent beat vocabularies and multiple writers
 of the same beat-shaped storage, none of them aware of each other or of
 this rule. That census records the gap; it does not close it.
 
+**(k) `event_type` stays the mechanic; events gain `category` and `format`
+(Evoni, 2026-09-22, Task #1635).** `world_events.event_type`
+(`invite | upgrade | guest | fail_test | deliverable | brand_deal`) keeps
+its existing meaning — no separate "purpose" field is added alongside it.
+Two new fields are ruled instead:
+
+- **`category`** — one of ten, settled: `fashion`, `social`,
+  `brunch_dining`, `beauty_wellness`, `creator_brand`,
+  `arts_entertainment`, `luxury_prestige`, `community_local`,
+  `travel_destination`, `personal_relationship`.
+- **`format`** — not yet settled. `docs/EVENT_TAXONOMY_PLAN.md` (Task
+  #1635) proposes a list drawn from existing format-like values (the
+  `QuickEpisodeCreator` presets, the Events-tab template cards, the
+  photo-booth gala/premiere/launch check) for Evoni's approval; this
+  ruling fixes only that a `format` field exists, not its vocabulary.
+
+Two things must happen before any migration is written, both named by
+Evoni directly: a drift check on `world_events` against the 2026-09-17
+canon capture (three other tables have already turned out to differ
+between production and this repo's migrations — a migration written blind
+against the repo could fail on production or land on the wrong shape),
+and Evoni's approval of the format list once drafted. `docs/EVENT_TAXONOMY_PLAN.md`
+performs the drift check and drafts the list; it does not write the
+migration.
+
 ---
 
 ## 9. Owed before enforcement
