@@ -23,6 +23,7 @@ import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItem
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
+import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel } from '../utils/eventReadiness';
 import './WorldAdmin.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -149,21 +150,10 @@ const EMPTY_EVENT = {
 };
 
 // ─── DIFFICULTY SCORING ───
-function calcDifficulty(ev) {
-  const p = ev.prestige || 5;
-  const s = ev.strictness || 5;
-  const dressComplexity = (ev.dress_code_keywords?.length || 0) * 0.5;
-  const deadlineWeight = { none: 0, low: 1, medium: 2, high: 3, tonight: 4, urgent: 5 }[ev.deadline_type] || 2;
-  const raw = (p * 0.35) + (s * 0.3) + (deadlineWeight * 0.2) + (dressComplexity * 0.15);
-  return Math.min(10, Math.max(1, Math.round(raw * 10) / 10));
-}
-
-function difficultyLabel(score) {
-  if (score <= 3) return { text: 'Easy', color: '#16a34a', bg: '#f0fdf4' };
-  if (score <= 5) return { text: 'Medium', color: '#b45309', bg: '#fef3c7' };
-  if (score <= 7) return { text: 'Hard', color: '#dc2626', bg: '#fef2f2' };
-  return { text: 'Extreme', color: '#7c3aed', bg: '#faf5ff' };
-}
+// calcDifficulty/difficultyLabel extracted to ../utils/eventReadiness.js
+// as calcEventDifficulty/eventDifficultyLabel (shared with EventPackagePage).
+const calcDifficulty = calcEventDifficulty;
+const difficultyLabel = eventDifficultyLabel;
 
 // ─── EVENT STATUS PIPELINE ───
 const EVENT_STATUSES = ['draft', 'ready', 'used', 'scripted', 'filmed'];
@@ -3245,25 +3235,10 @@ The revised event should feel like a completely different experience from the si
                     the creator at a glance what the AI will have to work
                     with. Each chip is green when set, yellow when missing. */}
                 {(() => {
-                  // Mirror the display logic above (line ~2933) which falls back
-                  // to canon_consequences.automation.venue_* when the top-level
-                  // venue columns are empty. Feed-profile events created before
-                  // the worldEvents.js from-profile route was patched to set
-                  // top-level venue_location_id (commit 3d4d1d26) only have
-                  // venue data in JSONB, so a column-only check would say
-                  // "Venue ⚠" while the card right above it shows the venue.
-                  const auto = ev.canon_consequences?.automation || {};
-                  const hasOutfit = !!ev.outfit_set_id || (Array.isArray(ev.outfit_pieces) && ev.outfit_pieces.length > 0);
-                  const hasVenue = !!ev.venue_location_id || !!ev.venue_name || !!auto.venue_location_id || !!auto.venue_name;
-                  const hasScene = !!ev.scene_set_id;
-                  const hasInvite = !!ev.invitation_asset_id;
-                  const checks = [
-                    { key: 'outfit', icon: '👗', label: 'Outfit', ok: hasOutfit },
-                    { key: 'venue', icon: '📍', label: 'Venue', ok: hasVenue },
-                    { key: 'scene', icon: '🎬', label: 'Scene', ok: hasScene },
-                    { key: 'invite', icon: '💌', label: 'Invite', ok: hasInvite },
-                  ];
-                  const allReady = checks.every(c => c.ok);
+                  // computeEventReadiness (../utils/eventReadiness.js) — shared
+                  // with EventPackagePage so the Events card and the Event
+                  // Package page never disagree on what "ready" means.
+                  const { checks, allReady } = computeEventReadiness(ev);
                   return (
                     <div style={{ display: 'flex', gap: 4, marginTop: 4, paddingTop: 6, borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', alignItems: 'center' }}>
                       <span style={{ fontSize: 9, fontWeight: 700, color: allReady ? '#16a34a' : '#94a3b8', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, marginRight: 4 }}>

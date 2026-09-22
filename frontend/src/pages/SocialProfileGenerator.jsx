@@ -357,14 +357,16 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     finally{setGenerating(false);}
   };
 
-  // ── Choose-host mode: create the event and open it in Producer Mode ──
+  // ── Choose-host mode: create the event and open its Event Package page ──
+  // (Task #1642 — New Episode lands on the Event Package page instead of
+  // Producer Mode's event editor modal, which "Edit details" still opens.)
   const handleHostEvent = async(profile)=>{
     if(!showId||!profile?.id)return;
     setHostingProfileId(profile.id);setError(null);
     try{
       const data=await createEventFromProfileApi(showId,{profile_id:profile.id,event_template:'Event'});
       const ev=data.event;
-      if(ev?.id)navigate(`/shows/${showId}/world?tab=events&event=${ev.id}`);
+      if(ev?.id)navigate(`/shows/${showId}/events/${ev.id}`);
       else setError('Event created but no event id was returned.');
     }catch(err){setError(err.response?.data?.error||err.message||'Failed to create event');}
     finally{setHostingProfileId(null);}
