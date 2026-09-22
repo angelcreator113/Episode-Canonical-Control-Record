@@ -65,6 +65,7 @@ const EpisodeReview = lazy(() => import('./pages/EpisodeReview'));
 const EvaluateEpisode = lazy(() => import('./pages/EvaluateEpisode'));
 const EpisodeTodoPage = lazy(() => import('./pages/EpisodeTodoPage'));
 const WorldAdmin = lazy(() => import('./pages/WorldAdmin'));
+const EventPackagePage = lazy(() => import('./pages/EventPackagePage'));
 const WorldStudio = lazy(() => import('./pages/WorldStudio'));
 const SceneStudio = lazy(() => import('./pages/SceneStudio'));
 const SceneStudioPage = lazy(() => import('./pages/SceneStudioPage'));
@@ -376,6 +377,7 @@ function AppContent() {
           <Route path="/shows/:id/world" element={<WorldAdmin />} />
           <Route path="/shows/:showId/quick-episode" element={<QuickEpisodeCreator />} />
           <Route path="/shows/:showId/new-episode" element={<NewEpisodeChooseHost />} />
+          <Route path="/shows/:showId/events/:eventId" element={<EventPackagePage />} />
           <Route path="/shows/:id/settings" element={<ShowSettings />} />
           {/* Studio — universe-level entry points */}
           <Route path="/studio/timeline" element={<StudioTimelinePage />} />

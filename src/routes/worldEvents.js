@@ -116,6 +116,91 @@ router.get('/world/:showId/events', requireAuth, async (req, res) => {
 
 
 // ═══════════════════════════════════════════
+// GET /api/v1/world/:showId/events/:eventId
+// Single event, full row — added for the Event Package page (Task #1642).
+// The list route above scopes `attributes` to WorldEvent.CURRENT_ATTRIBUTES
+// (WorldEvent.js:331-355), which deliberately excludes venue_name/
+// venue_address/event_date/event_time/category/format so it stays safe on
+// an un-migrated DB. The Event Package page's Basics and Place sections
+// need exactly those columns, so this route reads the row directly with
+// raw SQL (the same tolerate-whatever-columns-exist pattern already used
+// by /affordability, /decline, and /financial-forecast in this file)
+// instead of going through the model.
+// ═══════════════════════════════════════════
+
+router.get('/world/:showId/events/:eventId', requireAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+
+    const [rows] = await models.sequelize.query(
+      'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL LIMIT 1',
+      { replacements: { eventId, showId } }
+    );
+    const event = rows[0];
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
+
+    if (typeof event.canon_consequences === 'string') {
+      try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
+    }
+    if (typeof event.outfit_pieces === 'string') {
+      try { event.outfit_pieces = JSON.parse(event.outfit_pieces); } catch { event.outfit_pieces = []; }
+    }
+    if (typeof event.requirements === 'string') {
+      try { event.requirements = JSON.parse(event.requirements); } catch { event.requirements = {}; }
+    }
+
+    // People — host, from the durable FK (WorldEvent.js:97), shown as the
+    // linked creator. Null source_profile_id means "not linked" — the page
+    // falls back to the legacy `host` text field in that case.
+    let sourceProfile = null;
+    if (event.source_profile_id && models.SocialProfile) {
+      sourceProfile = await models.SocialProfile.findByPk(event.source_profile_id, {
+        attributes: ['id', 'handle', 'display_name', 'platform'],
+      }).catch(() => null);
+    }
+
+    // Place — the linked scene set's name
+    let sceneSet = null;
+    if (event.scene_set_id && models.SceneSet) {
+      sceneSet = await models.SceneSet.findByPk(event.scene_set_id, {
+        attributes: ['id', 'name'],
+      }).catch(() => null);
+    }
+
+    // Invitation — status + preview
+    let invitationAsset = null;
+    if (event.invitation_asset_id && models.Asset) {
+      invitationAsset = await models.Asset.findByPk(event.invitation_asset_id, {
+        attributes: ['id', 's3_url_processed', 's3_url_raw', 'approval_status'],
+      }).catch(() => null);
+    }
+
+    // Used events — hide Change Host / Edit details / Start Episode once set
+    let usedInEpisode = null;
+    if (event.used_in_episode_id && models.Episode) {
+      usedInEpisode = await models.Episode.findByPk(event.used_in_episode_id, {
+        attributes: ['id', 'episode_number', 'title'],
+      }).catch(() => null);
+    }
+
+    return res.json({
+      success: true,
+      event,
+      sourceProfile: sourceProfile ? sourceProfile.toJSON() : null,
+      sceneSet: sceneSet ? sceneSet.toJSON() : null,
+      invitationAsset: invitationAsset ? invitationAsset.toJSON() : null,
+      usedInEpisode: usedInEpisode ? usedInEpisode.toJSON() : null,
+    });
+  } catch (error) {
+    console.error('Get single event error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to load event', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
 // POST /api/v1/world/:showId/events
 // ═══════════════════════════════════════════
 
@@ -329,6 +414,9 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // the brief. Settable from the WorldAdmin event form's Narrative
       // Chain section.
       'parent_event_id', 'chain_position', 'chain_reason',
+      // Host (Event Package page, Change Host — Task #1642). Durable FK to
+      // social_profiles, integer PK (not a UUID) — see WorldEvent.js:97.
+      'source_profile_id',
     ];
     const _requiredStringFields = new Set(['name', 'event_type', 'status']);
 
@@ -336,7 +424,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     const replacements = { showId, eventId };
     const integerFields = new Set([
       'prestige', 'cost_coins', 'strictness', 'deadline_minutes',
-      'browse_pool_size', 'payment_amount', 'career_tier',
+      'browse_pool_size', 'payment_amount', 'career_tier', 'source_profile_id',
     ]);
     const uuidFields = new Set([
       'season_id', 'arc_id', 'scene_set_id', 'source_calendar_event_id',
@@ -477,7 +565,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
           'browse_pool_bias', 'browse_pool_size', 'scene_set_id',
           'is_paid', 'payment_amount', 'career_tier',
           'career_milestone', 'fail_consequence', 'success_unlock',
-          'updated_at',
+          'source_profile_id', 'updated_at',
         ]);
 
         // Stash venue/event fields into canon_consequences.automation if columns don't exist
