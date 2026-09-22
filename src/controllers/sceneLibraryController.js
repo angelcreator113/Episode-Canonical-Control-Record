@@ -315,7 +315,11 @@ exports.updateLibraryScene = async (req, res) => {
     if (tags !== undefined) updateData.tags = tags;
     if (characters !== undefined) updateData.characters = characters;
 
-    await scene.update(updateData);
+    // Explicit `fields` (Task #1657): saves only the columns this request
+    // actually named, regardless of what else Sequelize's dirty-tracking
+    // considers "changed" on this instance (the afterFind hook's presign,
+    // or any future field this route doesn't yet know about).
+    await scene.update(updateData, { fields: Object.keys(updateData) });
 
     res.status(200).json({
       success: true,
