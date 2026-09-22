@@ -23,7 +23,8 @@ import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItem
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
-import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel } from '../utils/eventReadiness';
+import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, computeEventState, EVENT_QUEUE_STATES } from '../utils/eventReadiness';
+import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles } from 'lucide-react';
 import './WorldAdmin.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -410,10 +411,14 @@ function WorldAdmin() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [aiFixLoading, setAiFixLoading] = useState(false);
   const [aiFixSuggestions, setAiFixSuggestions] = useState(null);
-  // Auto-Reorder previews its plan before touching the DB. null = no
-  // preview open; otherwise an array of { ep, current, proposed, changed }.
-  const [reorderPlan, setReorderPlan] = useState(null);
-  const [reorderApplying, setReorderApplying] = useState(false);
+  // Events-queue overflow menus (Task #1648) — the header's own admin
+  // actions, and which single card's per-event "⋯" menu is open (null =
+  // none; only one open at a time).
+  const [eventsHeaderMenuOpen, setEventsHeaderMenuOpen] = useState(false);
+  const [openEventMenuId, setOpenEventMenuId] = useState(null);
+  // Which open card menu is showing the "Change status" sub-list (null =
+  // none; the menu's normal item list otherwise).
+  const [statusMenuEventId, setStatusMenuEventId] = useState(null);
   const [aiRevising, setAiRevising] = useState(false);
   const [compareEvents, setCompareEvents] = useState(null); // [eventA, eventB]
   const [generating, setGenerating] = useState(false);
@@ -632,6 +637,43 @@ function WorldAdmin() {
     setEditingEvent('new');
   };
 
+  // Manual status override (Task #1648 follow-up, before Evoni's go on
+  // #1649). advanceEventStatus never let anyone reach 'declined' or set
+  // status back to 'draft' — it only cycled forward through
+  // EVENT_STATUSES ('draft'→'ready'→'used'→'scripted'→'filmed'); this
+  // isn't a capability the card rewrite removed, it's a pre-existing gap.
+  //
+  // Narrowed to draft/ready only (Evoni's ruling, same task): the other
+  // three values each have their own writer with side effects a bare
+  // status PUT would skip —
+  //   - declined: only via "Decline Invite" (eventDetailModal), which
+  //     calls POST .../decline → financialPressureService.recordDeclinedInvite
+  //     for the decline bookkeeping. A raw PUT here would set the label
+  //     without that bookkeeping ever running.
+  //   - used: only by actually starting an episode (generate-episode/
+  //     inject), which also sets used_in_episode_id. Setting status:
+  //     'used' by itself here would make computeEventState's Used check
+  //     (used_in_episode_id || status === 'used'/'filmed') report a
+  //     linked episode that doesn't exist.
+  //   - filmed: only by completing an episode (episodeCompletionService),
+  //     which finalizes financials and stats. A raw PUT would mark an
+  //     event filmed without the completion it's supposed to represent.
+  // 'archived' was never offered — EVENT_EPISODE_FLOW.md §4's census of
+  // every writer in the codebase found nothing that ever writes that
+  // value; offering it here would invent a status this app doesn't
+  // otherwise use, not restore one.
+  const STATUS_OVERRIDE_OPTIONS = ['draft', 'ready'];
+  const changeEventStatus = async (ev, status) => {
+    try {
+      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { status });
+      if (res.data.success) {
+        setWorldEvents(prev => prev.map(e => e.id === ev.id ? { ...e, ...res.data.event, status } : e));
+        setToast(`${ev.name} → ${status}`);
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+  };
+
   const bulkInject = async (episodeId) => {
     for (const eventId of selectedEvents) {
       try { await injectEvent(eventId, episodeId); } catch {}
@@ -783,52 +825,9 @@ function WorldAdmin() {
     } catch { setToast('Failed to swap'); setTimeout(() => setToast(null), 3000); }
   };
 
-  // Auto-reorder all events by prestige ascending
-  // Build a preview of the prestige-low-to-high reassignment without
-  // touching anything. The previous version went straight to a confirm()
-  // and silently overwrote curated assignments — this surfaces every
-  // change so the user can back out before committing.
-  const handleAutoReorder = () => {
-    const linked = worldEvents.filter(ev => ev.used_in_episode_id);
-    if (linked.length === 0) {
-      setToast('No linked events to reorder'); setTimeout(() => setToast(null), 3000); return;
-    }
-    const sortedByPrestige = [...linked].sort((a, b) => (a.prestige || 0) - (b.prestige || 0));
-    const sortedEps = [...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
-
-    const plan = sortedEps.map((ep, i) => {
-      const current = worldEvents.find(ev => ev.used_in_episode_id === ep.id) || null;
-      const proposed = sortedByPrestige[i] || null;
-      return {
-        ep,
-        current,
-        proposed,
-        changed: (current?.id || null) !== (proposed?.id || null),
-      };
-    });
-    setReorderPlan(plan);
-  };
-
-  const applyReorderPlan = async () => {
-    if (!reorderPlan) return;
-    const changes = reorderPlan.filter(p => p.changed && p.proposed);
-    if (changes.length === 0) { setReorderPlan(null); return; }
-    setReorderApplying(true);
-    try {
-      for (const p of changes) {
-        await api.post(`/api/v1/world/${showId}/events/${p.proposed.id}/inject`, { episode_id: p.ep.id });
-      }
-      setToast(`✅ Reordered ${changes.length} event${changes.length === 1 ? '' : 's'} by prestige`);
-      setTimeout(() => setToast(null), 3000);
-      setReorderPlan(null);
-      loadData();
-    } catch (err) {
-      setToast(`Reorder failed: ${err.response?.data?.error || err.message}`);
-      setTimeout(() => setToast(null), 3000);
-    } finally {
-      setReorderApplying(false);
-    }
-  };
+  // handleAutoReorder/applyReorderPlan moved to SeasonTab (Task #1648,
+  // docs/EVENT_EPISODE_FLOW.md §8(m)) — episode sequencing belongs on the
+  // Episodes tab's Season Arc view, not the Events queue.
 
   // Merge duplicate events — keep first, delete second
   const handleMergeDuplicates = async (keepEvent, removeEvent) => {
@@ -1074,19 +1073,10 @@ The revised event should feel like a completely different experience from the si
     });
   };
 
-  // ── Event status pipeline ──
-  const advanceEventStatus = async (ev) => {
-    const currentIdx = EVENT_STATUSES.indexOf(ev.status || 'draft');
-    const nextStatus = EVENT_STATUSES[Math.min(currentIdx + 1, EVENT_STATUSES.length - 1)];
-    try {
-      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { status: nextStatus });
-      if (res.data.success) {
-        setWorldEvents(prev => prev.map(e => e.id === ev.id ? { ...e, ...res.data.event, status: nextStatus } : e));
-        setToast(`${ev.name} → ${EVENT_STATUS_CONFIG[nextStatus]?.label}`);
-        setTimeout(() => setToast(null), 3000);
-      }
-    } catch {}
-  };
+  // advanceEventStatus removed (Task #1648) — its only call site was the
+  // Events card's old status-cycling pill, replaced by the computed-state
+  // badge; EVENT_STATUSES/EVENT_STATUS_CONFIG stay, still used elsewhere
+  // (e.g. the Episode Ledger's status display).
 
   // ── Bulk AI Enhance ──
   const handleBulkEnhance = async () => {
@@ -1520,7 +1510,7 @@ The revised event should feel like a completely different experience from the si
 
       {/* ════════════════════════ SEASON ════════════════════════ */}
       {activeTab === 'episodes' && subTab === 'season' && (
-        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} setToast={setToast} />
+        <SeasonTab showId={showId} api={api} S={S} episodes={episodes} worldEvents={worldEvents} loadData={loadData} setToast={setToast} />
       )}
 
       {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
@@ -1854,22 +1844,20 @@ The revised event should feel like a completely different experience from the si
       {/* ════════════════════════ EVENTS LIBRARY ════════════════════════ */}
       {activeTab === 'events' && (
         <div style={S.content}>
-          {/* Header — simplified with primary auto-fill action */}
+          {/* Header — a queue, not an editor (docs/EVENT_EPISODE_FLOW.md §8(m),
+              Evoni's ruling, Task #1648). Counts below come from the same
+              five computed states the filter bar and cards use
+              (computeEventState, ../utils/eventReadiness.js) — not the raw,
+              inconsistently-written world_events.status column §4 of that
+              doc already documents. */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
             <div>
               <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Events</h2>
               <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                {/* Feed Events and Events Library merged into this one tab
-                    (docs/PAGE_INVENTORY.md §4) — drafts and published events
-                    share the same list now, split by the status filter below
-                    instead of by tab. */}
-                {worldEvents.length} events · {worldEvents.filter(e => e.status === 'draft').length} draft · {worldEvents.filter(e => e.status === 'used').length} used · {worldEvents.filter(e => e.status === 'ready').length} available
+                {worldEvents.length} events
               </div>
-              <Link to={`/shows/${showId}/new-episode`} style={{ fontSize: 12, color: '#6366f1', textDecoration: 'underline' }}>
-                Choose a host from Lala's Feed
-              </Link>
             </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', position: 'relative' }}>
               <button onClick={async () => {
                 setAutoFilling(true);
                 setToast('🗓️ Generating events for this month...');
@@ -1909,26 +1897,45 @@ The revised event should feel like a completely different experience from the si
               }} disabled={autoFilling} style={{ ...S.primaryBtn, background: '#B8962E' }}>
                 {autoFilling ? '⏳ Generating...' : '🗓️ Auto-Fill This Month'}
               </button>
-              <button onClick={openNewEvent} style={S.primaryBtn}>+ Create Event</button>
-              <button onClick={() => setShowTemplates(!showTemplates)} style={S.smBtn}>📋 Templates</button>
-              <button onClick={handleBulkEnhance} disabled={aiFixLoading} style={S.smBtn}>{aiFixLoading ? '⏳...' : '✨ Enhance'}</button>
-              <button onClick={async () => {
-                if (!window.confirm('Delete ALL draft events? Ready/used events will be kept.')) return;
-                try {
-                  const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
-                  setToast(`Deleted ${res.data.deleted} draft events`);
-                  loadData();
-                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-              }} style={{ ...S.smBtn, color: '#dc2626', borderColor: '#fecaca' }}>Delete Drafts</button>
-              <button onClick={async () => {
-                if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
-                if (!window.confirm('Really delete everything? Type yes to confirm.')) return;
-                try {
-                  const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
-                  setToast(`Deleted ${res.data.deleted} events`);
-                  loadData();
-                } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-              }} style={{ ...S.smBtn, color: '#dc2626', borderColor: '#fecaca' }}>Delete All</button>
+              {/* + New Event opens the choose-host flow (Task #1628), same
+                  entry point as New Episode — an event created here always
+                  starts with a host, unlike the system-created paths (Needs
+                  Host below). Manual/no-host creation is still reachable
+                  from the empty state's "+ Create Manually". */}
+              <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={S.primaryBtn}>
+                <Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New Event
+              </button>
+              <button onClick={() => setEventsHeaderMenuOpen(o => !o)} style={S.smBtn} title="More actions" aria-label="More actions">
+                <MoreHorizontal size={16} />
+              </button>
+              {eventsHeaderMenuOpen && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setEventsHeaderMenuOpen(false)} />
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 41, minWidth: 180, overflow: 'hidden' }}>
+                    <button onClick={() => { setShowTemplates(!showTemplates); setEventsHeaderMenuOpen(false); }} style={S.menuItem}>📋 Templates</button>
+                    <button onClick={() => { handleBulkEnhance(); setEventsHeaderMenuOpen(false); }} disabled={aiFixLoading} style={S.menuItem}>{aiFixLoading ? '⏳ Enhancing...' : '✨ Enhance'}</button>
+                    <button onClick={async () => {
+                      setEventsHeaderMenuOpen(false);
+                      if (!window.confirm('Delete ALL draft events? Ready/used events will be kept.')) return;
+                      try {
+                        const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all_drafts: true });
+                        setToast(`Deleted ${res.data.deleted} draft events`);
+                        loadData();
+                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                    }} style={{ ...S.menuItem, color: '#dc2626' }}>Delete Drafts</button>
+                    <button onClick={async () => {
+                      setEventsHeaderMenuOpen(false);
+                      if (!window.confirm('DELETE ALL EVENTS? This cannot be undone. Are you sure?')) return;
+                      if (!window.confirm('Really delete everything? Type yes to confirm.')) return;
+                      try {
+                        const res = await api.post(`/api/v1/world/${showId}/events/bulk-delete`, { delete_all: true });
+                        setToast(`Deleted ${res.data.deleted} events`);
+                        loadData();
+                      } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                    }} style={{ ...S.menuItem, color: '#dc2626' }}>Delete All</button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -2347,9 +2354,8 @@ The revised event should feel like a completely different experience from the si
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>Story Logic Warnings ({warnings.length})</div>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={handleAutoReorder} style={{ padding: '5px 12px', background: '#fff', border: '1px solid #fde68a', borderRadius: 8, fontSize: 10, fontWeight: 700, color: '#b45309', cursor: 'pointer' }}>
-                      📊 Auto-Reorder
-                    </button>
+                    {/* Auto-Reorder moved to the Episodes tab's Season Arc
+                        view (Task #1648, docs/EVENT_EPISODE_FLOW.md §8(m)). */}
                     <button onClick={() => handleAiRebalance()} disabled={aiFixLoading} style={{ padding: '5px 12px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 10, fontWeight: 700, color: '#7c3aed', cursor: 'pointer' }}>
                       🔄 Rebalance
                     </button>
@@ -2511,19 +2517,17 @@ The revised event should feel like a completely different experience from the si
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <input type="text" value={eventSearch} onChange={e => setEventSearch(e.target.value)} placeholder="Search events..."
               style={{ flex: 1, minWidth: 180, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
-            <div style={{ display: 'flex', gap: 3, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+            <div style={{ display: 'flex', gap: 3, background: '#f1f5f9', borderRadius: 8, padding: 3, flexWrap: 'wrap' }}>
               {[
-                /* All + one chip per status value docs/EVENT_EPISODE_FLOW.md
-                   §4 confirms something actually writes (draft, ready, used,
-                   filmed, declined) — 'scripted' is checked by the UI
-                   elsewhere but written by nothing, so it gets no chip here;
-                   an event that somehow carries it still shows under "All". */
+                /* Filter bar over the five computed queue states (Task
+                   #1648, docs/EVENT_EPISODE_FLOW.md §8(m)) — replaces the
+                   old raw world_events.status chips. computeEventState is
+                   the same function the cards below use, so a count here
+                   always matches what's actually shown. */
                 { key: 'all', label: 'All', count: worldEvents.length },
-                { key: 'draft', label: 'Draft', count: worldEvents.filter(e => e.status === 'draft').length },
-                { key: 'ready', label: 'Ready', count: worldEvents.filter(e => e.status === 'ready').length },
-                { key: 'used', label: 'Used', count: worldEvents.filter(e => e.status === 'used').length },
-                { key: 'filmed', label: 'Filmed', count: worldEvents.filter(e => e.status === 'filmed').length },
-                { key: 'declined', label: 'Declined', count: worldEvents.filter(e => e.status === 'declined').length },
+                ...Object.entries(EVENT_QUEUE_STATES).map(([key, cfg]) => ({
+                  key, label: cfg.label, count: worldEvents.filter(e => computeEventState(e) === key).length,
+                })),
               ].map(f => (
                 <button key={f.key} onClick={() => setEventStatusFilter(f.key)} style={{
                   padding: '4px 10px', border: 'none', borderRadius: 6,
@@ -3095,10 +3099,10 @@ The revised event should feel like a completely different experience from the si
             {worldEvents.filter(ev => {
               const q = eventSearch.toLowerCase();
               const matchSearch = !q || ev.name?.toLowerCase().includes(q) || ev.host?.toLowerCase().includes(q) || ev.dress_code?.toLowerCase().includes(q) || ev.location_hint?.toLowerCase().includes(q);
-              // Drafts now list here too (Feed Events merged into this tab) —
-              // the status filter chips above decide what's visible, not a
-              // hard exclusion.
-              const matchStatus = eventStatusFilter === 'all' || ev.status === eventStatusFilter;
+              // Filters by the same computed queue state the chips above
+              // count and the cards below display (Task #1648) — not the
+              // raw world_events.status.
+              const matchStatus = eventStatusFilter === 'all' || computeEventState(ev) === eventStatusFilter;
               return matchSearch && matchStatus;
             }).sort((a, b) => {
               if (eventSort === 'prestige') return (b.prestige || 0) - (a.prestige || 0);
@@ -3108,232 +3112,113 @@ The revised event should feel like a completely different experience from the si
               return (a.name || '').localeCompare(b.name || '');
             }).map(ev => {
               const linkedEpisode = ev.used_in_episode_id ? episodes.find(ep => ep.id === ev.used_in_episode_id) : null;
-              const linkedScene = ev.scene_set_id ? sceneSets.find(ss => ss.id === ev.scene_set_id) : null;
               const isSelected = selectedEvents.has(ev.id);
-              const difficulty = calcDifficulty(ev);
-              const diff = difficultyLabel(difficulty);
+              const state = computeEventState(ev);
+              const stateCfg = EVENT_QUEUE_STATES[state];
+              const auto = ev.canon_consequences?.automation || {};
+              const hostName = (ev.source_profile_id || auto.host_profile_id)
+                ? (auto.host_display_name || ev.host || auto.host_handle || 'Linked host')
+                : null;
+              const venueName = ev.venue_name || auto.venue_name || null;
+              const { checks } = computeEventReadiness(ev);
+              const missing = checks.filter(c => !c.ok).map(c => c.label);
+              const menuOpen = openEventMenuId === ev.id;
+              const openPackage = () => navigate(`/shows/${showId}/events/${ev.id}`);
+              const primaryAction = () => {
+                if (state === 'used') { if (linkedEpisode) navigate(`/episodes/${linkedEpisode.id}`); return; }
+                openPackage();
+              };
               return (
-              <div key={ev.id} style={{ ...S.evCard, cursor: 'pointer', border: isSelected ? '2px solid #6366f1' : undefined, overflow: 'hidden' }} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : setEventDetailModal(ev)}>
-                {/* Scene set thumbnail banner */}
-                {linkedScene?.base_still_url && (
-                  <div style={{ height: 60, marginTop: -12, marginLeft: -12, marginRight: -12, marginBottom: 8, overflow: 'hidden', position: 'relative' }}>
-                    <img src={linkedScene.base_still_url} alt={linkedScene.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
-                    <div style={{ position: 'absolute', bottom: 4, left: 8, fontSize: 9, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.5)', padding: '1px 6px', borderRadius: 4 }}>
-                      📍 {linkedScene.name}
-                    </div>
-                  </div>
-                )}
-                {/* Mini mood board — scene set angles */}
-                {linkedScene?.angles && linkedScene.angles.length > 1 && (
-                  <div style={{ display: 'flex', gap: 2, marginBottom: 6, marginTop: linkedScene?.base_still_url ? 0 : -4 }}>
-                    {linkedScene.angles.filter(a => a.still_image_url).slice(0, 5).map(a => (
-                      <img key={a.id} src={a.still_image_url} alt={a.angle_label} style={{ width: 36, height: 24, objectFit: 'cover', borderRadius: 3, opacity: 0.8 }} title={a.angle_label} />
-                    ))}
-                  </div>
-                )}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div key={ev.id} data-testid={`event-card-${ev.id}`} style={{ ...S.evCard, cursor: 'pointer', border: isSelected ? '2px solid #6366f1' : undefined, overflow: 'visible', position: 'relative' }} onClick={() => bulkMode ? toggleSelectEvent(ev.id) : openPackage()}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
                   {bulkMode && (
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelectEvent(ev.id)} onClick={e => e.stopPropagation()}
-                      style={{ width: 16, height: 16, accentColor: '#6366f1', cursor: 'pointer' }} />
+                      style={{ width: 16, height: 16, accentColor: '#6366f1', cursor: 'pointer', marginTop: 2 }} />
                   )}
-                  <span style={{ fontSize: 18 }}>{EVENT_TYPE_ICONS[ev.event_type] || '📌'}</span>
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: 0, flex: 1 }}>{ev.name}</h3>
-                  <span onClick={e2 => { e2.stopPropagation(); advanceEventStatus(ev); }} style={{ ...S.statusPill(ev.status), cursor: 'pointer' }} title={`Click to advance → ${EVENT_STATUS_CONFIG[EVENT_STATUSES[Math.min(EVENT_STATUSES.indexOf(ev.status || 'draft') + 1, EVENT_STATUSES.length - 1)]]?.label || ''}`}>{EVENT_STATUS_CONFIG[ev.status]?.icon || '○'} {ev.status}</span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-                  <span style={S.eTag}>⭐ {ev.prestige}</span>
-                  <span style={S.eTag}>🪙 {ev.cost_coins}</span>
-                  <span style={S.eTag}>⏰ {ev.deadline_type}</span>
-                  {ev.dress_code && <span style={S.eTag}>👗 {ev.dress_code}</span>}
-                  <span style={{ padding: '2px 8px', background: diff.bg, color: diff.color, borderRadius: 6, fontSize: 10, fontWeight: 700 }}>🎯 {difficulty} {diff.text}</span>
-                </div>
-                {/* Host, venue, guests from automation */}
-                {(() => {
-                  const auto = ev.canon_consequences?.automation;
-                  return (
-                    <div style={{ marginBottom: 6 }}>
-                      {(ev.host || auto?.host_handle) && (
-                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>
-                          👤 {ev.host || auto?.host_display_name}{auto?.host_handle ? ` (${auto.host_handle})` : ''}{ev.host_brand ? ` — ${ev.host_brand}` : ''}
+                  <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => { setOpenEventMenuId(menuOpen ? null : ev.id); setStatusMenuEventId(null); }} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: '#94a3b8', borderRadius: 4 }} title="More actions" aria-label="More actions">
+                      <MoreHorizontal size={16} />
+                    </button>
+                    {menuOpen && (
+                      <>
+                        <div data-testid="event-menu-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => { setOpenEventMenuId(null); setStatusMenuEventId(null); }} />
+                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 41, minWidth: 200, overflow: 'hidden' }}>
+                          <button onClick={() => { setEventDetailModal(ev); setOpenEventMenuId(null); }} style={S.menuItem}>Edit details</button>
+                          <button onClick={() => { copyEvent(ev); setOpenEventMenuId(null); }} style={S.menuItem}>Duplicate as New Event</button>
+                          {statusMenuEventId === ev.id ? (
+                            <div style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <div style={{ padding: '6px 14px 2px', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Change status to…</div>
+                              {STATUS_OVERRIDE_OPTIONS.map(s => (
+                                <button key={s} disabled={s === ev.status} onClick={() => { changeEventStatus(ev, s); setStatusMenuEventId(null); setOpenEventMenuId(null); }}
+                                  style={{ ...S.menuItem, borderBottom: 'none', paddingLeft: 24, opacity: s === ev.status ? 0.4 : 1, cursor: s === ev.status ? 'default' : 'pointer' }}>
+                                  {s}{s === ev.status ? ' (current)' : ''}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <button onClick={() => setStatusMenuEventId(ev.id)} style={S.menuItem}>Change status…</button>
+                          )}
+                          <div style={S.menuItem}><InvitationButton event={ev} showId={showId} onGenerated={() => loadData()} /></div>
+                          <button onClick={async () => {
+                            setOpenEventMenuId(null);
+                            setOutfitPickerEvent(ev);
+                            setOutfitSelected(new Set());
+                            setOutfitScore(null);
+                            setOutfitSlotFilter('all');
+                            setOutfitTierFilter('all');
+                            setOutfitHideWorn(false);
+                            setOutfitShowAllRepeats(false);
+                            try {
+                              const res = await api.get(`/api/v1/world/${showId}/events/${ev.id}/wardrobe-options`);
+                              setOutfitOptions(res.data.items || []);
+                              const existing = await api.get(`/api/v1/world/${showId}/events/${ev.id}/outfit`);
+                              if (existing.data.pieces?.length > 0) {
+                                setOutfitSelected(new Set(existing.data.pieces.map(p => p.id)));
+                                setOutfitScore(existing.data.score);
+                              }
+                            } catch { setOutfitOptions([]); }
+                          }} style={S.menuItem}>👗 Outfit</button>
+                          {linkedEpisode && (
+                            <button onClick={async () => {
+                              setOpenEventMenuId(null);
+                              if (!window.confirm(`Regenerate this episode? "${linkedEpisode.title || 'Untitled'}" will be soft-deleted and a fresh episode created from this event.`)) return;
+                              try {
+                                setToast(`🎬 Regenerating episode${draftScriptOnGenerate ? ' + script' : ''}...`);
+                                const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/regenerate-episode`);
+                                if (res.data.success) {
+                                  if (draftScriptOnGenerate && res.data.data?.episode?.id) {
+                                    try { await api.post(`/api/v1/world/${showId}/events/${ev.id}/generate-script`, { episode_id: res.data.data.episode.id }); } catch { /* non-fatal */ }
+                                  }
+                                  const ep = res.data.data.episode;
+                                  setToast(`✅ Episode "${ep?.title}" regenerated`);
+                                  loadData();
+                                } else {
+                                  setToast(res.data.error || 'Failed');
+                                }
+                              } catch (err) { setToast('Regenerate failed: ' + (err.response?.data?.error || err.message)); }
+                              setTimeout(() => setToast(null), 5000);
+                            }} style={S.menuItem}>♻️ Regenerate Episode</button>
+                          )}
+                          <button onClick={() => { setOpenEventMenuId(null); deleteEvent(ev.id); }} style={{ ...S.menuItem, color: '#dc2626', borderBottom: 'none' }}>Delete</button>
                         </div>
-                      )}
-                      {(ev.venue_name || auto?.venue_name) && (
-                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>
-                          📍 {ev.venue_name || auto?.venue_name}{ev.venue_address || auto?.venue_address ? ` — ${ev.venue_address || auto.venue_address}` : ''}
-                        </div>
-                      )}
-                      {auto?.guest_profiles?.length > 0 && (
-                        <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>
-                          👥 {auto.guest_profiles.length} guests: {auto.guest_profiles.slice(0, 3).map(g => g.handle || g.display_name).join(', ')}{auto.guest_profiles.length > 3 ? '...' : ''}
-                        </div>
-                      )}
-                      {(ev.event_date || ev.event_time) && (
-                        <div style={{ fontSize: 10, color: '#94a3b8' }}>
-                          📅 {ev.event_date}{ev.event_time ? ` · ${ev.event_time}` : ''}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-                {(ev.is_paid || ev.is_free || ev.cost_coins > 0) && (
-                  <div style={{ display: 'flex', gap: 4, marginBottom: 4, flexWrap: 'wrap' }}>
-                    {ev.is_paid && <span style={{ padding: '1px 6px', background: '#f0fdf4', borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#16a34a' }}>💰 Paid{ev.payment_amount ? ` (${ev.payment_amount})` : ''}</span>}
-                    {ev.is_free && <span style={{ padding: '1px 6px', background: '#f0f9ff', borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#0284c7' }}>🎟️ Free</span>}
-                    {!ev.is_paid && !ev.is_free && ev.cost_coins > 0 && <span style={{ padding: '1px 6px', background: '#fef2f2', borderRadius: 4, fontSize: 9, fontWeight: 600, color: '#dc2626' }}>Costs {ev.cost_coins} coins</span>}
-                  </div>
-                )}
-                {/* Description preview */}
-                {ev.description && (
-                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.description}</div>
-                )}
-                {/* Outfit preview */}
-                {(() => {
-                  const pieces = typeof ev.outfit_pieces === 'string' ? JSON.parse(ev.outfit_pieces || '[]') : (ev.outfit_pieces || []);
-                  const score = typeof ev.outfit_score === 'string' ? JSON.parse(ev.outfit_score || 'null') : (ev.outfit_score || null);
-                  if (pieces.length === 0) return null;
-                  return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, padding: '4px 8px', background: '#faf5ea', borderRadius: 6, border: '1px solid #e8d9b8' }}>
-                      <span style={{ fontSize: 10, color: '#B8962E', fontWeight: 600 }}>👗</span>
-                      {pieces.slice(0, 4).map((p, i) => (
-                        <img key={i} src={p.image_url} alt="" style={{ width: 22, height: 22, objectFit: 'cover', borderRadius: 4, border: '1px solid #e8d9b8' }} title={p.name} />
-                      ))}
-                      {pieces.length > 4 && <span style={{ fontSize: 9, color: '#B8962E' }}>+{pieces.length - 4}</span>}
-                      {score && <span style={{ fontSize: 9, color: score.narrative_mood === 'confidence' ? '#16a34a' : score.narrative_mood === 'anxiety' ? '#dc2626' : '#B8962E', fontWeight: 600, marginLeft: 'auto' }}>{score.match_score}/100</span>}
-                    </div>
-                  );
-                })()}
-                {linkedEpisode ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#f0fdf4', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
-                    ✓ Ep {linkedEpisode.episode_number}: {linkedEpisode.title}
-                  </div>
-                ) : ev.status === 'used' ? (
-                  <div style={{ padding: '4px 8px', background: '#eef2ff', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#6366f1', fontWeight: 600 }}>
-                    ✓ Used {ev.times_used ? `(${ev.times_used}×)` : ''}
-                  </div>
-                ) : (
-                  <div style={{ padding: '4px 8px', background: '#fef3c7', borderRadius: 6, marginBottom: 6, fontSize: 11, color: '#b45309', fontWeight: 600 }}>
-                    ○ Not linked to an episode
-                  </div>
-                )}
-                {ev.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 4, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ev.narrative_stakes}</div>}
-                {/* Feed activity preview */}
-                {ev.canon_consequences?.feed_activity?.length > 0 && (
-                  <div style={{ marginBottom: 6, padding: '6px 8px', background: '#fafafa', borderRadius: 6, borderLeft: '2px solid #B8962E' }}>
-                    <div style={{ fontSize: 9, fontWeight: 600, color: '#B8962E', marginBottom: 3, fontFamily: "'DM Mono', monospace" }}>📢 FEED ACTIVITY</div>
-                    {ev.canon_consequences.feed_activity.slice(0, 2).map((post, pi) => (
-                      <div key={pi} style={{ fontSize: 10, color: '#666', marginBottom: 2 }}>
-                        <span style={{ fontWeight: 600 }}>{post.handle}</span>: "{post.content?.slice(0, 60)}{post.content?.length > 60 ? '...' : ''}"
-                      </div>
-                    ))}
-                    {ev.canon_consequences.feed_activity.length > 2 && (
-                      <div style={{ fontSize: 9, color: '#999' }}>+{ev.canon_consequences.feed_activity.length - 2} more posts</div>
+                      </>
                     )}
                   </div>
-                )}
-                {/* Pre-flight readiness — what's set vs missing before
-                    Generate Episode is clicked. Doesn't block, but tells
-                    the creator at a glance what the AI will have to work
-                    with. Each chip is green when set, yellow when missing. */}
-                {(() => {
-                  // computeEventReadiness (../utils/eventReadiness.js) — shared
-                  // with EventPackagePage so the Events card and the Event
-                  // Package page never disagree on what "ready" means.
-                  const { checks, allReady } = computeEventReadiness(ev);
-                  return (
-                    <div style={{ display: 'flex', gap: 4, marginTop: 4, paddingTop: 6, borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: allReady ? '#16a34a' : '#94a3b8', fontFamily: "'DM Mono', monospace", letterSpacing: 0.4, marginRight: 4 }}>
-                        {allReady ? 'READY' : 'PRE-FLIGHT'}
-                      </span>
-                      {checks.map(c => (
-                        <span
-                          key={c.key}
-                          title={c.ok ? `${c.label} is set` : `${c.label} not set yet — episode will generate without it`}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 3,
-                            padding: '1px 6px', borderRadius: 3,
-                            fontSize: 10, fontWeight: 600,
-                            background: c.ok ? '#f0fdf4' : '#fefce8',
-                            color: c.ok ? '#16a34a' : '#a16207',
-                            border: `1px solid ${c.ok ? '#bbf7d0' : '#fde68a'}`,
-                          }}
-                        >
-                          {c.icon} {c.label} {c.ok ? '✓' : '⚠'}
-                        </span>
-                      ))}
-                    </div>
-                  );
-                })()}
-                <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8, marginTop: 4, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setEventDetailModal(ev)} style={S.smBtn}>Edit</button>
-                  <button onClick={() => copyEvent(ev)} style={S.smBtn}>Copy</button>
-                  <InvitationButton event={ev} showId={showId} onGenerated={() => loadData()} />
-                  <button onClick={async () => {
-                    setOutfitPickerEvent(ev);
-                    setOutfitSelected(new Set());
-                    setOutfitScore(null);
-                    setOutfitSlotFilter('all');
-                    setOutfitTierFilter('all');
-                    setOutfitHideWorn(false);
-                    setOutfitShowAllRepeats(false);
-                    try {
-                      const res = await api.get(`/api/v1/world/${showId}/events/${ev.id}/wardrobe-options`);
-                      setOutfitOptions(res.data.items || []);
-                      // Load existing outfit
-                      const existing = await api.get(`/api/v1/world/${showId}/events/${ev.id}/outfit`);
-                      if (existing.data.pieces?.length > 0) {
-                        setOutfitSelected(new Set(existing.data.pieces.map(p => p.id)));
-                        setOutfitScore(existing.data.score);
-                      }
-                    } catch { setOutfitOptions([]); }
-                  }} style={{ ...S.smBtn, background: '#faf5ea', borderColor: '#e8d9b8', color: '#B8962E' }}>👗 Outfit</button>
-                  {!linkedEpisode && (
-                    <button onClick={async () => {
-                      try {
-                        setToast(`🎬 Generating episode${draftScriptOnGenerate ? ' + script' : ''}...`);
-                        const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/generate-episode`, {
-                          draft_script: draftScriptOnGenerate,
-                        });
-                        if (res.data.success) {
-                          setEpisodeBlueprint(res.data.data);
-                          const ep = res.data.data.episode;
-                          setToast(`✅ Episode ${ep?.episode_number || ''} "${ep?.title}" created — ${res.data.data.scenePlan?.length || 14} beats, ${res.data.data.socialTasks?.length || 0} social tasks${res.data.script_drafted ? ' + draft script' : ''} — opening…`);
-                          loadData();
-                          // Auto-navigate to the new episode (matches the
-                          // multi-event generator's behavior). Short delay
-                          // so the creator sees the success toast first.
-                          if (ep?.id) setTimeout(() => navigate(`/episodes/${ep.id}`), 800);
-                        } else {
-                          setToast(res.data.error || 'Failed');
-                        }
-                      } catch (err) { setToast('Episode generation failed: ' + (err.response?.data?.error || err.message)); }
-                      setTimeout(() => setToast(null), 5000);
-                    }} style={{ ...S.smBtn, background: '#f0fdf4', borderColor: '#bbf7d0', color: '#16a34a' }}>🎬 Generate Episode</button>
-                  )}
-                  {linkedEpisode && (
-                    <button onClick={async () => {
-                      if (!window.confirm(`Regenerate this episode? "${linkedEpisode.title || 'Untitled'}" will be soft-deleted and a fresh episode created from this event.`)) return;
-                      try {
-                        setToast(`🎬 Regenerating episode${draftScriptOnGenerate ? ' + script' : ''}...`);
-                        const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/regenerate-episode`);
-                        if (res.data.success) {
-                          // The regenerate endpoint doesn't currently
-                          // support draft_script — fire it as a follow-up
-                          // generate-script call when the toggle is on.
-                          if (draftScriptOnGenerate && res.data.data?.episode?.id) {
-                            try { await api.post(`/api/v1/world/${showId}/events/${ev.id}/generate-script`, { episode_id: res.data.data.episode.id }); } catch { /* non-fatal */ }
-                          }
-                          const ep = res.data.data.episode;
-                          setToast(`✅ Episode "${ep?.title}" regenerated`);
-                          loadData();
-                        } else {
-                          setToast(res.data.error || 'Failed');
-                        }
-                      } catch (err) { setToast('Regenerate failed: ' + (err.response?.data?.error || err.message)); }
-                      setTimeout(() => setToast(null), 5000);
-                    }} style={{ ...S.smBtn, background: '#fdf8ee', borderColor: '#e8d8b8', color: '#B8962E' }}>♻️ Regenerate Episode</button>
-                  )}
-                  <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>Delete</button>
                 </div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, color: stateCfg.color, background: stateCfg.bg, marginBottom: 8 }}>
+                  {stateCfg.icon} {stateCfg.label}
+                </span>
+                <div style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 10 }}>
+                  {hostName ? <div>Host: {hostName}</div> : <div style={{ color: '#dc2626' }}>No host linked</div>}
+                  {venueName && <div>Venue: {venueName}</div>}
+                  {(ev.event_date || ev.event_time) && <div>Date: {ev.event_date}{ev.event_time ? ` · ${ev.event_time}` : ''}</div>}
+                  {state === 'needs_setup' && missing.length > 0 && <div style={{ color: '#b45309' }}>Missing: {missing.join(', ')}</div>}
+                  {state === 'used' && linkedEpisode && <div>Episode {linkedEpisode.episode_number}: {linkedEpisode.title}</div>}
+                </div>
+                <button onClick={e => { e.stopPropagation(); primaryAction(); }} style={{ ...S.smBtn, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 700, padding: '8px 12px', background: stateCfg.bg, borderColor: stateCfg.color, color: stateCfg.color }}>
+                  {stateCfg.primaryAction} <ArrowRight size={13} />
+                </button>
               </div>
               );
             })}
@@ -3377,64 +3262,8 @@ The revised event should feel like a completely different experience from the si
 
         </div>
       )}
-          {reorderPlan && (() => {
-            const changes = reorderPlan.filter(p => p.changed);
-            return (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => !reorderApplying && setReorderPlan(null)}>
-                <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 720, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
-                  <div style={{ padding: '20px 24px 12px', borderBottom: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>📊 Auto-Reorder Preview</div>
-                    <div style={{ fontSize: 13, color: '#64748b' }}>
-                      Sort linked events by prestige (low → high) across episodes.
-                      {' '}<b style={{ color: changes.length > 0 ? '#7c3aed' : '#64748b' }}>{changes.length}</b> of {reorderPlan.length} episodes would change.
-                    </div>
-                  </div>
-                  <div style={{ padding: '12px 24px' }}>
-                    {reorderPlan.length === 0 ? (
-                      <div style={{ fontSize: 13, color: '#64748b', padding: 12 }}>No episodes to reorder.</div>
-                    ) : (
-                      <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#94a3b8', textAlign: 'left' }}>
-                            <th style={{ padding: '6px 8px', fontWeight: 700 }}>Episode</th>
-                            <th style={{ padding: '6px 8px', fontWeight: 700 }}>Currently</th>
-                            <th style={{ padding: '6px 8px', fontWeight: 700, width: 24 }}></th>
-                            <th style={{ padding: '6px 8px', fontWeight: 700 }}>Proposed</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {reorderPlan.map((p, i) => (
-                            <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: p.changed ? '#faf5ff' : 'transparent' }}>
-                              <td style={{ padding: '8px', fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>Ep {p.ep.episode_number}</td>
-                              <td style={{ padding: '8px', color: p.current ? '#475569' : '#cbd5e1' }}>
-                                {p.current ? `${p.current.name} (P${p.current.prestige ?? '?'})` : '— empty —'}
-                              </td>
-                              <td style={{ padding: '8px', color: p.changed ? '#7c3aed' : '#cbd5e1', textAlign: 'center' }}>
-                                {p.changed ? '→' : '·'}
-                              </td>
-                              <td style={{ padding: '8px', color: p.proposed ? (p.changed ? '#7c3aed' : '#475569') : '#cbd5e1', fontWeight: p.changed ? 600 : 400 }}>
-                                {p.proposed ? `${p.proposed.name} (P${p.proposed.prestige ?? '?'})` : '— empty —'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                  <div style={{ padding: '12px 24px 20px', display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0' }}>
-                    <button onClick={() => setReorderPlan(null)} disabled={reorderApplying}
-                      style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#475569', cursor: reorderApplying ? 'wait' : 'pointer' }}>
-                      Cancel
-                    </button>
-                    <button onClick={applyReorderPlan} disabled={reorderApplying || changes.length === 0}
-                      style={{ padding: '8px 16px', background: changes.length === 0 ? '#e5e7eb' : '#7c3aed', color: changes.length === 0 ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: reorderApplying ? 'wait' : (changes.length === 0 ? 'not-allowed' : 'pointer') }}>
-                      {reorderApplying ? '⏳ Applying...' : changes.length === 0 ? 'No changes' : `Apply ${changes.length} reassignment${changes.length === 1 ? '' : 's'}`}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
+          {/* Auto-Reorder preview modal moved to SeasonTab (Task #1648,
+              docs/EVENT_EPISODE_FLOW.md §8(m)). */}
           {eventDetailModal && (() => {
             // Hydrate missing fields from automation data + derive from context
             const auto = eventDetailModal.canon_consequences?.automation || {};
@@ -7620,7 +7449,7 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
 
 // ─── STYLES ───
 // ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
-function SeasonTab({ showId, api, S, episodes, setToast }) {
+function SeasonTab({ showId, api, S, episodes, worldEvents = [], loadData, setToast }) {
   const [arc, setArc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
@@ -7629,6 +7458,13 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
   const [warning, setWarning] = useState(null);
   const [goals, setGoals] = useState([]);
   const [rhythm, setRhythm] = useState(null);
+  // Auto-Reorder — moved here from the Events tab (Task #1648,
+  // docs/EVENT_EPISODE_FLOW.md §8(m)): episode sequencing belongs with
+  // season planning, not the event-creation queue. Previews its plan
+  // before touching the DB; null = no preview open, otherwise an array of
+  // { ep, current, proposed, changed }.
+  const [reorderPlan, setReorderPlan] = useState(null);
+  const [reorderApplying, setReorderApplying] = useState(false);
 
   const loadArc = useCallback(async () => {
     setLoading(true);
@@ -7705,6 +7541,51 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
       alert(err.response?.data?.error || err.message);
     }
     setExtending(false);
+  };
+
+  // Auto-reorder all linked events by prestige ascending across episodes.
+  // Builds a preview without touching anything — the creator applies or
+  // cancels explicitly, rather than a confirm() silently overwriting
+  // curated assignments.
+  const handleAutoReorder = () => {
+    const linked = worldEvents.filter(ev => ev.used_in_episode_id);
+    if (linked.length === 0) {
+      if (setToast) { setToast('No linked events to reorder'); setTimeout(() => setToast(null), 3000); }
+      return;
+    }
+    const sortedByPrestige = [...linked].sort((a, b) => (a.prestige || 0) - (b.prestige || 0));
+    const sortedEps = [...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
+
+    const plan = sortedEps.map((ep, i) => {
+      const current = worldEvents.find(ev => ev.used_in_episode_id === ep.id) || null;
+      const proposed = sortedByPrestige[i] || null;
+      return {
+        ep,
+        current,
+        proposed,
+        changed: (current?.id || null) !== (proposed?.id || null),
+      };
+    });
+    setReorderPlan(plan);
+  };
+
+  const applyReorderPlan = async () => {
+    if (!reorderPlan) return;
+    const changes = reorderPlan.filter(p => p.changed && p.proposed);
+    if (changes.length === 0) { setReorderPlan(null); return; }
+    setReorderApplying(true);
+    try {
+      for (const p of changes) {
+        await api.post(`/api/v1/world/${showId}/events/${p.proposed.id}/inject`, { episode_id: p.ep.id });
+      }
+      if (setToast) { setToast(`✅ Reordered ${changes.length} event${changes.length === 1 ? '' : 's'} by prestige`); setTimeout(() => setToast(null), 3000); }
+      setReorderPlan(null);
+      if (loadData) loadData();
+    } catch (err) {
+      if (setToast) { setToast(`Reorder failed: ${err.response?.data?.error || err.message}`); setTimeout(() => setToast(null), 3000); }
+    } finally {
+      setReorderApplying(false);
+    }
   };
 
   if (loading) return <div style={S.center}>Loading season data...</div>;
@@ -7797,6 +7678,79 @@ function SeasonTab({ showId, api, S, episodes, setToast }) {
           </div>
         </div>
       </div>
+
+      {/* Episode Order — Auto-Reorder (Task #1648, moved from the Events
+          tab: episode sequencing is a season-planning job, not an
+          event-creation one). */}
+      <div style={S.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <h3 style={{ ...S.cardTitle, margin: '0 0 2px' }}>Episode Order</h3>
+            <p style={{ ...S.muted, margin: 0 }}>Preview reassigning linked events across episodes by prestige, low to high.</p>
+          </div>
+          <button onClick={handleAutoReorder} style={{ padding: '7px 14px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 12, fontWeight: 700, color: '#7c3aed', cursor: 'pointer' }}>
+            📊 Auto-Reorder
+          </button>
+        </div>
+      </div>
+      {reorderPlan && (() => {
+        const changes = reorderPlan.filter(p => p.changed);
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => !reorderApplying && setReorderPlan(null)}>
+            <div style={{ background: '#fff', borderRadius: 16, width: '90vw', maxWidth: 720, maxHeight: '85vh', overflow: 'auto', boxShadow: '0 16px 48px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+              <div style={{ padding: '20px 24px 12px', borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>📊 Auto-Reorder Preview</div>
+                <div style={{ fontSize: 13, color: '#64748b' }}>
+                  Sort linked events by prestige (low → high) across episodes.
+                  {' '}<b style={{ color: changes.length > 0 ? '#7c3aed' : '#64748b' }}>{changes.length}</b> of {reorderPlan.length} episodes would change.
+                </div>
+              </div>
+              <div style={{ padding: '12px 24px' }}>
+                {reorderPlan.length === 0 ? (
+                  <div style={{ fontSize: 13, color: '#64748b', padding: 12 }}>No episodes to reorder.</div>
+                ) : (
+                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#94a3b8', textAlign: 'left' }}>
+                        <th style={{ padding: '6px 8px', fontWeight: 700 }}>Episode</th>
+                        <th style={{ padding: '6px 8px', fontWeight: 700 }}>Currently</th>
+                        <th style={{ padding: '6px 8px', fontWeight: 700, width: 24 }}></th>
+                        <th style={{ padding: '6px 8px', fontWeight: 700 }}>Proposed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reorderPlan.map((p, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: p.changed ? '#faf5ff' : 'transparent' }}>
+                          <td style={{ padding: '8px', fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>Ep {p.ep.episode_number}</td>
+                          <td style={{ padding: '8px', color: p.current ? '#475569' : '#cbd5e1' }}>
+                            {p.current ? `${p.current.name} (P${p.current.prestige ?? '?'})` : '— empty —'}
+                          </td>
+                          <td style={{ padding: '8px', color: p.changed ? '#7c3aed' : '#cbd5e1', textAlign: 'center' }}>
+                            {p.changed ? '→' : '·'}
+                          </td>
+                          <td style={{ padding: '8px', color: p.proposed ? (p.changed ? '#7c3aed' : '#475569') : '#cbd5e1', fontWeight: p.changed ? 600 : 400 }}>
+                            {p.proposed ? `${p.proposed.name} (P${p.proposed.prestige ?? '?'})` : '— empty —'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div style={{ padding: '12px 24px 20px', display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0' }}>
+                <button onClick={() => setReorderPlan(null)} disabled={reorderApplying}
+                  style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#475569', cursor: reorderApplying ? 'wait' : 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={applyReorderPlan} disabled={reorderApplying || changes.length === 0}
+                  style={{ padding: '8px 16px', background: changes.length === 0 ? '#e5e7eb' : '#7c3aed', color: changes.length === 0 ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: reorderApplying ? 'wait' : (changes.length === 0 ? 'not-allowed' : 'pointer') }}>
+                  {reorderApplying ? '⏳ Applying...' : changes.length === 0 ? 'No changes' : `Apply ${changes.length} reassignment${changes.length === 1 ? '' : 's'}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Phase Cards */}
       <div style={{ display: 'grid', gap: 12 }}>
@@ -8002,6 +7956,9 @@ const S = {
   secBtn: { padding: '8px 18px', background: '#FAF7F0', border: '1px solid rgba(184,150,46,0.2)', borderRadius: 8, color: '#B8962E', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' },
   smBtn: { padding: '5px 12px', background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#475569', fontWeight: 500, transition: 'all 0.12s' },
   smBtnDanger: { padding: '5px 12px', background: 'rgba(220,53,53,0.05)', border: '1px solid rgba(220,53,53,0.12)', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#dc2626', fontWeight: 500, transition: 'all 0.12s' },
+  // Overflow-menu item (Task #1648's per-card and header "⋯" menus —
+  // WorldAdmin.jsx's own style, not shared with any other page).
+  menuItem: { display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', borderBottom: '1px solid #f1f5f9', fontSize: 12, fontWeight: 500, color: '#475569', cursor: 'pointer' },
   statsRow: { display: 'flex', gap: 12, flexWrap: 'wrap' },
   statBox: { flex: '1 1 90px', background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', minWidth: 90, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
   statVal: (k, v) => ({ fontSize: 24, fontWeight: 700, color: (k === 'stress' && v >= 5) || (k === 'coins' && v < 0) ? '#dc2626' : '#1a1a2e' }),
