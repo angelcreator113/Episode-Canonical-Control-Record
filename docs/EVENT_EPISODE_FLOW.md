@@ -1410,6 +1410,257 @@ pipeline section elsewhere on this tab is unchanged.
 Not yet code at the point this entry is written — Task #1648 is the
 implementation.
 
+**(n) Scene-set decisions (Evoni, 2026-09-22, Task #1660).** Nine rulings,
+each followed by this document's own re-derivation of where current code
+agrees or conflicts. Basis for the code citations in this entry:
+`origin/main` at `8e078addf12fb244f2fd15db9d347faa7a837e3b` (2026-09-22) —
+a later basis than §§1–6/§7 above, which are not re-walked here.
+
+**1. Choose a place once.** The World Location chosen in the Event Package
+drives the event's scene set, its map pin, and the episode's coverage. No
+later step asks for the venue again.
+
+Code: partially agrees. The `from-profile`-adjacent event-create route,
+`POST /world/:showId/events`, already auto-derives `WorldEvent.scene_set_id`
+from `venue_location_id` when a `scene_set_id` isn't explicitly passed, by
+looking up an existing `SceneSet` row whose `world_location_id` matches the
+venue (`src/routes/worldEvents.js:241-257`, assigned at `:287`) — but only
+at creation; editing `venue_location_id` later via the event `PUT` route
+does not re-derive `scene_set_id`. The FK this depends on is real:
+`SceneSet.world_location_id` (`src/models/SceneSet.js:71`, association
+`:28-34`: `SceneSet.belongsTo(WorldLocation, ...)`; inverse
+`WorldLocation.hasMany(SceneSet, ...)`, `src/models/WorldLocation.js:131-136`).
+A second, independent auto-match exists at episode-linking time, keyed on
+`location_hint` text rather than `venue_location_id` — a different
+mechanism (`worldEvents.js:788-806`). Conflicts: the map pin does not read
+`WorldLocation.coordinates` at all. The interactive map,
+`frontend/src/components/DreamMap.jsx`, positions pins from a static
+per-city `x`/`y` array matched to `WorldLocation` rows by index within a
+city grouping (`DREAM_CITIES`, `:25-91`; `matchedLoc = cityLocs[pi]`,
+`:352`) — `WorldLocation.coordinates` (`WorldLocation.js:75-80`) is never
+read for this. A separate, unrelated phone-UI code comment
+(`frontend/src/components/ContentZoneEditor.jsx:646-648`) claims pin
+positions come from `coordinates`, but that's a different "world_map"
+content zone, not this map. No later step re-asks for venue, confirmed:
+`scenePlannerService.js` reads the event's `scene_set_id`, not its venue
+(§8(n)(4) below), and `EpisodeOverviewTab.jsx:74-284` only displays
+`venue_location_id` read-only.
+
+**2. Hierarchy: World Location → Scene Set → Angle → scene plan row (one
+per canonical beat) → scenes and character clips.**
+
+Code: partially agrees. `WorldLocation → SceneSet` (`SceneSet.world_location_id`,
+above) and `SceneSet → SceneAngle` (`SceneSet.hasMany(SceneAngle, {
+foreignKey: 'scene_set_id', as: 'angles' })`, `SceneSet.js:7-10`; inverse
+`SceneAngle.belongsTo(SceneSet, ...)`, `src/models/SceneAngle.js:7-10`) are
+both real associations — "Angle" is already a first-class model, named
+`SceneAngle` (table `scene_angles`). `ScenePlan` (table `scene_plans`,
+`src/models/ScenePlan.js`) is the one-row-per-beat object (`episode_id` +
+`beat_number` unique, `:49-51`), pointing at `SceneSet` by FK but at
+`SceneAngle` only by a matching label string (`angle_label`, `:16-17`) —
+`ScenePlan` has no association to `SceneAngle` at all (`:54-58`). Conflicts:
+nothing downstream points back at `ScenePlan`. `Scene` (table `scenes`) has
+its own direct FKs to `SceneSet` and `SceneAngle`
+(`Scene.js:378-389`, associations `src/models/index.js:934-955`), with no
+`scene_plan_id` column anywhere in the schema (confirmed: repo-wide grep
+across `src/models` and `src/migrations` returns nothing).
+`CharacterClip.belongsTo(Scene, ...)` and optionally a separate `Beat`
+model — script-level beats, not `ScenePlan` rows
+(`CharacterClip.js:155-166`). So `Scene`/`CharacterClip` and `ScenePlan`
+are two disconnected sibling branches today, both independently pointing
+at `SceneSet`/`SceneAngle`, not the single chain this ruling describes.
+
+**3. Refinement of the earlier Episode Plan decision.** Before the script,
+the plan fixes which location each beat uses (coverage); after the script,
+the scene planner assigns angles and shots. This refines, not reverses,
+§7 decision 7 ("Episode Plan precedes the script").
+
+Code: agrees with §7 decision 7's own already-recorded finding, unchanged
+at this basis — no distinct "Episode Plan" tab sits between Overview and
+Script in `EpisodeDetail.jsx`'s tab order (`:82-97`), and
+`ScenePlannerPage.jsx` (route `/episodes/:episodeId/plan`, `App.jsx:392`)
+is reached only via links from the Production Checklist
+(`EpisodeProductionChecklist.jsx:309-315,416-421`), not a dedicated flow
+step. Conflicts with the before/after split this ruling proposes: today,
+fixing which location a beat uses and assigning its angle/shot happen in
+the same step, not two. `generateScenePlan` (`scenePlannerService.js:77`)
+is called from exactly one route (`POST /:episodeId/generate-plan`,
+`src/routes/episodeBriefRoutes.js:92-119`), separate from script
+generation (`POST /:episodeId/generate-script`, `:203-248`, which never
+calls `generateScenePlan` and has no guard requiring a plan to exist
+first) — so plan-then-script ordering is a UI convention
+(`EpisodeProductionChecklist.jsx`'s required `scene_plan` checklist item,
+`:43,322-325,400-415`), not an enforced sequence. Within the plan step
+itself, one Claude call returns each beat's `scene_set_id`, `angle_label`,
+and `shot_type` together (`scenePlannerService.js:200-215`), and the one
+edit endpoint (`PUT /:episodeId/plan/:beatNumber`,
+`episodeBriefRoutes.js:144-172`) accepts all three as one `updatable` set
+behind a single per-beat lock — there is no separate "lock location" step
+distinct from "assign angle" as this ruling's before/after split implies.
+This ruling is Evoni's design intent for how the two should split; today's
+code has not yet made that split — it refines the plan/script boundary
+§7 decision 7 already established, without contradicting it.
+
+**4. Coverage is deterministic, with no AI:** each beat's `typical_location`
+from `canonicalBeats.js`, matched to the show's default set for that role,
+or to the event's `scene_set_id` for EVENT_LOCATION.
+
+Code: conflicts outright. `generateScenePlan` calls an LLM
+(`claude-sonnet-4-6`, `scenePlannerService.js:11-19`) to choose the scene
+set per beat: it builds a prompt embedding the full 14-beat list and every
+available scene set (`:112-172`) and parses the model's JSON response
+directly into each beat's `scene_set_id` (`:176-215`). `typical_location`
+is used only as descriptive text inside that prompt (`` `${b.number}.
+${b.name} (typical: ${b.typical_location}) — ${b.description}` ``, `:148`)
+— confirmed by grep as its only reference in `src/` outside
+`canonicalBeats.js` itself; no code matches it programmatically to a
+show's default set. The event's `scene_set_id` is passed into the prompt
+only as a suggestion for beats 10-12 ("use this for EVENT beats 10-12,"
+`:106,122`), with no enforced assignment — the model can choose
+differently, and the only post-response check is that the returned ID
+exists among the show's scene sets (`:201-215`), not that it matches the
+event.
+
+**5. Each show has one default scene set per role (HOME_BASE, CLOSET,
+TRANSITION). Record which field holds a set's role today, and whether any
+"default" marking exists. The mechanism is open.**
+
+Code: the role field exists — `SceneSet.scene_type`, an ENUM of
+`HOME_BASE | CLOSET | EVENT_LOCATION | TRANSITION | OTHER`
+(`SceneSet.js:73-76`) — but no default-marking mechanism exists at all: no
+`is_default` column (grepped), no unique index on `(show_id, scene_type)`
+(`SceneSet.js:109-116`'s `indexes` has none), no settings table.
+`loadAvailableSceneSets` (`scenePlannerService.js:30-72`) loads every
+complete scene set for the show with no role-default filter — the model
+picks freely among all of them (see decision 4 above). The mechanism
+stays open, as this ruling states.
+
+**6. The scene planner refines the 14 rows in place and never deletes and
+recreates them, so manual choices survive. Record, citing code, that it
+currently deletes and recreates.**
+
+Code: confirmed — delete-then-recreate is exactly what happens today, the
+one behavior this decision set names for future correction. Inside
+`generateScenePlan`, under `if (save)`:
+`ScenePlan.destroy({ where: { episode_id: episodeId }, force: true })`
+hard-deletes every existing row for the episode
+(`scenePlannerService.js:220`), then a fresh set of 14 rows is built
+(`:222-237`) and inserted via `ScenePlan.bulkCreate(rows)` (`:239`) — with
+no reference to any prior row's `locked` state or manual edits. There is
+no separate "regenerate" function; `generateScenePlan` is the only writer
+of `scene_plans`, for both first generation and any later re-generation
+(module exports only `{ generateScenePlan, getScenePlanForScriptGenerator,
+BEAT_STRUCTURE }`, `:288`) — so a locked beat is destroyed and rebuilt
+exactly like an unlocked one on every re-run.
+
+**7. Episode readiness means each beat's required angle exists. Only
+missing angles are offered for generation.**
+
+Code: not yet built. `SceneAngle` is a real model (`generation_status`,
+`beat_affinity` JSONB array, `angle_label`, `still_image_url` —
+`SceneAngle.js`), and `SceneSet.angleForBeat(beatNumber)`
+(`SceneSet.js:46-51`) already picks an angle by `beat_affinity` match,
+with `SceneSet.isReady` (`:60-64`) true if any angle is complete — but
+that's set-level, not per-beat. No episode-level readiness check is keyed
+on per-beat angle existence anywhere in the repo (grepped "readiness"
+across `src/` and `frontend/src/`; every hit is either the
+already-documented event-level `computeEventReadiness` or unrelated). The
+closest existing thing, `EpisodeProductionChecklist.jsx`'s Scene Plan
+check, only checks `scene_plan.length > 0` and whether all beats are
+locked (`:213-221`) — nothing about angles. `GET
+/:episodeId/script-context`'s own `ready` computation is `context.every(b
+=> b.locked)` (`episodeBriefRoutes.js:310-324`) — locked, not
+angle-complete.
+
+**8. The Scenes tab becomes the beat filmstrip, reusing the existing
+filmstrip endpoint; adding another set is the exception, not the main
+path.**
+
+Code: partially agrees. The filmstrip endpoint exists exactly as
+described — `GET /episode/:episodeId/filmstrip`
+(`src/routes/sceneSetRoutes.js:2398-2435`) already returns all 14 beat
+slots (filled or empty) joined from `scene_plans`/`scene_sets`/
+`scene_angles`, with `image_url`, `shot_type`, `emotional_intent`, and a
+`has_scene`/`covered` flag per beat (`:2404-2431`) — precisely the shape a
+beat filmstrip needs. But it has no current caller: grepped `/filmstrip`
+across `frontend/src`, nothing fetches it; `SceneSetsTab.jsx:2320`
+declares a `filmstrip` state variable whose setter is never called
+elsewhere in the file (vestigial). The Scenes tab this decision would
+replace — `EpisodeScenesTab.jsx` (mounted at `EpisodeDetail.jsx:88,719`,
+not `EpisodeAssetsTab.jsx`) — is a different UI today: it manages
+`Scene`/`SceneSet` linking directly (list/link/unlink scene sets,
+list/create/delete `Scene` rows from angles, `:17-35`), with no read of
+`scene_plans` and no call into the filmstrip endpoint.
+
+**9. Variants over duplicate sets: a place keeps one set, with
+time-of-day, seasonal and mood variants. Later work.**
+
+Code: confirmed no variant concept exists yet, as expected for later
+work. `SceneSet` has `time_of_day` and `season` as plain, unstructured
+scalar columns (`SceneSet.js:106-107`) and `mood_tags` as a JSONB tag
+array (`:81`) — no self-referencing FK, no `variant_of_scene_set_id`, no
+grouping concept (grepped "variant" in `SceneSet.js`, zero hits).
+
+**Open questions for Evoni**
+
+**(a)** Beats 1 and 2 happen in JustAWoman's space and the interface, not
+Lala's world. What is their coverage — a Host Environment set, or none?
+
+**(b)** `typical_location` values were inherited from the old scene
+planner, not sourced from the seeder (§8(e) above). List all 14 so Evoni
+can confirm them before coverage depends on them — source:
+`src/constants/canonicalBeats.js`, each beat's `typical_location` field:
+
+| Beat | Name | `typical_location` |
+|---|---|---|
+| 1 | Opening Ritual | `HOME_BASE` |
+| 2 | Login Sequence | `HOME_BASE` |
+| 3 | Welcome | `HOME_BASE` |
+| 4 | Interruption Pulse 1 | `HOME_BASE` |
+| 5 | Reveal | `HOME_BASE` |
+| 6 | Strategic Reaction | `HOME_BASE` |
+| 7 | Interruption Pulse 2 | `TRANSITION` |
+| 8 | Transformation Loop | `CLOSET` |
+| 9 | Reminder/Deadline | `TRANSITION` |
+| 10 | Event Travel | `TRANSITION` |
+| 11 | Event Outcome | `EVENT_LOCATION` |
+| 12 | Deliverable Creation | `EVENT_LOCATION` |
+| 13 | Recap Panel | `HOME_BASE` |
+| 14 | Cliffhanger | `HOME_BASE` |
+
+**(c)** How a show marks its default set per role.
+
+**Evoni's rulings on (a) and (c) (2026-09-22).** Recorded as her rulings,
+not this document's own inference. `canonicalBeats.js` itself is not
+changed by this PR — these rulings land in code with the coverage build
+the nine rulings above describe, not here.
+
+- **(a) resolved.** Beats 1 and 2 get a new location role,
+  `HOST_ENVIRONMENT` — JustAWoman's own space, distinct from Lala's
+  `HOME_BASE`. This needs a Scene Library set of its own, the same as
+  Lala's bedroom and closet — a real set to create, once.
+- **Beats 7 and 9 have no default location.** Unlike the other twelve
+  entries in (b)'s table above, which stand as defaults, beats 7
+  ("Interruption Pulse 2") and 9 ("Reminder/Deadline") take an explicit
+  "decided per episode" value instead of a fixed one — chosen from what
+  the script actually does, not proposed ahead of it. Coverage leaves
+  these two beats open before the script exists, and fills them once the
+  script shows where Lala is. This is a third, explicit state for
+  `typical_location`, the same pattern the file header's `null`/`'none'`/
+  value convention already uses for `actor`/`surface`/`diegetic`
+  (§8(e)/(f) above, `canonicalBeats.js:64-70`): "decided to be flexible"
+  and "not decided yet" have to look different, not collapse into one
+  blank value.
+- **Every beat's default is only a default.** Ruling 6 above (the scene
+  planner refines rows in place, manual choices survive) already means a
+  per-episode change to any beat's location — not only beats 7 and 9 —
+  survives regeneration once that refine-in-place behavior is built.
+  Beats 7 and 9 are simply the two beats with no default to override in
+  the first place.
+
+MERGE: still requires Evoni's explicit go — this addendum records her
+answers; it doesn't itself close the PR.
+
 ---
 
 ## 9. Owed before enforcement
