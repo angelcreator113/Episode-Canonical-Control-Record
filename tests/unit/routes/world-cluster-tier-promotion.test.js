@@ -41,9 +41,12 @@ const CP3_FILES = [
 // Per-file ref counts captured at CP3 close.
 // requireAuth count = imports (1) + handler-level invocations (Tier 1 only).
 // For worldStudio: 1 import + 34 mutations.
+// worldEvents.js: 63, not the CP3-close 62 — Task #1642 added
+// GET /world/:showId/events/:eventId (requireAuth), the Event Package
+// page's single-event read; no other CP3-zone route changed.
 const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
-  'worldEvents.js': 62,
+  'worldEvents.js': 63,
   'worldStudio.js': 35,
   'worldTemperatureRoutes.js': 3,
 };
@@ -257,13 +260,14 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
   });
 
   describe('CP3 zone aggregate consumer counts', () => {
-    test('CP3 zone contains 105 total requireAuth references across 4 files (4 imports + 101 handlers)', () => {
+    // 106, not the CP3-close 105 — see REQUIRE_AUTH_COUNTS['worldEvents.js'] above.
+    test('CP3 zone contains 106 total requireAuth references across 4 files (4 imports + 102 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(105);
+      expect(total).toBe(106);
     });
 
     test('CP3 zone contains 20 total optionalAuth references (all in worldStudio.js)', () => {
