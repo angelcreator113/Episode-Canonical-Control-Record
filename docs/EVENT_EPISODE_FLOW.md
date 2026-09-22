@@ -999,12 +999,17 @@ already records the two existing homes
 in the Sequelize model) without resolving which should be authoritative;
 this document does not resolve it either.
 
-**(c) Brand/entity hosts.** Not addressed by any decision above or by any
-code this document found. `source_profile_id` (item 5) points at
-`SocialProfile`, which §2's HOST section describes entirely in
-creator-profile terms (handle, `content_category`, `archetype`,
-`follower_tier`) — whether a brand or other non-creator entity can be a
-host through the same column, or needs a different one, is open.
+**(c) Brand/entity hosts — RESOLVED (Evoni, 2026-09-22; see (p) below).**
+Not addressed by any decision above or by any code this document found.
+`source_profile_id` (item 5) points at `SocialProfile`, which §2's HOST
+section describes entirely in creator-profile terms (handle,
+`content_category`, `archetype`, `follower_tier`) — whether a brand or
+other non-creator entity can be a host through the same column, or needs
+a different one, is open. **Resolved, not deleted — see (p) below: an
+organizer is a creator or a brand, `host_brand` is the interim storage
+for the brand case, and §2's HOST section above (a `SocialProfile` row,
+full stop) is now incomplete rather than wrong — it describes the
+creator-organizer path only.**
 
 **(d) The old-beat → canonical-beat content mapping (Task #1609).**
 Opened by resolving (a). `episodeGeneratorService.js`'s `phase` and
@@ -1723,6 +1728,191 @@ draw on the existing character-clip system (`CharacterClip`, belonging
 to `Scene`, `src/models/CharacterClip.js:155-166` — cited at (n) item 2
 above). Mapping from these existing fields to the four indicators happens
 in the coverage build this decision set describes, not in this document.
+
+**(p) Organizer decisions (Evoni, 2026-09-22, Task #1676).** Resolves (c)
+above. Six rulings, each followed by this document's own re-derivation of
+where current code agrees or conflicts. Basis for the code citations in
+this entry: `origin/main` at `b75ec5b9bcc71aec6deef67e5a5d65fda1eb71db`
+(2026-09-22) — a later basis than §§1–6/§7 above, which are not re-walked
+here.
+
+**1. Four roles per event.** The ORGANIZER puts the event on and is
+required. The HOST or FACE is an optional person fronting it. FEATURED
+ATTENDEES are the three to five Feed creators the story actually uses.
+LALA'S ROLE says why she is there — invited guest, paid creator,
+collaborator.
+
+*Code agreement/conflict:* none of the four are named fields anywhere in
+`WorldEvent` (`src/models/WorldEvent.js`). The closest existing fields
+conflate them: `host` (`STRING(200)`, comment "Host character name or
+entity", `:62-66`) and `host_brand` (`STRING(200)`, comment "Maison
+Belle, Luxe Cosmetics, etc.", `:67-71`) together read as one undivided
+organizer-or-face slot, not two. `source_profile_id` (`:132`) is the
+creator-organizer link; the guest homes item (b) above already records
+(`canon_consequences.automation.guest_profiles`, populated by
+`assembleGuestList`, `src/services/eventAutomationService.js:340`, and
+the separate top-level `guest_list` column) are the closest existing
+analog to featured attendees, but scoped differently:
+`assembleGuestList`'s own `maxGuests` default is `8`
+(`eventAutomationService.js:340`), not three to five, and nothing in
+code distinguishes a smaller "featured" subset the story actually uses
+from the full invited list. Lala's role has no field at all — no code
+this document found names why Lala attends a given event.
+
+**2. An organizer is a creator or a brand.** A creator organizer is a
+`SocialProfile`. A brand organizer is a `LalaverseBrand`
+(`src/models/LalaverseBrand.js`, table `lalaverse_brands`). A
+brand-hosted event with no person attached is valid and complete.
+
+*Code agreement/conflict:* agrees in practice, not in framing. The core
+event-creation route, `POST /world/:showId/events`
+(`src/routes/worldEvents.js:364-490`), requires only `name`
+(`:386`) — `host`, `host_brand`, and `source_profile_id` (which this
+route doesn't even destructure from the body) are all optional, so a
+brand-hosted event with `host_brand` set and no profile link is already
+code-valid today; nothing rejects it. But §2's HOST section (above)
+still describes HOST entirely as "a `SocialProfile` row" — the framing
+this ruling corrects, not the runtime behavior. `LalaverseBrand` is a
+real, registered model (`src/models/index.js:316,511,1750,1999`) but has
+no association to `WorldEvent` anywhere in `src/models/WorldEvent.js` or
+`src/models/index.js` — it is a standalone brand registry today, not
+linked to events by any FK.
+
+**3. The Events queue's "Needs Host" is wrong for brand-hosted events —
+it becomes "Needs Organizer."** Satisfied by either a linked profile or
+a linked brand.
+
+*Code agreement/conflict:* conflicts as designed. §8(m) above ("Producer
+Mode → Events is a queue of event packages") specified **Needs Host** as
+"no `source_profile_id` *and* no
+`canon_consequences.automation.host_profile_id`" — and the shipped
+implementation matches that spec exactly:
+`computeEventState`/`EVENT_QUEUE_STATES` in
+`frontend/src/utils/eventReadiness.js:97-125` checks `hasHost =
+!!ev.source_profile_id || !!ev.canon_consequences?.automation
+?.host_profile_id` (`:120`) and returns `'needs_host'` when neither is
+set (`:121`) — `host_brand` is never consulted. A brand-hosted event
+that sets only `host_brand` (ruling 2) has neither a `source_profile_id`
+nor an `automation.host_profile_id`, so this check marks it
+**Needs Host** — every brand-hosted event, without exception, since
+`host_brand` carries no other signal this function reads. Renaming the
+state and widening the check to accept a linked brand (once one exists,
+per ruling 6/open question (a)) is not built by this ruling — only
+recorded as wrong today.
+
+**4. Feed creators at a brand's event are attendees, not hosts.** The
+system must not describe a creator as hosting an event a brand puts on.
+
+*Code agreement/conflict:* no violation found — this document did not
+find code that labels a guest/attendee as a host. This is a preventative
+rule for future work (e.g. ruling 5's second New Episode path), not a
+correction of an existing mislabel.
+
+**5. New Episode gains a second starting path later: choose a brand
+opportunity instead of a creator.** Recorded as intended, not built.
+
+*Code agreement/conflict:* today there is exactly one path.
+`NewEpisodeChooseHost` (`frontend/src/App.jsx:106-109`) is the entire
+`/shows/:showId/new-episode` route; it unconditionally renders
+`<SocialProfileGenerator chooseHost showId={showId}
+defaultFeedLayer="lalaverse" />` — a creator-choosing flow with no
+branch, mode, or prop for a brand-opportunity start.
+
+**6. Interim storage, until a schema change.** `source_profile_id` for
+creator-hosted events, `host_brand` for brand-hosted ones, both presented
+as Organizer. `host_brand` is free text today (`WorldEvent.js:67-71`,
+`STRING(200)`, no FK, no `validate`); `lalaverse_brands` exists as a real
+table (ruling 2) but nothing links the two.
+
+*What reads `host_brand` today* — every site this document found,
+`event.host_brand` (or the equivalent local name) as a plain string,
+grouped by what the read is for. A schema change from free text to a
+brand link (open question (a)) touches all of these, not just the
+column:
+
+- *String-equality / substring brand-matching* — would need the most
+  rework, since each compares `host_brand` against another free-text
+  field rather than an id:
+  - Outfit/wardrobe scoring: `event.host_brand === item.brand_alignment`
+    in `episodeOrchestrationRoute.js:68`; `item.brand ===
+    event.host_brand` in `wardrobeIntelligenceService.js:286-288` and
+    `:361-363`; `hostBrand = event.host_brand || automation.host_brand`
+    then compared against wardrobe brands in
+    `wardrobeIntelligenceService.js:556` and `:734-736`; a lower-cased
+    substring match in `episodeCompletionService.js:84`; a lower-cased
+    `brandLower` built from `host_brand` in `routes/wardrobe.js:1007`
+    and matched against item aesthetic tags at `wardrobe.js:1051`.
+  - Brand continuity across episodes: `prevHostBrand && e.host_brand ===
+    prevHostBrand` in `routes/worldEvents.js:4218-4220`, fed by a raw SQL
+    `SELECT ... host_brand ...` at `:4125` and `prevEvent?.host_brand` at
+    `:4134`.
+  - Invitation style-reference lookup, the most structural read: `WHERE
+    e.host_brand = :brand` in `invitationGeneratorService.js:193`,
+    gated by `if (!event.host_brand) return null` at `:187`, replacing
+    `:brand` with `event.host_brand` at `:198` — an exact-string SQL
+    match against every other event's `host_brand`, used to find the
+    most recent invitation from "the same" brand.
+- *AI prompt / generated-copy text* — reads the string for display, would
+  need a brand name resolved from an id instead:
+  `episodeOrchestrationRoute.js:266`, `episodeScriptWriterService.js:405`,
+  `distributionService.js:147`, `episodeGeneratorService.js:512`,
+  `financialTransactionService.js:476`, `todoListService.js:617`,
+  `invitationCompositingService.js:310` and `:394`,
+  `scriptSkeletonGenerator.js:34`, `invitationGeneratorService.js:344`
+  and `:360`.
+- *Copied forward into another home* — reads `host_brand` off the event
+  and writes it into a second place, which then has its own independent
+  readers: `canon_consequences.automation.host_brand`
+  (`worldEvents.js:2391`, written; read back at
+  `frontend/src/components/Episodes/EpisodeOverviewTab.jsx:721,723` for
+  display, and via `event.host_brand || automation.host_brand` fallback
+  chains in `episodeGeneratorService.js:779`,
+  `wardrobeIntelligenceService.js:556`, and
+  `socialChecklistService.js:277`); the invitation asset's own metadata
+  (`invitationGeneratorService.js:240`); a scene-generation snapshot,
+  `event_metadata.host_brand` (`episodeGeneratorService.js:656`); an
+  evaluation context, `eventContext.host_brand = we.host_brand`
+  (`routes/evaluation.js:294`, from a raw SQL read at `:280`); a
+  brand-opportunity candidate list, `brandSources` in
+  `characterSyncService.js:226`; a wardrobe event-context object
+  (`routes/wardrobe.js:170,185` from SQL, and the request-body fallback
+  chain at `:950,973,984,1182`); a social-task-builder context,
+  `hostBrand = context.host_brand || hostProfile?.host_brand || null`
+  (`episodeGeneratorService.js:156` — the `hostProfile?.host_brand`
+  branch reads a field `SocialProfile` does not have, per
+  `src/models/index.js`'s model list, so only the `context.host_brand`
+  branch is ever live); story-generation context, a raw SQL `SELECT ...
+  host_brand ...` in `storyGenerationService.js:67`.
+- *Frontend display and editing* — reads the string to show or let a
+  creator type it: `frontend/src/pages/EventPackagePage.jsx:439` (Basics
+  section, read-only); `frontend/src/pages/WorldAdmin.jsx:1119` (CSV
+  export), `:2680` and `:3378` (controlled inputs, read the current value
+  to display it and to build the AI revise-suggestion prompt at `:3594`
+  and `:3604`), `:3292` (event-detail modal load, `event.host_brand ||
+  automation.host_brand` fallback), `:3645` (derives a fallback `host`
+  display string from `host_brand` when `host` is empty);
+  `frontend/src/components/QuickEpisodeCreator.jsx:229` (populates form
+  state from a loaded event); `frontend/src/components/
+  EpisodeWardrobeGameplay.jsx:209,506` (wardrobe-gameplay context and an
+  event tag chip).
+
+**Open questions for Evoni:**
+
+**(a) The schema target.** `organizer_type` with `organizer_profile_id`
+and `organizer_brand_id`, replacing free-text `host_brand` with a link to
+`lalaverse_brands`. This is a production schema change — hers to decide
+and run, not this document's or this task's to propose as a migration
+file. Recorded here as proposed, not planned.
+
+**(b) Is Lala's role a fixed list or free text?** Not decided here.
+
+**(c) Do featured attendees resolve the existing two-homes guest problem,
+or wait for it?** §2 EVENT PACKAGE's "Guests" subsection above already
+records that problem (`canon_consequences.automation.guest_profiles` vs.
+the top-level `guest_list` column, neither ruled authoritative) — cited
+here, not restated. Whether "featured attendees" becomes a third home, a
+view over one of the two existing ones, or the occasion to finally pick
+one, is not decided here.
 
 ---
 
