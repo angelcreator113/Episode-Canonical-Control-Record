@@ -1661,6 +1661,69 @@ the nine rulings above describe, not here.
 MERGE: still requires Evoni's explicit go — this addendum records her
 answers; it doesn't itself close the PR.
 
+**(o) SAL is composited; production coverage replaces scene coverage
+(Evoni, 2026-09-22, Task #1664).** Corrects (a) above — see the marked
+correction below, not a silent replacement.
+
+**1. SAL is composited, like a gameplay stream.** Three layers can be on
+screen at once: Host Environment (JustAWoman's persistent player frame
+and her real-world background), the Interface (login, Closet UI,
+notifications, HUD), and Lala's World (bedroom, closet, event
+locations). JustAWoman is never inside Lala's scene; Lala never
+perceives JustAWoman or the interface. This is the same three-layer
+split §8(f)'s SAL interaction law already names (Host Environment /
+Interface / Lala's World, `canonicalBeats.js:64-70`'s `surface` values)
+and the same beat-by-beat `actor`/`surface`/`diegetic` table §8(e)
+records — not restated here, only composited: where §8(f) established
+that a beat's `actor` and `diegetic` are independent axes, this ruling
+adds that the layers those axes describe are not exclusive states a beat
+occupies one at a time, but simultaneous tracks a composited frame can
+show together.
+
+**2. Production coverage replaces scene coverage.** Each beat has four
+independent indicators, each `required`, `not required`, or `decided per
+episode` (the same three-state pattern (b)/(c)'s addendum above already
+uses for `typical_location`, not a new convention):
+
+| Indicator | What it is |
+|---|---|
+| Environment | The Lala's World set — what (n)/(b) above called `typical_location` |
+| Host performance | A JustAWoman performance clip |
+| Character performance | A Lala performance clip |
+| Interface | A UI or overlay asset |
+
+A beat is covered only when every indicator marked `required` for that
+beat is met — not when any one of the four is met, and not when the old
+single `typical_location` value alone is set.
+
+**3. Correction to (a) above.** **(a)'s original wording — "Beats 1 and 2
+get a new location role, `HOST_ENVIRONMENT`... a real set to create,
+once" — is corrected, not deleted, by this ruling:** `HOST_ENVIRONMENT`
+is not a *location* Beats 1 and 2 occupy. It is JustAWoman's frame,
+present across the whole episode as the Host Environment layer (item 1
+above), not a per-beat coverage value. Under production coverage (item
+2), Beats 1 and 2's actual requirements are: both beats require a
+JustAWoman performance clip (Host performance — headphones on for Beat
+1, the login for Beat 2, matching each beat's own `actor: 'justawoman'`,
+`canonicalBeats.js:85,98`); Beat 2 additionally requires the login
+Interface asset (matching its `screen_action: 'LOGIN'`,
+`canonicalBeats.js:97`). The Host Environment *set* itself is still
+needed — not as Beats 1-2's Environment indicator, but as the constant
+background of JustAWoman's frame, independent of which beat is playing.
+
+**4. Open question for Evoni.** During Beats 1 and 2, what does Lala's
+World show — her home establishing shot, a loading state, or nothing
+yet? Not decided here.
+
+**5. The four indicators can draw on data that already exists.** No new
+storage is proposed by this ruling. The Interface and Host performance
+indicators can draw on the beat table's own `surface` and `actor` values
+(§8(e)/(i), `canonicalBeats.js`); the Character performance indicator can
+draw on the existing character-clip system (`CharacterClip`, belonging
+to `Scene`, `src/models/CharacterClip.js:155-166` — cited at (n) item 2
+above). Mapping from these existing fields to the four indicators happens
+in the coverage build this decision set describes, not in this document.
+
 ---
 
 ## 9. Owed before enforcement
