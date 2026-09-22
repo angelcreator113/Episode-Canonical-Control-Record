@@ -2106,7 +2106,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     if (!models?.SocialProfile) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
     const profile = await models.SocialProfile.findByPk(profile_id, {
-      attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'brand_partnerships', 'registry_character_id', 'lala_relevance_score', 'aesthetic_dna'],
+      attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'brand_partnerships', 'registry_character_id', 'lala_relevance_score', 'aesthetic_dna', 'city', 'frequent_venues'],
     });
     if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
 
@@ -2116,7 +2116,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     // Find venue
     const eventAutomation = require('../services/eventAutomationService');
     const fakeCalEvent = { cultural_category: p.content_category || 'creator_economy' };
-    let venue = await eventAutomation.findVenue(fakeCalEvent, models);
+    let venue = await eventAutomation.findVenue(fakeCalEvent, models, profile);
 
     // Auto-create venue in WorldLocations if none exists
     if (!venue) {
