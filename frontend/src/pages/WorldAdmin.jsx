@@ -71,6 +71,20 @@ const UIOverlaysTab = lazy(() => import('./UIOverlaysTab'));
 const ProductionOverlaysTab = lazy(() => import('./ProductionOverlaysTab'));
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
+// Maps the Feed event templates grid's own label-word `category` values to
+// the ten settled world_events.category values (Evoni's taxonomy ruling,
+// 2026-09-22, docs/EVENT_EPISODE_FLOW.md §8(k)/(l)). Mapped by what each
+// template actually is, not by generic label-matching — 'lifestyle' maps
+// to 'travel_destination' because the only template using it (Virtual
+// Travel Festival) is a travel concept, not a catch-all.
+const TEMPLATE_CATEGORY_MAP = {
+  creator_economy: 'creator_brand',
+  fashion: 'fashion',
+  beauty: 'beauty_wellness',
+  creative: 'arts_entertainment',
+  music: 'arts_entertainment',
+  lifestyle: 'travel_destination',
+};
 const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', safe: '#eab308', fail: '#dc2626' };
 const TIER_EMOJIS = { slay: '👑', pass: '✨', safe: '😐', fail: '💔' };
 const EVENT_TYPE_ICONS = { invite: '💌', upgrade: '⬆️', guest: '🌟', fail_test: '💔', deliverable: '📦', brand_deal: '🤝' };
@@ -2166,6 +2180,7 @@ The revised event should feel like a completely different experience from the si
                           const res = await api.post(`/api/v1/world/${showId}/events`, {
                             name: template.name,
                             event_type: 'invite',
+                            category: TEMPLATE_CATEGORY_MAP[template.category] || null,
                             description: template.desc,
                             prestige: 5,
                             cost_coins: 150,

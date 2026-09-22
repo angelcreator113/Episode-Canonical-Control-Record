@@ -1302,20 +1302,44 @@ Two new fields are ruled instead:
   `brunch_dining`, `beauty_wellness`, `creator_brand`,
   `arts_entertainment`, `luxury_prestige`, `community_local`,
   `travel_destination`, `personal_relationship`.
-- **`format`** — not yet settled. `docs/EVENT_TAXONOMY_PLAN.md` (Task
-  #1635) proposes a list drawn from existing format-like values (the
-  `QuickEpisodeCreator` presets, the Events-tab template cards, the
-  photo-booth gala/premiere/launch check) for Evoni's approval; this
-  ruling fixes only that a `format` field exists, not its vocabulary.
+- **`format`** — eight, settled (Evoni, 2026-09-22): `cocktail_party`,
+  `garden_soiree`, `gallery_opening`, `gala`, `brunch`, `concert`,
+  `brand_launch`, `premiere`. Drawn from `docs/EVENT_TAXONOMY_PLAN.md`'s
+  draft table (Task #1635), which proposed a ninth value, `red_carpet`,
+  drawn from the photo-booth check's own dress-code text match —
+  **explicitly rejected.** Evoni's own reasoning: `red_carpet` stays a
+  dress-code/presentation attribute, not a format, because promoting it
+  would recreate exactly the ambiguity this taxonomy exists to remove —
+  "Fashion category + Premiere format + red-carpet dress code" and
+  "Luxury & Prestige category + Gala format + red-carpet dress code" both
+  read cleanly; a `red_carpet` format would leave no way to tell whether a
+  given event is a `premiere` or a `red_carpet`, the "two homes for one
+  truth" problem again. Evoni's own examples, each field doing exactly one
+  job:
 
-Two things must happen before any migration is written, both named by
+  | `event_type` | `category` | `format` |
+  |---|---|---|
+  | `invite` | `fashion` | `gala` |
+  | `brand_deal` | `beauty_wellness` | `brand_launch` |
+  | `invite` | `brunch_dining` | `brunch` |
+
+  `event_type` = why/mechanically how Lala is involved; `category` = what
+  social/industry world the event belongs to; `format` = what kind of
+  gathering it physically is. Expanding either list later (per Evoni:
+  "we can add formats deliberately when SAL actually needs them," not
+  because unrelated code happens to contain a similar word) is an
+  application-code change to the model's `validate: { isIn: [...] }`, not
+  a migration — the reason `STRING` was chosen over a Postgres `ENUM`.
+
+Two things had to happen before any migration was written, both named by
 Evoni directly: a drift check on `world_events` against the 2026-09-17
 canon capture (three other tables have already turned out to differ
 between production and this repo's migrations — a migration written blind
-against the repo could fail on production or land on the wrong shape),
-and Evoni's approval of the format list once drafted. `docs/EVENT_TAXONOMY_PLAN.md`
-performs the drift check and drafts the list; it does not write the
-migration.
+against the repo could fail on production or land on the wrong shape) —
+performed in `docs/EVENT_TAXONOMY_PLAN.md` §1, no drift found — and
+Evoni's approval of the format list above. Task #1640 adds the columns and
+wires the three known call sites (`QuickEpisodeCreator.jsx`, the
+photo-booth check, the Events-tab template grid) to use them.
 
 **(l) Producer Mode and Lala's Feed answer different questions (Evoni,
 2026-09-22, Task #1631).** Producer Mode answers what is in production,

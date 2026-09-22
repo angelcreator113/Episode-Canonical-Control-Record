@@ -38,6 +38,27 @@ module.exports = (sequelize) => {
       defaultValue: 'invite',
       comment: 'invite | upgrade | guest | fail_test | deliverable | brand_deal',
     },
+    // category/format — Evoni's taxonomy ruling, 2026-09-22
+    // (docs/EVENT_EPISODE_FLOW.md §8(k)/(l)). Nullable, no default, no
+    // backfill on existing rows. isIn is skipped by Sequelize on a null
+    // value when allowNull is true (node_modules/sequelize/lib/instance-
+    // validator.js's _singleAttrValidate), so existing NULL rows are safe.
+    category: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'fashion | social | brunch_dining | beauty_wellness | creator_brand | arts_entertainment | luxury_prestige | community_local | travel_destination | personal_relationship',
+      validate: {
+        isIn: [['fashion', 'social', 'brunch_dining', 'beauty_wellness', 'creator_brand', 'arts_entertainment', 'luxury_prestige', 'community_local', 'travel_destination', 'personal_relationship']],
+      },
+    },
+    format: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'cocktail_party | garden_soiree | gallery_opening | gala | brunch | concert | brand_launch | premiere',
+      validate: {
+        isIn: [['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere']],
+      },
+    },
     host: {
       type: DataTypes.STRING(200),
       allowNull: true,

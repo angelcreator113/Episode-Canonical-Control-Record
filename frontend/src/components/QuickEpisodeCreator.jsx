@@ -22,44 +22,50 @@ import LoadingSkeleton from './LoadingSkeleton';
 const STORAGE_KEY_PREFIX = 'quick_episode_draft_';
 
 // ─── PRESET EVENT TEMPLATES ───
+// `format` values match the eight approved by Evoni's taxonomy ruling
+// (2026-09-22, docs/EVENT_EPISODE_FLOW.md §8(k)/(l)) verbatim. This key was
+// named `event_type` until Task #1640 — it never held a real event_type
+// mechanic value (invite | upgrade | guest | fail_test | deliverable |
+// brand_deal), only format-shaped words, and was being written straight
+// into the real event_type column (the bug that ruling exists to fix).
 const EVENT_PRESETS = [
-  { 
-    label: '🥂 Cocktail Party', event_type: 'cocktail', dress_code: 'cocktail elegant',
+  {
+    label: '🥂 Cocktail Party', format: 'cocktail_party', dress_code: 'cocktail elegant',
     dress_code_keywords: ['elegant', 'cocktail', 'sophisticated', 'chic'],
     prestige: 5, strictness: 4, cost: 50,
   },
-  { 
-    label: '🌸 Garden Soirée', event_type: 'garden', dress_code: 'romantic garden casual',
+  {
+    label: '🌸 Garden Soirée', format: 'garden_soiree', dress_code: 'romantic garden casual',
     dress_code_keywords: ['romantic', 'garden', 'casual', 'floral', 'soft', 'feminine'],
     prestige: 5, strictness: 4, cost: 75,
   },
-  { 
-    label: '🎨 Art Gallery Opening', event_type: 'gallery', dress_code: 'avant-garde artistic',
+  {
+    label: '🎨 Art Gallery Opening', format: 'gallery_opening', dress_code: 'avant-garde artistic',
     dress_code_keywords: ['artistic', 'avant-garde', 'bold', 'modern', 'edgy'],
     prestige: 7, strictness: 6, cost: 100,
   },
-  { 
-    label: '💎 Gala / Black Tie', event_type: 'gala', dress_code: 'black tie formal',
+  {
+    label: '💎 Gala / Black Tie', format: 'gala', dress_code: 'black tie formal',
     dress_code_keywords: ['formal', 'black-tie', 'luxury', 'glamorous', 'elite'],
     prestige: 9, strictness: 8, cost: 200,
   },
-  { 
-    label: '☕ Casual Brunch', event_type: 'brunch', dress_code: 'casual chic',
+  {
+    label: '☕ Casual Brunch', format: 'brunch', dress_code: 'casual chic',
     dress_code_keywords: ['casual', 'relaxed', 'chic', 'daytime', 'light'],
     prestige: 3, strictness: 2, cost: 25,
   },
-  { 
-    label: '🎵 Music Event', event_type: 'concert', dress_code: 'edgy nightlife',
+  {
+    label: '🎵 Music Event', format: 'concert', dress_code: 'edgy nightlife',
     dress_code_keywords: ['edgy', 'nightlife', 'bold', 'dark', 'streetwear'],
     prestige: 6, strictness: 5, cost: 80,
   },
-  { 
-    label: '📸 Brand Launch', event_type: 'brand_launch', dress_code: 'luxury brand aligned',
+  {
+    label: '📸 Brand Launch', format: 'brand_launch', dress_code: 'luxury brand aligned',
     dress_code_keywords: ['luxury', 'brand', 'polished', 'high-fashion', 'curated'],
     prestige: 8, strictness: 7, cost: 150,
   },
-  { 
-    label: '✏️ Custom Event', event_type: '', dress_code: '',
+  {
+    label: '✏️ Custom Event', format: '', dress_code: '',
     dress_code_keywords: [], prestige: 5, strictness: 5, cost: 50,
   },
 ];
@@ -99,7 +105,7 @@ export default function QuickEpisodeCreator() {
   // Event fields
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [eventName, setEventName] = useState('');
-  const [eventType, setEventType] = useState('');
+  const [format, setFormat] = useState('');
   const [dressCode, setDressCode] = useState('');
   const [dressCodeKeywords, setDressCodeKeywords] = useState([]);
   const [keywordInput, setKeywordInput] = useState('');
@@ -129,7 +135,7 @@ export default function QuickEpisodeCreator() {
         if (draft.description) setDescription(draft.description);
         if (draft.selectedPreset) setSelectedPreset(draft.selectedPreset);
         if (draft.eventName) setEventName(draft.eventName);
-        if (draft.eventType) setEventType(draft.eventType);
+        if (draft.format) setFormat(draft.format);
         if (draft.dressCode) setDressCode(draft.dressCode);
         if (draft.dressCodeKeywords) setDressCodeKeywords(draft.dressCodeKeywords);
         if (draft.prestige != null) setPrestige(draft.prestige);
@@ -153,7 +159,7 @@ export default function QuickEpisodeCreator() {
   const saveDraft = useCallback(() => {
     if (isRestoringRef.current) return;
     const draft = {
-      title, description, selectedPreset, eventName, eventType,
+      title, description, selectedPreset, eventName, format,
       dressCode, dressCodeKeywords, prestige, strictness, cost,
       hostBrand, narrativeStakes, inviteType, isFree,
       savedAt: new Date().toISOString(),
@@ -167,7 +173,7 @@ export default function QuickEpisodeCreator() {
       setTimeout(() => setSaveStatus('saved'), 300);
       setTimeout(() => setSaveStatus(null), 2500);
     }
-  }, [title, description, selectedPreset, eventName, eventType, dressCode,
+  }, [title, description, selectedPreset, eventName, format, dressCode,
       dressCodeKeywords, prestige, strictness, cost, hostBrand,
       narrativeStakes, inviteType, isFree, storageKey]);
 
@@ -213,7 +219,7 @@ export default function QuickEpisodeCreator() {
             if (ev) {
               setExistingEvent(ev);
               setEventName(ev.name || '');
-              setEventType(ev.event_type || '');
+              setFormat(ev.format || '');
               setDressCode(ev.dress_code || '');
               setDressCodeKeywords(ev.dress_code_keywords || []);
               setPrestige(ev.prestige ?? 5);
@@ -263,7 +269,7 @@ export default function QuickEpisodeCreator() {
   // ─── Apply preset ───
   const applyPreset = (preset) => {
     setSelectedPreset(preset.label);
-    setEventType(preset.event_type);
+    setFormat(preset.format);
     setDressCode(preset.dress_code);
     setDressCodeKeywords([...preset.dress_code_keywords]);
     setPrestige(preset.prestige);
@@ -307,7 +313,10 @@ export default function QuickEpisodeCreator() {
           try {
             await api.put(`/api/v1/world/${effectiveShowId}/events/${existingEvent.id}`, {
               name: eventName.trim(),
-              event_type: eventType,
+              // event_type (the mechanic) is deliberately not sent here —
+              // this form has no UI for changing it, and a partial update
+              // leaves the existing event's real value untouched.
+              format: format,
               invite_type: inviteType,
               dress_code: dressCode,
               dress_code_keywords: dressCodeKeywords,
@@ -324,7 +333,8 @@ export default function QuickEpisodeCreator() {
             const evRes = await api.post(`/api/v1/world/${effectiveShowId}/events`, {
               show_id: effectiveShowId,
               name: eventName.trim(),
-              event_type: eventType,
+              event_type: 'invite',
+              format: format,
               invite_type: inviteType,
               dress_code: dressCode,
               dress_code_keywords: dressCodeKeywords,
@@ -363,7 +373,8 @@ export default function QuickEpisodeCreator() {
         const evRes = await api.post(`/api/v1/world/${effectiveShowId}/events`, {
           show_id: effectiveShowId,
           name: eventName.trim(),
-          event_type: eventType,
+          event_type: 'invite',
+          format: format,
           invite_type: inviteType,
           dress_code: dressCode,
           dress_code_keywords: dressCodeKeywords,
@@ -488,7 +499,7 @@ Lala arrives at ${evName}.
           <button onClick={() => {
             clearDraft();
             setTitle(''); setDescription(''); setSelectedPreset(null);
-            setEventName(''); setEventType(''); setDressCode('');
+            setEventName(''); setFormat(''); setDressCode('');
             setDressCodeKeywords([]); setPrestige(5); setStrictness(5);
             setCost(50); setHostBrand(''); setNarrativeStakes('');
             setInviteType('invite'); setIsFree(false);
@@ -606,9 +617,9 @@ Lala arrives at ${evName}.
               style={S.input} placeholder="romantic garden casual" />
           </div>
           <div style={S.fieldHalf}>
-            <label style={S.label}>Event Type</label>
-            <input type="text" value={eventType} onChange={e => setEventType(e.target.value)}
-              style={S.input} placeholder="garden, gala, brunch..." />
+            <label style={S.label}>Format</label>
+            <input type="text" value={format} onChange={e => setFormat(e.target.value)}
+              style={S.input} placeholder="gala, brunch, concert, premiere..." />
           </div>
         </div>
 
