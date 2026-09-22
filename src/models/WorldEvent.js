@@ -75,14 +75,49 @@ module.exports = (sequelize) => {
     },
 
     // ── Venue & Location ──
-    // venue_location_id, venue_name, venue_address — migration 20260709 (may not exist)
+    // venue_location_id, venue_name, venue_address — migration 20260709.
+    // Confirmed present in the 2026-09-17 canon capture
+    // (docs/audit/EvidenceNote_Canon_Schema_Capture_2026-09-17.txt: uuid /
+    // character varying(200) / character varying(255), all nullable,
+    // matching the migration's own addColumn calls exactly) — declared
+    // here rather than left as a "may not exist" hedge (Task #1646).
+    venue_location_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'FK to WorldLocation — the venue where this event takes place',
+    },
+    venue_name: {
+      type: DataTypes.STRING(200),
+      allowNull: true,
+      comment: 'Display name: "Club Noir" (may differ from WorldLocation name)',
+    },
+    venue_address: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'Full address for invitation: "742 Ocean Drive, South Beach, Miami"',
+    },
     // source_calendar_event_id — migration 20260711 (may not exist)
     // opportunity_id — migration 20260719 (may not exist)
     location_hint: { type: DataTypes.TEXT, allowNull: true },
     scene_set_id: { type: DataTypes.UUID, allowNull: true },
 
     // ── Timeline ──
-    // event_date, event_time, guest_list — migration 20260709 (may not exist)
+    // event_date, event_time — migration 20260709. Confirmed present in the
+    // 2026-09-17 canon capture (character varying(50), nullable, matching
+    // the migration exactly) — declared here rather than left as a "may
+    // not exist" hedge (Task #1646). guest_list stays hedged below;
+    // out of this task's scope.
+    event_date: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Story date of the event: "Friday, March 15th" or "Tonight at 9pm"',
+    },
+    event_time: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Event time: "9:00 PM - 2:00 AM"',
+    },
+    // guest_list — migration 20260709 (may not exist)
 
     // ── Invitation ──
     invitation_asset_id: { type: DataTypes.UUID, allowNull: true },
@@ -329,19 +364,23 @@ module.exports = (sequelize) => {
   };
 
   // Every field this model declared before Task #1640 added category/format
-  // (2026-09-22), plus the three Sequelize-managed timestamp columns. An
-  // unrestricted findAll/findOne/findByPk (no `attributes` option) already
-  // only selects the model's own declared fields, not every world_events
-  // column — this file's own comments document several migrated columns
-  // deliberately left undeclared for exactly this reason ("may not exist").
-  // category/format are the two newest such columns; call sites that
-  // consume most of an event's fields (deep or multi-step consumers, where
-  // tracing an exact minimal list is impractical) pass this constant as
-  // `attributes` to keep returning exactly what they always have, without
-  // requesting the two columns a not-yet-migrated database won't have yet.
+  // (2026-09-22), plus venue_location_id/venue_name/venue_address/
+  // event_date/event_time (Task #1646, confirmed against the 2026-09-17
+  // canon capture and moved out of the undeclared "may not exist" set —
+  // see those fields' declarations above), plus the three Sequelize-
+  // managed timestamp columns. An unrestricted findAll/findOne/findByPk
+  // (no `attributes` option) already only selects the model's own declared
+  // fields, not every world_events column — this file's own comments
+  // document several migrated columns deliberately left undeclared for
+  // exactly this reason ("may not exist"). category/format are the two
+  // newest such columns still excluded here — deliberately, not an
+  // oversight, so call sites that pass this constant as `attributes` keep
+  // returning exactly what they always have without requesting the two
+  // columns a not-yet-migrated database won't have yet.
   WorldEvent.CURRENT_ATTRIBUTES = [
     'id', 'show_id', 'season_id', 'arc_id', 'name', 'event_type',
     'host', 'host_brand', 'description', 'location_hint', 'scene_set_id',
+    'venue_location_id', 'venue_name', 'venue_address', 'event_date', 'event_time',
     'invitation_asset_id', 'source_profile_id', 'prestige', 'cost_coins',
     'strictness', 'deadline_type', 'deadline_minutes', 'dress_code',
     'dress_code_keywords', 'outfit_set_id', 'outfit_pieces',
