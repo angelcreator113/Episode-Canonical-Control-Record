@@ -341,6 +341,17 @@ async function generateOpportunitiesFromFeed(showId, models) {
 
 // ── SCHEDULE OPPORTUNITY AS EVENT (ONE-CLICK) ────────────────────────────────
 
+// Shapes a raw social_profiles row into the same guest-object shape
+// assembleGuestList (eventAutomationService.js) writes — profile_id, not
+// id — so every profile_id-reading consumer of guest_profiles
+// (characterSyncService, storyGenerationService, episodeScriptWriterService,
+// feedActivityService) can find guests this path creates too (Task #1686,
+// docs/GUEST_OWNERSHIP_READ.md §6). A named function, not an inline
+// `.map`, so this shape is unit-testable on its own.
+function toGuestProfile(row) {
+  return { profile_id: row.id, handle: row.handle, display_name: row.display_name };
+}
+
 async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
   const { sequelize } = models;
 
@@ -417,7 +428,7 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
         venue_theme: venueTheme,
         event_date: eventDateStr,
         event_time: eventTime,
-        guest_profiles: guestProfiles.map(g => ({ id: g.id, handle: g.handle, display_name: g.display_name })),
+        guest_profiles: guestProfiles.map(toGuestProfile),
         career_milestone: opp.career_milestone || null,
       },
     }),
@@ -754,6 +765,7 @@ module.exports = {
   EVENT_TYPE_CONFIGS,
   pickVenue,
   generateUniqueVenue,
+  toGuestProfile,
   generateOpportunitiesFromFeed,
   scheduleOpportunityAsEvent,
   suggestNextEvents,

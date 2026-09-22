@@ -151,9 +151,14 @@ async function syncAfterEvent(event, episode, models) {
   // Update guest profiles
   const guests = automation.guest_profiles || [];
   for (const guest of guests) {
-    if (!guest.profile_id) continue;
+    // profile_id is the current shape (assembleGuestList); id is the
+    // pre-fix shape a guest written by the opportunity pipeline may still
+    // carry (Task #1686, docs/GUEST_OWNERSHIP_READ.md §6) — accept either
+    // so already-stored guests resolve without a data repair.
+    const guestProfileId = guest.profile_id || guest.id;
+    if (!guestProfileId) continue;
     try {
-      const profile = await SocialProfile.findByPk(guest.profile_id);
+      const profile = await SocialProfile.findByPk(guestProfileId);
       if (profile) {
         const fullProfile = profile.full_profile || {};
         const attendedEvents = fullProfile.attended_events || [];

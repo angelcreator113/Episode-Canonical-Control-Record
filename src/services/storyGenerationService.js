@@ -86,7 +86,10 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     let cc = event?.canon_consequences;
     if (typeof cc === 'string') try { cc = JSON.parse(cc); } catch { cc = {}; }
     const auto = cc?.automation || {};
-    const profileIds = [auto.host_profile_id, ...(auto.guest_profiles || []).map(g => g.profile_id)].filter(Boolean);
+    // g.id is the pre-fix shape a guest written by the opportunity
+    // pipeline may still carry (Task #1686, docs/GUEST_OWNERSHIP_READ.md
+    // §6) — g.profile_id is preferred, g.id is the fallback.
+    const profileIds = [auto.host_profile_id, ...(auto.guest_profiles || []).map(g => g.profile_id || g.id)].filter(Boolean);
     if (profileIds.length > 0) {
       const [rows] = await sequelize.query(
         `SELECT sp.handle, sp.display_name, sp.creator_name, sp.archetype, sp.posting_voice,

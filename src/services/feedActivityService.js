@@ -78,7 +78,10 @@ async function generatePostEventActivity(event, models) {
     const templates = POST_TEMPLATES[relationship] || POST_TEMPLATES.industry;
     const tpl = templates[Math.floor(Math.random() * templates.length)];
     posts.push({
-      profile_id: guest.profile_id,
+      // guest.id is the pre-fix shape a guest written by the opportunity
+      // pipeline may still carry (Task #1686, docs/GUEST_OWNERSHIP_READ.md
+      // §6) — guest.profile_id is preferred, guest.id is the fallback.
+      profile_id: guest.profile_id || guest.id,
       handle: guest.handle,
       role: relationship,
       content: tpl.template.replace('{event}', eventName).replace('{host}', hostHandle),
