@@ -106,6 +106,13 @@ async function loadScriptContext(episodeId, showId, models) {
   try {
     context.event = await WorldEvent.findOne({
       where: { used_in_episode_id: episodeId },
+      // context.event is passed wholesale into the wardrobe-intelligence
+      // pipeline (getWardrobeIntelligence -> scoreOutfitForEvent and
+      // several evaluate* helpers), which reads many of the event's
+      // fields — scoped to the model's own pre-Task-#1640 attribute set
+      // (WorldEvent.CURRENT_ATTRIBUTES) rather than a hand-traced minimal
+      // list, so this keeps returning exactly what it always has.
+      attributes: WorldEvent.CURRENT_ATTRIBUTES,
     }).then(e => e?.toJSON());
   } catch { /* non-blocking */ }
 

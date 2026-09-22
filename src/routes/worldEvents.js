@@ -57,11 +57,11 @@ router.get('/world/:showId/events', requireAuth, async (req, res) => {
           const include = [];
           if (models.Asset) include.push({ model: models.Asset, as: 'invitationAsset', attributes: ['id', 's3_url_processed', 's3_url_raw'], required: false });
           if (models.SceneSet) include.push({ model: models.SceneSet, as: 'sceneSet', attributes: ['id', 'name', 'base_still_url', 'scene_type'], required: false });
-          events = await models.WorldEvent.findAll({ where, include, order: [[sortCol, sortOrder]] });
+          events = await models.WorldEvent.findAll({ where, include, order: [[sortCol, sortOrder]], attributes: models.WorldEvent.CURRENT_ATTRIBUTES });
         } catch (includeErr) {
           console.warn('[WorldEvents] Includes failed, trying without:', includeErr.message);
           try {
-            events = await models.WorldEvent.findAll({ where, order: [[sortCol, sortOrder]] });
+            events = await models.WorldEvent.findAll({ where, order: [[sortCol, sortOrder]], attributes: models.WorldEvent.CURRENT_ATTRIBUTES });
           } catch (basicErr) {
             console.warn('[WorldEvents] Model query failed (paranoid/deleted_at?):', basicErr.message);
             events = null; // fall through to raw SQL
@@ -1721,7 +1721,7 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
     } catch {
       // Fallback to model if raw SQL fails
       if (models.WorldEvent) {
-        event = await models.WorldEvent.findByPk(eventId);
+        event = await models.WorldEvent.findByPk(eventId, { attributes: models.WorldEvent.CURRENT_ATTRIBUTES });
         if (event) event = event.toJSON();
       }
     }
@@ -2670,7 +2670,7 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', requireA
     } catch {
       if (models.WorldEvent) {
         try {
-          event = await models.WorldEvent.findByPk(eventId);
+          event = await models.WorldEvent.findByPk(eventId, { attributes: models.WorldEvent.CURRENT_ATTRIBUTES });
           if (event) event = event.toJSON();
         } catch { /* model query failed too */ }
       }
@@ -3900,6 +3900,13 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
         deleted_at: null,
       },
       limit: 50,
+      // Scoped to exactly what the scoring/response logic below reads —
+      // see the `event: {...}` mapping further down for the full list.
+      attributes: [
+        'id', 'name', 'event_type', 'host', 'host_brand', 'prestige',
+        'cost_coins', 'payment_amount', 'is_paid', 'strictness',
+        'career_tier', 'career_milestone', 'parent_event_id', 'source_profile_id',
+      ],
     });
 
     // ── 4. Score each candidate ──

@@ -328,5 +328,31 @@ module.exports = (sequelize) => {
     });
   };
 
+  // Every field this model declared before Task #1640 added category/format
+  // (2026-09-22), plus the three Sequelize-managed timestamp columns. An
+  // unrestricted findAll/findOne/findByPk (no `attributes` option) already
+  // only selects the model's own declared fields, not every world_events
+  // column — this file's own comments document several migrated columns
+  // deliberately left undeclared for exactly this reason ("may not exist").
+  // category/format are the two newest such columns; call sites that
+  // consume most of an event's fields (deep or multi-step consumers, where
+  // tracing an exact minimal list is impractical) pass this constant as
+  // `attributes` to keep returning exactly what they always have, without
+  // requesting the two columns a not-yet-migrated database won't have yet.
+  WorldEvent.CURRENT_ATTRIBUTES = [
+    'id', 'show_id', 'season_id', 'arc_id', 'name', 'event_type',
+    'host', 'host_brand', 'description', 'location_hint', 'scene_set_id',
+    'invitation_asset_id', 'source_profile_id', 'prestige', 'cost_coins',
+    'strictness', 'deadline_type', 'deadline_minutes', 'dress_code',
+    'dress_code_keywords', 'outfit_set_id', 'outfit_pieces',
+    'narrative_stakes', 'canon_consequences', 'seeds_future_events',
+    'overlay_template', 'required_ui_overlays', 'browse_pool_bias',
+    'browse_pool_size', 'rewards', 'is_paid', 'payment_amount',
+    'requirements', 'career_tier', 'career_milestone', 'fail_consequence',
+    'success_unlock', 'status', 'used_in_episode_id', 'times_used',
+    'parent_event_id', 'chain_position', 'chain_reason', 'momentum_score',
+    'created_at', 'updated_at', 'deleted_at',
+  ];
+
   return WorldEvent;
 };

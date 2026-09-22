@@ -36,7 +36,12 @@ async function generateEpisodeFeedPosts(episodeId, showId, models) {
 
   let event = null;
   try {
-    event = await WorldEvent.findOne({ where: { used_in_episode_id: episodeId } });
+    // Scoped to exactly what's read below: the event-context prompt string
+    // and the outfit_pieces check.
+    event = await WorldEvent.findOne({
+      where: { used_in_episode_id: episodeId },
+      attributes: ['id', 'name', 'event_type', 'prestige', 'dress_code', 'host', 'outfit_pieces'],
+    });
   } catch { /* skip */ }
 
   // Load the latest script

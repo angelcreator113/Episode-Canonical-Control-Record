@@ -603,6 +603,9 @@ router.get('/events/:id/spawned', requireAuth, async (req, res) => {
       const events = await models.WorldEvent.findAll({
         where: { source_calendar_event_id: req.params.id },
         order: [['created_at', 'DESC']],
+        // No known frontend caller found for this endpoint at this basis —
+        // scoped to a reasonable listing set rather than every field.
+        attributes: ['id', 'name', 'event_type', 'status', 'prestige', 'cost_coins', 'created_at'],
       });
       return res.json({ success: true, events });
     }
