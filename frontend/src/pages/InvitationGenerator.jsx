@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Loader2, RefreshCw, CheckCircle2, XCircle, Pencil, Mail, AlertCircle } from 'lucide-react';
 import api from '../services/api';
 
 // ─── THEME OPTIONS ────────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ export const BORDER_OPTIONS = [
 
 // ─── INVITATION BUTTON COMPONENT ──────────────────────────────────────────────
 
-export function InvitationButton({ event, showId, onGenerated }) {
+export function InvitationButton({ event, showId, onGenerated, mode = 'modal', autoGenerate = false }) {
   const [generating, setGenerating]   = useState(false);
   const [approving, setApproving]     = useState(false);
   const [imageUrl, setImageUrl]       = useState(event.invitation_url || null);
@@ -62,6 +63,17 @@ export function InvitationButton({ event, showId, onGenerated }) {
   const isPending = !!pendingAssetId;
   const currentAssetId = pendingAssetId || event.invitation_asset_id;
 
+  // none | generating | generated (pending approval) | approved — the four
+  // states the Event Package page's Invitation section shows (Task #1654).
+  const status = generating ? 'generating'
+    : (hasInvitation && !isPending) ? 'approved'
+    : (imageUrl || isPending) ? 'generated'
+    : 'none';
+  const statusLabel = {
+    none: 'No invitation', generating: 'Generating…',
+    generated: 'Generated — needs approval', approved: 'Approved',
+  }[status];
+
   const handleGenerate = async () => {
     setGenerating(true);
     setError(null);
@@ -70,13 +82,28 @@ export function InvitationButton({ event, showId, onGenerated }) {
       setImageUrl(res.data.data?.imageUrl);
       setPendingAssetId(res.data.data?.assetId);
       setModalTab('preview');
-      setShowPreview(true);
+      if (mode !== 'inline') setShowPreview(true);
     } catch (err) {
+      console.error('[InvitationButton] Generate failed:', err);
       setError(err.response?.data?.error || 'Generation failed');
     } finally {
       setGenerating(false);
     }
   };
+
+  // Auto-generate once for a just-created host event (Task #1654). Guarded
+  // by a ref rather than only the `autoGenerate` prop, so a StrictMode
+  // double-effect can't fire a second generate. The parent (EventPackagePage)
+  // passes autoGenerate=true only for a one-time URL flag it clears
+  // immediately, so a reload never re-triggers this.
+  const autoGenAttempted = useRef(false);
+  useEffect(() => {
+    if (autoGenerate && !autoGenAttempted.current && !hasInvitation && !imageUrl) {
+      autoGenAttempted.current = true;
+      handleGenerate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoGenerate]);
 
   const handleApprove = async () => {
     if (!pendingAssetId) return;
@@ -102,19 +129,37 @@ export function InvitationButton({ event, showId, onGenerated }) {
     setShowPreview(false);
   };
 
-  const handleRerender = async () => {
+  // Edits the invitation's own text in place, via edit-invitation-text
+  // (src/routes/worldEvents.js) — updates the existing asset record rather
+  // than creating a new one, distinct from Regenerate. Previously this
+  // button called re-render-invitation instead, a different endpoint whose
+  // own lookup ignores the edited text's assetId; edit-invitation-text had
+  // no caller anywhere in the frontend until this fix (Task #1654).
+  const handleEditText = async () => {
+    if (!currentAssetId) { setError('Generate an invitation first.'); return; }
     setRerendering(true);
+    setError(null);
     try {
-      const res = await api.post(`/api/v1/world/${showId}/events/${event.id}/re-render-invitation`, { invitation_text: editText });
+      const res = await api.post(`/api/v1/world/${showId}/events/${event.id}/edit-invitation-text`, {
+        assetId: currentAssetId,
+        opening: editText.opening,
+        body: editText.body,
+        closing: editText.closing,
+      });
       setImageUrl(res.data.imageUrl);
       setModalTab('preview');
-      showToast('Invitation re-rendered with your text');
+      showToast('Invitation text updated');
     } catch (err) {
-      setError(err.response?.data?.error || 'Re-render failed');
+      console.error('[InvitationButton] Edit text failed:', err);
+      setError(err.response?.data?.error || 'Edit failed');
     } finally {
       setRerendering(false);
     }
   };
+
+  // Retries whichever action last failed — the edit tab's save if the
+  // error happened there, generation otherwise (Task #1654).
+  const handleRetry = () => { if (modalTab === 'edit') handleEditText(); else handleGenerate(); };
 
   // Load existing invitation text when edit tab opens
   const loadInvitationText = async () => {
@@ -195,6 +240,99 @@ export function InvitationButton({ event, showId, onGenerated }) {
   const redBtn   = btn('#FFF', '#DC2626', '1px solid #FECACA');
   const grayBtn  = btn('#F5F5F5', '#666', '1px solid #EEE');
 
+  // Inline mode (Task #1654): the Event Package page's Invitation section
+  // embeds this same component and its same handlers/endpoints, but renders
+  // the preview/edit/actions directly in the page instead of behind the
+  // fixed-position backdrop modal below — a just-created event's automatic
+  // generation must not cover the rest of the page while it runs.
+  if (mode === 'inline') {
+    return (
+      <div className="epp-invitation-inline">
+        {toast && (
+          <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 10000, background: toast.type === 'error' ? '#FFEBEE' : '#E8F5E9', color: toast.type === 'error' ? '#C62828' : '#1A7A40', border: `1px solid ${toast.type === 'error' ? '#FFCDD2' : '#A5D6A7'}`, borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+            {toast.msg}
+          </div>
+        )}
+
+        <div className="epp-invitation-status-row">
+          <span className={`epp-invitation-status epp-invitation-status-${status}`}>
+            {status === 'generating' && <Loader2 size={12} className="epp-spin-icon" />}
+            {status === 'approved' && <CheckCircle2 size={12} />}
+            {statusLabel}
+          </span>
+          {(imageUrl || hasInvitation) && !generating && (
+            <div className="epp-invitation-actions-inline">
+              <button
+                type="button" className="epp-icon-btn" title="Edit text"
+                onClick={() => { const opening = modalTab !== 'edit'; setModalTab(opening ? 'edit' : 'preview'); if (opening) loadInvitationText(); }}
+              >
+                <Pencil size={14} />
+              </button>
+              <button type="button" className="epp-icon-btn" title="Regenerate" onClick={handleGenerate} disabled={generating}>
+                <RefreshCw size={14} />
+              </button>
+              {isPending && (
+                <>
+                  <button type="button" className="epp-icon-btn" title="Approve" onClick={handleApprove} disabled={approving}>
+                    <CheckCircle2 size={14} />
+                  </button>
+                  <button type="button" className="epp-icon-btn" title="Reject" onClick={handleReject}>
+                    <XCircle size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {generating && !imageUrl && (
+          <div className="epp-invitation-generating">
+            <Loader2 size={14} className="epp-spin-icon" /> Generating invitation…
+          </div>
+        )}
+
+        {error && (
+          <div className="epp-invitation-error">
+            <AlertCircle size={13} /> <span>{error}</span>
+            <button type="button" className="epp-invitation-retry" onClick={handleRetry} disabled={generating || rerendering}>Retry</button>
+          </div>
+        )}
+
+        {imageUrl && (
+          <img className="epp-invitation-preview" src={imageUrl} alt="Invitation preview" />
+        )}
+
+        {!imageUrl && !hasInvitation && !generating && (
+          <button type="button" className="epp-btn epp-btn-small" onClick={handleGenerate}>
+            <Mail size={14} /> Generate Invitation
+          </button>
+        )}
+
+        {modalTab === 'edit' && (imageUrl || hasInvitation) && (
+          <div className="epp-invitation-edit">
+            {[
+              { key: 'opening', label: 'Opening Line', rows: 2 },
+              { key: 'body', label: 'Body', rows: 4 },
+              { key: 'closing', label: 'Closing Line', rows: 2 },
+            ].map((field) => (
+              <div key={field.key} className="epp-invitation-edit-field">
+                <label>{field.label}</label>
+                <textarea
+                  value={editText[field.key]}
+                  onChange={(e) => setEditText((t) => ({ ...t, [field.key]: e.target.value }))}
+                  rows={field.rows}
+                />
+              </div>
+            ))}
+            <button type="button" className="epp-btn epp-btn-primary epp-btn-small" onClick={handleEditText} disabled={rerendering}>
+              {rerendering ? 'Saving…' : 'Save text'}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{ position: 'relative' }}>
       {toast && (
@@ -245,8 +383,8 @@ export function InvitationButton({ event, showId, onGenerated }) {
                     </div>
                   ))}
                   {error && <div style={{ background: '#FFEBEE', color: '#C62828', border: '1px solid #FFCDD2', borderRadius: 8, padding: '8px 12px', fontSize: 12, marginBottom: 12 }}>{error}</div>}
-                  <button onClick={handleRerender} disabled={rerendering} style={{ ...goldFill, width: '100%', padding: '10px 0', opacity: rerendering ? 0.6 : 1, cursor: rerendering ? 'not-allowed' : 'pointer' }}>
-                    {rerendering ? 'Re-rendering...' : 'Re-render Invitation'}
+                  <button onClick={handleEditText} disabled={rerendering} style={{ ...goldFill, width: '100%', padding: '10px 0', opacity: rerendering ? 0.6 : 1, cursor: rerendering ? 'not-allowed' : 'pointer' }}>
+                    {rerendering ? 'Saving...' : 'Save Text & Re-render'}
                   </button>
                 </div>
               )}

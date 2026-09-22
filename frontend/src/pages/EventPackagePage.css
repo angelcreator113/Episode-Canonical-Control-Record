@@ -236,6 +236,115 @@
   border: 1px solid var(--lala-parchment-3, #E8E0D0);
 }
 
+/* Invitation section, inline mode (Task #1654) — InvitationButton embedded
+   directly in the page instead of behind its own fixed-position modal. */
+.epp-invitation-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.epp-invitation-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.epp-invitation-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+  background: var(--lala-parchment-2, #F4EFE4);
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-invitation-status-generating { background: #fefce8; color: #a16207; }
+.epp-invitation-status-generated { background: #fff7ed; color: #c2410c; }
+.epp-invitation-status-approved { background: #f0fdf4; color: #16a34a; }
+
+.epp-invitation-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.epp-invitation-actions-inline .epp-icon-btn:hover { color: var(--lala-gold, #B8962E); }
+.epp-invitation-actions-inline .epp-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.epp-invitation-generating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.epp-spin-icon {
+  animation: epp-spin 0.9s linear infinite;
+}
+
+.epp-invitation-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FFEBEE;
+  color: #C62828;
+  border: 1px solid #FFCDD2;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.epp-invitation-error span { flex: 1; }
+
+.epp-invitation-retry {
+  border: 1px solid #C62828;
+  background: none;
+  color: #C62828;
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.epp-invitation-retry:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.epp-invitation-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--lala-parchment-3, #E8E0D0);
+}
+
+.epp-invitation-edit-field label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--lala-gold, #B8962E);
+  margin-bottom: 4px;
+}
+.epp-invitation-edit-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  background: var(--lala-surface, #FFFFFF);
+  color: var(--lala-ink, #2C2C2C);
+}
+
 .epp-requirements-list {
   margin: 0;
   padding-left: 16px;
