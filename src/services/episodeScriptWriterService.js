@@ -216,12 +216,25 @@ async function loadScriptContext(episodeId, showId, models) {
 
   // 10. Social profiles + linked character depth — host + guests with real literary depth
   context.socialProfiles = [];
+  context.unfeaturedGuestCount = 0;
   try {
     const auto = context.event?.canon_consequences?.automation || {};
     // g.id is the pre-fix shape a guest written by the opportunity
     // pipeline may still carry (Task #1686, docs/GUEST_OWNERSHIP_READ.md
     // §6) — g.profile_id is preferred, g.id is the fallback.
-    const profileIds = [auto.host_profile_id, ...(auto.guest_profiles || []).map(g => g.profile_id || g.id)].filter(Boolean);
+    const allGuests = auto.guest_profiles || [];
+    // Featured attendees (docs/EVENT_EPISODE_FLOW.md §8(q) ruling 3) are the
+    // three to five guests the story actually uses. When any guest is
+    // featured, only featured guests go into the script prompt, each with
+    // its story role; the rest are counted, not named. An event with no
+    // featured guests keeps today's behavior — every guest, unfiltered.
+    const featuredGuests = allGuests.filter(g => g.featured);
+    const promptGuests = featuredGuests.length > 0 ? featuredGuests : allGuests;
+    context.unfeaturedGuestCount = featuredGuests.length > 0 ? allGuests.length - featuredGuests.length : 0;
+    const storyRoleByProfileId = new Map(
+      featuredGuests.map(g => [g.profile_id || g.id, g.story_role || null])
+    );
+    const profileIds = [auto.host_profile_id, ...promptGuests.map(g => g.profile_id || g.id)].filter(Boolean);
     if (profileIds.length > 0) {
       const [rows] = await sequelize.query(
         `SELECT sp.id, sp.handle, sp.display_name, sp.creator_name, sp.platform, sp.archetype,
@@ -243,7 +256,7 @@ async function loadScriptContext(episodeId, showId, models) {
         // Parse personality JSON if present
         let personality = r.personality;
         if (typeof personality === 'string') try { personality = JSON.parse(personality); } catch { personality = null; }
-        return { ...r, personality };
+        return { ...r, personality, story_role: storyRoleByProfileId.get(r.id) || null };
       });
     }
   } catch { /* non-blocking */ }
@@ -477,11 +490,15 @@ ${(() => {
   let socialBlock = '';
   if (context.socialProfiles?.length > 0) {
     socialBlock = '═══ CHARACTERS AT THE EVENT ═══\n';
+    if (context.socialProfiles.some(p => p.story_role !== null && p.story_role !== undefined) || context.unfeaturedGuestCount > 0) {
+      socialBlock += 'Featured guests below are the named people the episode may use; others attending are present but not story participants.\n';
+    }
     socialBlock += context.socialProfiles.map(p => {
       let block = `${p.creator_name || p.display_name || p.handle} (@${p.handle}, ${p.platform})
   Archetype: ${p.archetype || 'unknown'} | Tier: ${p.celebrity_tier || 'accessible'}
   Voice: ${p.posting_voice || 'Standard social media voice'}
   Lala follows because: ${p.follow_motivation || 'general interest'}${p.follow_emotion ? ` (feels: ${p.follow_emotion})` : ''}`;
+      if (p.story_role) block += `\n  Story role: ${p.story_role}`;
 
       // Character literary depth (from registry) + therapy + life simulation
       if (p.core_belief || p.pressure_type || p.depth_level || p.core_wound) {
@@ -520,6 +537,9 @@ ${(() => {
 
       return block;
     }).join('\n\n');
+    if (context.unfeaturedGuestCount > 0) {
+      socialBlock += `\n\n${context.unfeaturedGuestCount} more guest${context.unfeaturedGuestCount === 1 ? '' : 's'} attending — present, but not story participants.`;
+    }
     socialBlock += '\n';
   }
 
