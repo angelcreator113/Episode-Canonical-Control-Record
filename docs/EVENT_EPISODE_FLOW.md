@@ -1630,6 +1630,37 @@ can confirm them before coverage depends on them — source:
 
 **(c)** How a show marks its default set per role.
 
+**Evoni's rulings on (a) and (c) (2026-09-22).** Recorded as her rulings,
+not this document's own inference. `canonicalBeats.js` itself is not
+changed by this PR — these rulings land in code with the coverage build
+the nine rulings above describe, not here.
+
+- **(a) resolved.** Beats 1 and 2 get a new location role,
+  `HOST_ENVIRONMENT` — JustAWoman's own space, distinct from Lala's
+  `HOME_BASE`. This needs a Scene Library set of its own, the same as
+  Lala's bedroom and closet — a real set to create, once.
+- **Beats 7 and 9 have no default location.** Unlike the other twelve
+  entries in (b)'s table above, which stand as defaults, beats 7
+  ("Interruption Pulse 2") and 9 ("Reminder/Deadline") take an explicit
+  "decided per episode" value instead of a fixed one — chosen from what
+  the script actually does, not proposed ahead of it. Coverage leaves
+  these two beats open before the script exists, and fills them once the
+  script shows where Lala is. This is a third, explicit state for
+  `typical_location`, the same pattern the file header's `null`/`'none'`/
+  value convention already uses for `actor`/`surface`/`diegetic`
+  (§8(e)/(f) above, `canonicalBeats.js:64-70`): "decided to be flexible"
+  and "not decided yet" have to look different, not collapse into one
+  blank value.
+- **Every beat's default is only a default.** Ruling 6 above (the scene
+  planner refines rows in place, manual choices survive) already means a
+  per-episode change to any beat's location — not only beats 7 and 9 —
+  survives regeneration once that refine-in-place behavior is built.
+  Beats 7 and 9 are simply the two beats with no default to override in
+  the first place.
+
+MERGE: still requires Evoni's explicit go — this addendum records her
+answers; it doesn't itself close the PR.
+
 ---
 
 ## 9. Owed before enforcement
