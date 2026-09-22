@@ -15,18 +15,50 @@
  * button's enabled state on the Event Package page).
  */
 
-// Mirrors the display logic that falls back to
-// canon_consequences.automation.venue_* when the top-level venue columns
-// are empty. Feed-profile events created before the worldEvents.js
-// from-profile route was patched to set top-level venue_location_id
-// (commit 3d4d1d26) only have venue data in JSONB, so a column-only check
-// would say "Venue ⚠" while other parts of the UI already show the venue.
-export function computeEventReadiness(event) {
+// Resolves an event's venue and date/time fields, top-level column first
+// then the canon_consequences.automation copy (Task #1656). Events created
+// before #1647 declared venue_location_id/venue_name/venue_address/
+// event_date/event_time on the WorldEvent model had those fields silently
+// dropped by Sequelize's .create() (undeclared attributes are never
+// persisted, the same mechanism #1644/#1645 fixed for venue lookup) even
+// though the code writing them — eventAutomationService.js's calendar-spawn
+// path — always also nested the same values inside canon_consequences,
+// a column that was declared from the start. So for those older events,
+// the automation copy is the only place the value survived. This is the
+// one fallback rule; computeEventReadiness's hasVenue check below calls
+// into it rather than keeping its own separate OR-chain.
+export function resolveEventVenueAndDate(event) {
   const ev = event || {};
   const auto = ev.canon_consequences?.automation || {};
 
+  const field = (topKey, autoKey = topKey) => {
+    const value = ev[topKey] ?? null;
+    if (value) return { value, fromSavedCopy: false };
+    const autoValue = auto[autoKey] ?? null;
+    return { value: autoValue, fromSavedCopy: !!autoValue };
+  };
+
+  const venueName = field('venue_name');
+  const venueAddress = field('venue_address');
+  const venueLocationId = field('venue_location_id');
+  const eventDate = field('event_date');
+  const eventTime = field('event_time');
+
+  return {
+    venueName: venueName.value, venueNameFromSavedCopy: venueName.fromSavedCopy,
+    venueAddress: venueAddress.value, venueAddressFromSavedCopy: venueAddress.fromSavedCopy,
+    venueLocationId: venueLocationId.value, venueLocationIdFromSavedCopy: venueLocationId.fromSavedCopy,
+    eventDate: eventDate.value, eventDateFromSavedCopy: eventDate.fromSavedCopy,
+    eventTime: eventTime.value, eventTimeFromSavedCopy: eventTime.fromSavedCopy,
+    hasVenue: !!(venueLocationId.value || venueName.value),
+  };
+}
+
+export function computeEventReadiness(event) {
+  const ev = event || {};
+
   const hasOutfit = !!ev.outfit_set_id || (Array.isArray(ev.outfit_pieces) && ev.outfit_pieces.length > 0);
-  const hasVenue = !!ev.venue_location_id || !!ev.venue_name || !!auto.venue_location_id || !!auto.venue_name;
+  const hasVenue = resolveEventVenueAndDate(ev).hasVenue;
   const hasScene = !!ev.scene_set_id;
   const hasInvite = !!ev.invitation_asset_id;
 

@@ -23,7 +23,7 @@ import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItem
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
-import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, computeEventState, EVENT_QUEUE_STATES } from '../utils/eventReadiness';
+import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, computeEventState, EVENT_QUEUE_STATES, resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles } from 'lucide-react';
 import './WorldAdmin.css';
 
@@ -3119,7 +3119,7 @@ The revised event should feel like a completely different experience from the si
               const hostName = (ev.source_profile_id || auto.host_profile_id)
                 ? (auto.host_display_name || ev.host || auto.host_handle || 'Linked host')
                 : null;
-              const venueName = ev.venue_name || auto.venue_name || null;
+              const venueDate = resolveEventVenueAndDate(ev);
               const { checks } = computeEventReadiness(ev);
               const missing = checks.filter(c => !c.ok).map(c => c.label);
               const menuOpen = openEventMenuId === ev.id;
@@ -3211,8 +3211,12 @@ The revised event should feel like a completely different experience from the si
                 </span>
                 <div style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 10 }}>
                   {hostName ? <div>Host: {hostName}</div> : <div style={{ color: '#dc2626' }}>No host linked</div>}
-                  {venueName && <div>Venue: {venueName}</div>}
-                  {(ev.event_date || ev.event_time) && <div>Date: {ev.event_date}{ev.event_time ? ` · ${ev.event_time}` : ''}</div>}
+                  {venueDate.venueName && (
+                    <div>Venue: {venueDate.venueName}{venueDate.venueNameFromSavedCopy && <span style={S.savedCopyTag}>saved copy</span>}</div>
+                  )}
+                  {(venueDate.eventDate || venueDate.eventTime) && (
+                    <div>Date: {venueDate.eventDate}{venueDate.eventTime ? ` · ${venueDate.eventTime}` : ''}{(venueDate.eventDateFromSavedCopy || venueDate.eventTimeFromSavedCopy) && <span style={S.savedCopyTag}>saved copy</span>}</div>
+                  )}
                   {state === 'needs_setup' && missing.length > 0 && <div style={{ color: '#b45309' }}>Missing: {missing.join(', ')}</div>}
                   {state === 'used' && linkedEpisode && <div>Episode {linkedEpisode.episode_number}: {linkedEpisode.title}</div>}
                 </div>
@@ -7959,6 +7963,11 @@ const S = {
   // Overflow-menu item (Task #1648's per-card and header "⋯" menus —
   // WorldAdmin.jsx's own style, not shared with any other page).
   menuItem: { display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', borderBottom: '1px solid #f1f5f9', fontSize: 12, fontWeight: 500, color: '#475569', cursor: 'pointer' },
+  // Marks a card's venue/date value resolved from the saved automation
+  // copy rather than the event's own column (Task #1656) — same meaning
+  // as EventPackagePage.css's .epp-saved-copy, kept inline here since this
+  // file has no shared stylesheet of its own.
+  savedCopyTag: { display: 'inline-block', marginLeft: 6, padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', background: '#FDF8EE', border: '1px solid #E8D9A8', color: '#B8962E', verticalAlign: 'middle' },
   statsRow: { display: 'flex', gap: 12, flexWrap: 'wrap' },
   statBox: { flex: '1 1 90px', background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 12, padding: 16, textAlign: 'center', minWidth: 90, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
   statVal: (k, v) => ({ fontSize: 24, fontWeight: 700, color: (k === 'stress' && v >= 5) || (k === 'coins' && v < 0) ? '#dc2626' : '#1a1a2e' }),
