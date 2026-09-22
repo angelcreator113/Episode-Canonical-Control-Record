@@ -375,8 +375,13 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
 
   const config = EVENT_TYPE_CONFIGS[opp.opportunity_type] || EVENT_TYPE_CONFIGS.social_event;
   const wardrobe = typeof opp.wardrobe_brief === 'string' ? JSON.parse(opp.wardrobe_brief) : (opp.wardrobe_brief || {});
-  const venueTheme = await generateUniqueVenue(opp.name, opp.opportunity_type, opp.connector_handle, prestige, showId);
+  // prestige must be declared before the generateUniqueVenue call below,
+  // which reads it as an argument — it previously came after, a
+  // temporal-dead-zone ReferenceError on every call that made this whole
+  // function unreachable (found while working #1686, not part of that
+  // issue's scope; fixed here as a follow-up, Task #1688).
   const prestige = opp.prestige || config.prestige_range[0] + 2;
+  const venueTheme = await generateUniqueVenue(opp.name, opp.opportunity_type, opp.connector_handle, prestige, showId);
 
   // Find guest profiles from feed (connected to the host)
   let guestProfiles = [];
