@@ -173,6 +173,25 @@
   margin-bottom: 4px;
 }
 
+/* Marks a Basics/Place value resolved from the event's saved automation
+   copy (canon_consequences.automation) rather than its own column — older
+   events whose venue/date fields were silently dropped before #1647
+   declared them on the model (Task #1656). */
+.epp-saved-copy {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: var(--lala-gold-soft, #FDF8EE);
+  border: 1px solid var(--lala-gold-line, #E8D9A8);
+  color: var(--lala-gold, #B8962E);
+  vertical-align: middle;
+}
+
 .epp-empty {
   font-size: 13px;
   color: var(--lala-ink-faint, #A09889);
