@@ -246,7 +246,12 @@ async function onEpisodeCompleted(episodeId, showId, models) {
   // Find the world event linked to this episode
   let event = null;
   if (WorldEvent) {
-    event = await WorldEvent.findOne({ where: { used_in_episode_id: episodeId } });
+    // Scoped to the only field this function actually reads (event.id, at
+    // the opportunity lookup below). event.opportunity_id is also read
+    // there, but that column isn't declared on the model at this basis
+    // (see WorldEvent.js's own comment) so it was already never populated
+    // via this query — not changed by this scoping.
+    event = await WorldEvent.findOne({ where: { used_in_episode_id: episodeId }, attributes: ['id'] });
   }
   if (!event) {
     try {

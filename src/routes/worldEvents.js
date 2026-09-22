@@ -57,11 +57,11 @@ router.get('/world/:showId/events', requireAuth, async (req, res) => {
           const include = [];
           if (models.Asset) include.push({ model: models.Asset, as: 'invitationAsset', attributes: ['id', 's3_url_processed', 's3_url_raw'], required: false });
           if (models.SceneSet) include.push({ model: models.SceneSet, as: 'sceneSet', attributes: ['id', 'name', 'base_still_url', 'scene_type'], required: false });
-          events = await models.WorldEvent.findAll({ where, include, order: [[sortCol, sortOrder]] });
+          events = await models.WorldEvent.findAll({ where, include, order: [[sortCol, sortOrder]], attributes: models.WorldEvent.CURRENT_ATTRIBUTES });
         } catch (includeErr) {
           console.warn('[WorldEvents] Includes failed, trying without:', includeErr.message);
           try {
-            events = await models.WorldEvent.findAll({ where, order: [[sortCol, sortOrder]] });
+            events = await models.WorldEvent.findAll({ where, order: [[sortCol, sortOrder]], attributes: models.WorldEvent.CURRENT_ATTRIBUTES });
           } catch (basicErr) {
             console.warn('[WorldEvents] Model query failed (paranoid/deleted_at?):', basicErr.message);
             events = null; // fall through to raw SQL
@@ -123,7 +123,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
     const {
-      name, event_type = 'invite', host, host_brand, description,
+      name, event_type = 'invite', category = null, format = null, host, host_brand, description,
       prestige = 5, cost_coins = 100, strictness = 5,
       deadline_type = 'medium', deadline_minutes,
       dress_code, dress_code_keywords = [],
@@ -180,6 +180,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
         season_id: season_id || null,
         arc_id: arc_id || null,
         name, event_type,
+        category, format,
         host: host || null,
         host_brand: host_brand || null,
         description: description || null,
@@ -212,7 +213,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
     const id = uuidv4();
     await models.sequelize.query(
       `INSERT INTO world_events
-        (id, show_id, season_id, arc_id, name, event_type, host, host_brand, description,
+        (id, show_id, season_id, arc_id, name, event_type, category, format, host, host_brand, description,
         prestige, cost_coins, strictness, deadline_type, deadline_minutes,
         dress_code, dress_code_keywords, location_hint, narrative_stakes,
         canon_consequences, seeds_future_events,
@@ -222,7 +223,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
         scene_set_id, parent_event_id, chain_position, chain_reason,
         status, created_at, updated_at)
        VALUES
-      (:id, :showId, :season_id, :arc_id, :name, :event_type, :host, :host_brand, :description,
+      (:id, :showId, :season_id, :arc_id, :name, :event_type, :category, :format, :host, :host_brand, :description,
         :prestige, :cost_coins, :strictness, :deadline_type, :deadline_minutes,
         :dress_code, :dress_code_keywords, :location_hint, :narrative_stakes,
         :canon_consequences, :seeds_future_events,
@@ -237,6 +238,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
           season_id: season_id || null,
           arc_id: arc_id || null,
           name, event_type,
+          category: category || null, format: format || null,
           host: host || null,
           host_brand: host_brand || null,
           description: description || null,
@@ -299,7 +301,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
 
     // Build dynamic SET clause
     const allowedFields = [
-      'name', 'event_type', 'host', 'host_brand', 'description',
+      'name', 'event_type', 'category', 'format', 'host', 'host_brand', 'description',
       'prestige', 'cost_coins', 'strictness',
       'deadline_type', 'deadline_minutes',
       'dress_code', 'dress_code_keywords',
@@ -341,7 +343,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       'venue_location_id', 'used_in_episode_id', 'outfit_set_id',
     ]);
     const scalarStringFields = new Set([
-      'name', 'event_type', 'host', 'host_brand', 'description',
+      'name', 'event_type', 'category', 'format', 'host', 'host_brand', 'description',
       'deadline_type', 'dress_code', 'location_hint', 'narrative_stakes',
       'overlay_template', 'browse_pool_bias', 'status',
       'career_milestone', 'fail_consequence', 'success_unlock',
@@ -1719,7 +1721,7 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
     } catch {
       // Fallback to model if raw SQL fails
       if (models.WorldEvent) {
-        event = await models.WorldEvent.findByPk(eventId);
+        event = await models.WorldEvent.findByPk(eventId, { attributes: models.WorldEvent.CURRENT_ATTRIBUTES });
         if (event) event = event.toJSON();
       }
     }
@@ -2448,10 +2450,14 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
     const drinks = EVENT_EXTRAS.drinks(prestige);
     const valet = EVENT_EXTRAS.valet(prestige);
     // Photo booth only fires on events where it makes narrative sense —
-    // galas, premieres, launch parties. Detected from event_type or the
-    // dress code mentioning "red carpet".
+    // galas, premieres, launch parties (format, per Evoni's taxonomy
+    // ruling, 2026-09-22) or brand-deal events (event_type, the mechanic),
+    // or the dress code/presentation mentioning "red carpet". red_carpet
+    // is deliberately not a format value of its own — it stays a
+    // dress-code attribute (docs/EVENT_EPISODE_FLOW.md §8(k)/(l)).
     const photoBoothPrompt = (event.dress_code || '').toLowerCase();
-    const wantsPhotoBooth = ['gala', 'premiere', 'launch', 'brand_deal'].includes(event.event_type)
+    const wantsPhotoBooth = ['gala', 'premiere', 'brand_launch'].includes(event.format)
+      || event.event_type === 'brand_deal'
       || photoBoothPrompt.includes('red carpet') || photoBoothPrompt.includes('photo');
     const photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
 
@@ -2664,7 +2670,7 @@ router.post('/world/:showId/events/:eventId/generate-social-checklist', requireA
     } catch {
       if (models.WorldEvent) {
         try {
-          event = await models.WorldEvent.findByPk(eventId);
+          event = await models.WorldEvent.findByPk(eventId, { attributes: models.WorldEvent.CURRENT_ATTRIBUTES });
           if (event) event = event.toJSON();
         } catch { /* model query failed too */ }
       }
@@ -3894,6 +3900,13 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
         deleted_at: null,
       },
       limit: 50,
+      // Scoped to exactly what the scoring/response logic below reads —
+      // see the `event: {...}` mapping further down for the full list.
+      attributes: [
+        'id', 'name', 'event_type', 'host', 'host_brand', 'prestige',
+        'cost_coins', 'payment_amount', 'is_paid', 'strictness',
+        'career_tier', 'career_milestone', 'parent_event_id', 'source_profile_id',
+      ],
     });
 
     // ── 4. Score each candidate ──

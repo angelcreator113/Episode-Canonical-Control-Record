@@ -48,7 +48,12 @@ router.get('/:showId/filter', requireAuth, async (req, res) => {
     // Load event if provided
     let event = null;
     if (event_id) {
-      event = await WorldEvent.findByPk(event_id);
+      // Scoped to exactly what this handler reads: dress_code/prestige for
+      // scoring, used_in_episode_id for the financial-pressure lookup,
+      // id/name for the response's own event summary.
+      event = await WorldEvent.findByPk(event_id, {
+        attributes: ['id', 'name', 'dress_code', 'prestige', 'used_in_episode_id'],
+      });
     }
 
     const effectiveDressCode = dress_code || event?.dress_code || 'casual';
@@ -188,7 +193,11 @@ router.post('/:showId/suggest', requireAuth, async (req, res) => {
     if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
     const models = require('../models');
-    const event = await models.WorldEvent.findByPk(event_id);
+    // Scoped to exactly what this handler reads: name/dress_code/prestige/
+    // host go into the stylist prompt and the response's event summary.
+    const event = await models.WorldEvent.findByPk(event_id, {
+      attributes: ['id', 'name', 'dress_code', 'prestige', 'host'],
+    });
     if (!event) return res.status(404).json({ error: 'Event not found' });
 
     // Get candidate items
