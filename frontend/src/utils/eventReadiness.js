@@ -54,6 +54,37 @@ export function resolveEventVenueAndDate(event) {
   };
 }
 
+// Resolves an event's organizer — a creator or a brand
+// (docs/EVENT_EPISODE_FLOW.md §8(p), Evoni's organizer ruling 2, Task
+// #1676/#1681). Checks both homes for each, the same two-homes pattern
+// already used above for venue/date: creator via the durable
+// source_profile_id column or the automation.host_profile_id copy
+// (§2 "HOST — recorded two different ways"); brand via the top-level
+// host_brand column or its own automation.host_brand copy (§8(p) ruling
+// 6/observation). Per ruling 2/3, the brand is the organizer whenever one
+// is set — a creator alongside it is the HOST/FACE (ruling 1), not a
+// co-equal organizer, so organizerKind never reports 'creator' when a
+// brand is also present.
+export function resolveEventOrganizer(event) {
+  const ev = event || {};
+  const auto = ev.canon_consequences?.automation || {};
+
+  const creatorName = ev.source_profile_id || auto.host_profile_id
+    ? (auto.host_display_name || ev.host || auto.host_handle || null)
+    : null;
+  const hasCreator = !!(ev.source_profile_id || auto.host_profile_id);
+
+  const brandName = ev.host_brand || auto.host_brand || null;
+  const hasBrand = !!brandName;
+
+  return {
+    hasCreator, creatorName,
+    hasBrand, brandName,
+    hasOrganizer: hasCreator || hasBrand,
+    organizerKind: hasBrand ? 'brand' : (hasCreator ? 'creator' : null),
+  };
+}
+
 export function computeEventReadiness(event) {
   const ev = event || {};
 
@@ -90,35 +121,33 @@ export function eventDifficultyLabel(score) {
 }
 
 // Producer Mode → Events queue states (docs/EVENT_EPISODE_FLOW.md §8(m),
-// Evoni's ruling, Task #1648). Computed client-side, no persisted value —
-// world_events.status stays exactly as §4 already documents it (a free
-// string, written inconsistently across five call sites). This is a
+// Evoni's ruling, Task #1648; needs_host renamed to needs_organizer per
+// §8(p)'s organizer ruling, Task #1676/#1681 — a brand-hosted event with
+// no person attached is complete, not incomplete, so the old "Needs Host"
+// name and check were wrong for it). Computed client-side, no persisted
+// value — world_events.status stays exactly as §4 already documents it (a
+// free string, written inconsistently across five call sites). This is a
 // separate, read-only view over the same fields, not a new source of truth.
 export const EVENT_QUEUE_STATES = {
-  needs_host:  { label: 'Needs Host',  icon: '👤', color: '#dc2626', bg: '#fef2f2', primaryAction: 'Choose Host' },
-  needs_setup: { label: 'Needs Setup', icon: '🛠️', color: '#b45309', bg: '#fef3c7', primaryAction: 'Continue Setup' },
-  ready:       { label: 'Ready',       icon: '✓',  color: '#16a34a', bg: '#f0fdf4', primaryAction: 'Start Episode' },
-  used:        { label: 'Used',        icon: '◉',  color: '#6366f1', bg: '#eef2ff', primaryAction: 'Open Episode' },
-  archived:    { label: 'Archived',    icon: '□',  color: '#94a3b8', bg: '#f1f5f9', primaryAction: 'View' },
+  needs_organizer: { label: 'Needs Organizer', icon: '👤', color: '#dc2626', bg: '#fef2f2', primaryAction: 'Choose Organizer' },
+  needs_setup:      { label: 'Needs Setup',     icon: '🛠️', color: '#b45309', bg: '#fef3c7', primaryAction: 'Continue Setup' },
+  ready:            { label: 'Ready',           icon: '✓',  color: '#16a34a', bg: '#f0fdf4', primaryAction: 'Start Episode' },
+  used:             { label: 'Used',            icon: '◉',  color: '#6366f1', bg: '#eef2ff', primaryAction: 'Open Episode' },
+  archived:         { label: 'Archived',        icon: '□',  color: '#94a3b8', bg: '#f1f5f9', primaryAction: 'View' },
 };
 
-// Terminal states (archived, used) are checked before host/readiness —
+// Terminal states (archived, used) are checked before organizer/readiness —
 // an already-used or declined event stays Used/Archived regardless of
-// whether it happens to lack a host or a readiness item, since neither
-// is actionable once the event is done.
+// whether it happens to lack an organizer or a readiness item, since
+// neither is actionable once the event is done.
 export function computeEventState(event) {
   const ev = event || {};
 
   if (ev.status === 'declined' || ev.status === 'archived') return 'archived';
   if (ev.used_in_episode_id || ev.status === 'used' || ev.status === 'filmed') return 'used';
 
-  // Host lives in one of two places depending on which door the event
-  // came through (docs/EVENT_EPISODE_FLOW.md §2 "HOST — recorded two
-  // different ways"): from-profile writes the durable source_profile_id
-  // column; calendar-driven writes only the JSONB copy. Both must be
-  // checked, or every calendar-spawned event misreports as hostless.
-  const hasHost = !!ev.source_profile_id || !!ev.canon_consequences?.automation?.host_profile_id;
-  if (!hasHost) return 'needs_host';
+  const { hasOrganizer } = resolveEventOrganizer(ev);
+  if (!hasOrganizer) return 'needs_organizer';
 
   const { allReady } = computeEventReadiness(ev);
   return allReady ? 'ready' : 'needs_setup';
