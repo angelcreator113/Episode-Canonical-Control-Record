@@ -1358,6 +1358,58 @@ unchanged. `?tab=feed-timeline` (and the old bare `?tab=feed`) redirect to
 the standalone Feed rather than resolving to a local tab that no longer
 exists.
 
+**(m) Producer Mode → Events is a queue of event packages, not an event
+editor (Evoni, 2026-09-22, Task #1648).** Editing an event's own fields
+belongs entirely on the Event Package page
+(`/shows/:showId/events/:eventId`, `EventPackagePage.jsx`, §7 decision 4);
+this tab's job is to tell a creator which event needs attention next, not
+to let them edit one in place.
+
+Each event card is reduced to a computed state, not the grab-bag of
+independent chips/buttons §2's EVENT READY section already found doing
+too many unrelated jobs at once (linked-episode status, feed activity
+preview, four readiness chips, and seven action buttons on one card).
+Five states, computed client-side from existing fields — no schema
+change, no new persisted status value alongside `world_events.status`'s
+existing free-string column (§4 already documents that column as
+inconsistently written; this ruling does not touch it or attempt to
+reconcile the two):
+
+- **Needs Host** — no `source_profile_id` *and* no
+  `canon_consequences.automation.host_profile_id`. The two-homes-for-host
+  problem §2's "HOST — recorded two different ways" section already
+  found (`from-profile` writes the durable column; calendar-driven writes
+  only the JSONB copy) means both have to be checked, or every
+  calendar-spawned event misreports as hostless even though it has one.
+- **Needs Setup** — a host exists; `computeEventReadiness` (from
+  `../utils/eventReadiness`, §7 decision 4's shared helper) reports
+  incomplete.
+- **Ready** — `computeEventReadiness` reports complete; not yet used.
+- **Used** — `used_in_episode_id` set, or `status` is `used`/`filmed`.
+- **Archived** — `status` is `declined`/`archived`.
+
+Each card gets exactly one primary action, matched to its state (Needs
+Host → Choose Host, Needs Setup → Continue Setup, Ready → Start Episode —
+all three open the Event Package page; Used → Open Episode; Archived →
+View). Every other action a card carried before this ruling — Edit,
+Copy, the invitation and outfit pickers, Regenerate Episode, Delete —
+moves into a per-card overflow menu; the feed activity preview is
+removed from the card entirely (it answers "who posted about this
+event," which is the Feed's question per decision (l) above, not
+Producer Mode's). Auto-Reorder (episode sequencing) moves off this tab
+onto the Episodes tab's Season Arc view — event creation and episode
+sequencing are different jobs that happened to share a screen.
+
+The header becomes a filter bar over the five states (`All · Needs Host
+· Needs Setup · Ready · Used · Archived`) plus **+ New Event** (opens
+`/shows/:showId/new-episode`, the existing choose-host flow) and a
+header overflow menu for the tab's own admin actions (Templates,
+Enhance, Delete Drafts, Delete All). The Feed → Opportunities → Events
+pipeline section elsewhere on this tab is unchanged.
+
+Not yet code at the point this entry is written — Task #1648 is the
+implementation.
+
 ---
 
 ## 9. Owed before enforcement

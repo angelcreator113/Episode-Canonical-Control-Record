@@ -56,3 +56,38 @@ export function eventDifficultyLabel(score) {
   if (score <= 7) return { text: 'Hard', color: '#dc2626', bg: '#fef2f2' };
   return { text: 'Extreme', color: '#7c3aed', bg: '#faf5ff' };
 }
+
+// Producer Mode → Events queue states (docs/EVENT_EPISODE_FLOW.md §8(m),
+// Evoni's ruling, Task #1648). Computed client-side, no persisted value —
+// world_events.status stays exactly as §4 already documents it (a free
+// string, written inconsistently across five call sites). This is a
+// separate, read-only view over the same fields, not a new source of truth.
+export const EVENT_QUEUE_STATES = {
+  needs_host:  { label: 'Needs Host',  icon: '👤', color: '#dc2626', bg: '#fef2f2', primaryAction: 'Choose Host' },
+  needs_setup: { label: 'Needs Setup', icon: '🛠️', color: '#b45309', bg: '#fef3c7', primaryAction: 'Continue Setup' },
+  ready:       { label: 'Ready',       icon: '✓',  color: '#16a34a', bg: '#f0fdf4', primaryAction: 'Start Episode' },
+  used:        { label: 'Used',        icon: '◉',  color: '#6366f1', bg: '#eef2ff', primaryAction: 'Open Episode' },
+  archived:    { label: 'Archived',    icon: '□',  color: '#94a3b8', bg: '#f1f5f9', primaryAction: 'View' },
+};
+
+// Terminal states (archived, used) are checked before host/readiness —
+// an already-used or declined event stays Used/Archived regardless of
+// whether it happens to lack a host or a readiness item, since neither
+// is actionable once the event is done.
+export function computeEventState(event) {
+  const ev = event || {};
+
+  if (ev.status === 'declined' || ev.status === 'archived') return 'archived';
+  if (ev.used_in_episode_id || ev.status === 'used' || ev.status === 'filmed') return 'used';
+
+  // Host lives in one of two places depending on which door the event
+  // came through (docs/EVENT_EPISODE_FLOW.md §2 "HOST — recorded two
+  // different ways"): from-profile writes the durable source_profile_id
+  // column; calendar-driven writes only the JSONB copy. Both must be
+  // checked, or every calendar-spawned event misreports as hostless.
+  const hasHost = !!ev.source_profile_id || !!ev.canon_consequences?.automation?.host_profile_id;
+  if (!hasHost) return 'needs_host';
+
+  const { allReady } = computeEventReadiness(ev);
+  return allReady ? 'ready' : 'needs_setup';
+}

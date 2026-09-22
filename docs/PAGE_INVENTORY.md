@@ -419,13 +419,13 @@ Package's five sub-parts, §2 "EVENT PACKAGE"] → GENERATE EPISODE → PRODUCE
 | Stage | Page(s)/tab(s) | Notes |
 |---|---|---|
 | HOST | Standalone `/feed` (`pages/SocialProfileGenerator.jsx`) only, as of Task #1631 | No longer a duplicate — see §4 |
-| EVENT | WorldAdmin's merged `events` tab, labeled "Events" (drafts and non-drafts both list here, split by a status filter chip, not a separate tab — PR #1590; §4), promoted to top-level by Task #1631 | One `worldEvents` fetch, unfiltered by status at fetch time; documented in `EVENT_EPISODE_FLOW.md` §3 — see §4 |
-| VENUE | WorldAdmin `events` tab — event create/edit form field (`venue_location_id`, `WorldAdmin.jsx:2540-2547`) | No dedicated page; edited inline in the Events tab's event form |
-| GUESTS | WorldAdmin `events` tab — read-only display of the auto-generated guest list (`WorldAdmin.jsx:1681,3116-3118,3528`) | No editable UI found anywhere for guests — see §5 |
-| INVITATION | WorldAdmin `events` tab — `InvitationButton`/`InvitationStyleFields` (`pages/InvitationGenerator.jsx`, rendered from `WorldAdmin.jsx:3235,3862,2694,3847`) | Real UI exists — see §5 for endpoint-by-endpoint coverage |
-| REQUIREMENTS | WorldAdmin `events` tab — event create/edit form field (`requirements.*`, `WorldAdmin.jsx:3009-3012`) | No dedicated page |
-| OUTFIT | WorldAdmin `events` tab — event-detail modal's outfit picker (`GET .../wardrobe-options` calls at `WorldAdmin.jsx:3245,4080`) | No dedicated page. Distinct from the `wardrobe-items` sub-tab (general wardrobe browsing/purchase, a different money-path feature per `EVENT_EPISODE_FLOW.md` §5(b)) — not a duplicate, a genuinely different feature that happens to share the word "wardrobe" |
-| GENERATE EPISODE | WorldAdmin `events` tab — "Generate Episode" button on the event card/modal (`WorldAdmin.jsx:3256-3276`, per `EVENT_EPISODE_FLOW.md` §2) | Same tab as EVENT/VENUE/GUESTS/INVITATION/REQUIREMENTS/OUTFIT |
+| EVENT | WorldAdmin's `events` tab, labeled "Events" — as of Task #1648 (`EVENT_EPISODE_FLOW.md` §8(m)) a queue view, not an editor: each card shows a computed state (Needs Host/Needs Setup/Ready/Used/Archived, `computeEventState`, `utils/eventReadiness.js`) and one primary action; the filter bar chips split by that computed state, not the raw `world_events.status` column the old chips used | One `worldEvents` fetch, unfiltered by status at fetch time; documented in `EVENT_EPISODE_FLOW.md` §3 — see §4 |
+| VENUE | Read-only on the card (name/date shown directly); editing moved to the Event Package page (`pages/EventPackagePage.jsx`, `/shows/:showId/events/:eventId`, Task #1642) reached via the card's primary action, or the card's "⋯" menu → Edit details (`WorldAdmin.jsx`'s `eventDetailModal`, opened the same way the `?tab=events&event=<id>` deep link does — field contents of that modal not re-verified by this task) | No longer edited inline in the Events tab itself |
+| GUESTS | Read-only summary on the card via the same automation data as before | No editable UI found anywhere for guests — see §5, unchanged by Task #1648 |
+| INVITATION | Events tab card's "⋯" menu → `InvitationButton`/`InvitationStyleFields` (`pages/InvitationGenerator.jsx`) — explicitly kept here rather than moved, per Task #1648's own scope, until Event Package's own Invitation piece (§7 decision 4) gives it a home | Real UI exists — see §5 for endpoint-by-endpoint coverage |
+| REQUIREMENTS | Editing moved to the Event Package page / `eventDetailModal` (see VENUE row) — no longer a direct Events-tab card control | No dedicated page |
+| OUTFIT | Events tab card's "⋯" menu → the outfit picker (`GET .../wardrobe-options`) — explicitly kept here rather than moved, per Task #1648's own scope, until Event Package's own Style piece (§7 decision 4) gives it a home | No dedicated page. Distinct from the `wardrobe-items` sub-tab (general wardrobe browsing/purchase, a different money-path feature per `EVENT_EPISODE_FLOW.md` §5(b)) — not a duplicate, a genuinely different feature that happens to share the word "wardrobe" |
+| GENERATE EPISODE | As of Task #1648, the Events tab card no longer has a "Generate Episode" button — a Ready-state card's primary action navigates to the Event Package page, whose own Start Episode button (gated on readiness, Task #1643) calls `POST .../generate-episode`. The card's own direct call to that route is gone | Formerly same tab as EVENT/VENUE/GUESTS/INVITATION/REQUIREMENTS/OUTFIT; now split across the Events queue (navigation) and the Event Package page (the actual call) |
 | PRODUCE | `/episodes/:episodeId` (`pages/EpisodeDetail.jsx`), Production tab: Assets / Scenes / Wardrobe / Phone / Production Checklist (`EpisodeDetail.jsx:85-91`, per `EVENT_EPISODE_FLOW.md` §2) | — |
 | EVALUATE/ACCEPT | `/episodes/:id/evaluate` (`pages/EvaluateEpisode.jsx`) **and** `EpisodeDetail.jsx`'s own Results/Evaluation tab | Duplicate — see §4 |
 | AFTERMATH | No page found | Gap — see §5 |
@@ -651,13 +651,13 @@ outside the flow entirely.
 | Stage | Page | Route | Component file | Reachable how |
 |---|---|---|---|---|
 | HOST | The Feed (standalone; no longer duplicated in Producer Mode, Task #1631) | `/feed` (`?layer=lalaverse` opens on the LalaVerse feed) | `pages/SocialProfileGenerator.jsx` via `FeedEntry` wrapper | in-app link (`components/Episodes/EpisodeOverviewTab.jsx:700`) + Sidebar → FRANCHISE → "Lala's Feed" (`Sidebar.jsx`) |
-| EVENT | Events (Producer Mode) — drafts and non-drafts both, split by a status filter chip, not a separate tab | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx` | Sidebar → Producer Mode |
-| VENUE | Events tab event form | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx:2540-2547` | same as above |
-| GUESTS | Events tab event display (read-only) | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx:1681,3116-3118,3528` | same as above |
-| INVITATION | Events tab `InvitationButton` | `/shows/:id/world?tab=events` | `pages/InvitationGenerator.jsx` (rendered from `pages/WorldAdmin.jsx:3235,3862`) | same as above |
-| REQUIREMENTS | Events tab event form | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx:3009-3012` | same as above |
-| OUTFIT | Events tab outfit picker | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx:3245,4080` | same as above |
-| GENERATE EPISODE | Events tab "Generate Episode" button | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx:3256-3276` | same as above |
+| EVENT | Events (Producer Mode) — a queue of event packages as of Task #1648, not an editor; cards split by computed state (Needs Host/Needs Setup/Ready/Used/Archived), not the raw `status` column | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx` | Sidebar → Producer Mode |
+| VENUE | Event Package page (card's primary action), or the card's "⋯" → Edit details | `/shows/:showId/events/:eventId`, or `/shows/:id/world?tab=events&event=<id>` | `pages/EventPackagePage.jsx`; `pages/WorldAdmin.jsx`'s `eventDetailModal` | same as above |
+| GUESTS | Events tab card (read-only summary) | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx` | same as above |
+| INVITATION | Events tab card's "⋯" menu → `InvitationButton` | `/shows/:id/world?tab=events` | `pages/InvitationGenerator.jsx` (rendered from `pages/WorldAdmin.jsx`) | same as above |
+| REQUIREMENTS | Event Package page / `eventDetailModal` — see VENUE row | `/shows/:showId/events/:eventId`, or `/shows/:id/world?tab=events&event=<id>` | `pages/EventPackagePage.jsx`; `pages/WorldAdmin.jsx`'s `eventDetailModal` | same as above |
+| OUTFIT | Events tab card's "⋯" menu → outfit picker | `/shows/:id/world?tab=events` | `pages/WorldAdmin.jsx` | same as above |
+| GENERATE EPISODE | Ready-state card → Event Package page → Start Episode | `/shows/:showId/events/:eventId` | `pages/EventPackagePage.jsx` (Task #1642/#1643) | same as above |
 | PRODUCE | Episode Detail — Production tab | `/episodes/:episodeId` | `pages/EpisodeDetail.jsx:85-91` | in-app link (many; see §1) |
 | EVALUATE/ACCEPT | Evaluate Episode (standalone) | `/episodes/:id/evaluate` | `pages/EvaluateEpisode.jsx` | in-app link (`pages/WorldAdmin.jsx:1780`) |
 | EVALUATE/ACCEPT | Episode Detail — Results/Evaluation tab | `/episodes/:episodeId` | `pages/EpisodeDetail.jsx` | in-app link (many; see §1) — does not resolve whether this duplicates or wraps the standalone page, see §4 |
