@@ -90,10 +90,28 @@ async function placeOverlayOnFirstScene(models, { episodeId, assetId, defaults =
 }
 
 /**
+ * Reduces a UI overlay key to lowercase alphanumerics only, so 'MailPanel'
+ * (PascalCase — world_events.required_ui_overlays' own default and every
+ * other producer that writes that column) and 'mail_panel' (snake_case —
+ * the overlay picker in WorldAdmin.jsx and uiOverlayService.suggestOverlaysForEvent's
+ * own suggestion) both reduce to 'mailpanel' and match each other. A plain
+ * case-fold isn't enough on its own — 'mailpanel' still isn't 'mail_panel'
+ * without also dropping the underscore.
+ */
+function normalizeOverlayKey(key) {
+  return String(key || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
  * Auto-place every overlay listed in event.required_ui_overlays at episode
  * generation time. Each entry in `requiredKeys` is matched against
- * ui_overlay_types by either type_key or name (matches the defaultValue
- * shape on world_events.required_ui_overlays — string keys, not UUIDs).
+ * ui_overlay_types by either type_key or name, normalized via
+ * `normalizeOverlayKey` on both sides so the PascalCase and snake_case
+ * spellings in circulation (see that helper's comment) both place
+ * correctly — matching happens in JS after fetching the show's types,
+ * not as a SQL equality, since Postgres `=` can't fold that gap on its
+ * own. No stored `required_ui_overlays` value or `ui_overlay_types` row is
+ * rewritten by this normalization; it only changes how a lookup compares.
  *
  * For each matched type we pick the best available asset:
  *   1. Episode-specific asset (asset.episode_id = episodeId) if one exists,
@@ -113,16 +131,20 @@ async function autoPlaceRequiredOverlays(models, { showId, episodeId, requiredKe
   const { sequelize } = models;
   if (!sequelize) return [];
 
+  const normalizedKeys = new Set(requiredKeys.map(normalizeOverlayKey).filter(Boolean));
+  if (normalizedKeys.size === 0) return [];
+
   let types = [];
   try {
     const [rows] = await sequelize.query(
       `SELECT id, type_key, name, category
          FROM ui_overlay_types
-        WHERE show_id = :showId AND deleted_at IS NULL
-          AND (type_key = ANY(:keys) OR name = ANY(:keys))`,
-      { replacements: { showId, keys: requiredKeys } }
+        WHERE show_id = :showId AND deleted_at IS NULL`,
+      { replacements: { showId } }
     );
-    types = rows || [];
+    types = (rows || []).filter(t =>
+      normalizedKeys.has(normalizeOverlayKey(t.type_key)) || normalizedKeys.has(normalizeOverlayKey(t.name))
+    );
   } catch (err) {
     console.warn('[timelinePlacementService] required overlay type lookup failed:', err.message);
     return [];
@@ -168,4 +190,5 @@ module.exports = {
   findFirstSceneId,
   placeOverlayOnFirstScene,
   autoPlaceRequiredOverlays,
+  normalizeOverlayKey,
 };
