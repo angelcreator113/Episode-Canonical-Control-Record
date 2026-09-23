@@ -6,6 +6,7 @@ const { v4: _uuidv4 } = require('uuid');
 
 // Auth middleware
 const { requireAuth } = require('../../middleware/auth');
+const { canAccessAuthorFields, stripAuthorOnlyFields } = require('../../middleware/authorOnlyFields');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 
 const db = require('../../models');
@@ -902,8 +903,12 @@ router.post('/story-engine-add-character', requireAuth, async (req, res) => {
     const existing = await RegistryCharacter.findOne({
       where: { registry_id: registry.id, character_key: charKey },
     });
+    // Author-only character fields go to the admin group only (filtered per
+    // response: this router shares /api/v1/memories with several others).
+    const forCaller = (row) => (canAccessAuthorFields(req.user) ? row : stripAuthorOnlyFields(row));
+
     if (existing) {
-      return res.json({ success: true, character: existing, already_existed: true });
+      return res.json({ success: true, character: forCaller(existing), already_existed: true });
     }
 
     const newChar = await RegistryCharacter.create({
@@ -916,7 +921,7 @@ router.post('/story-engine-add-character', requireAuth, async (req, res) => {
       icon: '◈',
     });
 
-    return res.json({ success: true, character: newChar, already_existed: false });
+    return res.json({ success: true, character: forCaller(newChar), already_existed: false });
   } catch (err) {
     console.error('[story-engine-add-character] error:', err?.message);
     return res.status(500).json({ success: false, error: err.message });
