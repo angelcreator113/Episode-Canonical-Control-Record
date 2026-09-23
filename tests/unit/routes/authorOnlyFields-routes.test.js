@@ -34,6 +34,10 @@ jest.mock('../../../src/models', () => ({
   CharacterRegistry: { findByPk: jest.fn(async () => mockRegistry), findOne: jest.fn(async () => mockRegistry) },
 }));
 jest.mock('../../../src/services/feedAutoGeneration', () => ({ autoCreateFeedProfile: jest.fn() }));
+jest.mock('../../../src/services/characterGenerationService', () => ({
+  generateFullCharacter: jest.fn(),
+  calculateDepthLevel: () => 'active',
+}));
 jest.mock('../../../src/middleware/aiRateLimiter', () => ({ aiRateLimiter: (_req, _res, next) => next() }));
 
 const mockCreate = jest.fn();
@@ -55,11 +59,13 @@ jest.mock('../../../src/middleware/auth', () => {
 
 const depthRoutes = require('../../../src/routes/characterDepthRoutes');
 const registryRoutes = require('../../../src/routes/characterRegistry');
+const generationRoutes = require('../../../src/routes/characterGenerationRoutes');
 
 const app = express();
 app.use(express.json());
 app.use('/api/v1/character-depth', depthRoutes);
 app.use('/api/v1/character-registry', registryRoutes);
+app.use('/api/v1/character-generation', generationRoutes);
 
 const USERS = { admin: 'admin', editor: 'editor', viewer: 'viewer' };
 const call = (method, url, groups, body) => {
@@ -135,6 +141,9 @@ describe('writes — only the admin group writes the four fields', () => {
     ['put', '/api/v1/character-depth/c1', (fields) => fields, (b) => b.depth],
     ['post', '/api/v1/character-depth/c1/confirm', (fields) => ({ proposed: fields }), (b) => b.depth],
     ['put', '/api/v1/character-registry/characters/c1', (fields) => fields, (b) => b.character],
+    // characterGenerationRoutes /confirm spreads `proposed` into update()
+    ['post', '/api/v1/character-generation/confirm', (fields) => ({ character_id: 'c1', proposed: fields }),
+      (b) => b.character],
   ];
 
   beforeEach(() => resetRow(false));
