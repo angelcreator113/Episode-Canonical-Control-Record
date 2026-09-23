@@ -16,7 +16,8 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 
 describe('Step 3 CP6 — characterRegistry.js anchor file Tier 1 sweep', () => {
   test('imports requireAuth from middleware/auth (lazy-noop dual fallback removed)', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    // #1699: userInGroup joins the same import for the isAuthor field filter.
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*,\s*userInGroup\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
   });
 
   test('imports aiRateLimiter (preserved — used by reference handler)', () => {
@@ -60,7 +61,10 @@ describe('Step 3 CP6 — characterRegistry.js anchor file Tier 1 sweep', () => {
 
   describe('Item 16 inspection (D6 — defaults Tier 1; escalation NOT triggered)', () => {
     test('author-gate at L658 remains in handler body (response-shape filtering, not permission gate)', () => {
-      expect(SRC).toMatch(/isAuthor\s*=\s*req\.user\?\.role\s*===\s*'author'/);
+      // #1699: req.user carries Cognito groups, never a role, so the gate reads
+      // the admin group. Still in the handler body, still field filtering only.
+      expect(SRC).toMatch(/isAuthor\s*=\s*userInGroup\(req\.user,\s*'admin'\)/);
+      expect(SRC).not.toMatch(/req\.user\??\.role/);
     });
     test('no authorize\\(\\[\'ADMIN\'\\]\\) calls were added (Item 16 NOT escalated)', () => {
       expect(SRC).not.toMatch(/authorize\(\[?'ADMIN'\]?\)/);

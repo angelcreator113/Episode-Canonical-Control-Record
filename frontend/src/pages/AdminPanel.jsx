@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wallet, BarChart3, Coins, Map as MapIcon, Palette, Stethoscope, Trash2, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { isAdmin } from '../utils/authGroups';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import '../styles/AdminPanel.css';
@@ -45,9 +46,9 @@ const AdminPanel = () => {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  // Check if user is admin
+  // Check if user is admin (Cognito admin group; the user has no role field)
   useEffect(() => {
-    if (user && user.role !== 'admin') {
+    if (user && !isAdmin(user)) {
       setError('Access denied. Admin privileges required.');
       setTimeout(() => navigate('/episodes'), 2000);
     }

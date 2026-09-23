@@ -7,6 +7,7 @@
 const ActivityIndexService = require('../services/ActivityIndexService');
 const _ActivityService = require('../services/ActivityService');
 const logger = require('../services/Logger');
+const { userInGroup } = require('../middleware/auth');
 const { getPool } = require('../config/database');
 
 const db = getPool();
@@ -573,8 +574,8 @@ exports.getSearchStats = async (req, res) => {
  */
 exports.reindexActivities = async (req, res) => {
   try {
-    // Check admin role (adjust based on your auth implementation)
-    if (req.user?.role !== 'admin') {
+    // Admin only: req.user carries Cognito groups, never a role
+    if (!userInGroup(req.user, 'admin')) {
       logger.warn('Unauthorized reindex attempt', { userId: req.user?.id });
       return res.status(403).json({
         success: false,

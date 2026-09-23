@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { isAdmin } from '../utils/authGroups';
 import templateService from '../services/templateService';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
@@ -38,9 +39,9 @@ const TemplateManagement = () => {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  // Check if user is admin
+  // Check if user is admin (Cognito admin group; the user has no role field)
   useEffect(() => {
-    if (user && user.role !== 'admin') {
+    if (user && !isAdmin(user)) {
       setError('Access denied. Admin privileges required.');
       setTimeout(() => navigate('/'), 2000);
     }
