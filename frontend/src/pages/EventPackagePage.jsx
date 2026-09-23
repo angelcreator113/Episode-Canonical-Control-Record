@@ -10,15 +10,23 @@
  * and Start Episode (the existing generate-episode action, gated on
  * readiness). Editing itself still happens in the existing editor —
  * later pieces replace these sections one at a time.
+ *
+ * Basics (Task #1755): date, time, description and dress code are edited
+ * here, one focused dialog per field, through the same event PUT. Each
+ * field shows one of three states — set, suggested, missing
+ * (resolveEventBasics, utils/eventBasics.js). A suggestion is shown only,
+ * never saved, until Evoni accepts it.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
+  Lightbulb, CircleDashed, CalendarClock,
 } from 'lucide-react';
 import api from '../services/api';
 import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
+import { resolveEventBasics, AUTO_DATE_KEY } from '../utils/eventBasics';
 import { InvitationButton } from './InvitationGenerator';
 import './EventPackagePage.css';
 
@@ -31,6 +39,37 @@ function fmtLabel(value) {
 // this fixed set; no role is forced onto a featured guest.
 const STORY_ROLES = ['friend', 'tension', 'opportunity', 'wildcard', 'romantic', 'mentor', 'rival'];
 const MAX_FEATURED_GUESTS = 5;
+
+// Basics fields (Task #1755): the dialog title, the PUT column each one
+// saves to, and the input it edits with. maxLength follows the column
+// (event_date/event_time character varying(50), dress_code (200)).
+const BASICS_FIELDS = {
+  date: { label: 'Date', title: 'Event date', column: 'event_date', input: 'date', maxLength: 50 },
+  time: { label: 'Time', title: 'Start time', column: 'event_time', input: 'time', maxLength: 50 },
+  description: { label: 'Description', title: 'Description', column: 'description', input: 'textarea' },
+  dressCode: { label: 'Dress code', title: 'Dress code', column: 'dress_code', input: 'text', maxLength: 200 },
+};
+const BASICS_ORDER = ['date', 'time', 'description', 'dressCode'];
+const BASICS_STATE_LABEL = { set: 'Set', suggested: 'Suggested', missing: 'Missing' };
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const HH_MM = /^\d{2}:\d{2}$/;
+
+// Display only: "2026-11-07" → "Sat, Nov 7, 2026"; "20:00" → "8:00 PM".
+// Anything else (older free-text values) is shown as stored.
+function fmtBasicsValue(key, value) {
+  if (!value) return value;
+  if (key === 'date' && ISO_DATE.test(value)) {
+    const d = new Date(`${value}T00:00:00Z`);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    }
+  }
+  if (key === 'time' && HH_MM.test(value)) {
+    const [h, m] = value.split(':').map(Number);
+    if (h < 24 && m < 60) return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+  }
+  return value;
+}
 
 export default function EventPackagePage() {
   const { showId, eventId } = useParams();
@@ -107,6 +146,11 @@ export default function EventPackagePage() {
   const [guestFeedSearch, setGuestFeedSearch] = useState('');
   const [guestFeedResults, setGuestFeedResults] = useState([]);
   const [guestFeedSearching, setGuestFeedSearching] = useState(false);
+
+  // Basics dialog (Task #1755): which field is open, and its draft value.
+  const [basicsEditing, setBasicsEditing] = useState(null);
+  const [basicsDraft, setBasicsDraft] = useState('');
+  const [basicsSaving, setBasicsSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setLoadError(null);
@@ -193,9 +237,10 @@ export default function EventPackagePage() {
     );
   }
 
-  const { event, sourceProfile, sceneSet, invitationAsset, usedInEpisode } = data;
+  const { event, sourceProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode } = data;
   const used = !!event.used_in_episode_id;
   const { checks, allReady } = computeEventReadiness(event);
+  const basics = resolveEventBasics(event, venueLocation, { suggest: !used });
   const venueDate = resolveEventVenueAndDate(event);
   const organizer = resolveEventOrganizer(event);
   const difficulty = calcEventDifficulty(event);
@@ -221,6 +266,96 @@ export default function EventPackagePage() {
   };
 
   const openEditor = () => navigate(`/shows/${showId}/world?tab=events&event=${eventId}`);
+
+  // Saves one Basics field through the existing PUT (all four columns are in
+  // its allowedFields). An empty value clears the column (the route turns ''
+  // into NULL). Saving a date — any date, even the same one — also removes
+  // automation.event_date_auto: the PUT merges canon_consequences two levels
+  // deep and deletes a key sent as null (mergeCanonConsequences), so this
+  // touches nothing else in canon_consequences. Time, dress code and
+  // description never carry a derived value here: they are saved only from
+  // what Evoni typed or a suggestion she accepted.
+  const saveBasicsField = async (key, rawValue, successMessage) => {
+    const spec = BASICS_FIELDS[key];
+    if (!spec || used || basicsSaving) return;
+    const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+    const body = { [spec.column]: value || null };
+    if (key === 'date' && event.canon_consequences?.automation?.[AUTO_DATE_KEY] !== undefined) {
+      body.canon_consequences = { automation: { [AUTO_DATE_KEY]: null } };
+    }
+    setBasicsSaving(true);
+    try {
+      await api.put(`/api/v1/world/${showId}/events/${eventId}`, body);
+      setBasicsEditing(null);
+      setBasicsDraft('');
+      setToast(successMessage || (value ? `${spec.label} saved` : `${spec.label} cleared`));
+      await load();
+    } catch (err) {
+      setToast(err.response?.data?.error || err.message || `Failed to save ${spec.label.toLowerCase()}`);
+    } finally {
+      setBasicsSaving(false);
+    }
+  };
+
+  const acceptBasicsSuggestion = (key) => {
+    const suggestion = basics[key]?.suggestion;
+    if (!suggestion) return;
+    saveBasicsField(key, suggestion.value, `${BASICS_FIELDS[key].label} set to ${fmtBasicsValue(key, suggestion.value)}`);
+  };
+
+  const openBasicsEditor = (key) => {
+    if (used) return;
+    setBasicsDraft(basics[key]?.value || '');
+    setBasicsEditing(key);
+  };
+
+  const renderBasicsRow = (key) => {
+    const spec = BASICS_FIELDS[key];
+    const f = basics[key];
+    const StateIcon = f.state === 'set' ? CheckCircle2 : f.state === 'suggested' ? Lightbulb : CircleDashed;
+    return (
+      <div key={key} className={`epp-basic is-${f.state}`} data-testid={`basics-${key}`} data-state={f.state}>
+        <dt>
+          {spec.label}
+          <span className="epp-basic-state"><StateIcon size={11} aria-hidden="true" /> {BASICS_STATE_LABEL[f.state]}</span>
+        </dt>
+        <dd>
+          {f.state === 'set' ? (
+            <span className={key === 'description' ? 'epp-basic-value epp-basic-prose' : 'epp-basic-value'}>{fmtBasicsValue(key, f.value)}</span>
+          ) : (
+            <span className="epp-basic-unset">Not set</span>
+          )}
+          {f.autoScheduled && (
+            <span className="epp-auto-chip" title="System default: 45 days after the event was created. Change it to make it yours.">
+              <CalendarClock size={11} aria-hidden="true" /> Auto-scheduled
+            </span>
+          )}
+          {f.fromSavedCopy && (
+            <span className="epp-saved-copy" title="Not yet in the event's own fields — shown from its saved automation copy">saved copy</span>
+          )}
+          {!used && (
+            <button type="button" className="epp-inline-link" onClick={() => openBasicsEditor(key)} disabled={basicsSaving}>
+              {f.state === 'set' ? 'Edit' : 'Set'}
+            </button>
+          )}
+          {f.state === 'suggested' && (
+            <div className="epp-suggestion">
+              <span className="epp-suggestion-text">
+                <Lightbulb size={12} aria-hidden="true" /> Suggestion: <strong>{fmtBasicsValue(key, f.suggestion.value)}</strong>
+                <span className="epp-suggestion-basis">{f.suggestion.basis}</span>
+              </span>
+              <button
+                type="button" className="epp-btn epp-btn-small epp-suggestion-accept"
+                onClick={() => acceptBasicsSuggestion(key)} disabled={basicsSaving}
+              >
+                <CheckCircle2 size={13} /> Use this
+              </button>
+            </div>
+          )}
+        </dd>
+      </div>
+    );
+  };
 
   const selectHost = async (profile) => {
     setHostSaving(true);
@@ -530,15 +665,7 @@ export default function EventPackagePage() {
           </div>
           <dl className="epp-fields">
             <div><dt>Name</dt><dd>{event.name}</dd></div>
-            <div>
-              <dt>Date &amp; time</dt>
-              <dd>
-                {venueDate.eventDate ? `${venueDate.eventDate}${venueDate.eventTime ? ` · ${venueDate.eventTime}` : ''}` : 'Not set'}
-                {(venueDate.eventDateFromSavedCopy || venueDate.eventTimeFromSavedCopy) && (
-                  <span className="epp-saved-copy" title="Not yet in the event's own fields — shown from its saved automation copy">saved copy</span>
-                )}
-              </dd>
-            </div>
+            {BASICS_ORDER.map(renderBasicsRow)}
             <div><dt>Brand</dt><dd>{event.host_brand || 'Not set'}</dd></div>
             <div><dt>Category</dt><dd>{fmtLabel(event.category)}</dd></div>
             <div><dt>Format</dt><dd>{fmtLabel(event.format)}</dd></div>
@@ -769,7 +896,6 @@ export default function EventPackagePage() {
         <section className="epp-section">
           <h2 className="epp-section-title">Style &amp; Deliverables</h2>
           <dl className="epp-fields">
-            <div><dt>Dress code</dt><dd>{event.dress_code || 'Not set'}</dd></div>
             <div><dt>Outfit</dt><dd>{outfitPieces.length ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'} chosen` : 'Not chosen'}</dd></div>
             <div>
               <dt>Requirements</dt>
@@ -826,6 +952,73 @@ export default function EventPackagePage() {
           </button>
         </div>
       )}
+
+      {basicsEditing && !used && (() => {
+        const key = basicsEditing;
+        const spec = BASICS_FIELDS[key];
+        const f = basics[key];
+        const closeBasics = () => { if (!basicsSaving) { setBasicsEditing(null); setBasicsDraft(''); } };
+        // A stored value the native date/time input can't show (older
+        // free-text rows) falls back to a text input, so it isn't lost.
+        const nativeOk = (spec.input === 'date' && (!basicsDraft || ISO_DATE.test(basicsDraft)))
+          || (spec.input === 'time' && (!basicsDraft || HH_MM.test(basicsDraft)));
+        const inputType = nativeOk ? spec.input : 'text';
+        return (
+          <div className="epp-modal-backdrop" onClick={closeBasics}>
+            <div className="epp-modal" role="dialog" aria-label={spec.title} onClick={(e) => e.stopPropagation()}>
+              <div className="epp-modal-header">
+                <h3>{spec.title}</h3>
+                <button className="epp-icon-btn" onClick={closeBasics} aria-label="Close" disabled={basicsSaving}>
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="epp-basics-dialog">
+                {key === 'date' && f.autoScheduled && (
+                  <p className="epp-basics-note">
+                    <CalendarClock size={13} aria-hidden="true" /> Auto-scheduled 45 days after the event was created. Saving makes this date yours.
+                  </p>
+                )}
+                {spec.input === 'textarea' ? (
+                  <textarea
+                    autoFocus rows={5} value={basicsDraft}
+                    onChange={(e) => setBasicsDraft(e.target.value)}
+                    placeholder="What is this event?"
+                    aria-label={spec.title}
+                  />
+                ) : (
+                  <input
+                    autoFocus type={inputType} value={basicsDraft} maxLength={spec.maxLength}
+                    onChange={(e) => setBasicsDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveBasicsField(key, basicsDraft); }}
+                    placeholder={key === 'dressCode' ? 'e.g. black tie formal' : ''}
+                    aria-label={spec.title}
+                  />
+                )}
+                {f.suggestion && (
+                  <button type="button" className="epp-inline-link epp-basics-fill" onClick={() => setBasicsDraft(f.suggestion.value)}>
+                    Fill in suggestion: {fmtBasicsValue(key, f.suggestion.value)}
+                  </button>
+                )}
+              </div>
+              <div className="epp-modal-footer epp-basics-actions">
+                {f.value && (
+                  <button type="button" className="epp-btn epp-btn-small" onClick={() => saveBasicsField(key, '')} disabled={basicsSaving}>
+                    Clear
+                  </button>
+                )}
+                <div className="epp-basics-spacer" />
+                <button type="button" className="epp-btn epp-btn-small" onClick={closeBasics} disabled={basicsSaving}>Cancel</button>
+                <button
+                  type="button" className="epp-btn epp-btn-small epp-btn-primary"
+                  onClick={() => saveBasicsField(key, basicsDraft)} disabled={basicsSaving || !basicsDraft.trim()}
+                >
+                  {basicsSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {hostPickerOpen && (
         <div className="epp-modal-backdrop" onClick={() => setHostPickerOpen(false)}>

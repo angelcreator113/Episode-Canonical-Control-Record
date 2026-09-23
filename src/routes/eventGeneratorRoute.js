@@ -16,6 +16,7 @@ const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { withAutoScheduledDate } = require('../utils/eventDateDefault');
 
 const client = new Anthropic();
 
@@ -87,8 +88,13 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
     // Upsert into world_events
     const { v4: uuidv4 } = require('uuid');
     const now = new Date();
+    // Task #1755: generation supplies no date; each event gets the system
+    // default, 45 days out, flagged as automation.event_date_auto.
+    const genDated = withAutoScheduledDate(null, {}, now);
     const toInsert = events.map(ev => ({
       id: uuidv4(),
+      event_date: genDated.event_date,
+      canon_consequences: JSON.stringify(genDated.canon_consequences),
       show_id,
       name: ev.name,
       event_type: ev.event_type || ev.event_category || 'invite',
@@ -118,11 +124,11 @@ Respond ONLY with a valid JSON array. No preamble, no markdown, no explanation.`
         `INSERT INTO world_events
            (id, show_id, name, event_type, host_brand, description,
             prestige, cost_coins, strictness, dress_code,
-            dress_code_keywords, location_hint, status, created_at, updated_at)
+            dress_code_keywords, location_hint, event_date, canon_consequences, status, created_at, updated_at)
          VALUES
            (:id, :show_id, :name, :event_type, :host_brand, :description,
             :prestige, :cost_coins, :strictness, :dress_code,
-            :dress_code_keywords::jsonb, :location_hint, :status, :created_at, :updated_at)
+            :dress_code_keywords::jsonb, :location_hint, :event_date, :canon_consequences::jsonb, :status, :created_at, :updated_at)
          ON CONFLICT DO NOTHING`,
         { replacements: ev }
       );

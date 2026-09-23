@@ -36,6 +36,7 @@ const router  = express.Router();
 const { Op }  = require('sequelize');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { withAutoScheduledDate } = require('../utils/eventDateDefault');
 
 router.use(requireAuth);
 
@@ -535,6 +536,14 @@ router.post('/events/:id/spawn-world-event', requireAuth, async (req, res) => {
       'character_event': 'guest',
     };
 
+    // Date: one typed in the request, else the calendar event's own start,
+    // else the system default (45 days out, flagged as
+    // automation.event_date_auto — Task #1755).
+    const dated = withAutoScheduledDate(
+      req.body.event_date || (calendarEvent.start_datetime ? new Date(calendarEvent.start_datetime).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : null),
+      {}
+    );
+
     if (WorldEvent) {
       const worldEvent = await WorldEvent.create({
         show_id,
@@ -546,8 +555,9 @@ router.post('/events/:id/spawn-world-event', requireAuth, async (req, res) => {
         venue_location_id: calendarEvent.location_id || null,
         venue_name: req.body.venue_name || venue?.name || calendarEvent.location_name || null,
         venue_address: req.body.venue_address || venueAddress || null,
-        event_date: req.body.event_date || (calendarEvent.start_datetime ? new Date(calendarEvent.start_datetime).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : null),
+        event_date: dated.event_date,
         event_time: req.body.event_time || null,
+        canon_consequences: dated.canon_consequences,
         location_hint: calendarEvent.location_name || dreamCityFromEvent(calendarEvent) || calendarEvent.lalaverse_district || null,
         dress_code: req.body.dress_code || null,
         prestige: req.body.prestige || Math.min(10, (calendarEvent.severity_level || 5) + 2),
@@ -571,8 +581,8 @@ router.post('/events/:id/spawn-world-event', requireAuth, async (req, res) => {
     const { v4: uuidv4 } = require('uuid');
     const id = uuidv4();
     await models.sequelize.query(
-      `INSERT INTO world_events (id, show_id, name, event_type, description, location_hint, source_calendar_event_id, status, created_at, updated_at)
-       VALUES (:id, :show_id, :name, :event_type, :desc, :location_hint, :source_id, 'draft', NOW(), NOW())`,
+      `INSERT INTO world_events (id, show_id, name, event_type, description, location_hint, source_calendar_event_id, event_date, canon_consequences, status, created_at, updated_at)
+       VALUES (:id, :show_id, :name, :event_type, :desc, :location_hint, :source_id, :event_date, :canon_consequences, 'draft', NOW(), NOW())`,
       {
         replacements: {
           id, show_id,
@@ -581,6 +591,8 @@ router.post('/events/:id/spawn-world-event', requireAuth, async (req, res) => {
           desc: calendarEvent.what_world_knows || calendarEvent.title,
           location_hint: calendarEvent.location_name || null,
           source_id: calendarEvent.id,
+          event_date: dated.event_date,
+          canon_consequences: JSON.stringify(dated.canon_consequences),
         },
       }
     );

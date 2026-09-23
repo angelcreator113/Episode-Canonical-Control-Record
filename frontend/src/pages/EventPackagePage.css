@@ -727,6 +727,142 @@
 }
 .epp-inline-link:hover { color: var(--lala-gold-hover, #A68324); }
 
+/* Basics — date, time, description, dress code (Task #1755). Three states,
+   told apart by the left rule, the state tag's icon and word, and the
+   value's own weight: set (solid gold rule, ink value), suggested (dashed
+   gold rule, gold-tinted suggestion box), missing (dashed danger rule,
+   muted "Not set"). */
+.epp-fields > .epp-basic {
+  padding-left: 8px;
+  border-left: 3px solid var(--lala-parchment-3, #E8E0D0);
+}
+.epp-fields > .epp-basic.is-set { border-left-style: solid; border-left-color: var(--lala-gold, #B8962E); }
+.epp-fields > .epp-basic.is-suggested { border-left-style: dashed; border-left-color: var(--lala-gold, #B8962E); }
+.epp-fields > .epp-basic.is-missing { border-left-style: dashed; border-left-color: var(--lala-danger, #B84D2E); }
+
+.epp-basic dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.epp-basic-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border: 1px solid transparent;
+}
+.epp-basic.is-set .epp-basic-state {
+  color: var(--lala-ink, #2C2C2C);
+  background: var(--lala-parchment-2, #F4EFE4);
+}
+.epp-basic.is-suggested .epp-basic-state {
+  color: var(--lala-gold-hover, #A68324);
+  background: var(--lala-gold-soft, #FDF8EE);
+  border: 1px dashed var(--lala-gold-line, #E8D9A8);
+}
+.epp-basic.is-missing .epp-basic-state {
+  color: var(--lala-danger, #B84D2E);
+  background: var(--lala-danger-soft, #F7E4DC);
+}
+
+.epp-basic-value { font-weight: 600; color: var(--lala-ink, #2C2C2C); }
+.epp-basic-prose {
+  display: block;
+  font-family: 'Lora', Georgia, serif;
+  font-weight: 400;
+  white-space: pre-wrap;
+}
+.epp-basic-unset {
+  font-style: italic;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.epp-auto-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: var(--lala-parchment-2, #F4EFE4);
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  color: var(--lala-ink-muted, #6B6557);
+  vertical-align: middle;
+}
+
+.epp-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px dashed var(--lala-gold-line, #E8D9A8);
+  border-radius: 6px;
+  background: var(--lala-gold-soft, #FDF8EE);
+}
+.epp-suggestion-text {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--lala-ink, #2C2C2C);
+}
+.epp-suggestion-basis {
+  flex-basis: 100%;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-suggestion-accept { flex-shrink: 0; }
+
+.epp-basics-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.epp-basics-dialog input,
+.epp-basics-dialog textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--lala-surface, #FFFFFF);
+  color: var(--lala-ink, #2C2C2C);
+}
+.epp-basics-dialog textarea { font-family: 'Lora', Georgia, serif; resize: vertical; }
+.epp-basics-note {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-basics-fill { margin-left: 0; align-self: flex-start; text-align: left; }
+.epp-basics-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.epp-basics-spacer { flex: 1; }
+
 /* 375px — single column, no horizontal overflow */
 @media (max-width: 480px) {
   .epp-page { padding: 14px 12px 96px; }
