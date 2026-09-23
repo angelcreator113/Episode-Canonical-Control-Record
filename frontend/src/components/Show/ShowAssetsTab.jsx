@@ -9,8 +9,8 @@ import api from '../../services/api';
  */
 
 const SECTION_CONFIG = {
-  scene_sets: { icon: '📍', label: 'Scene Sets', desc: 'Venue exteriors, interiors, and camera angles', color: '#6366f1', link: 'scene-library', actionLabel: 'Scene Library' },
-  overlays: { icon: '📱', label: "Lala's Phone", desc: 'Phone screen designs and app icons — generated from DALL-E and Flux', color: '#B8962E', link: 'scene-library?tab=overlays', actionLabel: 'Manage Overlays' },
+  scene_sets: { icon: '📍', label: 'Scene Sets', desc: 'Venue exteriors, interiors, and camera angles', color: '#6366f1', link: '/scene-library?showId=:showId', actionLabel: 'Scene Library' },
+  overlays: { icon: '📱', label: "Lala's Phone", desc: 'Phone screen designs and app icons — generated from DALL-E and Flux', color: '#B8962E', link: 'world?tab=overlays-tab', actionLabel: 'Manage Overlays' },
   wardrobe: { icon: '👗', label: 'Wardrobe', desc: 'Clothing, shoes, accessories, jewelry, perfume', color: '#ec4899', link: 'world?tab=wardrobe', actionLabel: 'Wardrobe Library' },
   invitations: { icon: '💌', label: 'Invitations', desc: 'Event invitation letters — per episode', color: '#f59e0b', link: 'world?tab=events', actionLabel: 'Events' },
   uploads: { icon: '📁', label: 'Uploads', desc: 'Logos, music, intros, outros, custom assets', color: '#64748b', link: null, actionLabel: null },
@@ -74,7 +74,11 @@ function ShowAssetsTab({ show }) {
 
   const goTo = (section) => {
     const config = SECTION_CONFIG[section];
-    if (config?.link) navigate(`/shows/${show.id}/${config.link}`);
+    if (!config?.link) return;
+    // Absolute links (leading '/') are top-level routes; the rest are relative to the show.
+    navigate(config.link.startsWith('/')
+      ? config.link.replace(':showId', show.id)
+      : `/shows/${show.id}/${config.link}`);
   };
 
   if (loading) return <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>Loading production assets...</div>;

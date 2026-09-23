@@ -434,14 +434,7 @@ const EpisodeDetail = () => {
         buttonText: 'Go to Scenes'
       };
     }
-    if (!episode.thumbnailUrl && !episode.thumbnail_url) {
-      return {
-        title: 'Create a thumbnail',
-        description: 'Design a compelling thumbnail to represent this episode',
-        action: () => navigate(`/episodes/${episode.id}/scene-composer`),
-        buttonText: 'Create Thumbnail'
-      };
-    }
+    // Removed: "Create a thumbnail" next action — opened the thumbnail workspace, which does not exist (docs/THUMBNAIL_SYSTEM.md).
     if (episode.wardrobeCount === 0) {
       return {
         title: 'Add wardrobe items',
@@ -467,13 +460,14 @@ const EpisodeDetail = () => {
     const primaryAction = getPrimaryNextAction();
     
     if (episodeScenes.length === 0 && primaryAction?.title !== 'Add your first scene') {
-      steps.push({ title: 'Add Scenes', status: 'pending', action: () => navigate(`/episodes/${episode.id}/scene-composer`) });
+      steps.push({ title: 'Add Scenes', status: 'pending', action: () => setActiveTab('scenes') });
     } else if (episodeScenes.length > 0) {
       steps.push({ title: 'Add Scenes', status: 'complete', count: episodeScenes.length });
     }
     
-    if (!episode.thumbnailUrl && !episode.thumbnail_url && primaryAction?.title !== 'Create a thumbnail') {
-      steps.push({ title: 'Create Thumbnail', status: 'pending', action: () => navigate(`/episodes/${episode.id}/scene-composer`) });
+    if (!episode.thumbnailUrl && !episode.thumbnail_url) {
+      // Removed action: opened the thumbnail workspace, which does not exist (docs/THUMBNAIL_SYSTEM.md).
+      steps.push({ title: 'Create Thumbnail', status: 'pending' });
     } else if (episode.thumbnailUrl || episode.thumbnail_url) {
       steps.push({ title: 'Create Thumbnail', status: 'complete' });
     }

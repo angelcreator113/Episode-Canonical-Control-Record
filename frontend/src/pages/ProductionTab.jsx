@@ -422,8 +422,8 @@ export default function ProductionTab({ shows, universeId, onChanged, showToast,
                     <div className="prod-ep-actions" onClick={e => e.stopPropagation()}>
                       <button
                         className="prod-ep-action-btn"
-                        onClick={() => navigate(`/episodes/${ep.id}/scene-composer`)}
-                        title="Scene Composer"
+                        onClick={() => navigate(`/episodes/${ep.id}?tab=scenes`)}
+                        title="Scenes"
                       >🎬</button>
                       <button
                         className="prod-ep-action-btn"

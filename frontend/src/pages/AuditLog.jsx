@@ -39,6 +39,7 @@ const AuditLog = () => {
     // Cognito admin group; the user has no role field
     if (!isAdmin(user)) {
       setError('Only administrators can view audit logs');
+      setLoading(false);
       return;
     }
 

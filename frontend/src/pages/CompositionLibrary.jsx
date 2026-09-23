@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import './CompositionLibrary.css';
 
 export default function CompositionLibrary() {
-  const navigate = useNavigate();
-
   const [compositions, setCompositions] = useState([]);
   const [filteredCompositions, setFilteredCompositions] = useState([]);
   const [view, setView] = useState('all');
@@ -108,18 +105,6 @@ export default function CompositionLibrary() {
     }
   };
 
-  const handleApply = (composition) => {
-    navigate('/episodes/new/thumbnail/new', {
-      state: { compositionId: composition.id }
-    });
-  };
-
-  const handleEdit = (composition) => {
-    navigate('/episodes/new/thumbnail/new', {
-      state: { compositionId: composition.id, mode: 'edit' }
-    });
-  };
-
   const handleDuplicate = async (composition) => {
     try {
       alert(`Duplicating "${composition.name}"...`);
@@ -169,9 +154,7 @@ export default function CompositionLibrary() {
           <span className="count">{filteredCompositions.length} compositions</span>
         </div>
         <div className="header-right">
-          <button className="create-btn" onClick={() => navigate('/episodes/new/thumbnail/new')}>
-            + New Composition
-          </button>
+          {/* Removed: "+ New Composition" button — opened the thumbnail workspace, which does not exist (docs/THUMBNAIL_SYSTEM.md). */}
         </div>
       </header>
 
@@ -233,9 +216,7 @@ export default function CompositionLibrary() {
                 ? 'Try adjusting your filters'
                 : 'Create your first composition to reuse across episodes'}
             </p>
-            <button className="create-btn" onClick={() => navigate('/episodes/new/thumbnail/new')}>
-              Create Composition
-            </button>
+            {/* Removed: "Create Composition" button — opened the thumbnail workspace, which does not exist (docs/THUMBNAIL_SYSTEM.md). */}
           </div>
         ) : (
           <div className="compositions-grid">
@@ -281,18 +262,7 @@ export default function CompositionLibrary() {
                   </div>
 
                   <div className="composition-actions">
-                    <button
-                      className="action-btn primary"
-                      onClick={() => handleApply(composition)}
-                    >
-                      Apply
-                    </button>
-                    <button
-                      className="action-btn"
-                      onClick={() => handleEdit(composition)}
-                    >
-                      Edit
-                    </button>
+                    {/* Removed: "Apply" and "Edit" buttons — opened this composition in the thumbnail workspace, which does not exist (docs/THUMBNAIL_SYSTEM.md). */}
                     <button
                       className="action-btn"
                       onClick={() => handleDuplicate(composition)}

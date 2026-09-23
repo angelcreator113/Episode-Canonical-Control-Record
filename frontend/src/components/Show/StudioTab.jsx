@@ -172,8 +172,8 @@ function StudioTab({ show, episodes = [] }) {
         {[
           { icon: '🎭', label: 'Producer Mode', route: `/shows/${showId}/world?tab=overview` },
           { icon: '💌', label: 'Events', route: `/shows/${showId}/world?tab=events` },
-          { icon: '👥', label: "Lala's Feed", route: `/shows/${showId}/world?tab=feed` },
-          { icon: '📍', label: 'Scene Library', route: `/shows/${showId}/scene-library` },
+          { icon: '👥', label: "Lala's Feed", route: '/feed?layer=lalaverse' },
+          { icon: '📍', label: 'Scene Library', route: `/scene-library?showId=${showId}` },
         ].map(action => (
           <button key={action.label} onClick={() => navigate(action.route)} style={{
             ...S.card, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center',
