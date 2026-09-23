@@ -8,6 +8,8 @@ const express = require('express');
 const router = express.Router();
 const Anthropic = require('@anthropic-ai/sdk');
 const { requireAuth } = require('../middleware/auth');
+const { userInGroup } = require('../middleware/auth'); // separate line: CP6 test locks the import above
+const { AUTHOR_ONLY_FIELDS } = require('../middleware/authorOnlyFields');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 
@@ -281,6 +283,25 @@ router.get('/character-growth/flagged', requireAuth, async (req, res) => {
 // ROUTE 3: review a flagged contradiction
 // Author accepts / reverts / modifies
 // ─────────────────────────────────────────────────────────────────────────────
+
+// The only RegistryCharacter fields /review may write, on 'accepted' or
+// 'modified' (#1709). The field name comes from log.field_updated, which the
+// AI chose; anything not listed here is rejected. Of the names the growth
+// engine proposes, only `wound` is a real column.
+const REVIEW_WRITABLE_FIELDS = ['wound'];
+
+// Never writable through /review, whatever REVIEW_WRITABLE_FIELDS says:
+// identity, association, lifecycle and timestamps, and the author-only fields.
+const REVIEW_NEVER_WRITABLE = new Set([
+  'id',
+  'created_at', 'updated_at', 'deleted_at', 'createdAt', 'updatedAt', 'deletedAt',
+  'character_key', 'registry_id', 'status', 'feed_profile_id',
+  ...AUTHOR_ONLY_FIELDS,
+]);
+
+const isReviewWritable = (field) =>
+  REVIEW_WRITABLE_FIELDS.includes(field) && !REVIEW_NEVER_WRITABLE.has(field);
+
 router.post('/character-growth/:id/review', requireAuth, async (req, res) => {
   const { decision, modified_value, author_note } = req.body;
   // decision: 'accepted' | 'reverted' | 'modified'
@@ -290,8 +311,24 @@ router.post('/character-growth/:id/review', requireAuth, async (req, res) => {
   }
 
   try {
+    // Admin group only (the author). req.user carries Cognito groups, never a role.
+    if (!userInGroup(req.user, 'admin')) {
+      return res.status(403).json({ error: 'Only the author (admin group) can review growth flags' });
+    }
+
     const log = await db.CharacterGrowthLog.findByPk(req.params.id);
     if (!log) return res.status(404).json({ error: 'Growth log not found' });
+
+    // 'accepted' and 'modified' write log.field_updated; only whitelisted fields.
+    // 'reverted' writes nothing and stays allowed for any field.
+    if (decision !== 'reverted' && !isReviewWritable(log.field_updated)) {
+      console.warn(`[characterGrowthRoute] review refused: field "${log.field_updated}" is not writable (log ${log.id}, decision ${decision})`);
+      return res.status(422).json({
+        error: `Field "${log.field_updated}" cannot be written by growth review. Revert this flag to dismiss it.`,
+        field: log.field_updated,
+        writable_fields: REVIEW_WRITABLE_FIELDS,
+      });
+    }
 
     const character = await db.RegistryCharacter.findByPk(log.character_id);
     if (!character) return res.status(404).json({ error: 'Character not found' });
