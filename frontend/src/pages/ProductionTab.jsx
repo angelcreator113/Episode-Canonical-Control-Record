@@ -420,7 +420,11 @@ export default function ProductionTab({ shows, universeId, onChanged, showToast,
                       </div>
                     </div>
                     <div className="prod-ep-actions" onClick={e => e.stopPropagation()}>
-                      {/* Removed: 🎬 "Scene Composer" button — opened the per-episode scene composer, which no longer exists. */}
+                      <button
+                        className="prod-ep-action-btn"
+                        onClick={() => navigate(`/episodes/${ep.id}?tab=scenes`)}
+                        title="Scenes"
+                      >🎬</button>
                       <button
                         className="prod-ep-action-btn"
                         onClick={() => navigate(`/episodes/${ep.id}/timeline`)}

@@ -460,8 +460,7 @@ const EpisodeDetail = () => {
     const primaryAction = getPrimaryNextAction();
     
     if (episodeScenes.length === 0 && primaryAction?.title !== 'Add your first scene') {
-      // Removed action: opened the per-episode scene composer, which no longer exists; the Scene Planner builds the beat plan, not episode scenes.
-      steps.push({ title: 'Add Scenes', status: 'pending' });
+      steps.push({ title: 'Add Scenes', status: 'pending', action: () => setActiveTab('scenes') });
     } else if (episodeScenes.length > 0) {
       steps.push({ title: 'Add Scenes', status: 'complete', count: episodeScenes.length });
     }
