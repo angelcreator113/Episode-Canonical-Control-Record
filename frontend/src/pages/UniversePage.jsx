@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LayoutDashboard } from 'lucide-react';
 import api from '../services/api';
 
 export default function UniversePage() {
@@ -206,13 +207,14 @@ export default function UniversePage() {
         </div>
       )}
 
-      {/* Quick Links */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+      {/* Quick Links — auto-fit so the row wraps instead of overflowing at 375px */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
         {[
           { icon: '🎭', label: 'Producer Mode', route: showId ? `/shows/${showId}/world?tab=overview` : '/shows' },
           { icon: '👥', label: 'Characters', route: '/character-registry?view=world' },
           { icon: '🔗', label: 'Relationships', route: '/world-studio?tab=relationships' },
           { icon: '📖', label: 'Show Bible', route: '/show-bible' },
+          { icon: <LayoutDashboard size={22} color="#B8962E" aria-hidden="true" style={{ display: 'block', margin: '6px 0 5px' }} />, label: 'World Dashboard', route: '/world-dashboard' },
         ].map(link => (
           <button key={link.label} onClick={() => navigate(link.route)} style={{
             background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '14px 16px',
