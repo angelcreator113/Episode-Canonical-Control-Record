@@ -24,6 +24,7 @@ const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
+const { mergeCanonConsequences } = require('../utils/canonConsequencesMerge');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -618,6 +619,10 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       return value;
     };
 
+    // canon_consequences as sent (after null-normalising), kept unstringified
+    // so it can be merged with the stored value. undefined = not merging.
+    let ccIncoming;
+
     for (const field of allowedFields) {
       if (updates[field] !== undefined) {
         let val = normalizeNullLike(unwrapScalar(updates[field]));
@@ -638,6 +643,11 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
             });
           }
           val = Math.trunc(numeric);
+        }
+
+        if (field === 'canon_consequences' && val !== null) {
+          // Merged with the stored value just before the UPDATE (Task #1747).
+          ccIncoming = val;
         }
 
         if (jsonFields.has(field)) {
@@ -703,10 +713,27 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
 
     // Try full update, if columns don't exist, retry without them
     try {
-      await models.sequelize.query(
-        `UPDATE world_events SET ${setClauses.join(', ')} WHERE id = :eventId AND show_id = :showId`,
-        { replacements }
-      );
+      const updateSql = `UPDATE world_events SET ${setClauses.join(', ')} WHERE id = :eventId AND show_id = :showId`;
+      if (ccIncoming !== undefined) {
+        // Merge canon_consequences with the stored value instead of
+        // replacing it (Task #1747; depth and null-removal rules in
+        // mergeCanonConsequences). The row is locked from the read to the
+        // write so a concurrent writer can't land in between. The merged
+        // string stays in `replacements`, so the core-only retry below
+        // writes the merged value too.
+        await models.sequelize.transaction(async (transaction) => {
+          const [rows] = await models.sequelize.query(
+            'SELECT canon_consequences FROM world_events WHERE id = :eventId AND show_id = :showId FOR UPDATE',
+            { replacements: { eventId, showId }, transaction }
+          );
+          replacements.canon_consequences = JSON.stringify(
+            mergeCanonConsequences(rows[0]?.canon_consequences, ccIncoming)
+          );
+          await models.sequelize.query(updateSql, { replacements, transaction });
+        });
+      } else {
+        await models.sequelize.query(updateSql, { replacements });
+      }
     } catch (updateErr) {
       const errMsg = String(updateErr.message || '');
       if (errMsg.includes('does not exist') || errMsg.includes('column')) {
