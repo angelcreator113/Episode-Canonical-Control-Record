@@ -519,6 +519,22 @@ const authorize = (requiredGroups) => {
 };
 
 /**
+ * In-handler group test, for checks that can't be route middleware (e.g. a
+ * handler that filters fields rather than refusing the request). Same
+ * comparison as authorize(): case-insensitive, plain toLowerCase().
+ * req.user carries Cognito groups and never a `role`, so handlers must test
+ * groups, not req.user.role.
+ * @param {object|null|undefined} user - req.user
+ * @param {string} group - group name, e.g. 'admin'
+ * @returns {boolean}
+ */
+const userInGroup = (user, group) => {
+  if (!user || !Array.isArray(user.groups) || typeof group !== 'string') return false;
+  const wanted = group.toLowerCase();
+  return user.groups.some((g) => typeof g === 'string' && g.toLowerCase() === wanted);
+};
+
+/**
  * Alias for authenticateToken - more intuitive naming
  */
 const authenticate = authenticateToken;
@@ -628,6 +644,7 @@ module.exports = {
   authorizeRole,
   optionalAuth,
   requireAuth,
+  userInGroup,
   verifyToken,
   verifyGroup,
 };

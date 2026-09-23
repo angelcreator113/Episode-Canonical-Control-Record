@@ -9,7 +9,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, userInGroup } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { Op } = require('sequelize');
 const { autoCreateFeedProfile } = require('../services/feedAutoGeneration');
@@ -640,8 +640,9 @@ router.put('/characters/:id', requireAuth, express.json(), async (req, res) => {
       }
     }
 
-    // Filter author-only fields for non-author requests
-    const isAuthor = req.user?.role === 'author' || req.user?.role === 'admin';
+    // Filter author-only fields unless the caller is in the Cognito admin group.
+    // req.user carries groups, never a role; there is no 'author' group.
+    const isAuthor = userInGroup(req.user, 'admin');
     const filteredAllowed = isAuthor ? allowed : allowed.filter(f => !AUTHOR_ONLY.includes(f));
 
     filteredAllowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });

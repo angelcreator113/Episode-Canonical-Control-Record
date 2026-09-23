@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { isAdmin } from '../utils/authGroups';
 import apiClient from '../services/api';
 import ErrorMessage from '../components/ErrorMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -35,7 +36,8 @@ const AuditLog = () => {
       return;
     }
 
-    if (user?.role !== 'ADMIN') {
+    // Cognito admin group; the user has no role field
+    if (!isAdmin(user)) {
       setError('Only administrators can view audit logs');
       return;
     }
