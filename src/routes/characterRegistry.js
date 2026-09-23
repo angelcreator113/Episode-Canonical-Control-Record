@@ -11,6 +11,7 @@ const router = express.Router();
 
 const { requireAuth, userInGroup } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { hideAuthorOnlyFieldsFromNonAdmins } = require('../middleware/authorOnlyFields');
 const { Op } = require('sequelize');
 const { autoCreateFeedProfile } = require('../services/feedAutoGeneration');
 let createFollowProfileFromDNA;
@@ -30,6 +31,12 @@ function extractAIText(response) {
 /*  Lazy model loader                                                  */
 /* ------------------------------------------------------------------ */
 let models = null;
+
+// Every response from this router: the four author-only character fields
+// (RegistryCharacter.AUTHOR_ONLY_FIELDS) go to the admin group only. The
+// PUT /characters/:id write filter (isAuthor below) is the write half.
+router.use(hideAuthorOnlyFieldsFromNonAdmins);
+
 function getModels() {
   if (!models) {
     models = require('../models');

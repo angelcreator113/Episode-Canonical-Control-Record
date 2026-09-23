@@ -26,11 +26,18 @@ const router  = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const {
+  canAccessAuthorFields,
+  stripAuthorOnlyFields,
+  hideAuthorOnlyFieldsFromNonAdmins,
+} = require('../middleware/authorOnlyFields');
+const {
   generateFullCharacter,
   calculateDepthLevel,
 } = require('../services/characterGenerationService');
 
 router.use(requireAuth);
+// Every response from this router: author-only character fields for the admin group only
+router.use(hideAuthorOnlyFieldsFromNonAdmins);
 
 function getModels(req) {
   return req.app.get('models') || require('../models');
@@ -99,9 +106,9 @@ router.post('/generate', aiRateLimiter, async (req, res) => {
 // Author has reviewed the proposal. Writes to registry_characters.
 // ────────────────────────────────────────────────────────────────────────────
 router.post('/confirm', async (req, res) => {
-  const { character_id, proposed, registry_id } = req.body;
+  const { character_id, registry_id } = req.body;
 
-  if (!proposed) {
+  if (!req.body.proposed) {
     return res.status(400).json({ error: 'proposed character data is required' });
   }
 
@@ -109,6 +116,12 @@ router.post('/confirm', async (req, res) => {
   const { RegistryCharacter, CharacterRegistry } = models;
 
   try {
+    // proposed is spread into update()/create() below: only the author (admin
+    // group) may write the four author-only fields through it.
+    const proposed = canAccessAuthorFields(req.user)
+      ? req.body.proposed
+      : stripAuthorOnlyFields(req.body.proposed);
+
     // If character_id provided — updating an existing character
     if (character_id) {
       const character = await RegistryCharacter.findByPk(character_id);

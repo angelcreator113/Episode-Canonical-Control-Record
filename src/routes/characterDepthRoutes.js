@@ -20,12 +20,19 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 // ── Auth middleware ──
 const { requireAuth } = require('../middleware/auth');
+const {
+  AUTHOR_ONLY_FIELDS,
+  canAccessAuthorFields,
+  hideAuthorOnlyFieldsFromNonAdmins,
+} = require('../middleware/authorOnlyFields');
+
+// Every response from this router: author-only fields for the admin group only
+router.use(hideAuthorOnlyFieldsFromNonAdmins);
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // ── Models ──
 const db = require('../models');
 const { RegistryCharacter, CharacterRegistry } = db;
-const { AUTHOR_ONLY_FIELDS } = require('../models/RegistryCharacter');
 
 // ── Anthropic ──
 const anthropic = new Anthropic();
@@ -72,17 +79,15 @@ const DIMENSION_FIELDS = {
 
 // ── Helpers ──
 
-function stripAuthorFields(obj) {
-  const clean = { ...obj };
-  for (const field of AUTHOR_ONLY_FIELDS) {
-    delete clean[field];
-  }
-  return clean;
+// The author is the Cognito admin group. Reads: every response from this
+// router is filtered by hideAuthorOnlyFieldsFromNonAdmins (mounted below).
+// Writes: PUT /:charId and POST /:charId/confirm skip the author-only fields
+// for everyone else.
+function isAuthor(req) {
+  return canAccessAuthorFields(req.user);
 }
 
-function isAuthor(req) {
-  return !!req.user;
-}
+const isWritableBy = (req) => (field) => isAuthor(req) || !AUTHOR_ONLY_FIELDS.includes(field);
 
 function buildCharacterContext(character) {
   const c = character.toJSON ? character.toJSON() : character;
@@ -215,14 +220,12 @@ router.get('/:charId', requireAuth, async (req, res) => {
       depth[field] = json[field] ?? null;
     }
 
-    // Strip author-only fields if not author
-    const result = isAuthor(req) ? depth : stripAuthorFields(depth);
-
+    // Author-only fields are stripped for non-admins by hideAuthorOnlyFieldsFromNonAdmins
     return res.json({
       success: true,
       character_id: character.id,
       character_name: character.selected_name || character.display_name,
-      depth: result,
+      depth,
     });
   } catch (err) {
     console.error('GET /character-depth/:charId error:', err);
@@ -249,10 +252,11 @@ router.put('/:charId', requireAuth, async (req, res) => {
       });
     }
 
-    // Only accept de_ fields
+    // Only accept de_ fields; author-only fields from the author (admin group) only
+    const canWrite = isWritableBy(req);
     const updates = {};
     for (const field of DE_FIELDS) {
-      if (req.body[field] !== undefined) {
+      if (req.body[field] !== undefined && canWrite(field)) {
         updates[field] = req.body[field];
       }
     }
@@ -272,7 +276,7 @@ router.put('/:charId', requireAuth, async (req, res) => {
     return res.json({
       success: true,
       character_id: character.id,
-      depth: isAuthor(req) ? depth : stripAuthorFields(depth),
+      depth,
     });
   } catch (err) {
     console.error('PUT /character-depth/:charId error:', err);
@@ -396,10 +400,11 @@ router.post('/:charId/confirm', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing "proposed" object in request body' });
     }
 
-    // Only accept de_ fields
+    // Only accept de_ fields; author-only fields from the author (admin group) only
+    const canWrite = isWritableBy(req);
     const updates = {};
     for (const field of DE_FIELDS) {
-      if (proposed[field] !== undefined) {
+      if (proposed[field] !== undefined && canWrite(field)) {
         updates[field] = proposed[field];
       }
     }
@@ -419,7 +424,7 @@ router.post('/:charId/confirm', requireAuth, async (req, res) => {
     return res.json({
       success: true,
       character_id: character.id,
-      depth: isAuthor(req) ? depth : stripAuthorFields(depth),
+      depth,
       saved: true,
       fields_written: Object.keys(updates).length,
     });
