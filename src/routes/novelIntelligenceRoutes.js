@@ -219,6 +219,42 @@ router.get('/voice-rules/active', requireAuth, async (req, res) => {
 // MANUSCRIPT-TO-METADATA CASCADE
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Manuscript cascade: AI response whitelist (#1733) ───────────────────────
+// The model's JSON is filtered to the metadata the cascade prompt asks for
+// before either write. Stray keys are dropped, not rejected — this is a model
+// reply, not a caller's request — and each drop is logged.
+const CASCADE_AI_WRITABLE_FIELDS = [
+  'book_title', 'tagline', 'one_line_logline', 'amazon_description',
+  'section_establishment', 'section_pressure', 'section_crisis', 'section_integration',
+  'table_of_contents', 'dominant_themes', 'recurring_motifs', 'pain_point_summary',
+  'lala_seed_moments',
+];
+
+// Never taken from the model, whatever CASCADE_AI_WRITABLE_FIELDS says.
+// Identity and bookkeeping are set by the route; approval and overrides are the author's.
+const CASCADE_AI_NEVER_WRITABLE = [
+  'id', 'created_at', 'updated_at', 'deleted_at', 'createdAt', 'updatedAt', 'deletedAt',
+  'book_id', 'series_id', 'author_approved', 'approved_at', 'author_overrides',
+  'stories_included', 'generation_model', 'generated_at', 'lala_seed_count',
+];
+
+function pickCascadeAiFields(metadata) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    console.warn('[manuscript/cascade] model returned a non-object; nothing merged');
+    return {};
+  }
+  const kept = {};
+  const dropped = [];
+  for (const [key, value] of Object.entries(metadata)) {
+    if (CASCADE_AI_WRITABLE_FIELDS.includes(key) && !CASCADE_AI_NEVER_WRITABLE.includes(key)) kept[key] = value;
+    else dropped.push(key);
+  }
+  if (dropped.length) {
+    console.warn(`[manuscript/cascade] model returned keys outside CASCADE_AI_WRITABLE_FIELDS, dropped: ${dropped.join(', ')}`);
+  }
+  return kept;
+}
+
 // POST /api/v1/novel/manuscript/cascade
 router.post('/manuscript/cascade', requireAuth, aiRateLimiter, async (req, res) => {
   const { book_id, series_id } = req.body;
@@ -315,24 +351,28 @@ Generate the full manuscript metadata. Respond ONLY in valid JSON:
       return res.status(500).json({ error: 'Metadata generation failed to parse. Try again.' });
     }
 
+    // Filtered model output first, the route's own fields after, in both branches.
+    const aiFields = pickCascadeAiFields(metadata);
+    const lalaSeedCount = aiFields.lala_seed_moments?.length || 0;
+
     const existing = await db.ManuscriptMetadata.findOne({ where: { book_id } });
 
     const record = existing
       ? await existing.update({
-          ...metadata,
+          ...aiFields,
           stories_included:  stories.length,
           generated_at:      new Date(),
           generation_model:  'claude-sonnet-4-6',
           author_approved:   false,
-          lala_seed_count:   metadata.lala_seed_moments?.length || 0,
+          lala_seed_count:   lalaSeedCount,
         })
       : await db.ManuscriptMetadata.create({
+          ...aiFields,
           series_id:         series_id || null,
           book_id,
           stories_included:  stories.length,
           generation_model:  'claude-sonnet-4-6',
-          lala_seed_count:   metadata.lala_seed_moments?.length || 0,
-          ...metadata,
+          lala_seed_count:   lalaSeedCount,
         });
 
     return res.json({
@@ -478,3 +518,5 @@ router.post('/brain/supersede-version', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.CASCADE_AI_WRITABLE_FIELDS = CASCADE_AI_WRITABLE_FIELDS;
+module.exports.CASCADE_AI_NEVER_WRITABLE = CASCADE_AI_NEVER_WRITABLE;
