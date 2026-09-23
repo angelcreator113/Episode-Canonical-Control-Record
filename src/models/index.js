@@ -2071,3 +2071,7 @@ module.exports.ShowArc = ShowArc;
 module.exports.Opportunity = Opportunity;
 module.exports.CareerGoal = CareerGoal;
 module.exports.CharacterState = CharacterState;
+// Lala's Phone runtime: the mission and playthrough routes read models.PhoneMission
+// and models.PhonePlaythroughState from this export (#1720).
+module.exports.PhonePlaythroughState = PhonePlaythroughState;
+module.exports.PhoneMission = PhoneMission;
