@@ -1,13 +1,14 @@
 // ============================================================================
 // One event starts at most one episode (Task #1751)
 // ============================================================================
-// docs/EVENT_EPISODE_FLOW.md ruling 3. The backend refuses a second episode
-// from an event whose used_in_episode_id points at a live episode
-// (deleted_at IS NULL), with 409 naming that episode. A link to a deleted
-// episode does not block — the state the 2026-09-22 data reset left.
-// Covers POST .../inject (guarded in the route, under FOR UPDATE) and the
-// generateEpisodeFromEvent guard shared by generate-episode,
-// generate-episode-from-many and regenerate-episode. Mocked, no database.
+// docs/EVENT_EPISODE_FLOW.md ruling 3. The link is world_events.
+// used_in_episode_id, which holds one episode (Evoni's ruling on #1751:
+// "column only"). Generating a new episode from an event whose link points
+// at a live episode (deleted_at IS NULL) is refused with 409 naming that
+// episode; a link to a deleted episode does not block — the state the
+// 2026-09-22 data reset left. POST .../inject re-points the link in the same
+// UPDATE, which releases the old episode, so a move (swap, reorder, AI-fix
+// reassign) is never refused. Mocked, no database.
 
 const express = require('express');
 const request = require('supertest');
@@ -121,8 +122,8 @@ afterEach(() => jest.restoreAllMocks());
 const inject = (eventId, episodeId) =>
   request(app).post(`/api/v1/world/${SHOW}/events/${eventId}/inject`).send({ episode_id: episodeId });
 
-describe('POST /world/:showId/events/:eventId/inject', () => {
-  test('an unused event starts an episode: script saved and event marked used, in the transaction', async () => {
+describe('POST /world/:showId/events/:eventId/inject (a move, never refused)', () => {
+  test('an unused event is injected: script saved and event marked used', async () => {
     const res = await inject('ev-unused', 'ep-target');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -130,35 +131,30 @@ describe('POST /world/:showId/events/:eventId/inject', () => {
     expect(mockEventUpdates).toHaveLength(1);
     expect(mockEventUpdates[0].replacements).toEqual({ episodeId: 'ep-target', eventId: 'ev-unused' });
     expect(mockEventUpdates[0].sql).toMatch(/status = 'used'/);
-    const lockCall = mockQuery.mock.calls.find(([sql]) => /FOR UPDATE/.test(sql));
-    expect(lockCall).toBeDefined();
-    expect(lockCall[1].transaction).toBe(mockTx);
   });
 
-  test('an event with a live episode is refused with 409 that names the episode, and nothing is written', async () => {
+  test('an event linked to a live episode moves to another: the link is re-pointed, releasing the old episode', async () => {
     const res = await inject('ev-live', 'ep-target');
-    expect(res.status).toBe(409);
-    expect(res.body.success).toBe(false);
-    expect(res.body.code).toBe('EVENT_ALREADY_HAS_EPISODE');
-    expect(res.body.episode).toEqual({ id: 'ep-live', title: 'Gala Night', episode_number: 3 });
-    expect(res.body.error).toContain('ep-live');
-    expect(res.body.error).toContain('Gala Night');
-    expect(res.body.error).toContain('Episode 3');
-    expect(mockEpisodeUpdate).not.toHaveBeenCalled();
-    expect(mockEventUpdates).toHaveLength(0);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockEventUpdates).toHaveLength(1);
+    // One column, one episode: the UPDATE replaces ep-live with ep-target.
+    expect(mockEventUpdates[0].replacements).toEqual({ episodeId: 'ep-target', eventId: 'ev-live' });
   });
 
-  test('an event whose linked episode was deleted is allowed', async () => {
+  test('a swap (two moves) both go through', async () => {
+    const a = await inject('ev-live', 'ep-target');
+    const b = await inject('ev-dead', 'ep-live');
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    expect(mockEventUpdates).toHaveLength(2);
+  });
+
+  test('an event whose linked episode was deleted is injected', async () => {
     const res = await inject('ev-dead', 'ep-target');
     expect(res.status).toBe(200);
     expect(mockEventUpdates).toHaveLength(1);
     expect(mockEventUpdates[0].replacements.episodeId).toBe('ep-target');
-  });
-
-  test('re-injecting into the episode it already links is not a second episode', async () => {
-    const res = await inject('ev-live', 'ep-live');
-    expect(res.status).toBe(200);
-    expect(mockEventUpdates).toHaveLength(1);
   });
 });
 

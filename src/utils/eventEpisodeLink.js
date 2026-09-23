@@ -19,12 +19,10 @@ const EVENT_EPISODE_CONFLICT_CODE = 'EVENT_ALREADY_HAS_EPISODE';
 
 /**
  * Returns the live episode an event is linked to, or null.
- * With { transaction, lock: true } the world_events row is read
- * FOR UPDATE, so the caller holds the row until its transaction ends.
  */
-async function findLiveLinkedEpisode(sequelize, eventId, { transaction, lock = false } = {}) {
+async function findLiveLinkedEpisode(sequelize, eventId, { transaction } = {}) {
   const [eventRows] = await sequelize.query(
-    `SELECT used_in_episode_id FROM world_events WHERE id = :eventId LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
+    `SELECT used_in_episode_id FROM world_events WHERE id = :eventId LIMIT 1`,
     { replacements: { eventId }, transaction }
   );
   const linkedId = eventRows?.[0]?.used_in_episode_id;

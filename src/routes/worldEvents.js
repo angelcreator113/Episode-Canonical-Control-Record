@@ -25,7 +25,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 const { mergeCanonConsequences } = require('../utils/canonConsequencesMerge');
-const { findLiveLinkedEpisode, eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../utils/eventEpisodeLink');
+const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../utils/eventEpisodeLink');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -927,42 +927,20 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
     const injection = eventTag + '\n' + (locationTag ? locationTag + '\n' : '');
     script = script.substring(0, insertIdx) + injection + script.substring(insertIdx);
 
-    // One event starts at most one episode (Task #1751). The event row is
-    // locked FOR UPDATE, checked, and only then are the script saved and
-    // the event marked used, all in one transaction, so two concurrent
-    // injects of one event can't both pass the check. An event already
-    // linked to a live episode other than this one is refused with 409;
-    // re-injecting into the episode it already links is not a second
-    // episode and goes through. A link to a deleted episode does not block.
-    let conflictEpisode = null;
-    await models.sequelize.transaction(async (transaction) => {
-      const linked = await findLiveLinkedEpisode(models.sequelize, eventId, { transaction, lock: true });
-      if (linked && String(linked.id) !== String(episode_id)) {
-        conflictEpisode = linked;
-        return;
-      }
+    // Save
+    await episode.update({ script_content: script.trim() });
 
-      // Save
-      await episode.update({ script_content: script.trim() }, { transaction });
-
-      // Mark event as used — try with times_used, fall back without. The
-      // first attempt runs in a savepoint so its failure doesn't abort the
-      // outer transaction before the fallback runs.
-      try {
-        await models.sequelize.transaction({ transaction }, (savepoint) => models.sequelize.query(
-          `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
-          { replacements: { episodeId: episode_id, eventId }, transaction: savepoint }
-        ));
-      } catch (markErr) {
-        console.warn('[Inject] times_used update failed, retrying without it:', markErr.message);
-        await models.sequelize.query(
-          `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW() WHERE id = :eventId`,
-          { replacements: { episodeId: episode_id, eventId }, transaction }
-        );
-      }
-    });
-    if (conflictEpisode) {
-      return res.status(409).json(eventEpisodeConflictBody(conflictEpisode));
+    // Mark event as used — try with times_used, fall back without
+    try {
+      await models.sequelize.query(
+        `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId`,
+        { replacements: { episodeId: episode_id, eventId } }
+      );
+    } catch {
+      await models.sequelize.query(
+        `UPDATE world_events SET used_in_episode_id = :episodeId, status = 'used', updated_at = NOW() WHERE id = :eventId`,
+        { replacements: { episodeId: episode_id, eventId } }
+      );
     }
 
     // If this event has an approved invitation, stamp the episode_id on the asset
