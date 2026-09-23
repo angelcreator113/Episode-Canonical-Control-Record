@@ -20,12 +20,20 @@ const mockEvents = {
   'ev-unused': { id: 'ev-unused', show_id: SHOW, name: 'Unused Soiree', used_in_episode_id: null },
   'ev-live': { id: 'ev-live', show_id: SHOW, name: 'Gala', used_in_episode_id: 'ep-live' },
   'ev-dead': { id: 'ev-dead', show_id: SHOW, name: 'Reset Brunch', used_in_episode_id: 'ep-dead' },
+  // Three events each linked to a live episode, for swap and season reorder.
+  'ev-a': { id: 'ev-a', show_id: SHOW, name: 'Event A', used_in_episode_id: 'ep-a' },
+  'ev-b': { id: 'ev-b', show_id: SHOW, name: 'Event B', used_in_episode_id: 'ep-b' },
+  'ev-c': { id: 'ev-c', show_id: SHOW, name: 'Event C', used_in_episode_id: 'ep-c' },
 };
+const mockInitialLinks = Object.fromEntries(Object.values(mockEvents).map(e => [e.id, e.used_in_episode_id]));
 // episodes rows; ep-dead is soft-deleted, ep-gone was hard-deleted (absent).
 const mockEpisodes = {
   'ep-live': { id: 'ep-live', title: 'Gala Night', episode_number: 3, show_id: SHOW, deleted_at: null },
   'ep-target': { id: 'ep-target', title: 'New Episode', episode_number: 4, show_id: SHOW, deleted_at: null },
   'ep-dead': { id: 'ep-dead', title: 'Old Brunch', episode_number: 1, show_id: SHOW, deleted_at: new Date() },
+  'ep-a': { id: 'ep-a', title: 'Episode A', episode_number: 5, show_id: SHOW, deleted_at: null },
+  'ep-b': { id: 'ep-b', title: 'Episode B', episode_number: 6, show_id: SHOW, deleted_at: null },
+  'ep-c': { id: 'ep-c', title: 'Episode C', episode_number: 7, show_id: SHOW, deleted_at: null },
 };
 
 const mockEventUpdates = [];
@@ -54,6 +62,8 @@ const mockQuery = jest.fn(async (sql, opts = {}) => {
   }
   if (/^UPDATE world_events SET used_in_episode_id = :episodeId/.test(sql)) {
     mockEventUpdates.push({ sql, replacements: r, transaction: opts.transaction });
+    const target = mockEvents[r.eventId || r.evId];
+    if (target) target.used_in_episode_id = r.episodeId;
     return [[], { rowCount: 1 }];
   }
   return [[]];
@@ -110,6 +120,7 @@ function serviceModels() {
 }
 
 beforeEach(() => {
+  for (const [id, link] of Object.entries(mockInitialLinks)) mockEvents[id].used_in_episode_id = link;
   mockEventUpdates.length = 0;
   mockEpisodeUpdate.mockClear();
   mockQuery.mockClear();
@@ -142,12 +153,35 @@ describe('POST /world/:showId/events/:eventId/inject (a move, never refused)', (
     expect(mockEventUpdates[0].replacements).toEqual({ episodeId: 'ep-target', eventId: 'ev-live' });
   });
 
-  test('a swap (two moves) both go through', async () => {
-    const a = await inject('ev-live', 'ep-target');
-    const b = await inject('ev-dead', 'ep-live');
+  test('swap: two events linked to live episodes trade episodes (WorldAdmin handleSwapEpisodes)', async () => {
+    // handleSwapEpisodes fires both injects together with Promise.all.
+    const [a, b] = await Promise.all([inject('ev-a', 'ep-b'), inject('ev-b', 'ep-a')]);
     expect(a.status).toBe(200);
     expect(b.status).toBe(200);
-    expect(mockEventUpdates).toHaveLength(2);
+    expect(mockEvents['ev-a'].used_in_episode_id).toBe('ep-b');
+    expect(mockEvents['ev-b'].used_in_episode_id).toBe('ep-a');
+  });
+
+  test('season reorder: three linked events rotate across three live episodes (applyReorderPlan)', async () => {
+    // applyReorderPlan injects each changed event into its new episode, one
+    // after another; each move releases the event's previous episode.
+    const plan = [['ev-a', 'ep-b'], ['ev-b', 'ep-c'], ['ev-c', 'ep-a']];
+    for (const [eventId, episodeId] of plan) {
+      const res = await inject(eventId, episodeId);
+      expect(res.status).toBe(200);
+    }
+    expect(mockEvents['ev-a'].used_in_episode_id).toBe('ep-b');
+    expect(mockEvents['ev-b'].used_in_episode_id).toBe('ep-c');
+    expect(mockEvents['ev-c'].used_in_episode_id).toBe('ep-a');
+    // Each event holds exactly one link, so none ends up on two live episodes.
+    const links = ['ev-a', 'ev-b', 'ev-c'].map(id => mockEvents[id].used_in_episode_id);
+    expect(new Set(links).size).toBe(3);
+  });
+
+  test('after a move, generating from the moved event is refused: its new episode is live', async () => {
+    await inject('ev-a', 'ep-b');
+    await expect(episodeGenerator.generateEpisodeFromEvent(mockEvents['ev-a'], serviceModels()))
+      .rejects.toMatchObject({ code: 'EVENT_ALREADY_HAS_EPISODE', episode: expect.objectContaining({ id: 'ep-b' }) });
   });
 
   test('an event whose linked episode was deleted is injected', async () => {
