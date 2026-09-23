@@ -8,7 +8,7 @@
  */
 
 const { pool } = require('../db');
-const axios = require('axios');
+const Anthropic = require('@anthropic-ai/sdk');
 
 class IconCueGeneratorService {
   
@@ -399,28 +399,22 @@ Focus on story-relevant moments. Be conservative - only suggest icons when clear
       throw new Error('ANTHROPIC_API_KEY not configured');
     }
     
-    const response = await axios.post(
-      'https://api.anthropic.com/v1/messages',
-      {
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
+    // Through the SDK (not a raw HTTP post) so aiCostTracker logs and
+    // budget-checks it (#1731). maxRetries: 0 keeps the single attempt the
+    // axios call made.
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY, maxRetries: 0 });
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
         },
-      }
-    );
+      ],
+    });
     
-    return response.data.content[0].text;
+    return response.content[0].text;
   }
   
   /**
