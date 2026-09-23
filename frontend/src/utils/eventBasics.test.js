@@ -8,6 +8,11 @@ import {
   suggestEventTime, suggestDressCode, isAutoScheduledDate, resolveEventBasics,
 } from './eventBasics';
 import { computeEventReadiness, computeEventState } from './eventReadiness';
+import { createRequire } from 'module';
+
+// The server's own merge for PUT canon_consequences (PR #1749), so the
+// label scenarios below replay what the route actually stores.
+const { mergeCanonConsequences } = createRequire(import.meta.url)('../../../src/utils/canonConsequencesMerge.js');
 
 const FORMATS = ['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere'];
 
@@ -143,5 +148,80 @@ describe('readiness does not read Basics suggestions', () => {
 
   test('accepting a time does not change readiness either', () => {
     expect(computeEventReadiness({ ...base, event_time: '20:00' })).toEqual(computeEventReadiness(base));
+  });
+});
+
+describe('auto-scheduled label across real saves (PUT merge replayed)', () => {
+  const D = '2026-11-07'; // the create path's default, flagged
+  const X = '2026-12-24'; // a date Evoni chose
+  const guests = [{ profile_id: 1, featured: true }];
+  const created = () => ({
+    event_date: D,
+    canon_consequences: { automation: { [AUTO_DATE_KEY]: D, guest_profiles: guests } },
+  });
+  // What PUT /world/:showId/events/:eventId stores: columns replaced,
+  // canon_consequences merged two levels deep.
+  const put = (stored, body) => ({
+    ...stored,
+    ...body,
+    ...(body.canon_consequences !== undefined
+      ? { canon_consequences: mergeCanonConsequences(stored.canon_consequences, body.canon_consequences) }
+      : {}),
+  });
+  // The old eventDetailModal 💾 Save: the columns it holds plus the whole
+  // canon_consequences copy it opened with, automation re-spread over it.
+  const oldModalSave = (openedCopy, eventDate) => ({
+    event_date: eventDate,
+    canon_consequences: {
+      ...openedCopy.canon_consequences,
+      automation: { ...openedCopy.canon_consequences.automation, event_date: eventDate },
+    },
+  });
+
+  test('a new event is labelled', () => {
+    expect(isAutoScheduledDate(created())).toBe(true);
+  });
+
+  test('Package date save: label gone, flag deleted, guests kept', () => {
+    const after = put(created(), { event_date: X, canon_consequences: { automation: { [AUTO_DATE_KEY]: null } } });
+    expect(isAutoScheduledDate(after)).toBe(false);
+    expect(after.canon_consequences.automation).not.toHaveProperty(AUTO_DATE_KEY);
+    expect(after.canon_consequences.automation.guest_profiles).toEqual(guests);
+  });
+
+  test('old modal changes the date: stale flag re-sent, label still gone (flag and date disagree)', () => {
+    const opened = created();
+    const after = put(opened, oldModalSave(opened, X));
+    expect(after.canon_consequences.automation[AUTO_DATE_KEY]).toBe(D);
+    expect(after.event_date).toBe(X);
+    expect(isAutoScheduledDate(after)).toBe(false);
+  });
+
+  test('stale old-modal save after a Package change reverts date and flag together: label shows, and the date really is the default again', () => {
+    const opened = created(); // copy held in another tab
+    const packageSaved = put(opened, { event_date: X, canon_consequences: { automation: { [AUTO_DATE_KEY]: null } } });
+    const after = put(packageSaved, oldModalSave(opened, D));
+    expect(after.event_date).toBe(D);
+    expect(isAutoScheduledDate(after)).toBe(true);
+  });
+
+  test('residual: old editor sets the date back to exactly the default after changing it: label reappears', () => {
+    const opened = created();
+    const changed = put(opened, oldModalSave(opened, X));        // flag D left behind
+    const back = put(changed, oldModalSave(changed, D));        // she picks D in the old editor
+    expect(isAutoScheduledDate(back)).toBe(true);
+    // Any Package date save clears it for good:
+    const fixed = put(back, { event_date: D, canon_consequences: { automation: { [AUTO_DATE_KEY]: null } } });
+    expect(isAutoScheduledDate(fixed)).toBe(false);
+  });
+
+  test('flag present but date column empty: no label (the date row reads the saved copy)', () => {
+    const ev = { event_date: null, canon_consequences: { automation: { [AUTO_DATE_KEY]: D, event_date: D } } };
+    expect(isAutoScheduledDate(ev)).toBe(false);
+    expect(resolveEventBasics(ev).date).toMatchObject({ state: 'set', value: D, autoScheduled: false });
+  });
+
+  test('date equals the default with no flag (an existing or Package-saved event): no label', () => {
+    expect(isAutoScheduledDate({ event_date: D, canon_consequences: { automation: {} } })).toBe(false);
   });
 });
