@@ -340,6 +340,13 @@
 }
 
 /* ── USER FOOTER ─────────────────────────────────────────────────────── */
+/* Utility rows (Search, Settings, Admin) pinned above the user footer */
+.ps-footer-nav {
+  border-top: 1px solid var(--ps-border);
+  padding: 6px 0;
+  flex-shrink: 0;
+}
+
 .ps-user-footer {
   display: flex;
   align-items: center;

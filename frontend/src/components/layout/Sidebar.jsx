@@ -1,6 +1,10 @@
 /**
  * Sidebar.jsx — Prime Studios Navigation
- * 4 zones: WRITE · WORLD · PRODUCE · MANAGE
+ * Home, then four zones by the question each answers (#1739):
+ *   WORLD — what exists · PRODUCE — what am I making ·
+ *   LIBRARY — what reusable things do I have · WRITE — the novel.
+ * Footer: Search, Settings and Admin rows (Admin's tools index reaches the
+ * admin tools), then the user avatar, which also opens Settings.
  * Props: isOpen (mobile drawer), onClose (close drawer)
  */
 import React, { useState, useEffect } from 'react';
@@ -16,7 +20,7 @@ function buildNav(shows) {
 
   return [
     {
-      zone: 'FRANCHISE',
+      zone: 'WORLD',
       items: [
         { icon: '◈', label: 'LalaVerse', route: '/universe' },
         { icon: '📖', label: 'Show Bible', route: '/show-bible' },
@@ -34,6 +38,17 @@ function buildNav(shows) {
           { icon: '📅', label: 'Producer Mode', route: `/shows/${showId}/world?tab=overview` },
         ] : []),
         { icon: '🎬', label: 'Shows', route: '/shows', expandable: true },
+        { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
+        { icon: '📦', label: 'Compositions', route: '/library' },
+      ],
+    },
+    {
+      zone: 'LIBRARY',
+      items: [
+        { icon: '🗃️', label: 'Assets', route: '/assets' },
+        { icon: '🏞️', label: 'Scene Library', route: '/scene-library' },
+        { icon: '🧩', label: 'Templates', route: '/template-studio' },
+        { icon: '📱', label: "Lala's Phone", route: '/phone-hub' },
       ],
     },
     {
@@ -50,46 +65,18 @@ function buildNav(shows) {
         { icon: '🔗', label: 'Relationships', route: '/relationships' },
       ],
     },
-    {
-      zone: 'STUDIO',
-      items: [
-        { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
-        { icon: '📦', label: 'Compositions', route: '/library' },
-      ],
-    },
-    {
-      zone: 'LIBRARY',
-      items: [
-        { icon: '🗃️', label: 'Assets', route: '/assets' },
-        { icon: '🏞️', label: 'Scene Library', route: '/scene-library' },
-        { icon: '🧩', label: 'Templates', route: '/template-studio' },
-        { icon: '📱', label: "Lala's Phone", route: '/phone-hub' },
-      ],
-    },
-    {
-      zone: 'SYSTEM',
-      items: [
-        { icon: '💵', label: 'CFO Agent', route: '/cfo',
-          children: [
-            { icon: '📊', label: 'Analytics', route: '/analytics/decisions' },
-            { icon: '💰', label: 'AI Costs', route: '/ai-costs' },
-          ],
-        },
-        { icon: '🗺️', label: 'Site Organizer', route: '/site-organizer' },
-        { icon: '🎨', label: 'Design Agent', route: '/design-agent' },
-        { icon: '🔍', label: 'Search', route: '/search' },
-        { icon: '🛡️', label: 'Admin', route: '/admin',
-          children: [
-            { icon: '🩺', label: 'Diagnostics', route: '/diagnostics' },
-          ],
-        },
-        { icon: '🗑️', label: 'Recycle Bin', route: '/recycle-bin' },
-        { icon: '⚙️', label: 'Settings', route: '/settings' },
-      ],
-    },
   ];
 }
 
+
+// Utility rows pinned in the footer, below the zones. Admin's tools index
+// (AdminPanel) reaches CFO Agent, Decision Analytics, AI Costs, Site
+// Organizer, Design Agent, Diagnostics and Recycle Bin.
+const FOOTER_ITEMS = [
+  { icon: '🔍', label: 'Search', route: '/search' },
+  { icon: '⚙️', label: 'Settings', route: '/settings' },
+  { icon: '🛡️', label: 'Admin', route: '/admin' },
+];
 
 /* ─── Shows hook (uses showService with auth) ───────────────── */
 function useShows() {
@@ -116,8 +103,6 @@ function Sidebar({ isOpen, onClose }) {
   const [universeOpen, setUniverseOpen] = useState(false);
   const [worldOpen, setWorldOpen] = useState(false);
   const [storiesOpen, setStoriesOpen] = useState(false);
-  const [cfoOpen, setCfoOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [collapsedZones, setCollapsedZones] = useState({});
   const [collapsedGroups, setCollapsedGroups] = useState({});
@@ -145,20 +130,6 @@ function Sidebar({ isOpen, onClose }) {
   useEffect(() => {
     if (['/story-engine', '/scene-proposer', '/assembler', '/continuity', '/narrative-control'].some(p => location.pathname.startsWith(p))) {
       setStoriesOpen(true);
-    }
-  }, [location.pathname]);
-
-  // Auto-expand CFO sub-nav
-  useEffect(() => {
-    if (['/cfo', '/analytics/decisions', '/ai-costs'].some(p => location.pathname.startsWith(p))) {
-      setCfoOpen(true);
-    }
-  }, [location.pathname]);
-
-  // Auto-expand Admin sub-nav
-  useEffect(() => {
-    if (['/admin', '/diagnostics'].some(p => location.pathname.startsWith(p))) {
-      setAdminOpen(true);
     }
   }, [location.pathname]);
 
@@ -295,10 +266,8 @@ function Sidebar({ isOpen, onClose }) {
                 if (item.children) {
                   const isWorld = item.route === '/world-studio';
                   const isStories = item.route === '/stories';
-                  const isCfo = item.route === '/cfo';
-                  const isAdmin = item.route === '/admin';
-                  const groupOpen = isWorld ? worldOpen : isStories ? storiesOpen : isCfo ? cfoOpen : isAdmin ? adminOpen : false;
-                  const setGroupOpen = isWorld ? setWorldOpen : isStories ? setStoriesOpen : isCfo ? setCfoOpen : isAdmin ? setAdminOpen : () => {};
+                  const groupOpen = isWorld ? worldOpen : isStories ? storiesOpen : false;
+                  const setGroupOpen = isWorld ? setWorldOpen : isStories ? setStoriesOpen : () => {};
                   const childRoutes = item.children.map(c => c.route);
                   const groupActive = isActive(item.route) || childRoutes.some(r => isActive(r));
                   return (
@@ -417,6 +386,22 @@ function Sidebar({ isOpen, onClose }) {
           );
           })}
         </nav>
+
+        {/* ── Footer rows ── */}
+        <div className="ps-footer-nav">
+          {FOOTER_ITEMS.map(item => (
+            <NavLink
+              key={item.route}
+              to={item.route}
+              className={({ isActive: a }) => `ps-nav-item ${a ? 'ps-nav-item-active' : ''}`}
+              onClick={() => { if (onClose) onClose(); }}
+              title={collapsed ? item.label : undefined}
+            >
+              <span className="ps-nav-icon">{item.icon}</span>
+              {!collapsed && <span className="ps-nav-label">{item.label}</span>}
+            </NavLink>
+          ))}
+        </div>
 
         {/* ── Footer ── */}
         <div className="ps-user-footer">
