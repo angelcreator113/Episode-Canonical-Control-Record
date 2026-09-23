@@ -168,16 +168,16 @@ entries are listed after the table; they need no sidebar decision.
 | `/template-studio/designer` | `TemplateDesigner` | C of Templates | — | `TemplateStudio` (:64) | Unchanged. |
 | `/template-studio/designer/:templateId` | `TemplateDesigner` | C of Templates | — | `TemplateStudio` (:72) | Unchanged. |
 
-### Write — stories, characters, relationships (placement open, §4)
+### Write — stories, characters, relationships (its own group, §4)
 
 | Route | Page | Class | Reached from (proposed) | Doorway at basis | Reason |
 |---|---|---|---|---|---|
 | `/stories` | `StoriesPage` | E | Write | Sidebar, `EpisodeDetail` | The book side's front door. |
 | `/story-threads` | `StoryThreadTracker` | C of Stories | Stories children | Sidebar child, Command Palette | Keeps its sidebar child. |
 | `/story-calendar` | `StoryCalendar` | C of Stories | Stories children | Sidebar child, Command Palette | Keeps its sidebar child. |
-| `/character-registry` | `CharacterRegistryPage` | E | Write (or World) | Sidebar, many | Characters. |
+| `/character-registry` | `CharacterRegistryPage` | E | Write | Sidebar, many | Characters. |
 | `/character/:id` | `CharacterProfilePage` | C of Characters | — | `CharacterRegistryPage` (:124) | Unchanged. |
-| `/relationships` | `RelationshipEngine` | E | Write (or World) | Sidebar, `WorldStudio` | Relationships. |
+| `/relationships` | `RelationshipEngine` | E | Write | Sidebar, `WorldStudio` | Relationships. |
 | `/continuity` | `ContinuityEnginePage` | C of Stories | Stories children | `Home` (:276) | Story continuity; keep Home's link, add a child. |
 | `/narrative-control` | `NarrativeControlCenter` | C of Stories | Stories children | URL only | Hub for narrative intelligence. **doorway needed.** |
 | `/story-health` | `StoryHealthDashboard` | C of Stories | Stories children | URL only | **doorway needed.** |
@@ -261,7 +261,7 @@ LIBRARY — what reusable things do I have
   Scene Library                   /scene-library
   Templates                       /template-studio
 
-WRITE — open question for Evoni (see below)
+WRITE — its own group (Evoni's ruling, see below)
   Stories ▸                       /stories
       Threads · Calendar · Continuity · Story Health
       Narrative Control · Story Dashboard · Writing Rhythm
@@ -291,19 +291,13 @@ How it meets the rulings:
   reusable-thing libraries that are URL-only or a closed loop today, so
   this group adds doorways rather than moving them.
 
-**Open — for Evoni: does Write stay its own group or fold into World?**
-The two shapes:
-
-- **A. Write stays.** As drawn above: the book side (Before Lala) keeps its
-  own group, and Characters and Relationships sit with Stories because the
-  memoir is where they're written.
-- **B. Write folds into World.** Characters and Relationships move under
-  World (they answer "what exists"; the Feed and Show Bible already sit
-  there). Stories and its children become the last World entry, or a
-  Produce entry for the book. World grows to nine rows.
-
-This proposal doesn't choose. Either shape uses the same classification;
-only the heading changes.
+**Decided — Write stays its own group (Evoni, 2026-09-23).** Write keeps
+Stories, Characters, and Relationships, as drawn above. Evoni's reason:
+"It's where the novel lives, and folding it into World would bury it under
+world-building." The alternative this proposal laid out, folding
+Characters and Relationships under World and Stories after them, is not
+taken. The classification in §3 doesn't change; only the Write rows'
+placement is now settled.
 
 ---
 
@@ -406,7 +400,7 @@ approval. Old bookmarks and deep links keep resolving.
    about their target first, so they belong to their own task.)
 3. **Add the Library group** (Assets, Scene Library, Templates). Purely
    additive: three URL-only routes gain an entry.
-4. **Regroup the sidebar**, once Evoni answers the Write question: rename
+4. **Regroup the sidebar**, with Write kept as its own group (§4): rename
    FRANCHISE → World, fold STUDIO into Produce, move World Dashboard out,
    drop the Structure self-link, replace SYSTEM with the footer Admin tools
    link. Update `Sidebar.jsx`'s header comment and remove the dead
@@ -420,7 +414,7 @@ approval. Old bookmarks and deep links keep resolving.
    do; none deletes a path.
 
 Steps 1–3 can ship in any order among themselves; step 4 must wait for
-steps 1 and 3 and for the Write answer.
+steps 1 and 3.
 
 ---
 
@@ -428,7 +422,8 @@ steps 1 and 3 and for the Write answer.
 
 - doesn't change `Sidebar.jsx`, `App.jsx`, or any route, page, or link;
 - doesn't retire or redirect anything;
-- doesn't answer the Write question, or the Home vs Producer Mode question;
+- doesn't answer the Home vs Producer Mode question (the Write question is
+  recorded in §4 as Evoni's ruling, not decided by this document);
 - doesn't edit anything under `docs/audit/`, and is not a register document;
 - mints no FD, XK, or PE number;
 - made no host, AWS, database, or Cognito contact.
