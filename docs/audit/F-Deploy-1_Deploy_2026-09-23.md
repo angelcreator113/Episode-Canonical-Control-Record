@@ -1,4 +1,4 @@
-| **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Three production deploys on 2026-09-23, and the read-only production schema check that preceded the second — all performed personally by Evoni, outside any agent session.* |
+| **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Four production deploys — one late on 2026-09-22, not filed at the time, and three on 2026-09-23 — and the read-only production schema check that preceded Deploy B, all performed personally by Evoni, outside any agent session.* |
 | --- |
 
 **Document version**
@@ -7,7 +7,7 @@ New record, not a Fix Plan revision, and not an amendment of
 `F-Deploy-1_Deploy_Late_2026-09-22.md` — this document follows that
 one rather than editing it. Basis: `origin/main` at
 `5dc8a484bb72008a2f2788fda3be1804f1853a1c`, measured 2026-09-23. That
-basis is the tree Deploy C (§5) moved production to; no commit on
+basis is the tree Deploy C (§6) moved production to; no commit on
 `origin/main` falls after it.
 
 **Author**
@@ -24,20 +24,73 @@ clone, and **MEASURED** for what this repository itself shows — a
 keystone, discharges no owed item, mints no FD, XK, or PE number, and
 rules on nothing.
 
-## §1. Identity — all three deploys
+## §1. Identity — Deploys A, B and C
 
 **ATTESTED.** Instance `i-02ae7608c531db485`; tree `~/episode-metadata`.
 `git status` showed only the four known untracked `.bak` files, unchanged
 from the standing observation in `F-Deploy-1_Deploy_Late_2026-09-22.md`
 §1 and the records it cites. `episode-worker` was stopped throughout
 all three deploys. No package or migration change appeared in any of
-the three.
+the three. Deploy 0 (§2) carries only the identity facts its own
+section states.
 
-**MEASURED.** None of the three commit ranges below touches
-`src/migrations/`, `package.json`, or `package-lock.json`; each command
-in §2, §4 and §5 scoped to those paths printed nothing.
+**MEASURED.** None of the four commit ranges below (§2, §3, §5, §6)
+touches `src/migrations/`, `package.json`, or `package-lock.json`; each
+command scoped to those paths printed nothing.
 
-## §2. Deploy A — 2026-09-23 ~05:52–05:56 UTC, frontend and backend
+## §2. Deploy 0 — 2026-09-22 ~23:44–23:46 UTC, frontend only
+
+**ATTESTED — from Evoni's session transcript, not a contemporaneous
+record** (see §8). Evoni moved the tree from
+`70cc93f4acec2912deb6680fc2efdcc95a8d2b7d` to
+`1233d054170531f8e36eb43fd3b2467e059963e5`, two commits (#1690 and
+#1692); no backend `src/` files changed; no API restart. `git status`
+showed only the four known untracked `.bak` files.
+
+Backup `/var/www/html.bak-20260923-pre1690` (5.8M); served entry
+`index-DF9EvC2j.js` → `index-Bgcn9YAH.js`; a request with
+`Host: primepisodes.com` returned HTTP 200. The frontend build took
+33.95s. Disk: 890M free before and after.
+
+The transcript as supplied does not state the instance, the tree path,
+or `episode-worker`'s state for this deploy; this record does not carry
+them over from §1.
+
+**MEASURED**, `git log --oneline
+70cc93f4acec2912deb6680fc2efdcc95a8d2b7d..1233d054170531f8e36eb43fd3b2467e059963e5`:
+
+```
+1233d0541 docs(audit): file the 2026-09-22 late deploy record [skip-automerge] (#1692)
+b65defa56 feat(frontend): mark featured attendees with story roles [skip-automerge] (#1690)
+```
+
+Two commits (`git rev-list --count` over the range: `2`), matching
+Evoni's own count. PRs #1690, #1692. `git diff --stat` over the same
+range, scoped to `src/`, confirms zero files changed:
+
+```
+(no output)
+```
+
+Scoped to `src/migrations package.json package-lock.json`: no output.
+The full (unscoped) diffstat:
+
+```
+ docs/audit/F-Deploy-1_Deploy_Late_2026-09-22.md | 280 ++++++++++++++++++++++++
+ frontend/src/pages/EventPackagePage.css         |  57 ++++-
+ frontend/src/pages/EventPackagePage.jsx         | 219 +++++++++++++++++-
+ 3 files changed, 548 insertions(+), 8 deletions(-)
+```
+
+— consistent with Evoni's account of a frontend-only deploy with no API
+restart. The starting tree and entry match where
+`F-Deploy-1_Deploy_Late_2026-09-22.md` §4 leaves production
+(`70cc93f4`, `index-DF9EvC2j.js`); the ending tree and entry match where
+Deploy A (§3) begins (`1233d054`, `index-Bgcn9YAH.js`). The restart
+counts are consistent with no restart between them: 15 → 16 at the Late
+record's Deploy C, 16 → 17 at Deploy A.
+
+## §3. Deploy A — 2026-09-23 ~05:52–05:56 UTC, frontend and backend
 
 **ATTESTED.** Evoni moved the tree from
 `1233d054170531f8e36eb43fd3b2467e059963e5` to
@@ -97,10 +150,10 @@ seven files under `frontend/src/` (`AdminPanel.jsx`, `AuditLog.jsx`,
 under `tests/unit/` — consistent with Evoni's account of a frontend
 build in this deploy.
 
-## §3. Production schema check — 2026-09-23 ~13:36 UTC, read-only
+## §4. Production schema check — 2026-09-23 ~13:36 UTC, read-only
 
 **ATTESTED.** Via `psql`, as the application user on database
-`episode_metadata`, over SSL, read-only, before Deploy B (§4):
+`episode_metadata`, over SSL, read-only, before Deploy B (§5):
 
 - `phone_missions` has 14 columns; `phone_playthrough_state` has 12.
 - `SequelizeMeta` records all four Phone Hub migrations:
@@ -123,7 +176,7 @@ $ ls src/migrations | grep -E "2026073[01]|2026080[12]"
 This record does not re-derive the column counts from those files; the
 counts above are Evoni's reading of production, recorded as given.
 
-## §4. Deploy B — 2026-09-23 ~13:40–13:43 UTC, backend
+## §5. Deploy B — 2026-09-23 ~13:40–13:43 UTC, backend
 
 **ATTESTED.** Evoni moved the tree from
 `9f04c821d5fc6224613e824f0fda63a40a7f5534` to
@@ -140,7 +193,7 @@ unchanged at `index-C1gwTz-E.js`, as no frontend source changed this
 deploy; HTTP 200. The frontend build took 32.73s.
 
 `pm2 restart`: restart count 17 → 18, online; `/health` returned 200;
-the startup log showed only the three familiar notices (§2).
+the startup log showed only the three familiar notices (§3).
 
 A read-only log check afterwards found no error mentioning the new
 middleware, the phone models, or the filter service after the restart.
@@ -200,7 +253,7 @@ output. Outside `src/`, the range touches only `docs/` (the five reads
 and filings) and six test files under `tests/unit/` — no file under
 `frontend/`, consistent with the unchanged served entry.
 
-## §5. Deploy C — 2026-09-23 ~14:20 UTC, frontend only
+## §6. Deploy C — 2026-09-23 ~14:20 UTC, frontend only
 
 **ATTESTED.** Evoni moved the tree from
 `ae7d6623ba607236754d1e6dedd56e4f035943cf` to
@@ -229,7 +282,7 @@ Scoped to `src/migrations package.json package-lock.json`: no output.
 Outside `src/`, the range touches thirteen files, all under
 `frontend/src/` — consistent with Evoni's account of no API restart.
 
-## §6. Related, by citation only — not re-derived, not ruled on
+## §7. Related, by citation only — not re-derived, not ruled on
 
 **The records this one follows.** `F-Deploy-1_Deploy_Late_2026-09-22.md`
 (filed by #1692), and through it `F-Deploy-1_Deploy_Evening_2026-09-22.md`,
@@ -256,10 +309,10 @@ is where `docs/INTERACTIVE_ROUTE_READ.md` begins. It is listed for
 completeness; no Deploy B fix is paired to it here. The #1707 pairing
 rests on one ATTESTED line — an issue's text, not the repository.
 
-## §7. Observations — not findings, not ruled on
+## §8. Observations — not findings, not ruled on
 
 - **ATTESTED (Evoni).** Deploy B was the first deploy to run a
-  production schema check before deploying (§3), and that check was what
+  production schema check before deploying (§4), and that check was what
   cleared #1722 to ship: exporting `PhoneMission` and
   `PhonePlaythroughState` makes routes query those tables, so their
   existence in production was the precondition.
@@ -269,43 +322,36 @@ rests on one ATTESTED line — an issue's text, not the repository.
   and `F-Deploy-1_Deploy_Evening_2026-09-22.md` §3 (a data change). Both
   are recorded as changes; neither is recorded as a read-only check made
   before a deploy. This record does not rule on "first" beyond that.
-- **MEASURED.** Deploy A's starting tree, `1233d054`, is not the tree
-  the last filed record leaves production at. `F-Deploy-1_Deploy_Late_2026-09-22.md`
-  §4 ends at `70cc93f4acec2912deb6680fc2efdcc95a8d2b7d` with served
-  entry `index-DF9EvC2j.js`; Deploy A begins at `1233d054` with served
-  entry `index-Bgcn9YAH.js`. Between them:
-
-  ```
-  $ git log --oneline 70cc93f4acec2912deb6680fc2efdcc95a8d2b7d..1233d054170531f8e36eb43fd3b2467e059963e5
-  1233d0541 docs(audit): file the 2026-09-22 late deploy record [skip-automerge] (#1692)
-  b65defa56 feat(frontend): mark featured attendees with story roles [skip-automerge] (#1690)
-  ```
-
-  `git diff --stat` over that range touches only
-  `F-Deploy-1_Deploy_Late_2026-09-22.md` and
-  `frontend/src/pages/EventPackagePage.{css,jsx}`. The changed served
-  entry is consistent with a frontend-only deploy of #1690 between the
-  two records, and the restart counts (15 → 16 at the Late record's
-  Deploy C, 16 → 17 at Deploy A here) are consistent with that deploy
-  making no API restart. The Late record left #1690's deploy "for the
-  next one"; this record holds no attestation for it and does not
-  reconstruct it.
+- **Deploy 0 was not filed at the time.** It is recorded in §2 as
+  ATTESTED from Evoni's session transcript, supplied after the fact,
+  not from a contemporaneous deploy record. The Late record left #1690's
+  deploy "for the next one"; this is that record.
+- **The gap was found by measurement, not reported.** This filing
+  session found it by comparing served entry names across the filed
+  records: `F-Deploy-1_Deploy_Late_2026-09-22.md` §4 leaves production
+  at `index-DF9EvC2j.js`, while Deploy A's attested starting entry was
+  `index-Bgcn9YAH.js`, and `git log` between the two trees held two
+  commits no record covered (§2's MEASURED block). Evoni did not report
+  the gap; she supplied §2's facts once the session raised it.
+- **A date in a name.** Deploy 0's backup is named
+  `html.bak-20260923-pre1690`, while its time is 2026-09-22 ~23:44 UTC.
+  Both are recorded as given; this record does not reconcile them.
 
 None of the observations above is characterized as a defect, ruled on,
 or assigned an owner in this document.
 
-## §8. What this document does not do
+## §9. What this document does not do
 
 This document:
 
-- does not record the deploy that shipped #1690 (§7) — no attestation
-  for it was supplied, and it is not reconstructed here;
-- does not re-derive the production column counts in §3 from the
+- does not treat Deploy 0 (§2) as contemporaneously recorded — it is
+  attested from a transcript after the fact, and says so (§8);
+- does not re-derive the production column counts in §4 from the
   migration files — they are Evoni's reading, recorded as given;
-- does not restate or re-verify any read cited in §6, and does not
+- does not restate or re-verify any read cited in §7, and does not
   discharge any of them — a fix shipping is not a ruling that a read's
   question is closed;
-- does not rule on whether Deploy B's schema check was the first (§7);
+- does not rule on whether Deploy B's schema check was the first (§8);
 - does not discharge any owed item recorded in `PROJECT_CONTEXT.md` §6.5
   or any Fix Plan revision;
 - makes no fix, and mints no FD, XK, or PE number;
@@ -318,7 +364,7 @@ This document:
   performed itself, against `origin/main`, not against any host;
 - records no secret anywhere above.
 
-## §9. Tails — re-derived, not carried
+## §10. Tails — re-derived, not carried
 
 ```
 $ ls docs/audit/ | grep -E '^FD-[0-9]+_' | sort -t- -k2 -n
@@ -337,12 +383,12 @@ minted here.
 
 ## §Standing
 
-§1–§5 each carry an ATTESTED clause (Evoni's own account of actions and
+§1–§6 each carry an ATTESTED clause (Evoni's own account of actions and
 reads made personally, on the production host or database — not
-reproducible from a clone) and a MEASURED clause (a read of this
+reproducible from a clone; §2's from a transcript, as it says) and a MEASURED clause (a read of this
 repository, reproducible by anyone with a clone), marked separately,
-never merged into one standing. §6 carries no standing beyond the
-citations and reads it names, plus the one ATTESTED line it marks. §7
+never merged into one standing. §7 carries no standing beyond the
+citations and reads it names, plus the one ATTESTED line it marks. §8
 marks each observation's standing on the observation. Nothing in this
 document is labelled RULED. No host, AWS, database, or Cognito contact
 was made by the agent session that filed it. Production's freeze is
