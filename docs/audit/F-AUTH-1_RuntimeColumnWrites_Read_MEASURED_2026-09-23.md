@@ -287,8 +287,61 @@ This governs what "can reach" means in §2. From
   models (`:748`–`:760`). So `update` cannot change `id`, the timestamps, or a
   paranoid model's `deleted_at`. It can change every other attribute it is given.
 - **`Model.create(values)`** builds a new record, so neither guard applies.
-  `create` can therefore set `id` and, on a paranoid model, `deleted_at`.
+  `create` can therefore set `id`, the created timestamp (`save` fills it only
+  when it is empty, `:2419`–`:2420`) and, on a paranoid model, the soft-delete
+  timestamp. The updated timestamp is overwritten with the current time on save
+  (`:2416`–`:2417`).
 - **`Model.bulkCreate(records)`** builds each record the same way.
+- **The soft-delete key depends on the model.** It is the attribute name that
+  `set` matches, not the column name. `Opportunity` and `Layer` name the
+  attribute `deleted_at`. `RegistryCharacter`, `StoryTexture` and `Show` name it
+  `deletedAt`: they are `underscored` (`RegistryCharacter.js:631`,
+  `StoryTexture.js:99`, `Show.js:145`), which maps that attribute to the
+  `deleted_at` column. On those three models, a body or AI key `deleted_at` is
+  dropped as a non-attribute, and the key that reaches the column is
+  `deletedAt`.
+
+The two probes below build instances from the real model files with a
+`Sequelize` that never connects. They were run from the repository root and
+deleted afterwards. `create` builds a new record, so the first probe calls
+`build(vals)`. `findByPk` returns a raw, non-new row, so the second builds with
+`{ isNewRecord: false, raw: true }` and then calls `set`, which is what
+`update` does before it saves:
+
+```
+$ node ./.sq-probe.js   # build(vals) on new records; set(vals) on a non-new row
+Opportunity: timestamps={"createdAt":"created_at","updatedAt":"updated_at","deletedAt":"deleted_at"} attrs=id,deleted_at,created_at,updated_at
+  create build changed: id,deleted_at,created_at,updated_at
+  update set changed:   id
+Layer: timestamps={"createdAt":"created_at","updatedAt":"updated_at","deletedAt":"deleted_at"} attrs=id,deleted_at,created_at,updated_at
+  create build changed: id,deleted_at,created_at,updated_at
+  update set changed:   id
+RegistryCharacter: timestamps={"createdAt":"createdAt","updatedAt":"updatedAt","deletedAt":"deletedAt"} attrs=id,deletedAt,createdAt,updatedAt
+  create build changed: id,deletedAt,createdAt,updatedAt
+  update set changed:   id
+StoryTexture: timestamps={"createdAt":"createdAt","updatedAt":"updatedAt","deletedAt":"deletedAt"} attrs=id,deletedAt,createdAt,updatedAt
+  create build changed: id,deletedAt,createdAt,updatedAt
+  update set changed:   id
+Show: timestamps={"createdAt":"createdAt","updatedAt":"updatedAt","deletedAt":"deletedAt"} attrs=id,deletedAt,createdAt,updatedAt
+  create build changed: id,deletedAt,createdAt,updatedAt
+  update set changed:   id
+EXIT: 0
+```
+
+In that first probe, `update set changed: id` comes from building the row without
+`raw`, not from `set`. The second probe builds the row the way `findByPk`
+returns it (`raw: true`), then sets `id`, the created and soft-delete timestamps,
+and `status`:
+
+```
+$ node ./.sq-probe.js   # findByPk-shaped row, then set()
+Opportunity update (findByPk-shaped row): id=a deleted_at=null created_at=0 changed=[status]
+RegistryCharacter update (findByPk-shaped row): id=a deletedAt=null createdAt=0 changed=[status]
+Show update (findByPk-shaped row): id=a deletedAt=null createdAt=0 changed=[status]
+EXIT: 0
+```
+
+On an existing row, `set` ignores `id` and both timestamps and changes `status`.
 
 ---
 
@@ -421,8 +474,9 @@ does not say what that call does at runtime.
 
 "Can reach" means the column is an attribute of the model (§0.9), nothing on the
 path removes it, and Sequelize accepts it for that kind of write (§0.10). **On
-`update`, `id` and a paranoid model's `deleted_at` are not reachable. On `create`,
-they are.** Where a fixed key follows the spread, the body's value is overwritten
+`update`, `id` and a paranoid model's soft-delete column are not reachable. On
+`create`, they are.** The soft-delete column is `deleted_at`; the key that reaches it
+is `deleted_at` or `deletedAt` depending on the model (§0.10). Where a fixed key follows the spread, the body's value is overwritten
 and that column is not listed.
 
 | # | Route | Columns reachable |
@@ -455,8 +509,8 @@ and that column is not listed.
 | 26, 27 | `PUT` / `PATCH /{raw-footage,edit-maps}/:id` | `episode_id`, `raw_footage_id` |
 | 28 | `PUT /{episodes,templates}/:showId/config` | create: `id`, `show_id` (overridden by the body, because `...updates` follows it at `:50`), `config_key`; update: `show_id`, `config_key` |
 | 29 | `POST /layers/bulk-create` | `id`, `deleted_at` (`episode_id` fixed after the spread) |
-| 30 | `POST /character-generation/confirm` | update: `registry_id`, `character_key`, `status`, `feed_profile_id`; create: `id`, `character_key`, `feed_profile_id`, `deleted_at` (`registry_id` and `status` fixed after the spread, `:162`–`:164`) |
-| 31 | `POST /texture-layer/generate` (AI) | `id`, `character_key`, `registry_id`, `deleted_at`. Also the approval columns `*_confirmed`, `fully_confirmed` and `confirmed_at` (§0.9); none is set after the merges. |
+| 30 | `POST /character-generation/confirm` | update: `registry_id`, `character_key`, `status`, `feed_profile_id`; create: `id`, `character_key`, `feed_profile_id`, and `deleted_at` via the key `deletedAt` (§0.10) (`registry_id` and `status` fixed after the spread, `:162`–`:164`) |
+| 31 | `POST /texture-layer/generate` (AI) | `id`, `character_key`, `registry_id`, and `deleted_at` via the key `deletedAt` (§0.10). Also the approval columns `*_confirmed`, `fully_confirmed` and `confirmed_at` (§0.9); none is set after the merges. |
 | 32 | `POST /novel/manuscript/cascade` (AI) | update: `series_id`, `book_id`, `approved_at` (`author_approved` fixed after the spread); create: `id`, `series_id`, `book_id`, `author_approved`, `approved_at` (the spread is last, `:335`) |
 
 **Every path in §1 except path 23 can reach at least one column in this table.**
