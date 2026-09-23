@@ -33,6 +33,7 @@ const { v4: uuidv4 } = require('uuid');
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { canAccessAuthorFields, stripAuthorOnlyFields } = require('../middleware/authorOnlyFields');
 
 // ── DB ─────────────────────────────────────────────────────────────────────
 const models = require('../models');
@@ -1674,7 +1675,12 @@ router.post('/world/characters/:id/re-sync', requireAuth, async (req, res) => {
     );
 
     const [updated] = await Q(req, 'SELECT * FROM registry_characters WHERE id = :id', { replacements: { id: rc.id } });
-    res.json({ synced: true, registry_character: updated });
+    // Author-only character fields go to the admin group only (filtered per
+    // response: this router is mounted at /api/v1 and sees nearly every request).
+    res.json({
+      synced: true,
+      registry_character: canAccessAuthorFields(req.user) ? updated : stripAuthorOnlyFields(updated),
+    });
   } catch (err) {
     console.error('re-sync error:', err.message);
     res.status(500).json({ error: err.message });
