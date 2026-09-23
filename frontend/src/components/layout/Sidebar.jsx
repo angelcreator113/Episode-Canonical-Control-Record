@@ -7,7 +7,6 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import showService from '../../services/showService';
-import SidebarProgress from '../SidebarProgress';
 import './Sidebar.css';
 
 /* ─── Navigation map ────────────────────────────────────────── */
@@ -56,6 +55,15 @@ function buildNav(shows) {
       items: [
         { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
         { icon: '📦', label: 'Compositions', route: '/library' },
+      ],
+    },
+    {
+      zone: 'LIBRARY',
+      items: [
+        { icon: '🗃️', label: 'Assets', route: '/assets' },
+        { icon: '🏞️', label: 'Scene Library', route: '/scene-library' },
+        { icon: '🧩', label: 'Templates', route: '/template-studio' },
+        { icon: '📱', label: "Lala's Phone", route: '/phone-hub' },
       ],
     },
     {
@@ -409,9 +417,6 @@ function Sidebar({ isOpen, onClose }) {
           );
           })}
         </nav>
-
-        {/* ── Setup Progress ── */}
-        <SidebarProgress showId={shows[0]?.id} collapsed={collapsed} />
 
         {/* ── Footer ── */}
         <div className="ps-user-footer">
