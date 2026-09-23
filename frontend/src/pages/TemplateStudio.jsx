@@ -353,12 +353,7 @@ function TemplateStudio() {
                   
                   {template.status === 'PUBLISHED' && (
                     <>
-                      <button 
-                        onClick={() => navigate(`/composer?template=${template.id}`)}
-                        className="btn-action-primary"
-                      >
-                        Use Template
-                      </button>
+                      {/* Removed: "Use Template" button — opened a composer with this template; no composer route takes a template without an episode. */}
                       <button 
                         onClick={() => handleClone(template)}
                         className="btn-action-secondary"

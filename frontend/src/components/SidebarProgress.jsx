@@ -71,7 +71,7 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
       icon: '✨', label: 'Overlays',
       done: data.overlays.generated >= 10,
       detail: `${data.overlays.generated}/${data.overlays.total}`,
-      route: `/shows/${showId}/scene-library?tab=overlays`,
+      route: `/shows/${showId}/world?tab=overlays-tab`,
     },
     {
       icon: '📝', label: 'Episodes',

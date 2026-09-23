@@ -265,10 +265,7 @@ function Home() {
             <div className="hp-action-icon hp-action-icon--purple">📺</div>
             <span className="hp-action-label">New Episode</span>
           </div>
-          <div className="hp-action-card hp-action-card--blue" onClick={() => navigate('/studio/scene-composer')}>
-            <div className="hp-action-icon hp-action-icon--blue">🎬</div>
-            <span className="hp-action-label">Scene Composer</span>
-          </div>
+          {/* Removed: "Scene Composer" card — opened the standalone episode picker for the scene composer; both pages no longer exist. */}
           <div className="hp-action-card hp-action-card--gold" onClick={() => navigate('/character-registry')}>
             <div className="hp-action-icon hp-action-icon--gold">👤</div>
             <span className="hp-action-label">Characters</span>

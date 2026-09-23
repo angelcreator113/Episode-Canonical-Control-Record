@@ -285,7 +285,7 @@ export default function ScenePlannerPage() {
 
           {allLocked && (
             <button className="scene-planner-btn success"
-              onClick={() => navigate(`/episodes/${episodeId}/script`)}>
+              onClick={() => navigate(`/episodes/${episodeId}/script-writer`)}>
               ✦ Generate Script →
             </button>
           )}

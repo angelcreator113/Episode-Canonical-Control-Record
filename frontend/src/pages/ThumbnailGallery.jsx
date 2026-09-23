@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import './ThumbnailGallery.css';
 
 function ThumbnailGallery() {
-  const navigate = useNavigate();
-
   const [thumbnails, setThumbnails] = useState([]);
   const [filteredThumbnails, setFilteredThumbnails] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,10 +84,6 @@ function ThumbnailGallery() {
     setFilteredThumbnails(filtered);
   };
 
-  const handleEdit = (thumbnail) => {
-    navigate(`/episodes/${thumbnail.episode_id}/thumbnail/${thumbnail.id}`);
-  };
-
   const handleDuplicate = async (thumbnail) => {
     try {
       alert(`Duplicating thumbnail ${thumbnail.id}...`);
@@ -150,9 +143,7 @@ function ThumbnailGallery() {
           <span className="count">{filteredThumbnails.length} thumbnails</span>
         </div>
         <div className="header-right">
-          <button className="create-btn" onClick={() => navigate('/episodes')}>
-            + New Thumbnail
-          </button>
+          {/* Removed: "+ New Thumbnail" button — meant to open the thumbnail workspace (which does not exist, docs/THUMBNAIL_SYSTEM.md); it returned to the episodes list. */}
         </div>
       </header>
 
@@ -200,9 +191,7 @@ function ThumbnailGallery() {
                 ? 'Try adjusting your filters'
                 : 'Create your first thumbnail to get started'}
             </p>
-            <button className="create-btn" onClick={() => navigate('/episodes')}>
-              Create Thumbnail
-            </button>
+            {/* Removed: "Create Thumbnail" button — same dead end as "+ New Thumbnail" above. */}
           </div>
         ) : (
           <div className="thumbnails-grid">
@@ -223,13 +212,7 @@ function ThumbnailGallery() {
                   </div>
 
                   <div className="quick-actions">
-                    <button
-                      className="action-btn"
-                      onClick={() => handleEdit(thumbnail)}
-                      title="Edit"
-                    >
-                      ✏️
-                    </button>
+                    {/* Removed: ✏️ "Edit" button — opened this thumbnail in the thumbnail workspace, which does not exist (docs/THUMBNAIL_SYSTEM.md). */}
                     <button
                       className="action-btn"
                       onClick={() => handleDuplicate(thumbnail)}

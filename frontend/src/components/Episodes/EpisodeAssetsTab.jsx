@@ -176,15 +176,7 @@ function EpisodeAssetsTab({ episode, show }) {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Create Thumbnail — relocated from the Episode Detail ⋯ menu
-              (issue #1601), same navigate target as before. */}
-          <button onClick={() => navigate(`/episodes/${episodeId}/scene-composer`)} style={{
-            padding: '5px 10px', borderRadius: 6, border: '1px solid #e8e0d0',
-            background: '#fff', color: '#6366f1', fontSize: 11, fontWeight: 600,
-            cursor: 'pointer', whiteSpace: 'nowrap',
-          }}>
-            🎨 Create Thumbnail
-          </button>
+          {/* Removed: "Create Thumbnail" button — opened the thumbnail workspace, which does not exist (docs/THUMBNAIL_SYSTEM.md). */}
           <div style={{
             width: 48, height: 48, borderRadius: '50%',
             background: `conic-gradient(${pct >= 80 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#dc2626'} ${pct * 3.6}deg, #f1f5f9 0deg)`,

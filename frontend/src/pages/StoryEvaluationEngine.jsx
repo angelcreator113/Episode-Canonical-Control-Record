@@ -2396,7 +2396,7 @@ export default function StoryEvaluationEngine() {
                             }
                           }
                           // Navigate to RelationshipEngine with suggestion context
-                          navigate('/relationship-engine', {
+                          navigate('/relationships', {
                             state: {
                               autoSuggestions: suggestions,
                               fromScene: brief.scene_title || 'Untitled',
