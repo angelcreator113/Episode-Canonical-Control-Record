@@ -98,39 +98,115 @@ function inferRouteName() {
 }
 
 // ── Daily budget limiter ──────────────────────────────────────────────────
-// Set AI_DAILY_BUDGET_USD to cap daily spending (default: no limit).
-// When the budget is exceeded, API calls are blocked and return an error.
-// The counter resets at midnight UTC.
-let dailySpend = 0;
-let dailySpendDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+// Hard stop. Set AI_DAILY_BUDGET_USD to the daily cap in USD; if it is unset
+// or not a number, the cap is $50. When a call's worst-case estimate would
+// take today's spend past the cap, the call is refused before it is made
+// (429). The check runs once, before each call starts: a call already in
+// flight, including a stream, completes; the next call is refused. Days are
+// UTC.
+//
+// Today's spend is read from ai_usage_logs, the rows this tracker writes, so
+// it survives restarts and is the same figure in every process that writes
+// there (#1735). create() must stay synchronous (see trackedCreate), so the
+// check reads a cached figure:
+//   - dbSpend: SUM(cost_usd) for today, re-read at most every SPEND_CACHE_MS,
+//     in the background, when a check or record finds it stale;
+//   - pendingSpend: spend this process recorded whose ai_usage_logs row has
+//     not been written yet (rows are written fire-and-forget), so its own
+//     calls count at once;
+//   - persistedSpend: spend whose row this process has written but no read
+//     has summed yet. A read that succeeds subtracts only the rows written
+//     before it started, so a call is never counted twice or dropped.
+// If a read fails, the last figure is kept and local spend keeps adding to it
+// (fail open, degrading to an in-process counter): refusing every AI call
+// because the usage log could not be read would turn a logging fault into an
+// outage. At a UTC day change both parts reset to zero and a read is started.
 const DAILY_BUDGET = parseFloat(process.env.AI_DAILY_BUDGET_USD) || 50;
+const SPEND_CACHE_MS = 30_000;
 
-function checkBudget(costEstimate) {
-  const today = new Date().toISOString().slice(0, 10);
-  if (today !== dailySpendDate) {
-    dailySpend = 0;
-    dailySpendDate = today;
-  }
-  return (dailySpend + costEstimate) <= DAILY_BUDGET;
+const spendCache = {
+  date: null,       // 'YYYY-MM-DD' (UTC) the figures below belong to
+  dbSpend: 0,          // last SUM(cost_usd) read for that day
+  pendingSpend: 0,     // recorded here, row not yet written
+  persistedSpend: 0,   // row written here, not yet summed by a read
+  fetchedAt: 0,     // when the last read started (ms)
+  inFlight: null,   // the pending read, if any
+};
+
+function utcDay(now = new Date()) {
+  return now.toISOString().slice(0, 10);
 }
 
-function recordSpend(cost) {
-  const today = new Date().toISOString().slice(0, 10);
-  if (today !== dailySpendDate) {
-    dailySpend = 0;
-    dailySpendDate = today;
+function rollDay() {
+  const today = utcDay();
+  if (spendCache.date !== today) {
+    spendCache.date = today;
+    spendCache.dbSpend = 0;
+    spendCache.pendingSpend = 0;
+    spendCache.persistedSpend = 0;
+    spendCache.fetchedAt = 0;
   }
-  dailySpend += cost;
-  // Warn at 80% budget
-  if (DAILY_BUDGET < Infinity && dailySpend >= DAILY_BUDGET * 0.8) {
-    console.warn(`[AI Cost] Daily spend $${dailySpend.toFixed(2)} / $${DAILY_BUDGET} (${Math.round(dailySpend / DAILY_BUDGET * 100)}%)`);
-  }
+  return today;
+}
+
+function refreshSpend() {
+  if (spendCache.inFlight) return spendCache.inFlight;
+  const day = rollDay();
+  const startedAt = Date.now();
+  const persistedAtStart = spendCache.persistedSpend;
+  spendCache.fetchedAt = startedAt;
+  spendCache.inFlight = (async () => {
+    try {
+      const db = require('../models');
+      if (!db.AIUsageLog) throw new Error('AIUsageLog model not loaded');
+      const { Op } = require('sequelize');
+      const total = await db.AIUsageLog.sum('cost_usd', {
+        where: { created_at: { [Op.gte]: new Date(`${day}T00:00:00.000Z`) } },
+      });
+      if (spendCache.date === day) {
+        spendCache.dbSpend = Number(total) || 0;
+        // Rows written before this read started are in the sum it returned.
+        spendCache.persistedSpend = Math.max(0, spendCache.persistedSpend - persistedAtStart);
+      }
+    } catch (err) {
+      console.warn(`[AI Cost] could not read today's spend from ai_usage_logs; keeping $${getDailySpend().toFixed(2)}: ${err.message}`);
+    } finally {
+      spendCache.inFlight = null;
+    }
+  })();
+  return spendCache.inFlight;
+}
+
+function refreshIfStale() {
+  rollDay();
+  if (Date.now() - spendCache.fetchedAt >= SPEND_CACHE_MS) refreshSpend();
 }
 
 function getDailySpend() {
-  const today = new Date().toISOString().slice(0, 10);
-  if (today !== dailySpendDate) return 0;
-  return dailySpend;
+  rollDay();
+  return spendCache.dbSpend + spendCache.pendingSpend + spendCache.persistedSpend;
+}
+
+function checkBudget(costEstimate) {
+  refreshIfStale();
+  return (getDailySpend() + costEstimate) <= DAILY_BUDGET;
+}
+
+// Returns a callback to run once the call's ai_usage_logs row is written.
+function recordSpend(cost) {
+  const day = rollDay();
+  spendCache.pendingSpend += cost;
+  refreshIfStale();
+  const spent = getDailySpend();
+  // Warn at 80% budget
+  if (DAILY_BUDGET < Infinity && spent >= DAILY_BUDGET * 0.8) {
+    console.warn(`[AI Cost] Daily spend $${spent.toFixed(2)} / $${DAILY_BUDGET} (${Math.round(spent / DAILY_BUDGET * 100)}%)`);
+  }
+  return () => {
+    if (spendCache.date !== day) return;
+    spendCache.pendingSpend = Math.max(0, spendCache.pendingSpend - cost);
+    spendCache.persistedSpend += cost;
+  };
 }
 
 let patchApplied = false;
@@ -231,7 +307,7 @@ function applyPatch() {
       const maxTokens = params?.max_tokens || 4096;
       const estimatedCost = (maxTokens / 1_000_000) * pricing.output; // worst-case: full output
       if (!checkBudget(estimatedCost)) {
-        const err = new Error(`AI daily budget exceeded ($${dailySpend.toFixed(2)} / $${DAILY_BUDGET}). Call blocked.`);
+        const err = new Error(`AI daily budget exceeded ($${getDailySpend().toFixed(2)} / $${DAILY_BUDGET}). Call blocked.`);
         err.status = 429;
         console.error(`[AI Cost] BLOCKED ${routeName} — budget exceeded`);
         return Promise.reject(err);
@@ -245,7 +321,8 @@ function applyPatch() {
       const cost = charged ? calculateCost(model, usage) : 0;
 
       // Track daily spend for budget limiter
-      if (charged && cost > 0) recordSpend(cost);
+      // Once the row below is written, a later read of the log counts it instead.
+      const markPersisted = charged && cost > 0 ? recordSpend(cost) : null;
 
       // Fire-and-forget DB write — never block the caller
       setImmediate(() => {
@@ -263,6 +340,8 @@ function applyPatch() {
               duration_ms: duration,
               is_error: isError,
               error_type: errorType,
+            }).then(() => {
+              if (markPersisted) markPersisted();
             }).catch(dbErr => {
               if (process.env.NODE_ENV !== 'production') {
                 console.log('⚠️  AI cost log write failed:', dbErr.message);
@@ -299,10 +378,12 @@ function applyPatch() {
   };
 
   patchApplied = true;
+  // Load today's spend once models are available (they may load after this file).
+  setImmediate(() => { refreshIfStale(); });
   console.log('💰 AI cost tracking enabled — all Anthropic API calls will be logged');
 }
 
 // Auto-apply on require
 applyPatch();
 
-module.exports = { calculateCost, MODEL_PRICING, getDailySpend, DAILY_BUDGET };
+module.exports = { calculateCost, MODEL_PRICING, getDailySpend, DAILY_BUDGET, SPEND_CACHE_MS, refreshSpend };
