@@ -1251,6 +1251,13 @@ router.get('/search', requireAuth, async (req, res) => {
 router.get('/search/filters/options', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.query;
+    // episodeId is a UUID column; reject anything else before it reaches the service
+    if (episodeId && (typeof episodeId !== 'string' || !isValidUUID(episodeId))) {
+      return res.status(400).json({
+        status: 'ERROR',
+        error: 'episodeId must be a UUID',
+      });
+    }
     const options = await FilterService.getFilterOptions(episodeId);
 
     res.json({

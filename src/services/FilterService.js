@@ -70,9 +70,9 @@ class FilterService {
     if (Array.isArray(formats) && formats.length > 0) {
       const formatConditions = formats
         .map((fmt) => {
-          paramIndex++;
-          params.push(fmt);
-          return `tc.selected_formats @> '["${fmt}"]'::jsonb`;
+          // Bound as a JSON array; the caller's text never enters the SQL
+          params.push(JSON.stringify([fmt]));
+          return `tc.selected_formats @> $${paramIndex++}::jsonb`;
         })
         .join(' OR ');
       whereClauses.push(`(${formatConditions})`);
@@ -219,12 +219,14 @@ class FilterService {
 
   /**
    * Get available filter options (for UI dropdown/select population)
-   * @param {Number} episodeId - Optional: limit to specific episode
+   * @param {String} episodeId - Optional: UUID of the episode to limit to (the
+   *   route validates it; it is bound as $1, never placed in the SQL text)
    * @returns {Object} Available filters
    */
   async getFilterOptions(episodeId = null) {
     try {
-      const episodeFilter = episodeId ? `AND tc.episode_id = ${episodeId}` : '';
+      const episodeFilter = episodeId ? 'AND tc.episode_id = $1' : '';
+      const params = episodeId ? [episodeId] : [];
 
       // Get unique formats
       const formatsQuery = `
@@ -237,7 +239,7 @@ class FilterService {
       // Get unique statuses
       const statusQuery = `
         SELECT DISTINCT status
-        FROM thumbnail_compositions
+        FROM thumbnail_compositions tc
         WHERE 1=1 ${episodeFilter}
         ORDER BY status
       `;
@@ -245,7 +247,7 @@ class FilterService {
       // Get unique templates
       const templatesQuery = `
         SELECT DISTINCT template_id
-        FROM thumbnail_compositions
+        FROM thumbnail_compositions tc
         WHERE template_id IS NOT NULL AND 1=1 ${episodeFilter}
         ORDER BY template_id
       `;
@@ -253,7 +255,7 @@ class FilterService {
       // Get unique creators
       const creatorsQuery = `
         SELECT DISTINCT created_by
-        FROM thumbnail_compositions
+        FROM thumbnail_compositions tc
         WHERE created_by IS NOT NULL AND 1=1 ${episodeFilter}
         ORDER BY created_by
       `;
@@ -263,17 +265,17 @@ class FilterService {
         SELECT 
           MIN(created_at)::date as earliest_date,
           MAX(created_at)::date as latest_date
-        FROM thumbnail_compositions
+        FROM thumbnail_compositions tc
         WHERE 1=1 ${episodeFilter}
       `;
 
       const [formatsResult, statusResult, templatesResult, creatorsResult, dateRangeResult] =
         await Promise.all([
-          pool.query(formatsQuery),
-          pool.query(statusQuery),
-          pool.query(templatesQuery),
-          pool.query(creatorsQuery),
-          pool.query(dateRangeQuery),
+          pool.query(formatsQuery, params),
+          pool.query(statusQuery, params),
+          pool.query(templatesQuery, params),
+          pool.query(creatorsQuery, params),
+          pool.query(dateRangeQuery, params),
         ]);
 
       return {
