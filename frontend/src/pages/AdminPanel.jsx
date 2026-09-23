@@ -1,14 +1,34 @@
 /**
  * Admin Panel Page
- * User roles management interface
+ * User roles management interface, plus the admin tools index — the
+ * doorway to the admin and diagnostic pages (docs/SIDEBAR_PROPOSAL.md §5).
  */
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Wallet, BarChart3, Coins, Map as MapIcon, Palette, Stethoscope, Trash2, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import '../styles/AdminPanel.css';
+
+// Admin tools index — each entry is a route in App.jsx.
+const ADMIN_TOOLS = [
+  { route: '/cfo', label: 'CFO Agent', Icon: Wallet,
+    desc: 'Runs cost, dependency, resource and health audits across the system.' },
+  { route: '/analytics/decisions', label: 'Decision Analytics', Icon: BarChart3,
+    desc: 'Insights from your editing decisions, used to train the AI.' },
+  { route: '/ai-costs', label: 'AI Costs', Icon: Coins,
+    desc: 'AI spend broken down by day, model and feature.' },
+  { route: '/site-organizer', label: 'Site Organizer', Icon: MapIcon,
+    desc: 'Audits navigation: sidebar and route alignment, dead links, orphan pages.' },
+  { route: '/design-agent', label: 'Design Agent', Icon: Palette,
+    desc: 'Audits design: responsive breakpoints, tokens, consistency, accessibility.' },
+  { route: '/diagnostics', label: 'Diagnostics', Icon: Stethoscope,
+    desc: 'Tests the API endpoints to find what is failing.' },
+  { route: '/recycle-bin', label: 'Recycle Bin', Icon: Trash2,
+    desc: 'Restores soft-deleted items, grouped by type.' },
+];
 
 const AdminPanel = () => {
   const navigate = useNavigate();
@@ -84,6 +104,28 @@ const AdminPanel = () => {
             onDismiss={() => setError(null)}
           />
         )}
+
+        <section className="admin-tools" aria-labelledby="admin-tools-heading">
+          <h2 id="admin-tools-heading" className="admin-tools-heading">Admin tools</h2>
+          <ul className="admin-tools-list">
+            {ADMIN_TOOLS.map(({ route, label, Icon, desc }) => (
+              <li key={route}>
+                <button
+                  type="button"
+                  className="admin-tool"
+                  onClick={() => navigate(route)}
+                >
+                  <Icon className="admin-tool-icon" size={20} aria-hidden="true" />
+                  <span className="admin-tool-text">
+                    <span className="admin-tool-label">{label}</span>
+                    <span className="admin-tool-desc">{desc}</span>
+                  </span>
+                  <ChevronRight className="admin-tool-chevron" size={16} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         {loading ? (
           <LoadingSpinner />
