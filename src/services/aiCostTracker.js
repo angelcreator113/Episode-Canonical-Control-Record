@@ -135,6 +135,53 @@ function getDailySpend() {
 
 let patchApplied = false;
 
+function errorTypeOf(err) {
+  return err?.error?.type || err?.status?.toString() || err?.constructor?.name || 'unknown';
+}
+
+// Streamed calls (messages.stream(), or create({ stream: true })) resolve to a
+// Stream before any tokens exist. Wrap its iterator so the usage the API
+// reports while streaming is collected, and write exactly one row when the
+// stream ends — completed, errored, or abandoned by its consumer.
+//
+// Input tokens arrive in message_start; the final output count arrives only in
+// message_delta, near the end. A stream that stops before message_delta is
+// logged with its input tokens and the output count message_start reported,
+// which undercounts the output actually generated.
+function trackStreamUsage(stream, logUsage) {
+  const originalIterator = stream.iterator;
+  const usage = {};
+  let completed = false;
+  let logged = false;
+
+  stream.iterator = async function* trackedIterator() {
+    let failure = null;
+    try {
+      for await (const event of originalIterator.call(stream)) {
+        if (event?.type === 'message_start' && event.message?.usage) {
+          Object.assign(usage, event.message.usage);
+        } else if (event?.type === 'message_delta' && event.usage) {
+          for (const [key, value] of Object.entries(event.usage)) {
+            if (value != null) usage[key] = value;
+          }
+        } else if (event?.type === 'message_stop') {
+          completed = true;
+        }
+        yield event;
+      }
+    } catch (err) {
+      failure = err;
+      throw err;
+    } finally {
+      if (!logged) {
+        logged = true;
+        if (completed) logUsage(usage, false, null);
+        else logUsage(usage, true, failure ? errorTypeOf(failure) : 'stream_incomplete', true);
+      }
+    }
+  };
+}
+
 function applyPatch() {
   if (patchApplied) return;
 
@@ -191,13 +238,14 @@ function applyPatch() {
       }
     }
 
-    const logUsage = (response, isError, errorType) => {
+    // `charged` is false only for calls that failed before any tokens were
+    // billed; an interrupted stream is an error that still used tokens.
+    const logUsage = (usage, isError, errorType, charged = !isError) => {
       const duration = Date.now() - startTime;
-      const usage = response?.usage || {};
-      const cost = isError ? 0 : calculateCost(model, usage);
+      const cost = charged ? calculateCost(model, usage) : 0;
 
       // Track daily spend for budget limiter
-      if (!isError && cost > 0) recordSpend(cost);
+      if (charged && cost > 0) recordSpend(cost);
 
       // Fire-and-forget DB write — never block the caller
       setImmediate(() => {
@@ -235,8 +283,16 @@ function applyPatch() {
     // APIPromise.then() returns a new plain Promise, so we can't use that as our return.
     // Instead, attach a side-effect via .then() on a SEPARATE chain.
     Promise.resolve(result).then(
-      (response) => logUsage(response, false, null),
-      (err) => logUsage(null, true, err?.error?.type || err?.status?.toString() || err.constructor?.name || 'unknown'),
+      (response) => {
+        // A streamed call resolves to a Stream with no usage yet; its row is
+        // written once, when the stream ends (see trackStreamUsage).
+        if (params?.stream && response && typeof response.iterator === 'function') {
+          trackStreamUsage(response, logUsage);
+          return;
+        }
+        logUsage(response?.usage || {}, false, null);
+      },
+      (err) => logUsage({}, true, errorTypeOf(err)),
     );
 
     return result;
