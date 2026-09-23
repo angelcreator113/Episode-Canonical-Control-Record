@@ -633,6 +633,62 @@ Return JSON array only. No preamble.`;
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// AI RESULT WHITELIST (#1727)
+// ══════════════════════════════════════════════════════════════════════
+// Five generators return JSON.parse of the model's text, whatever keys it
+// produced. Each result is filtered to the columns the generators are meant
+// to set before it is merged into the row, so a model reply cannot name
+// identity, approval or eligibility columns. Keys dropped are logged.
+const TEXTURE_AI_WRITABLE_FIELDS = [
+  'inner_thought_type', 'inner_thought_text',
+  'conflict_trigger', 'conflict_surface_text', 'conflict_subtext',
+  'conflict_silence_beat', 'conflict_resolution_type',
+  'body_narrator_text',
+  'private_moment_setting', 'private_moment_held_thing',
+  'private_moment_sensory_anchor', 'private_moment_text',
+  'post_text', 'post_platform', 'post_audience_bestie',
+  'post_audience_paying_man', 'post_audience_competitive_woman',
+  'bleed_text',
+  'mom_tone_trigger', 'mom_tone_text', 'mom_tone_child',
+  'aftermath_line_text',
+  'memory_proposal_type', 'memory_proposal_detail', 'memory_proposal_text',
+];
+
+// Never taken from an AI result, whatever TEXTURE_AI_WRITABLE_FIELDS says.
+// Identity comes from the request; approval is set only by /confirm.
+const TEXTURE_AI_NEVER_WRITABLE = [
+  'id', 'story_number', 'character_key', 'registry_id',
+  'created_at', 'updated_at', 'deleted_at', 'createdAt', 'updatedAt', 'deletedAt',
+  'fully_confirmed', 'confirmed_at',
+];
+
+function isTextureAiWritable(key) {
+  return TEXTURE_AI_WRITABLE_FIELDS.includes(key)
+    && !TEXTURE_AI_NEVER_WRITABLE.includes(key)
+    && !key.endsWith('_confirmed');
+}
+
+// Drops, rather than rejects, keys outside the whitelist: this is a model
+// reply, not a caller's request, so the valid layers are kept and the stray
+// keys are logged instead of failing (and re-paying for) the whole generation.
+function pickTextureAiFields(result, source) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    console.warn(`[textureLayerService] ${source} returned a non-object result; nothing merged`);
+    return {};
+  }
+  const kept = {};
+  const dropped = [];
+  for (const [key, value] of Object.entries(result)) {
+    if (isTextureAiWritable(key)) kept[key] = value;
+    else dropped.push(key);
+  }
+  if (dropped.length) {
+    console.warn(`[textureLayerService] ${source} returned keys outside TEXTURE_AI_WRITABLE_FIELDS, dropped: ${dropped.join(', ')}`);
+  }
+  return kept;
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // MAIN ORCHESTRATOR
 // ══════════════════════════════════════════════════════════════════════
 async function generateTextureLayer(db, storyData, options = {}) {
@@ -664,7 +720,9 @@ async function generateTextureLayer(db, storyData, options = {}) {
     generateBodyNarrator(storyData, characterData, arcContext),
   ]);
 
-  Object.assign(texture, innerThought, bodyNarrator);
+  Object.assign(texture,
+    pickTextureAiFields(innerThought, 'generateInnerThought'),
+    pickTextureAiFields(bodyNarrator, 'generateBodyNarrator'));
 
   // ── Conflict (sequential — needs inner thought context) ─────────
   if (isConflictEligible(storyData.story_type, charactersPresent)) {
@@ -672,7 +730,7 @@ async function generateTextureLayer(db, storyData, options = {}) {
     const conflictResult = await generateConflictScene(
       storyData, characterData, arcContext, charactersPresent
     );
-    Object.assign(texture, conflictResult);
+    Object.assign(texture, pickTextureAiFields(conflictResult, 'generateConflictScene'));
   }
 
   // ── Mom tone insert (children present) ─────────────────────────
@@ -681,7 +739,7 @@ async function generateTextureLayer(db, storyData, options = {}) {
     const momResult = await generateMomToneInsert(
       storyData, characterData, arcContext, charactersPresent
     );
-    Object.assign(texture, momResult);
+    Object.assign(texture, pickTextureAiFields(momResult, 'generateMomToneInsert'));
   }
 
   // ── Aftermath line + Memory proposal (intimate roles present) ──
@@ -691,7 +749,9 @@ async function generateTextureLayer(db, storyData, options = {}) {
       generateAftermathLine(storyData, characterData, arcContext, charactersPresent),
       generateMemoryProposal(storyData, characterData, arcContext, charactersPresent),
     ]);
-    Object.assign(texture, aftermathResult, memoryResult);
+    Object.assign(texture,
+      pickTextureAiFields(aftermathResult, 'generateAftermathLine'),
+      pickTextureAiFields(memoryResult, 'generateMemoryProposal'));
   }
 
   // ── Private moment (position check) ────────────────────────────
@@ -700,7 +760,7 @@ async function generateTextureLayer(db, storyData, options = {}) {
     const pmResult = await generatePrivateMoment(
       storyData, characterData, arcContext
     );
-    Object.assign(texture, pmResult);
+    Object.assign(texture, pickTextureAiFields(pmResult, 'generatePrivateMoment'));
   }
 
   // ── Online self post ────────────────────────────────────────────
@@ -708,7 +768,7 @@ async function generateTextureLayer(db, storyData, options = {}) {
     const postResult = await generateOnlineSelfPost(
       storyData, characterData, arcContext
     );
-    Object.assign(texture, postResult);
+    Object.assign(texture, pickTextureAiFields(postResult, 'generateOnlineSelfPost'));
   }
 
   // ── Bleed generator (story 47 only) ────────────────────────────
@@ -716,7 +776,7 @@ async function generateTextureLayer(db, storyData, options = {}) {
     const bleedResult = await generateBleed(
       storyData, characterData, arcContext
     );
-    Object.assign(texture, bleedResult);
+    Object.assign(texture, pickTextureAiFields(bleedResult, 'generateBleed'));
   }
 
   // ── Amber reads everything ──────────────────────────────────────
@@ -731,6 +791,9 @@ async function generateTextureLayer(db, storyData, options = {}) {
 
 module.exports = {
   generateTextureLayer,
+  TEXTURE_AI_WRITABLE_FIELDS,
+  TEXTURE_AI_NEVER_WRITABLE,
+  pickTextureAiFields,
   detectPhone,
   isConflictEligible,
   isMomToneEligible,

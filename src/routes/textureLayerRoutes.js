@@ -13,9 +13,16 @@ const { updateArcTracking }    = require('../services/arcTrackingService');
 // wraps Anthropic); 1 non-AI POST (confirm) gets plain requireAuth.
 const { optionalAuth, requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { userInGroup } = require('../middleware/auth'); // separate line: CP9 test locks the import above
 
 // ── Generate texture for a story ──────────────────────────────────────
 router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
+  // Admin group only (the author), checked before any AI call (#1727).
+  // req.user carries Cognito groups, never a role.
+  if (!userInGroup(req.user, 'admin')) {
+    return res.status(403).json({ error: 'Only the author (admin group) can generate texture layers' });
+  }
+
   const {
     story,
     character_key,
