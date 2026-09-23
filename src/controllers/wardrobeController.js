@@ -25,6 +25,39 @@ const BUCKET_NAME =
   'episode-metadata-storage-dev';
 
 /**
+ * Coerce a tags input into the shape the wardrobe.tags column takes: an array
+ * of non-empty strings. The column is a Postgres array in canon and the model
+ * declares ARRAY(TEXT), which needs a real JS array — a string or object would
+ * not bind (Task #1743).
+ *
+ * Accepts an array, a JSON array string ('["a","b"]'), or a comma-separated
+ * string ('a, b'). Returns undefined for null / undefined / '' so a caller can
+ * leave the column untouched; returns [] for an explicit empty array.
+ */
+function normalizeTags(input) {
+  if (input === undefined || input === null) return undefined;
+  let list = input;
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (!trimmed) return undefined;
+    list = null;
+    if (trimmed.startsWith('[')) {
+      try {
+        list = JSON.parse(trimmed);
+      } catch (parseErr) {
+        console.warn('⚠️ tags looked like JSON but did not parse; treating as comma-separated:', parseErr.message);
+      }
+    }
+    if (!Array.isArray(list)) list = trimmed.split(',');
+  }
+  if (!Array.isArray(list)) return undefined;
+  return list
+    .filter((t) => t !== null && t !== undefined && typeof t !== 'object')
+    .map((t) => String(t).trim())
+    .filter(Boolean);
+}
+
+/**
  * Wardrobe Controller
  * Handles all wardrobe-related API operations
  */
@@ -157,13 +190,7 @@ module.exports = {
 
       // Create wardrobe item
       // Parse tags — could be JSON array, comma-separated string, or already an array
-      let parsedTags = [];
-      if (tags) {
-        if (Array.isArray(tags)) parsedTags = tags;
-        else if (typeof tags === 'string') {
-          try { parsedTags = JSON.parse(tags); } catch { parsedTags = tags.split(',').map(s => s.trim()).filter(Boolean); }
-        }
-      }
+      const parsedTags = normalizeTags(tags) || [];
 
       const wardrobeItem = await Wardrobe.create({
         name: resolvedName,
@@ -658,6 +685,9 @@ module.exports = {
         name: updates.name,
         character: updates.character ?? updates.defaultCharacter,
         clothing_category: updates.clothing_category ?? updates.clothingCategory ?? updates.itemType,
+        // description was missing, so edits and "AI Enhance" → Save dropped it
+        // (Task #1743). Same key on the wardrobe row and the library form.
+        description: updates.description,
         brand: updates.brand ?? updates.vendor,
         price: floatOrUndef(updates.price),
         purchase_link: updates.purchase_link ?? updates.purchaseLink,
@@ -675,11 +705,7 @@ module.exports = {
           : updates.isFavorite != null
             ? (updates.isFavorite === 'true' || updates.isFavorite === true)
             : undefined,
-        tags: updates.tags
-          ? typeof updates.tags === 'string'
-            ? JSON.parse(updates.tags)
-            : updates.tags
-          : undefined,
+        tags: normalizeTags(updates.tags),
         s3_key: updates.s3_key,
         s3_url: updates.s3_url,
         // Game-layer fields
@@ -1978,7 +2004,7 @@ module.exports = {
         if (analysis.primaryColor) updates.color = analysis.primaryColor;
         if (analysis.category) updates.clothing_category = analysis.category;
         if (analysis.allTags?.length) {
-          updates.tags = [...new Set([...(wardrobeItem.tags || []), ...analysis.allTags])];
+          updates.tags = [...new Set(normalizeTags([...(normalizeTags(wardrobeItem.tags) || []), ...analysis.allTags]))];
         }
         if (analysis.suggestedName && !wardrobeItem.name) {
           updates.name = analysis.suggestedName;
@@ -2214,7 +2240,7 @@ module.exports = {
             if (analysis.primaryColor) updates.color = analysis.primaryColor;
             if (analysis.category) updates.clothing_category = analysis.category;
             if (analysis.allTags?.length) {
-              updates.tags = [...new Set([...(wardrobeItem.tags || []), ...analysis.allTags])];
+              updates.tags = [...new Set(normalizeTags([...(normalizeTags(wardrobeItem.tags) || []), ...analysis.allTags]))];
             }
 
             if (Object.keys(updates).length > 0) {
