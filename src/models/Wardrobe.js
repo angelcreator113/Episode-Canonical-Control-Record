@@ -179,8 +179,17 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      // Canon wardrobe.tags is a Postgres array (data_type ARRAY), not JSONB.
+      // The element type was not captured; TEXT[] is inferred from
+      // scripts/migrations/create-wardrobe-tables.sql, the repo DDL that
+      // declares it that way.
+      // A JSONB attribute binds tags as the JSON string '[]' / '["a"]', which
+      // Postgres rejects for an array column ("malformed array literal").
+      // ARRAY(TEXT) binds a JS array, which node-postgres sends as '{...}'.
+      // Writers must pass an array of strings (see normalizeTags in
+      // wardrobeController). Task #1743.
       tags: {
-        type: DataTypes.JSONB,
+        type: DataTypes.ARRAY(DataTypes.TEXT),
         allowNull: true,
         defaultValue: [],
       },
