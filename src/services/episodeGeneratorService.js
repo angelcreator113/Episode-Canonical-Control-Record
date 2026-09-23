@@ -15,6 +15,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
+const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
 
 // ─── SOCIAL MEDIA TASK TEMPLATES ─────────────────────────────────────────────
 // Tasks vary by event type and timing (before/during/after)
@@ -415,22 +416,19 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   if (!showId) throw new Error('show_id is required');
   if (!Episode) throw new Error('Episode model not loaded');
 
-  // Check if event is already used — prevent double generation
+  // One event starts at most one episode (Task #1751). This is the shared
+  // guard for every route that starts an episode through this function
+  // (generate-episode, generate-episode-from-many, regenerate-episode).
+  // A link to a soft- or hard-deleted episode does not block.
   const eventId = typeof event.id === 'string' ? event.id : String(event.id);
+  let liveEpisode = null;
   try {
-    const [usedCheck] = await models.sequelize.query(
-      `SELECT id, title FROM episodes WHERE id IN (
-        SELECT used_in_episode_id FROM world_events WHERE id = :eventId AND used_in_episode_id IS NOT NULL
-      ) AND deleted_at IS NULL LIMIT 1`,
-      { replacements: { eventId } }
-    );
-    if (usedCheck?.length > 0) {
-      throw new Error(`Episode already exists for this event: "${usedCheck[0].title}". Delete it first to regenerate.`);
-    }
+    liveEpisode = await findLiveLinkedEpisode(models.sequelize, eventId);
   } catch (checkErr) {
-    if (checkErr.message.includes('already exists')) throw checkErr;
     // Column may not exist, skip check
+    console.warn('[EpisodeGenerator] used-event check skipped:', checkErr.message);
   }
+  if (liveEpisode) throw eventEpisodeConflictError(liveEpisode);
 
   // Get next episode number from active episodes only. Soft-deleted
   // regenerate history should not inflate visible episode numbering.

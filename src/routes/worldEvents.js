@@ -25,6 +25,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 const { mergeCanonConsequences } = require('../utils/canonConsequencesMerge');
+const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../utils/eventEpisodeLink');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -2054,6 +2055,10 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRa
       message: `Episode "${result.episode.title}" created with ${result.scenePlan.length} beats, ${result.socialTasks.length} social tasks${scriptDrafted ? ' + draft script' : ''}`,
     });
   } catch (error) {
+    if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
+      console.warn('Generate episode refused:', error.message);
+      return res.status(409).json(eventEpisodeConflictBody(error.episode));
+    }
     console.error('Generate episode error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message, stack: error.stack?.slice(0, 500) });
   }
@@ -2094,15 +2099,10 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
     const anchor = ordered[0];
     const extras = ordered.slice(1);
 
-    // Anchor must not already have an episode — same guard as the
-    // single-event generator. Extras that are already linked to other
-    // episodes are skipped with a warning.
-    if (anchor.used_in_episode_id) {
-      return res.status(409).json({
-        success: false,
-        error: 'The anchor event already has an episode. Regenerate it first to combine.',
-      });
-    }
+    // Anchor must not already have a live episode. generateEpisodeFromEvent
+    // enforces that (Task #1751) and the catch below maps its refusal to
+    // 409; a link to a deleted episode does not block. Extras that are
+    // already linked to other episodes are skipped with a warning.
 
     let wardrobeItems = [];
     try {
@@ -2171,6 +2171,10 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
       message: `Episode "${result.episode.title}" created from ${1 + linkedExtras.length} event${linkedExtras.length === 0 ? '' : 's'}${skippedExtras.length ? ` (${skippedExtras.length} skipped)` : ''}`,
     });
   } catch (error) {
+    if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
+      console.warn('Multi-event generate refused:', error.message);
+      return res.status(409).json(eventEpisodeConflictBody(error.episode));
+    }
     console.error('Multi-event generate error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -2235,6 +2239,10 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, ai
       message: `Episode regenerated. Previous episode${oldEpisodeId ? ' soft-deleted' : ' did not exist'}.`,
     });
   } catch (error) {
+    if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
+      console.warn('Regenerate episode refused:', error.message);
+      return res.status(409).json(eventEpisodeConflictBody(error.episode));
+    }
     console.error('Regenerate episode error:', error.message, error.stack?.slice(0, 500));
     return res.status(500).json({ success: false, error: error.message });
   }
