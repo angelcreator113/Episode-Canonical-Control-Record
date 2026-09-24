@@ -176,7 +176,7 @@ describe('relationship stage — the same two filters as the fill stage', () => 
 describe('eligibility — one set of rules for both stages', () => {
   const rel = (b, type = 'friend') => ({ profile_a_id: HOST.id, profile_b_id: b, relationship_type: type });
   const SHARED = {
-    status: { [Op.in]: ['finalized', 'generated'] },
+    status: { [Op.in]: ['finalized', 'generated', 'crossed'] },
     feed_layer: 'lalaverse',
     is_justawoman_record: { [Op.ne]: true },
     [Op.or]: [{ celebrity_tier: null }, { celebrity_tier: 'accessible' }, { celebrity_tier: 'selective' }],
