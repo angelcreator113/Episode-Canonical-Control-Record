@@ -2375,7 +2375,23 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     const costCoins = prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50;
     const strictness = Math.min(10, prestige + Math.floor(Math.random() * 2));
     const deadlineType = prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low';
-    const hostBrand = p.brand_partnerships?.[0]?.brand || null;
+    // Task #1765: a creator's brand partnership is their sponsor, not the
+    // event's organizer. This route used to write the first partnership's
+    // brand to host_brand and automation.host_brand, and
+    // resolveEventOrganizer (frontend eventReadiness.js) lets any brand
+    // there win over the creator, so the Event Package read "Organized by
+    // <sponsor>". The creator is the organizer (source_profile_id and the
+    // automation.host_* copy); host_brand is null in both homes (the keys
+    // are kept, so a profile with no partnerships creates the same event as
+    // before) and left for Evoni to set in the Event Package.
+    // The partnerships are kept as automation.brand_partnerships (read by
+    // characterSyncService.generatePostEventOpportunities as brand sources)
+    // and in the narrative sentence below; the profile row still holds them.
+    const partnerships = Array.isArray(p.brand_partnerships)
+      ? p.brand_partnerships.filter(b => b && typeof b === 'object' && b.brand)
+      : [];
+    // Same value the narrative sentence always used (first partnership).
+    const sponsorBrand = p.brand_partnerships?.[0]?.brand || null;
 
     // Task #1757: no time and no dress code. This route used to derive the
     // time from prestige (20:00/19:00/18:00) and the dress code (and its
@@ -2426,14 +2442,14 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       border_style: archStyle.border_style,
     };
     const descriptionText = `${p.display_name || p.handle} is hosting an exclusive ${p.content_category || 'creator'} event${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`;
-    const narrativeText = `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${hostBrand ? `Brand opportunity with ${hostBrand}.` : ''}`;
+    const narrativeText = `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${sponsorBrand ? `Brand opportunity with ${sponsorBrand}.` : ''}`;
 
     const eventData = {
       show_id: showId,
       name: event_template ? `${p.display_name || p.handle}'s ${event_template}` : `${p.display_name || p.handle} Hosts`,
       event_type: 'invite',
       host: p.display_name || p.handle,
-      host_brand: hostBrand,
+      host_brand: null,
       source_profile_id: p.id,
       prestige,
       cost_coins: costCoins,
@@ -2463,7 +2479,8 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
           host_handle: p.handle,
           host_display_name: p.display_name,
           host_registry_character_id: p.registry_character_id,
-          host_brand: hostBrand,
+          host_brand: null,
+          ...(partnerships.length > 0 ? { brand_partnerships: partnerships } : {}),
           venue_location_id: venue?.id,
           venue_name: venue?.name,
           venue_address: venueAddress,
