@@ -15,7 +15,7 @@
  * Location: frontend/src/pages/WorldAdmin.jsx
  */
 
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -24,7 +24,7 @@ import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, computeEventState, EVENT_QUEUE_STATES, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
-import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles, ChevronDown, ChevronRight, Lightbulb, AlertTriangle } from 'lucide-react';
 import './WorldAdmin.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -415,6 +415,33 @@ function WorldAdmin() {
   // actions, and which single card's per-event "⋯" menu is open (null =
   // none; only one open at a time).
   const [eventsHeaderMenuOpen, setEventsHeaderMenuOpen] = useState(false);
+  // Events tab leads with the queue (Task #1763): the sections that used to
+  // stack above it now sit below it, collapsed by default. Local state only —
+  // every visit starts with them closed.
+  const [eventsWarningsOpen, setEventsWarningsOpen] = useState(false);
+  const [eventsDraftsOpen, setEventsDraftsOpen] = useState(false);
+  const [eventsIdeasOpen, setEventsIdeasOpen] = useState(false);
+  const eventsWarningsRef = useRef(null);
+  const eventsIdeasRef = useRef(null);
+  // Header shortcuts to the below-the-queue sections: open, then scroll to it
+  // (after the expand has rendered).
+  const revealEventsSection = (setOpen, ref) => {
+    setOpen(true);
+    requestAnimationFrame(() => ref.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
+  };
+  // The inline event editor renders above the queue, but it can be opened
+  // from below it (a warning's Edit, a suggestion's + Create, a template).
+  // Bring its top into view when it opens off-screen.
+  const eventEditorRef = useRef(null);
+  useEffect(() => {
+    if (!editingEvent || activeTab !== 'events') return;
+    requestAnimationFrame(() => {
+      const el = eventEditorRef.current;
+      if (!el?.getBoundingClientRect) return;
+      const { top } = el.getBoundingClientRect();
+      if (top < 0 || top > window.innerHeight) el.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    });
+  }, [editingEvent, activeTab]);
   const [openEventMenuId, setOpenEventMenuId] = useState(null);
   // Which open card menu is showing the "Change status" sub-list (null =
   // none; the menu's normal item list otherwise).
@@ -1853,8 +1880,21 @@ The revised event should feel like a completely different experience from the si
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
             <div>
               <h2 style={{ ...S.cardTitle, margin: '0 0 4px' }}>Events</h2>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                {worldEvents.length} events
+              <div style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>{worldEvents.length} events</span>
+                {/* Story logic warnings live below the queue, collapsed
+                    (Task #1763); this count keeps them visible from the
+                    header and jumps straight to them. */}
+                {(() => {
+                  const warningCount = getSequenceWarnings().length;
+                  return warningCount > 0 ? (
+                    <button type="button" className="wa-ev-warn-link" data-testid="events-warnings-link"
+                      onClick={() => revealEventsSection(setEventsWarningsOpen, eventsWarningsRef)}>
+                      <AlertTriangle size={12} aria-hidden="true" />
+                      {warningCount} story logic warning{warningCount === 1 ? '' : 's'}
+                    </button>
+                  ) : null;
+                })()}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', position: 'relative' }}>
@@ -1905,6 +1945,14 @@ The revised event should feel like a completely different experience from the si
               <button onClick={() => navigate(`/shows/${showId}/new-episode`)} style={S.primaryBtn}>
                 <Plus size={14} style={{ verticalAlign: -2, marginRight: 4 }} />New Event
               </button>
+              {/* Creation tools (opportunity pipeline + event ideas) moved
+                  below the queue into a collapsed section (Task #1763);
+                  this opens it and scrolls to it in one click. */}
+              <button type="button" data-testid="events-ideas-button"
+                onClick={() => revealEventsSection(setEventsIdeasOpen, eventsIdeasRef)}
+                style={S.smBtn} title="Feed opportunities and event ideas">
+                <Lightbulb size={14} style={{ verticalAlign: -2, marginRight: 4 }} aria-hidden="true" />Ideas
+              </button>
               <button onClick={() => setEventsHeaderMenuOpen(o => !o)} style={S.smBtn} title="More actions" aria-label="More actions">
                 <MoreHorizontal size={16} />
               </button>
@@ -1938,528 +1986,6 @@ The revised event should feel like a completely different experience from the si
               )}
             </div>
           </div>
-
-          {/* ── Draft Events Being Worked On ── */}
-          {(() => {
-            const draftEvents = worldEvents.filter(ev => ev.status === 'draft');
-            if (draftEvents.length === 0) return null;
-            return (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, textTransform: 'uppercase', color: '#B8962E', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Draft Events ({draftEvents.length})</span>
-                  <span style={{ fontSize: 9, color: '#94a3b8', textTransform: 'none', fontFamily: 'inherit' }}>Complete details and mark ready</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {draftEvents.map(ev => {
-                    const auto = ev.canon_consequences?.automation;
-                    const host = ev.host || auto?.host_display_name || '';
-                    const venue = ev.venue_name || auto?.venue_name || '';
-                    const guestCount = auto?.guest_profiles?.length || 0;
-                    // Check completeness — check both top-level and automation fields
-                    const filled = [
-                      ev.host || auto?.host_display_name,
-                      ev.venue_name || auto?.venue_name,
-                      ev.event_date || auto?.event_date,
-                      ev.dress_code || auto?.dress_code,
-                      ev.description,
-                      ev.narrative_stakes,
-                    ].filter(Boolean).length;
-                    const total = 6;
-                    const pct = Math.round((filled / total) * 100);
-                    return (
-                      <div key={ev.id} onClick={() => setEventDetailModal(ev)} style={{ background: '#fff', border: '1px solid #e8e0d0', borderLeft: `4px solid ${pct === 100 ? '#22c55e' : '#f59e0b'}`, borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'border-color 0.15s' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{ev.name}</div>
-                            <div style={{ fontSize: 11, color: '#64748b', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                              {host && <span>👤 {host}</span>}
-                              {venue && <span>📍 {venue}</span>}
-                              {guestCount > 0 && <span>👥 {guestCount}</span>}
-                              {ev.event_date && <span>📅 {ev.event_date}</span>}
-                              <span>⭐ {ev.prestige || 5}</span>
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: pct === 100 ? '#16a34a' : '#f59e0b', marginBottom: 4 }}>{pct}% complete</div>
-                            <div style={{ width: 80, height: 4, background: '#e8e0d0', borderRadius: 2, overflow: 'hidden' }}>
-                              <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#22c55e' : '#f59e0b', borderRadius: 2 }} />
-                            </div>
-                          </div>
-                        </div>
-                        {pct === 100 && (
-                          <div style={{ marginTop: 8, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
-                            Ready to publish — open to mark as ready
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* ── Pipeline: Opportunities → Events ── */}
-          <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E' }}>
-                Pipeline — Feed → Opportunities → Events
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={async () => {
-                  setToast('Scanning feed for opportunities...');
-                  try {
-                    const res = await api.post(`/api/v1/feed-pipeline/${showId}/generate-opportunities`);
-                    if (res.data.success) {
-                      setToast(`${res.data.count} opportunities generated from feed profiles`);
-                      loadData();
-                    }
-                  } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                  setTimeout(() => setToast(null), 3000);
-                }} style={{ ...S.smBtn, background: '#B8962E', color: '#fff', border: 'none', fontSize: 10 }}>
-                  🔍 Scan Feed
-                </button>
-                <button onClick={() => setOppQuickForm({ name: '', opportunity_type: 'modeling', prestige: 5, narrative_stakes: '' })} style={{ ...S.smBtn, fontSize: 10 }}>
-                  + New Opportunity
-                </button>
-              </div>
-            </div>
-            <div style={{ fontSize: 12, color: '#666' }}>
-              Scan Lala's feed for opportunities, or pick a template below.
-            </div>
-          </div>
-
-          {/* Pipeline stats */}
-          {opportunities.length > 0 && (
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-              {['offered','considering','booked','active','completed'].map(s => {
-                const count = opportunities.filter(o => o.status === s).length;
-                if (!count) return null;
-                const colors = { offered: '#f59e0b', considering: '#6366f1', booked: '#22c55e', active: '#16a34a', completed: '#059669' };
-                return <span key={s} style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontWeight: 600, background: (colors[s] || '#999') + '18', color: colors[s] || '#999' }}>{s}: {count}</span>;
-              })}
-              <span style={{ fontSize: 9, color: '#888', padding: '2px 4px' }}>
-                ${opportunities.filter(o => ['booked','active','completed','paid'].includes(o.status)).reduce((s, o) => s + (parseFloat(o.payment_amount) || 0), 0).toLocaleString()} booked
-              </span>
-            </div>
-          )}
-
-          {/* Quick create opportunity form */}
-          {oppQuickForm && (
-            <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 14, marginBottom: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-                <div><label style={{ fontSize: 10, color: '#aaa' }}>name</label><input value={oppQuickForm.name} onChange={e => setOppQuickForm(p => ({ ...p, name: e.target.value }))} placeholder="Velour Magazine Cover" style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
-                <div><label style={{ fontSize: 10, color: '#aaa' }}>type</label><select value={oppQuickForm.opportunity_type} onChange={e => setOppQuickForm(p => ({ ...p, opportunity_type: e.target.value }))} style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }}>
-                  {['modeling', 'runway', 'editorial', 'campaign', 'ambassador', 'brand_deal', 'casting_call', 'podcast', 'interview', 'award_show', 'social_event'].map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-                </select></div>
-                <div><label style={{ fontSize: 10, color: '#aaa' }}>prestige</label><input type="number" value={oppQuickForm.prestige} onChange={e => setOppQuickForm(p => ({ ...p, prestige: parseInt(e.target.value) || 5 }))} min="1" max="10" style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
-              </div>
-              <div style={{ marginBottom: 8 }}><label style={{ fontSize: 10, color: '#aaa' }}>stakes</label><input value={oppQuickForm.narrative_stakes} onChange={e => setOppQuickForm(p => ({ ...p, narrative_stakes: e.target.value }))} placeholder="Why this matters for Lala..." style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
-              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                <button onClick={() => setOppQuickForm(null)} style={{ padding: '5px 14px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
-                <button disabled={!oppQuickForm.name} onClick={async () => {
-                  try {
-                    await api.post(`/api/v1/opportunities/${showId}`, { ...oppQuickForm, category: 'fashion' });
-                    setOppQuickForm(null);
-                    setToast('Opportunity created');
-                    loadData();
-                  } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                }} style={{ padding: '5px 14px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: !oppQuickForm.name ? 0.4 : 1 }}>Create</button>
-              </div>
-            </div>
-          )}
-
-          {/* Active Opportunities ready to schedule */}
-          {(() => {
-            const schedulable = (opportunities || []).filter(o => !o.event_id && ['offered','considering','negotiating','booked'].includes(o.status));
-            if (schedulable.length === 0) return null;
-            return (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>
-                  Active Opportunities — ready to schedule ({schedulable.length})
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
-                  {schedulable.map(opp => (
-                    <div key={opp.id} style={{ background: '#fff', border: '1px solid #e8e0d0', borderLeft: '4px solid #B8962E', borderRadius: 10, padding: '12px 14px' }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#2C2C2C', marginBottom: 2 }}>{opp.name}</div>
-                      <div style={{ fontSize: 10, color: '#888', marginBottom: 4, display: 'flex', gap: 6 }}>
-                        <span>{opp.opportunity_type?.replace(/_/g, ' ')}</span>
-                        {opp.connector_handle && <span>via @{opp.connector_handle}</span>}
-                        {opp.prestige && <span>⭐ {opp.prestige}</span>}
-                      </div>
-                      {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6, lineHeight: 1.3 }}>{typeof opp.narrative_stakes === 'string' ? opp.narrative_stakes.slice(0, 100) : ''}</div>}
-                      <button onClick={async () => {
-                        setToast(`Scheduling "${opp.name}"...`);
-                        try {
-                          const res = await api.post(`/api/v1/feed-pipeline/${showId}/schedule/${opp.id}`);
-                          if (res.data.success) { setToast(`"${opp.name}" → Event created!`); loadData(); }
-                        } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
-                      }} style={{ padding: '5px 14px', border: 'none', borderRadius: 6, background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 11, cursor: 'pointer', width: '100%' }}>
-                        📅 Schedule as Event
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Feed event templates grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
-            {[
-              { name: 'Creator Roast Night', category: 'creator_economy', icon: '🔥', desc: 'Public roasting of creators by other creators. Everything is jokes until someone goes too far.', energy: 'chaotic', venue_theme: 'Dark underground comedy club with exposed brick, dramatic red spotlights, leather booths, vintage microphone on stage' },
-              { name: 'Fashion Mystery Box', category: 'fashion', icon: '📦', desc: 'Style looks from a mystery selection. Constraint reveals true taste — or lack of it.', energy: 'creative', venue_theme: 'Sleek futuristic showroom with glass display cases, neon accents, mirrored walls, mystery boxes on pedestals' },
-              { name: 'Creator Speed Dating', category: 'creator_economy', icon: '⚡', desc: 'Rapid-fire collab pitches. Alliances form fast. Some are regretted faster.', energy: 'networking', venue_theme: 'Modern co-working lounge with round tables, warm lighting, exposed ceiling beams, cocktail bar in corner' },
-              { name: 'Street Style Marathon', category: 'fashion', icon: '👟', desc: 'Extended street style documentation — the week\'s best looks ranked publicly.', energy: 'competitive', venue_theme: 'Luxury outdoor fashion district — cobblestone streets, designer storefronts, fairy lights strung between buildings, photography wall' },
-              { name: 'Beauty Battles', category: 'beauty', icon: '💄', desc: 'Head-to-head beauty challenges. The audience votes. The loser loses followers publicly.', energy: 'dramatic', venue_theme: 'Glamorous beauty arena with vanity mirror stations, ring lights everywhere, judges panel, pink neon runway' },
-              { name: 'Design Lab Week', category: 'creative', icon: '🎨', desc: 'Experimental design projects and innovation challenges. Where new ideas are tested publicly.', energy: 'creative', venue_theme: 'Industrial creative studio with paint-splattered floors, large canvases, skylights, modern art installations' },
-              { name: 'Community Build Week', category: 'creator_economy', icon: '🤝', desc: 'Collaborative content between otherwise competing creators. Forced proximity events.', energy: 'wholesome', venue_theme: 'Warm communal space with long wooden tables, greenery, soft natural lighting, open kitchen, cozy seating nooks' },
-              { name: 'The Great Glow-Up Challenge', category: 'beauty', icon: '✨', desc: 'Dramatic transformation challenge. Before and after content that goes viral.', energy: 'aspirational', venue_theme: 'Luxury spa and transformation center with marble floors, gold mirrors, professional styling stations, crystal chandeliers' },
-              { name: 'Creator Charity Week', category: 'creator_economy', icon: '💝', desc: 'Creators raise money for causes. Reputation washing meets genuine impact.', energy: 'feel-good', venue_theme: 'Elegant charity gala ballroom with auction stage, flower arrangements, candlelit tables, donation display board' },
-              { name: 'Midnight Music Festival', category: 'music', icon: '🎵', desc: 'Late-night music and performance event. Unexpected collabs happen after midnight.', energy: 'electric', venue_theme: 'Rooftop music venue at night with city skyline, string lights, DJ booth, velvet lounge areas, starlit sky' },
-              { name: 'Virtual Travel Festival', category: 'lifestyle', icon: '✈️', desc: 'Digital travel content — who can make home feel like elsewhere.', energy: 'escapist', venue_theme: 'Tropical resort-style venue with palm trees, infinity pool edge, sunset views, bamboo furniture, exotic flowers' },
-              { name: 'Artist Residency Month', category: 'creative', icon: '🖼️', desc: 'Creators slow down and make something intentional. The antidote to the content grind.', energy: 'reflective', venue_theme: 'Serene gallery loft with white walls, natural wood floors, large windows with garden views, minimal sculptures' },
-              { name: 'Creator Talent Show', category: 'creator_economy', icon: '🎤', desc: 'Hidden talents revealed. Singers, dancers, comedians — the audience discovers new sides.', energy: 'surprising', venue_theme: 'Intimate theater with velvet curtains, spotlit stage, orchestra seating, gold balcony railings, dramatic drapes' },
-            ].map(template => {
-              const catColors = {
-                fashion: { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
-                beauty: { bg: '#fce7f3', border: '#ec4899', text: '#9d174d' },
-                creator_economy: { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' },
-                creative: { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3' },
-                music: { bg: '#fae8ff', border: '#a855f7', text: '#6b21a8' },
-                lifestyle: { bg: '#d1fae5', border: '#10b981', text: '#065f46' },
-              };
-              const cc = catColors[template.category] || catColors.creator_economy;
-              // Check if an event already exists from this template
-              const existingEvent = worldEvents.find(ev =>
-                ev.name?.includes(template.name) ||
-                ev.canon_consequences?.automation?.source_calendar_title === template.name
-              );
-
-              return (
-                <div key={template.name} style={{ background: existingEvent ? '#fafffe' : '#fff', border: `1px solid ${existingEvent ? '#a3cfbb' : cc.border + '30'}`, borderLeft: `4px solid ${existingEvent ? '#22c55e' : cc.border}`, borderRadius: 10, padding: 16, transition: 'border-color 0.15s' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 20 }}>{template.icon}</span>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: '#2C2C2C' }}>{template.name}</div>
-                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: cc.bg, color: cc.text, fontWeight: 600 }}>{template.category.replace(/_/g, ' ')}</span>
-                    </div>
-                  </div>
-                  <p style={{ fontSize: 12, color: '#666', margin: '0 0 10px', lineHeight: 1.5 }}>{template.desc}</p>
-                  <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-                    <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#f0f0f0', color: '#666', fontFamily: "'DM Mono', monospace" }}>Energy: {template.energy}</span>
-                  </div>
-                  {(feedEventResults[template.name]?.status === 'created' || existingEvent) ? (() => {
-                    const created = feedEventResults[template.name]?.event || existingEvent;
-                    const host = created?.host || created?.canon_consequences?.automation?.host_display_name || '';
-                    return (
-                      <div style={{ background: '#d4edda', border: '1px solid #a3cfbb', borderRadius: 8, padding: 10, fontSize: 12, marginTop: 6 }}>
-                        <div style={{ fontWeight: 700, color: '#155724', marginBottom: 4 }}>Event Created</div>
-                        <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{created?.name || template.name}</div>
-                        <div style={{ fontSize: 11, color: '#666', margin: '2px 0' }}>
-                          {host ? `Host: ${host} · ` : ''}Prestige: {created?.prestige || 5}{created?.status ? ` · ${created.status}` : ''}
-                        </div>
-                        <button
-                          onClick={() => { setEventDetailModal(created); }}
-                          style={{ marginTop: 6, padding: '4px 12px', borderRadius: 4, border: '1px solid #B8962E', background: '#fff', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
-                        >
-                          Edit Event Details
-                        </button>
-                      </div>
-                    );
-                  })() : (
-                    <button
-                      disabled={feedEventResults[template.name]?.status === 'creating'}
-                      onClick={async () => {
-                        setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'creating' } }));
-                        try {
-                          // Create world event directly from template — no calendar middleware
-                          const res = await api.post(`/api/v1/world/${showId}/events`, {
-                            name: template.name,
-                            event_type: 'invite',
-                            category: TEMPLATE_CATEGORY_MAP[template.category] || null,
-                            description: template.desc,
-                            prestige: 5,
-                            cost_coins: 150,
-                            dress_code: null,
-                            narrative_stakes: template.desc,
-                            location_hint: template.venue_theme || null,
-                            canon_consequences: {
-                              automation: {
-                                venue_theme: template.venue_theme,
-                                energy: template.energy,
-                                category: template.category,
-                              },
-                            },
-                            status: 'draft',
-                          });
-                          if (res.data.success || res.data.data) {
-                            const created = res.data.data || res.data;
-                            setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'created', event: created } }));
-                            loadData();
-                            setToast(`"${template.name}" created as draft — add host, venue, and details below`);
-                          } else {
-                            setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
-                            setToast(res.data.error || 'Failed to create event');
-                          }
-                        } catch (err) {
-                          setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
-                          setToast('Failed: ' + (err.response?.data?.error || err.message));
-                        }
-                      }}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${cc.border}40`, background: `${cc.bg}80`, color: cc.text, fontWeight: 600, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s' }}
-                    >
-                      {feedEventResults[template.name]?.status === 'creating' ? 'Creating...' : 'Create This Event'}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Templates panel */}
-          {showTemplates && (
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#16a34a' }}>📋 Event Templates — click to start from a template</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
-                {EVENT_TEMPLATES.map((tpl, i) => (
-                  <button key={i} onClick={() => { setEventForm({ ...EMPTY_EVENT, ...tpl }); setEditingEvent('new'); setShowTemplates(false); }}
-                    style={{ textAlign: 'left', padding: '8px 12px', background: '#fff', border: '1px solid #d1fae5', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
-                    <div style={{ fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{tpl.name}</div>
-                    <div style={{ fontSize: 10, color: '#64748b' }}>⭐{tpl.prestige} 🪙{tpl.cost_coins} 👗{tpl.dress_code}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Episode ↔ Event coverage map */}
-          {episodes.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Episode → Event Map</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {episodes.map(ep => {
-                  const linkedEvent = worldEvents.find(ev => ev.used_in_episode_id === ep.id);
-                  const scriptEvent = !linkedEvent ? worldEvents.find(ev => ev.status === 'used' && ep.script_content?.includes(ev.name)) : null;
-                  const event = linkedEvent || scriptEvent;
-                  return (
-                    <div key={ep.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '6px 10px', borderRadius: 8,
-                      background: event ? '#f8fdf8' : '#fffbeb',
-                      border: `1px solid ${event ? '#d1fae5' : '#fde68a'}`,
-                    }}>
-                      <div onClick={() => navigate(`/episodes/${ep.id}`)} style={{
-                        minWidth: 140, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#1a1a2e',
-                      }} title={`Go to ${ep.title}`}>
-                        <span style={{ color: '#94a3b8', marginRight: 4 }}>{ep.episode_number || '?'}.</span>
-                        {ep.title?.slice(0, 20) || 'Untitled'}{ep.title?.length > 20 ? '…' : ''}
-                      </div>
-                      <span style={{ color: '#cbd5e1', fontSize: 12 }}>→</span>
-                      {event ? (
-                        <div onClick={() => setEventDetailModal(event)} style={{
-                          flex: 1, display: 'flex', alignItems: 'center', gap: 6,
-                          cursor: 'pointer', minWidth: 0,
-                        }} title="Click to see event details">
-                          <span style={{ fontSize: 14, flexShrink: 0 }}>{EVENT_TYPE_ICONS[event.event_type] || '📌'}</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {event.name}
-                          </span>
-                          <span style={{ fontSize: 9, padding: '1px 6px', background: '#e0f2fe', color: '#0284c7', borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>⭐{event.prestige}</span>
-                          {event.dress_code && <span style={{ fontSize: 9, padding: '1px 6px', background: '#faf5ff', color: '#7c3aed', borderRadius: 4, flexShrink: 0 }}>👗 {event.dress_code}</span>}
-                        </div>
-                      ) : (
-                        <span style={{ flex: 1, fontSize: 11, color: '#b45309', fontStyle: 'italic' }}>No event assigned</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Budget tracker */}
-          {episodes.length > 0 && worldEvents.length > 0 && (
-            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Total Event Budget</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
-                  🪙 {worldEvents.filter(ev => ev.status === 'used').reduce((sum, ev) => sum + (ev.cost_coins || 0), 0).toLocaleString()}
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> / {worldEvents.reduce((sum, ev) => sum + (ev.cost_coins || 0), 0).toLocaleString()} total</span>
-                </div>
-              </div>
-              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Avg Difficulty</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
-                  {worldEvents.length > 0 ? (worldEvents.reduce((sum, ev) => sum + calcDifficulty(ev), 0) / worldEvents.length).toFixed(1) : '—'}
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> / 10</span>
-                </div>
-              </div>
-              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Coverage</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
-                  {episodes.filter(ep => worldEvents.some(ev => ev.used_in_episode_id === ep.id)).length}/{episodes.length}
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> episodes linked</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Season arc visualization */}
-          {episodes.length > 3 && worldEvents.some(ev => ev.used_in_episode_id) && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Season Arc — Difficulty Curve</div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 60 }}>
-                {[...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0)).map(ep => {
-                  const ev = worldEvents.find(e => e.used_in_episode_id === ep.id);
-                  const diff = ev ? calcDifficulty(ev) : 0;
-                  const dl = ev ? difficultyLabel(diff) : { bg: '#f1f5f9', color: '#cbd5e1' };
-                  const height = ev ? Math.max(8, (diff / 10) * 55) : 4;
-                  return (
-                    <div key={ep.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                      <div style={{ width: '100%', height, background: ev ? dl.color : '#e2e8f0', borderRadius: '3px 3px 0 0', transition: 'height 0.3s ease', opacity: ev ? 0.7 : 0.3 }}
-                        title={ev ? `Ep ${ep.episode_number}: ${ev.name} (${diff})` : `Ep ${ep.episode_number}: no event`} />
-                      <span style={{ fontSize: 7, color: '#94a3b8' }}>{ep.episode_number}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                <span style={{ fontSize: 8, color: '#cbd5e1' }}>Easy</span>
-                <span style={{ fontSize: 8, color: '#cbd5e1' }}>Hard</span>
-              </div>
-            </div>
-          )}
-
-          {/* Wardrobe vs Dress Code conflicts */}
-          {(() => {
-            const conflicts = getDressCodeConflicts();
-            return conflicts.length > 0 ? (
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', marginBottom: 6 }}>👗 Wardrobe Conflicts</div>
-                {conflicts.map((c, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#991b1b', marginBottom: 3 }}>
-                    Ep {c.episode.episode_number} "{c.event.name}" wants [{c.eventKeywords.join(', ')}] but wardrobe has [{c.wardrobeKeywords.join(', ')}]
-                  </div>
-                ))}
-              </div>
-            ) : null;
-          })()}
-
-          {/* Sequence validation warnings + AI Fix */}
-          {(() => {
-            const warnings = getSequenceWarnings();
-            return warnings.length > 0 ? (
-              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>Story Logic Warnings ({warnings.length})</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {/* Auto-Reorder moved to the Episodes tab's Season Arc
-                        view (Task #1648, docs/EVENT_EPISODE_FLOW.md §8(m)). */}
-                    <button onClick={() => handleAiRebalance()} disabled={aiFixLoading} style={{ padding: '5px 12px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 10, fontWeight: 700, color: '#7c3aed', cursor: 'pointer' }}>
-                      🔄 Rebalance
-                    </button>
-                    <button onClick={() => handleAiFix(warnings)} disabled={aiFixLoading} style={{
-                      padding: '5px 14px', background: aiFixLoading ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-                      color: aiFixLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
-                      fontSize: 11, fontWeight: 700, cursor: aiFixLoading ? 'wait' : 'pointer',
-                    }}>
-                      {aiFixLoading ? '⏳ Thinking...' : '✨ Amber Fix'}
-                    </button>
-                  </div>
-                </div>
-                {warnings.map((w, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#92400e', marginBottom: 5, lineHeight: 1.4 }}>
-                    <span style={{ flex: 1 }}>{w.msg}</span>
-                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                      {w.fixType === 'swap_episodes' && w.evA && w.evB && (
-                        <button onClick={() => handleSwapEpisodes(w.evA, w.evB, w.epA, w.epB)}
-                          style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#4338ca', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          🔄 Swap
-                        </button>
-                      )}
-                      {w.fixType === 'merge' && w.dupA && w.dupB && (
-                        <button onClick={() => handleMergeDuplicates(w.dupA, w.dupB)}
-                          style={{ padding: '2px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          🔗 Merge
-                        </button>
-                      )}
-                      {w.fixType === 'fill' && w.ep && (
-                        <button onClick={() => handleAiGenerateForGap(w.ep)} disabled={aiFixLoading}
-                          style={{ padding: '2px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#7c3aed', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          ✨ AI Create
-                        </button>
-                      )}
-                      {w.eventName && (
-                        <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
-                          style={{ padding: '2px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#b45309', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          ✏️ Edit
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null;
-          })()}
-
-          {/* Amber's Suggestions — rendered as a sibling of the warnings
-              card, not inside it. Used to live nested under "Story Logic
-              Warnings" so when applying a suggestion cleared the last
-              warning, the entire wrapper unmounted and any remaining
-              suggestion cards vanished with it. Now it stands alone and
-              persists until you Apply each card or hit Dismiss. */}
-          {aiFixSuggestions && aiFixSuggestions.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e0e7ff', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', marginBottom: 8 }}>✨ Amber's Suggestions ({aiFixSuggestions.length})</div>
-              {aiFixSuggestions.map((s, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', background: '#faf5ff', border: '1px solid #e0e7ff', borderRadius: 8, marginBottom: 6 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', marginBottom: 2 }}>
-                      {s.event_name && <span style={{ color: '#6366f1' }}>"{s.event_name}"</span>}
-                      {s.action && <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 6px', background: '#eef2ff', color: '#4338ca', borderRadius: 4, fontWeight: 700 }}>{s.action.replace(/_/g, ' ')}</span>}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>{s.suggestion}</div>
-                    {s.new_value && <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2, wordBreak: 'break-word' }}>→ {typeof s.new_value === 'object' ? s.new_value.name || JSON.stringify(s.new_value) : s.new_value}</div>}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-                    {s.action === 'create' && (s.new_value || s.suggestion) && (
-                      <button onClick={() => {
-                        let data = {};
-                        if (s.new_value) {
-                          if (typeof s.new_value === 'object') data = s.new_value;
-                          else try { data = JSON.parse(s.new_value); } catch { data = { description: s.new_value }; }
-                        }
-                        if (!data.name && s.suggestion) {
-                          try {
-                            const match = s.suggestion.match(/\{[\s\S]*"name"[\s\S]*\}/);
-                            if (match) data = { ...data, ...JSON.parse(match[0]) };
-                          } catch {}
-                        }
-                        if (data.dress_code_style && !data.dress_code) data.dress_code = data.dress_code_style;
-                        if (data.type && !data.event_type) data.event_type = data.type;
-                        setEventForm({ ...EMPTY_EVENT, ...data, __pendingEpisodeLink: s.__targetEpisodeId || null });
-                        setEditingEvent('new');
-                        setAiFixSuggestions(prev => prev.filter(x => x !== s));
-                      }} style={{
-                        padding: '4px 12px', background: '#16a34a', color: '#fff',
-                        border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
-                        cursor: 'pointer', whiteSpace: 'nowrap',
-                      }}>+ Create</button>
-                    )}
-                    {s.action !== 'manual' && s.action !== 'create' && s.event_name && s.new_value && (
-                      <button onClick={() => applyAiFix(s)} style={{
-                        padding: '4px 12px', background: '#6366f1', color: '#fff',
-                        border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
-                        cursor: 'pointer', whiteSpace: 'nowrap',
-                      }}>Apply</button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              <button onClick={() => setAiFixSuggestions(null)} style={{ ...S.smBtn, marginTop: 4, fontSize: 10 }}>Dismiss all</button>
-            </div>
-          )}
 
           {/* Bulk action bar */}
           {bulkMode && selectedEvents.size > 0 && (
@@ -2546,9 +2072,25 @@ The revised event should feel like a completely different experience from the si
             </select>
           </div>
 
+          {/* Templates panel */}
+          {showTemplates && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#16a34a' }}>📋 Event Templates — click to start from a template</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+                {EVENT_TEMPLATES.map((tpl, i) => (
+                  <button key={i} onClick={() => { setEventForm({ ...EMPTY_EVENT, ...tpl }); setEditingEvent('new'); setShowTemplates(false); }}
+                    style={{ textAlign: 'left', padding: '8px 12px', background: '#fff', border: '1px solid #d1fae5', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>
+                    <div style={{ fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{tpl.name}</div>
+                    <div style={{ fontSize: 10, color: '#64748b' }}>⭐{tpl.prestige} 🪙{tpl.cost_coins} 👗{tpl.dress_code}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Event editor */}
           {editingEvent && (
-            <div style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16 }}>
+            <div ref={eventEditorRef} data-testid="event-editor" style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16, scrollMarginTop: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 16px' }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{editingEvent === 'new' ? '✨ New Event' : '✏️ Edit Event'}</h3>
                 {/* Read-only badge when this event was spawned from a feed
@@ -3270,6 +2812,552 @@ The revised event should feel like a completely different experience from the si
               </div>
             )}
           </div>
+
+          {/* ── Below the queue (Task #1763) ── Everything that used to
+              stack above the queue: warnings, drafts, creation tools, then
+              the season overviews. Nothing here was removed. */}
+          <hr className="wa-ev-divider" aria-hidden="true" />
+
+          {/* Sequence validation warnings + AI Fix — below the queue and
+              collapsed by default, count always shown (Task #1763). The
+              header's "N story logic warnings" link opens this. */}
+          {(() => {
+            const warnings = getSequenceWarnings();
+            return warnings.length > 0 ? (
+              <div ref={eventsWarningsRef} data-testid="events-warnings" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 12, scrollMarginTop: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: eventsWarningsOpen ? 8 : 0 }}>
+                  <button type="button" className="wa-ev-section-toggle" data-testid="events-warnings-toggle"
+                    aria-expanded={eventsWarningsOpen} onClick={() => setEventsWarningsOpen(o => !o)}
+                    style={{ color: '#b45309' }}>
+                    {eventsWarningsOpen ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+                    Story Logic Warnings ({warnings.length})
+                  </button>
+                  {eventsWarningsOpen && (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {/* Auto-Reorder moved to the Episodes tab's Season Arc
+                          view (Task #1648, docs/EVENT_EPISODE_FLOW.md §8(m)). */}
+                      <button onClick={() => handleAiRebalance()} disabled={aiFixLoading} style={{ padding: '5px 12px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, fontSize: 10, fontWeight: 700, color: '#7c3aed', cursor: 'pointer' }}>
+                        🔄 Rebalance
+                      </button>
+                      <button onClick={() => handleAiFix(warnings)} disabled={aiFixLoading} style={{
+                        padding: '5px 14px', background: aiFixLoading ? '#e5e7eb' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                        color: aiFixLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8,
+                        fontSize: 11, fontWeight: 700, cursor: aiFixLoading ? 'wait' : 'pointer',
+                      }}>
+                        {aiFixLoading ? '⏳ Thinking...' : '✨ Amber Fix'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {eventsWarningsOpen && warnings.map((w, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#92400e', marginBottom: 5, lineHeight: 1.4 }}>
+                    <span style={{ flex: 1 }}>{w.msg}</span>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      {w.fixType === 'swap_episodes' && w.evA && w.evB && (
+                        <button onClick={() => handleSwapEpisodes(w.evA, w.evB, w.epA, w.epB)}
+                          style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#4338ca', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          🔄 Swap
+                        </button>
+                      )}
+                      {w.fixType === 'merge' && w.dupA && w.dupB && (
+                        <button onClick={() => handleMergeDuplicates(w.dupA, w.dupB)}
+                          style={{ padding: '2px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          🔗 Merge
+                        </button>
+                      )}
+                      {w.fixType === 'fill' && w.ep && (
+                        <button onClick={() => handleAiGenerateForGap(w.ep)} disabled={aiFixLoading}
+                          style={{ padding: '2px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#7c3aed', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          ✨ AI Create
+                        </button>
+                      )}
+                      {w.eventName && (
+                        <button onClick={() => { const ev = worldEvents.find(e => e.name === w.eventName); if (ev) openEditEvent(ev); }}
+                          style={{ padding: '2px 8px', background: '#fff', border: '1px solid #fde68a', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#b45309', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          ✏️ Edit
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null;
+          })()}
+
+          {/* Amber's Suggestions — rendered as a sibling of the warnings
+              card, not inside it. Used to live nested under "Story Logic
+              Warnings" so when applying a suggestion cleared the last
+              warning, the entire wrapper unmounted and any remaining
+              suggestion cards vanished with it. Now it stands alone and
+              persists until you Apply each card or hit Dismiss. */}
+          {aiFixSuggestions && aiFixSuggestions.length > 0 && (
+            <div style={{ background: '#fff', border: '1px solid #e0e7ff', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', marginBottom: 8 }}>✨ Amber's Suggestions ({aiFixSuggestions.length})</div>
+              {aiFixSuggestions.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', background: '#faf5ff', border: '1px solid #e0e7ff', borderRadius: 8, marginBottom: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', marginBottom: 2 }}>
+                      {s.event_name && <span style={{ color: '#6366f1' }}>"{s.event_name}"</span>}
+                      {s.action && <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 6px', background: '#eef2ff', color: '#4338ca', borderRadius: 4, fontWeight: 700 }}>{s.action.replace(/_/g, ' ')}</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.4 }}>{s.suggestion}</div>
+                    {s.new_value && <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2, wordBreak: 'break-word' }}>→ {typeof s.new_value === 'object' ? s.new_value.name || JSON.stringify(s.new_value) : s.new_value}</div>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                    {s.action === 'create' && (s.new_value || s.suggestion) && (
+                      <button onClick={() => {
+                        let data = {};
+                        if (s.new_value) {
+                          if (typeof s.new_value === 'object') data = s.new_value;
+                          else try { data = JSON.parse(s.new_value); } catch { data = { description: s.new_value }; }
+                        }
+                        if (!data.name && s.suggestion) {
+                          try {
+                            const match = s.suggestion.match(/\{[\s\S]*"name"[\s\S]*\}/);
+                            if (match) data = { ...data, ...JSON.parse(match[0]) };
+                          } catch {}
+                        }
+                        if (data.dress_code_style && !data.dress_code) data.dress_code = data.dress_code_style;
+                        if (data.type && !data.event_type) data.event_type = data.type;
+                        setEventForm({ ...EMPTY_EVENT, ...data, __pendingEpisodeLink: s.__targetEpisodeId || null });
+                        setEditingEvent('new');
+                        setAiFixSuggestions(prev => prev.filter(x => x !== s));
+                      }} style={{
+                        padding: '4px 12px', background: '#16a34a', color: '#fff',
+                        border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}>+ Create</button>
+                    )}
+                    {s.action !== 'manual' && s.action !== 'create' && s.event_name && s.new_value && (
+                      <button onClick={() => applyAiFix(s)} style={{
+                        padding: '4px 12px', background: '#6366f1', color: '#fff',
+                        border: 'none', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}>Apply</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => setAiFixSuggestions(null)} style={{ ...S.smBtn, marginTop: 4, fontSize: 10 }}>Dismiss all</button>
+            </div>
+          )}
+
+          {/* Wardrobe vs Dress Code conflicts */}
+          {(() => {
+            const conflicts = getDressCodeConflicts();
+            return conflicts.length > 0 ? (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', marginBottom: 6 }}>👗 Wardrobe Conflicts</div>
+                {conflicts.map((c, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#991b1b', marginBottom: 3 }}>
+                    Ep {c.episode.episode_number} "{c.event.name}" wants [{c.eventKeywords.join(', ')}] but wardrobe has [{c.wardrobeKeywords.join(', ')}]
+                  </div>
+                ))}
+              </div>
+            ) : null;
+          })()}
+
+          {/* ── Draft Events Being Worked On ── Below the queue, collapsed by
+              default (Task #1763). Kept: it shows a completion % over six
+              detail fields (host, venue, date, dress code, description,
+              stakes), guest count and prestige, none of which the queue
+              cards show. */}
+          {(() => {
+            const draftEvents = worldEvents.filter(ev => ev.status === 'draft');
+            if (draftEvents.length === 0) return null;
+            return (
+              <div data-testid="events-drafts" style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: eventsDraftsOpen ? 10 : 0 }}>
+                  <button type="button" className="wa-ev-section-toggle" data-testid="events-drafts-toggle"
+                    aria-expanded={eventsDraftsOpen} onClick={() => setEventsDraftsOpen(o => !o)}>
+                    {eventsDraftsOpen ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+                    Draft Events ({draftEvents.length})
+                  </button>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>Completion % — complete details and mark ready</span>
+                </div>
+                {eventsDraftsOpen && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {draftEvents.map(ev => {
+                      const auto = ev.canon_consequences?.automation;
+                      const host = ev.host || auto?.host_display_name || '';
+                      const venue = ev.venue_name || auto?.venue_name || '';
+                      const guestCount = auto?.guest_profiles?.length || 0;
+                      // Check completeness — check both top-level and automation fields
+                      const filled = [
+                        ev.host || auto?.host_display_name,
+                        ev.venue_name || auto?.venue_name,
+                        ev.event_date || auto?.event_date,
+                        ev.dress_code || auto?.dress_code,
+                        ev.description,
+                        ev.narrative_stakes,
+                      ].filter(Boolean).length;
+                      const total = 6;
+                      const pct = Math.round((filled / total) * 100);
+                      return (
+                        <div key={ev.id} onClick={() => setEventDetailModal(ev)} style={{ background: '#fff', border: '1px solid #e8e0d0', borderLeft: `4px solid ${pct === 100 ? '#22c55e' : '#f59e0b'}`, borderRadius: 10, padding: '12px 16px', cursor: 'pointer', transition: 'border-color 0.15s' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e', marginBottom: 2 }}>{ev.name}</div>
+                              <div style={{ fontSize: 11, color: '#64748b', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {host && <span>👤 {host}</span>}
+                                {venue && <span>📍 {venue}</span>}
+                                {guestCount > 0 && <span>👥 {guestCount}</span>}
+                                {ev.event_date && <span>📅 {ev.event_date}</span>}
+                                <span>⭐ {ev.prestige || 5}</span>
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: pct === 100 ? '#16a34a' : '#f59e0b', marginBottom: 4 }}>{pct}% complete</div>
+                              <div style={{ width: 80, height: 4, background: '#e8e0d0', borderRadius: 2, overflow: 'hidden' }}>
+                                <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#22c55e' : '#f59e0b', borderRadius: 2 }} />
+                              </div>
+                            </div>
+                          </div>
+                          {pct === 100 && (
+                            <div style={{ marginTop: 8, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
+                              Ready to publish — open to mark as ready
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Ideas: Feed opportunities + event templates ── The creation
+              tools that used to sit above the queue, collapsed by default
+              below it (Task #1763). The header's "Ideas" button opens and
+              scrolls to this section; "+ New Event" is unchanged. */}
+          <div ref={eventsIdeasRef} data-testid="events-ideas" style={{ marginBottom: 16, scrollMarginTop: 16 }}>
+            <button type="button" className="wa-ev-section-toggle" data-testid="events-ideas-toggle"
+              aria-expanded={eventsIdeasOpen} onClick={() => setEventsIdeasOpen(o => !o)}
+              style={{ marginBottom: eventsIdeasOpen ? 10 : 0 }}>
+              {eventsIdeasOpen ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+              Ideas — Feed opportunities &amp; event templates
+            </button>
+            {eventsIdeasOpen && (
+              <>
+                {/* ── Pipeline: Opportunities → Events ── */}
+                <div style={{ background: '#FAF7F0', border: '1px solid #e8e0d0', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E' }}>
+                      Pipeline — Feed → Opportunities → Events
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={async () => {
+                        setToast('Scanning feed for opportunities...');
+                        try {
+                          const res = await api.post(`/api/v1/feed-pipeline/${showId}/generate-opportunities`);
+                          if (res.data.success) {
+                            setToast(`${res.data.count} opportunities generated from feed profiles`);
+                            loadData();
+                          }
+                        } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                        setTimeout(() => setToast(null), 3000);
+                      }} style={{ ...S.smBtn, background: '#B8962E', color: '#fff', border: 'none', fontSize: 10 }}>
+                        🔍 Scan Feed
+                      </button>
+                      <button onClick={() => setOppQuickForm({ name: '', opportunity_type: 'modeling', prestige: 5, narrative_stakes: '' })} style={{ ...S.smBtn, fontSize: 10 }}>
+                        + New Opportunity
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#666' }}>
+                    Scan Lala's feed for opportunities, or pick a template below.
+                  </div>
+                </div>
+
+                {/* Pipeline stats */}
+                {opportunities.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                    {['offered','considering','booked','active','completed'].map(s => {
+                      const count = opportunities.filter(o => o.status === s).length;
+                      if (!count) return null;
+                      const colors = { offered: '#f59e0b', considering: '#6366f1', booked: '#22c55e', active: '#16a34a', completed: '#059669' };
+                      return <span key={s} style={{ padding: '2px 8px', borderRadius: 4, fontSize: 9, fontWeight: 600, background: (colors[s] || '#999') + '18', color: colors[s] || '#999' }}>{s}: {count}</span>;
+                    })}
+                    <span style={{ fontSize: 9, color: '#888', padding: '2px 4px' }}>
+                      ${opportunities.filter(o => ['booked','active','completed','paid'].includes(o.status)).reduce((s, o) => s + (parseFloat(o.payment_amount) || 0), 0).toLocaleString()} booked
+                    </span>
+                  </div>
+                )}
+
+                {/* Quick create opportunity form */}
+                {oppQuickForm && (
+                  <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 14, marginBottom: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                      <div><label style={{ fontSize: 10, color: '#aaa' }}>name</label><input value={oppQuickForm.name} onChange={e => setOppQuickForm(p => ({ ...p, name: e.target.value }))} placeholder="Velour Magazine Cover" style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
+                      <div><label style={{ fontSize: 10, color: '#aaa' }}>type</label><select value={oppQuickForm.opportunity_type} onChange={e => setOppQuickForm(p => ({ ...p, opportunity_type: e.target.value }))} style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }}>
+                        {['modeling', 'runway', 'editorial', 'campaign', 'ambassador', 'brand_deal', 'casting_call', 'podcast', 'interview', 'award_show', 'social_event'].map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                      </select></div>
+                      <div><label style={{ fontSize: 10, color: '#aaa' }}>prestige</label><input type="number" value={oppQuickForm.prestige} onChange={e => setOppQuickForm(p => ({ ...p, prestige: parseInt(e.target.value) || 5 }))} min="1" max="10" style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
+                    </div>
+                    <div style={{ marginBottom: 8 }}><label style={{ fontSize: 10, color: '#aaa' }}>stakes</label><input value={oppQuickForm.narrative_stakes} onChange={e => setOppQuickForm(p => ({ ...p, narrative_stakes: e.target.value }))} placeholder="Why this matters for Lala..." style={{ width: '100%', padding: '6px 8px', border: '1px solid #e0d9cc', borderRadius: 6, fontSize: 12 }} /></div>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button onClick={() => setOppQuickForm(null)} style={{ padding: '5px 14px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+                      <button disabled={!oppQuickForm.name} onClick={async () => {
+                        try {
+                          await api.post(`/api/v1/opportunities/${showId}`, { ...oppQuickForm, category: 'fashion' });
+                          setOppQuickForm(null);
+                          setToast('Opportunity created');
+                          loadData();
+                        } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                      }} style={{ padding: '5px 14px', border: 'none', borderRadius: 6, background: '#2C2C2C', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: !oppQuickForm.name ? 0.4 : 1 }}>Create</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Opportunities ready to schedule */}
+                {(() => {
+                  const schedulable = (opportunities || []).filter(o => !o.event_id && ['offered','considering','negotiating','booked'].includes(o.status));
+                  if (schedulable.length === 0) return null;
+                  return (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 8 }}>
+                        Active Opportunities — ready to schedule ({schedulable.length})
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                        {schedulable.map(opp => (
+                          <div key={opp.id} style={{ background: '#fff', border: '1px solid #e8e0d0', borderLeft: '4px solid #B8962E', borderRadius: 10, padding: '12px 14px' }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#2C2C2C', marginBottom: 2 }}>{opp.name}</div>
+                            <div style={{ fontSize: 10, color: '#888', marginBottom: 4, display: 'flex', gap: 6 }}>
+                              <span>{opp.opportunity_type?.replace(/_/g, ' ')}</span>
+                              {opp.connector_handle && <span>via @{opp.connector_handle}</span>}
+                              {opp.prestige && <span>⭐ {opp.prestige}</span>}
+                            </div>
+                            {opp.narrative_stakes && <div style={{ fontSize: 11, color: '#666', marginBottom: 6, lineHeight: 1.3 }}>{typeof opp.narrative_stakes === 'string' ? opp.narrative_stakes.slice(0, 100) : ''}</div>}
+                            <button onClick={async () => {
+                              setToast(`Scheduling "${opp.name}"...`);
+                              try {
+                                const res = await api.post(`/api/v1/feed-pipeline/${showId}/schedule/${opp.id}`);
+                                if (res.data.success) { setToast(`"${opp.name}" → Event created!`); loadData(); }
+                              } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+                            }} style={{ padding: '5px 14px', border: 'none', borderRadius: 6, background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 11, cursor: 'pointer', width: '100%' }}>
+                              📅 Schedule as Event
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Feed event templates grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
+                  {[
+                    { name: 'Creator Roast Night', category: 'creator_economy', icon: '🔥', desc: 'Public roasting of creators by other creators. Everything is jokes until someone goes too far.', energy: 'chaotic', venue_theme: 'Dark underground comedy club with exposed brick, dramatic red spotlights, leather booths, vintage microphone on stage' },
+                    { name: 'Fashion Mystery Box', category: 'fashion', icon: '📦', desc: 'Style looks from a mystery selection. Constraint reveals true taste — or lack of it.', energy: 'creative', venue_theme: 'Sleek futuristic showroom with glass display cases, neon accents, mirrored walls, mystery boxes on pedestals' },
+                    { name: 'Creator Speed Dating', category: 'creator_economy', icon: '⚡', desc: 'Rapid-fire collab pitches. Alliances form fast. Some are regretted faster.', energy: 'networking', venue_theme: 'Modern co-working lounge with round tables, warm lighting, exposed ceiling beams, cocktail bar in corner' },
+                    { name: 'Street Style Marathon', category: 'fashion', icon: '👟', desc: 'Extended street style documentation — the week\'s best looks ranked publicly.', energy: 'competitive', venue_theme: 'Luxury outdoor fashion district — cobblestone streets, designer storefronts, fairy lights strung between buildings, photography wall' },
+                    { name: 'Beauty Battles', category: 'beauty', icon: '💄', desc: 'Head-to-head beauty challenges. The audience votes. The loser loses followers publicly.', energy: 'dramatic', venue_theme: 'Glamorous beauty arena with vanity mirror stations, ring lights everywhere, judges panel, pink neon runway' },
+                    { name: 'Design Lab Week', category: 'creative', icon: '🎨', desc: 'Experimental design projects and innovation challenges. Where new ideas are tested publicly.', energy: 'creative', venue_theme: 'Industrial creative studio with paint-splattered floors, large canvases, skylights, modern art installations' },
+                    { name: 'Community Build Week', category: 'creator_economy', icon: '🤝', desc: 'Collaborative content between otherwise competing creators. Forced proximity events.', energy: 'wholesome', venue_theme: 'Warm communal space with long wooden tables, greenery, soft natural lighting, open kitchen, cozy seating nooks' },
+                    { name: 'The Great Glow-Up Challenge', category: 'beauty', icon: '✨', desc: 'Dramatic transformation challenge. Before and after content that goes viral.', energy: 'aspirational', venue_theme: 'Luxury spa and transformation center with marble floors, gold mirrors, professional styling stations, crystal chandeliers' },
+                    { name: 'Creator Charity Week', category: 'creator_economy', icon: '💝', desc: 'Creators raise money for causes. Reputation washing meets genuine impact.', energy: 'feel-good', venue_theme: 'Elegant charity gala ballroom with auction stage, flower arrangements, candlelit tables, donation display board' },
+                    { name: 'Midnight Music Festival', category: 'music', icon: '🎵', desc: 'Late-night music and performance event. Unexpected collabs happen after midnight.', energy: 'electric', venue_theme: 'Rooftop music venue at night with city skyline, string lights, DJ booth, velvet lounge areas, starlit sky' },
+                    { name: 'Virtual Travel Festival', category: 'lifestyle', icon: '✈️', desc: 'Digital travel content — who can make home feel like elsewhere.', energy: 'escapist', venue_theme: 'Tropical resort-style venue with palm trees, infinity pool edge, sunset views, bamboo furniture, exotic flowers' },
+                    { name: 'Artist Residency Month', category: 'creative', icon: '🖼️', desc: 'Creators slow down and make something intentional. The antidote to the content grind.', energy: 'reflective', venue_theme: 'Serene gallery loft with white walls, natural wood floors, large windows with garden views, minimal sculptures' },
+                    { name: 'Creator Talent Show', category: 'creator_economy', icon: '🎤', desc: 'Hidden talents revealed. Singers, dancers, comedians — the audience discovers new sides.', energy: 'surprising', venue_theme: 'Intimate theater with velvet curtains, spotlit stage, orchestra seating, gold balcony railings, dramatic drapes' },
+                  ].map(template => {
+                    const catColors = {
+                      fashion: { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
+                      beauty: { bg: '#fce7f3', border: '#ec4899', text: '#9d174d' },
+                      creator_economy: { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' },
+                      creative: { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3' },
+                      music: { bg: '#fae8ff', border: '#a855f7', text: '#6b21a8' },
+                      lifestyle: { bg: '#d1fae5', border: '#10b981', text: '#065f46' },
+                    };
+                    const cc = catColors[template.category] || catColors.creator_economy;
+                    // Check if an event already exists from this template
+                    const existingEvent = worldEvents.find(ev =>
+                      ev.name?.includes(template.name) ||
+                      ev.canon_consequences?.automation?.source_calendar_title === template.name
+                    );
+
+                    return (
+                      <div key={template.name} style={{ background: existingEvent ? '#fafffe' : '#fff', border: `1px solid ${existingEvent ? '#a3cfbb' : cc.border + '30'}`, borderLeft: `4px solid ${existingEvent ? '#22c55e' : cc.border}`, borderRadius: 10, padding: 16, transition: 'border-color 0.15s' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: 20 }}>{template.icon}</span>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: '#2C2C2C' }}>{template.name}</div>
+                            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: cc.bg, color: cc.text, fontWeight: 600 }}>{template.category.replace(/_/g, ' ')}</span>
+                          </div>
+                        </div>
+                        <p style={{ fontSize: 12, color: '#666', margin: '0 0 10px', lineHeight: 1.5 }}>{template.desc}</p>
+                        <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#f0f0f0', color: '#666', fontFamily: "'DM Mono', monospace" }}>Energy: {template.energy}</span>
+                        </div>
+                        {(feedEventResults[template.name]?.status === 'created' || existingEvent) ? (() => {
+                          const created = feedEventResults[template.name]?.event || existingEvent;
+                          const host = created?.host || created?.canon_consequences?.automation?.host_display_name || '';
+                          return (
+                            <div style={{ background: '#d4edda', border: '1px solid #a3cfbb', borderRadius: 8, padding: 10, fontSize: 12, marginTop: 6 }}>
+                              <div style={{ fontWeight: 700, color: '#155724', marginBottom: 4 }}>Event Created</div>
+                              <div style={{ fontWeight: 600, color: '#2C2C2C' }}>{created?.name || template.name}</div>
+                              <div style={{ fontSize: 11, color: '#666', margin: '2px 0' }}>
+                                {host ? `Host: ${host} · ` : ''}Prestige: {created?.prestige || 5}{created?.status ? ` · ${created.status}` : ''}
+                              </div>
+                              <button
+                                onClick={() => { setEventDetailModal(created); }}
+                                style={{ marginTop: 6, padding: '4px 12px', borderRadius: 4, border: '1px solid #B8962E', background: '#fff', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer' }}
+                              >
+                                Edit Event Details
+                              </button>
+                            </div>
+                          );
+                        })() : (
+                          <button
+                            disabled={feedEventResults[template.name]?.status === 'creating'}
+                            onClick={async () => {
+                              setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'creating' } }));
+                              try {
+                                // Create world event directly from template — no calendar middleware
+                                const res = await api.post(`/api/v1/world/${showId}/events`, {
+                                  name: template.name,
+                                  event_type: 'invite',
+                                  category: TEMPLATE_CATEGORY_MAP[template.category] || null,
+                                  description: template.desc,
+                                  prestige: 5,
+                                  cost_coins: 150,
+                                  dress_code: null,
+                                  narrative_stakes: template.desc,
+                                  location_hint: template.venue_theme || null,
+                                  canon_consequences: {
+                                    automation: {
+                                      venue_theme: template.venue_theme,
+                                      energy: template.energy,
+                                      category: template.category,
+                                    },
+                                  },
+                                  status: 'draft',
+                                });
+                                if (res.data.success || res.data.data) {
+                                  const created = res.data.data || res.data;
+                                  setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'created', event: created } }));
+                                  loadData();
+                                  setToast(`"${template.name}" created as draft — add host, venue, and details below`);
+                                } else {
+                                  setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
+                                  setToast(res.data.error || 'Failed to create event');
+                                }
+                              } catch (err) {
+                                setFeedEventResults(prev => ({ ...prev, [template.name]: { status: 'idle' } }));
+                                setToast('Failed: ' + (err.response?.data?.error || err.message));
+                              }
+                            }}
+                            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${cc.border}40`, background: `${cc.bg}80`, color: cc.text, fontWeight: 600, fontSize: 12, cursor: 'pointer', transition: 'background 0.15s' }}
+                          >
+                            {feedEventResults[template.name]?.status === 'creating' ? 'Creating...' : 'Create This Event'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Episode ↔ Event coverage map */}
+          {episodes.length > 0 && (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Episode → Event Map</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {episodes.map(ep => {
+                  const linkedEvent = worldEvents.find(ev => ev.used_in_episode_id === ep.id);
+                  const scriptEvent = !linkedEvent ? worldEvents.find(ev => ev.status === 'used' && ep.script_content?.includes(ev.name)) : null;
+                  const event = linkedEvent || scriptEvent;
+                  return (
+                    <div key={ep.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '6px 10px', borderRadius: 8,
+                      background: event ? '#f8fdf8' : '#fffbeb',
+                      border: `1px solid ${event ? '#d1fae5' : '#fde68a'}`,
+                    }}>
+                      <div onClick={() => navigate(`/episodes/${ep.id}`)} style={{
+                        minWidth: 140, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#1a1a2e',
+                      }} title={`Go to ${ep.title}`}>
+                        <span style={{ color: '#94a3b8', marginRight: 4 }}>{ep.episode_number || '?'}.</span>
+                        {ep.title?.slice(0, 20) || 'Untitled'}{ep.title?.length > 20 ? '…' : ''}
+                      </div>
+                      <span style={{ color: '#cbd5e1', fontSize: 12 }}>→</span>
+                      {event ? (
+                        <div onClick={() => setEventDetailModal(event)} style={{
+                          flex: 1, display: 'flex', alignItems: 'center', gap: 6,
+                          cursor: 'pointer', minWidth: 0,
+                        }} title="Click to see event details">
+                          <span style={{ fontSize: 14, flexShrink: 0 }}>{EVENT_TYPE_ICONS[event.event_type] || '📌'}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {event.name}
+                          </span>
+                          <span style={{ fontSize: 9, padding: '1px 6px', background: '#e0f2fe', color: '#0284c7', borderRadius: 4, fontWeight: 600, flexShrink: 0 }}>⭐{event.prestige}</span>
+                          {event.dress_code && <span style={{ fontSize: 9, padding: '1px 6px', background: '#faf5ff', color: '#7c3aed', borderRadius: 4, flexShrink: 0 }}>👗 {event.dress_code}</span>}
+                        </div>
+                      ) : (
+                        <span style={{ flex: 1, fontSize: 11, color: '#b45309', fontStyle: 'italic' }}>No event assigned</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Budget tracker */}
+          {episodes.length > 0 && worldEvents.length > 0 && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Total Event Budget</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
+                  🪙 {worldEvents.filter(ev => ev.status === 'used').reduce((sum, ev) => sum + (ev.cost_coins || 0), 0).toLocaleString()}
+                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> / {worldEvents.reduce((sum, ev) => sum + (ev.cost_coins || 0), 0).toLocaleString()} total</span>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Avg Difficulty</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
+                  {worldEvents.length > 0 ? (worldEvents.reduce((sum, ev) => sum + calcDifficulty(ev), 0) / worldEvents.length).toFixed(1) : '—'}
+                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> / 10</span>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Coverage</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e' }}>
+                  {episodes.filter(ep => worldEvents.some(ev => ev.used_in_episode_id === ep.id)).length}/{episodes.length}
+                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}> episodes linked</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Season arc visualization */}
+          {episodes.length > 3 && worldEvents.some(ev => ev.used_in_episode_id) && (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Season Arc — Difficulty Curve</div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 60 }}>
+                {[...episodes].sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0)).map(ep => {
+                  const ev = worldEvents.find(e => e.used_in_episode_id === ep.id);
+                  const diff = ev ? calcDifficulty(ev) : 0;
+                  const dl = ev ? difficultyLabel(diff) : { bg: '#f1f5f9', color: '#cbd5e1' };
+                  const height = ev ? Math.max(8, (diff / 10) * 55) : 4;
+                  return (
+                    <div key={ep.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <div style={{ width: '100%', height, background: ev ? dl.color : '#e2e8f0', borderRadius: '3px 3px 0 0', transition: 'height 0.3s ease', opacity: ev ? 0.7 : 0.3 }}
+                        title={ev ? `Ep ${ep.episode_number}: ${ev.name} (${diff})` : `Ep ${ep.episode_number}: no event`} />
+                      <span style={{ fontSize: 7, color: '#94a3b8' }}>{ep.episode_number}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                <span style={{ fontSize: 8, color: '#cbd5e1' }}>Easy</span>
+                <span style={{ fontSize: 8, color: '#cbd5e1' }}>Hard</span>
+              </div>
+            </div>
+          )}
 
         </div>
       )}
