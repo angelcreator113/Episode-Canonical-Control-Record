@@ -528,7 +528,9 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
     // the random 1-3 weeks this used to pick); flagged below as
     // automation.event_date_auto so the Event Package labels it.
     const eventDateStr = autoScheduledEventDate();
-    const eventTimeStr = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00';
+    // No event time (Task #1757): a calendar event supplies none, and this
+    // used to derive one from prestige (20:00/19:00/18:00) and save it to
+    // the column and the automation copy. The Event Package suggests one.
 
     const automationData = {
       host_profile_id: host?.id || null,
@@ -545,7 +547,6 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       automated_at: new Date().toISOString(),
       event_date: eventDateStr,
       [AUTO_DATE_KEY]: eventDateStr,
-      event_time: eventTimeStr,
       cost_coins: costCoins,
       strictness,
       deadline_type: deadlineType,
@@ -596,7 +597,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       venue_name: venueName || null,
       venue_address: venueAddress || null,
       event_date: eventDateStr,
-      event_time: eventTimeStr,
+      event_time: null,
       dress_code: calendarEvent.activities?.dress_code || null,
       narrative_stakes: calendarEvent.what_only_we_know || null,
       canon_consequences: { automation: automationData },

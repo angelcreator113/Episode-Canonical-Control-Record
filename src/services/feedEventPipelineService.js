@@ -404,8 +404,12 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
   // random 1-3 weeks this used to pick). Written to the event_date column
   // as well as the automation copy, and flagged as event_date_auto so the
   // Event Package labels it auto-scheduled.
+  // No event time and no type-default dress code (Task #1757): this used
+  // to derive the time from prestige (20:00/19:00/14:00, saved to the
+  // automation copy, which the Event Package reads when the column is
+  // empty) and fall back to the opportunity type's config dress code. The
+  // opportunity's own wardrobe_brief.dress_code is still saved.
   const eventDateStr = autoScheduledEventDate();
-  const eventTime = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '14:00';
 
   // Create the world event
   const eventId = uuidv4();
@@ -421,7 +425,7 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
     cost_coins: prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50,
     strictness: Math.min(10, prestige + 1),
     deadline_type: prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low',
-    dress_code: wardrobe.dress_code || config.dress_code,
+    dress_code: wardrobe.dress_code || null,
     location_hint: venueTheme,
     narrative_stakes: opp.what_could_go_wrong || opp.narrative_stakes || config.narrative_template,
     canon_consequences: JSON.stringify({
@@ -435,7 +439,6 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
         venue_theme: venueTheme,
         event_date: eventDateStr,
         [AUTO_DATE_KEY]: eventDateStr,
-        event_time: eventTime,
         guest_profiles: guestProfiles.map(toGuestProfile),
         career_milestone: opp.career_milestone || null,
       },
@@ -657,7 +660,9 @@ async function chainEventFromMomentum(parentEventId, chainConfig, showId, models
     cost_coins: prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50,
     strictness: Math.min(10, prestige + 1),
     deadline_type: prestige >= 8 ? 'urgent' : 'medium',
-    dress_code: config.dress_code,
+    // No dress code (Task #1757): this used to save the chain type's
+    // config dress code, a value nobody chose. The Event Package suggests one.
+    dress_code: null,
     location_hint: await generateUniqueVenue(`${chainConfig.type.replace(/_/g, ' ')} (from ${parent.name})`, chainConfig.type, parent.host, prestige, showId),
     narrative_stakes: chainConfig.reason || CHAIN_NARRATIVES[chainConfig.type],
     canon_consequences: JSON.stringify({
