@@ -163,8 +163,18 @@ export const EVENT_PACKAGE_SECTIONS = [
   {
     key: 'place',
     label: 'Place',
+    // Evoni, 2026-09-24: only a linked World Location satisfies the venue
+    // gate. A typed venue_name guarantees no city, map position, scene sets
+    // or reuse, so a legacy event with a name and no link still displays
+    // its name but reads "Needs location link" until one is chosen. The
+    // link counts from either home (venue_location_id or its automation
+    // copy); both point at a WorldLocation row.
     items: ({ event, venueDate }) => [
-      item('venue', 'Venue', venueDate.hasVenue),
+      item('venue', 'Venue', venueDate.venueLocationId, {
+        note: !venueDate.venueLocationId && venueDate.venueName
+          ? `Needs location link (saved name: ${venueDate.venueName})`
+          : null,
+      }),
       item('scene_set', 'Scene set', event.scene_set_id),
     ],
   },

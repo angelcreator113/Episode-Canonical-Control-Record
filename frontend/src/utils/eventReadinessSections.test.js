@@ -116,12 +116,31 @@ describe('items', () => {
     expect(it.consequence).toBe(READINESS_ITEMS[`${sec}.${key}`].consequence);
   });
 
-  test('venue counts from its saved automation copy (resolveEventVenueAndDate)', () => {
+  test('a World Location link counts from its saved automation copy', () => {
+    const ev = full();
+    ev.venue_location_id = null; ev.venue_name = null;
+    ev.canon_consequences.automation.venue_location_id = 'loc-1';
+    expect(itemOf(computeEventPackageReadiness(ev), 'place', 'venue').satisfied).toBe(true);
+  });
+
+  test("Evoni's ruling: a venue name without a World Location link does not meet the gate", () => {
+    const ev = { ...full(), venue_location_id: null, venue_name: 'Club Noir' };
+    expect(resolveEventVenueAndDate(ev).hasVenue).toBe(true); // still displayed as a venue
+    const r = computeEventPackageReadiness(ev);
+    expect(itemOf(r, 'place', 'venue')).toMatchObject({
+      satisfied: false, gate: true, note: 'Needs location link (saved name: Club Noir)',
+    });
+    expect(r.gatesMet).toBe(false);
+    expect(computeEventState(ev)).toBe('needs_setup');
+  });
+
+  test('a name only in the automation copy also reads "Needs location link"', () => {
     const ev = full();
     ev.venue_location_id = null; ev.venue_name = null;
     ev.canon_consequences.automation.venue_name = 'Club Noir';
-    expect(resolveEventVenueAndDate(ev).hasVenue).toBe(true);
-    expect(itemOf(computeEventPackageReadiness(ev), 'place', 'venue').satisfied).toBe(true);
+    expect(itemOf(computeEventPackageReadiness(ev), 'place', 'venue')).toMatchObject({
+      satisfied: false, note: 'Needs location link (saved name: Club Noir)',
+    });
   });
 
   test('outfit counts from outfit_set_id as well as pieces', () => {
@@ -220,7 +239,7 @@ function expectedState(ev) {
   if (ev.used_in_episode_id || ev.status === 'used' || ev.status === 'filmed') return 'used';
   if (!resolveEventOrganizer(ev).hasOrganizer) return 'needs_organizer';
   const gates = !!ev.name && !!ev.category && !!ev.format && !!ev.event_date
-    && resolveEventVenueAndDate(ev).hasVenue && !!ev.invitation_asset_id;
+    && !!resolveEventVenueAndDate(ev).venueLocationId && !!ev.invitation_asset_id;
   return gates ? 'ready' : 'needs_setup';
 }
 
@@ -234,7 +253,8 @@ describe('queue states', () => {
       if (mask & 1) ev.source_profile_id = 1;
       if (mask & 2) ev.category = 'social';
       if (mask & 4) ev.event_date = '2026-11-07';
-      if (mask & 8) ev.venue_name = 'V';
+      if (mask & 8) ev.venue_location_id = 'loc';
+      else if (status === 'draft') ev.venue_name = 'V'; // a name alone never meets the gate
       if (mask & 16) ev.invitation_asset_id = 'i';
       if (mask & 32) ev.scene_set_id = 's';
       if (mask & 64) ev.outfit_pieces = [{ id: 'p' }];
