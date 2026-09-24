@@ -22,6 +22,15 @@ jest.mock('../../../src/services/financialTransactionService', () => ({
 // completeEpisode skips outfit scoring when getOutfitScore is absent.
 jest.mock('../../../src/routes/wardrobe', () => ({}));
 
+// Task #1817: completeEpisode now calls careerPipelineService.onEpisodeCompleted
+// with require('../models'). Keep the real model graph (and any DB) out of
+// this character_key test; the hook has its own suite.
+jest.mock('../../../src/models', () => ({}));
+jest.mock('../../../src/services/careerPipelineService', () => ({
+  onEpisodeCompleted: jest.fn(async () => ({ opportunities_advanced: [] })),
+  spawnGoalUnlocks: jest.fn(async () => []),
+}));
+
 const { completeEpisode } = require('../../../src/services/episodeCompletionService');
 
 const SHOW_ID = 'show-1';

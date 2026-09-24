@@ -106,14 +106,8 @@ async function onOpportunityAdvanced(opportunityId, newStatus, models) {
       result.goals_completed.push({ id: g.id, title: g.title });
 
       // Process unlocks
-      const unlocks = Array.isArray(g.unlocks_on_complete)
-        ? g.unlocks_on_complete
-        : (typeof g.unlocks_on_complete === 'string' ? JSON.parse(g.unlocks_on_complete) : []);
-
-      if (unlocks.length > 0) {
-        const spawned = await spawnUnlockOpportunities(showId, g, unlocks, models);
-        result.unlocks.push(...spawned);
-      }
+      const spawned = await spawnGoalUnlocks(g, showId, models);
+      result.unlocks.push(...spawned);
     }
   }
 
@@ -121,6 +115,25 @@ async function onOpportunityAdvanced(opportunityId, newStatus, models) {
 }
 
 // ── 2. GOAL COMPLETION → SPAWN NEW OPPORTUNITIES ────────────────────────────
+
+/**
+ * Spawn a just-completed goal's unlocks_on_complete as new opportunities.
+ * Shared by onOpportunityAdvanced (manual Advance) and completeEpisode's
+ * step 17 (Task #1817) so both completion paths spawn the same way.
+ *
+ * goal: plain object with id, title, priority, unlocks_on_complete
+ *       (array, or a JSON string). Returns the spawned list (possibly empty).
+ * A malformed unlocks_on_complete string throws, as it always has here;
+ * callers that must not fail wrap this call.
+ */
+async function spawnGoalUnlocks(goal, showId, models) {
+  const unlocks = Array.isArray(goal.unlocks_on_complete)
+    ? goal.unlocks_on_complete
+    : (typeof goal.unlocks_on_complete === 'string' ? JSON.parse(goal.unlocks_on_complete) : []);
+
+  if (unlocks.length === 0) return [];
+  return spawnUnlockOpportunities(showId, goal, unlocks, models);
+}
 
 /**
  * When a goal completes, its unlocks_on_complete items become new opportunities.
@@ -239,12 +252,21 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
 // ── 4. EPISODE COMPLETION → CASCADE ──────────────────────────────────────────
 
 /**
- * When an episode is marked complete, advance any linked opportunities
- * and update financial state on career goals.
+ * When an episode is marked complete, complete its linked opportunity
+ * (booked/preparing/active → completed, with status_history and episode_id).
+ *
+ * Task #1817 (Evoni's ruling, option 1): this hook completes the opportunity
+ * ONLY. It no longer cascades into onOpportunityAdvanced and no longer
+ * credits episode.total_income to coins goals — completeEpisode's step 17
+ * (+1 per active goal) is the single goal advance on completion, and it
+ * spawns unlocks for goals it completes. Manual Advance still goes through
+ * onOpportunityAdvanced unchanged.
+ *
+ * Returns { opportunities_advanced }.
  */
 async function onEpisodeCompleted(episodeId, showId, models) {
   const { Episode, WorldEvent, Opportunity, sequelize } = models;
-  const result = { opportunities_advanced: [], goals_updated: [], goals_completed: [], unlocks: [] };
+  const result = { opportunities_advanced: [] };
 
   const episode = await Episode.findByPk(episodeId);
   if (!episode) return result;
@@ -283,56 +305,13 @@ async function onEpisodeCompleted(episodeId, showId, models) {
     }
   }
 
-  // Advance opportunity if found
+  // Complete the opportunity if found (no goal cascade — see header)
   if (opp && ['booked', 'preparing', 'active'].includes(opp.status)) {
     const history = opp.status_history || [];
     history.push({ status: 'completed', date: new Date().toISOString(), note: `Episode ${episode.episode_number || episodeId} completed`, from: opp.status });
 
     await opp.update({ status: 'completed', status_history: history, episode_id: episodeId });
     result.opportunities_advanced.push({ id: opp.id, name: opp.name, from: history[history.length - 1].from, to: 'completed' });
-
-    // Cascade to career goals
-    const goalResult = await onOpportunityAdvanced(opp.id, 'completed', models);
-    result.goals_updated.push(...goalResult.goals_updated);
-    result.goals_completed.push(...goalResult.goals_completed);
-    result.unlocks.push(...goalResult.unlocks);
-  }
-
-  // Update financial goals from episode financials
-  if (episode.total_income || episode.total_expenses) {
-    try {
-      const income = parseFloat(episode.total_income) || 0;
-      if (income > 0) {
-        const [coinGoals] = await sequelize.query(
-          `SELECT * FROM career_goals WHERE show_id = :showId AND status = 'active' AND target_metric = 'coins'`,
-          { replacements: { showId } }
-        );
-        for (const g of (coinGoals || [])) {
-          const newVal = (g.current_value || 0) + income;
-          await sequelize.query(
-            `UPDATE career_goals SET current_value = :val, updated_at = NOW() WHERE id = :id`,
-            { replacements: { val: newVal, id: g.id } }
-          );
-          result.goals_updated.push({ id: g.id, title: g.title, metric: 'coins', added: income, new_value: newVal });
-
-          if (newVal >= g.target_value) {
-            await sequelize.query(
-              `UPDATE career_goals SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = :id`,
-              { replacements: { id: g.id } }
-            );
-            result.goals_completed.push({ id: g.id, title: g.title });
-
-            const unlocks = typeof g.unlocks_on_complete === 'string' ? JSON.parse(g.unlocks_on_complete) : (g.unlocks_on_complete || []);
-            if (unlocks.length > 0) {
-              const spawned = await spawnUnlockOpportunities(showId, g, unlocks, models);
-              result.unlocks.push(...spawned);
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('[CareerPipeline] Financial goal update failed:', err.message);
-    }
   }
 
   return result;
@@ -364,5 +343,6 @@ module.exports = {
   onEpisodeCompleted,
   convertOpportunityToEvent,
   spawnUnlockOpportunities,
+  spawnGoalUnlocks,
   getAccessibleCareerTier,
 };
