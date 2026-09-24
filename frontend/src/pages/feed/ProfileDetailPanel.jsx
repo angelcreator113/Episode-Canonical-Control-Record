@@ -5,6 +5,12 @@ import {
   FEED_STATE_CONFIG, PROTAGONISTS, lalaClass, fp,
 } from './feedConstants';
 
+// Local Spinner, as in FeedViews.jsx. It stayed behind in
+// SocialProfileGenerator.jsx when this panel was extracted (Task #1793).
+function Spinner() {
+  return <span style={{display:'inline-block',width:14,height:14,border:`2px solid ${C.border}`,borderTopColor:C.lavender,borderRadius:'50%',animation:'spin 0.6s linear infinite'}}/>;
+}
+
 // Track 3 module-scope helpers (Pattern D).
 export const updateProfileState = (profileId, currentState) =>
   apiClient.patch(`${API}/${profileId}`, { current_state: currentState });

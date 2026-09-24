@@ -3,6 +3,7 @@
  */
 
 import { vi, describe, beforeEach, test, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
 
 vi.mock('../../services/api', () => ({
   default: {
@@ -20,6 +21,7 @@ import {
   updateProfileState,
   removeFollower,
   addFollower,
+  DetailPanel,
 } from './ProfileDetailPanel';
 
 describe('ProfileDetailPanel — Track 3 helpers', () => {
@@ -56,5 +58,32 @@ describe('ProfileDetailPanel — Track 3 helpers', () => {
   test('error path — updateProfileState rejection propagates', async () => {
     vi.mocked(apiClient.patch).mockRejectedValue(new Error('not found'));
     await expect(updateProfileState('p-x', 'rising')).rejects.toThrow('not found');
+  });
+});
+
+// Task #1793 — the Scene and Crossing tabs' loading states rendered an
+// undefined Spinner (ReferenceError in production since the panel was
+// extracted from SocialProfileGenerator, 289b1503d).
+describe('DetailPanel — loading states render', () => {
+  const renderPanel = (detailTab, profile = { id: 'p-1', handle: 'mika', status: 'finalized', followers: [] }) =>
+    render(
+      <DetailPanel
+        profile={profile} fp={{}} detailTab={detailTab} setDetailTab={vi.fn()}
+        sceneContext={null} setSceneContext={vi.fn()} onLoadSceneContext={vi.fn()} onCopySceneContext={vi.fn()}
+        crossingPreview={null} setCrossingPreview={vi.fn()} onLoadCrossingPreview={vi.fn()}
+        onClose={vi.fn()} onFinalize={vi.fn()} onCross={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()}
+        onRefresh={vi.fn()} onRegenerate={vi.fn()} regenerating={false}
+        onApprove={vi.fn()} onRejectCrossing={vi.fn()} onSaveAsTemplate={vi.fn()} onReactions={vi.fn()}
+      />
+    );
+
+  test('Scene tab with no scene context loaded', () => {
+    renderPanel('scene');
+    expect(screen.getByText(/Loading scene context/)).toBeTruthy();
+  });
+
+  test('Crossing tab with no preview for an uncrossed profile', () => {
+    renderPanel('crossing');
+    expect(screen.getByText(/Loading crossing preview/)).toBeTruthy();
   });
 });
