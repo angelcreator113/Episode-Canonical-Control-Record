@@ -84,7 +84,7 @@ export default function ProfileCard({ profile: p, selected, feedLayer, bulkMode,
             disabled={hosting}
             style={{ marginTop: 10, width: '100%', padding: '9px 14px', borderRadius: C.radiusSm, fontSize: 13, fontWeight: 700, border: 'none', cursor: hosting ? 'not-allowed' : 'pointer', background: hosting ? C.border : C.lavender, color: hosting ? C.inkLight : '#fff', transition: 'all 0.15s' }}
           >
-            {hosting ? 'Creating event…' : 'Host an Event'}
+            {hosting ? 'Creating event…' : 'Start an Event'}
           </button>
         )}
       </div>

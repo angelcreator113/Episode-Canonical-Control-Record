@@ -167,6 +167,17 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res) => {
       }).catch(() => null);
     }
 
+    // The creator this event was started from on the Feed (Task #1790):
+    // automation.started_from_profile_id. Not the organizer — the Event
+    // Package offers them as a suggestion only. Read-only.
+    let startedFromProfile = null;
+    const startedFromId = event.canon_consequences?.automation?.started_from_profile_id;
+    if (startedFromId && models.SocialProfile) {
+      startedFromProfile = await models.SocialProfile.findByPk(startedFromId, {
+        attributes: ['id', 'handle', 'display_name', 'platform', 'registry_character_id'],
+      }).catch((e) => { console.error('[WorldEvents] started-from profile lookup failed:', e.message); return null; });
+    }
+
     // Place — the linked scene set's name
     let sceneSet = null;
     if (event.scene_set_id && models.SceneSet) {
@@ -214,6 +225,7 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res) => {
       success: true,
       event,
       sourceProfile: sourceProfile ? sourceProfile.toJSON() : null,
+      startedFromProfile: startedFromProfile ? startedFromProfile.toJSON() : null,
       sceneSet: sceneSet ? sceneSet.toJSON() : null,
       venueLocation,
       invitationAsset: invitationAsset ? invitationAsset.toJSON() : null,
@@ -2423,10 +2435,18 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     // brand to host_brand and automation.host_brand, and
     // resolveEventOrganizer (frontend eventReadiness.js) lets any brand
     // there win over the creator, so the Event Package read "Organized by
-    // <sponsor>". The creator is the organizer (source_profile_id and the
-    // automation.host_* copy); host_brand is null in both homes (the keys
-    // are kept, so a profile with no partnerships creates the same event as
-    // before) and left for Evoni to set in the Event Package.
+    // <sponsor>". host_brand is null in both homes (the keys are kept, so a
+    // profile with no partnerships creates the same event as before) and
+    // left for Evoni to set in the Event Package.
+    // Task #1790: the creator is not the organizer either. Starting an event
+    // from a Feed creator no longer decides their role (docs/
+    // EVENT_EPISODE_FLOW.md §8(r): organizer, host/face, sponsor, featured
+    // attendees). This route writes no organizer field — not `host`, not
+    // source_profile_id (§8(p) ruling 6's interim creator-organizer home),
+    // not the automation.host_* copy — and records the creator only as
+    // automation.started_from_profile_id, which means "started from" and
+    // nothing more. The Event Package offers them as the organizer and as a
+    // featured attendee; nothing is saved until Evoni accepts.
     // The partnerships are kept as automation.brand_partnerships (read by
     // characterSyncService.generatePostEventOpportunities as brand sources)
     // and in the narrative sentence below; the profile row still holds them.
@@ -2484,16 +2504,19 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       floral_style: catTweak.floral_tweak || archStyle.floral_style,
       border_style: archStyle.border_style,
     };
-    const descriptionText = `${p.display_name || p.handle} is hosting an exclusive ${p.content_category || 'creator'} event${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`;
+    // Task #1790: neither the name nor the description says the creator
+    // hosts or organizes the event.
+    const creatorName = p.display_name || p.handle;
+    const descriptionText = `An exclusive ${p.content_category || 'creator'} event with ${creatorName}${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`;
     const narrativeText = `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${sponsorBrand ? `Brand opportunity with ${sponsorBrand}.` : ''}`;
 
     const eventData = {
       show_id: showId,
-      name: event_template ? `${p.display_name || p.handle}'s ${event_template}` : `${p.display_name || p.handle} Hosts`,
+      name: `${event_template || 'Event'} with ${creatorName}`,
       event_type: 'invite',
-      host: p.display_name || p.handle,
+      host: null,
       host_brand: null,
-      source_profile_id: p.id,
+      source_profile_id: null,
       prestige,
       cost_coins: costCoins,
       strictness,
@@ -2518,10 +2541,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       border_style: invStyle.border_style,
       canon_consequences: {
         automation: {
-          host_profile_id: p.id,
-          host_handle: p.handle,
-          host_display_name: p.display_name,
-          host_registry_character_id: p.registry_character_id,
+          started_from_profile_id: p.id,
           host_brand: null,
           ...(partnerships.length > 0 ? { brand_partnerships: partnerships } : {}),
           venue_location_id: venue?.id,

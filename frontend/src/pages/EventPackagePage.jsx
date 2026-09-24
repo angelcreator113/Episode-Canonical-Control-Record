@@ -27,6 +27,13 @@
  * name). Choosing one kind clears the other kind in both of its homes;
  * the exact writes are built in utils/eventOrganizer.js.
  *
+ * Started from the Feed (Task #1790): an event created from a Feed creator
+ * has no organizer; the creator is only automation.started_from_profile_id
+ * (describeStartedFrom). The page suggests them as the organizer, in People
+ * and on the readiness Organizer item, and as a featured attendee — each one
+ * click to accept, nothing saved until then. The invitation follows the
+ * organizer: it cannot be generated until one is set.
+ *
  * Stakes and money (Task #1771): what the event is worth and what it
  * costs, in plain words first; the numbers (prestige, strictness, career
  * tier, deadline type, cost) sit behind a "View details" disclosure.
@@ -44,7 +51,7 @@
  * and its consequence, with Start Anyway / Go back.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
@@ -58,7 +65,7 @@ import { computeEventPackageReadiness, describeMissing } from '../utils/eventRea
 import { resolveEventBasics, AUTO_DATE_KEY } from '../utils/eventBasics';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
-  filterBrands, brandIsListed, profileName, BRAND_NAME_MAX,
+  filterBrands, brandIsListed, profileName, describeStartedFrom, BRAND_NAME_MAX,
 } from '../utils/eventOrganizer';
 import {
   resolveEventStakes, stakesDraftFrom, buildStakesUpdate,
@@ -127,20 +134,6 @@ function fmtBasicsValue(key, value) {
 export default function EventPackagePage() {
   const { showId, eventId } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  // One-time auto-generate flag (Task #1654): SocialProfileGenerator's
-  // handleHostEvent navigates here with ?autoInvite=1 right after creating
-  // a host-linked event. Captured once on mount, then the flag is stripped
-  // from the URL below so a reload can never re-trigger it — the value
-  // itself never changes again for the life of this mounted page.
-  const [autoInvite] = useState(() => searchParams.get('autoInvite') === '1');
-  useEffect(() => {
-    if (searchParams.get('autoInvite') === '1') {
-      navigate(`/shows/${showId}/events/${eventId}`, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -353,7 +346,7 @@ export default function EventPackagePage() {
     );
   }
 
-  const { event, sourceProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode } = data;
+  const { event, sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode } = data;
   const used = !!event.used_in_episode_id;
   const readiness = computeEventPackageReadiness(event, { suggest: !used });
   const { gatesMet } = readiness;
@@ -367,6 +360,7 @@ export default function EventPackagePage() {
   };
   const venueDate = resolveEventVenueAndDate(event);
   const organizer = describeEventOrganizer(event, sourceProfile);
+  const startedFrom = used ? null : describeStartedFrom(event, startedFromProfile);
   const stakes = resolveEventStakes(event);
   const projection = stakes.difficulty;
 
@@ -549,6 +543,16 @@ export default function EventPackagePage() {
       label: profileName(profile) || 'Creator',
       update: buildCreatorOrganizerUpdate(event, profile),
     });
+  };
+
+  // Started-from suggestions (Task #1790): one click each.
+  const acceptStartedFromOrganizer = () => {
+    if (startedFrom?.suggestOrganizer) chooseCreatorOrganizer(startedFrom.profile);
+  };
+  const acceptStartedFromAttendee = () => {
+    if (!startedFrom?.suggestAttendee) return;
+    if (startedFrom.guestIndex >= 0) toggleFeatured(startedFrom.guestIndex);
+    else addGuestFromFeed(startedFrom.profile);
   };
 
   const chooseBrandOrganizer = (brandName) => {
@@ -943,6 +947,34 @@ export default function EventPackagePage() {
               <span className="epp-host-unlinked">No organizer set</span>
             )}
           </div>
+          {startedFrom?.suggestOrganizer && (
+            <div className="epp-suggestion" data-testid="organizer-suggestion">
+              <span className="epp-suggestion-text">
+                <Lightbulb size={12} aria-hidden="true" /> Suggestion: <strong>{startedFrom.name}</strong> as organizer
+                <span className="epp-suggestion-basis">You started this event from their Feed profile</span>
+              </span>
+              <button
+                type="button" className="epp-btn epp-btn-small epp-suggestion-accept" data-testid="organizer-suggestion-accept"
+                onClick={acceptStartedFromOrganizer} disabled={organizerSaving}
+              >
+                Accept
+              </button>
+            </div>
+          )}
+          {startedFrom?.suggestAttendee && (
+            <div className="epp-suggestion" data-testid="attendee-suggestion">
+              <span className="epp-suggestion-text">
+                <Lightbulb size={12} aria-hidden="true" /> Suggestion: <strong>{startedFrom.name}</strong> as a featured attendee
+                <span className="epp-suggestion-basis">You started this event from their Feed profile</span>
+              </span>
+              <button
+                type="button" className="epp-btn epp-btn-small epp-suggestion-accept" data-testid="attendee-suggestion-accept"
+                onClick={acceptStartedFromAttendee} disabled={guestSaving}
+              >
+                {startedFrom.guestIndex >= 0 ? 'Feature' : 'Add'}
+              </button>
+            </div>
+          )}
           {/* A brand organizer with no person is complete (§8(p) ruling 2),
               so no red "not linked" host card for it. */}
           {!(organizer.kind === 'brand' && !sourceProfile && !event.host) && (
@@ -1084,17 +1116,24 @@ export default function EventPackagePage() {
 
         <section className="epp-section">
           <h2 className="epp-section-title">Invitation</h2>
-          <InvitationButton
-            mode="inline"
-            autoGenerate={autoInvite}
-            event={{ ...event, invitation_url: invitationAsset?.s3_url_processed || null }}
-            showId={showId}
-            approvalInfo={invitationApprovalInfo}
-            onGenerated={(_url, _assetId, approvalDetail) => {
-              if (approvalDetail) setInvitationApprovalInfo(approvalDetail);
-              load();
-            }}
-          />
+          {/* The invitation names the organizer (Task #1790): with none set
+              it would read "A Special Host", so it waits for one. */}
+          {!organizer.hasOrganizer && !invitationAsset ? (
+            <div className="epp-empty" data-testid="invitation-needs-organizer">
+              Choose an organizer first — the invitation names them.
+            </div>
+          ) : (
+            <InvitationButton
+              mode="inline"
+              event={{ ...event, invitation_url: invitationAsset?.s3_url_processed || null }}
+              showId={showId}
+              approvalInfo={invitationApprovalInfo}
+              onGenerated={(_url, _assetId, approvalDetail) => {
+                if (approvalDetail) setInvitationApprovalInfo(approvalDetail);
+                load();
+              }}
+            />
+          )}
         </section>
 
         <section className="epp-section">
@@ -1255,6 +1294,14 @@ export default function EventPackagePage() {
                             {m.gate ? <Lock size={11} aria-hidden="true" /> : <CircleDashed size={11} aria-hidden="true" />} {m.label}
                             {m.note && <span className="epp-rsection-note"> · {m.note}</span>}
                           </span>
+                          {sec.key === 'organizer' && m.key === 'organizer' && startedFrom?.suggestOrganizer && (
+                            <button
+                              type="button" className="epp-inline-link" data-testid="readiness-organizer-accept"
+                              onClick={acceptStartedFromOrganizer} disabled={organizerSaving}
+                            >
+                              Use {startedFrom.name}
+                            </button>
+                          )}
                           {!m.gate && m.consequence && <span className="epp-rsection-consequence">{m.consequence}</span>}
                         </li>
                       ))}

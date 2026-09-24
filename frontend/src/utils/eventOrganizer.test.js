@@ -7,7 +7,7 @@ import { createRequire } from 'module';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
   filterBrands, brandIsListed, BRAND_NAME_MAX,
-  eventCreatorOrganizer, isOrganizedByProfile,
+  eventCreatorOrganizer, isOrganizedByProfile, describeStartedFrom,
 } from './eventOrganizer';
 import { resolveEventOrganizer } from './eventReadiness';
 import { computeEventState } from './eventReadinessSections';
@@ -233,5 +233,54 @@ describe('eventCreatorOrganizer — the four cases', () => {
     expect(isOrganizedByProfile({ host_brand: 'Velour' }, 7)).toBe(false);
     expect(isOrganizedByProfile({ source_profile_id: 9, ...copy({ host_profile_id: 7 }) }, 7)).toBe(false);
     expect(isOrganizedByProfile({ source_profile_id: '7' }, 7)).toBe(true);
+  });
+});
+
+// Task #1790 — an event started from a Feed creator: what the Event Package
+// suggests for them. Suggestions only; nothing here is saved.
+describe('describeStartedFrom', () => {
+  const mika = { id: 7, handle: 'mika', display_name: 'Mika' };
+  const started = (extra = {}, automation = {}) => ({
+    source_profile_id: null, host: null, host_brand: null,
+    canon_consequences: { automation: { started_from_profile_id: 7, guest_profiles: [], ...automation } },
+    ...extra,
+  });
+
+  test('not started from a creator, or no profile loaded: null', () => {
+    expect(describeStartedFrom({ canon_consequences: { automation: {} } }, mika)).toBeNull();
+    expect(describeStartedFrom(started(), null)).toBeNull();
+    expect(describeStartedFrom(started(), { ...mika, id: 9 })).toBeNull();
+  });
+
+  test('no organizer yet: suggested as organizer and as a featured attendee', () => {
+    expect(describeStartedFrom(started(), mika)).toMatchObject({
+      name: 'Mika', isOrganizer: false, suggestOrganizer: true, suggestAttendee: true, guestIndex: -1,
+    });
+  });
+
+  test('accepting the organizer suggestion writes exactly what Change Organizer writes, and settles both suggestions', () => {
+    const ev = started();
+    const { body } = buildCreatorOrganizerUpdate(ev, mika);
+    expect(body).toEqual({ source_profile_id: 7, host: 'Mika' });
+    const after = { ...ev, ...body };
+    expect(describeStartedFrom(after, mika)).toMatchObject({ isOrganizer: true, suggestOrganizer: false, suggestAttendee: false });
+    expect(resolveEventOrganizer(after)).toMatchObject({ hasOrganizer: true, organizerKind: 'creator' });
+  });
+
+  test('a brand chosen instead: no organizer suggestion, the creator stays a possible featured attendee', () => {
+    const ev = started({ host_brand: 'Velour' });
+    expect(describeStartedFrom(ev, mika)).toMatchObject({ suggestOrganizer: false, suggestAttendee: true });
+  });
+
+  test('another creator chosen: no organizer suggestion, attendee still offered', () => {
+    expect(describeStartedFrom(started({ source_profile_id: 9, host: 'Noor' }), mika))
+      .toMatchObject({ isOrganizer: false, suggestOrganizer: false, suggestAttendee: true });
+  });
+
+  test('on the guest list unfeatured: offered with their index; featured already: not offered', () => {
+    expect(describeStartedFrom(started({}, { guest_profiles: [{ profile_id: 3 }, { profile_id: 7, featured: false }] }), mika))
+      .toMatchObject({ suggestAttendee: true, guestIndex: 1 });
+    expect(describeStartedFrom(started({}, { guest_profiles: [{ profile_id: 7, featured: true }] }), mika))
+      .toMatchObject({ suggestAttendee: false, guestIndex: -1 });
   });
 });
