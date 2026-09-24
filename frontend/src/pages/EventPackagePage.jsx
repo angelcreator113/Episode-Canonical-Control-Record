@@ -29,6 +29,12 @@
  * input is missing. Prestige, strictness, deadline type and career tier
  * are editable here through the same event PUT; cost is read-only
  * (resolveEventStakes / buildStakesUpdate, utils/eventStakes.js).
+ *
+ * Review (Task #1775): readiness by Package section
+ * (computeEventPackageReadiness, utils/eventReadinessSections.js) — each
+ * section's state and what is missing in it. A section is either a gate
+ * (blocks Start Episode) or a warning, per SECTION_GATES there. A
+ * suggestion never satisfies a section; only a saved value does.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -37,9 +43,11 @@ import {
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
   Lightbulb, CircleDashed, CalendarClock, Building2,
   ChevronDown, ChevronRight, Coins, Gauge, HeartHandshake, TrendingUp, Info,
+  Tag, Users, Mail, Shirt, AlertTriangle, PackagePlus,
 } from 'lucide-react';
 import api from '../services/api';
-import { computeEventReadiness, resolveEventVenueAndDate } from '../utils/eventReadiness';
+import { resolveEventVenueAndDate } from '../utils/eventReadiness';
+import { computeEventPackageReadiness } from '../utils/eventReadinessSections';
 import { resolveEventBasics, AUTO_DATE_KEY } from '../utils/eventBasics';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
@@ -74,6 +82,13 @@ const BASICS_FIELDS = {
 const BASICS_ORDER = ['date', 'time', 'description', 'dressCode'];
 const BASICS_STATE_LABEL = { set: 'Set', suggested: 'Suggested', missing: 'Missing' };
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Review (Task #1775): one icon per readiness section. A section key not
+// listed here (a later one, e.g. deliverables) falls back to PackagePlus.
+const READINESS_ICONS = {
+  organizer: Building2, identity: Tag, people: Users, place: MapPin,
+  invitation: Mail, look: Shirt, stakes: TrendingUp,
+};
 const HH_MM = /^\d{2}:\d{2}$/;
 
 // Display only: "2026-11-07" → "Sat, Nov 7, 2026"; "20:00" → "8:00 PM".
@@ -299,7 +314,8 @@ export default function EventPackagePage() {
 
   const { event, sourceProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode } = data;
   const used = !!event.used_in_episode_id;
-  const { checks, allReady } = computeEventReadiness(event);
+  const readiness = computeEventPackageReadiness(event, { suggest: !used });
+  const { gatesMet } = readiness;
   const basics = resolveEventBasics(event, venueLocation, { suggest: !used });
   const venueDate = resolveEventVenueAndDate(event);
   const organizer = describeEventOrganizer(event, sourceProfile);
@@ -720,7 +736,7 @@ export default function EventPackagePage() {
   };
 
   const handleStartEpisode = async () => {
-    if (!allReady || used || starting) return;
+    if (!gatesMet || used || starting) return;
     setStarting(true);
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, { draft_script: false });
@@ -1143,14 +1159,45 @@ export default function EventPackagePage() {
 
         <section className="epp-section">
           <h2 className="epp-section-title">Review</h2>
-          <div className="epp-readiness">
-            <span className={`epp-readiness-label ${allReady ? 'is-ready' : ''}`}>{allReady ? 'READY' : 'PRE-FLIGHT'}</span>
-            {checks.map((c) => (
-              <span key={c.key} className={`epp-chip ${c.ok ? 'is-ok' : ''}`} title={c.ok ? `${c.label} is set` : `${c.label} not set yet`}>
-                {c.icon} {c.label} {c.ok ? '✓' : '⚠'}
-              </span>
-            ))}
+          <div className="epp-readiness" data-testid="readiness">
+            <span className={`epp-readiness-label ${gatesMet ? 'is-ready' : ''}`} data-testid="readiness-label">{gatesMet ? 'READY' : 'PRE-FLIGHT'}</span>
+            <span className="epp-readiness-summary">
+              {gatesMet
+                ? (readiness.warnings.length ? `Start Episode is open. ${readiness.warnings.length} section${readiness.warnings.length === 1 ? '' : 's'} still to finish.` : 'Every section is complete.')
+                : `${readiness.blocking.length} section${readiness.blocking.length === 1 ? '' : 's'} must be complete before Start Episode.`}
+            </span>
           </div>
+          <ul className="epp-rsections">
+            {readiness.sections.map((sec) => {
+              const Icon = READINESS_ICONS[sec.key] || PackagePlus;
+              const kind = sec.complete ? 'complete' : sec.gate ? 'blocking' : 'warning';
+              return (
+                <li key={sec.key} className={`epp-rsection is-${kind}`} data-testid={`readiness-${sec.key}`} data-state={kind}>
+                  <div className="epp-rsection-head">
+                    <Icon size={14} aria-hidden="true" />
+                    <span className="epp-rsection-label">{sec.label}</span>
+                    <span className="epp-rsection-state">
+                      {sec.complete
+                        ? <><CheckCircle2 size={12} aria-hidden="true" /> Complete</>
+                        : sec.gate
+                          ? <><Lock size={12} aria-hidden="true" /> Blocks Start Episode</>
+                          : <><AlertTriangle size={12} aria-hidden="true" /> Warning</>}
+                    </span>
+                  </div>
+                  {!sec.complete && (
+                    <ul className="epp-rsection-missing">
+                      {sec.missing.map((m) => (
+                        <li key={m.key} data-testid={`readiness-missing-${sec.key}-${m.key}`} data-item-state={m.state}>
+                          <CircleDashed size={11} aria-hidden="true" /> {m.label}
+                          {m.note && <span className="epp-rsection-note"> · {m.note}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </section>
       </div>
 
@@ -1161,8 +1208,9 @@ export default function EventPackagePage() {
           </button>
           <button
             className="epp-btn epp-btn-primary"
-            disabled={!allReady || starting}
-            title={allReady ? 'Start the episode' : 'Not ready yet — see Review below'}
+            disabled={!gatesMet || starting}
+            title={gatesMet ? 'Start the episode' : 'Not ready yet — see Review'}
+            data-testid="start-episode"
             onClick={handleStartEpisode}
           >
             <PlayCircle size={16} /> {starting ? 'Starting…' : 'Start Episode'}

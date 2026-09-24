@@ -8,7 +8,8 @@ import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
   filterBrands, brandIsListed, BRAND_NAME_MAX,
 } from './eventOrganizer';
-import { resolveEventOrganizer, computeEventState } from './eventReadiness';
+import { resolveEventOrganizer } from './eventReadiness';
+import { computeEventState } from './eventReadinessSections';
 
 // The server's own merge for PUT canon_consequences (PR #1749), so each
 // scenario below replays what the route actually stores.

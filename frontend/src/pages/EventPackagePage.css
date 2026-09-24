@@ -599,23 +599,67 @@
 }
 .epp-readiness-label.is-ready { color: #16a34a; }
 
-.epp-chip {
+.epp-readiness-summary {
+  font-size: 12px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+/* Readiness by section (Task #1775) */
+.epp-rsections {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.epp-rsection {
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: var(--lala-surface, #FFFFFF);
+  min-width: 0;
+}
+.epp-rsection.is-complete { border-left-color: #16a34a; }
+.epp-rsection.is-blocking { border-left-color: var(--lala-danger, #B84D2E); background: #fdf6f3; }
+.epp-rsection.is-warning { border-left-color: #d97706; background: #fffbeb; }
+.epp-rsection-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.epp-rsection-label { font-weight: 600; flex: 1 1 auto; min-width: 0; }
+.epp-rsection-state {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  background: #fefce8;
-  color: #a16207;
-  border: 1px solid #fde68a;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
 }
-.epp-chip.is-ok {
-  background: #f0fdf4;
-  color: #16a34a;
-  border-color: #bbf7d0;
+.epp-rsection.is-complete .epp-rsection-state { color: #16a34a; }
+.epp-rsection.is-blocking .epp-rsection-state { color: var(--lala-danger, #B84D2E); }
+.epp-rsection.is-warning .epp-rsection-state { color: #b45309; }
+.epp-rsection-missing {
+  list-style: none;
+  margin: 5px 0 0;
+  padding: 0 0 0 20px;
+  font-size: 12px;
+  color: var(--lala-ink, #2C2C2C);
 }
+.epp-rsection-missing li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.epp-rsection-note { color: var(--lala-ink-muted, #6B6557); }
 
 .epp-actions {
   position: sticky;

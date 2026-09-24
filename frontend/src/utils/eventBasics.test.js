@@ -7,7 +7,7 @@ import {
   AUTO_DATE_KEY, FORMAT_START_TIMES, FORMAT_DRESS_CODES,
   suggestEventTime, suggestDressCode, isAutoScheduledDate, resolveEventBasics,
 } from './eventBasics';
-import { computeEventReadiness, computeEventState } from './eventReadiness';
+import { computeEventPackageReadiness, computeEventState } from './eventReadinessSections';
 import { createRequire } from 'module';
 
 // The server's own merge for PUT canon_consequences (PR #1749), so the
@@ -129,25 +129,33 @@ describe('resolveEventBasics — three states', () => {
   });
 });
 
-describe('readiness does not read Basics suggestions', () => {
-  // computeEventReadiness gates on outfit, venue, scene set and invitation
-  // only; computeEventState adds the organizer. Neither reads time, dress
-  // code, description or date — so showing a suggestion can't change them.
+describe('a Basics suggestion never satisfies readiness', () => {
+  // Readiness (computeEventPackageReadiness, eventReadinessSections.js)
+  // counts a Basics field only in the 'set' state. Before Task #1775 it did
+  // not read time at all; now time is an Event identity item (a warning,
+  // not a gate), so these tests pin that a suggested time stays missing and
+  // an accepted one counts, while the gates and queue state do not move.
   const base = {
     source_profile_id: 7, outfit_pieces: [{ id: 'p1' }], venue_location_id: 'loc-1',
     scene_set_id: 'ss-1', invitation_asset_id: null, format: 'gala', prestige: 9,
   };
+  const identityMissing = (r) => r.sections.find((s) => s.key === 'identity').missing.map((m) => m.key);
 
-  test('same readiness with and without a suggestion showing', () => {
-    const before = computeEventReadiness(base);
+  test('a suggested time is still missing, and readiness is the same with or without it showing', () => {
+    const before = computeEventPackageReadiness(base);
     const basics = resolveEventBasics(base);
     expect(basics.time.state).toBe('suggested');
-    expect(computeEventReadiness(base)).toEqual(before);
+    expect(identityMissing(before)).toContain('time');
+    expect(computeEventPackageReadiness(base)).toEqual(before);
     expect(computeEventState(base)).toBe('needs_setup');
   });
 
-  test('accepting a time does not change readiness either', () => {
-    expect(computeEventReadiness({ ...base, event_time: '20:00' })).toEqual(computeEventReadiness(base));
+  test('accepting a time satisfies the time item and leaves the gates alone', () => {
+    const before = computeEventPackageReadiness(base);
+    const after = computeEventPackageReadiness({ ...base, event_time: '20:00' });
+    expect(identityMissing(after)).not.toContain('time');
+    expect(after.gatesMet).toBe(before.gatesMet);
+    expect(after.blocking.map((s) => s.key)).toEqual(before.blocking.map((s) => s.key));
   });
 });
 
