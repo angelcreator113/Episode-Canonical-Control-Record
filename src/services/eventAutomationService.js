@@ -332,7 +332,10 @@ async function ensureVenueLocation(venueName, venueAddress, category, models) {
 /**
  * Who may be chosen as a guest, in either stage of assembleGuestList
  * (Task #1800) — one place, so the two stages cannot drift apart again.
- *   - status finalized or generated (no drafts, no archived profiles);
+ *   - status finalized, generated or crossed (no drafts, no archived
+ *     profiles). Crossed profiles are eligible (Evoni, Task #1804):
+ *     crossing freezes nothing on the Feed, and a crossed profile is a
+ *     deeper character, more story-relevant rather than less;
  *   - LalaVerse profiles only (feed_layer defaults to 'real_world');
  *   - never JustAWoman (she is the host, not an attendee);
  *   - celebrity_tier null, accessible or selective — untouchable profiles
@@ -342,7 +345,7 @@ async function ensureVenueLocation(venueName, venueAddress, category, models) {
  */
 function guestEligibilityWhere(Op) {
   return {
-    status: { [Op.in]: ['finalized', 'generated'] },
+    status: { [Op.in]: ['finalized', 'generated', 'crossed'] },
     feed_layer: 'lalaverse',
     is_justawoman_record: { [Op.ne]: true },
     [Op.or]: [{ celebrity_tier: null }, { celebrity_tier: 'accessible' }, { celebrity_tier: 'selective' }],

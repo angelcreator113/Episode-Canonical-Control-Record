@@ -349,8 +349,24 @@ async function generateOpportunitiesFromFeed(showId, models) {
 // feedActivityService) can find guests this path creates too (Task #1686,
 // docs/GUEST_OWNERSHIP_READ.md §6). A named function, not an inline
 // `.map`, so this shape is unit-testable on its own.
+// Since Task #1804 scheduleOpportunityAsEvent takes its guests from
+// assembleGuestList, which already writes this shape (plus relationship),
+// so this is no longer called there; it is kept for its #1686 test.
 function toGuestProfile(row) {
   return { profile_id: row.id, handle: row.handle, display_name: row.display_name };
+}
+
+// The category the guest scorer matches an opportunity against (Task
+// #1804). opportunities.category is a real column, but three writers
+// fill in 'fashion' when they do not know (feedEventPipelineService,
+// characterSyncService, careerPipelineService), and nothing on the row
+// says whether 'fashion' was chosen or defaulted. So 'fashion' is no
+// signal (Evoni: better to lose a real signal than to score on a
+// placeholder). Any other value passes through; one the scorer does not
+// know matches nothing, the same as none.
+function opportunityGuestCategory(category) {
+  if (!category || category === 'fashion') return null;
+  return category;
 }
 
 async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
@@ -384,28 +400,25 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
   const prestige = opp.prestige || config.prestige_range[0] + 2;
   const venueTheme = await generateUniqueVenue(opp.name, opp.opportunity_type, opp.connector_handle, prestige, showId);
 
-  // Find guest profiles from feed (connected to the host)
-  // Task #1797: never JustAWoman (she is the host, not an attendee; the
-  // same exclusion assembleGuestList's guestWhere carries) and never a
-  // real-world profile at a LalaVerse event (feed_layer defaults to
-  // 'real_world'). Fewer than six guests when the eligible LalaVerse pool
-  // is small is the correct result, not a regression — do not relax
-  // these filters to fill the list.
+  // Guests come from the shared selection (Task #1804, Evoni's rulings):
+  // assembleGuestList, with guestEligibilityWhere and scoreGuestCandidate
+  // (eventAutomationService.js). The connector is the host, so their own
+  // circle is considered first. An opportunity with no connector has no
+  // social anchor and gets no guests, as before. Six guests, or fewer
+  // when fewer are eligible — that is correct, not a regression.
   let guestProfiles = [];
   if (opp.connector_profile_id) {
     try {
-      const [guests] = await sequelize.query(
-        `SELECT id, handle, display_name, platform, follower_tier
-         FROM social_profiles
-         WHERE id != :hostId AND status IN ('generated', 'finalized', 'crossed')
-         AND lala_relevance_score >= 3
-         AND is_justawoman_record IS NOT TRUE
-         AND feed_layer = 'lalaverse'
-         ORDER BY RANDOM() LIMIT 6`,
-        { replacements: { hostId: opp.connector_profile_id } }
+      const { assembleGuestList } = require('./eventAutomationService');
+      guestProfiles = await assembleGuestList(
+        { id: opp.connector_profile_id },
+        { cultural_category: opportunityGuestCategory(opp.category) },
+        models,
+        6
       );
-      guestProfiles = guests || [];
-    } catch { /* skip */ }
+    } catch (err) {
+      console.warn('[FeedPipeline] Guest selection failed (event created without guests):', err.message);
+    }
   }
 
   // Event date: the system default, 45 days out (Task #1755, replacing the
@@ -447,7 +460,7 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
         venue_theme: venueTheme,
         event_date: eventDateStr,
         [AUTO_DATE_KEY]: eventDateStr,
-        guest_profiles: guestProfiles.map(toGuestProfile),
+        guest_profiles: guestProfiles,
         career_milestone: opp.career_milestone || null,
       },
     }),
@@ -794,6 +807,7 @@ module.exports = {
   pickVenue,
   generateUniqueVenue,
   toGuestProfile,
+  opportunityGuestCategory,
   generateOpportunitiesFromFeed,
   scheduleOpportunityAsEvent,
   suggestNextEvents,

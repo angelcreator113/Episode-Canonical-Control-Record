@@ -13,14 +13,24 @@
  * This is the first test that can exercise scheduleOpportunityAsEvent end
  * to end — any earlier attempt would have thrown before reaching any of
  * the assertions below.
+ *
+ * Task #1804: guests now come from the shared selection (assembleGuestList),
+ * so the mocks provide SocialProfile / SocialProfileRelationship. The #1797
+ * query-text tests are replaced by tests of the shared rules, which carry
+ * the same JustAWoman and feed_layer filters.
  */
 
-const { scheduleOpportunityAsEvent } = require('../../../src/services/feedEventPipelineService');
+const { Op } = require('sequelize');
+const { scheduleOpportunityAsEvent, opportunityGuestCategory } = require('../../../src/services/feedEventPipelineService');
 
-function makeModels({ opportunity, guests = [] } = {}) {
+// Since Task #1804 the pipeline takes its guests from assembleGuestList
+// (models.SocialProfile / SocialProfileRelationship), not a raw query.
+function makeModels({ opportunity, guests = [], relationships = [], related = [] } = {}) {
   const queries = [];
+  const profileCalls = { related: [], pool: [] };
   return {
     queries,
+    profileCalls,
     models: {
       sequelize: {
         query: jest.fn(async (sql, opts) => {
@@ -31,9 +41,6 @@ function makeModels({ opportunity, guests = [] } = {}) {
           if (/FROM world_events WHERE show_id/.test(sql)) {
             return [[]]; // no name collision
           }
-          if (/FROM social_profiles/.test(sql)) {
-            return [guests];
-          }
           if (/INSERT INTO world_events/.test(sql)) {
             return [[]];
           }
@@ -43,9 +50,34 @@ function makeModels({ opportunity, guests = [] } = {}) {
           throw new Error(`Unexpected query in test: ${sql}`);
         }),
       },
+      SocialProfile: {
+        findAll: jest.fn(async (opts) => {
+          if (opts.where?.id?.[Op.in]) { profileCalls.related.push(opts); return related; }
+          profileCalls.pool.push(opts);
+          return guests;
+        }),
+      },
+      SocialProfileRelationship: { findAll: jest.fn(async () => relationships) },
     },
   };
 }
+
+const baseOpportunity = () => ({
+  id: 'opp-1',
+  show_id: 'show-1',
+  name: 'Test Opportunity Event',
+  event_id: null,
+  opportunity_type: 'social_event',
+  category: null,
+  connector_profile_id: 'host-profile-1',
+  connector_handle: 'thehost',
+  brand_or_company: null,
+  prestige: 6,
+  wardrobe_brief: null,
+  narrative_stakes: null,
+  what_could_go_wrong: null,
+  career_milestone: null,
+});
 
 describe('scheduleOpportunityAsEvent', () => {
   // generateUniqueVenue only calls the Anthropic API when this is set —
@@ -56,28 +88,12 @@ describe('scheduleOpportunityAsEvent', () => {
     if (originalApiKey !== undefined) process.env.ANTHROPIC_API_KEY = originalApiKey;
   });
 
-  it('runs to completion and produces a guest with profile_id — impossible before this fix', async () => {
-    const opportunity = {
-      id: 'opp-1',
-      show_id: 'show-1',
-      name: 'Test Opportunity Event',
-      event_id: null,
-      opportunity_type: 'social_event',
-      connector_profile_id: 'host-profile-1',
-      connector_handle: 'thehost',
-      brand_or_company: null,
-      prestige: 6,
-      wardrobe_brief: null,
-      narrative_stakes: null,
-      what_could_go_wrong: null,
-      career_milestone: null,
-    };
+  it('runs to completion and produces a guest with profile_id — impossible before #1688', async () => {
     const guestRow = {
       id: 'guest-profile-1', handle: 'guestone', display_name: 'Guest One',
-      platform: 'instagram', follower_tier: 'mid',
+      content_category: 'music', archetype: 'the_peer', follower_tier: 'mid', lala_relationship: null,
     };
-
-    const { models, queries } = makeModels({ opportunity, guests: [guestRow] });
+    const { models, queries } = makeModels({ opportunity: baseOpportunity(), guests: [guestRow] });
 
     const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
 
@@ -85,8 +101,10 @@ describe('scheduleOpportunityAsEvent', () => {
     expect(result.guests).toBe(1);
 
     const automation = JSON.parse(result.event_data.canon_consequences).automation;
+    // The shared selection's shape (Task #1804): relationship, archetype and
+    // follower_tier now ride along with the #1686 keys.
     expect(automation.guest_profiles).toEqual([
-      { profile_id: 'guest-profile-1', handle: 'guestone', display_name: 'Guest One' },
+      { profile_id: 'guest-profile-1', handle: 'guestone', display_name: 'Guest One', relationship: 'scene', archetype: 'the_peer', follower_tier: 'mid' },
     ]);
 
     const inserts = queries.filter(q => /INSERT INTO world_events/.test(q.sql));
@@ -95,61 +113,93 @@ describe('scheduleOpportunityAsEvent', () => {
     expect(opportunityUpdates).toHaveLength(1);
   });
 
-  // Task #1797: the guest query never picks JustAWoman (she is the host,
-  // not an attendee) or a real-world profile for a LalaVerse event. Nothing
-  // else about the query changes.
-  describe('guest query filters (Task #1797)', () => {
-    const opportunity = {
-      id: 'opp-1', show_id: 'show-1', name: 'Filter Event', event_id: null,
-      opportunity_type: 'social_event', connector_profile_id: 'host-profile-1',
-      connector_handle: 'thehost', brand_or_company: null, prestige: 6,
-      wardrobe_brief: null, narrative_stakes: null, what_could_go_wrong: null, career_milestone: null,
-    };
-    const guestQuery = async (guests = []) => {
-      const { models, queries } = makeModels({ opportunity, guests });
-      const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
-      const q = queries.filter(x => /FROM social_profiles/.test(x.sql));
-      expect(q).toHaveLength(1);
-      return { sql: q[0].sql.replace(/\s+/g, ' '), opts: q[0].opts, result };
-    };
-
-    it('excludes JustAWoman', async () => {
-      const { sql } = await guestQuery();
-      expect(sql).toMatch(/AND is_justawoman_record IS NOT TRUE/);
+  // Task #1804 — the pipeline uses the shared selection, per Evoni's rulings.
+  describe('guests come from the shared selection (Task #1804)', () => {
+    const cand = (id, over = {}) => ({
+      id, handle: `h${id}`, display_name: `P${id}`, content_category: 'gaming',
+      archetype: 'the_peer', follower_tier: 'micro', lala_relationship: null, ...over,
     });
-
-    it('takes LalaVerse profiles only', async () => {
-      const { sql } = await guestQuery();
-      expect(sql).toMatch(/AND feed_layer = 'lalaverse'/);
-    });
-
-    it('keeps everything else: host excluded, statuses, minimum relevance, RANDOM() LIMIT 6', async () => {
-      const { sql, opts } = await guestQuery();
-      expect(sql).toMatch(/WHERE id != :hostId AND status IN \('generated', 'finalized', 'crossed'\)/);
-      expect(sql).toMatch(/AND lala_relevance_score >= 3/);
-      expect(sql).toMatch(/ORDER BY RANDOM\(\) LIMIT 6$/);
-      expect(opts.replacements).toEqual({ hostId: 'host-profile-1' });
-    });
-
-    it('fewer eligible profiles means fewer guests, in the same shape', async () => {
-      const rows = [
-        { id: 'g1', handle: 'one', display_name: 'One', platform: 'instagram', follower_tier: 'mid' },
-        { id: 'g2', handle: 'two', display_name: 'Two', platform: 'tiktok', follower_tier: 'micro' },
-      ];
-      const { result } = await guestQuery(rows);
-      expect(result.guests).toBe(2);
+    const run = async ({ opportunity = {}, ...rest } = {}) => {
+      const made = makeModels({ ...rest, opportunity: { ...baseOpportunity(), ...opportunity } });
+      const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', made.models);
       const automation = JSON.parse(result.event_data.canon_consequences).automation;
-      expect(automation.guest_profiles).toEqual([
-        { profile_id: 'g1', handle: 'one', display_name: 'One' },
-        { profile_id: 'g2', handle: 'two', display_name: 'Two' },
-      ]);
+      return { ...made, result, guests: automation.guest_profiles };
+    };
+
+    it('no raw guest query any more: the pool query carries the shared rules, crossed included', async () => {
+      const { queries, profileCalls } = await run({ guests: [cand(1)] });
+      expect(queries.filter(q => /FROM social_profiles/.test(q.sql))).toHaveLength(0);
+      const where = profileCalls.pool[0].where;
+      expect(where.status).toEqual({ [Op.in]: ['finalized', 'generated', 'crossed'] });
+      expect(where.feed_layer).toBe('lalaverse');
+      expect(where.is_justawoman_record).toEqual({ [Op.ne]: true });
+      expect(where[Op.or]).toEqual([{ celebrity_tier: null }, { celebrity_tier: 'accessible' }, { celebrity_tier: 'selective' }]);
+      // No relevance floor (Evoni: dropped); the connector is excluded as host.
+      expect(where).not.toHaveProperty('lala_relevance_score');
+      expect(where.id).toEqual({ [Op.notIn]: ['host-profile-1'] });
     });
 
-    it('no connector profile: no guest query at all, as before', async () => {
-      const { models, queries } = makeModels({ opportunity: { ...opportunity, connector_profile_id: null } });
-      const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
-      expect(queries.filter(x => /FROM social_profiles/.test(x.sql))).toHaveLength(0);
-      expect(result.guests).toBe(0);
+    it('the connector is the host: their circle is considered first', async () => {
+      const friend = { id: 'friend-1', handle: 'friend', display_name: 'Friend' };
+      const { guests, profileCalls } = await run({
+        relationships: [{ profile_a_id: 'host-profile-1', profile_b_id: 'friend-1', relationship_type: 'friend' }],
+        related: [friend],
+        guests: [cand(1), cand(2, { archetype: 'soft_life' })],
+      });
+      expect(profileCalls.related[0].where.id).toEqual({ [Op.in]: ['friend-1'] });
+      expect(guests[0]).toEqual({ profile_id: 'friend-1', handle: 'friend', display_name: 'Friend', relationship: 'friend' });
+      expect(guests).toHaveLength(3);
     });
+
+    it('six guests at most, chosen by score, the same list for the same pool', async () => {
+      const pool = Array.from({ length: 12 }, (_, i) => cand(i + 1, { archetype: `a${i % 4}`, follower_tier: `t${i % 3}` }));
+      const first = (await run({ guests: pool })).guests;
+      const again = (await run({ guests: pool })).guests;
+      expect(first).toHaveLength(6);
+      expect(again).toEqual(first);
+    });
+
+    it('a known category scores; the relationship label follows it', async () => {
+      const pool = [cand(1), cand(2, { content_category: 'beauty' })];
+      const { guests } = await run({ opportunity: { category: 'beauty' }, guests: pool });
+      expect(guests[0]).toMatchObject({ profile_id: 2, relationship: 'industry' });
+    });
+
+    it("'fashion' is no signal: a fashion candidate gets no category bonus", async () => {
+      const pool = [cand(1), cand(2, { content_category: 'fashion' })];
+      const { guests } = await run({ opportunity: { category: 'fashion' }, guests: pool });
+      expect(guests.map(g => g.profile_id)).toEqual([1, 2]);
+      expect(guests.every(g => g.relationship === 'scene')).toBe(true);
+    });
+
+    it('no connector: no guests, and no guest lookup at all (as before)', async () => {
+      const { guests, profileCalls, result } = await run({ opportunity: { connector_profile_id: null }, guests: [cand(1)] });
+      expect(guests).toEqual([]);
+      expect(result.guests).toBe(0);
+      expect(profileCalls.pool).toHaveLength(0);
+      expect(profileCalls.related).toHaveLength(0);
+    });
+
+    it('a failed guest lookup is logged and the event is still created', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const made = makeModels({ opportunity: baseOpportunity() });
+      made.models.SocialProfile.findAll = jest.fn(async () => { throw new Error('db down'); });
+      const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', made.models);
+      expect(result.event_id).toBeTruthy();
+      expect(result.guests).toBe(0);
+      expect(warn).toHaveBeenCalledWith('[FeedPipeline] Guest selection failed (event created without guests):', 'db down');
+      warn.mockRestore();
+    });
+  });
+});
+
+describe('opportunityGuestCategory (Task #1804)', () => {
+  it("'fashion' and empty are no signal; anything else passes through", () => {
+    expect(opportunityGuestCategory('fashion')).toBeNull();
+    expect(opportunityGuestCategory(null)).toBeNull();
+    expect(opportunityGuestCategory('')).toBeNull();
+    expect(opportunityGuestCategory('beauty')).toBe('beauty');
+    expect(opportunityGuestCategory('tech')).toBe('tech');
+    expect(opportunityGuestCategory('lifestyle')).toBe('lifestyle');
   });
 });
