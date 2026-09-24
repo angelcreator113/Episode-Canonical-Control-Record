@@ -26,6 +26,7 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 const { mergeCanonConsequences } = require('../utils/canonConsequencesMerge');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../utils/eventEpisodeLink');
+const { withAutoScheduledDate, autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -172,6 +173,25 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res) => {
       }).catch(() => null);
     }
 
+    // Place — the linked World Location's type and its own dress code, read
+    // only as inputs to the Event Package's dress-code suggestion (Task
+    // #1755). Nothing here is written.
+    let venueLocation = null;
+    if (event.venue_location_id && models.WorldLocation) {
+      const loc = await models.WorldLocation.findByPk(event.venue_location_id, {
+        attributes: ['id', 'name', 'venue_type', 'venue_details'],
+      }).catch((e) => { console.error('[WorldEvents] venue location lookup failed:', e.message); return null; });
+      if (loc) {
+        const details = loc.venue_details && typeof loc.venue_details === 'object' ? loc.venue_details : {};
+        venueLocation = {
+          id: loc.id,
+          name: loc.name,
+          venue_type: loc.venue_type || null,
+          dress_code: typeof details.dress_code === 'string' && details.dress_code.trim() ? details.dress_code.trim() : null,
+        };
+      }
+    }
+
     // Invitation — status + preview
     let invitationAsset = null;
     if (event.invitation_asset_id && models.Asset) {
@@ -193,6 +213,7 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res) => {
       event,
       sourceProfile: sourceProfile ? sourceProfile.toJSON() : null,
       sceneSet: sceneSet ? sceneSet.toJSON() : null,
+      venueLocation,
       invitationAsset: invitationAsset ? invitationAsset.toJSON() : null,
       usedInEpisode: usedInEpisode ? usedInEpisode.toJSON() : null,
     });
@@ -383,13 +404,20 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
       requirements = {}, career_tier = 1,
       career_milestone, fail_consequence, success_unlock,
       // New venue fields (stored in event even pre-migration)
-      venue_location_id, venue_name, venue_address, event_date: _event_date, event_time: _event_time,
+      venue_location_id, venue_name, venue_address, event_date, event_time,
       guest_list: _guest_list, invitation_details: _invitation_details, scene_set_id,
       // Narrative chain — see PUT allowlist for details. Optional on create.
       parent_event_id = null, chain_position = null, chain_reason = null,
     } = req.body;
 
     if (!name) return res.status(400).json({ success: false, error: 'Event name is required' });
+
+    // Date and time (Task #1755). A date or time the creator typed is kept
+    // (this route used to discard both). With no date, the event is
+    // auto-scheduled 45 days out and flagged in automation.event_date_auto
+    // so the Event Package can label it (src/utils/eventDateDefault.js).
+    const dated = withAutoScheduledDate(event_date, canon_consequences);
+    const createEventTime = typeof event_time === 'string' && event_time.trim() ? event_time.trim() : null;
 
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -435,7 +463,9 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
         dress_code_keywords,
         location_hint: location_hint || resolvedVenueAddress || null,
         narrative_stakes: narrative_stakes || null,
-        canon_consequences, seeds_future_events,
+        event_date: dated.event_date || null,
+        event_time: createEventTime,
+        canon_consequences: dated.canon_consequences, seeds_future_events,
         overlay_template, required_ui_overlays,
         browse_pool_bias, browse_pool_size,
         rewards,
@@ -461,6 +491,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
         (id, show_id, season_id, arc_id, name, event_type, category, format, host, host_brand, description,
         prestige, cost_coins, strictness, deadline_type, deadline_minutes,
         dress_code, dress_code_keywords, location_hint, narrative_stakes,
+        event_date, event_time,
         canon_consequences, seeds_future_events,
         overlay_template, required_ui_overlays, browse_pool_bias, browse_pool_size,
         rewards, is_paid, payment_amount, requirements, career_tier,
@@ -471,6 +502,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
       (:id, :showId, :season_id, :arc_id, :name, :event_type, :category, :format, :host, :host_brand, :description,
         :prestige, :cost_coins, :strictness, :deadline_type, :deadline_minutes,
         :dress_code, :dress_code_keywords, :location_hint, :narrative_stakes,
+        :event_date, :event_time,
         :canon_consequences, :seeds_future_events,
         :overlay_template, :required_ui_overlays, :browse_pool_bias, :browse_pool_size,
         :rewards, :is_paid, :payment_amount, :requirements, :career_tier,
@@ -493,7 +525,9 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
           dress_code_keywords: JSON.stringify(dress_code_keywords),
           location_hint: location_hint || resolvedVenueAddress || null,
           narrative_stakes: narrative_stakes || null,
-          canon_consequences: JSON.stringify(canon_consequences),
+          event_date: dated.event_date || null,
+          event_time: createEventTime,
+          canon_consequences: JSON.stringify(dated.canon_consequences),
           seeds_future_events: JSON.stringify(seeds_future_events),
           overlay_template,
           required_ui_overlays: JSON.stringify(required_ui_overlays),
@@ -1129,6 +1163,9 @@ router.post('/world/:showId/events/bulk-seed', requireAuth, async (req, res) => 
     const created = [];
     for (const ev of events) {
       const id = uuidv4();
+      // Task #1755: a seeded event with no date is auto-scheduled 45 days
+      // out (src/utils/eventDateDefault.js); a supplied date is kept.
+      const dated = withAutoScheduledDate(ev.event_date, {});
       await models.sequelize.query(
         `INSERT INTO world_events 
          (id, show_id, name, event_type, host, host_brand, description,
@@ -1137,6 +1174,7 @@ router.post('/world/:showId/events/bulk-seed', requireAuth, async (req, res) => 
           browse_pool_bias, browse_pool_size,
           is_paid, payment_amount, requirements, career_tier,
           career_milestone, fail_consequence, success_unlock,
+          event_date, canon_consequences,
           status, created_at, updated_at)
          VALUES
          (:id, :showId, :name, :event_type, :host, :host_brand, :description,
@@ -1145,10 +1183,13 @@ router.post('/world/:showId/events/bulk-seed', requireAuth, async (req, res) => 
           :browse_pool_bias, :browse_pool_size,
           :is_paid, :payment_amount, :requirements, :career_tier,
           :career_milestone, :fail_consequence, :success_unlock,
+          :event_date, :canon_consequences,
           'ready', NOW(), NOW())`,
         {
           replacements: {
             id, showId,
+            event_date: dated.event_date,
+            canon_consequences: JSON.stringify(dated.canon_consequences),
             name: ev.name,
             event_type: ev.event_type || 'invite',
             host: ev.host || null,
@@ -2334,8 +2375,6 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     const costCoins = prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50;
     const strictness = Math.min(10, prestige + Math.floor(Math.random() * 2));
     const deadlineType = prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low';
-    const eventDate = new Date();
-    eventDate.setDate(eventDate.getDate() + 7 + Math.floor(Math.random() * 14));
     const hostBrand = p.brand_partnerships?.[0]?.brand || null;
 
     // Category-aware dress code defaults
@@ -2345,7 +2384,10 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       creator_economy: 'influencer chic', drama: 'camera-ready',
     };
     const dressCode = CATEGORY_DRESS_CODES[(p.content_category || '').toLowerCase()] || 'chic';
-    const eventDateStr = eventDate.toISOString().split('T')[0];
+    // Task #1755: the system default date (45 days out), replacing the
+    // random 7-20 days this route used to pick; flagged below as
+    // automation.event_date_auto so the Event Package labels it.
+    const eventDateStr = autoScheduledEventDate();
     const eventTimeStr = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00';
 
     // Invitation style derived from archetype + category + aesthetic_dna
@@ -2429,6 +2471,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
           venue_address: venueAddress,
           guest_profiles: guestList,
           event_date: eventDateStr,
+          [AUTO_DATE_KEY]: eventDateStr,
           event_time: eventTimeStr,
           cost_coins: costCoins,
           strictness,

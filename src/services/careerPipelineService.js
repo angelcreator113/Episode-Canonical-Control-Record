@@ -14,6 +14,7 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
+const { withAutoScheduledDate } = require('../utils/eventDateDefault');
 
 // ── METRIC → OPPORTUNITY TYPE MAPPING ────────────────────────────────────────
 const _METRIC_OPP_TYPES = { // eslint-disable-line no-unused-vars
@@ -209,6 +210,11 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
     },
     status: 'ready',
   };
+  // No date comes from an opportunity: the system default, 45 days out,
+  // flagged as automation.event_date_auto (Task #1755).
+  const dated = withAutoScheduledDate(null, eventData.canon_consequences);
+  eventData.event_date = dated.event_date;
+  eventData.canon_consequences = dated.canon_consequences;
 
   let event;
   if (WorldEvent) {
@@ -216,9 +222,9 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
   } else {
     await sequelize.query(
       `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, prestige, description,
-       narrative_stakes, location_hint, opportunity_id, canon_consequences, status, created_at, updated_at)
+       narrative_stakes, location_hint, opportunity_id, event_date, canon_consequences, status, created_at, updated_at)
        VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :prestige, :description,
-       :narrative_stakes, :location_hint, :opportunity_id, :canon_consequences, 'ready', NOW(), NOW())`,
+       :narrative_stakes, :location_hint, :opportunity_id, :event_date, :canon_consequences, 'ready', NOW(), NOW())`,
       { replacements: { ...eventData, canon_consequences: JSON.stringify(eventData.canon_consequences) } }
     );
     event = eventData;

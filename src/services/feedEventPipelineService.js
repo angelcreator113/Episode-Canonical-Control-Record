@@ -13,6 +13,7 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
+const { autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -399,10 +400,11 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
     } catch { /* skip */ }
   }
 
-  // Generate event date (1-3 weeks from now)
-  const eventDate = new Date();
-  eventDate.setDate(eventDate.getDate() + 7 + Math.floor(Math.random() * 14));
-  const eventDateStr = eventDate.toISOString().split('T')[0];
+  // Event date: the system default, 45 days out (Task #1755, replacing the
+  // random 1-3 weeks this used to pick). Written to the event_date column
+  // as well as the automation copy, and flagged as event_date_auto so the
+  // Event Package labels it auto-scheduled.
+  const eventDateStr = autoScheduledEventDate();
   const eventTime = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '14:00';
 
   // Create the world event
@@ -432,21 +434,23 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
         host_profile_id: opp.connector_profile_id,
         venue_theme: venueTheme,
         event_date: eventDateStr,
+        [AUTO_DATE_KEY]: eventDateStr,
         event_time: eventTime,
         guest_profiles: guestProfiles.map(toGuestProfile),
         career_milestone: opp.career_milestone || null,
       },
     }),
+    event_date: eventDateStr,
     status: 'ready',
   };
 
   await sequelize.query(
     `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
      prestige, cost_coins, strictness, deadline_type, dress_code, location_hint,
-     narrative_stakes, canon_consequences, status, created_at, updated_at)
+     narrative_stakes, event_date, canon_consequences, status, created_at, updated_at)
      VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
      :prestige, :cost_coins, :strictness, :deadline_type, :dress_code, :location_hint,
-     :narrative_stakes, :canon_consequences, :status, NOW(), NOW())`,
+     :narrative_stakes, :event_date, :canon_consequences, :status, NOW(), NOW())`,
     { replacements: eventData }
   );
 
@@ -638,6 +642,10 @@ async function chainEventFromMomentum(parentEventId, chainConfig, showId, models
     campaign: `The viral moment from "${parent.name}" caught a creative director's eye.`,
   };
 
+  // No date is chosen for a chained event: the system default, 45 days
+  // out, flagged as event_date_auto (Task #1755).
+  const chainEventDate = autoScheduledEventDate();
+
   const eventData = {
     id: eventId,
     show_id: showId,
@@ -661,8 +669,10 @@ async function chainEventFromMomentum(parentEventId, chainConfig, showId, models
         host_handle: parentAuto.host_handle || null,
         guest_profiles: guestProfiles.slice(0, 6),
         momentum_driven: true,
+        [AUTO_DATE_KEY]: chainEventDate,
       },
     }),
+    event_date: chainEventDate,
     seeds_future_events: JSON.stringify([{
       type: 'momentum_chain',
       from_event: parent.name,
@@ -678,12 +688,12 @@ async function chainEventFromMomentum(parentEventId, chainConfig, showId, models
   await sequelize.query(
     `INSERT INTO world_events (id, show_id, name, event_type, host, description,
      prestige, cost_coins, strictness, deadline_type, dress_code, location_hint,
-     narrative_stakes, canon_consequences, seeds_future_events,
+     narrative_stakes, event_date, canon_consequences, seeds_future_events,
      parent_event_id, chain_position, chain_reason, momentum_score,
      status, created_at, updated_at)
      VALUES (:id, :show_id, :name, :event_type, :host, :description,
      :prestige, :cost_coins, :strictness, :deadline_type, :dress_code, :location_hint,
-     :narrative_stakes, :canon_consequences, :seeds_future_events,
+     :narrative_stakes, :event_date, :canon_consequences, :seeds_future_events,
      :parent_event_id, :chain_position, :chain_reason, :momentum_score,
      :status, NOW(), NOW())`,
     { replacements: eventData }

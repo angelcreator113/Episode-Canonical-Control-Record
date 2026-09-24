@@ -16,6 +16,7 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
+const { autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 
 // ─── CATEGORY MAPPING ────────────────────────────────────────────────────────
 // Maps cultural calendar categories to feed profile content categories
@@ -523,10 +524,10 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
     const strictness = Math.min(10, prestige + Math.floor(Math.random() * 2));
     const deadlineType = prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low';
 
-    // Generate event date (next 1-3 weeks from now)
-    const eventDate = new Date();
-    eventDate.setDate(eventDate.getDate() + 7 + Math.floor(Math.random() * 14));
-    const eventDateStr = eventDate.toISOString().split('T')[0];
+    // Event date: the system default, 45 days out (Task #1755, replacing
+    // the random 1-3 weeks this used to pick); flagged below as
+    // automation.event_date_auto so the Event Package labels it.
+    const eventDateStr = autoScheduledEventDate();
     const eventTimeStr = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00';
 
     const automationData = {
@@ -543,6 +544,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       source_calendar_title: calendarEvent.title,
       automated_at: new Date().toISOString(),
       event_date: eventDateStr,
+      [AUTO_DATE_KEY]: eventDateStr,
       event_time: eventTimeStr,
       cost_coins: costCoins,
       strictness,
