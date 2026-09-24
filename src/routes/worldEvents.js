@@ -2870,8 +2870,9 @@ router.get('/world/:showId/events/:eventId/financial-forecast', requireAuth, asy
     const socialTasks = Array.isArray(automation.social_tasks) ? automation.social_tasks : [];
     const taskRewards = calculateSocialTaskRewards(socialTasks);
     const socialTaskRewards = taskRewards.reduce((s, t) => s + (t.reward || 0), 0);
-    // Content bonus uses the same rule as finalize-financials: brand deals
-    // get a 10% post-delivery bonus on top of event payment.
+    // Content fee uses the same rule as finalize-financials: paid brand
+    // deals get a 10% brand-deal content fee on top of event payment. No
+    // delivery is checked (Task #1808).
     const contentRevenueEst = (event.event_type === 'brand_deal' && eventPayment > 0)
       ? Math.round(eventPayment * 0.1)
       : 0;
