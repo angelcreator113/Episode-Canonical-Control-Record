@@ -598,10 +598,9 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
     // wrapper, and the ledger mirror was non-fatal — a failing ledger
     // insert left character_state.coins out of sync with getCurrentBalance.
     // Now any failure rolls back every write so the two sources of truth
-    // can never drift out of admin edits. The 'key === lala' gate was also
-    // dropped: 'justawoman' is the canonical key writers actually use, so
-    // the old check meant no ledger mirror ever fired for the real
-    // character. Mirror now runs whenever coins changed, regardless of key.
+    // can never drift out of admin edits. The mirror runs whenever coins
+    // changed, regardless of key; the canonical key is 'lala' (F-Sec-3
+    // decision; Task #1816).
     const {
       seedStartingBalance, getCurrentBalance, logTransaction,
     } = require('../services/financialTransactionService');

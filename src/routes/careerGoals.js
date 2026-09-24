@@ -378,8 +378,6 @@ router.post('/world/:showId/goals', requireAuth, async (req, res) => {
     // Auto-populate current_value from character state if metric matches
     let autoValue = current_value;
     try {
-      // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
-      // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
       const state = await models.CharacterState.findOne({
         where: { show_id: showId, character_key: 'lala' },
       });
@@ -507,8 +505,6 @@ router.post('/world/:showId/goals/sync', requireAuth, async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     // Get character state
-    // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
-    // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
     const state = await models.CharacterState.findOne({
       where: { show_id: showId, character_key: 'lala' },
     });
@@ -579,8 +575,6 @@ router.get('/world/:showId/suggest-events', requireAuth, async (req, res) => {
     // Get character state
     let charState = {};
     try {
-      // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
-      // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
       const state = await models.CharacterState.findOne({
         where: { show_id: showId, character_key: 'lala' },
       });

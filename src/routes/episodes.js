@@ -938,8 +938,6 @@ router.post('/:id/generate-beats', requireAuth, aiRateLimiter, asyncHandler(asyn
   // Get character state for context-aware generation
   let characterState = {};
   try {
-    // F-Sec-3 owns the character_key drift fix ('lala' vs 'justawoman').
-    // Key preserved verbatim per F-Stats-1 Decision #12 — do not fix here.
     const state = await CharacterState.findOne({
       where: { show_id: showId, character_key: 'lala' },
     });

@@ -170,9 +170,10 @@ async function completeEpisode(episodeId, showId, sequelize) {
   } catch { /* non-blocking */ }
 
   // ── 4. Get current character state ──
+  // Canonical character_key is 'lala' (F-Sec-3 decision; Task #1816).
   let characterState;
   const [existingState] = await sequelize.query(
-    `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'justawoman' LIMIT 1`,
+    `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
     { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => []);
 
@@ -183,7 +184,7 @@ async function completeEpisode(episodeId, showId, sequelize) {
     const stateId = uuidv4();
     await sequelize.query(
       `INSERT INTO character_state (id, show_id, character_key, coins, reputation, brand_trust, influence, stress, created_at, updated_at)
-       VALUES (:id, :showId, 'justawoman', 500, 1, 1, 1, 0, NOW(), NOW())`,
+       VALUES (:id, :showId, 'lala', 500, 1, 1, 1, 0, NOW(), NOW())`,
       { replacements: { id: stateId, showId } }
     );
     characterState = { id: stateId, coins: 500, reputation: 1, brand_trust: 1, influence: 1, stress: 0 };
@@ -414,7 +415,7 @@ async function completeEpisode(episodeId, showId, sequelize) {
   await sequelize.query(
     `INSERT INTO character_state_history
      (id, show_id, character_key, episode_id, evaluation_id, source, deltas_json, state_after_json, notes, created_at)
-     VALUES (:id, :showId, 'justawoman', :episodeId, :evaluationId, 'computed', :deltas, :stateAfter, :notes, NOW())`,
+     VALUES (:id, :showId, 'lala', :episodeId, :evaluationId, 'computed', :deltas, :stateAfter, :notes, NOW())`,
     { replacements: {
       id: uuidv4(), showId, episodeId, evaluationId,
       deltas: JSON.stringify(mergedDeltas),
