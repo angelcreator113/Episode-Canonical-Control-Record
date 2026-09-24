@@ -254,8 +254,12 @@ module.exports = {
         lala_reaction_reject: lalaReactionReject || undefined,
       });
 
-      // Auto background removal — runs async, updates the record when done
-      if (s3Url && s3Key && process.env.REMOVEBG_API_KEY) {
+      // Auto background removal — runs async, updates the record when done.
+      // Whether it was started is returned to the client (Task #1769): the
+      // item's URLs alone cannot tell "still running" from "never attempted"
+      // (no REMOVEBG_API_KEY) or "failed" (the catch below writes nothing).
+      const backgroundRemovalStarted = Boolean(s3Url && s3Key && process.env.REMOVEBG_API_KEY);
+      if (backgroundRemovalStarted) {
         // Don't await — let it run in background so upload returns fast
         (async () => {
           try {
@@ -373,6 +377,7 @@ module.exports = {
       res.status(201).json({
         success: true,
         data: wardrobeItem,
+        background_removal: backgroundRemovalStarted ? 'started' : 'not_started',
       });
     } catch (error) {
       console.error('❌ Error creating wardrobe item:', error);

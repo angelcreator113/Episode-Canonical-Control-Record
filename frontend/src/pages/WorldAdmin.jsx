@@ -24,7 +24,9 @@ import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, computeEventState, EVENT_QUEUE_STATES, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
-import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles, ChevronDown, ChevronRight, Lightbulb, AlertTriangle } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles, ChevronDown, ChevronRight, Lightbulb, AlertTriangle, Loader2, RotateCw, X } from 'lucide-react';
+import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
+import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import './WorldAdmin.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -204,6 +206,13 @@ function WorldAdmin() {
   const [sceneSets, setSceneSets] = useState([]);
   const [goals, setGoals] = useState([]);
   const [wardrobeItems, setWardrobeItems] = useState([]);
+  // Upload processing state (Task #1769): cards for items this session
+  // uploaded show "Extracting item…" until the background-removed image
+  // lands, then swap to it without a reload.
+  const mergeWardrobeItem = useCallback((patch) => {
+    setWardrobeItems(prev => prev.map(i => (i.id === patch.id ? { ...i, ...patch } : i)));
+  }, []);
+  const wardrobeProcessing = useWardrobeProcessing(mergeWardrobeItem);
   const [lightboxItem, setLightboxItem] = useState(null);  // For fullscreen image view
   const [regeneratingItemId, setRegeneratingItemId] = useState(null);  // AI product-shot regeneration in flight
   const [lightboxVariant, setLightboxVariant] = useState(null);  // 'original' | 'processed' | 'regenerated' (overrides resolver in lightbox only)
@@ -6031,6 +6040,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                 const isBulkSelected = selectedWardrobeIds.has(item.id);
                 const colorHex = getColorHex(item.color);
                 const hasRecentUsage = recentlyUsedItems.has(item.id);
+                const processingState = wardrobeProcessing.stateFor(item);
 
                 const isListMode = wardrobeViewMode === 'list';
                 return (
@@ -6123,9 +6133,39 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         {CAT_ICONS[itemType] || '👗'}
                       </div>
                       {/* Expand icon on hover */}
-                      {imgUrl && (
+                      {imgUrl && processingState !== PROCESSING_STATES.PROCESSING && processingState !== PROCESSING_STATES.STALLED && (
                         <div style={{ position: 'absolute', bottom: 6, right: 6, padding: '3px 6px', background: 'rgba(0,0,0,0.6)', borderRadius: 4, fontSize: 10, color: '#fff', opacity: 0.7 }}>
                           🔍
+                        </div>
+                      )}
+                      {/* Upload processing state (Task #1769) — only for items this
+                          session uploaded and the server started processing. */}
+                      {processingState === PROCESSING_STATES.PROCESSING && !isListMode && (
+                        <div className="wa-wd-processing wa-wd-processing--running" role="status" data-testid="wardrobe-processing"
+                          onClick={e => e.stopPropagation()}>
+                          <span className="wa-wd-processing-label">
+                            <Loader2 size={13} className="wa-wd-processing-spin" aria-hidden="true" />
+                            Extracting item…
+                          </span>
+                        </div>
+                      )}
+                      {processingState === PROCESSING_STATES.STALLED && !isListMode && (
+                        <div className="wa-wd-processing wa-wd-processing--stalled" role="status" data-testid="wardrobe-processing-stalled"
+                          onClick={e => e.stopPropagation()}>
+                          <span className="wa-wd-processing-label">
+                            <AlertTriangle size={13} aria-hidden="true" />
+                            Extraction didn’t finish — showing the original
+                          </span>
+                          <span className="wa-wd-processing-actions">
+                            <button type="button" className="wa-wd-processing-btn"
+                              onClick={e => { e.stopPropagation(); wardrobeProcessing.retry(item.id); }}>
+                              <RotateCw size={12} aria-hidden="true" /> Retry
+                            </button>
+                            <button type="button" className="wa-wd-processing-btn"
+                              onClick={e => { e.stopPropagation(); wardrobeProcessing.dismiss(item.id); }}>
+                              <X size={12} aria-hidden="true" /> Keep original
+                            </button>
+                          </span>
                         </div>
                       )}
                     </div>
@@ -6150,6 +6190,24 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         {item.color && <span> · {item.color}</span>}
                         {item.vendor && <span> · {item.vendor}</span>}
                       </div>
+                      {/* List mode: the 80px image is too small for the overlay,
+                          so the processing state sits under the category line. */}
+                      {isListMode && processingState === PROCESSING_STATES.PROCESSING && (
+                        <div className="wa-wd-processing-label" role="status" style={{ fontSize: 11, color: '#2C2C2C', fontFamily: "'DM Mono', monospace", marginBottom: 4 }}>
+                          <Loader2 size={12} className="wa-wd-processing-spin" aria-hidden="true" /> Extracting item…
+                        </div>
+                      )}
+                      {isListMode && processingState === PROCESSING_STATES.STALLED && (
+                        <div role="status" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: '#9a3412', fontFamily: "'DM Mono', monospace", marginBottom: 4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                          <AlertTriangle size={12} aria-hidden="true" /> Extraction didn’t finish
+                          <button type="button" className="wa-wd-processing-btn" onClick={e => { e.stopPropagation(); wardrobeProcessing.retry(item.id); }}>
+                            <RotateCw size={12} aria-hidden="true" /> Retry
+                          </button>
+                          <button type="button" className="wa-wd-processing-btn" onClick={e => { e.stopPropagation(); wardrobeProcessing.dismiss(item.id); }}>
+                            <X size={12} aria-hidden="true" /> Keep original
+                          </button>
+                        </div>
+                      )}
 
                       {/* Tags */}
                       {tags.length > 0 && (
@@ -6586,6 +6644,11 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           // strips JSON Content-Type so browser sets multipart boundary.
                           const data = await uploadWardrobeApi(fd);
                           setWardrobeItems(prev => [data.data, ...prev]);
+                          // Only track items the server said it started processing —
+                          // an item it never processes must not show a spinner.
+                          if (backgroundRemovalStarted(data) && data.data?.id && !data.data.s3_url_processed) {
+                            wardrobeProcessing.track(data.data.id);
+                          }
                           setShowWardrobeUpload(false);
                           setToast('Item uploaded!'); setTimeout(() => setToast(null), 2500);
                         } catch (httpErr) {
