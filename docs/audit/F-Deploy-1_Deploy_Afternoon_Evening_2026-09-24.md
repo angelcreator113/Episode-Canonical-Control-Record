@@ -115,8 +115,17 @@ adds two register documents:
 - **The backup deletion** is not visible from a clone. It has no
   MEASURED clause. Its figures (five deleted, six left, 90% to 89%) are
   the same as those `F-Deploy-1_Deploy_2026-09-24.md` §5 records for
-  Deploy L. They are recorded here as given; this record does not say
-  whether the two are separate deletions with the same figures.
+  Deploy L.
+- **They are two separate prunes.** ATTESTED (Evoni): there were two
+  prunes on 2026-09-24 with the same outcome, one at Deploy L and one at
+  Deploy Q. That is consistent with the backup names the two records
+  give:
+  - Deploy L's prune left six backups.
+  - Deploys M, N, O, P and Q then added five: `pre1770`, `pre1774`,
+    `pre1776`, `pre1781` and `pre1787`.
+  - Pruning five by name at Deploy Q left six again.
+
+  Deploy L's record stands on its own and is not amended here.
 
 ## §5. Deploy R — 2026-09-24 ~15:43 UTC, backend and frontend
 
