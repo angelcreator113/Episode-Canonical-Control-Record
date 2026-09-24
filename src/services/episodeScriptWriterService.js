@@ -311,7 +311,7 @@ async function loadScriptContext(episodeId, showId, models) {
   try {
     const [state] = await sequelize.query(
       `SELECT coins, reputation, brand_trust, influence, stress FROM character_state
-       WHERE show_id = :showId AND character_key = 'justawoman' LIMIT 1`,
+       WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
       { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
     );
     context.characterState = state || null;

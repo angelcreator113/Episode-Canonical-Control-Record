@@ -170,9 +170,10 @@ async function completeEpisode(episodeId, showId, sequelize) {
   } catch { /* non-blocking */ }
 
   // ── 4. Get current character state ──
+  // Canonical character_key is 'lala' (F-Sec-3 decision; Task #1816).
   let characterState;
   const [existingState] = await sequelize.query(
-    `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'justawoman' LIMIT 1`,
+    `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
     { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => []);
 
@@ -183,7 +184,7 @@ async function completeEpisode(episodeId, showId, sequelize) {
     const stateId = uuidv4();
     await sequelize.query(
       `INSERT INTO character_state (id, show_id, character_key, coins, reputation, brand_trust, influence, stress, created_at, updated_at)
-       VALUES (:id, :showId, 'justawoman', 500, 1, 1, 1, 0, NOW(), NOW())`,
+       VALUES (:id, :showId, 'lala', 500, 1, 1, 1, 0, NOW(), NOW())`,
       { replacements: { id: stateId, showId } }
     );
     characterState = { id: stateId, coins: 500, reputation: 1, brand_trust: 1, influence: 1, stress: 0 };
@@ -414,7 +415,7 @@ async function completeEpisode(episodeId, showId, sequelize) {
   await sequelize.query(
     `INSERT INTO character_state_history
      (id, show_id, character_key, episode_id, evaluation_id, source, deltas_json, state_after_json, notes, created_at)
-     VALUES (:id, :showId, 'justawoman', :episodeId, :evaluationId, 'computed', :deltas, :stateAfter, :notes, NOW())`,
+     VALUES (:id, :showId, 'lala', :episodeId, :evaluationId, 'computed', :deltas, :stateAfter, :notes, NOW())`,
     { replacements: {
       id: uuidv4(), showId, episodeId, evaluationId,
       deltas: JSON.stringify(mergedDeltas),
@@ -535,6 +536,10 @@ ${narrativeLines.short || ''}`,
 
 
   // \u2500\u2500 17. Career unlocks from episode brief (slay/pass only) \u2500\u2500
+  // The single goal advance on completion (+1 per active, non-deleted goal).
+  // Goals this step completes spawn their unlocks_on_complete via the shared
+  // careerPipelineService.spawnGoalUnlocks helper (Task #1817).
+  const careerSummary = { goals_completed: [], unlocks: [], opportunities_advanced: [] };
   if (['slay', 'pass'].includes(evalResult.tier_final)) {
     try {
       const [brief] = await sequelize.query(
@@ -546,25 +551,54 @@ ${narrativeLines.short || ''}`,
         : (brief?.career_context || {});
       if (careerCtx?.success_unlock) {
         const goals = await sequelize.query(
-          `SELECT id, current_value, target_value FROM career_goals
+          `SELECT id, title, priority, current_value, target_value, unlocks_on_complete FROM career_goals
            WHERE show_id = :showId AND status = 'active' AND deleted_at IS NULL`,
           { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
         ).catch(() => []);
         for (const goal of goals || []) {
           const newVal = Math.min((parseInt(goal.current_value) || 0) + 1, parseInt(goal.target_value) || 10);
           const newStatus = newVal >= (parseInt(goal.target_value) || 10) ? 'completed' : 'active';
+          let goalWritten = true;
           await sequelize.query(
             `UPDATE career_goals SET current_value = :val, status = :status,
              completed_at = CASE WHEN :status = 'completed' THEN NOW() ELSE completed_at END,
              updated_at = NOW() WHERE id = :id`,
             { replacements: { val: newVal, status: newStatus, id: goal.id } }
-          ).catch(err => console.warn('[episodeCompletion] career_goals update failed:', err?.message));
+          ).catch(err => {
+            goalWritten = false;
+            console.warn('[episodeCompletion] career_goals update failed:', err?.message);
+          });
+
+          // Only goals that transition to completed in this call spawn unlocks
+          // (the SELECT above only returns status = 'active' goals).
+          if (goalWritten && newStatus === 'completed') {
+            careerSummary.goals_completed.push({ id: goal.id, title: goal.title });
+            try {
+              const { spawnGoalUnlocks } = require('./careerPipelineService');
+              const spawned = await spawnGoalUnlocks(goal, showId, require('../models'));
+              careerSummary.unlocks.push(...spawned);
+            } catch (unlockErr) {
+              console.error('[EpisodeCompletion] Goal unlock spawn failed (non-blocking):', goal.id, unlockErr?.message);
+            }
+          }
         }
         console.log(`[episodeComplete] Career unlocks applied for tier ${evalResult.tier_final}: ${careerCtx.success_unlock}`);
       }
     } catch (careerErr) {
       console.warn('[episodeComplete] Career unlock failed (non-blocking):', careerErr.message);
     }
+  }
+
+  // ── 18. Complete the linked opportunity (Task #1817) ──
+  // Runs once per completion: the already-accepted early return above skips
+  // it on repeat calls. Opportunity only — no goal cascade (step 17 above is
+  // the single goal advance).
+  try {
+    const { onEpisodeCompleted } = require('./careerPipelineService');
+    const oppResult = await onEpisodeCompleted(episodeId, showId, require('../models'));
+    careerSummary.opportunities_advanced.push(...(oppResult?.opportunities_advanced || []));
+  } catch (oppErr) {
+    console.error('[EpisodeCompletion] Opportunity completion failed (non-blocking):', oppErr?.message);
   }
 
   return {
@@ -582,6 +616,7 @@ ${narrativeLines.short || ''}`,
     wardrobe: wardrobeBonuses.detail,
     financials: financialResult.summary,
     transactions: (financialResult.transactions || []).length,
+    career: careerSummary,
   };
 }
 

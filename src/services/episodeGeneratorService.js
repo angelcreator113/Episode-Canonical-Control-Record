@@ -458,7 +458,7 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
     let affordabilityWarning = null;
     try {
       const [charState] = await models.sequelize.query(
-        `SELECT coins FROM character_state WHERE show_id = :showId AND character_key = 'justawoman' LIMIT 1`,
+        `SELECT coins FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
         { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
       ).catch(() => []);
       const currentCoins = parseInt(charState?.coins) || 0;
