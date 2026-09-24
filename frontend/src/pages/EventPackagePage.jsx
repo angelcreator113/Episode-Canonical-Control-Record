@@ -5,8 +5,8 @@
  *
  * Six read-only summary sections (Basics, People, Place, Invitation,
  * Style & Deliverables, Review) plus a readiness count, and three actions:
- * Change Host, Edit details (opens the existing WorldAdmin editor via the
- * same ?tab=events&event=<id> deep link Task #1628/#1630 already use),
+ * Change Organizer (Change Host until Task #1761), Edit details (opens
+ * the existing WorldAdmin editor via the same ?tab=events&event=<id> deep link Task #1628/#1630 already use),
  * and Start Episode (the existing generate-episode action, gated on
  * readiness). Editing itself still happens in the existing editor —
  * later pieces replace these sections one at a time.
@@ -16,17 +16,26 @@
  * field shows one of three states — set, suggested, missing
  * (resolveEventBasics, utils/eventBasics.js). A suggestion is shown only,
  * never saved, until Evoni accepts it.
+ *
+ * Organizer (Task #1761): Change Organizer picks a creator (a Social
+ * Profile) or a brand (a lalaverse_brands row, written to host_brand by
+ * name). Choosing one kind clears the other kind in both of its homes;
+ * the exact writes are built in utils/eventOrganizer.js.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
-  Lightbulb, CircleDashed, CalendarClock,
+  Lightbulb, CircleDashed, CalendarClock, Building2,
 } from 'lucide-react';
 import api from '../services/api';
-import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
+import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { resolveEventBasics, AUTO_DATE_KEY } from '../utils/eventBasics';
+import {
+  describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
+  filterBrands, brandIsListed, profileName, BRAND_NAME_MAX,
+} from '../utils/eventOrganizer';
 import { InvitationButton } from './InvitationGenerator';
 import './EventPackagePage.css';
 
@@ -102,11 +111,21 @@ export default function EventPackagePage() {
   // survives, since it's never itself unmounted by its own loading toggle.
   const [invitationApprovalInfo, setInvitationApprovalInfo] = useState(null);
 
-  const [hostPickerOpen, setHostPickerOpen] = useState(false);
+  // Change Organizer (Task #1761; was Change Host). One picker, two kinds.
+  // brands: null = not fetched yet; brandsError = the list could not be
+  // loaded, so the Brand tab falls back to typing a name.
+  const [organizerPickerOpen, setOrganizerPickerOpen] = useState(false);
+  const [organizerTab, setOrganizerTab] = useState('creator');
   const [hostSearch, setHostSearch] = useState('');
   const [hostResults, setHostResults] = useState([]);
   const [hostSearching, setHostSearching] = useState(false);
-  const [hostSaving, setHostSaving] = useState(false);
+  const [brands, setBrands] = useState(null);
+  const [brandsLoading, setBrandsLoading] = useState(false);
+  const [brandsError, setBrandsError] = useState(null);
+  const [brandSearch, setBrandSearch] = useState('');
+  const [brandFreeText, setBrandFreeText] = useState('');
+  const [pendingOrganizer, setPendingOrganizer] = useState(null);
+  const [organizerSaving, setOrganizerSaving] = useState(false);
 
   // Suggest names (Task #1670). Nothing here fires on mount — only
   // openNameSuggest, called from a click, ever requests suggestions.
@@ -170,12 +189,17 @@ export default function EventPackagePage() {
     if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); }
   }, [toast]);
 
-  // Debounced creator search for the Change Host picker.
+  // Debounced creator search for the Change Organizer picker's Creator
+  // tab. "For this show": social profiles carry no show_id (the list route
+  // reads none), so this uses the scope New Episode's Choose Host uses for
+  // the show, feed_layer=lalaverse (NewEpisodeChooseHost in App.jsx); the
+  // route also returns the real-world profiles Lala follows for that layer.
   useEffect(() => {
-    if (!hostPickerOpen) return;
+    if (!organizerPickerOpen || organizerTab !== 'creator') return;
     setHostSearching(true);
     const t = setTimeout(() => {
       const qs = new URLSearchParams();
+      qs.set('feed_layer', 'lalaverse');
       if (hostSearch.trim()) qs.set('search', hostSearch.trim());
       qs.set('limit', '20');
       api.get(`/api/v1/social-profiles?${qs.toString()}`)
@@ -184,12 +208,29 @@ export default function EventPackagePage() {
         .finally(() => setHostSearching(false));
     }, 300);
     return () => clearTimeout(t);
-  }, [hostPickerOpen, hostSearch]);
+  }, [organizerPickerOpen, organizerTab, hostSearch]);
+
+  // Brand list for the Brand tab, fetched once on first use: GET
+  // /api/v1/wardrobe-brands/brands (wardrobeBrands.js) returns every
+  // lalaverse_brands row, not show-scoped; filtered here by name.
+  useEffect(() => {
+    if (!organizerPickerOpen || organizerTab !== 'brand' || brands !== null) return;
+    setBrandsLoading(true);
+    setBrandsError(null);
+    api.get('/api/v1/wardrobe-brands/brands')
+      .then((res) => setBrands(Array.isArray(res.data) ? res.data : []))
+      .catch((err) => {
+        console.error('[EventPackage] brand list failed:', err);
+        setBrandsError(err.response?.data?.error || err.message || 'Could not load brands');
+        setBrands([]);
+      })
+      .finally(() => setBrandsLoading(false));
+  }, [organizerPickerOpen, organizerTab, brands]);
 
   // Debounced creator search for "Add from Lala's Feed" — same endpoint
-  // and shape as the Change Host picker above, no show/series scoping,
-  // matching both that picker and assembleGuestList itself
-  // (eventAutomationService.js), neither of which scope by show either.
+  // and shape as the organizer picker's Creator tab above, no show/series
+  // or feed-layer scoping, matching assembleGuestList itself
+  // (eventAutomationService.js), which does not scope by show either.
   useEffect(() => {
     if (!guestFeedPickerOpen) return;
     setGuestFeedSearching(true);
@@ -242,7 +283,7 @@ export default function EventPackagePage() {
   const { checks, allReady } = computeEventReadiness(event);
   const basics = resolveEventBasics(event, venueLocation, { suggest: !used });
   const venueDate = resolveEventVenueAndDate(event);
-  const organizer = resolveEventOrganizer(event);
+  const organizer = describeEventOrganizer(event, sourceProfile);
   const difficulty = calcEventDifficulty(event);
   const diffLabel = eventDifficultyLabel(difficulty);
 
@@ -357,22 +398,67 @@ export default function EventPackagePage() {
     );
   };
 
-  const selectHost = async (profile) => {
-    setHostSaving(true);
+  const closeOrganizerPicker = () => {
+    setOrganizerPickerOpen(false);
+    setHostSearch(''); setHostResults([]);
+    setBrandSearch(''); setBrandFreeText('');
+    setPendingOrganizer(null);
+  };
+
+  const openOrganizerPicker = () => {
+    if (used) return;
+    setOrganizerTab(organizer.kind === 'brand' ? 'brand' : 'creator');
+    setPendingOrganizer(null);
+    setOrganizerPickerOpen(true);
+  };
+
+  // Saves an organizer through the existing PUT. pending.update.body comes
+  // from buildCreatorOrganizerUpdate / buildBrandOrganizerUpdate; its keys
+  // (source_profile_id, host, host_brand, canon_consequences) are all in
+  // the route's allowedFields.
+  const saveOrganizer = async (pending) => {
+    if (used || organizerSaving || !pending) return;
+    if (pending.update.unchanged) {
+      closeOrganizerPicker();
+      setToast(`${pending.label} is already the organizer`);
+      return;
+    }
+    setOrganizerSaving(true);
     try {
-      await api.put(`/api/v1/world/${showId}/events/${eventId}`, {
-        source_profile_id: profile.id,
-        host: profile.display_name || profile.handle || null,
-      });
-      setHostPickerOpen(false); setHostSearch(''); setHostResults([]);
-      setToast(`Host changed to ${profile.display_name || profile.handle}`);
+      await api.put(`/api/v1/world/${showId}/events/${eventId}`, pending.update.body);
+      closeOrganizerPicker();
+      setToast(`Organizer set to ${pending.label} (${pending.kind})`);
       await load();
     } catch (err) {
-      setToast(err.response?.data?.error || err.message || 'Failed to change host');
+      setToast(err.response?.data?.error || err.message || 'Failed to change organizer');
     } finally {
-      setHostSaving(false);
+      setOrganizerSaving(false);
     }
   };
+
+  // A choice that clears the other kind is confirmed first, naming what
+  // goes; a choice that clears nothing saves straight away.
+  const chooseOrganizer = (pending) => {
+    if (pending.update.clears.length) setPendingOrganizer(pending);
+    else saveOrganizer(pending);
+  };
+
+  const chooseCreatorOrganizer = (profile) => {
+    chooseOrganizer({
+      kind: 'creator',
+      label: profileName(profile) || 'Creator',
+      update: buildCreatorOrganizerUpdate(event, profile),
+    });
+  };
+
+  const chooseBrandOrganizer = (brandName) => {
+    const update = buildBrandOrganizerUpdate(event, brandName, sourceProfile);
+    if (!update) return;
+    chooseOrganizer({ kind: 'brand', label: brandName.trim(), update });
+  };
+
+  const brandsListed = filterBrands(brands, brandSearch);
+  const brandFallback = brands !== null && !brandsLoading && (brandsError || brands.length === 0);
 
   // Persists a whole new guest_profiles array through the existing event
   // PUT route. canon_consequences is a plain JSONB column overwrite there
@@ -724,25 +810,33 @@ export default function EventPackagePage() {
           <div className="epp-section-header">
             <h2 className="epp-section-title">People</h2>
             {!used && (
-              <button className="epp-btn epp-btn-small" onClick={() => setHostPickerOpen(true)}>
-                <UserPlus size={14} /> Change Host
+              <button className="epp-btn epp-btn-small" onClick={openOrganizerPicker} data-testid="change-organizer">
+                <UserPlus size={14} /> Change Organizer
               </button>
             )}
           </div>
-          <div className="epp-organizer-line">
+          <div className="epp-organizer-line" data-testid="organizer-line" data-kind={organizer.kind || 'none'}>
             {organizer.hasOrganizer ? (
               <>
                 <span className="epp-fields-label">Organized by</span>{' '}
-                <strong>{organizer.organizerKind === 'brand' ? organizer.brandName : organizer.creatorName}</strong>
-                <span className="epp-saved-copy">{organizer.organizerKind === 'brand' ? 'Brand' : 'Creator'}</span>
-                {organizer.organizerKind === 'brand' && organizer.hasCreator && (
-                  <span> · Hosted by: {organizer.creatorName}</span>
+                <strong>{organizer.name || 'Unnamed'}</strong>
+                <span className="epp-saved-copy">{organizer.kind === 'brand' ? 'Brand' : 'Creator'}</span>
+                {organizer.handle && (
+                  <span className="epp-host-handle"> @{String(organizer.handle).replace(/^@/, '')}</span>
+                )}
+                {organizer.alsoLinkedCreator && (
+                  <div className="epp-organizer-also" title="Saved before the Event Package chose organizers. The brand counts as the organizer; choosing an organizer settles which one it is.">
+                    Also linked creator: {organizer.alsoLinkedCreator}
+                  </div>
                 )}
               </>
             ) : (
               <span className="epp-host-unlinked">No organizer set</span>
             )}
           </div>
+          {/* A brand organizer with no person is complete (§8(p) ruling 2),
+              so no red "not linked" host card for it. */}
+          {!(organizer.kind === 'brand' && !sourceProfile && !event.host) && (
           <div className="epp-host">
             <User size={18} />
             {sourceProfile ? (
@@ -757,6 +851,7 @@ export default function EventPackagePage() {
               </div>
             )}
           </div>
+          )}
           <div className="epp-guests">
             <div className="epp-section-header">
               <div className="epp-fields-label">Featured Attendees ({featuredGuests.length}/{MAX_FEATURED_GUESTS})</div>
@@ -1020,41 +1115,163 @@ export default function EventPackagePage() {
         );
       })()}
 
-      {hostPickerOpen && (
-        <div className="epp-modal-backdrop" onClick={() => setHostPickerOpen(false)}>
-          <div className="epp-modal" onClick={(e) => e.stopPropagation()}>
+      {organizerPickerOpen && !used && (
+        <div className="epp-modal-backdrop" onClick={() => { if (!organizerSaving) closeOrganizerPicker(); }}>
+          <div className="epp-modal" role="dialog" aria-label="Change Organizer" onClick={(e) => e.stopPropagation()}>
             <div className="epp-modal-header">
-              <h3>Change Host</h3>
-              <button className="epp-icon-btn" onClick={() => setHostPickerOpen(false)} aria-label="Close">
+              <h3>Change Organizer</h3>
+              <button className="epp-icon-btn" onClick={closeOrganizerPicker} aria-label="Close" disabled={organizerSaving}>
                 <X size={16} />
               </button>
             </div>
-            <div className="epp-modal-search">
-              <Search size={14} />
-              <input
-                autoFocus
-                placeholder="Search creators…"
-                value={hostSearch}
-                onChange={(e) => setHostSearch(e.target.value)}
-              />
-            </div>
-            <div className="epp-modal-results">
-              {hostSearching ? (
-                <div className="epp-empty">Searching…</div>
-              ) : hostResults.length ? (
-                hostResults.map((p) => (
-                  <button key={p.id} className="epp-modal-result" disabled={hostSaving} onClick={() => selectHost(p)}>
-                    <div>
-                      <div className="epp-host-name">{p.display_name || p.handle}</div>
-                      {p.handle && <div className="epp-host-handle">@{String(p.handle).replace(/^@/, '')}</div>}
-                    </div>
-                    {sourceProfile?.id === p.id && <CheckCircle2 size={16} />}
+
+            {pendingOrganizer ? (
+              <>
+                <div className="epp-basics-dialog epp-organizer-confirm" data-testid="organizer-confirm">
+                  <p className="epp-organizer-confirm-lead">
+                    Make <strong>{pendingOrganizer.label}</strong> the organizer ({pendingOrganizer.kind})?
+                  </p>
+                  <ul className="epp-organizer-clears">
+                    {pendingOrganizer.update.clears.map((c, i) => (
+                      <li key={`${c.kind}-${i}`}>
+                        {c.kind === 'brand'
+                          ? <>Removes the brand <strong>{c.value}</strong> from this event.</>
+                          : <>Unlinks the creator <strong>{c.value}</strong> from this event.</>}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="epp-basics-note">
+                    An event has one organizer: a creator or a brand.
+                    {pendingOrganizer.kind === 'creator' && ' The brand name is also used for outfit brand matching and invitation style lookups.'}
+                  </p>
+                </div>
+                <div className="epp-modal-footer epp-basics-actions">
+                  <button type="button" className="epp-btn epp-btn-small" onClick={() => setPendingOrganizer(null)} disabled={organizerSaving}>
+                    Back
                   </button>
-                ))
-              ) : (
-                <div className="epp-empty">No creators found</div>
-              )}
-            </div>
+                  <div className="epp-basics-spacer" />
+                  <button
+                    type="button" className="epp-btn epp-btn-small epp-btn-primary"
+                    onClick={() => saveOrganizer(pendingOrganizer)} disabled={organizerSaving}
+                  >
+                    {organizerSaving ? 'Saving…' : 'Set organizer'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="epp-organizer-tabs" role="tablist">
+                  <button
+                    type="button" role="tab" aria-selected={organizerTab === 'creator'}
+                    className={`epp-organizer-tab ${organizerTab === 'creator' ? 'is-active' : ''}`}
+                    onClick={() => setOrganizerTab('creator')}
+                  >
+                    <User size={14} /> Creator
+                  </button>
+                  <button
+                    type="button" role="tab" aria-selected={organizerTab === 'brand'}
+                    className={`epp-organizer-tab ${organizerTab === 'brand' ? 'is-active' : ''}`}
+                    onClick={() => setOrganizerTab('brand')}
+                  >
+                    <Building2 size={14} /> Brand
+                  </button>
+                </div>
+
+                {organizerTab === 'creator' ? (
+                  <>
+                    <div className="epp-modal-search">
+                      <Search size={14} />
+                      <input
+                        autoFocus
+                        placeholder="Search creators…"
+                        aria-label="Search creators"
+                        value={hostSearch}
+                        onChange={(e) => setHostSearch(e.target.value)}
+                      />
+                    </div>
+                    <div className="epp-modal-results">
+                      {hostSearching ? (
+                        <div className="epp-empty">Searching…</div>
+                      ) : hostResults.length ? (
+                        hostResults.map((p) => (
+                          <button key={p.id} className="epp-modal-result" disabled={organizerSaving} onClick={() => chooseCreatorOrganizer(p)}>
+                            <div>
+                              <div className="epp-host-name">{p.display_name || p.handle}</div>
+                              {p.handle && <div className="epp-host-handle">@{String(p.handle).replace(/^@/, '')}</div>}
+                            </div>
+                            {organizer.kind === 'creator' && event.source_profile_id === p.id && <CheckCircle2 size={16} />}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="epp-empty">No creators found</div>
+                      )}
+                    </div>
+                  </>
+                ) : brandFallback ? (
+                  <div className="epp-basics-dialog" data-testid="brand-free-text">
+                    <p className="epp-basics-note">
+                      <AlertCircle size={13} aria-hidden="true" />
+                      {brandsError ? `The brand list could not be loaded (${brandsError}). Type the brand name instead.` : 'No LalaVerse brands exist yet. Type the brand name instead.'}
+                    </p>
+                    <input
+                      autoFocus type="text" value={brandFreeText} maxLength={BRAND_NAME_MAX}
+                      placeholder="Brand name" aria-label="Brand name"
+                      onChange={(e) => setBrandFreeText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && brandFreeText.trim()) chooseBrandOrganizer(brandFreeText); }}
+                    />
+                    <div className="epp-basics-actions">
+                      {brandsError && (
+                        <button type="button" className="epp-btn epp-btn-small" onClick={() => setBrands(null)} disabled={organizerSaving}>
+                          <RefreshCw size={13} /> Retry list
+                        </button>
+                      )}
+                      <div className="epp-basics-spacer" />
+                      <button
+                        type="button" className="epp-btn epp-btn-small epp-btn-primary"
+                        onClick={() => chooseBrandOrganizer(brandFreeText)} disabled={organizerSaving || !brandFreeText.trim()}
+                      >
+                        Use this brand
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="epp-modal-search">
+                      <Search size={14} />
+                      <input
+                        autoFocus
+                        placeholder="Search brands…"
+                        aria-label="Search brands"
+                        value={brandSearch}
+                        onChange={(e) => setBrandSearch(e.target.value)}
+                      />
+                    </div>
+                    {organizer.brandName && brands && !brandIsListed(brands, organizer.brandName) && (
+                      <p className="epp-organizer-unlisted">
+                        Current brand <strong>{organizer.brandName}</strong> was typed in and is not in the LalaVerse brand list.
+                      </p>
+                    )}
+                    <div className="epp-modal-results">
+                      {brandsLoading || brands === null ? (
+                        <div className="epp-empty">Loading brands…</div>
+                      ) : brandsListed.length ? (
+                        brandsListed.map((b) => (
+                          <button key={b.id} className="epp-modal-result" disabled={organizerSaving} onClick={() => chooseBrandOrganizer(b.name)}>
+                            <div>
+                              <div className="epp-host-name">{b.name}</div>
+                              {(b.category || b.type) && <div className="epp-host-handle">{fmtLabel(b.category || b.type)}</div>}
+                            </div>
+                            {organizer.kind === 'brand' && organizer.brandName === b.name && <CheckCircle2 size={16} />}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="epp-empty">No brands match</div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

@@ -252,6 +252,56 @@
 .epp-organizer-line {
   font-size: 13px;
   margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+.epp-organizer-also {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+/* Change Organizer picker (Task #1761) — Creator / Brand tabs, and the
+   confirmation step naming what a choice clears. */
+.epp-organizer-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px 0;
+  border-bottom: 1px solid var(--lala-parchment-3, #E8E0D0);
+}
+.epp-organizer-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lala-ink-muted, #6B6557);
+  cursor: pointer;
+}
+.epp-organizer-tab.is-active {
+  color: var(--lala-ink, #2C2C2C);
+  border-bottom-color: var(--lala-gold, #B8962E);
+}
+.epp-organizer-unlisted {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--lala-ink-muted, #6B6557);
+  background: var(--lala-gold-soft, #FDF8EE);
+  border-bottom: 1px solid var(--lala-gold-line, #E8D9A8);
+}
+.epp-organizer-confirm-lead { margin: 0; font-size: 14px; }
+.epp-organizer-clears {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .epp-host {
