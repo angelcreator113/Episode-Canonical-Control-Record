@@ -95,6 +95,34 @@ describe('useWardrobeProcessing (Task #1769)', () => {
     expect(result.current.stateFor(item)).toBe(PROCESSING_STATES.NONE);
   });
 
+  test('retry checks the item first: a cutout that arrived late is swapped in without calling remove.bg', async () => {
+    api.get.mockResolvedValue({ data: { data: { ...item } } });
+    const onUpdate = vi.fn();
+    const { result } = renderHook(() => useWardrobeProcessing(onUpdate));
+    act(() => { result.current.track('w-1'); });
+    await tick(PROCESSING_GIVE_UP_MS + PROCESSING_POLL_INTERVAL_MS);
+    expect(result.current.stateFor(item)).toBe(PROCESSING_STATES.STALLED);
+
+    api.get.mockResolvedValueOnce({ data: { data: { ...item, s3_url_processed: 'https://b/late.png' } } });
+    await act(async () => { await result.current.retry('w-1'); });
+    expect(api.post).not.toHaveBeenCalled();
+    expect(onUpdate).toHaveBeenCalledWith({ id: 'w-1', s3_url_processed: 'https://b/late.png' });
+    expect(result.current.stateFor(item)).toBe(PROCESSING_STATES.NONE);
+  });
+
+  test('retry still calls remove.bg when the pre-check itself fails (not a 404)', async () => {
+    api.get.mockResolvedValue({ data: { data: { ...item } } });
+    const { result } = renderHook(() => useWardrobeProcessing(vi.fn()));
+    act(() => { result.current.track('w-1'); });
+    await tick(PROCESSING_GIVE_UP_MS + PROCESSING_POLL_INTERVAL_MS);
+
+    api.get.mockRejectedValueOnce(new Error('network'));
+    api.post.mockResolvedValueOnce({ data: { success: true, data: { id: 'w-1', s3_url_processed: 'https://b/r.png' } } });
+    await act(async () => { await result.current.retry('w-1'); });
+    expect(api.post).toHaveBeenCalledWith('/api/v1/wardrobe/w-1/process-background');
+    expect(result.current.stateFor(item)).toBe(PROCESSING_STATES.NONE);
+  });
+
   test('dismiss clears the state', async () => {
     const { result } = renderHook(() => useWardrobeProcessing(vi.fn()));
     act(() => { result.current.track('w-1'); });

@@ -86,6 +86,21 @@ export default function useWardrobeProcessing(onItemUpdate) {
 
   const retry = useCallback(async (id) => {
     setTrackers((prev) => ({ ...prev, [id]: { startedAt: Date.now(), retrying: true } }));
+    // The upload's removal may have finished after the give-up window.
+    // Check first, so a Retry never pays remove.bg for a cutout that exists.
+    try {
+      const fresh = (await getWardrobeItemApi(id))?.data;
+      if (!mountedRef.current) return;
+      if (fresh?.s3_url_processed) {
+        onUpdateRef.current?.(pickProcessedFields(fresh));
+        untrack(id);
+        return;
+      }
+    } catch (err) {
+      console.warn(`[wardrobe] pre-retry check failed for ${id}:`, err?.message);
+      if (!mountedRef.current) return;
+      if (err?.response?.status === 404) { untrack(id); return; }
+    }
     try {
       const body = await retryWardrobeBackgroundApi(id);
       if (!mountedRef.current) return;
