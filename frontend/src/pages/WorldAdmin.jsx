@@ -25,6 +25,9 @@ import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
 import { calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, computeEventState, describeMissing, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
+import {
+  hydrateEventForModal, sameEditorValue, changedFields, withoutOrganizerKeys, missingForMarkReady,
+} from '../utils/eventEditorChanges';
 import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles, ChevronDown, ChevronRight, Lightbulb, AlertTriangle, Loader2, RotateCw, X } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
@@ -152,6 +155,16 @@ const EMPTY_EVENT = {
   // canonical screens; per-event customization is what this form enables.
   required_ui_overlays: ['MailPanel', 'InviteLetterOverlay', 'WardrobeList', 'CareerList'],
 };
+
+// Fields the Edit details modal's 💾 Save and Mark Ready may send — only
+// when their value differs from what the modal opened with (Task #1786).
+const MODAL_SAVEABLE_FIELDS = [
+  'name', 'event_type', 'host', 'host_brand', 'description', 'prestige', 'cost_coins', 'strictness',
+  'deadline_type', 'dress_code', 'dress_code_keywords', 'location_hint', 'narrative_stakes',
+  'career_milestone', 'career_tier', 'fail_consequence', 'success_unlock', 'is_paid', 'is_free',
+  'payment_amount', 'browse_pool_bias', 'scene_set_id', 'venue_name', 'venue_address', 'event_date',
+  'event_time', 'theme', 'mood', 'color_palette', 'floral_style', 'border_style',
+];
 
 // ─── DIFFICULTY SCORING ───
 // calcDifficulty/difficultyLabel extracted to ../utils/eventReadiness.js
@@ -384,6 +397,14 @@ function WorldAdmin() {
   const [eventSearch, setEventSearch] = useState('');
   const [eventStatusFilter, setEventStatusFilter] = useState('all');
   const [eventDetailModal, setEventDetailModal] = useState(null);
+  // The stored row the Edit details modal opened with, plus every change it
+  // has saved since (Task #1786). Its hydration is the baseline a save
+  // compares against, so only edited fields are sent. Cleared on close so a
+  // reopen starts from the row as it is then.
+  const eventModalStoredRef = useRef(null);
+  useEffect(() => {
+    if (!eventDetailModal) eventModalStoredRef.current = null;
+  }, [eventDetailModal]);
   // Live financial forecast for the open event + the show-level finance
   // config (balance, goals, next goal, progress). The forecast fetches
   // whenever the modal's event changes so a newly-picked outfit shows
@@ -593,28 +614,36 @@ function WorldAdmin() {
 
   // ─── EVENT CRUD ───
   const openNewEvent = () => { setEventForm({ ...EMPTY_EVENT }); setEditingEvent('new'); };
+  // What the event form's edit mode opened with (Task #1786), so its save
+  // sends only what changed. Only openEditEvent sets it; new events POST
+  // the whole form, as before.
+  const eventFormOpenedRef = useRef(null);
   const openEditEvent = (ev) => {
-    setEventForm({
+    const opened = {
       ...EMPTY_EVENT, ...ev,
       is_paid: ev.is_free ? 'free' : ev.is_paid ? 'yes' : 'no',
       dress_code_keywords: Array.isArray(ev.dress_code_keywords) ? ev.dress_code_keywords : [],
       color_palette: Array.isArray(ev.color_palette) ? ev.color_palette : [],
-    });
+    };
+    eventFormOpenedRef.current = opened;
+    setEventForm(opened);
     setEditingEvent(ev.id);
   };
+
+  const toEventSubmitData = (form) => ({
+    ...form,
+    is_paid: form.is_paid === 'yes',
+    is_free: form.is_paid === 'free',
+    cost_coins: form.is_paid === 'free' ? 0 : form.cost_coins,
+    dress_code_keywords: Array.isArray(form.dress_code_keywords)
+      ? form.dress_code_keywords
+      : (form.dress_code_keywords || '').split(',').map(k => k.trim()).filter(Boolean),
+  });
 
   const saveEvent = async () => {
     setSavingEvent(true); setError(null);
     try {
-      const submitData = {
-        ...eventForm,
-        is_paid: eventForm.is_paid === 'yes',
-        is_free: eventForm.is_paid === 'free',
-        cost_coins: eventForm.is_paid === 'free' ? 0 : eventForm.cost_coins,
-        dress_code_keywords: Array.isArray(eventForm.dress_code_keywords)
-          ? eventForm.dress_code_keywords
-          : (eventForm.dress_code_keywords || '').split(',').map(k => k.trim()).filter(Boolean),
-      };
+      const submitData = toEventSubmitData(eventForm);
       if (editingEvent === 'new') {
         const res = await api.post(`/api/v1/world/${showId}/events`, submitData);
         if (res.data.success) {
@@ -636,8 +665,21 @@ function WorldAdmin() {
           setSuccessMsg(linkEpId ? 'Event created and linked to episode!' : 'Event created!');
         }
       } else {
-        const res = await api.put(`/api/v1/world/${showId}/events/${editingEvent}`, submitData);
-        if (res.data.success) { setWorldEvents(p => p.map(e => e.id === editingEvent ? res.data.event : e)); setEditingEvent(null); setSuccessMsg('Event updated!'); }
+        // Edit: send only the fields that differ from what the form opened
+        // with (Task #1786) — not the whole list row, which carried
+        // canon_consequences, source_profile_id, venue_location_id,
+        // outfit_pieces and the form's blank invitation-style defaults.
+        // is_free is dropped: it is not a column, and the route ignores it.
+        const opened = eventFormOpenedRef.current ? toEventSubmitData(eventFormOpenedRef.current) : {};
+        const changes = changedFields(opened, submitData, Object.keys(submitData));
+        delete changes.is_free;
+        if (Object.keys(changes).length === 0) {
+          setEditingEvent(null);
+          setSuccessMsg('No changes to save');
+          return;
+        }
+        const res = await api.put(`/api/v1/world/${showId}/events/${editingEvent}`, changes);
+        if (res.data.success) { setWorldEvents(p => p.map(e => e.id === editingEvent ? { ...e, ...res.data.event } : e)); setEditingEvent(null); setSuccessMsg('Event updated!'); }
       }
     } catch (err) { setError(err.response?.data?.error || err.message); }
     finally { setSavingEvent(false); }
@@ -1028,9 +1070,12 @@ function WorldAdmin() {
         return;
       }
 
-      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { ...ev, ...updates });
+      // Only the suggestion's own fields (Task #1786). Spreading the list
+      // row here resent every field it had, canon_consequences and
+      // outfit_pieces included.
+      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, updates);
       if (res.data.success) {
-        const nextEvents = worldEvents.map(e => e.id === ev.id ? res.data.event : e);
+        const nextEvents = worldEvents.map(e => e.id === ev.id ? { ...e, ...res.data.event } : e);
         setWorldEvents(nextEvents);
         setAiFixSuggestions(prev => prev.filter(s => s !== suggestion));
         flash(checkWarningCleared(suggestion, nextEvents)
@@ -1131,8 +1176,11 @@ The revised event should feel like a completely different experience from the si
         const data = res.data?.data?.[0]?.new_value;
         if (data) {
           const parsed = typeof data === 'object' ? data : JSON.parse(data);
+          // Never an organizer field (Task #1786): host, host_brand and
+          // source_profile_id are chosen in the Event Package, not filled
+          // from AI output.
           const toSave = {};
-          for (const [k, v] of Object.entries(parsed)) {
+          for (const [k, v] of Object.entries(withoutOrganizerKeys(parsed))) {
             if (v && !ev[k]) toSave[k] = v;
           }
           if (Object.keys(toSave).length > 0) {
@@ -3382,48 +3430,39 @@ The revised event should feel like a completely different experience from the si
           {/* Auto-Reorder preview modal moved to SeasonTab (Task #1648,
               docs/EVENT_EPISODE_FLOW.md §8(m)). */}
           {eventDetailModal && (() => {
-            // Hydrate missing fields from automation data + derive from context
+            // Hydrate missing fields from automation data + derive from
+            // context (hydrateEventForModal, utils/eventEditorChanges.js —
+            // the same values as before, now with where each came from).
+            // What the modal shows is unchanged; what it saves is not
+            // (Task #1786): every save sends only the fields whose value
+            // differs from what the modal opened with.
+            //
+            // eventModalStoredRef holds the stored row as the modal opened
+            // it, plus every change this modal has since saved. Its
+            // hydration is the "opened with" baseline, so a field left as
+            // shown — including a value invented at render — is never sent.
+            if (eventModalStoredRef.current?.id !== eventDetailModal.id) {
+              eventModalStoredRef.current = { ...eventDetailModal };
+            }
+            const stored = eventModalStoredRef.current;
+            const baseline = hydrateEventForModal(stored).values;
+            const md = hydrateEventForModal(eventDetailModal).values;
             const auto = eventDetailModal.canon_consequences?.automation || {};
-            const prestige = eventDetailModal.prestige || 5;
-
-            const categoryDressCodes = {
-              fashion: 'runway-ready', beauty: 'glam chic', lifestyle: 'smart casual',
-              fitness: 'athleisure luxe', food: 'cocktail', music: 'streetwear elevated',
-              creator_economy: 'influencer chic', drama: 'camera-ready',
-            };
-            const hostCategory = auto.content_category || '';
-            const derivedDressCode = categoryDressCodes[hostCategory.toLowerCase()] || 'chic';
-
-            const derivedDate = (() => {
-              const d = new Date(); d.setDate(d.getDate() + 14);
-              return d.toISOString().split('T')[0];
-            })();
-
-            const md = {
-              ...eventDetailModal,
-              host: eventDetailModal.host || auto.host_display_name || auto.host_handle || '',
-              host_brand: eventDetailModal.host_brand || auto.host_brand || '',
-              venue_name: eventDetailModal.venue_name || auto.venue_name || '',
-              venue_address: eventDetailModal.venue_address || auto.venue_address || '',
-              event_date: eventDetailModal.event_date || auto.event_date || derivedDate,
-              event_time: eventDetailModal.event_time || auto.event_time || (prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00'),
-              dress_code: eventDetailModal.dress_code || auto.dress_code || derivedDressCode,
-              description: eventDetailModal.description || auto.description || '',
-              narrative_stakes: eventDetailModal.narrative_stakes || auto.narrative_stakes || '',
-              cost_coins: eventDetailModal.cost_coins ?? auto.cost_coins ?? (prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50),
-              strictness: eventDetailModal.strictness ?? auto.strictness ?? Math.min(10, prestige + 1),
-              deadline_type: eventDetailModal.deadline_type || auto.deadline_type || (prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low'),
-              theme: eventDetailModal.theme || auto.theme || '',
-              mood: eventDetailModal.mood || auto.mood || '',
-              color_palette: eventDetailModal.color_palette?.length > 0 ? eventDetailModal.color_palette : (auto.color_palette || []),
-              floral_style: eventDetailModal.floral_style || auto.floral_style || '',
-              border_style: eventDetailModal.border_style || auto.border_style || '',
-              dress_code_keywords: eventDetailModal.dress_code_keywords?.length > 0 ? eventDetailModal.dress_code_keywords : (auto.dress_code_keywords || []),
+            const recordSaved = (fields) => {
+              eventModalStoredRef.current = { ...eventModalStoredRef.current, ...fields };
             };
             const updateField = async (field, value) => {
+              // A blur or change that leaves the value as opened sends
+              // nothing, so focusing a field showing an invented value and
+              // leaving it cannot save that value.
+              if (sameEditorValue(value, baseline[field])) {
+                setEventDetailModal(prev => prev ? { ...prev, [field]: value } : prev);
+                return;
+              }
               try {
                 const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [field]: value });
                 if (res.data.success && res.data.event) {
+                  recordSaved({ [field]: value });
                   setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event } : ev));
                   // Update modal but preserve any local edits by merging
                   setEventDetailModal(prev => prev ? { ...prev, [field]: value } : prev);
@@ -3434,14 +3473,12 @@ The revised event should feel like a completely different experience from the si
               }
             };
             const updateMultipleFields = async (fields) => {
-              const changed = {};
-              for (const [k, v] of Object.entries(fields)) {
-                if (v !== md[k]) changed[k] = v;
-              }
+              const changed = changedFields(baseline, fields, Object.keys(fields));
               if (Object.keys(changed).length === 0) return;
               try {
                 const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, changed);
                 if (res.data.success) {
+                  recordSaved(changed);
                   const updated = res.data.event;
                   setWorldEvents(prev => prev.map(ev => ev.id === md.id ? updated : ev));
                   setEventDetailModal(updated);
@@ -3640,6 +3677,9 @@ The revised event should feel like a completely different experience from the si
                               if (res.data.success) {
                                 setToast('Venue images created! Scene set linked.');
                                 if (res.data.data?.scene_set_id) {
+                                  // The server already linked it; record it as
+                                  // saved so 💾 Save does not resend it.
+                                  recordSaved({ scene_set_id: res.data.data.scene_set_id });
                                   setEventDetailModal({ ...md, scene_set_id: res.data.data.scene_set_id });
                                 }
                                 loadData();
@@ -3740,7 +3780,13 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           if (typeof data === 'string') try { data = JSON.parse(data); } catch { data = {}; }
                           if (typeof data === 'object') {
                             const merged = { ...md };
-                            for (const [key, val] of Object.entries(data)) {
+                            // The organizer is never filled from AI output
+                            // (Task #1786): host, host_brand and
+                            // source_profile_id are skipped here, and the
+                            // old host fallback (`${host_brand} Events`, or
+                            // the name before "—") is gone. The organizer is
+                            // chosen in the Event Package.
+                            for (const [key, val] of Object.entries(withoutOrganizerKeys(data))) {
                               // Fill any empty/null/undefined field
                               const current = md[key];
                               const isEmpty = current === null || current === undefined || current === '' || (Array.isArray(current) && current.length === 0);
@@ -3751,30 +3797,23 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             // Always update these if AI provided richer versions
                             if (data.description && (!md.description || data.description.length > md.description.length)) merged.description = data.description;
                             if (data.narrative_stakes && (!md.narrative_stakes || data.narrative_stakes.length > md.narrative_stakes.length)) merged.narrative_stakes = data.narrative_stakes;
-                            // Fallback chain for host
-                            if (!merged.host) {
-                              if (data.hosted_by) merged.host = data.hosted_by;
-                              else if (data.host_name) merged.host = data.host_name;
-                              else if (merged.host_brand) merged.host = `${merged.host_brand} Events`;
-                              else if (merged.name) merged.host = merged.name.split('—')[0].trim();
-                            }
-
                             setEventDetailModal(merged);
-                            // Batch save all changed fields in one PUT
-                            const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','venue_name','venue_address','event_date','event_time'];
-                            const toSave = {};
-                            for (const key of saveable) {
-                              if (merged[key] !== undefined && merged[key] !== md[key]) {
-                                toSave[key] = merged[key];
-                              }
-                            }
+                            // Batch save, in one PUT, only the fields the AI
+                            // changed from what the modal opened with —
+                            // never an organizer field, never a value the
+                            // modal invented and the AI left alone.
+                            const saveable = ['name','event_type','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','venue_name','venue_address','event_date','event_time'];
+                            const toSave = withoutOrganizerKeys(changedFields(baseline, merged, saveable));
                             if (Object.keys(toSave).length > 0) {
                               try {
                                 const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, toSave);
                                 if (res.data.success) {
-                                  // Merge server response WITH our local enhanced data (server might not have all columns yet)
+                                  recordSaved(toSave);
+                                  // The list keeps the server's row only — not
+                                  // the modal's hydrated copy, whose invented
+                                  // values would otherwise look stored.
                                   const serverData = res.data.event || {};
-                                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...serverData, ...merged } : ev));
+                                  setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...serverData } : ev));
                                 }
                               } catch (err) {
                                 // If batch fails (e.g. missing column), try saving fields one by one
@@ -3782,6 +3821,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                 for (const [key, val] of Object.entries(toSave)) {
                                   try {
                                     await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [key]: val });
+                                    recordSaved({ [key]: val });
                                   } catch (e2) {
                                     console.warn(`[Event] Skip ${key}:`, e2.response?.data?.error || e2.message);
                                   }
@@ -4293,13 +4333,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   )}
                   {md.status === 'draft' && (
                     <button onClick={async () => {
-                      // Validate required fields
-                      const missing = [];
-                      if (!md.host) missing.push('Host');
-                      if (!md.venue_name) missing.push('Venue Name');
-                      if (!md.event_date) missing.push('Event Date');
-                      if (!md.dress_code) missing.push('Dress Code');
-                      if (!md.description) missing.push('Description');
+                      // Validate required fields against what is stored
+                      // (Task #1786): the row's own field or its saved
+                      // automation copy, plus any edit made in this modal
+                      // not yet saved. A value shown only because the modal
+                      // invented it at render (the two-weeks-out date, the
+                      // 'chic' dress code) counts as missing.
+                      const pending = changedFields(baseline, md, MODAL_SAVEABLE_FIELDS);
+                      const missing = missingForMarkReady({ ...stored, ...pending });
                       if (missing.length > 0) {
                         setToast(`Missing fields: ${missing.join(', ')}. Fill them or use AI Enhance first.`);
                         return;
@@ -4309,21 +4350,16 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       // (the backend also guards this, but skipping the call
                       // entirely saves a round-trip and makes the UX honest).
                       const hasVenue = !!(md.scene_set_id || md.venue_location_id);
-                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Save all fields\n• Generate social checklist\n${hasVenue ? '• Keep the attached venue (no regeneration)' : '• Generate venue images'}\n• Move out of Drafts`;
+                      const summary = `Mark "${md.name}" as ready?\n\nHost: ${md.host}\nVenue: ${md.venue_name}\nDate: ${md.event_date}\nPrestige: ${md.prestige}\n\nThis will:\n• Mark the event ready${Object.keys(pending).length ? ' and save your unsaved edits' : ''}\n• Generate social checklist\n${hasVenue ? '• Keep the attached venue (no regeneration)' : '• Generate venue images'}\n• Move out of Drafts`;
                       if (!window.confirm(summary)) return;
                       try {
-                        // Save all hydrated fields + status in one PUT
-                        const fieldsToSave = {
-                          status: 'ready',
-                          host: md.host, host_brand: md.host_brand, dress_code: md.dress_code,
-                          venue_name: md.venue_name, venue_address: md.venue_address,
-                          event_date: md.event_date, event_time: md.event_time,
-                          description: md.description, narrative_stakes: md.narrative_stakes,
-                          cost_coins: md.cost_coins, strictness: md.strictness,
-                          deadline_type: md.deadline_type,
-                        };
+                        // Mark ready, plus only the edits this modal has not
+                        // saved yet — never a resave of the hydrated copy
+                        // (Task #1786).
+                        const fieldsToSave = { ...pending, status: 'ready' };
                         const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, fieldsToSave);
                         if (res.data.success) {
+                          recordSaved(fieldsToSave);
                           const updated = { ...md, ...fieldsToSave };
                           setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...fieldsToSave } : ev));
                           setEventDetailModal(updated);
@@ -4394,41 +4430,25 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                   )}
                   <div style={{ flex: 1 }} />
                   <button onClick={async () => {
-                    const saveable = ['name','event_type','host','host_brand','description','prestige','cost_coins','strictness','deadline_type','dress_code','dress_code_keywords','location_hint','narrative_stakes','career_milestone','career_tier','fail_consequence','success_unlock','is_paid','is_free','payment_amount','browse_pool_bias','scene_set_id','venue_name','venue_address','event_date','event_time'];
-                    const toSave = {};
-                    for (const key of saveable) {
-                      if (md[key] !== undefined && md[key] !== null) toSave[key] = md[key];
+                    // Send only the fields whose value differs from what the
+                    // modal opened with (Task #1786). Most fields already
+                    // saved on blur, so this is usually nothing. It never
+                    // sends canon_consequences: nothing in this modal edits
+                    // it, and sending the opened copy whole overwrote the
+                    // Event Package's guests and a freshly generated
+                    // invitation (docs/EVENT_EDITOR_REMOVAL_READ.md §5.2).
+                    const toSave = changedFields(baseline, md, MODAL_SAVEABLE_FIELDS);
+                    if (Object.keys(toSave).length === 0) {
+                      setToast('No unsaved changes');
+                      return;
                     }
-
-                    // Always save hydrated fields into canon_consequences.automation
-                    // This persists data even when DB columns don't exist yet
-                    const updatedAuto = { ...(md.canon_consequences?.automation || {}) };
-                    const hydratedFields = ['host', 'host_brand', 'venue_name', 'venue_address', 'event_date', 'event_time', 'dress_code', 'cost_coins', 'strictness', 'deadline_type', 'description', 'narrative_stakes', 'theme', 'mood', 'color_palette', 'floral_style', 'border_style', 'dress_code_keywords'];
-                    for (const key of hydratedFields) {
-                      if (md[key] !== undefined && md[key] !== null && md[key] !== '') updatedAuto[key] = md[key];
-                    }
-                    toSave.canon_consequences = { ...(md.canon_consequences || {}), automation: updatedAuto };
-
-                    // Try batch save first
                     try {
                       const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, toSave);
                       if (res.data.success) {
-                        setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event, ...md } : ev));
+                        recordSaved(toSave);
+                        setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event } : ev));
                         setToast('Event saved');
-                        return;
                       }
-                    } catch (batchErr) {
-                      console.warn('[Event] Batch save failed, trying safe fields:', batchErr.response?.data?.error);
-                    }
-                    // Fallback: save only canon_consequences (always works) + safe DB fields
-                    try {
-                      await api.put(`/api/v1/world/${showId}/events/${md.id}`, {
-                        canon_consequences: toSave.canon_consequences,
-                        name: md.name, host: md.host, description: md.description,
-                        prestige: md.prestige, status: md.status,
-                      });
-                      setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...md } : ev));
-                      setToast('Event saved (some fields in automation data)');
                     } catch (err) {
                       setToast('Save failed: ' + (err.response?.data?.error || err.message));
                     }
