@@ -161,6 +161,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const [bulkMode,setBulkMode]   = useState(false);
   const [selectedIds,setSelectedIds] = useState(new Set());
   const [selectAllPages,setSelectAllPages] = useState(false);
+  const [deleteConfirmIds,setDeleteConfirmIds] = useState(null);
   const [toast,setToast]         = useState(null);
   const toastTimer = useRef(null);
   const [handle,setHandle]       = useState('');
@@ -339,6 +340,20 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   };
   const runBulk = async(ids,endpoint)=>{const results=[];for(let i=0;i<ids.length;i+=100){const chunk=ids.slice(i,i+100);try{const res=await runBulkActionApi(endpoint,chunk);results.push(res.data);}catch(err){throw new Error(err.response?.data?.error||err.message||'Bulk action failed');}}return results;};
   const bulkOp = async(endpoint,confirmMsg,onDone)=>{const ids=await getBulkIds();if(!ids.length)return;if(!window.confirm(confirmMsg.replace('$n',selectAllPages?`all ${statusCounts.total}`:ids.length)))return;try{const r=await runBulk(ids,endpoint);onDone(r);setSelectedIds(new Set());setSelectAllPages(false);setPage(1);loadProfiles();}catch(err){setError(err.message);}};
+  // Bulk delete uses a typed-count dialog instead of window.confirm; the server
+  // skips locked, crossed and entangled profiles and reports them.
+  const openBulkDelete = async()=>{try{const ids=await getBulkIds();if(ids.length)setDeleteConfirmIds(ids);}catch(err){console.error('Bulk delete: failed to collect ids',err);setError(err.message);}};
+  const confirmBulkDelete = async()=>{
+    const ids=deleteConfirmIds;
+    try{
+      const results=await runBulk(ids,'bulk/delete');
+      const deleted=results.reduce((a,d)=>a+(Array.isArray(d.deleted)?d.deleted.length:0),0);
+      const skipped=results.flatMap(d=>Array.isArray(d.skipped)?d.skipped:[]);
+      const by=reason=>skipped.filter(x=>x.reason===reason).length;
+      showToast(skipped.length?`Deleted ${deleted} · Kept ${skipped.length} (locked ${by('locked')}, crossed ${by('crossed')}, entangled ${by('entangled')})`:`Deleted ${deleted}`,'warn');
+      setDeleteConfirmIds(null);setSelectedIds(new Set());setSelectAllPages(false);setPage(1);loadProfiles();
+    }catch(err){console.error('Bulk delete failed',err);setDeleteConfirmIds(null);setError(err.message);loadProfiles();}
+  };
 
   // ── Generate ───────────────────────────────────────────────────────
   const generateProfile = async()=>{
@@ -1117,6 +1132,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
           </div>
 
           {/* Bulk action bar — prominent when active */}
+          {deleteConfirmIds && <BulkDeleteDialog count={deleteConfirmIds.length} onCancel={()=>setDeleteConfirmIds(null)} onConfirm={confirmBulkDelete}/>}
           {bulkMode && (
             <div className="spg-bulk-bar" style={{background:'#FAF7F0',borderBottom:'2px solid #B8962E',padding:'12px 24px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',flexShrink:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -1134,7 +1150,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                     <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/finalize','Finalize $n profile(s)? They will be marked as reviewed and ready for the story.',r=>{const t=r.reduce((a,d)=>a+(d.finalized||0),0);showToast(`✅ Finalized ${t} profile(s) — they can now host events and appear in episodes`);})} style={{...sBtnSm,background:'#d4edda',color:'#155724',fontWeight:700,padding:'6px 14px'}}>✓ Finalize</button>
                     <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/cross','Cross $n profile(s) into the story world? They will be marked as active story characters.',r=>{const t=r.reduce((a,d)=>a+(d.crossed||0),0);showToast(`✦ Crossed ${t} profile(s) into the story`);})} style={{...sBtnSm,background:'#e8daff',color:'#5b21b6',fontWeight:700,padding:'6px 14px'}}>✦ Cross</button>
                     <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/archive','Archive $n profile(s)? They will be hidden but not deleted.',r=>{const t=r.reduce((a,d)=>a+(d.archived||0),0);showToast(`▪ Archived ${t} profile(s)`);})} style={{...sBtnSm,padding:'6px 14px'}}>▪ Archive</button>
-                    <button disabled={!selectedIds.size&&!selectAllPages} onClick={()=>bulkOp('bulk/delete','⚠️ Permanently delete $n profile(s)? This cannot be undone.',r=>{const t=r.reduce((a,d)=>a+(d.deleted||0),0);showToast(`🗑️ Deleted ${t} profile(s)`,'warn');})} style={{...sBtnSm,color:'#dc2626',border:'1px solid #fecaca',padding:'6px 14px'}}>✕ Delete</button>
+                    <button disabled={!selectedIds.size&&!selectAllPages} onClick={openBulkDelete} style={{...sBtnSm,color:'#dc2626',border:'1px solid #fecaca',padding:'6px 14px'}}>✕ Delete</button>
                   </div>
                 </>
               ) : (
@@ -1384,6 +1400,31 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
 }
 
 // Spinner imported from ./feed/FeedViews
+
+// ── Bulk delete confirm ───────────────────────────────────────────────
+// Delete stays disabled until the typed number equals the selection count.
+function BulkDeleteDialog({ count, onCancel, onConfirm }) {
+  const [typed,setTyped] = useState('');
+  const [busy,setBusy] = useState(false);
+  const matches = typed.trim()===String(count);
+  const submit = async()=>{if(!matches||busy)return;setBusy(true);try{await onConfirm();}finally{setBusy(false);}};
+  return createPortal(
+    <div className="spg-delete-overlay" role="dialog" aria-modal="true" aria-labelledby="spg-delete-title" onClick={e=>{if(e.target===e.currentTarget&&!busy)onCancel();}}>
+      <div className="spg-delete-dialog">
+        <div id="spg-delete-title" className="spg-delete-title">Permanently delete {count} profile{count===1?'':'s'} and their follows/relationships? This cannot be undone.</div>
+        <p className="spg-delete-note">Locked, crossed and entangled profiles are kept automatically.</p>
+        <label className="spg-delete-label" htmlFor="spg-delete-input">Type <strong>{count}</strong> to confirm</label>
+        <input id="spg-delete-input" className="spg-delete-input" inputMode="numeric" autoFocus value={typed} disabled={busy}
+          onChange={e=>setTyped(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();if(e.key==='Escape'&&!busy)onCancel();}}/>
+        <div className="spg-delete-actions">
+          <button type="button" className="spg-delete-cancel" disabled={busy} onClick={onCancel}>Cancel</button>
+          <button type="button" className="spg-delete-confirm" disabled={!matches||busy} onClick={submit}>{busy?'Deleting…':`Delete ${count}`}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 // ── Page button ───────────────────────────────────────────────────────
 function PageBtn({ children, disabled, onClick }) {
