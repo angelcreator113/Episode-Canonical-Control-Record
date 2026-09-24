@@ -23,7 +23,8 @@ import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItem
 import { InvitationButton, InvitationStyleFields } from './InvitationGenerator';
 import OverlayApprovalPanel from '../components/OverlayApprovalPanel';
 import { EventInvitePreview } from './feed/FeedEnhancements';
-import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, computeEventState, EVENT_QUEUE_STATES, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
+import { calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate, resolveEventOrganizer } from '../utils/eventReadiness';
+import { computeEventPackageReadiness, computeEventState, describeMissing, EVENT_QUEUE_STATES } from '../utils/eventReadinessSections';
 import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles, ChevronDown, ChevronRight, Lightbulb, AlertTriangle, Loader2, RotateCw, X } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
@@ -1883,7 +1884,7 @@ The revised event should feel like a completely different experience from the si
           {/* Header — a queue, not an editor (docs/EVENT_EPISODE_FLOW.md §8(m),
               Evoni's ruling, Task #1648). Counts below come from the same
               five computed states the filter bar and cards use
-              (computeEventState, ../utils/eventReadiness.js) — not the raw,
+              (computeEventState, ../utils/eventReadinessSections.js) — not the raw,
               inconsistently-written world_events.status column §4 of that
               doc already documents. */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
@@ -2664,12 +2665,17 @@ The revised event should feel like a completely different experience from the si
             }).map(ev => {
               const linkedEpisode = ev.used_in_episode_id ? episodes.find(ep => ep.id === ev.used_in_episode_id) : null;
               const isSelected = selectedEvents.has(ev.id);
-              const state = computeEventState(ev);
+              // Readiness by Event Package item (Task #1775, Evoni's gates
+              // of 2026-09-24): "Missing" lists only gate items (what keeps
+              // it in Needs Setup); "Still to finish" lists warning items,
+              // shown but never blocking.
+              const readiness = computeEventPackageReadiness(ev);
+              const state = computeEventState(ev, readiness);
               const stateCfg = EVENT_QUEUE_STATES[state];
               const organizer = resolveEventOrganizer(ev);
               const venueDate = resolveEventVenueAndDate(ev);
-              const { checks } = computeEventReadiness(ev);
-              const missing = checks.filter(c => !c.ok).map(c => c.label);
+              const missing = describeMissing(readiness.blocking);
+              const toFinish = describeMissing(readiness.warnings, 'warning');
               const menuOpen = openEventMenuId === ev.id;
               const openPackage = () => navigate(`/shows/${showId}/events/${ev.id}`);
               const primaryAction = () => {
@@ -2775,7 +2781,10 @@ The revised event should feel like a completely different experience from the si
                   {(venueDate.eventDate || venueDate.eventTime) && (
                     <div>Date: {venueDate.eventDate}{venueDate.eventTime ? ` · ${venueDate.eventTime}` : ''}{(venueDate.eventDateFromSavedCopy || venueDate.eventTimeFromSavedCopy) && <span style={S.savedCopyTag}>saved copy</span>}</div>
                   )}
-                  {state === 'needs_setup' && missing.length > 0 && <div style={{ color: '#b45309' }}>Missing: {missing.join(', ')}</div>}
+                  {state === 'needs_setup' && missing.length > 0 && <div data-testid={`event-card-missing-${ev.id}`} style={{ color: '#b45309' }}>Missing: {missing.join(' · ')}</div>}
+                  {(state === 'needs_setup' || state === 'ready' || state === 'needs_organizer') && toFinish.length > 0 && (
+                    <div data-testid={`event-card-warnings-${ev.id}`} style={{ color: '#94a3b8' }}>Still to finish: {toFinish.join(' · ')}</div>
+                  )}
                   {state === 'used' && linkedEpisode && <div>Episode {linkedEpisode.episode_number}: {linkedEpisode.title}</div>}
                 </div>
                 <button onClick={e => { e.stopPropagation(); primaryAction(); }} style={{ ...S.smBtn, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 700, padding: '8px 12px', background: stateCfg.bg, borderColor: stateCfg.color, color: stateCfg.color }}>

@@ -11,8 +11,9 @@
  *   - Each field is in exactly one of three states: set, suggested, missing.
  *
  * Everything here is pure and deterministic: no AI call, no I/O, no clock.
- * A suggestion is display-only. Nothing in this file is read by
- * eventReadiness.js, and the Event Package never writes a suggestion to a
+ * A suggestion is display-only. Readiness (eventReadinessSections.js,
+ * Task #1775) reads resolveEventBasics but counts a field only in the
+ * 'set' state, and the Event Package never writes a suggestion to a
  * column or to canon_consequences unless Evoni accepts it — so an
  * unaccepted suggestion cannot satisfy readiness, now or if a Basics field
  * is added to the readiness gate later.

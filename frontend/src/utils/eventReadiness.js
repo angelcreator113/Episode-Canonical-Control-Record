@@ -1,18 +1,16 @@
 /**
- * Event Package pre-flight readiness + difficulty.
+ * Event Package field resolvers + difficulty.
  *
- * Single source of truth for the checks that used to live inline in
- * WorldAdmin's Events card (`computeEventReadiness`, extracted from the
- * card's own `hasOutfit`/`hasVenue`/`hasScene`/`hasInvite` block) and the
- * card's difficulty score (`calcEventDifficulty`/`eventDifficultyLabel`,
- * extracted from the same file's former top-level `calcDifficulty`/
- * `difficultyLabel`). The Events card and the Event Package page
- * (`/shows/:showId/events/:eventId`) both import from here instead of each
- * keeping their own copy.
+ * resolveEventVenueAndDate / resolveEventOrganizer resolve the fields that
+ * have two homes; calcEventDifficulty/eventDifficultyLabel are the card's
+ * difficulty score (extracted from WorldAdmin's former top-level
+ * `calcDifficulty`/`difficultyLabel`).
  *
- * This does not gate anything by itself — see each consumer for how the
- * result is used (advisory chips on the Events card; the Start Episode
- * button's enabled state on the Event Package page).
+ * Readiness itself lives in eventReadinessSections.js (Task #1775):
+ * computeEventPackageReadiness reports each Event Package section, and
+ * READINESS_ITEMS there says which items block Start Episode (Evoni's
+ * gates of 2026-09-24). It replaced the old flat computeEventReadiness
+ * (outfit / venue / scene / invite).
  */
 
 // Resolves an event's venue and date/time fields, top-level column first
@@ -25,7 +23,7 @@
 // path — always also nested the same values inside canon_consequences,
 // a column that was declared from the start. So for those older events,
 // the automation copy is the only place the value survived. This is the
-// one fallback rule; computeEventReadiness's hasVenue check below calls
+// one fallback rule; the Place section's venue check (eventReadinessSections.js) calls
 // into it rather than keeping its own separate OR-chain.
 export function resolveEventVenueAndDate(event) {
   const ev = event || {};
@@ -85,24 +83,6 @@ export function resolveEventOrganizer(event) {
   };
 }
 
-export function computeEventReadiness(event) {
-  const ev = event || {};
-
-  const hasOutfit = !!ev.outfit_set_id || (Array.isArray(ev.outfit_pieces) && ev.outfit_pieces.length > 0);
-  const hasVenue = resolveEventVenueAndDate(ev).hasVenue;
-  const hasScene = !!ev.scene_set_id;
-  const hasInvite = !!ev.invitation_asset_id;
-
-  const checks = [
-    { key: 'outfit', icon: '👗', label: 'Outfit', ok: hasOutfit },
-    { key: 'venue', icon: '📍', label: 'Venue', ok: hasVenue },
-    { key: 'scene', icon: '🎬', label: 'Scene', ok: hasScene },
-    { key: 'invite', icon: '💌', label: 'Invite', ok: hasInvite },
-  ];
-
-  return { checks, allReady: checks.every(c => c.ok) };
-}
-
 export function calcEventDifficulty(event) {
   const ev = event || {};
   const p = ev.prestige || 5;
@@ -120,35 +100,5 @@ export function eventDifficultyLabel(score) {
   return { text: 'Extreme', color: '#7c3aed', bg: '#faf5ff' };
 }
 
-// Producer Mode → Events queue states (docs/EVENT_EPISODE_FLOW.md §8(m),
-// Evoni's ruling, Task #1648; needs_host renamed to needs_organizer per
-// §8(p)'s organizer ruling, Task #1676/#1681 — a brand-hosted event with
-// no person attached is complete, not incomplete, so the old "Needs Host"
-// name and check were wrong for it). Computed client-side, no persisted
-// value — world_events.status stays exactly as §4 already documents it (a
-// free string, written inconsistently across five call sites). This is a
-// separate, read-only view over the same fields, not a new source of truth.
-export const EVENT_QUEUE_STATES = {
-  needs_organizer: { label: 'Needs Organizer', icon: '👤', color: '#dc2626', bg: '#fef2f2', primaryAction: 'Choose Organizer' },
-  needs_setup:      { label: 'Needs Setup',     icon: '🛠️', color: '#b45309', bg: '#fef3c7', primaryAction: 'Continue Setup' },
-  ready:            { label: 'Ready',           icon: '✓',  color: '#16a34a', bg: '#f0fdf4', primaryAction: 'Start Episode' },
-  used:             { label: 'Used',            icon: '◉',  color: '#6366f1', bg: '#eef2ff', primaryAction: 'Open Episode' },
-  archived:         { label: 'Archived',        icon: '□',  color: '#94a3b8', bg: '#f1f5f9', primaryAction: 'View' },
-};
-
-// Terminal states (archived, used) are checked before organizer/readiness —
-// an already-used or declined event stays Used/Archived regardless of
-// whether it happens to lack an organizer or a readiness item, since
-// neither is actionable once the event is done.
-export function computeEventState(event) {
-  const ev = event || {};
-
-  if (ev.status === 'declined' || ev.status === 'archived') return 'archived';
-  if (ev.used_in_episode_id || ev.status === 'used' || ev.status === 'filmed') return 'used';
-
-  const { hasOrganizer } = resolveEventOrganizer(ev);
-  if (!hasOrganizer) return 'needs_organizer';
-
-  const { allReady } = computeEventReadiness(ev);
-  return allReady ? 'ready' : 'needs_setup';
-}
+// EVENT_QUEUE_STATES and computeEventState moved to eventReadinessSections.js
+// (Task #1775), next to the section gate declaration they now read.
