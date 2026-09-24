@@ -2377,18 +2377,17 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     const deadlineType = prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low';
     const hostBrand = p.brand_partnerships?.[0]?.brand || null;
 
-    // Category-aware dress code defaults
-    const CATEGORY_DRESS_CODES = {
-      fashion: 'runway-ready', beauty: 'glam chic', lifestyle: 'smart casual',
-      fitness: 'athleisure luxe', food: 'cocktail', music: 'streetwear elevated',
-      creator_economy: 'influencer chic', drama: 'camera-ready',
-    };
-    const dressCode = CATEGORY_DRESS_CODES[(p.content_category || '').toLowerCase()] || 'chic';
+    // Task #1757: no time and no dress code. This route used to derive the
+    // time from prestige (20:00/19:00/18:00) and the dress code (and its
+    // keywords) from the profile's content_category (falling back to
+    // 'chic'), and saved both to the columns and to the automation copy —
+    // so the Event Package showed "Set" for values nobody chose. A profile
+    // supplies neither, so the event is created with neither; the Event
+    // Package offers suggestions (src/utils/eventBasics.js on the frontend).
     // Task #1755: the system default date (45 days out), replacing the
     // random 7-20 days this route used to pick; flagged below as
     // automation.event_date_auto so the Event Package labels it.
     const eventDateStr = autoScheduledEventDate();
-    const eventTimeStr = prestige >= 7 ? '20:00' : prestige >= 4 ? '19:00' : '18:00';
 
     // Invitation style derived from archetype + category + aesthetic_dna
     const ARCHETYPE_STYLES = {
@@ -2440,7 +2439,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       cost_coins: costCoins,
       strictness,
       deadline_type: deadlineType,
-      dress_code: dressCode,
+      dress_code: null,
       location_hint: venueAddress || null,
       // Top-level FK to the WorldLocation. Without this, the venue only
       // lives nested in canon_consequences.automation and Overview's
@@ -2450,7 +2449,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       venue_name: venue?.name || null,
       venue_address: venueAddress || null,
       event_date: eventDateStr,
-      event_time: eventTimeStr,
+      event_time: null,
       description: descriptionText,
       narrative_stakes: narrativeText,
       theme: invStyle.theme,
@@ -2458,7 +2457,6 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       color_palette: invStyle.color_palette,
       floral_style: invStyle.floral_style,
       border_style: invStyle.border_style,
-      dress_code_keywords: dressCode.split(/[,\s]+/).filter(Boolean),
       canon_consequences: {
         automation: {
           host_profile_id: p.id,
@@ -2472,11 +2470,9 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
           guest_profiles: guestList,
           event_date: eventDateStr,
           [AUTO_DATE_KEY]: eventDateStr,
-          event_time: eventTimeStr,
           cost_coins: costCoins,
           strictness,
           deadline_type: deadlineType,
-          dress_code: dressCode,
           description: descriptionText,
           narrative_stakes: narrativeText,
           theme: invStyle.theme,
@@ -2484,7 +2480,6 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
           color_palette: invStyle.color_palette,
           floral_style: invStyle.floral_style,
           border_style: invStyle.border_style,
-          dress_code_keywords: dressCode.split(/[,\s]+/).filter(Boolean),
           // Follow psychology — drives Lala's emotional arc in episodes
           follow_motivation: p.follow_motivation || null,
           follow_emotion: p.follow_emotion || null,
