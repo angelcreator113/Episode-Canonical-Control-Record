@@ -908,20 +908,17 @@ Return ONLY JSON.` }],
     }
   } catch { /* non-blocking */ }
 
-  // Sync character profiles (host + guests)
+  // Record the event in host + guest history (Task #1818). History only:
+  // no episode is evaluated yet, so the relevance boost, the tier-based
+  // state change and the post-event opportunities run at completion
+  // (episodeCompletionService.completeEpisode, applyEventOutcome +
+  // generatePostEventOpportunities). A regeneration adds no second entry.
   try {
     const characterSync = require('./characterSyncService');
-    const syncResult = await characterSync.syncAfterEvent(event, episode, models);
-    console.log(`[EpisodeGenerator] Character sync: ${syncResult.updated} profiles updated`);
-    // Auto-generate opportunities from event performance
-    try {
-      const newOpps = await characterSync.generatePostEventOpportunities(event, episode, models);
-      if (newOpps.length > 0) console.log(`[EpisodeGenerator] ${newOpps.length} opportunities generated from event`);
-    } catch (oppErr) {
-      console.warn('[EpisodeGenerator] Opportunity generation failed (non-blocking):', oppErr.message);
-    }
+    const historyResult = await characterSync.recordEventHistory(event, episode, models);
+    console.log(`[EpisodeGenerator] Event history: ${historyResult.updated} profiles updated, ${historyResult.skipped} already recorded`);
   } catch (syncErr) {
-    console.warn('[EpisodeGenerator] Character sync failed (non-blocking):', syncErr.message);
+    console.warn('[EpisodeGenerator] Event history failed (non-blocking):', syncErr.message);
   }
 
   // Generate post-event feed activity
