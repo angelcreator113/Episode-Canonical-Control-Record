@@ -330,6 +330,25 @@ async function ensureVenueLocation(venueName, venueAddress, category, models) {
 }
 
 /**
+ * Score one fill-stage guest candidate against the guests already chosen
+ * (Task #1796). Category match: the candidate's content fits the event's
+ * cultural category (+20). Lala relationship: how directly they touch
+ * Lala's story — direct (+15), competitive (+12), aware (+8). Archetype
+ * and tier diversity: a kind of creator, and a follower tier, not yet on
+ * the list (+10, +8).
+ */
+function scoreGuestCandidate(pData, contentMatches, usedArchetypes, usedTiers) {
+  let score = 0;
+  if (contentMatches.includes(pData.content_category)) score += 20;
+  if (!usedArchetypes.has(pData.archetype)) score += 10;
+  if (!usedTiers.has(pData.follower_tier)) score += 8;
+  if (pData.lala_relationship === 'direct') score += 15;
+  if (pData.lala_relationship === 'competitive') score += 12;
+  if (pData.lala_relationship === 'aware') score += 8;
+  return score;
+}
+
+/**
  * Assemble a guest list from profiles related to the host.
  *
  * @param {object} hostProfile — SocialProfile of the host
@@ -363,8 +382,17 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
       ).filter(Boolean);
 
       if (relatedIds.length > 0) {
+        // Task #1796: a guest arriving through a relationship is no more
+        // eligible than one arriving through the fill query below, so this
+        // stage applies the same two filters guestWhere does — never
+        // JustAWoman, never a real-world profile. A related profile filtered
+        // out here leaves its slot to the fill stage.
         const relatedProfiles = await SocialProfile.findAll({
-          where: { id: { [Op.in]: relatedIds } },
+          where: {
+            id: { [Op.in]: relatedIds },
+            feed_layer: 'lalaverse',
+            is_justawoman_record: { [Op.ne]: true },
+          },
           attributes: ['id', 'handle', 'display_name'],
         });
 
@@ -402,49 +430,48 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
     } catch { /* column may not exist */ }
     const candidatePool = await SocialProfile.findAll({
       where: guestWhere,
-      order: [['lala_relevance_score', 'DESC']],
+      // id breaks relevance ties, so the same data always gives the same
+      // pool (Task #1796).
+      order: [['lala_relevance_score', 'DESC'], ['id', 'ASC']],
       limit: Math.max(20, maxGuests * 3),
       attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype', 'follower_tier', 'lala_relationship'],
     });
 
-    // Score and rank: category match + diversity bonus
+    // Score and pick, one guest at a time (Task #1796). Every remaining
+    // candidate is scored, the best is taken, its archetype and tier are
+    // recorded, and the rest are rescored — so the diversity bonuses reward
+    // a candidate who differs from the guests already chosen. (This used to
+    // score only the first `remaining` candidates and keep all of them, and
+    // filled usedArchetypes/usedTiers only after choosing, so no bonus ever
+    // changed who was picked: the guests were the top N by relevance.)
+    // Ties go to the earlier candidate in the pool's own order.
     const usedArchetypes = new Set();
     const usedTiers = new Set();
     const remaining = maxGuests - guests.length;
-    const selected = [];
+    const pool = candidatePool.map(p => (p.toJSON ? p.toJSON() : p));
+    const chosen = [];
 
-    for (const p of candidatePool) {
-      if (selected.length >= remaining) break;
-      const pData = p.toJSON ? p.toJSON() : p;
-
-      let score = 0;
-      // Category match
-      if (contentMatches.includes(pData.content_category)) score += 20;
-      // Archetype diversity bonus
-      if (!usedArchetypes.has(pData.archetype)) score += 10;
-      // Tier diversity bonus
-      if (!usedTiers.has(pData.follower_tier)) score += 8;
-      // Lala relationship bonus — direct connections more interesting
-      if (pData.lala_relationship === 'direct') score += 15;
-      if (pData.lala_relationship === 'competitive') score += 12;
-      if (pData.lala_relationship === 'aware') score += 8;
-
-      selected.push({ profile: p, score, data: pData });
+    while (chosen.length < remaining && pool.length > 0) {
+      let bestIndex = 0;
+      let bestScore = -Infinity;
+      pool.forEach((pData, i) => {
+        const score = scoreGuestCandidate(pData, contentMatches, usedArchetypes, usedTiers);
+        if (score > bestScore) { bestScore = score; bestIndex = i; }
+      });
+      const [pick] = pool.splice(bestIndex, 1);
+      usedArchetypes.add(pick.archetype);
+      usedTiers.add(pick.follower_tier);
+      chosen.push(pick);
     }
 
-    // Sort by score, pick top N
-    selected.sort((a, b) => b.score - a.score);
-
-    for (const s of selected.slice(0, remaining)) {
-      usedArchetypes.add(s.data.archetype);
-      usedTiers.add(s.data.follower_tier);
+    for (const data of chosen) {
       guests.push({
-        profile_id: s.data.id,
-        handle: s.data.handle,
-        display_name: s.data.display_name,
-        relationship: contentMatches.includes(s.data.content_category) ? 'industry' : 'scene',
-        archetype: s.data.archetype,
-        follower_tier: s.data.follower_tier,
+        profile_id: data.id,
+        handle: data.handle,
+        display_name: data.display_name,
+        relationship: contentMatches.includes(data.content_category) ? 'industry' : 'scene',
+        archetype: data.archetype,
+        follower_tier: data.follower_tier,
       });
     }
   }
@@ -691,6 +718,7 @@ module.exports = {
   findVenue,
   ensureVenueLocation,
   assembleGuestList,
+  scoreGuestCandidate,
   generateEventName,
   spawnEventsFromCalendar,
   CATEGORY_TO_CONTENT,
