@@ -489,6 +489,28 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
 
     const hostName = host?.display_name || host?.handle || null;
 
+    // Task #1771 (same fix as #1765/#1766 for from-profile): a host
+    // creator's brand partnership is their sponsor, not the event's
+    // organizer. This used to write the first partnership's brand to the
+    // host_brand column and to automation.host_brand, and
+    // resolveEventOrganizer (frontend eventReadiness.js) lets a brand in
+    // either home win over the creator, so the Event Package read
+    // "Organized by <sponsor>". The creator stays the organizer (the
+    // automation.host_* copy below); host_brand is null in both homes (the
+    // key is kept, as in from-profile). A calendar event carries no brand
+    // of its own (StoryCalendarEvent has no brand or host field), so
+    // nothing here is the calendar's organizer being dropped.
+    // The partnerships are kept as automation.brand_partnerships, only when
+    // at least one well-formed { brand } entry exists (read by
+    // characterSyncService.generatePostEventOpportunities as brand
+    // sources), and the first one still names the sponsor in the social
+    // task copy below.
+    const partnerships = Array.isArray(host?.brand_partnerships)
+      ? host.brand_partnerships.filter(b => b && typeof b === 'object' && b.brand)
+      : [];
+    // Same value the social task copy always used (first partnership).
+    const sponsorBrand = host?.brand_partnerships?.[0]?.brand || null;
+
     // Find venue
     let venue = await findVenue(calendarEvent, models, host);
 
@@ -537,7 +559,8 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       host_handle: host?.handle || null,
       host_display_name: hostName,
       host_registry_character_id: host?.registry_character_id || null,
-      host_brand: host?.brand_partnerships?.[0]?.brand || null,
+      host_brand: null,
+      ...(partnerships.length > 0 ? { brand_partnerships: partnerships } : {}),
       venue_location_id: venue?.id || null,
       venue_name: venueName,
       venue_address: venueAddress,
@@ -571,7 +594,11 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
               event_name: eventName,
               host_name: hostName,
               host_handle: host?.handle || null,
-              host_brand: host?.brand_partnerships?.[0]?.brand || null,
+              // Sponsor copy, not an organizer field: buildSocialTasks
+              // only uses it in task text ("Create a post with @host
+              // (<sponsor>)", "Tease the <sponsor> collaboration"), which
+              // is true of a creator's partner brand.
+              host_brand: sponsorBrand,
               venue_name: venueName,
               dress_code: calendarEvent.activities?.dress_code || null,
               guest_names: guestList.map(g => g.display_name || g.handle).filter(Boolean),
@@ -587,7 +614,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       name: eventName,
       event_type: i === 0 ? 'invite' : (i === 1 ? 'guest' : 'upgrade'),
       host: hostName,
-      host_brand: host?.brand_partnerships?.[0]?.brand || null,
+      host_brand: null,
       description: `${calendarEvent.title} — ${calendarEvent.what_world_knows || eventName}`,
       prestige,
       cost_coins: costCoins,
