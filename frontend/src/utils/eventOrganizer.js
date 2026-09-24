@@ -155,6 +155,45 @@ export function buildBrandOrganizerUpdate(event, brandName, sourceProfile) {
   return { body, clears, unchanged: Object.keys(body).length === 0 };
 }
 
+const present = (v) => v !== undefined && v !== null && v !== '';
+
+/**
+ * The event's creator organizer, for readers (Task #1791). The one rule:
+ * `source_profile_id` when it is set; otherwise the automation copy's
+ * `host_profile_id` (older events, and paths that write only the copy).
+ * A brand-organized event has neither and yields null. The backend's
+ * eventCreatorOrganizer (src/utils/eventOrganizer.js) applies the same
+ * rule. resolveEventOrganizer (utils/eventReadiness.js) already counts
+ * either home as "has a creator" and decides brand-vs-creator; this does
+ * not re-decide it.
+ *
+ * The copy's handle and display name are returned only when the copy
+ * names the same profile; otherwise they are null and the reader falls
+ * back to `event.host` (Change Organizer writes the creator's name there).
+ * Returns { profileId, handle, displayName, fromSavedCopy } or null.
+ */
+export function eventCreatorOrganizer(event) {
+  const auto = automationOf(event);
+  const column = present(event?.source_profile_id) ? event.source_profile_id : null;
+  const copyId = present(auto.host_profile_id) ? auto.host_profile_id : null;
+  const profileId = column ?? copyId;
+  if (profileId === null) return null;
+
+  const copyIsSame = copyId !== null && String(copyId) === String(profileId);
+  return {
+    profileId,
+    handle: copyIsSame ? auto.host_handle || null : null,
+    displayName: copyIsSame ? auto.host_display_name || null : null,
+    fromSavedCopy: column === null,
+  };
+}
+
+/** True when `profileId` is the event's creator organizer. */
+export function isOrganizedByProfile(event, profileId) {
+  const creator = eventCreatorOrganizer(event);
+  return !!creator && present(profileId) && String(creator.profileId) === String(profileId);
+}
+
 /** Brands from GET /api/v1/wardrobe-brands/brands, filtered by name. */
 export function filterBrands(brands, query) {
   const list = Array.isArray(brands) ? brands.filter((b) => b && b.name) : [];

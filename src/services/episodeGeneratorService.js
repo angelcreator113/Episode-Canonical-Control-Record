@@ -16,6 +16,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
+const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 
 // ─── SOCIAL MEDIA TASK TEMPLATES ─────────────────────────────────────────────
 // Tasks vary by event type and timing (before/during/after)
@@ -760,8 +761,9 @@ Return ONLY JSON.` }],
   let socialTasks = automation.social_tasks;
   if (!Array.isArray(socialTasks) || socialTasks.length === 0) {
     let hostProfile = null;
+    const creator = eventCreatorOrganizer(event);
     try {
-      const hostProfileId = automation.host_profile_id;
+      const hostProfileId = creator?.profileId;
       if (hostProfileId) {
         const [rows] = await models.sequelize.query(
           'SELECT platform, content_category, archetype, follower_tier, handle, display_name FROM social_profiles WHERE id = :id LIMIT 1',
@@ -772,8 +774,8 @@ Return ONLY JSON.` }],
     } catch { /* non-blocking */ }
     socialTasks = buildSocialTasks(eventType, hostProfile, outfitPieces, {
       event_name: event.name,
-      host_name: event.host || automation.host_display_name,
-      host_handle: automation.host_handle,
+      host_name: event.host || creator?.displayName,
+      host_handle: creator?.handle,
       host_brand: event.host_brand || automation.host_brand,
       venue_name: event.venue_name || automation.venue_name,
       dress_code: event.dress_code,

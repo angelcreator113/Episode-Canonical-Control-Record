@@ -7,6 +7,7 @@ import { createRequire } from 'module';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
   filterBrands, brandIsListed, BRAND_NAME_MAX,
+  eventCreatorOrganizer, isOrganizedByProfile,
 } from './eventOrganizer';
 import { resolveEventOrganizer } from './eventReadiness';
 import { computeEventState } from './eventReadinessSections';
@@ -14,6 +15,7 @@ import { computeEventState } from './eventReadinessSections';
 // The server's own merge for PUT canon_consequences (PR #1749), so each
 // scenario below replays what the route actually stores.
 const { mergeCanonConsequences } = createRequire(import.meta.url)('../../../src/utils/canonConsequencesMerge.js');
+const backendOrganizer = createRequire(import.meta.url)('../../../src/utils/eventOrganizer.js');
 
 // Mirrors the PUT: top-level keys sent replace, '' / null clear,
 // canon_consequences merges two levels deep.
@@ -198,5 +200,38 @@ describe('brand list helpers', () => {
     expect(brandIsListed(brands, 'Maison Belle')).toBe(true);
     expect(brandIsListed(brands, 'maison belle')).toBe(false);
     expect(brandIsListed(brands, 'Velour')).toBe(false);
+  });
+});
+
+// Task #1791 — the creator organizer for readers: source_profile_id first,
+// the automation copy as the fallback.
+describe('eventCreatorOrganizer — the four cases', () => {
+  const copy = (automation) => ({ canon_consequences: { automation } });
+  const CASES = [
+    ['(a) source_profile_id only', { source_profile_id: 7, host: 'Mika' },
+      { profileId: 7, handle: null, displayName: null, fromSavedCopy: false }],
+    ['(b) the automation copy only', copy({ host_profile_id: 7, host_handle: 'mika', host_display_name: 'Mika' }),
+      { profileId: 7, handle: 'mika', displayName: 'Mika', fromSavedCopy: true }],
+    ['(c) both naming the same person', { source_profile_id: 7, ...copy({ host_profile_id: 7, host_handle: 'mika', host_display_name: 'Mika' }) },
+      { profileId: 7, handle: 'mika', displayName: 'Mika', fromSavedCopy: false }],
+    ['(d) a brand organizer with neither', { host_brand: 'Velour', ...copy({ host_brand: 'Velour' }) }, null],
+    ['column and copy naming different people', { source_profile_id: 9, ...copy({ host_profile_id: 7, host_handle: 'mika', host_display_name: 'Mika' }) },
+      { profileId: 9, handle: null, displayName: null, fromSavedCopy: false }],
+  ];
+  test.each(CASES)('%s', (_label, event, expected) => {
+    expect(eventCreatorOrganizer(event)).toEqual(expected);
+  });
+  test.each(CASES)('%s — the backend helper finds the same creator', (_label, event) => {
+    const front = eventCreatorOrganizer(event);
+    const back = backendOrganizer.eventCreatorOrganizer(event);
+    expect(back && { profileId: back.profileId, handle: back.handle, displayName: back.displayName, fromSavedCopy: back.fromSavedCopy }).toEqual(front);
+  });
+  test('"Events Hosted": organized by this profile, by the same rule', () => {
+    expect(isOrganizedByProfile({ source_profile_id: 7 }, 7)).toBe(true);
+    expect(isOrganizedByProfile(copy({ host_profile_id: 7 }), 7)).toBe(true);
+    expect(isOrganizedByProfile({ source_profile_id: 7, ...copy({ host_profile_id: 7 }) }, 7)).toBe(true);
+    expect(isOrganizedByProfile({ host_brand: 'Velour' }, 7)).toBe(false);
+    expect(isOrganizedByProfile({ source_profile_id: 9, ...copy({ host_profile_id: 7 }) }, 7)).toBe(false);
+    expect(isOrganizedByProfile({ source_profile_id: '7' }, 7)).toBe(true);
   });
 });
