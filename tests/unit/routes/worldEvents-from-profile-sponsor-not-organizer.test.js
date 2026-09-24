@@ -12,6 +12,13 @@
 // (read by characterSyncService.generatePostEventOpportunities) and in the
 // narrative sentence. A profile with no partnerships creates the same event
 // as before. The manual create route still honours a supplied host_brand.
+//
+// Task #1790 supersedes "the creator is the organizer": from-profile now
+// writes no organizer at all (no host, no source_profile_id, no
+// automation.host_* copy) and records the creator only as
+// automation.started_from_profile_id. The sponsor rule above still holds —
+// the brand is still not the organizer. The #1790 behaviour itself is
+// tested in worldEvents-from-profile-no-organizer.test.js.
 
 const express = require('express');
 const request = require('supertest');
@@ -86,9 +93,9 @@ const AUTO_KEYS = [
   'aesthetic_power', 'beauty_description', 'beauty_factor', 'border_style', 'color_palette',
   'content_category', 'cost_coins', 'deadline_type', 'description', 'event_date', 'event_date_auto',
   'event_excitement', 'floral_style', 'follow_emotion', 'follow_motivation', 'follow_trigger',
-  'guest_profiles', 'host_brand', 'host_display_name', 'host_handle', 'host_profile_id', 'host_registry_character_id',
+  'guest_profiles', 'host_brand',
   'lifestyle_claim', 'lifestyle_gap', 'lifestyle_reality', 'mood', 'narrative_stakes', 'social_tasks',
-  'strictness', 'theme', 'venue_address', 'venue_location_id', 'venue_name',
+  'started_from_profile_id', 'strictness', 'theme', 'venue_address', 'venue_location_id', 'venue_name',
 ];
 
 async function createFromProfile() {
@@ -98,17 +105,17 @@ async function createFromProfile() {
 }
 
 describe('POST /world/:showId/events/from-profile — sponsor is not the organizer', () => {
-  test('a profile with brand partnerships: creator is the organizer, no host_brand in either home', async () => {
+  test('a profile with brand partnerships: no host_brand in either home, and no organizer (Task #1790)', async () => {
     mockProfile.brand_partnerships = [{ brand: 'Velour', type: 'ambassador', visible: true }, { brand: 'Ori Beauty', type: 'gifted', visible: false }];
     const data = await createFromProfile();
     const auto = data.canon_consequences.automation;
 
     expect(data.host_brand).toBeNull();
     expect(auto.host_brand).toBeNull();
-    expect(data.source_profile_id).toBe(42);
-    expect(data.host).toBe('Hosty');
-    expect(auto).toMatchObject({ host_profile_id: 42, host_handle: 'hosty', host_display_name: 'Hosty', host_registry_character_id: 'rc-7' });
-    expect(organizerOf(data)).toEqual({ kind: 'creator', name: 'Hosty' });
+    expect(data.source_profile_id).toBeNull();
+    expect(data.host).toBeNull();
+    expect(auto.started_from_profile_id).toBe(42);
+    expect(organizerOf(data)).toBeNull();
 
     // The sponsor is kept, outside the organizer fields.
     expect(auto.brand_partnerships).toEqual(mockProfile.brand_partnerships);
@@ -138,18 +145,18 @@ describe('POST /world/:showId/events/from-profile — sponsor is not the organiz
     expect(data.host_brand).toBeNull();
   });
 
-  test('a profile without partnerships is unchanged: same keys, host_brand null, no sponsor sentence', async () => {
+  test('a profile without partnerships: same keys, host_brand null, no sponsor sentence', async () => {
     const data = await createFromProfile();
     const auto = data.canon_consequences.automation;
     expect(Object.keys(data).sort()).toEqual(EVENT_KEYS);
     expect(Object.keys(auto).sort()).toEqual(AUTO_KEYS);
     expect(data).toMatchObject({
-      show_id: 'show-1', name: "Hosty's Event", event_type: 'invite', host: 'Hosty', host_brand: null,
-      source_profile_id: 42, prestige: 6, cost_coins: 300, strictness: 6, deadline_type: 'medium',
+      show_id: 'show-1', name: 'Event with Hosty', event_type: 'invite', host: null, host_brand: null,
+      source_profile_id: null, prestige: 6, cost_coins: 300, strictness: 6, deadline_type: 'medium',
       dress_code: null, event_time: null, status: 'draft',
     });
     expect(data.narrative_stakes).not.toMatch(/Brand opportunity/);
-    expect(organizerOf(data)).toEqual({ kind: 'creator', name: 'Hosty' });
+    expect(organizerOf(data)).toBeNull();
   });
 });
 

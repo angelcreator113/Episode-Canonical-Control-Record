@@ -89,6 +89,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const [draft, setDraft] = useState({});
   const [savingBrief, setSavingBrief] = useState(false);
   const [parentEvent, setParentEvent] = useState(null);
+  // Feed origin for an event started from a Feed creator (Task #1790): the
+  // brief's automation holds only started_from_profile_id, so the name and
+  // handle are read from that profile.
+  const [startedFromProfile, setStartedFromProfile] = useState(null);
   // AI scene-set suggester state — fetch is one-shot, the modal is the
   // creator's review surface, and apply links the chosen sets via the
   // existing /scene-sets endpoint.
@@ -309,9 +313,21 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const seeds = Array.isArray(narChain.seeds_future_events) ? narChain.seeds_future_events : [];
   // Feed origin lives nested in canon_consequences.automation when an event
   // was created from a SocialProfile. Strip it from the canon JSON view to
-  // avoid duplicating the Source section.
+  // avoid duplicating the Source section. Events started from the Feed since
+  // Task #1790 record the creator as started_from_profile_id (not as the
+  // organizer); older ones carry the automation.host_* copy.
   const automation = canonCons.automation || {};
-  const hasFeedOrigin = !!(automation.host_profile_id || automation.host_handle || automation.host_display_name);
+  const startedFromId = automation.started_from_profile_id || null;
+  useEffect(() => {
+    if (!startedFromId) { setStartedFromProfile(null); return; }
+    api.get(`/api/v1/social-profiles/${startedFromId}`)
+      .then(({ data }) => setStartedFromProfile(data?.profile || null))
+      .catch((err) => { console.error('[EpisodeOverviewTab] started-from profile load failed:', err?.message); setStartedFromProfile(null); });
+  }, [startedFromId]);
+  const feedOriginName = automation.host_display_name || automation.host_handle
+    || startedFromProfile?.display_name || startedFromProfile?.handle || 'Unknown profile';
+  const feedOriginHandle = automation.host_handle || startedFromProfile?.handle || null;
+  const hasFeedOrigin = !!(startedFromId || automation.host_profile_id || automation.host_handle || automation.host_display_name);
   const canonConsCleaned = (() => { const { automation: _a, ...rest } = canonCons; return rest; })();
   const hasCanonCons = Object.keys(canonConsCleaned).length > 0;
   const hasCareerCtx = Object.keys(careerCtx).length > 0;
@@ -693,8 +709,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
             <div style={S.card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #f1f5f9' }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>🌐 {automation.host_display_name || automation.host_handle || 'Unknown profile'}</div>
-                  {automation.host_handle && <div style={{ fontSize: 10, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>@{String(automation.host_handle).replace(/^@/, '')}</div>}
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>🌐 {feedOriginName}</div>
+                  {feedOriginHandle && <div style={{ fontSize: 10, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>@{String(feedOriginHandle).replace(/^@/, '')}</div>}
                   {automation.content_category && <div style={{ marginTop: 3, display: 'inline-block', padding: '1px 6px', background: '#eef2ff', color: '#6366f1', borderRadius: 3, fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{automation.content_category}</div>}
                 </div>
                 <Link to="/feed" style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 10, fontWeight: 600, textDecoration: 'none' }}>Feed →</Link>

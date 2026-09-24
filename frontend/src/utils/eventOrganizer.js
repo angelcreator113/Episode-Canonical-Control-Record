@@ -194,6 +194,41 @@ export function isOrganizedByProfile(event, profileId) {
   return !!creator && present(profileId) && String(creator.profileId) === String(profileId);
 }
 
+/**
+ * The Feed creator an event was started from (Task #1790), and what the
+ * Event Package suggests for them. POST /events/from-profile records the
+ * creator as automation.started_from_profile_id and nothing else — no
+ * organizer. `startedFromProfile` is the SocialProfile the single-event GET
+ * returns for that id. Suggestions are shown only; nothing is saved until
+ * Evoni accepts one.
+ *   - suggestOrganizer: the event has no organizer yet (a chosen creator or
+ *     brand is never second-guessed).
+ *   - suggestAttendee: the creator is not the organizer and is not already a
+ *     featured guest. `guestIndex` is their place on the guest list when they
+ *     are on it unfeatured (so accepting features them), else -1.
+ * Returns null when the event was not started from a creator.
+ */
+export function describeStartedFrom(event, startedFromProfile) {
+  const auto = automationOf(event);
+  const id = auto.started_from_profile_id;
+  if (!present(id) || !startedFromProfile || String(startedFromProfile.id) !== String(id)) return null;
+
+  const creator = eventCreatorOrganizer(event);
+  const isOrganizer = !!creator && String(creator.profileId) === String(id);
+  const guests = Array.isArray(auto.guest_profiles) ? auto.guest_profiles : [];
+  const guestIndex = guests.findIndex((g) => g && String(g.profile_id ?? g.id) === String(id));
+  const isFeatured = guestIndex >= 0 && !!guests[guestIndex].featured;
+
+  return {
+    profile: startedFromProfile,
+    name: profileName(startedFromProfile) || 'the creator',
+    isOrganizer,
+    suggestOrganizer: !resolveEventOrganizer(event).hasOrganizer,
+    suggestAttendee: !isOrganizer && !isFeatured,
+    guestIndex: isFeatured ? -1 : guestIndex,
+  };
+}
+
 /** Brands from GET /api/v1/wardrobe-brands/brands, filtered by name. */
 export function filterBrands(brands, query) {
   const list = Array.isArray(brands) ? brands.filter((b) => b && b.name) : [];

@@ -350,9 +350,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       const res=await generateProfileApi({handle:handle.trim(),platform,vibe_sentence:vibe.trim(),character_context:protagonist.context,character_key:protagonist.key,...lvFields,...(hasAdv?{advanced_context:advFields}:{})});
       const data=res.data;
       setSelected(data.profile);setHandle('');setVibe('');setAdvFields({location_hint:'',follower_hint:'',relationship_hint:'',drama_hint:'',aesthetic_hint:'',revenue_hint:''});setShowAdvanced(false);setPage(1);
-      // New Episode choose-host mode (Task #1628): a newly created host
+      // New Episode choose-host mode (Task #1628): a newly created creator
       // continues straight into event creation, same as clicking
-      // "Host an Event" on an existing card — one step, not two.
+      // "Start an Event" on an existing card — one step, not two.
       if(chooseHost&&data.profile)await handleHostEvent(data.profile);
     }catch(err){setError(err.response?.data?.error||err.message||'Generation failed');}
     finally{setGenerating(false);}
@@ -361,16 +361,17 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   // ── Choose-host mode: create the event and open its Event Package page ──
   // (Task #1642 — New Episode lands on the Event Package page instead of
   // Producer Mode's event editor modal, which "Edit details" still opens.)
+  // Task #1790: the event is started *with* this creator; it does not make
+  // them the organizer. The Event Package suggests them as organizer and as
+  // a featured attendee. No ?autoInvite=1 — the invitation names the
+  // organizer, so it is generated from the Package once one is chosen.
   const handleHostEvent = async(profile)=>{
     if(!showId||!profile?.id)return;
     setHostingProfileId(profile.id);setError(null);
     try{
       const data=await createEventFromProfileApi(showId,{profile_id:profile.id,event_template:'Event'});
       const ev=data.event;
-      // ?autoInvite=1 (Task #1654): a one-time flag the Event Package page
-      // reads on mount, then strips from the URL — triggers exactly one
-      // automatic invitation generation for this just-created host event.
-      if(ev?.id)navigate(`/shows/${showId}/events/${ev.id}?autoInvite=1`);
+      if(ev?.id)navigate(`/shows/${showId}/events/${ev.id}`);
       else setError('Event created but no event id was returned.');
     }catch(err){setError(err.response?.data?.error||err.message||'Failed to create event');}
     finally{setHostingProfileId(null);}
@@ -659,7 +660,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
         {/* New Episode step header — choose-host mode only */}
         {chooseHost && (
           <div style={{marginBottom:12,padding:'8px 14px',background:C.lavLight,border:`1px solid ${C.lavender}40`,borderRadius:C.radiusSm,fontSize:13,fontWeight:700,color:C.lavender}}>
-            New Episode · Step 1 of 4 — Choose Event Host
+            New Episode · Step 1 of 4 — Choose a Creator to Start From
           </div>
         )}
         {/* Feed layer switcher — hidden when embedded with a locked layer, or in choose-host mode with a locked layer */}
@@ -766,13 +767,13 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       )}
 
       {view==='feed' && <>
-        {/* ── Auto-Generate Bar (replaced by a compact "+ Create New Host" form in choose-host mode) ── */}
+        {/* ── Auto-Generate Bar (replaced by a compact "+ Create New Creator" form in choose-host mode) ── */}
         <div className="spg-autogen-bar" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:chooseHost?'12px 24px':(stats.total>0&&!activeJob?'0':'16px 24px')}}>
         {chooseHost ? (
           <div>
             <button onClick={()=>setShowManualSpark(!showManualSpark)} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,fontWeight:700,color:C.lavender,display:'flex',alignItems:'center',gap:4,padding:'4px 0'}}>
               <span style={{transition:'transform 0.2s',display:'inline-block',transform:showManualSpark?'rotate(90deg)':'none'}}>▸</span>
-              + Create New Host
+              + Create New Creator
             </button>
             {showManualSpark && (
               <div style={{marginTop:10,padding:14,background:C.surfaceAlt,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
@@ -797,7 +798,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                     background:generating||!handle.trim()||!vibe.trim()?C.border:C.lavender,color:generating||!handle.trim()||!vibe.trim()?C.inkLight:'#fff',
                     display:'flex',alignItems:'center',gap:6,transition:'all 0.15s',
                   }}>
-                    {generating?<><Spinner/> Creating…</>:'Create & Host Event'}
+                    {generating?<><Spinner/> Creating…</>:'Create & Start Event'}
                   </button>
                 </div>
                 <div style={{marginTop:12,display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
@@ -1187,7 +1188,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                         :'Generate the creators JustAWoman watches, follows, envies, and obsesses over. Each profile is a full parasocial character with metrics, voice, and story potential.'}
                     </div>
                     {chooseHost ? (
-                      <div style={{fontSize:13,color:C.inkLight}}>Use "+ Create New Host" above to add one.</div>
+                      <div style={{fontSize:13,color:C.inkLight}}>Use "+ Create New Creator" above to add one.</div>
                     ) : (
                       <>
                         <button onClick={()=>{setAutoGenCount(5);runAutoGenerate();}} disabled={autoGenRunning||!!activeJob} style={{
@@ -1321,7 +1322,8 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
     listWorldEventsApi(showId)
       .then(d => {
         const all = d.events || d.success && d.events || [];
-        // "Events Hosted" means organized by this creator (Evoni, #1790).
+        // "Events Organized" (was "Events Hosted"): events this creator
+        // organizes (Evoni, #1790) — not events started from their profile.
         const hosted = all.filter(ev => isOrganizedByProfile(ev, profileId));
         setEvents(hosted);
       })
@@ -1333,8 +1335,10 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
     try {
       const d = await createEventFromProfileApi(showId, { profile_id: profileId, event_template: 'Event' });
       if (d.success) {
-        setEvents(prev => [...(prev || []), d.event]);
-        showToast(`Event created for ${profileName}`);
+        // Not added to the list below: that list is events this creator
+        // organizes, and starting an event with them does not make them its
+        // organizer (Task #1790).
+        showToast(`Event started with ${profileName}`);
         // Navigate directly to the event for editing
         if (d.event && onNavigateToEvent) onNavigateToEvent(d.event);
       } else {
@@ -1353,7 +1357,7 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
       {/* Existing events */}
       {events.length > 0 && (
         <div style={{ marginBottom: 8 }}>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 6 }}>Events Hosted ({events.length})</div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, textTransform: 'uppercase', color: '#B8962E', marginBottom: 6 }}>Events Organized ({events.length})</div>
           {events.map(ev => (
             <div key={ev.id} style={{ background: '#fff', border: '1px solid #d4edda', borderRadius: 8, padding: '8px 10px', marginBottom: 6 }}>
               <div style={{ fontWeight: 700, fontSize: 12, color: '#2C2C2C', marginBottom: 2 }}>{ev.name}</div>
@@ -1373,7 +1377,7 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
 
       {/* Create button */}
       <button onClick={createEvent} disabled={creating} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #B8962E', background: 'transparent', color: '#B8962E', fontWeight: 600, fontSize: 11, cursor: 'pointer', width: '100%', textAlign: 'left' }}>
-        {creating ? '⏳ Creating...' : `🎭 Create Event Hosted by ${profileName}`}
+        {creating ? '⏳ Creating...' : `🎭 Start an Event with ${profileName}`}
       </button>
     </div>
   );
