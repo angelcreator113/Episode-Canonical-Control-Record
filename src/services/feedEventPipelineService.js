@@ -14,6 +14,9 @@
 
 const { v4: uuidv4 } = require('uuid');
 const { autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
+const {
+  deliverablesFromOpportunity, restrictionsFromOpportunity, compensationFromOpportunity, insertEventDeliverables,
+} = require('./eventTermsService');
 
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -432,6 +435,14 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
   // opportunity's own wardrobe_brief.dress_code is still saved.
   const eventDateStr = autoScheduledEventDate();
 
+  // Terms the opportunity proposes (Task #1814, eventTermsService.js):
+  // exclusivity becomes a restriction, payment_amount the event's
+  // contractual pay (rounded to the INTEGER column), and deliverables
+  // become event_deliverables rows once the event exists (below).
+  const restrictions = restrictionsFromOpportunity(opp);
+  const compensation = compensationFromOpportunity(opp);
+  const deliverableRows = deliverablesFromOpportunity(opp);
+
   // Create the world event
   const eventId = uuidv4();
   const eventData = {
@@ -465,18 +476,35 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
       },
     }),
     event_date: eventDateStr,
+    restrictions: JSON.stringify(restrictions),
+    is_paid: compensation.is_paid,
+    payment_amount: compensation.payment_amount,
     status: 'ready',
   };
 
   await sequelize.query(
     `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
      prestige, cost_coins, strictness, deadline_type, dress_code, location_hint,
-     narrative_stakes, event_date, canon_consequences, status, created_at, updated_at)
+     narrative_stakes, event_date, canon_consequences, restrictions, is_paid, payment_amount,
+     status, created_at, updated_at)
      VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
      :prestige, :cost_coins, :strictness, :deadline_type, :dress_code, :location_hint,
-     :narrative_stakes, :event_date, :canon_consequences, :status, NOW(), NOW())`,
+     :narrative_stakes, :event_date, :canon_consequences, :restrictions, :is_paid, :payment_amount,
+     :status, NOW(), NOW())`,
     { replacements: eventData }
   );
+
+  // Deliverables (Task #1814). The event already exists, so a failure here
+  // is logged and the event stands without them, the same as a failed
+  // guest selection above; they can be added in the Event Package.
+  let deliverablesCarried = 0;
+  if (deliverableRows.length > 0) {
+    try {
+      deliverablesCarried = await insertEventDeliverables(sequelize, eventId, deliverableRows);
+    } catch (err) {
+      console.error('[FeedPipeline] Deliverable carry failed (event created without deliverables):', err.message);
+    }
+  }
 
   // Update opportunity with event link
   await sequelize.query(
@@ -489,7 +517,10 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
     } }
   );
 
-  return { event_id: eventId, opportunity: opp, event_data: eventData, guests: guestProfiles.length };
+  return {
+    event_id: eventId, opportunity: opp, event_data: eventData,
+    guests: guestProfiles.length, deliverables: deliverablesCarried,
+  };
 }
 
 // ── AI-SUGGEST EVENTS BASED ON NARRATIVE STATE ──────────────────────────────
