@@ -772,6 +772,16 @@ app.use('/api/v1', worldRoutes);
 const worldEventRoutes = trackRouteLoad('worldEvents', () => require('./routes/worldEvents'));
 app.use('/api/v1', worldEventRoutes);
 
+// Event deliverables (Task #1814) — the Event Package's Terms area;
+// /world/:showId/events/:eventId/deliverables[/:deliverableId]
+try {
+  const eventDeliverableRoutes = require('./routes/eventDeliverables');
+  app.use('/api/v1', eventDeliverableRoutes);
+  console.log('✓ Event deliverable routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load event deliverable routes:', e.message);
+}
+
 // World Studio routes (character ecosystem + intimate scene generator)
 const worldStudioRoutes = trackRouteLoad('worldStudio', () => require('./routes/worldStudio'));
 app.use('/api/v1', worldStudioRoutes);

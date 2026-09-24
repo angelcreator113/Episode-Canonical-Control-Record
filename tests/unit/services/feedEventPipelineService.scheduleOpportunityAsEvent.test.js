@@ -25,7 +25,11 @@ const { scheduleOpportunityAsEvent, opportunityGuestCategory } = require('../../
 
 // Since Task #1804 the pipeline takes its guests from assembleGuestList
 // (models.SocialProfile / SocialProfileRelationship), not a raw query.
-function makeModels({ opportunity, guests = [], relationships = [], related = [] } = {}) {
+//
+// Task #1814: the event also carries the opportunity's terms. The only new
+// statement is INSERT INTO event_deliverables (when the opportunity has
+// deliverables); `failDeliverables` makes it throw.
+function makeModels({ opportunity, guests = [], relationships = [], related = [], failDeliverables = false } = {}) {
   const queries = [];
   const profileCalls = { related: [], pool: [] };
   return {
@@ -42,6 +46,10 @@ function makeModels({ opportunity, guests = [], relationships = [], related = []
             return [[]]; // no name collision
           }
           if (/INSERT INTO world_events/.test(sql)) {
+            return [[]];
+          }
+          if (/INSERT INTO event_deliverables/.test(sql)) {
+            if (failDeliverables) throw new Error('relation "event_deliverables" does not exist');
             return [[]];
           }
           if (/UPDATE opportunities SET event_id/.test(sql)) {
@@ -190,6 +198,87 @@ describe('scheduleOpportunityAsEvent', () => {
       expect(warn).toHaveBeenCalledWith('[FeedPipeline] Guest selection failed (event created without guests):', 'db down');
       warn.mockRestore();
     });
+  });
+});
+
+describe('scheduleOpportunityAsEvent carries the opportunity terms (Task #1814)', () => {
+  const originalApiKey = process.env.ANTHROPIC_API_KEY;
+  beforeEach(() => { delete process.env.ANTHROPIC_API_KEY; });
+  afterEach(() => {
+    if (originalApiKey !== undefined) process.env.ANTHROPIC_API_KEY = originalApiKey;
+  });
+
+  const termsOpportunity = () => ({
+    ...baseOpportunity(),
+    connector_profile_id: null,
+    deliverables: [
+      { description: 'Sponsored content', completed: false },
+      { type: 'story', description: 'Story mentions', due_date: '2026-11-07', completed: false },
+    ],
+    exclusivity: 'No competing beauty brands for 90 days',
+    payment_amount: '1500.00',
+  });
+
+  it('deliverables become pending event_deliverables rows for the new event', async () => {
+    const { models, queries } = makeModels({ opportunity: termsOpportunity() });
+    const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
+
+    const inserts = queries.filter(q => /INSERT INTO event_deliverables/.test(q.sql));
+    expect(inserts).toHaveLength(1);
+    const r = inserts[0].opts.replacements;
+    expect(r.event_id).toBe(result.event_id);
+    expect(r).toMatchObject({
+      description0: 'Sponsored content', type0: null, due0: null, required0: true,
+      description1: 'Story mentions', type1: 'story', due1: '2026-11-07', required1: true,
+    });
+    expect(inserts[0].sql.match(/'pending'/g)).toHaveLength(2);
+    expect(result.deliverables).toBe(2);
+
+    // Written after the event exists (event_deliverables.event_id references it).
+    const order = queries.map(q => q.sql);
+    expect(order.findIndex(s => /INSERT INTO world_events/.test(s)))
+      .toBeLessThan(order.findIndex(s => /INSERT INTO event_deliverables/.test(s)));
+  });
+
+  it('exclusivity becomes a restriction; payment is carried to payment_amount (rounded), is_paid stays off', async () => {
+    const { models, queries } = makeModels({ opportunity: { ...termsOpportunity(), payment_amount: '249.50' } });
+    const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
+
+    const insert = queries.find(q => /INSERT INTO world_events/.test(q.sql));
+    expect(insert.sql).toMatch(/restrictions, is_paid, payment_amount/);
+    expect(insert.sql).toMatch(/:restrictions, :is_paid, :payment_amount/);
+    expect(JSON.parse(insert.opts.replacements.restrictions))
+      .toEqual([{ type: 'exclusivity', description: 'No competing beauty brands for 90 days' }]);
+    expect(insert.opts.replacements.is_paid).toBe(false);
+    expect(insert.opts.replacements.payment_amount).toBe(250);
+    // Requirements are not touched: access requirements stay their own term.
+    expect(insert.sql).not.toMatch(/requirements/);
+    expect(result.event_data.requirements).toBeUndefined();
+  });
+
+  it('an opportunity with no terms: no deliverable insert, no restrictions, unpaid', async () => {
+    const { models, queries } = makeModels({ opportunity: { ...baseOpportunity(), connector_profile_id: null } });
+    const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
+    expect(queries.filter(q => /INSERT INTO event_deliverables/.test(q.sql))).toHaveLength(0);
+    const insert = queries.find(q => /INSERT INTO world_events/.test(q.sql));
+    expect(JSON.parse(insert.opts.replacements.restrictions)).toEqual([]);
+    expect(insert.opts.replacements.is_paid).toBe(false);
+    expect(insert.opts.replacements.payment_amount).toBe(0);
+    expect(result.deliverables).toBe(0);
+  });
+
+  it('a failed deliverable insert is logged and the event is still created and booked', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { models, queries } = makeModels({ opportunity: termsOpportunity(), failDeliverables: true });
+    const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
+    expect(result.event_id).toBeTruthy();
+    expect(result.deliverables).toBe(0);
+    expect(error).toHaveBeenCalledWith(
+      '[FeedPipeline] Deliverable carry failed (event created without deliverables):',
+      'relation "event_deliverables" does not exist'
+    );
+    expect(queries.filter(q => /UPDATE opportunities SET event_id/.test(q.sql))).toHaveLength(1);
+    error.mockRestore();
   });
 });
 

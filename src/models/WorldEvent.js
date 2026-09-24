@@ -97,7 +97,15 @@ module.exports = (sequelize) => {
       comment: 'Full address for invitation: "742 Ocean Drive, South Beach, Miami"',
     },
     // source_calendar_event_id — migration 20260711 (may not exist)
-    // opportunity_id — migration 20260719 (may not exist)
+    // opportunity_id — migration 20260719. Confirmed present in the
+    // 2026-09-17 canon capture (uuid, nullable) and declared here (Task
+    // #1814): convertOpportunityToEvent passes it to WorldEvent.create,
+    // which dropped it silently while the column was undeclared.
+    opportunity_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'The opportunity this event was created from, when there was one',
+    },
     location_hint: { type: DataTypes.TEXT, allowNull: true },
     scene_set_id: { type: DataTypes.UUID, allowNull: true },
 
@@ -236,10 +244,23 @@ module.exports = (sequelize) => {
       allowNull: true,
       defaultValue: 0,
     },
+    // Access requirements — what Lala must have to take part (today:
+    // reputation_min, brand_trust_min, coins_min). One of the four kinds of
+    // term (docs/EVENT_EPISODE_FLOW.md §8(t) item 1); never holds
+    // deliverables or restrictions.
     requirements: {
       type: DataTypes.JSONB,
       allowNull: true,
       defaultValue: {},
+    },
+    // Restrictions — what Lala agrees not to do, [{type, description}]
+    // (Task #1814, migration 20260924000000). Deliverables live in
+    // event_deliverables (EventDeliverable.js); compensation is is_paid /
+    // payment_amount above.
+    restrictions: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: [],
     },
     career_tier: {
       type: DataTypes.INTEGER,
@@ -311,8 +332,9 @@ module.exports = (sequelize) => {
 
   WorldEvent.associate = (models) => {
     // WorldLocation venue — venue_location_id column may not exist (migration 20260709)
-    // Opportunity reverse link — opportunity_id column may not exist (migration 20260719)
-    // These associations are disabled until migrations run on the DB
+    // Opportunity reverse link — opportunity_id is declared above (Task
+    // #1814); no association is added here, nothing reads through one yet.
+    // Deliverables — EventDeliverable.belongsTo(WorldEvent) (Task #1814).
 
     // Visual scene set
     if (models.SceneSet) {
@@ -377,6 +399,13 @@ module.exports = (sequelize) => {
   // oversight, so call sites that pass this constant as `attributes` keep
   // returning exactly what they always have without requesting the two
   // columns a not-yet-migrated database won't have yet.
+  // restrictions and opportunity_id (Task #1814) ARE included:
+  // opportunity_id is in the 2026-09-17 canon capture, and restrictions
+  // arrives with migration 20260924000000, which both deploy workflows run
+  // (sequelize-cli db:migrate) before the app restarts. If that migration
+  // has not run, model reads of world_events fail on the missing column
+  // (the list route then falls back to raw SQL) — the migration must land
+  // with this code.
   WorldEvent.CURRENT_ATTRIBUTES = [
     'id', 'show_id', 'season_id', 'arc_id', 'name', 'event_type',
     'host', 'host_brand', 'description', 'location_hint', 'scene_set_id',
@@ -387,8 +416,9 @@ module.exports = (sequelize) => {
     'narrative_stakes', 'canon_consequences', 'seeds_future_events',
     'overlay_template', 'required_ui_overlays', 'browse_pool_bias',
     'browse_pool_size', 'rewards', 'is_paid', 'payment_amount',
-    'requirements', 'career_tier', 'career_milestone', 'fail_consequence',
-    'success_unlock', 'status', 'used_in_episode_id', 'times_used',
+    'requirements', 'restrictions', 'opportunity_id', 'career_tier',
+    'career_milestone', 'fail_consequence', 'success_unlock', 'status',
+    'used_in_episode_id', 'times_used',
     'parent_event_id', 'chain_position', 'chain_reason', 'momentum_score',
     'created_at', 'updated_at', 'deleted_at',
   ];

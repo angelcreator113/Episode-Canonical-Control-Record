@@ -3,8 +3,8 @@
  *
  * Route: /shows/:showId/events/:eventId
  *
- * Six read-only summary sections (Basics, People, Place, Invitation,
- * Style & Requirements, Review) plus a readiness count, and three actions:
+ * Summary sections (Basics, People, Place, Invitation, Style, Terms,
+ * Stakes & Money, Review) plus a readiness count, and three actions:
  * Change Organizer (Change Host until Task #1761), Edit details (opens
  * the existing WorldAdmin editor via the same ?tab=events&event=<id> deep link Task #1628/#1630 already use),
  * and Start Episode (the existing generate-episode action, gated on
@@ -42,6 +42,12 @@
  * are editable here through the same event PUT; cost is read-only
  * (resolveEventStakes / buildStakesUpdate, utils/eventStakes.js).
  *
+ * Terms (Task #1814): access requirements, deliverables, restrictions and
+ * compensation, each edited in its own home (EventTermsSection,
+ * components/EventPackage/). The requirements that used to sit under
+ * "Style & Requirements" are the access requirements there. Editing stops
+ * at Start Episode, like every other section.
+ *
  * Review (Task #1775): readiness by Package section
  * (computeEventPackageReadiness, utils/eventReadinessSections.js) — each
  * section's state and what is missing in it. Each item is a gate (blocks
@@ -76,6 +82,7 @@ import {
 } from '../utils/eventTaxonomy';
 import { createEventSaveQueue, isStaleSaveError } from '../utils/eventSaveVersion';
 import { InvitationButton } from './InvitationGenerator';
+import EventTermsSection from '../components/EventPackage/EventTermsSection';
 import './EventPackagePage.css';
 
 function fmtLabel(value) {
@@ -369,9 +376,6 @@ export default function EventPackagePage() {
     .map((guest, index) => ({ guest, index }))
     .filter(({ guest }) => guest.featured);
   const outfitPieces = Array.isArray(event.outfit_pieces) ? event.outfit_pieces : [];
-  const requirementEntries = event.requirements && typeof event.requirements === 'object'
-    ? Object.entries(event.requirements).filter(([, v]) => v !== null && v !== undefined && v !== '')
-    : [];
 
   const openEditor = () => navigate(`/shows/${showId}/world?tab=events&event=${eventId}`);
 
@@ -1136,22 +1140,26 @@ export default function EventPackagePage() {
           )}
         </section>
 
+        {/* Style (Task #1814): the requirements that sat here moved to the
+            Terms area below as access requirements, one of the four kinds
+            of term (docs/EVENT_EPISODE_FLOW.md §8(t) item 1) — shown and
+            edited in one place. */}
         <section className="epp-section">
-          <h2 className="epp-section-title">Style &amp; Requirements</h2>
+          <h2 className="epp-section-title">Style</h2>
           <dl className="epp-fields">
             <div><dt>Outfit</dt><dd>{outfitPieces.length ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'} chosen` : 'Not chosen'}</dd></div>
-            <div>
-              <dt>Requirements</dt>
-              <dd>
-                {requirementEntries.length ? (
-                  <ul className="epp-requirements-list">
-                    {requirementEntries.map(([k, v]) => <li key={k}>{fmtLabel(k)}: {typeof v === 'object' ? JSON.stringify(v) : String(v)}</li>)}
-                  </ul>
-                ) : 'None set'}
-              </dd>
-            </div>
           </dl>
         </section>
+
+        <EventTermsSection
+          showId={showId}
+          eventId={eventId}
+          event={event}
+          locked={used}
+          putEvent={putEvent}
+          onSaved={load}
+          onToast={setToast}
+        />
 
         <section className="epp-section epp-stakes" data-testid="stakes-section">
           <div className="epp-section-header">

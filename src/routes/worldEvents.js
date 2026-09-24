@@ -29,6 +29,7 @@ const { parseExpectedVersion, versionMatches, staleSaveBody } = require('../util
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../utils/eventEpisodeLink');
 const { withAutoScheduledDate, autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+const { normalizeRestrictions } = require('../services/eventTermsService');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -155,6 +156,9 @@ router.get('/world/:showId/events/:eventId', requireAuth, async (req, res) => {
     }
     if (typeof event.requirements === 'string') {
       try { event.requirements = JSON.parse(event.requirements); } catch { event.requirements = {}; }
+    }
+    if (typeof event.restrictions === 'string') {
+      try { event.restrictions = JSON.parse(event.restrictions); } catch (e) { console.error('[WorldEvents] restrictions parse failed:', e.message); event.restrictions = []; }
     }
 
     // People — host, from the durable FK (WorldEvent.js:97), shown as the
@@ -623,6 +627,10 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       'season_id', 'arc_id',
       'is_paid', 'payment_amount', 'requirements', 'career_tier',
       'career_milestone', 'fail_consequence', 'success_unlock',
+      // Restrictions (Task #1814) — what Lala agrees not to do. Its own
+      // column, never folded into requirements (access requirements):
+      // docs/EVENT_EPISODE_FLOW.md §8(t) item 1.
+      'restrictions',
       'scene_set_id', 'source_calendar_event_id',
       'venue_location_id', 'venue_name', 'venue_address', 'event_date', 'event_time',
       'guest_list', 'invitation_details',
@@ -668,6 +676,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     const jsonFields = new Set([
       'dress_code_keywords', 'canon_consequences', 'seeds_future_events',
       'required_ui_overlays', 'rewards', 'requirements', 'color_palette',
+      'restrictions',
     ]);
 
     const normalizeNullLike = (value) => {
@@ -716,6 +725,14 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
         if (field === 'canon_consequences' && val !== null) {
           // Merged with the stored value just before the UPDATE (Task #1747).
           ccIncoming = val;
+        }
+
+        if (field === 'restrictions' && val !== null) {
+          const normalized = normalizeRestrictions(val);
+          if (normalized.error) {
+            return res.status(400).json({ success: false, error: 'Invalid value for restrictions', message: normalized.error });
+          }
+          val = normalized.value;
         }
 
         if (jsonFields.has(field)) {

@@ -2238,6 +2238,10 @@ trust, coins, profile state and career goals was checked, and none reads
 Requirements" heading and the "Brand deal content fee" ledger line
 (`financialTransactionService`) both shipped in #1810. The read's §4 and
 §0 hold what they replaced.
+**Superseded in part, not deleted (Evoni, 2026-09-24, Task #1814):**
+slice 1a renamed that heading "Style" (the outfit only). Access
+requirements are shown and edited only in the Event Package's Terms area,
+so each term has one place. The ledger line is unchanged.
 
 **9. Build order, as intent** (Evoni has set it; none of it is built):
 1. opportunity terms carry to the event;

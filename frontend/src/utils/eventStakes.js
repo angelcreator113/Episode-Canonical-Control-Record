@@ -248,7 +248,8 @@ export function resolveEventStakes(event) {
       state: pay === null ? 'missing' : 'stored',
       display: pay === null ? null : `${pay} coins`,
       readOnly: true,
-      note: null,
+      // Compensation is edited in the Package's Terms area (Task #1814).
+      note: 'Edited under Terms, Compensation.',
     });
   }
 
