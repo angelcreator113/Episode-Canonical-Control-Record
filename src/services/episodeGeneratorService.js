@@ -301,7 +301,7 @@ function calculateFinancials(event, wardrobeItems = []) {
 
   // Estimate content revenue from social tasks
   const contentRevenue = event.event_type === 'brand_deal'
-    ? eventIncome * 0.1 // 10% bonus for content delivery
+    ? eventIncome * 0.1 // 10% brand-deal content fee (paid on any paid brand_deal; no delivery is checked — Task #1808)
     : 0;
 
   return {

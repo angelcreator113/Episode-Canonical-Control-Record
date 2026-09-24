@@ -4,7 +4,7 @@
  * Route: /shows/:showId/events/:eventId
  *
  * Six read-only summary sections (Basics, People, Place, Invitation,
- * Style & Deliverables, Review) plus a readiness count, and three actions:
+ * Style & Requirements, Review) plus a readiness count, and three actions:
  * Change Organizer (Change Host until Task #1761), Edit details (opens
  * the existing WorldAdmin editor via the same ?tab=events&event=<id> deep link Task #1628/#1630 already use),
  * and Start Episode (the existing generate-episode action, gated on
@@ -1137,7 +1137,7 @@ export default function EventPackagePage() {
         </section>
 
         <section className="epp-section">
-          <h2 className="epp-section-title">Style &amp; Deliverables</h2>
+          <h2 className="epp-section-title">Style &amp; Requirements</h2>
           <dl className="epp-fields">
             <div><dt>Outfit</dt><dd>{outfitPieces.length ? `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'} chosen` : 'Not chosen'}</dd></div>
             <div>
