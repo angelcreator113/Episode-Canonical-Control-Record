@@ -12,7 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
-const { assembleGuestList, scoreGuestCandidate } = require('../../../src/services/eventAutomationService');
+const { assembleGuestList, scoreGuestCandidate, guestEligibilityWhere } = require('../../../src/services/eventAutomationService');
 
 const HOST = { id: 1, handle: 'host' };
 const FASHION = { cultural_category: 'fashion' };
@@ -168,5 +168,74 @@ describe('relationship stage — the same two filters as the fill stage', () => 
     expect(guests).toHaveLength(6);
     expect(guests[0]).toEqual({ profile_id: 7, handle: 'kept-friend', display_name: 'Kept', relationship: 'friend' });
     expect(guests.slice(1).every(g => g.handle.startsWith('fill'))).toBe(true);
+  });
+});
+
+// Task #1800 — both stages apply the same eligibility rules, from
+// guestEligibilityWhere: status, layer, JustAWoman, celebrity tier.
+describe('eligibility — one set of rules for both stages', () => {
+  const rel = (b, type = 'friend') => ({ profile_a_id: HOST.id, profile_b_id: b, relationship_type: type });
+  const SHARED = {
+    status: { [Op.in]: ['finalized', 'generated'] },
+    feed_layer: 'lalaverse',
+    is_justawoman_record: { [Op.ne]: true },
+    [Op.or]: [{ celebrity_tier: null }, { celebrity_tier: 'accessible' }, { celebrity_tier: 'selective' }],
+  };
+
+  test('guestEligibilityWhere holds the four rules, unchanged from guestWhere', () => {
+    expect(guestEligibilityWhere(Op)).toEqual(SHARED);
+  });
+
+  test('the relationship stage carries every shared condition, plus its own id IN', async () => {
+    const { models, calls } = makeModels({ relationships: [rel(7), rel(8)], related: [] });
+    await assembleGuestList(HOST, FASHION, models, 6);
+    const where = calls.related[0].where;
+    expect(where).toEqual({ ...SHARED, id: { [Op.in]: [7, 8] } });
+  });
+
+  test('the fill stage carries every shared condition, plus its own id NOT IN', async () => {
+    const { models, calls } = makeModels({ pool: [] });
+    await assembleGuestList(HOST, FASHION, models, 6);
+    expect(calls.pool[0].where).toEqual({ ...SHARED, id: { [Op.notIn]: [HOST.id] } });
+  });
+
+  // The database applies the where clause; this mock applies the same rules
+  // to rows, so a draft, an archived and an untouchable related profile are
+  // seen being left out and their slots going to the fill stage.
+  test('a draft, an archived and an untouchable related profile are skipped; their slots are filled', async () => {
+    const eligible = (p) => ['finalized', 'generated'].includes(p.status) && p.feed_layer === 'lalaverse'
+      && p.is_justawoman_record !== true && [null, 'accessible', 'selective'].includes(p.celebrity_tier ?? null);
+    const relatedRows = [
+      { id: 7, handle: 'ok-friend', display_name: 'OK', status: 'finalized', feed_layer: 'lalaverse', celebrity_tier: 'accessible' },
+      { id: 8, handle: 'draft-friend', display_name: 'Draft', status: 'draft', feed_layer: 'lalaverse', celebrity_tier: null },
+      { id: 9, handle: 'archived-friend', display_name: 'Archived', status: 'archived', feed_layer: 'lalaverse', celebrity_tier: null },
+      { id: 10, handle: 'untouchable-friend', display_name: 'Star', status: 'finalized', feed_layer: 'lalaverse', celebrity_tier: 'untouchable' },
+    ];
+    const pool = Array.from({ length: 10 }, (_, i) => cand({ handle: `fill${i}`, archetype: `a${i}` }));
+    const SocialProfile = {
+      findAll: jest.fn(async (opts) => {
+        if (opts.where?.id?.[Op.in]) {
+          expect(opts.where).toMatchObject({ status: SHARED.status, feed_layer: 'lalaverse' });
+          return relatedRows.filter(eligible).map(({ id, handle, display_name }) => ({ id, handle, display_name }));
+        }
+        return pool;
+      }),
+    };
+    const SocialProfileRelationship = { findAll: jest.fn(async () => [rel(7), rel(8), rel(9), rel(10)]) };
+    const guests = await assembleGuestList(HOST, FASHION, { SocialProfile, SocialProfileRelationship }, 6);
+    expect(guests).toHaveLength(6);
+    expect(guests.map(g => g.handle)).toEqual(['ok-friend', 'fill0', 'fill1', 'fill2', 'fill3', 'fill4']);
+    expect(guests.map(g => g.handle)).not.toEqual(expect.arrayContaining(['draft-friend', 'archived-friend', 'untouchable-friend']));
+  });
+
+  test('a failed relationship lookup is logged, and the fill stage still runs', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const pool = Array.from({ length: 8 }, (_, i) => cand({ handle: `fill${i}` }));
+    const SocialProfile = { findAll: jest.fn(async (opts) => (opts.where?.id?.[Op.in] ? [] : pool)) };
+    const SocialProfileRelationship = { findAll: jest.fn(async () => { throw new Error('relation "social_profile_relationships" does not exist'); }) };
+    const guests = await assembleGuestList(HOST, FASHION, { SocialProfile, SocialProfileRelationship }, 6);
+    expect(warn).toHaveBeenCalledWith('[EventAutomation] Relationship-stage guest lookup failed:', 'relation "social_profile_relationships" does not exist');
+    expect(guests).toHaveLength(6);
+    warn.mockRestore();
   });
 });
