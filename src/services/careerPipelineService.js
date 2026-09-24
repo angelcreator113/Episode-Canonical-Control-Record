@@ -15,6 +15,9 @@
 
 const { v4: uuidv4 } = require('uuid');
 const { withAutoScheduledDate } = require('../utils/eventDateDefault');
+const {
+  deliverablesFromOpportunity, restrictionsFromOpportunity, compensationFromOpportunity, insertEventDeliverables,
+} = require('./eventTermsService');
 
 // ── METRIC → OPPORTUNITY TYPE MAPPING ────────────────────────────────────────
 const _METRIC_OPP_TYPES = { // eslint-disable-line no-unused-vars
@@ -195,6 +198,12 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
   const opp = Opportunity ? await Opportunity.findByPk(opportunityId) : null;
   if (!opp) throw new Error('Opportunity not found');
 
+  // Terms the opportunity proposes (Task #1814, eventTermsService.js).
+  // automation.payment_amount below stays as it was; payment_amount is the
+  // event's own contractual-pay column. is_paid stays off until the money
+  // slice rules on payout (see compensationFromOpportunity).
+  const compensation = compensationFromOpportunity(opp);
+
   const eventData = {
     id: uuidv4(),
     show_id: showId,
@@ -208,6 +217,9 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
     location_hint: opp.venue_name || null,
     dress_code: opp.wardrobe_brief?.dress_code || null,
     opportunity_id: opp.id,
+    restrictions: restrictionsFromOpportunity(opp),
+    is_paid: compensation.is_paid,
+    payment_amount: compensation.payment_amount,
     canon_consequences: {
       automation: {
         source: 'opportunity',
@@ -235,18 +247,42 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
   } else {
     await sequelize.query(
       `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, prestige, description,
-       narrative_stakes, location_hint, opportunity_id, event_date, canon_consequences, status, created_at, updated_at)
+       narrative_stakes, location_hint, opportunity_id, event_date, canon_consequences,
+       restrictions, is_paid, payment_amount, status, created_at, updated_at)
        VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :prestige, :description,
-       :narrative_stakes, :location_hint, :opportunity_id, :event_date, :canon_consequences, 'ready', NOW(), NOW())`,
-      { replacements: { ...eventData, canon_consequences: JSON.stringify(eventData.canon_consequences) } }
+       :narrative_stakes, :location_hint, :opportunity_id, :event_date, :canon_consequences,
+       :restrictions, :is_paid, :payment_amount, 'ready', NOW(), NOW())`,
+      { replacements: {
+        ...eventData,
+        canon_consequences: JSON.stringify(eventData.canon_consequences),
+        restrictions: JSON.stringify(eventData.restrictions),
+      } }
     );
     event = eventData;
+  }
+
+  // Deliverables (Task #1814). The event already exists, so a failure here
+  // is logged and the event stands without them; they can be added in the
+  // Event Package.
+  const deliverableRows = deliverablesFromOpportunity(opp);
+  let deliverablesCarried = 0;
+  if (deliverableRows.length > 0) {
+    try {
+      if (!sequelize) throw new Error('sequelize not available');
+      deliverablesCarried = await insertEventDeliverables(sequelize, event.id || eventData.id, deliverableRows);
+    } catch (err) {
+      console.error('[CareerPipeline] Deliverable carry failed (event created without deliverables):', err.message);
+    }
   }
 
   // Link event back to opportunity
   await opp.update({ event_id: event.id || eventData.id });
 
-  return { event: event.toJSON ? event.toJSON() : event, opportunity: opp.toJSON ? opp.toJSON() : opp };
+  return {
+    event: event.toJSON ? event.toJSON() : event,
+    opportunity: opp.toJSON ? opp.toJSON() : opp,
+    deliverables: deliverablesCarried,
+  };
 }
 
 // ── 4. EPISODE COMPLETION → CASCADE ──────────────────────────────────────────

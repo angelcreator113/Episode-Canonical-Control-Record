@@ -1126,6 +1126,171 @@
   color: var(--lala-ink, #2C2C2C);
 }
 
+/* Terms (Task #1814) — access requirements, deliverables, restrictions,
+   compensation: four sub-sections in one full-width section. */
+.epp-sections > .epp-terms { grid-column: 1 / -1; }
+.epp-terms-intro {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-terms-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-terms-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.epp-term {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+  background: var(--lala-parchment-1, #FAF7F0);
+}
+.epp-term-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.epp-term-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--lala-ink, #2C2C2C);
+}
+.epp-term-head .epp-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 0;
+}
+.epp-term-value { font-size: 13px; }
+.epp-term-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-term-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--lala-danger, #B84D2E);
+}
+.epp-term-error svg { flex-shrink: 0; margin-top: 2px; }
+.epp-term-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.epp-term-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--lala-surface, #FFFFFF);
+}
+.epp-term-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.epp-term-item-text {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.epp-term-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-term-status {
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+}
+.epp-term-status.is-pending { color: var(--lala-ink-muted, #6B6557); }
+.epp-term-item-actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.epp-term-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.epp-term-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.epp-term-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-term-field input,
+.epp-term-field textarea,
+.epp-term-add input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--lala-surface, #FFFFFF);
+  color: var(--lala-ink, #2C2C2C);
+}
+.epp-term-field textarea { resize: vertical; }
+.epp-term-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.epp-term-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.epp-term-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.epp-term-add input { flex: 1; min-width: 0; }
+.epp-term-add .epp-btn { flex-shrink: 0; }
+
 /* 375px — single column, no horizontal overflow */
 @media (max-width: 480px) {
   .epp-page { padding: 14px 12px 96px; }
@@ -1134,4 +1299,6 @@
   .epp-actions { flex-direction: column-reverse; align-items: stretch; }
   .epp-btn { justify-content: center; }
   .epp-stakes-summary { grid-template-columns: 1fr; }
+  .epp-terms-grid { grid-template-columns: 1fr; }
+  .epp-term-row { grid-template-columns: 1fr; }
 }

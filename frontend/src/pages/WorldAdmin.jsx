@@ -141,9 +141,12 @@ const EMPTY_EVENT = {
   // episode-completion delta logic; outcomes is a free-text list
   // surfaced to the writer for narrative beats.
   rewards: { coins: 0, reputation: 0, brand_trust: 0, influence: 0, outcomes: [] },
-  // Requirements: pre-flight gates the next-event suggester reads
-  // (careerGoals.js:655-656). reputation_min and brand_trust_min
-  // dock the event's score by -5 when unmet, so creators see why.
+  // Requirements (access requirements): soft gates the next-event
+  // suggester reads — the GET /world/:showId/suggest-events route in
+  // src/routes/careerGoals.js, its "Check requirements met" block (around
+  // line 621-628). Any unmet reputation_min, brand_trust_min or coins_min
+  // docks the event's suggestion score by 5 and flags it "requirements
+  // not met"; the event is still suggested.
   requirements: { reputation_min: 0, brand_trust_min: 0, coins_min: 0 },
   scene_set_id: null,
   venue_name: '', venue_address: '', event_date: '', event_time: '',

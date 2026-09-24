@@ -17,6 +17,7 @@ const { v4: uuidv4 } = require('uuid');
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { findLiveLinkedEpisode, eventEpisodeConflictError } = require('../utils/eventEpisodeLink');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+const { listEventDeliverables, stampDeliverablesEpisode, buildTermsSnapshot } = require('./eventTermsService');
 
 // ─── SOCIAL MEDIA TASK TEMPLATES ─────────────────────────────────────────────
 // Tasks vary by event type and timing (before/during/after)
@@ -593,7 +594,21 @@ Return ONLY JSON.` }],
     total_expenses: 0,
   });
 
-  // ── 2. Create Episode Brief ──
+  // ── 2. Snapshot the accepted terms (Task #1814) ──
+  // Start Episode snapshots the four kinds of term the Event Package owns
+  // (docs/EVENT_EPISODE_FLOW.md §8(t) item 2) onto the brief, so the
+  // episode never reaches back to the event or a live opportunity to find
+  // what is owed. A failed deliverables read is logged and the snapshot
+  // carries none; it never fails generation.
+  let eventDeliverables = [];
+  try {
+    eventDeliverables = await listEventDeliverables(models.sequelize, eventId);
+  } catch (delivErr) {
+    console.error('[EpisodeGenerator] Deliverables read failed (terms snapshot has none):', delivErr.message);
+  }
+  const termsSnapshot = buildTermsSnapshot(event, eventDeliverables);
+
+  // ── 2a. Create Episode Brief ──
   let brief = null;
   if (EpisodeBrief) {
     // Snapshot every load-bearing field from the event onto the brief at
@@ -655,6 +670,10 @@ Return ONLY JSON.` }],
         host_brand: event.host_brand || null,
         dress_code_keywords: event.dress_code_keywords || [],
         location_hint: event.location_hint || null,
+        // The accepted terms at Start Episode (Task #1814): access
+        // requirements, deliverables, restrictions, compensation. A
+        // snapshot; completion readers still read the event, not this.
+        terms: termsSnapshot,
       },
       // AI-drafted beat outline from the same Claude call that generated
       // the title — gives creators something to anchor edits against and
@@ -666,6 +685,16 @@ Return ONLY JSON.` }],
       forward_hook: aiForwardHook,
       status: 'draft',
     });
+  }
+
+  // Stamp the episode on the event's deliverables (Task #1814). Logged,
+  // never fatal: the snapshot above already holds them.
+  if (eventDeliverables.length > 0) {
+    try {
+      await stampDeliverablesEpisode(models.sequelize, eventId, episode.id);
+    } catch (stampErr) {
+      console.error('[EpisodeGenerator] Deliverable episode stamp failed (non-blocking):', stampErr.message);
+    }
   }
 
   // ── 2b. Auto-place required UI overlays on the timeline ──
