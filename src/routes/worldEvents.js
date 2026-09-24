@@ -4253,13 +4253,11 @@ router.get('/world/:showId/events/next-suggestions', requireAuth, async (req, re
     const { sequelize, WorldEvent, EpisodeBrief } = models;
 
     // ── 1. Live character state ──
-    // character_key is 'justawoman' (matches episodeCompletionService:176).
-    // Note: careerPipelineService.getAccessibleCareerTier queries 'lala' as
-    // of writing, which is a pre-existing bug — don't reuse that helper here.
+    // Canonical character_key is 'lala' (F-Sec-3 decision; Task #1816).
     const [stateRows] = await sequelize.query(
       `SELECT coins, reputation, brand_trust, influence, stress
        FROM character_state
-       WHERE show_id = :showId AND character_key = 'justawoman'
+       WHERE show_id = :showId AND character_key = 'lala'
        LIMIT 1`,
       { replacements: { showId } }
     );

@@ -514,7 +514,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
     await sequelize.query(
       `INSERT INTO character_state_history
        (id, show_id, character_key, episode_id, source, deltas_json, state_after_json, notes, created_at)
-       VALUES (:id, :showId, 'justawoman', :episodeId, 'computed',
+       VALUES (:id, :showId, 'lala', :episodeId, 'computed',
         :deltas, :stateAfter, :notes, NOW())`,
       { replacements: {
         id: uuidv4(),

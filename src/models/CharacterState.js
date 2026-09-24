@@ -17,8 +17,7 @@ module.exports = (sequelize) => {
     season_id: { type: DataTypes.UUID, allowNull: true },
     character_key: {
       type: DataTypes.STRING(50), allowNull: false,
-      // 'lala' (user-facing) | 'justawoman' (backend) | 'guest:<id>'
-      // Drift preserved per Decision #6; F-Sec-3 will consolidate.
+      // 'lala' (canonical, F-Sec-3 decision; Task #1816) | 'guest:<id>'
     },
     coins: { type: DataTypes.INTEGER, defaultValue: 500 },
     reputation: {
