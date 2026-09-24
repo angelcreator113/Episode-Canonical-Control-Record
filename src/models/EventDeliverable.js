@@ -12,8 +12,10 @@ const { DataTypes } = require('sequelize');
  * brief (EpisodeBrief.event_metadata.terms).
  *
  * Fulfilment is its own lifecycle (§8(t) item 4): pending → completed →
- * submitted → approved, each with its own timestamp. Slice 1a writes only
- * pending; nothing here moves a row forward yet (slice 1b).
+ * submitted → approved, each with its own timestamp. Rows are written
+ * pending; after Start Episode the status POST in
+ * src/routes/eventDeliverables.js moves one forward a step at a time
+ * (validateDeliverableTransition in eventTermsService.js; Task #1815).
  *
  * Migration: 20260924000000-add-event-terms.js.
  */
