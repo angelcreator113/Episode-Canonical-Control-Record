@@ -2100,6 +2100,9 @@ scattered:
   Package (`EventPackagePage`) lists its entries as "Requirements" under
   its "Style & Deliverables" section. Nothing defines which keys it holds,
   and nothing marks an entry as a deliverable or tracks it as done.
+  **Resolved, not deleted — see (t) below: #1810 renamed that section
+  "Style & Requirements"; (t) item 1 names what it holds as access
+  requirements, a different kind of term from deliverables.**
 - `canon_consequences.automation.social_tasks`, Lala's in-story posting
   tasks ("Post outfit details… tag <brand>", "Tease the <brand>
   collaboration without disclosing deliverables"). `buildSocialTasks`
@@ -2167,6 +2170,96 @@ conflated, and keeping them apart prevents a shared store forming.
   called `social_tasks` and render as a "social checklist"; the show's
   publishing work is what this entry calls the social package. The
   shared name is the likeliest place for one store to start holding both.
+
+**(t) The deliverables doctrine (Evoni, 2026-09-24, Task #1812).** Builds
+on (s) above. Docs only: nothing is built, no schema is proposed, and no
+field is named as the home of any term. The read that grounds it is
+`docs/DELIVERABLES_READ.md`, cited by section, not restated.
+
+**1. Four kinds of term, each distinct.**
+- **ACCESS REQUIREMENTS** are what Lala must have or do to take part.
+- **DELIVERABLES** are what she promises to produce.
+- **RESTRICTIONS** are what she agrees not to do.
+- **COMPENSATION** is what she receives.
+
+Together they are the terms of an opportunity. They do not share one
+field. (The read's §5 sorts today's fields into the first three and
+places `rewards` in none of them; this ruling names compensation as the
+fourth.)
+
+**2. Ownership.** An `Opportunity` proposes terms; the Event Package
+(`EventPackagePage`) owns the accepted terms; Start Episode snapshots
+them. An episode never reaches back to a live opportunity to find what is
+owed. An event created without an opportunity (from-profile, calendar,
+manual) gets its terms in the Event Package directly.
+
+**3. Deliverables are not tasks.** A deliverable says what Lala owes;
+social and production tasks say what work fulfils it. One deliverable may
+produce several tasks. Today's social tasks (`buildSocialTasks`, copied
+into `episode_todo_lists.social_tasks`) are generated from the event type,
+outfit and guests rather than from any ask (read §1.4 and §5), and so are
+not deliveries.
+
+**4. Fulfilment is its own lifecycle, not a flag.** These are distinct
+states:
+- an event happened;
+- an episode completed;
+- a deliverable was completed;
+- submitted;
+- approved;
+- payment earned;
+- payment received.
+
+Completing an episode never means deliverables were fulfilled.
+
+**5. Deliverable load is separate from difficulty.** Difficulty measures
+how demanding the event is; load measures how much Lala owes. Difficulty
+follows
+`docs/audit/F-Stats-1_EventDifficulty_ProjectedVsCanonical_Decision_2026-09-24.md`
+(projected for planning only; canonical uses only accepted values). Load
+is computed from accepted deliverables only, never from today's
+social-task count, and it cannot be computed until deliverables exist.
+The read's §6 records that the two share no input today.
+
+**6. What fulfilment feeds:** payment settlement, brand relationships,
+career outcomes and evaluation. As a consequence, per the read's §0 and
+§3, none of those reads a deliverable today: every writer of stats, brand
+trust, coins, profile state and career goals was checked, and none reads
+`Opportunity.deliverables`, `content_requirements` or
+`WorldEvent.requirements` as a delivery signal.
+
+**7. Intended, not built, and each needing its own decision:**
+- per-brand relationships with their own history, separate from the
+  global `brand_trust` score;
+- separating contractual pay from performance reward. This would change
+  what Lala earns today.
+
+**8. Already done, by citation.** The Event Package's "Style &
+Requirements" heading and the "Brand deal content fee" ledger line
+(`financialTransactionService`) both shipped in #1810. The read's §4 and
+§0 hold what they replaced.
+
+**9. Build order, as intent** (Evoni has set it; none of it is built):
+1. opportunity terms carry to the event;
+2. the Event Package edits them;
+3. Start Episode snapshots them;
+4. fulfilment is recorded.
+
+Then phone and production, then money, then brand relationships and
+evaluation.
+
+**10. The read's seven questions.** These are the rulings on
+`docs/DELIVERABLES_READ.md` §7. The read itself is not edited.
+
+| Read §7 question | Answered by | What remains open |
+|---|---|---|
+| 1. Should delivering move anything? | Item 6: yes. Fulfilment feeds pay, brand relationships, career and evaluation. Item 9 puts recording fulfilment before those consequences. | Which stats and scores move, and by how much. |
+| 2. Where do an event's deliverables live? | Item 2: the opportunity proposes, the Event Package owns, and events with no opportunity set terms there directly. | The storage itself (no field is named here). |
+| 3. What is `requirements`? | Item 1: what it holds today (stat thresholds) is an access requirement. The heading was renamed (item 8). | Whether access requirements widen beyond stat thresholds (dress code, invitation, brands worn). |
+| 4. Are social tasks Lala's deliverables? | Item 3: no. Tasks are the work that fulfils a deliverable, and today's generated tasks are not deliveries. | Whether today's generated tasks remain alongside tasks derived from deliverables. |
+| 5. Requirements, deliverables and restrictions: three categories, each with its own home? | Item 1: four kinds, adding compensation, never sharing one field. | Where each lives (no field is named here). |
+| 6. Deliverable load | Item 5: separate from difficulty, computed from accepted deliverables only, and not until they exist. | How it is computed and shown. |
+| 7. Two misleading labels | Item 8: both renamed in #1810. | Nothing. |
 
 ---
 
