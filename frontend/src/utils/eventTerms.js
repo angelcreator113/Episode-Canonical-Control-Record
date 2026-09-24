@@ -11,6 +11,11 @@
  * the builders here return the PUT body. Deliverables save through
  * /world/:showId/events/:eventId/deliverables (EventTermsSection.jsx).
  *
+ * Fulfilment (Task #1815, slice 1b): after Start Episode a deliverable
+ * moves pending → completed → submitted → approved, one step at a time,
+ * through .../deliverables/:id/status. The helpers at the end mirror the
+ * server's rule (validateDeliverableTransition in eventTermsService.js).
+ *
  * Pure; no I/O.
  */
 
@@ -217,4 +222,56 @@ export function deliverableDraftFrom(d) {
     due_date: d?.due_date || '',
     required: d ? d.required !== false : true,
   };
+}
+
+// ── Fulfilment (Task #1815, slice 1b) ──
+
+export const DELIVERABLE_STATUS_FLOW = ['pending', 'completed', 'submitted', 'approved'];
+export const DELIVERABLE_STATUS_LABELS = {
+  pending: 'Pending', completed: 'Completed', submitted: 'Submitted', approved: 'Approved',
+};
+// The timestamp column each status after pending stamps.
+export const DELIVERABLE_STATUS_TIMESTAMP = {
+  completed: 'completed_at', submitted: 'submitted_at', approved: 'approved_at',
+};
+
+/** The known status of a row; anything else reads as pending. */
+export function deliverableStatusOf(d) {
+  return DELIVERABLE_STATUS_FLOW.includes(d?.status) ? d.status : 'pending';
+}
+
+/** The one status a row can move to next, or null at approved. */
+export function nextDeliverableStatus(status) {
+  const i = DELIVERABLE_STATUS_FLOW.indexOf(status);
+  if (i < 0 || i === DELIVERABLE_STATUS_FLOW.length - 1) return null;
+  return DELIVERABLE_STATUS_FLOW[i + 1];
+}
+
+/** Button text for moving to `next`: "Mark completed", …; null for none. */
+export function deliverableAdvanceLabel(next) {
+  return next && DELIVERABLE_STATUS_LABELS[next] ? `Mark ${DELIVERABLE_STATUS_LABELS[next].toLowerCase()}` : null;
+}
+
+/** A stored timestamp as a short date, or null when absent or unreadable. */
+export function formatFulfilmentDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
+ * The steps a row has reached, each with its timestamp:
+ * [{ status, label, at, text }] in lifecycle order. A step without a
+ * stored timestamp is left out.
+ */
+export function deliverableTimeline(d) {
+  const out = [];
+  for (const status of DELIVERABLE_STATUS_FLOW.slice(1)) {
+    const at = d?.[DELIVERABLE_STATUS_TIMESTAMP[status]];
+    const text = formatFulfilmentDate(at);
+    if (!text) continue;
+    out.push({ status, label: DELIVERABLE_STATUS_LABELS[status], at: new Date(at).toISOString(), text });
+  }
+  return out;
 }

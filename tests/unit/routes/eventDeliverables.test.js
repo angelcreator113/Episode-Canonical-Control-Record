@@ -3,7 +3,9 @@
 // /world/:showId/events/:eventId/deliverables[/:deliverableId].
 // requireAuth on every route (the real middleware's no-header 401 path);
 // writes refused with 409 once Start Episode has set used_in_episode_id;
-// status is not writable (fulfilment is slice 1b). Mocked, no database.
+// the PUT refuses status. Fulfilment (Task #1815, slice 1b) is the status
+// POST: after Start Episode only, one step forward at a time, each step
+// stamping its own timestamp. Mocked, no database.
 // ============================================================================
 
 const fs = require('fs');
@@ -15,6 +17,7 @@ const SHOW = 'show-1';
 const mockEvents = {};
 const mockDeliverables = {};
 const mockCalls = [];
+let mockRaceNextUpdate = false;
 
 jest.mock('../../../src/models', () => ({
   sequelize: {
@@ -35,6 +38,19 @@ jest.mock('../../../src/models', () => ({
         };
         mockDeliverables[r.id] = row;
         return [[row]];
+      }
+      if (/^SELECT id, event_id, status, episode_id FROM event_deliverables\s+WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL/.test(sql)) {
+        const d = mockDeliverables[r.deliverableId];
+        return [d && d.event_id === r.eventId && !d.deleted_at ? [{ ...d }] : []];
+      }
+      if (/^UPDATE event_deliverables SET status = :to, (completed_at|submitted_at|approved_at) = NOW\(\), updated_at = NOW\(\)\s+WHERE id = :deliverableId AND event_id = :eventId AND deleted_at IS NULL AND status = :from/.test(sql)) {
+        const column = sql.match(/SET status = :to, (\w+) = NOW/)[1];
+        const d = mockDeliverables[r.deliverableId];
+        if (!d || d.event_id !== r.eventId || d.deleted_at || d.status !== r.from) return [[]];
+        if (mockRaceNextUpdate) { mockRaceNextUpdate = false; return [[]]; }
+        d.status = r.to;
+        d[column] = new Date();
+        return [[{ ...d }]];
       }
       if (/^UPDATE event_deliverables SET deleted_at = NOW\(\)/.test(sql)) {
         const d = mockDeliverables[r.deliverableId];
@@ -85,6 +101,7 @@ beforeEach(() => {
   mockEvents['ev-used'] = { id: 'ev-used', show_id: SHOW, used_in_episode_id: 'ep-1' };
   mockDeliverables.d1 = { id: 'd1', event_id: 'ev-open', description: 'Tagged post', deliverable_type: 'post', due_date: null, required: true, status: 'pending', episode_id: null, deleted_at: null };
   mockDeliverables.d2 = { id: 'd2', event_id: 'ev-used', description: 'Story', deliverable_type: null, due_date: null, required: true, status: 'pending', episode_id: 'ep-1', deleted_at: null };
+  mockRaceNextUpdate = false;
   jest.spyOn(console, 'error').mockImplementation(() => {});
   jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
@@ -94,7 +111,7 @@ describe('auth', () => {
   test('every route in the file uses requireAuth', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'eventDeliverables.js'), 'utf8');
     const routes = src.match(/router\.(get|post|put|patch|delete)\([^\n]*/g) || [];
-    expect(routes).toHaveLength(4);
+    expect(routes).toHaveLength(5);
     routes.forEach((line) => expect(line).toMatch(/requireAuth/));
   });
 
@@ -103,7 +120,8 @@ describe('auth', () => {
     ['post', base('ev-open')],
     ['put', `${base('ev-open')}/d1`],
     ['delete', `${base('ev-open')}/d1`],
-  ])('%s without a token is 401 and touches nothing', async (method, url) => {
+    ['post', `${base('ev-used')}/d2/status`],
+  ])('%s %s without a token is 401 and touches nothing', async (method, url) => {
     const res = await request(app)[method](url).send({ description: 'x' });
     expect(res.status).toBe(401);
     expect(res.body.code).toBe('AUTH_REQUIRED');
@@ -171,6 +189,20 @@ describe('PUT', () => {
     expect(mockDeliverables.d1.status).toBe('pending');
   });
 
+  test.each([
+    [{ description: 'Two tagged posts', status: 'approved' }, 'status'],
+    [{ description: 'x', completed_at: '2026-09-24T00:00:00Z' }, 'completed_at'],
+    [{ submitted_at: null }, 'submitted_at'],
+    [{ approved_at: '2026-09-24T00:00:00Z' }, 'approved_at'],
+  ])('fulfilment fields are refused, even beside editable ones: %j', async (body, field) => {
+    const res = await request(app).put(`${base('ev-open')}/d1`).set(AUTH).send(body);
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('DELIVERABLE_STATUS_NOT_EDITABLE');
+    expect(res.body.error).toContain(field);
+    expect(writes()).toHaveLength(0);
+    expect(mockDeliverables.d1).toMatchObject({ status: 'pending', description: 'Tagged post' });
+  });
+
   test('locked after Start Episode: 409, nothing written', async () => {
     const res = await request(app).put(`${base('ev-used')}/d2`).set(AUTH).send({ description: 'Changed' });
     expect(res.status).toBe(409);
@@ -199,5 +231,125 @@ describe('DELETE', () => {
     expect(res.status).toBe(409);
     expect(writes()).toHaveLength(0);
     expect(mockDeliverables.d2.deleted_at).toBeNull();
+  });
+});
+
+describe('POST .../:deliverableId/status (fulfilment, Task #1815)', () => {
+  const statusUrl = (eventId, id) => `${base(eventId)}/${id}/status`;
+  const advance = (eventId, id, status) => request(app).post(statusUrl(eventId, id)).set(AUTH).send({ status });
+
+  test.each([
+    ['pending', 'completed', 'completed_at'],
+    ['completed', 'submitted', 'submitted_at'],
+    ['submitted', 'approved', 'approved_at'],
+  ])('%s → %s stamps %s and nothing else', async (from, to, column) => {
+    mockDeliverables.d2.status = from;
+    const res = await advance('ev-used', 'd2', to);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.deliverable.status).toBe(to);
+    expect(mockDeliverables.d2.status).toBe(to);
+    expect(mockDeliverables.d2[column]).toBeInstanceOf(Date);
+    for (const other of ['completed_at', 'submitted_at', 'approved_at'].filter((c) => c !== column)) {
+      expect(mockDeliverables.d2[other]).toBeUndefined();
+    }
+    const w = writes();
+    expect(w).toHaveLength(1);
+    expect(w[0].sql).toMatch(new RegExp(`SET status = :to, ${column} = NOW\\(\\)`));
+    expect(w[0].sql).toMatch(/AND status = :from/);
+    expect(w[0].replacements).toMatchObject({ to, from, deliverableId: 'd2', eventId: 'ev-used' });
+  });
+
+  test('walks the whole lifecycle, each step keeping the earlier timestamps', async () => {
+    for (const to of ['completed', 'submitted', 'approved']) {
+      const res = await advance('ev-used', 'd2', to);
+      expect(res.status).toBe(200);
+    }
+    expect(mockDeliverables.d2.status).toBe('approved');
+    expect(mockDeliverables.d2.completed_at).toBeInstanceOf(Date);
+    expect(mockDeliverables.d2.submitted_at).toBeInstanceOf(Date);
+    expect(mockDeliverables.d2.approved_at).toBeInstanceOf(Date);
+    // Approved is final.
+    const again = await advance('ev-used', 'd2', 'approved');
+    expect(again.status).toBe(400);
+    expect(again.body.code).toBe('DELIVERABLE_STATUS_UNCHANGED');
+  });
+
+  test.each([
+    ['pending', 'submitted', 'DELIVERABLE_STATUS_SKIPPED'],
+    ['pending', 'approved', 'DELIVERABLE_STATUS_SKIPPED'],
+    ['completed', 'approved', 'DELIVERABLE_STATUS_SKIPPED'],
+    ['completed', 'pending', 'DELIVERABLE_STATUS_BACKWARD'],
+    ['approved', 'submitted', 'DELIVERABLE_STATUS_BACKWARD'],
+    ['submitted', 'completed', 'DELIVERABLE_STATUS_BACKWARD'],
+    ['completed', 'completed', 'DELIVERABLE_STATUS_UNCHANGED'],
+  ])('%s → %s is 400 %s, nothing written', async (from, to, code) => {
+    mockDeliverables.d2.status = from;
+    const res = await advance('ev-used', 'd2', to);
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(code);
+    expect(res.body.status).toBe(from);
+    expect(writes()).toHaveLength(0);
+    expect(mockDeliverables.d2.status).toBe(from);
+  });
+
+  test.each([['done'], [''], [null], [42], [undefined], ['APPROVED']])(
+    'unknown status %j is 400 DELIVERABLE_STATUS_UNKNOWN before anything is read', async (status) => {
+      const res = await request(app).post(statusUrl('ev-used', 'd2')).set(AUTH).send(status === undefined ? {} : { status });
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('DELIVERABLE_STATUS_UNKNOWN');
+      expect(mockCalls).toHaveLength(0);
+    }
+  );
+
+  test('before Start Episode: 409 DELIVERABLE_NOT_STARTED, nothing written', async () => {
+    const res = await advance('ev-open', 'd1', 'completed');
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('DELIVERABLE_NOT_STARTED');
+    expect(writes()).toHaveLength(0);
+    expect(mockDeliverables.d1.status).toBe('pending');
+  });
+
+  test('a deliverable already stamped with an episode may advance even if the event is not marked used', async () => {
+    mockDeliverables.d1.episode_id = 'ep-9';
+    const res = await advance('ev-open', 'd1', 'completed');
+    expect(res.status).toBe(200);
+    expect(mockDeliverables.d1.status).toBe('completed');
+  });
+
+  test('a deliverable of another event is 404', async () => {
+    const res = await advance('ev-used', 'd1', 'completed');
+    expect(res.status).toBe(404);
+    expect(writes()).toHaveLength(0);
+  });
+
+  test('an event of another show is 404', async () => {
+    const res = await request(app).post('/api/v1/world/other-show/events/ev-used/deliverables/d2/status').set(AUTH).send({ status: 'completed' });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('Event not found');
+    expect(writes()).toHaveLength(0);
+  });
+
+  test('a soft-deleted deliverable is 404', async () => {
+    mockDeliverables.d2.deleted_at = new Date();
+    const res = await advance('ev-used', 'd2', 'completed');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('Deliverable not found');
+    expect(writes()).toHaveLength(0);
+  });
+
+  test('a row moved by someone else between read and write is 409 DELIVERABLE_STATUS_CONFLICT', async () => {
+    mockRaceNextUpdate = true;
+    const res = await advance('ev-used', 'd2', 'completed');
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('DELIVERABLE_STATUS_CONFLICT');
+  });
+
+  test('the terms stay locked: PUT and DELETE still 409 after fulfilment starts', async () => {
+    await advance('ev-used', 'd2', 'completed');
+    const put = await request(app).put(`${base('ev-used')}/d2`).set(AUTH).send({ description: 'Changed' });
+    expect(put.status).toBe(409);
+    const del = await request(app).delete(`${base('ev-used')}/d2`).set(AUTH);
+    expect(del.status).toBe(409);
   });
 });

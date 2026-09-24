@@ -17,7 +17,11 @@
  * (generateEpisodeFromEvent) stamps episode_id on the deliverables and
  * snapshots all four onto the brief (buildTermsSnapshot).
  *
- * Nothing here records fulfilment (slice 1b): every row is written pending.
+ * Every row is written pending. Fulfilment (Task #1815, slice 1b) moves a
+ * row forward one step at a time after Start Episode; the rules are
+ * validateDeliverableTransition below, and the route is the status POST in
+ * src/routes/eventDeliverables.js. Completing an episode never moves one
+ * (§8(t) item 4).
  */
 
 const { v4: uuidv4 } = require('uuid');
@@ -25,6 +29,21 @@ const { v4: uuidv4 } = require('uuid');
 const DESCRIPTION_MAX = 2000;
 const TYPE_MAX = 50;
 const DUE_DATE_MAX = 50;
+
+// Fulfilment (§8(t) item 4): each status after pending has its own
+// timestamp column. Order matters: a row moves one step forward at a time.
+const DELIVERABLE_STATUS_FLOW = ['pending', 'completed', 'submitted', 'approved'];
+const DELIVERABLE_STATUS_TIMESTAMP = {
+  completed: 'completed_at',
+  submitted: 'submitted_at',
+  approved: 'approved_at',
+};
+const TRANSITION_CODES = {
+  UNKNOWN: 'DELIVERABLE_STATUS_UNKNOWN',
+  UNCHANGED: 'DELIVERABLE_STATUS_UNCHANGED',
+  BACKWARD: 'DELIVERABLE_STATUS_BACKWARD',
+  SKIPPED: 'DELIVERABLE_STATUS_SKIPPED',
+};
 
 function text(v) {
   return typeof v === 'string' ? v.trim() : '';
@@ -192,7 +211,56 @@ function normalizeRestrictions(input) {
   return { value };
 }
 
+/**
+ * The status after `current`, or null when `current` is approved or not a
+ * known status.
+ */
+function nextDeliverableStatus(current) {
+  const i = DELIVERABLE_STATUS_FLOW.indexOf(current);
+  if (i < 0 || i === DELIVERABLE_STATUS_FLOW.length - 1) return null;
+  return DELIVERABLE_STATUS_FLOW[i + 1];
+}
+
+/**
+ * Whether a deliverable may move from `from` to `to`. Only forward, one
+ * step at a time. Returns { ok: true, timestampColumn } (the column the
+ * move stamps) or { ok: false, code, error }. Pure.
+ */
+function validateDeliverableTransition(from, to) {
+  const fromIdx = DELIVERABLE_STATUS_FLOW.indexOf(from);
+  const toIdx = DELIVERABLE_STATUS_FLOW.indexOf(to);
+  if (toIdx < 0) {
+    return {
+      ok: false,
+      code: TRANSITION_CODES.UNKNOWN,
+      error: `status must be one of ${DELIVERABLE_STATUS_FLOW.slice(1).join(', ')}`,
+    };
+  }
+  if (fromIdx < 0) {
+    return { ok: false, code: TRANSITION_CODES.UNKNOWN, error: `The deliverable has an unknown status (${from})` };
+  }
+  if (toIdx === fromIdx) {
+    return { ok: false, code: TRANSITION_CODES.UNCHANGED, error: `The deliverable is already ${from}` };
+  }
+  if (toIdx < fromIdx) {
+    return { ok: false, code: TRANSITION_CODES.BACKWARD, error: `A deliverable cannot move back from ${from} to ${to}` };
+  }
+  if (toIdx > fromIdx + 1) {
+    return {
+      ok: false,
+      code: TRANSITION_CODES.SKIPPED,
+      error: `A deliverable moves one step at a time: ${from} goes to ${DELIVERABLE_STATUS_FLOW[fromIdx + 1]}, not ${to}`,
+    };
+  }
+  return { ok: true, timestampColumn: DELIVERABLE_STATUS_TIMESTAMP[to] };
+}
+
 module.exports = {
+  nextDeliverableStatus,
+  validateDeliverableTransition,
+  DELIVERABLE_STATUS_FLOW,
+  DELIVERABLE_STATUS_TIMESTAMP,
+  TRANSITION_CODES,
   deliverablesFromOpportunity,
   restrictionsFromOpportunity,
   compensationFromOpportunity,

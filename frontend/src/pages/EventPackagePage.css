@@ -1234,6 +1234,26 @@
   border: 1px solid var(--lala-parchment-3, #E8E0D0);
 }
 .epp-term-status.is-pending { color: var(--lala-ink-muted, #6B6557); }
+/* Fulfilment (Task #1815): each step after pending reads warmer. */
+.epp-term-status.is-completed { color: var(--lala-ink, #2C2C2C); border-color: var(--lala-gold-line, #E8D9A8); }
+.epp-term-status.is-submitted { color: var(--lala-ink, #2C2C2C); border-color: var(--lala-gold, #B8962E); }
+.epp-term-status.is-approved {
+  color: var(--lala-gold-hover, #A68324);
+  border-color: var(--lala-gold, #B8962E);
+  background: var(--lala-gold-soft, #FDF8EE);
+}
+.epp-term-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-term-timeline-step { white-space: nowrap; }
+.epp-term-item.is-fulfilment { flex-wrap: wrap; }
+.epp-term-item.is-fulfilment .epp-term-item-main { flex: 1 1 160px; }
+.epp-term-advance { flex-shrink: 0; white-space: nowrap; }
 .epp-term-item-actions {
   display: inline-flex;
   gap: 6px;
@@ -1301,4 +1321,7 @@
   .epp-stakes-summary { grid-template-columns: 1fr; }
   .epp-terms-grid { grid-template-columns: 1fr; }
   .epp-term-row { grid-template-columns: 1fr; }
+  /* The advance button drops under its deliverable and fills the row. */
+  .epp-term-item.is-fulfilment { flex-direction: column; align-items: stretch; }
+  .epp-term-item.is-fulfilment .epp-term-item-main { flex: none; }
 }
