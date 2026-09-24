@@ -913,6 +913,133 @@
 }
 .epp-basics-spacer { flex: 1; }
 
+/* Stakes & Money (Task #1771). Plain-language summary first (career,
+   relationship, challenge, money: no numbers), then a "View details"
+   disclosure with the stored numbers. A stored value is marked "Stored",
+   never "Set" (the columns have defaults, so stored does not mean chosen);
+   a missing one reuses the Basics missing style. */
+.epp-sections > .epp-stakes { grid-column: 1 / -1; }
+.epp-stakes-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.epp-stake {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+  background: var(--lala-parchment-1, #FAF7F0);
+}
+.epp-stake-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-stake-text {
+  margin: 0 0 4px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--lala-ink, #2C2C2C);
+  overflow-wrap: anywhere;
+}
+.epp-stake-text:last-child { margin-bottom: 0; }
+.epp-stake-prose { font-family: 'Lora', Georgia, serif; }
+.epp-stake-lead { font-weight: 600; }
+.epp-stake-projected {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-stake-incomplete {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  color: var(--lala-danger, #B84D2E);
+}
+.epp-stake-incomplete svg { flex-shrink: 0; margin-top: 3px; }
+
+.epp-stakes-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: var(--lala-gold, #B8962E);
+  cursor: pointer;
+}
+.epp-stakes-toggle:hover { color: var(--lala-gold-hover, #A68324); }
+.epp-stakes-details {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--lala-parchment-3, #E8E0D0);
+}
+.epp-fields > .epp-basic.is-stored { border-left-style: solid; border-left-color: var(--lala-parchment-3, #E8E0D0); }
+.epp-basic.is-stored .epp-basic-state {
+  color: var(--lala-ink-muted, #6B6557);
+  background: var(--lala-parchment-2, #F4EFE4);
+}
+.epp-fields > .epp-basic.is-projected { border-left-style: dotted; border-left-color: var(--lala-gold, #B8962E); }
+.epp-stake-readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--lala-ink-muted, #6B6557);
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+}
+.epp-stake-note {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-stakes-origin {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-stakes-origin svg { flex-shrink: 0; margin-top: 2px; }
+
+.epp-stakes-dialog .epp-basics-note svg { flex-shrink: 0; margin-top: 2px; }
+.epp-stakes-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-stakes-field select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--lala-surface, #FFFFFF);
+  color: var(--lala-ink, #2C2C2C);
+}
+
 /* 375px — single column, no horizontal overflow */
 @media (max-width: 480px) {
   .epp-page { padding: 14px 12px 96px; }
@@ -920,4 +1047,5 @@
   .epp-title { font-size: 18px; }
   .epp-actions { flex-direction: column-reverse; align-items: stretch; }
   .epp-btn { justify-content: center; }
+  .epp-stakes-summary { grid-template-columns: 1fr; }
 }

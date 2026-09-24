@@ -21,6 +21,14 @@
  * Profile) or a brand (a lalaverse_brands row, written to host_brand by
  * name). Choosing one kind clears the other kind in both of its homes;
  * the exact writes are built in utils/eventOrganizer.js.
+ *
+ * Stakes and money (Task #1771): what the event is worth and what it
+ * costs, in plain words first; the numbers (prestige, strictness, career
+ * tier, deadline type, cost) sit behind a "View details" disclosure.
+ * Difficulty is the projected one (F-Stats-1 decision), incomplete when an
+ * input is missing. Prestige, strictness, deadline type and career tier
+ * are editable here through the same event PUT; cost is read-only
+ * (resolveEventStakes / buildStakesUpdate, utils/eventStakes.js).
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -28,14 +36,19 @@ import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
   Lightbulb, CircleDashed, CalendarClock, Building2,
+  ChevronDown, ChevronRight, Coins, Gauge, HeartHandshake, TrendingUp, Info,
 } from 'lucide-react';
 import api from '../services/api';
-import { computeEventReadiness, calcEventDifficulty, eventDifficultyLabel, resolveEventVenueAndDate } from '../utils/eventReadiness';
+import { computeEventReadiness, resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { resolveEventBasics, AUTO_DATE_KEY } from '../utils/eventBasics';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
   filterBrands, brandIsListed, profileName, BRAND_NAME_MAX,
 } from '../utils/eventOrganizer';
+import {
+  resolveEventStakes, stakesDraftFrom, buildStakesUpdate,
+  DEADLINE_TYPES, CAREER_TIERS, COST_READ_ONLY_REASON, STORED_ORIGIN_NOTE,
+} from '../utils/eventStakes';
 import { InvitationButton } from './InvitationGenerator';
 import './EventPackagePage.css';
 
@@ -171,6 +184,12 @@ export default function EventPackagePage() {
   const [basicsDraft, setBasicsDraft] = useState('');
   const [basicsSaving, setBasicsSaving] = useState(false);
 
+  // Stakes and money (Task #1771): the details disclosure, and the edit
+  // dialog's draft (null = closed).
+  const [stakesDetailsOpen, setStakesDetailsOpen] = useState(false);
+  const [stakesDraft, setStakesDraft] = useState(null);
+  const [stakesSaving, setStakesSaving] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true); setLoadError(null);
     try {
@@ -284,8 +303,8 @@ export default function EventPackagePage() {
   const basics = resolveEventBasics(event, venueLocation, { suggest: !used });
   const venueDate = resolveEventVenueAndDate(event);
   const organizer = describeEventOrganizer(event, sourceProfile);
-  const difficulty = calcEventDifficulty(event);
-  const diffLabel = eventDifficultyLabel(difficulty);
+  const stakes = resolveEventStakes(event);
+  const projection = stakes.difficulty;
 
   const guestList = event.canon_consequences?.automation?.guest_profiles || [];
   const featuredGuests = guestList
@@ -295,16 +314,6 @@ export default function EventPackagePage() {
   const requirementEntries = event.requirements && typeof event.requirements === 'object'
     ? Object.entries(event.requirements).filter(([, v]) => v !== null && v !== undefined && v !== '')
     : [];
-
-  const costLine = () => {
-    if (event.is_paid) {
-      return `Paid appearance: +${event.payment_amount || 0} coins when the episode is finalized`;
-    }
-    if (!event.cost_coins || event.cost_coins <= 0) {
-      return 'Free — no cost to attend';
-    }
-    return `Attendance cost: ${event.cost_coins} coins — deducted when the episode is finalized`;
-  };
 
   const openEditor = () => navigate(`/shows/${showId}/world?tab=events&event=${eventId}`);
 
@@ -396,6 +405,30 @@ export default function EventPackagePage() {
         </dd>
       </div>
     );
+  };
+
+  // Saves the stakes inputs Evoni changed through the existing PUT. Every
+  // key buildStakesUpdate can put in the body (prestige, strictness,
+  // deadline_type, career_tier) is in the route's allowedFields; cost_coins
+  // is never sent from here.
+  const openStakesEditor = () => {
+    if (used) return;
+    setStakesDraft(stakesDraftFrom(event));
+  };
+  const stakesUpdate = stakesDraft ? buildStakesUpdate(event, stakesDraft) : null;
+  const saveStakes = async () => {
+    if (used || stakesSaving || !stakesUpdate || stakesUpdate.unchanged || stakesUpdate.errors.length) return;
+    setStakesSaving(true);
+    try {
+      await api.put(`/api/v1/world/${showId}/events/${eventId}`, stakesUpdate.body);
+      setStakesDraft(null);
+      setToast('Stakes saved');
+      await load();
+    } catch (err) {
+      setToast(err.response?.data?.error || err.message || 'Failed to save stakes');
+    } finally {
+      setStakesSaving(false);
+    }
   };
 
   const closeOrganizerPicker = () => {
@@ -1002,25 +1035,114 @@ export default function EventPackagePage() {
                 ) : 'None set'}
               </dd>
             </div>
-            <div><dt>Prestige</dt><dd>{event.prestige ?? 'Not set'}</dd></div>
-            <div><dt>Strictness</dt><dd>{event.strictness ?? 'Not set'}</dd></div>
-            <div><dt>Cost</dt><dd>{costLine()}</dd></div>
           </dl>
+        </section>
+
+        <section className="epp-section epp-stakes" data-testid="stakes-section">
+          <div className="epp-section-header">
+            <h2 className="epp-section-title">Stakes &amp; Money</h2>
+            {!used && (
+              <button className="epp-btn epp-btn-small" onClick={openStakesEditor} data-testid="stakes-edit">
+                <Pencil size={14} /> Edit stakes
+              </button>
+            )}
+          </div>
+          <div className="epp-stakes-summary" data-testid="stakes-summary">
+            <div className="epp-stake">
+              <div className="epp-stake-head"><TrendingUp size={14} aria-hidden="true" /> Career opportunity</div>
+              {stakes.career.missing ? (
+                <div className="epp-basic-unset">Not set</div>
+              ) : (
+                <>
+                  {stakes.career.summary && <p className="epp-stake-text">{stakes.career.summary}</p>}
+                  {stakes.career.milestone && <p className="epp-stake-text"><span className="epp-stake-lead">Milestone:</span> {stakes.career.milestone}</p>}
+                  {stakes.career.successUnlock && <p className="epp-stake-text"><span className="epp-stake-lead">If it goes well:</span> {stakes.career.successUnlock}</p>}
+                </>
+              )}
+            </div>
+            <div className="epp-stake">
+              <div className="epp-stake-head"><HeartHandshake size={14} aria-hidden="true" /> Relationship stakes</div>
+              {stakes.relationship.missing ? (
+                <div className="epp-basic-unset">Not set</div>
+              ) : (
+                <>
+                  {stakes.relationship.summary && <p className="epp-stake-text epp-stake-prose">{stakes.relationship.summary}</p>}
+                  {stakes.relationship.failConsequence && <p className="epp-stake-text"><span className="epp-stake-lead">If it goes wrong:</span> {stakes.relationship.failConsequence}</p>}
+                </>
+              )}
+            </div>
+            <div className="epp-stake" data-testid="stakes-challenge" data-complete={projection.complete ? 'true' : 'false'}>
+              <div className="epp-stake-head"><Gauge size={14} aria-hidden="true" /> Challenge</div>
+              {projection.complete ? (
+                <p className="epp-stake-text">
+                  <span className="epp-difficulty-chip" style={{ color: projection.label.color, background: projection.label.bg }}>
+                    {projection.label.text}
+                  </span>{' '}
+                  <span className="epp-stake-projected">projected, not the evaluation&apos;s number</span>
+                </p>
+              ) : (
+                <p className="epp-stake-text epp-stake-incomplete">
+                  <CircleDashed size={13} aria-hidden="true" /> Projection incomplete: {projection.missing.map((m) => m.label).join(', ')} not set.
+                </p>
+              )}
+              {stakes.challenge.pressure && <p className="epp-stake-text">{stakes.challenge.pressure}</p>}
+            </div>
+            <div className="epp-stake">
+              <div className="epp-stake-head"><Coins size={14} aria-hidden="true" /> Money</div>
+              {stakes.money.summary
+                ? <p className="epp-stake-text">{stakes.money.summary}</p>
+                : <div className="epp-basic-unset">Not set</div>}
+            </div>
+          </div>
+
+          <button
+            type="button" className="epp-stakes-toggle" aria-expanded={stakesDetailsOpen}
+            aria-controls="epp-stakes-details" data-testid="stakes-details-toggle"
+            onClick={() => setStakesDetailsOpen((o) => !o)}
+          >
+            {stakesDetailsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {stakesDetailsOpen ? 'Hide details' : 'View details'}
+          </button>
+          {stakesDetailsOpen && (
+            <div id="epp-stakes-details" className="epp-stakes-details" data-testid="stakes-details">
+              <dl className="epp-fields">
+                {stakes.details.map((d) => (
+                  <div key={d.key} className={`epp-basic is-${d.state === 'stored' ? 'stored' : 'missing'}`} data-testid={`stakes-detail-${d.key}`} data-state={d.state}>
+                    <dt>
+                      {d.label}
+                      <span className="epp-basic-state">
+                        {d.state === 'stored' ? <CheckCircle2 size={11} aria-hidden="true" /> : <CircleDashed size={11} aria-hidden="true" />}
+                        {' '}{d.state === 'stored' ? 'Stored' : 'Missing'}
+                      </span>
+                      {d.readOnly && <span className="epp-stake-readonly" title={d.key === 'cost_coins' ? COST_READ_ONLY_REASON : 'Not edited here'}><Lock size={9} aria-hidden="true" /> Read-only</span>}
+                    </dt>
+                    <dd>
+                      {d.display ? <span className="epp-basic-value">{d.display}</span> : <span className="epp-basic-unset">Not set</span>}
+                      {d.note && <div className="epp-stake-note">{d.note}</div>}
+                    </dd>
+                  </div>
+                ))}
+                <div className="epp-basic is-projected" data-testid="stakes-detail-difficulty">
+                  <dt>Projected difficulty</dt>
+                  <dd>
+                    {projection.complete
+                      ? <span className="epp-basic-value">{projection.score} of 10 ({projection.label.text})</span>
+                      : <span className="epp-basic-unset">Incomplete: {projection.missing.map((m) => m.label).join(', ')} not set</span>}
+                    <div className="epp-stake-note">
+                      A planning projection, not the evaluation&apos;s number. Evaluation reads prestige and deadline type directly and never reads this score.
+                    </div>
+                    {projection.notes.map((n) => <div key={n} className="epp-stake-note">{n}</div>)}
+                  </dd>
+                </div>
+              </dl>
+              <p className="epp-stakes-origin"><Info size={13} aria-hidden="true" /> {STORED_ORIGIN_NOTE}</p>
+              <p className="epp-stakes-origin"><Lock size={13} aria-hidden="true" /> {COST_READ_ONLY_REASON}</p>
+            </div>
+          )}
         </section>
 
         <section className="epp-section">
           <h2 className="epp-section-title">Review</h2>
-          <dl className="epp-fields">
-            <div><dt>Career tier</dt><dd>{event.career_tier ?? 'Not set'}</dd></div>
-            <div>
-              <dt>Difficulty</dt>
-              <dd>
-                <span className="epp-difficulty-chip" style={{ color: diffLabel.color, background: diffLabel.bg }}>
-                  {diffLabel.text} ({difficulty})
-                </span>
-              </dd>
-            </div>
-          </dl>
           <div className="epp-readiness">
             <span className={`epp-readiness-label ${allReady ? 'is-ready' : ''}`}>{allReady ? 'READY' : 'PRE-FLIGHT'}</span>
             {checks.map((c) => (
@@ -1108,6 +1230,58 @@ export default function EventPackagePage() {
                   onClick={() => saveBasicsField(key, basicsDraft)} disabled={basicsSaving || !basicsDraft.trim()}
                 >
                   {basicsSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {stakesDraft && !used && (() => {
+        const closeStakes = () => { if (!stakesSaving) setStakesDraft(null); };
+        const setDraft = (key, value) => setStakesDraft((d) => ({ ...d, [key]: value }));
+        const numberSelect = (key, label, max, labelFor) => (
+          <label className="epp-stakes-field">
+            <span>{label}</span>
+            <select value={stakesDraft[key]} onChange={(e) => setDraft(key, e.target.value)} data-testid={`stakes-input-${key}`}>
+              {stakesDraft[key] === '' && <option value="" disabled>Not set</option>}
+              {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={String(n)}>{labelFor ? labelFor(n) : n}</option>
+              ))}
+            </select>
+          </label>
+        );
+        return (
+          <div className="epp-modal-backdrop" onClick={closeStakes}>
+            <div className="epp-modal" role="dialog" aria-label="Edit stakes" onClick={(e) => e.stopPropagation()}>
+              <div className="epp-modal-header">
+                <h3>Edit stakes</h3>
+                <button className="epp-icon-btn" onClick={closeStakes} aria-label="Close" disabled={stakesSaving}>
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="epp-basics-dialog epp-stakes-dialog">
+                {numberSelect('prestige', 'Prestige (1–10)', 10)}
+                {numberSelect('strictness', 'Strictness (1–10)', 10)}
+                <label className="epp-stakes-field">
+                  <span>Deadline type</span>
+                  <select value={stakesDraft.deadline_type} onChange={(e) => setDraft('deadline_type', e.target.value)} data-testid="stakes-input-deadline_type">
+                    {stakesDraft.deadline_type === '' && <option value="" disabled>Not set</option>}
+                    {DEADLINE_TYPES.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </label>
+                {numberSelect('career_tier', 'Career tier', 5, (n) => `${n}: ${CAREER_TIERS[n].label}`)}
+                <p className="epp-basics-note"><Lock size={13} aria-hidden="true" /> {COST_READ_ONLY_REASON}</p>
+                {stakesUpdate?.errors.map((e) => <p key={e.key} className="epp-invitation-error"><AlertCircle size={13} /> {e.message}</p>)}
+              </div>
+              <div className="epp-modal-footer epp-basics-actions">
+                <div className="epp-basics-spacer" />
+                <button type="button" className="epp-btn epp-btn-small" onClick={closeStakes} disabled={stakesSaving}>Cancel</button>
+                <button
+                  type="button" className="epp-btn epp-btn-small epp-btn-primary" data-testid="stakes-save"
+                  onClick={saveStakes} disabled={stakesSaving || !stakesUpdate || stakesUpdate.unchanged || stakesUpdate.errors.length > 0}
+                >
+                  {stakesSaving ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </div>
