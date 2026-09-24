@@ -13,14 +13,21 @@
  * Start Episode (`locked`, the page's used_in_episode_id check), which is
  * also when the deliverable routes start refusing writes (409).
  *
- * Deliverables show their status (every row is pending in slice 1a);
- * nothing here records fulfilment.
+ * Fulfilment (Task #1815, slice 1b) is recorded here too, once the terms
+ * are locked: each deliverable shows its status and the date of each step
+ * reached, and one button moves it to the next status
+ * (pending → completed → submitted → approved) through
+ * POST .../deliverables/:id/status. Nothing is shown at approved. Before
+ * Start Episode the terms are still being edited and there is no button.
+ * Deliverables are not tasks (§8(t) item 3), so they are recorded here,
+ * on the terms, not on the Run Sheet's social task list; completing the
+ * episode never moves them (§8(t) item 4).
  *
  * Styles live in pages/EventPackagePage.css (one CSS file per page).
  */
 import { useState, useEffect, useCallback } from 'react';
 import {
-  KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle,
+  KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle, Check,
 } from 'lucide-react';
 import api from '../../services/api';
 import {
@@ -28,6 +35,7 @@ import {
   restrictionsOf, restrictionLabel, buildRestrictionAdd, buildRestrictionRemove,
   describeCompensation, compensationDraftFrom, buildCompensationUpdate,
   buildDeliverableBody, deliverableDraftFrom,
+  DELIVERABLE_STATUS_LABELS, deliverableStatusOf, nextDeliverableStatus, deliverableAdvanceLabel, deliverableTimeline,
   RESTRICTION_MAX, DELIVERABLE_DESCRIPTION_MAX, DELIVERABLE_TYPE_MAX, DELIVERABLE_DUE_MAX,
 } from '../../utils/eventTerms';
 
@@ -37,8 +45,7 @@ export const listDeliverablesApi = (showId, eventId) => api.get(deliverablesUrl(
 export const createDeliverableApi = (showId, eventId, body) => api.post(deliverablesUrl(showId, eventId), body);
 export const updateDeliverableApi = (showId, eventId, id, body) => api.put(`${deliverablesUrl(showId, eventId)}/${id}`, body);
 export const deleteDeliverableApi = (showId, eventId, id) => api.delete(`${deliverablesUrl(showId, eventId)}/${id}`);
-
-const STATUS_LABELS = { pending: 'Pending', completed: 'Completed', submitted: 'Submitted', approved: 'Approved' };
+export const advanceDeliverableApi = (showId, eventId, id, status) => api.post(`${deliverablesUrl(showId, eventId)}/${id}/status`, { status });
 
 function errorMessage(err, fallback) {
   return err?.response?.data?.error || err?.message || fallback;
@@ -102,6 +109,31 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
       onDeliverableWriteError(err, 'Failed to save deliverable');
     } finally {
       setDelivSaving(false);
+    }
+  };
+
+  // ── Fulfilment: after Start Episode only ──
+  const [advancingId, setAdvancingId] = useState(null);
+  const [advanceError, setAdvanceError] = useState(null); // { id, message }
+
+  const advanceDeliverable = async (d) => {
+    const next = nextDeliverableStatus(deliverableStatusOf(d));
+    if (!locked || !next || advancingId) return;
+    setAdvancingId(d.id); setAdvanceError(null);
+    try {
+      const res = await advanceDeliverableApi(showId, eventId, d.id, next);
+      const updated = res.data?.deliverable;
+      if (updated?.id) setDeliverables((list) => list.map((row) => (row.id === updated.id ? updated : row)));
+      else await loadDeliverables();
+      toast(`Marked ${DELIVERABLE_STATUS_LABELS[next].toLowerCase()}`);
+    } catch (err) {
+      console.error('[EventTerms] deliverable status change failed:', err);
+      setAdvanceError({ id: d.id, message: errorMessage(err, 'Failed to record the status') });
+      // A refusal (moved elsewhere, not started) means the row on screen is
+      // stale: reload it.
+      if (err?.response?.status === 400 || err?.response?.status === 409) await loadDeliverables();
+    } finally {
+      setAdvancingId(null);
     }
   };
 
@@ -242,17 +274,45 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
             <p className="epp-term-error"><AlertCircle size={12} aria-hidden="true" /> {delivLoadError}</p>
           ) : deliverables.length ? (
             <ul className="epp-term-list" data-testid="terms-deliverable-list">
-              {deliverables.map((d) => (
-                <li key={d.id} className="epp-term-item" data-testid={`terms-deliverable-${d.id}`}>
+              {deliverables.map((d) => {
+                const status = deliverableStatusOf(d);
+                const next = locked ? nextDeliverableStatus(status) : null;
+                const timeline = deliverableTimeline(d);
+                return (
+                <li key={d.id} className={`epp-term-item${locked ? ' is-fulfilment' : ''}`} data-testid={`terms-deliverable-${d.id}`}>
                   <div className="epp-term-item-main">
                     <span className="epp-term-item-text">{d.description}</span>
                     <span className="epp-term-meta">
                       {d.deliverable_type && <span>{d.deliverable_type}</span>}
                       {d.due_date && <span>Due {d.due_date}</span>}
                       {d.required === false && <span>Optional</span>}
-                      <span className={`epp-term-status is-${d.status || 'pending'}`}>{STATUS_LABELS[d.status] || 'Pending'}</span>
+                      <span className={`epp-term-status is-${status}`} data-testid={`terms-deliverable-status-${d.id}`}>{DELIVERABLE_STATUS_LABELS[status]}</span>
                     </span>
+                    {timeline.length > 0 && (
+                      <span className="epp-term-timeline" data-testid={`terms-deliverable-timeline-${d.id}`}>
+                        {timeline.map((t) => (
+                          <span key={t.status} className="epp-term-timeline-step">
+                            {t.label} <time dateTime={t.at}>{t.text}</time>
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                    {advanceError?.id === d.id && (
+                      <span className="epp-term-error"><AlertCircle size={12} aria-hidden="true" /> {advanceError.message}</span>
+                    )}
                   </div>
+                  {next && (
+                    <button
+                      type="button" className="epp-btn epp-btn-small epp-term-advance"
+                      data-testid={`terms-deliverable-advance-${d.id}`}
+                      onClick={() => advanceDeliverable(d)} disabled={!!advancingId}
+                    >
+                      {advancingId === d.id
+                        ? <Loader2 size={12} className="epp-spin-icon" aria-hidden="true" />
+                        : <Check size={12} aria-hidden="true" />}
+                      {deliverableAdvanceLabel(next)}
+                    </button>
+                  )}
                   {!locked && (
                     <span className="epp-term-item-actions">
                       <button type="button" className="epp-icon-btn" aria-label={`Edit ${d.description}`} onClick={() => openDeliverableForm(d)} disabled={delivSaving}>
@@ -264,9 +324,15 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                     </span>
                   )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           ) : <div className="epp-empty">None set</div>}
+          {locked && deliverables.length > 0 && (
+            <p className="epp-term-note">
+              Record each step as it happens. Completing the episode does not change these.
+            </p>
+          )}
           {delivForm && !locked && (
             <div className="epp-term-form" data-testid="terms-deliverable-form">
               <label className="epp-term-field">

@@ -4,6 +4,8 @@ import {
   restrictionsOf, buildRestrictionAdd, buildRestrictionRemove, restrictionLabel,
   describeCompensation, compensationDraftFrom, buildCompensationUpdate,
   buildDeliverableBody, deliverableDraftFrom,
+  DELIVERABLE_STATUS_FLOW, deliverableStatusOf, nextDeliverableStatus, deliverableAdvanceLabel,
+  formatFulfilmentDate, deliverableTimeline,
 } from './eventTerms';
 
 describe('access requirements', () => {
@@ -83,5 +85,49 @@ describe('deliverable form', () => {
       .toEqual({ body: { description: 'Tagged post', deliverable_type: null, due_date: '2026-11-07', required: false } });
     expect(buildDeliverableBody({ description: '' }).error).toBeTruthy();
     expect(deliverableDraftFrom(null)).toEqual({ description: '', deliverable_type: '', due_date: '', required: true });
+  });
+});
+
+describe('fulfilment (Task #1815)', () => {
+  test('one step forward at a time, nothing after approved', () => {
+    expect(DELIVERABLE_STATUS_FLOW).toEqual(['pending', 'completed', 'submitted', 'approved']);
+    expect(nextDeliverableStatus('pending')).toBe('completed');
+    expect(nextDeliverableStatus('completed')).toBe('submitted');
+    expect(nextDeliverableStatus('submitted')).toBe('approved');
+    expect(nextDeliverableStatus('approved')).toBeNull();
+    expect(nextDeliverableStatus('bogus')).toBeNull();
+  });
+
+  test('an unknown or missing status reads as pending', () => {
+    expect(deliverableStatusOf({ status: 'submitted' })).toBe('submitted');
+    expect(deliverableStatusOf({ status: 'done' })).toBe('pending');
+    expect(deliverableStatusOf(null)).toBe('pending');
+  });
+
+  test('advance labels', () => {
+    expect(deliverableAdvanceLabel('completed')).toBe('Mark completed');
+    expect(deliverableAdvanceLabel('submitted')).toBe('Mark submitted');
+    expect(deliverableAdvanceLabel('approved')).toBe('Mark approved');
+    expect(deliverableAdvanceLabel(null)).toBeNull();
+  });
+
+  test('dates: absent or unreadable is null', () => {
+    expect(formatFulfilmentDate(null)).toBeNull();
+    expect(formatFulfilmentDate('not a date')).toBeNull();
+    expect(formatFulfilmentDate('2026-09-24T12:00:00Z')).toMatch(/2026/);
+  });
+
+  test('timeline lists the reached steps in order, each with its own timestamp', () => {
+    const t = deliverableTimeline({
+      status: 'submitted',
+      completed_at: '2026-09-20T12:00:00Z',
+      submitted_at: '2026-09-22T12:00:00Z',
+      approved_at: null,
+    });
+    expect(t.map((s) => [s.status, s.label, s.at])).toEqual([
+      ['completed', 'Completed', '2026-09-20T12:00:00.000Z'],
+      ['submitted', 'Submitted', '2026-09-22T12:00:00.000Z'],
+    ]);
+    expect(deliverableTimeline({ status: 'pending' })).toEqual([]);
   });
 });
