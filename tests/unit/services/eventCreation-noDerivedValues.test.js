@@ -91,7 +91,7 @@ describe('POST /world/:showId/events/from-profile', () => {
     await request(app).post('/api/v1/world/show-1/events/from-profile').send({ profile_id: 42 });
     const data = mockCreate.mock.calls[0][0];
     expect(data).toMatchObject({
-      show_id: 'show-1', name: 'Hosty Hosts', event_type: 'invite', host: 'Hosty', host_brand: 'Velour',
+      show_id: 'show-1', name: 'Hosty Hosts', event_type: 'invite', host: 'Hosty', host_brand: null, // Task #1765: a sponsor is not an organizer
       source_profile_id: 42, prestige: 6, cost_coins: 300, strictness: 6, deadline_type: 'medium',
       event_date: DATE(), theme: 'dreamy luxury', mood: 'serene, aspirational, soft, fashion-forward',
       floral_style: 'fashion show florals', border_style: 'watercolor wash', status: 'draft',
