@@ -601,6 +601,32 @@ ${narrativeLines.short || ''}`,
     console.error('[EpisodeCompletion] Opportunity completion failed (non-blocking):', oppErr?.message);
   }
 
+  // ── 19. Event outcome for host + guests, post-event opportunities (Task #1818) ──
+  // Generation records only the event history (recordEventHistory); what
+  // depends on the score runs here, with the real tier: the host's
+  // relevance boost (once per event, marker in the host's
+  // full_profile.relevance_boosts), the tier-based state change for host and
+  // guests, and the post-event opportunities (once per event, marker in
+  // their status_history). Uses the event row loaded in step 2.
+  const eventSync = { host_boosted: false, host_state: null, guest_states: [], opportunities_generated: [] };
+  if (event) {
+    const characterSync = require('./characterSyncService');
+    try {
+      const outcome = await characterSync.applyEventOutcome(event, evalResult.tier_final, require('../models'));
+      eventSync.host_boosted = outcome.host_boosted;
+      eventSync.host_state = outcome.host_state;
+      eventSync.guest_states = outcome.guest_states;
+    } catch (syncErr) {
+      console.error('[EpisodeCompletion] Event outcome sync failed (non-blocking):', syncErr?.message);
+    }
+    try {
+      const opps = await characterSync.generatePostEventOpportunities(event, evalResult.tier_final, require('../models'));
+      eventSync.opportunities_generated = (opps || []).map(o => ({ id: o.id, name: o.name }));
+    } catch (oppGenErr) {
+      console.error('[EpisodeCompletion] Post-event opportunity generation failed (non-blocking):', oppGenErr?.message);
+    }
+  }
+
   return {
     episode_id: episodeId,
     evaluation: {
@@ -617,6 +643,7 @@ ${narrativeLines.short || ''}`,
     financials: financialResult.summary,
     transactions: (financialResult.transactions || []).length,
     career: careerSummary,
+    event_sync: eventSync,
   };
 }
 

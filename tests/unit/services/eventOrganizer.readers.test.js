@@ -22,7 +22,7 @@ jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({
 
 const fs = require('fs');
 const path = require('path');
-const { syncAfterEvent, generatePostEventOpportunities } = require('../../../src/services/characterSyncService');
+const { recordEventHistory, applyEventOutcome, generatePostEventOpportunities } = require('../../../src/services/characterSyncService');
 const { generatePostEventActivity } = require('../../../src/services/feedActivityService');
 const { generateSocialChecklist } = require('../../../src/services/socialChecklistService');
 const { loadScriptContext } = require('../../../src/services/episodeScriptWriterService');
@@ -51,21 +51,36 @@ beforeAll(() => {
 });
 afterAll(() => jest.restoreAllMocks());
 
-describe('characterSyncService.syncAfterEvent — the host profile it updates', () => {
+// Task #1818 split syncAfterEvent into recordEventHistory (generation) and
+// applyEventOutcome (completion); both resolve the host the same way.
+// `updated` counts host writes: history at generation, the pending relevance
+// boost at completion.
+describe.each([
+  ['recordEventHistory', (event, models) => recordEventHistory(event, { id: 'ep-1', episode_number: 1, evaluation_json: null }, models)],
+  ['applyEventOutcome', (event, models) => applyEventOutcome(event, 'pass', models)],
+])('characterSyncService.%s — the host profile it updates', (_fn, sync) => {
   const run = async (event) => {
     const seen = [];
+    const updates = [];
     const findByPk = jest.fn(async (id) => {
       seen.push(id);
       const p = PROFILES[id];
-      return p ? { ...p, full_profile: {}, lala_relevance_score: 0, current_state: 'rising', update: jest.fn() } : null;
+      return p ? {
+        ...p,
+        full_profile: { relevance_boosts: { 'event-1': { status: 'pending' } } },
+        lala_relevance_score: 0,
+        current_state: 'rising',
+        update: jest.fn(async (u) => updates.push(u)),
+      } : null;
     });
-    const result = await syncAfterEvent(event, { id: 'ep-1', episode_number: 1, evaluation_json: null }, { SocialProfile: { findByPk } });
-    return { seen, result };
+    const result = await sync(event, { SocialProfile: { findByPk } });
+    return { seen, result, updated: updates.length };
   };
   test.each(CASES)('%s', async (_label, ev, expected) => {
-    const { seen, result } = await run(withBase(ev));
+    const { seen, result, updated } = await run(withBase(ev));
     expect(seen).toEqual(expected === null ? [] : [expected]);
-    expect(result.updated).toBe(expected === null ? 0 : 1);
+    expect(updated).toBe(expected === null ? 0 : 1);
+    expect(result.host_id).toBe(expected);
   });
   test('an event with no automation copy at all still updates its organizer', async () => {
     const { seen } = await run(withBase({ source_profile_id: 7, canon_consequences: {} }));
@@ -81,7 +96,10 @@ describe('characterSyncService.generatePostEventOpportunities — the connector 
     const created = [];
     jest.spyOn(Math, 'random').mockReturnValue(0);
     const Opportunity = { create: jest.fn(async (row) => { created.push(row); return row; }) };
-    await generatePostEventOpportunities({ ...event, prestige: 9 }, { evaluation_json: { tier_final: 'slay' } }, { Opportunity });
+    // Task #1818: the tier is passed in at completion; the once-per-event
+    // check finds no earlier opportunities for this event.
+    const sequelize = { query: jest.fn(async () => []), QueryTypes: { SELECT: 'SELECT' } };
+    await generatePostEventOpportunities({ ...event, prestige: 9 }, 'slay', { Opportunity, sequelize });
     Math.random.mockRestore();
     return created.map(o => o.connector_handle);
   };
