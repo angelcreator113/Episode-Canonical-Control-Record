@@ -1921,11 +1921,15 @@ ruling 6's reader list above:
 
 **Open questions for Evoni:**
 
-**(a) The schema target.** `organizer_type` with `organizer_profile_id`
+**(a) The schema target — RESOLVED (Evoni, 2026-09-24; see (r) below).**
+`organizer_type` with `organizer_profile_id`
 and `organizer_brand_id`, replacing free-text `host_brand` with a link to
 `lalaverse_brands`. This is a production schema change — hers to decide
 and run, not this document's or this task's to propose as a migration
-file. Recorded here as proposed, not planned.
+file. Recorded here as proposed, not planned. **Resolved, not deleted —
+see (r) below: the target is recorded as intended, not built, and adds
+`host_face_profile_id` and `sponsor_brand_id` to the three fields named
+here.**
 
 **(b) Is Lala's role a fixed list or free text?** Not decided here.
 
@@ -1975,6 +1979,99 @@ assembled guest list `guest_profiles` holds — every entry today is
 presented identically; nothing distinguishes an invited guest from a
 featured one. Marking them (a per-guest flag, rank, or story reason) is
 a later task, not this one.
+
+**(r) The four event roles (Evoni, 2026-09-24, Task #1767).** Extends
+§8(p) Organizer decisions above and resolves its open question (a).
+Docs only: no code, no migration.
+
+**1. Four event roles, distinct.** The ORGANIZER owns the event and is
+required. The HOST or FACE is the optional person who publicly fronts it.
+The SPONSOR optionally funds or backs it. The FEATURED ATTENDEES are the
+three to five the story uses (§8(q) ruling 3). A creator can organize an
+event a brand sponsors, and neither role is the other.
+
+*Note on §8(p) ruling 1.* This revises §8(p) ruling 1, whose four roles
+included LALA'S ROLE and no sponsor; ruling 1's text is left as filed.
+LALA'S ROLE stays, recorded as a property of Lala's attendance rather
+than an event role. Evoni's reason: the four event roles describe the
+event (who owns, fronts, funds and features in it), while Lala's role
+describes her relationship to it, and the event exists whether or not
+she attends. So there are four event roles plus Lala's role. Whether
+Lala's role is a fixed list or free text is still §8(p) open question
+(b), which stays open.
+
+**2. The schema target, recorded as intended and not built.**
+
+- `organizer_type`: creator, brand or organization;
+- `organizer_profile_id`;
+- `organizer_brand_id`;
+- `host_face_profile_id`;
+- `sponsor_brand_id`.
+
+Brands link to `lalaverse_brands` (the `LalaverseBrand` model); people
+link to social profiles (`SocialProfile`). No new brand table. This is a
+production schema change, Evoni's to plan and run; no migration is
+proposed here.
+
+**3. Why a real link rather than free text.** A link is what connects an
+event to:
+
+- brand relationship history;
+- career progression;
+- previous collaborations;
+- wardrobe-brand alignment;
+- invitations;
+- gifting and payouts;
+- future opportunities.
+
+§8(p) ruling 6's list of what reads `host_brand` today (roughly 40 sites)
+is why this is a project with its own plan, not a field rename. The list
+covers string matching in wardrobe scoring, invitation lookup, completion
+and continuity; AI prompt text; and the copied-forward homes. Cited, not
+restated.
+
+**4. What holds until then.**
+
+- *Interim storage:* `source_profile_id` for a creator organizer and
+  `host_brand` for a brand organizer, both presented as Organizer. This
+  is §8(p) ruling 6. The Event Package applies it through Change
+  Organizer (PR #1762: `buildCreatorOrganizerUpdate` and
+  `buildBrandOrganizerUpdate` in `frontend/src/utils/eventOrganizer.js`).
+- *A brand and a creator cannot both be set, because the row would
+  contradict itself.* PR #1762 built the behaviour: choosing one kind in
+  the Package clears the other in both homes. Its stated reason was
+  display, since `resolveEventOrganizer` lets the brand win. The reason
+  recorded here, that the row would contradict itself, is part of this
+  ruling. Rows saved before #1762, and the old editor's writes, can still
+  hold both.
+- *No honest home for a host or face.* PR #1762's "Host or face" section
+  records why: `host` mirrors the creator's name, and `automation.host_*`
+  and `source_profile_id` are the creator organizer. The field in point 2
+  is where it would go.
+- *Display:* the Events queue card shows the same organizer
+  (`resolveEventOrganizer`) since PR #1764 (Task #1763). That PR moved
+  the display; it set no storage rule.
+
+**5. The sponsor after PR #1766 — a consequence, not a ruling.** The
+sponsor is kept, not lost, but it is not an event role and has no field
+of its own. On events created from a creator's profile (the from-profile
+route, `POST /world/:showId/events/from-profile`), it lives in three
+places:
+
+- the creator's own `brand_partnerships` (`social_profiles`);
+- a copy on the event under
+  `canon_consequences.automation.brand_partnerships`;
+- the event's narrative text ("Brand opportunity with <brand>.").
+
+Two limits:
+
+- Events created before PR #1766 still hold the sponsor in `host_brand`
+  and still display it as the organizer.
+- Calendar-spawned events (`spawnEventsFromCalendar`,
+  `src/services/eventAutomationService.js`) still write the sponsor as
+  organizer.
+
+Nothing was backfilled.
 
 ---
 
