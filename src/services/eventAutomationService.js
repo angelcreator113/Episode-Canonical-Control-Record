@@ -330,6 +330,26 @@ async function ensureVenueLocation(venueName, venueAddress, category, models) {
 }
 
 /**
+ * Who may be chosen as a guest, in either stage of assembleGuestList
+ * (Task #1800) — one place, so the two stages cannot drift apart again.
+ *   - status finalized or generated (no drafts, no archived profiles);
+ *   - LalaVerse profiles only (feed_layer defaults to 'real_world');
+ *   - never JustAWoman (she is the host, not an attendee);
+ *   - celebrity_tier null, accessible or selective — untouchable profiles
+ *     do not turn up at a prestige-3 brunch.
+ * celebrity_tier is added by migration 20260713000000; the old try/catch
+ * around this condition wrapped a plain assignment and guarded nothing.
+ */
+function guestEligibilityWhere(Op) {
+  return {
+    status: { [Op.in]: ['finalized', 'generated'] },
+    feed_layer: 'lalaverse',
+    is_justawoman_record: { [Op.ne]: true },
+    [Op.or]: [{ celebrity_tier: null }, { celebrity_tier: 'accessible' }, { celebrity_tier: 'selective' }],
+  };
+}
+
+/**
  * Score one fill-stage guest candidate against the guests already chosen
  * (Task #1796). Category match: the candidate's content fits the event's
  * cultural category (+20). Lala relationship: how directly they touch
@@ -382,17 +402,12 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
       ).filter(Boolean);
 
       if (relatedIds.length > 0) {
-        // Task #1796: a guest arriving through a relationship is no more
-        // eligible than one arriving through the fill query below, so this
-        // stage applies the same two filters guestWhere does — never
-        // JustAWoman, never a real-world profile. A related profile filtered
-        // out here leaves its slot to the fill stage.
+        // A guest arriving through a relationship is no more eligible than
+        // one arriving through the fill query below (Evoni, Tasks #1796 and
+        // #1800), so this stage applies the same rules: guestEligibilityWhere.
+        // A related profile filtered out here leaves its slot to the fill stage.
         const relatedProfiles = await SocialProfile.findAll({
-          where: {
-            id: { [Op.in]: relatedIds },
-            feed_layer: 'lalaverse',
-            is_justawoman_record: { [Op.ne]: true },
-          },
+          where: { ...guestEligibilityWhere(Op), id: { [Op.in]: relatedIds } },
           attributes: ['id', 'handle', 'display_name'],
         });
 
@@ -408,7 +423,11 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
           });
         }
       }
-    } catch { /* relationships table may not exist */ }
+    } catch (err) {
+      // The relationships table may not exist. Logged, because a failure
+      // here quietly leaves the event with no related guests (Task #1800).
+      console.warn('[EventAutomation] Relationship-stage guest lookup failed:', err.message);
+    }
   }
 
   // 2. Fill remaining spots — mix of category matches, diverse archetypes and tiers
@@ -417,17 +436,12 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
     const contentMatches = CATEGORY_TO_CONTENT[category] || [];
     const excludeIds = [hostProfile?.id, ...guests.map(g => g.profile_id)].filter(Boolean);
 
-    // Get more candidates than needed, then diversify
-    // Exclude untouchable profiles from guest lists
+    // Get more candidates than needed, then diversify. Same eligibility
+    // rules as the relationship stage (guestEligibilityWhere).
     const guestWhere = {
-      status: { [Op.in]: ['finalized', 'generated'] },
-      feed_layer: 'lalaverse',
-      is_justawoman_record: { [Op.ne]: true },  // Never include JustAWoman as guest
+      ...guestEligibilityWhere(Op),
       ...(excludeIds.length > 0 ? { id: { [Op.notIn]: excludeIds } } : {}),
     };
-    try {
-      guestWhere[Op.or] = [{ celebrity_tier: null }, { celebrity_tier: 'accessible' }, { celebrity_tier: 'selective' }];
-    } catch { /* column may not exist */ }
     const candidatePool = await SocialProfile.findAll({
       where: guestWhere,
       // id breaks relevance ties, so the same data always gives the same
@@ -718,6 +732,7 @@ module.exports = {
   findVenue,
   ensureVenueLocation,
   assembleGuestList,
+  guestEligibilityWhere,
   scoreGuestCandidate,
   generateEventName,
   spawnEventsFromCalendar,
