@@ -2665,18 +2665,17 @@ The revised event should feel like a completely different experience from the si
             }).map(ev => {
               const linkedEpisode = ev.used_in_episode_id ? episodes.find(ep => ep.id === ev.used_in_episode_id) : null;
               const isSelected = selectedEvents.has(ev.id);
-              // Readiness by Event Package section (Task #1775): blocking =
-              // gated sections still incomplete (what keeps it in Needs
-              // Setup); warnings = the rest, shown but never blocking. The
-              // organizer is left out of the warnings line because the card
-              // already says "No organizer linked".
+              // Readiness by Event Package item (Task #1775, Evoni's gates
+              // of 2026-09-24): "Missing" lists only gate items (what keeps
+              // it in Needs Setup); "Still to finish" lists warning items,
+              // shown but never blocking.
               const readiness = computeEventPackageReadiness(ev);
               const state = computeEventState(ev, readiness);
               const stateCfg = EVENT_QUEUE_STATES[state];
               const organizer = resolveEventOrganizer(ev);
               const venueDate = resolveEventVenueAndDate(ev);
               const missing = describeMissing(readiness.blocking);
-              const toFinish = readiness.warnings.filter(sec => sec.key !== 'organizer').map(sec => sec.label);
+              const toFinish = describeMissing(readiness.warnings, 'warning');
               const menuOpen = openEventMenuId === ev.id;
               const openPackage = () => navigate(`/shows/${showId}/events/${ev.id}`);
               const primaryAction = () => {
@@ -2784,7 +2783,7 @@ The revised event should feel like a completely different experience from the si
                   )}
                   {state === 'needs_setup' && missing.length > 0 && <div data-testid={`event-card-missing-${ev.id}`} style={{ color: '#b45309' }}>Missing: {missing.join(' · ')}</div>}
                   {(state === 'needs_setup' || state === 'ready' || state === 'needs_organizer') && toFinish.length > 0 && (
-                    <div data-testid={`event-card-warnings-${ev.id}`} style={{ color: '#94a3b8' }}>Still to finish: {toFinish.join(', ')}</div>
+                    <div data-testid={`event-card-warnings-${ev.id}`} style={{ color: '#94a3b8' }}>Still to finish: {toFinish.join(' · ')}</div>
                   )}
                   {state === 'used' && linkedEpisode && <div>Episode {linkedEpisode.episode_number}: {linkedEpisode.title}</div>}
                 </div>

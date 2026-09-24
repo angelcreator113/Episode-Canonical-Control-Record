@@ -1,5 +1,5 @@
 /**
- * Event Package readiness, by section (Task #1775).
+ * Event Package readiness, by section and item (Task #1775).
  *
  * Replaces the flat four-chip list computeEventReadiness used to return
  * (outfit / venue / scene / invite) with one entry per Event Package
@@ -9,7 +9,7 @@
  * eventReadiness.js so the queue and the Start Episode button read the
  * same gate declaration.
  *
- * Why a separate file: the Basics section reads resolveEventBasics
+ * Why a separate file: the sections read resolveEventBasics
  * (eventBasics.js), which itself imports resolveEventVenueAndDate from
  * eventReadiness.js. Putting this in eventReadiness.js would make the two
  * files import each other.
@@ -23,29 +23,50 @@
  *     event_date_auto, Task #1756) is a stored date, so it counts as set.
  *   - Nothing here fetches, saves or derives a value. Pure.
  *
- * GATES: SECTION_GATES below is the one place that says which sections
- * block Start Episode. Everything not gated is a warning. Evoni has not
- * ruled on a split yet (Task #1775 step 3), so it holds today's gates
- * exactly: outfit, venue + scene set, invitation. The organizer is not a
- * Start Episode gate today; the queue's Needs Organizer state checks it on
- * its own, as it did before.
+ * GATES — Evoni's ruling, 2026-09-24 (Task #1775). Start Episode asks
+ * whether there is enough canonical story truth to know what episode this
+ * is. BLOCK: event identity (name, category, format; date, where the
+ * auto-scheduled date counts as set), organizer, place (World Location
+ * only), invitation. WARN: scene set, Lala's look, featured attendees,
+ * stakes, time, dress code, money. A World Location establishes where it
+ * happens; a scene set is how it will be drawn, a production requirement.
+ * An episode can be created before the outfit is chosen (Beat 8 needs it,
+ * creation doesn't). The invitation stays a gate on purpose: Beats 4 and 5
+ * are the opportunity arriving, so an episode without one starts without
+ * its trigger. Warnings state their consequence and Start Anyway is
+ * offered. The gate set is READINESS_ITEMS below, one line per item.
+ *
+ * Recorded for later, not built (Evoni's ruling, 2026-09-24): readiness is
+ * not one thing. Event Ready, Script Ready, Production Ready, Evaluation
+ * Ready and Acceptance Ready are separate gates; Lala's look and scene set
+ * belong to the later ones. This module is Event Ready only.
  */
 import { resolveEventVenueAndDate, resolveEventOrganizer } from './eventReadiness';
 import { resolveEventBasics } from './eventBasics';
-import { resolveEventStakes } from './eventStakes';
+import { resolveEventStakes, COLUMN_DEFAULTS } from './eventStakes';
 
 // ── The gate declaration ──────────────────────────────────────────────
-// true = the section must be complete before Start Episode is enabled and
-// before the queue says Ready. false = shown as a warning only.
-// Today's gates, unchanged (awaiting Evoni's decision, Task #1775).
-export const SECTION_GATES = {
-  organizer: false,
-  identity: false,
-  people: false,
-  place: true,
-  invitation: true,
-  look: true,
-  stakes: false,
+// One entry per item, keyed "section.item". gate: true = the item must be
+// satisfied before Start Episode is enabled and before the queue says
+// Ready. gate: false = a warning: Start Episode asks first (Start Anyway)
+// and the consequence line says what skipping it means. Every item carries
+// a consequence so a gate can be turned into a warning by flipping one
+// boolean. An item with no entry here is a warning with no consequence.
+export const READINESS_ITEMS = {
+  'organizer.organizer': { gate: true, consequence: 'The event has no owner, so the episode would not know whose event it is.' },
+  'identity.name': { gate: true, consequence: 'The episode would have no event name.' },
+  'identity.category': { gate: true, consequence: 'The episode would not know what kind of event this is.' },
+  'identity.format': { gate: true, consequence: 'The episode would not know what shape the event takes.' },
+  'identity.date': { gate: true, consequence: 'The episode would not know when the event happens.' },
+  'identity.time': { gate: false, consequence: 'The episode has no set time.' },
+  'people.featured': { gate: false, consequence: 'The script will draw on the full guest list.' },
+  'place.venue': { gate: true, consequence: 'The episode would not know where the event happens.' },
+  'place.scene_set': { gate: false, consequence: 'Production will need a scene set before this event can be drawn.' },
+  'invitation.invitation': { gate: true, consequence: 'Beats 4 and 5 are the invitation arriving; without one the episode starts without its trigger.' },
+  'look.outfit': { gate: false, consequence: 'Beat 8 needs an outfit; it will have to be chosen before then.' },
+  'look.dress_code': { gate: false, consequence: 'Lala will dress without a stated dress code, so the look cannot be judged against one.' },
+  'stakes.story_stakes': { gate: false, consequence: 'The script will have no stated story stakes to build tension from.' },
+  'stakes.money': { gate: false, consequence: 'Finalizing the episode charges the stored cost, which may only be the column default.' },
 };
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
@@ -70,12 +91,35 @@ function basicsItem(key, label, field) {
 }
 
 /**
+ * Money (Task #1775, from describeEventMoney / resolveEventStakes).
+ * cost_coins is NOT NULL DEFAULT 100 and a stored 100 cannot be told from
+ * a chosen 100 (#1774), so money is almost never honestly "missing". The
+ * least misleading rule: satisfied when the event is a paid appearance,
+ * free (cost 0), or has a cost other than the column default; a warning
+ * when the cost equals the default (may never have been chosen) or, on a
+ * row that somehow has none, when there is no cost at all. Its state is
+ * 'stored', never 'set'.
+ */
+export function moneyItem(stakes, event) {
+  const kind = stakes.money.kind;
+  const cost = Number(event.cost_coins);
+  const isDefault = kind === 'cost' && cost === COLUMN_DEFAULTS.cost_coins;
+  const satisfied = kind === 'paid' || kind === 'free' || (kind === 'cost' && !isDefault);
+  return item('money', 'Money', satisfied, {
+    state: kind === 'missing' ? 'missing' : 'stored',
+    note: kind === 'missing'
+      ? 'No cost stored'
+      : (isDefault ? 'Cost matches the column default (100 coins)' : null),
+  });
+}
+
+/**
  * The Event Package's sections, in page order. Each entry:
  *   { key, label, items(ctx) → [{ key, label, satisfied, state, note }] }
  * ctx = { event, basics, venueDate, organizer, stakes }.
  * Adding a section (Lala's deliverables, once they have a home — Task
- * #1773) is one more entry here plus one key in SECTION_GATES; nothing
- * else changes. An entry without a SECTION_GATES key is a warning.
+ * #1773) is one more entry here plus one READINESS_ITEMS line per item;
+ * nothing else changes.
  */
 export const EVENT_PACKAGE_SECTIONS = [
   {
@@ -132,51 +176,55 @@ export const EVENT_PACKAGE_SECTIONS = [
     ],
   },
   {
+    // Dress code is Basics' dressCode field (the stored dress_code column);
+    // only its 'set' state counts, never a format/venue suggestion.
     key: 'look',
     label: "Lala's look",
-    items: ({ event }) => [
+    items: ({ event, basics }) => [
       item('outfit', 'Outfit', event.outfit_set_id || (Array.isArray(event.outfit_pieces) && event.outfit_pieces.length > 0)),
+      basicsItem('dress_code', 'Dress code', basics.dressCode),
     ],
   },
   {
-    // Only the story stakes count: narrative_stakes or fail_consequence,
-    // nullable text with no column default. Prestige, strictness, cost,
-    // deadline type and career tier never count — every row stores them
-    // (NOT NULL defaults or creation-path derivations, eventStakes.js), so
-    // their presence says nothing about whether anyone chose them.
+    // Story stakes: narrative_stakes or fail_consequence, nullable text
+    // with no column default. Prestige, strictness, deadline type and
+    // career tier never count — every row stores them (NOT NULL defaults
+    // or creation-path derivations, eventStakes.js). Money: moneyItem.
     key: 'stakes',
     label: 'Stakes',
-    items: ({ stakes }) => [
+    items: ({ event, stakes }) => [
       item('story_stakes', 'Story stakes', !stakes.relationship.missing, {
         state: stakes.relationship.missing ? 'missing' : 'stored',
       }),
+      moneyItem(stakes, event),
     ],
   },
 ];
 
 /**
- * Readiness by section.
+ * Readiness by section and item.
  * Returns {
- *   sections: [{ key, label, gate, complete, items, missing }],
- *   gatesMet,   // every gated section complete: Start Episode may run
- *   blocking,   // gated sections still incomplete
- *   warnings,   // ungated sections still incomplete
+ *   sections: [{ key, label, complete, kind: 'complete'|'blocking'|'warning',
+ *                items, missing, blockingMissing, warningMissing }],
+ *     each item also gets { gate, consequence } from READINESS_ITEMS;
+ *   gatesMet,       // no gate item missing: Start Episode may run
+ *   blocking,       // sections with a gate item missing
+ *   warnings,       // sections with a warning item missing
+ *   blockingItems,  // [{ section, sectionLabel, ...item }] gate items missing
+ *   warningItems,   // same, for warning items (the Start Anyway list)
  *   allComplete,
  * }
- * `missing` is the section's unsatisfied items. `options.sections` and
- * `options.gates` exist for tests and for adding a section; callers
- * normally pass neither. `options.suggest: false` (a used event) drops the
- * "suggestion not accepted" note; it cannot change what is satisfied.
+ * `options.sections` and `options.items` (a READINESS_ITEMS stand-in) are
+ * for tests and for adding a section; callers normally pass neither.
+ * `options.suggest: false` (a used event) drops the "suggestion not
+ * accepted" note; it cannot change what is satisfied.
  */
 export function computeEventPackageReadiness(event, options = {}) {
   const ev = event || {};
   const defs = options.sections || EVENT_PACKAGE_SECTIONS;
-  const gates = options.gates || SECTION_GATES;
+  const rules = options.items || READINESS_ITEMS;
   const ctx = {
     event: ev,
-    // Suggestions are resolved (unless options.suggest is false, for a
-    // used event) so an item can say one is waiting; they still never
-    // count, which is what the tests pin.
     basics: resolveEventBasics(ev, null, { suggest: options.suggest !== false }),
     venueDate: resolveEventVenueAndDate(ev),
     organizer: resolveEventOrganizer(ev),
@@ -184,33 +232,47 @@ export function computeEventPackageReadiness(event, options = {}) {
   };
 
   const sections = defs.map((def) => {
-    const items = def.items(ctx);
+    const items = def.items(ctx).map((it) => {
+      const rule = rules[`${def.key}.${it.key}`] || {};
+      return { ...it, gate: rule.gate === true, consequence: rule.consequence || null };
+    });
     const missing = items.filter((i) => !i.satisfied);
+    const blockingMissing = missing.filter((i) => i.gate);
+    const warningMissing = missing.filter((i) => !i.gate);
     return {
       key: def.key,
       label: def.label,
-      gate: gates[def.key] === true,
       complete: missing.length === 0,
+      kind: blockingMissing.length ? 'blocking' : (warningMissing.length ? 'warning' : 'complete'),
       items,
       missing,
+      blockingMissing,
+      warningMissing,
     };
   });
 
-  const blocking = sections.filter((s) => s.gate && !s.complete);
-  const warnings = sections.filter((s) => !s.gate && !s.complete);
+  const flat = (list) => sections.flatMap((s) => s[list].map((i) => ({ section: s.key, sectionLabel: s.label, ...i })));
+  const blockingItems = flat('blockingMissing');
+  const warningItems = flat('warningMissing');
   return {
     sections,
-    gatesMet: blocking.length === 0,
-    blocking,
-    warnings,
-    allComplete: blocking.length === 0 && warnings.length === 0,
+    gatesMet: blockingItems.length === 0,
+    blocking: sections.filter((s) => s.blockingMissing.length),
+    warnings: sections.filter((s) => s.warningMissing.length),
+    blockingItems,
+    warningItems,
+    allComplete: blockingItems.length === 0 && warningItems.length === 0,
   };
 }
 
-/** "Place: scene set" style labels for a list of incomplete sections. */
-export function describeMissing(sections) {
-  return (sections || []).map((s) => {
-    const labels = s.missing.map((m) => m.label);
+/**
+ * "Place: venue" style labels, one per section. which = 'blocking' lists
+ * only gate items, 'warning' only warning items, 'all' both.
+ */
+export function describeMissing(sections, which = 'blocking') {
+  const key = which === 'warning' ? 'warningMissing' : which === 'all' ? 'missing' : 'blockingMissing';
+  return (sections || []).filter((s) => s[key].length).map((s) => {
+    const labels = s[key].map((m) => m.label);
     if (labels.length === 1 && labels[0] === s.label) return s.label;
     return `${s.label}: ${labels.join(', ').toLowerCase()}`;
   });
@@ -236,8 +298,10 @@ export const EVENT_QUEUE_STATES = {
 // an already-used or declined event stays Used/Archived regardless of
 // whether it happens to lack an organizer or a readiness item, since
 // neither is actionable once the event is done. Then: no organizer →
-// Needs Organizer; any gated section incomplete → Needs Setup; else Ready.
-// Warning sections never move an event out of Ready.
+// Needs Organizer (the organizer is a gate, but it keeps its own state);
+// any other gate item missing → Needs Setup; else Ready. Warning items
+// (scene set, outfit, time, dress code, featured attendees, stakes, money)
+// never move an event out of Ready.
 export function computeEventState(event, readiness) {
   const ev = event || {};
 

@@ -32,9 +32,11 @@
  *
  * Review (Task #1775): readiness by Package section
  * (computeEventPackageReadiness, utils/eventReadinessSections.js) — each
- * section's state and what is missing in it. A section is either a gate
- * (blocks Start Episode) or a warning, per SECTION_GATES there. A
- * suggestion never satisfies a section; only a saved value does.
+ * section's state and what is missing in it. Each item is a gate (blocks
+ * Start Episode) or a warning, per READINESS_ITEMS there (Evoni's ruling,
+ * 2026-09-24). A suggestion never satisfies an item; only a saved value
+ * does. Start Episode with warnings open asks first, listing each warning
+ * and its consequence, with Start Anyway / Go back.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -47,7 +49,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
-import { computeEventPackageReadiness } from '../utils/eventReadinessSections';
+import { computeEventPackageReadiness, describeMissing } from '../utils/eventReadinessSections';
 import { resolveEventBasics, AUTO_DATE_KEY } from '../utils/eventBasics';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
@@ -130,6 +132,8 @@ export default function EventPackagePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [starting, setStarting] = useState(false);
+  // Start Anyway confirm (Task #1775): open while warnings are listed.
+  const [startConfirmOpen, setStartConfirmOpen] = useState(false);
   const [toast, setToast] = useState(null);
   // Owned here, not inside InvitationButton (Task #1668): load() below sets
   // loading=true while it refetches, which unmounts this page's whole JSX
@@ -316,6 +320,7 @@ export default function EventPackagePage() {
   const used = !!event.used_in_episode_id;
   const readiness = computeEventPackageReadiness(event, { suggest: !used });
   const { gatesMet } = readiness;
+  const blockedBy = describeMissing(readiness.blocking);
   const basics = resolveEventBasics(event, venueLocation, { suggest: !used });
   const venueDate = resolveEventVenueAndDate(event);
   const organizer = describeEventOrganizer(event, sourceProfile);
@@ -735,8 +740,17 @@ export default function EventPackagePage() {
     }
   };
 
+  // Start Episode: blocked while any gate item is missing; with warnings
+  // open it asks first (Start Anyway); with none it starts directly.
+  const requestStartEpisode = () => {
+    if (!gatesMet || used || starting) return;
+    if (readiness.warningItems.length) setStartConfirmOpen(true);
+    else handleStartEpisode();
+  };
+
   const handleStartEpisode = async () => {
     if (!gatesMet || used || starting) return;
+    setStartConfirmOpen(false);
     setStarting(true);
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, { draft_script: false });
@@ -1163,23 +1177,23 @@ export default function EventPackagePage() {
             <span className={`epp-readiness-label ${gatesMet ? 'is-ready' : ''}`} data-testid="readiness-label">{gatesMet ? 'READY' : 'PRE-FLIGHT'}</span>
             <span className="epp-readiness-summary">
               {gatesMet
-                ? (readiness.warnings.length ? `Start Episode is open. ${readiness.warnings.length} section${readiness.warnings.length === 1 ? '' : 's'} still to finish.` : 'Every section is complete.')
-                : `${readiness.blocking.length} section${readiness.blocking.length === 1 ? '' : 's'} must be complete before Start Episode.`}
+                ? (readiness.warningItems.length ? `Start Episode is open. ${readiness.warningItems.length} warning${readiness.warningItems.length === 1 ? '' : 's'} to review.` : 'Every section is complete.')
+                : `${readiness.blockingItems.length} item${readiness.blockingItems.length === 1 ? '' : 's'} must be set before Start Episode.`}
             </span>
           </div>
           <ul className="epp-rsections">
             {readiness.sections.map((sec) => {
               const Icon = READINESS_ICONS[sec.key] || PackagePlus;
-              const kind = sec.complete ? 'complete' : sec.gate ? 'blocking' : 'warning';
+              const { kind } = sec;
               return (
                 <li key={sec.key} className={`epp-rsection is-${kind}`} data-testid={`readiness-${sec.key}`} data-state={kind}>
                   <div className="epp-rsection-head">
                     <Icon size={14} aria-hidden="true" />
                     <span className="epp-rsection-label">{sec.label}</span>
                     <span className="epp-rsection-state">
-                      {sec.complete
+                      {kind === 'complete'
                         ? <><CheckCircle2 size={12} aria-hidden="true" /> Complete</>
-                        : sec.gate
+                        : kind === 'blocking'
                           ? <><Lock size={12} aria-hidden="true" /> Blocks Start Episode</>
                           : <><AlertTriangle size={12} aria-hidden="true" /> Warning</>}
                     </span>
@@ -1187,9 +1201,15 @@ export default function EventPackagePage() {
                   {!sec.complete && (
                     <ul className="epp-rsection-missing">
                       {sec.missing.map((m) => (
-                        <li key={m.key} data-testid={`readiness-missing-${sec.key}-${m.key}`} data-item-state={m.state}>
-                          <CircleDashed size={11} aria-hidden="true" /> {m.label}
-                          {m.note && <span className="epp-rsection-note"> · {m.note}</span>}
+                        <li
+                          key={m.key} className={m.gate ? 'is-gate' : 'is-warn'}
+                          data-testid={`readiness-missing-${sec.key}-${m.key}`} data-item-state={m.state} data-gate={m.gate ? 'true' : 'false'}
+                        >
+                          <span className="epp-rsection-item">
+                            {m.gate ? <Lock size={11} aria-hidden="true" /> : <CircleDashed size={11} aria-hidden="true" />} {m.label}
+                            {m.note && <span className="epp-rsection-note"> · {m.note}</span>}
+                          </span>
+                          {!m.gate && m.consequence && <span className="epp-rsection-consequence">{m.consequence}</span>}
                         </li>
                       ))}
                     </ul>
@@ -1201,6 +1221,12 @@ export default function EventPackagePage() {
         </section>
       </div>
 
+      {!used && !gatesMet && (
+        <div className="epp-start-blocked" data-testid="start-blocked">
+          <Lock size={13} aria-hidden="true" /> Start Episode needs: {blockedBy.join(' · ')}
+        </div>
+      )}
+
       {!used && (
         <div className="epp-actions">
           <button className="epp-btn epp-btn-secondary" onClick={openEditor}>
@@ -1209,12 +1235,41 @@ export default function EventPackagePage() {
           <button
             className="epp-btn epp-btn-primary"
             disabled={!gatesMet || starting}
-            title={gatesMet ? 'Start the episode' : 'Not ready yet — see Review'}
+            title={gatesMet ? 'Start the episode' : `Start Episode needs: ${blockedBy.join(' · ')}`}
             data-testid="start-episode"
-            onClick={handleStartEpisode}
+            onClick={requestStartEpisode}
           >
             <PlayCircle size={16} /> {starting ? 'Starting…' : 'Start Episode'}
           </button>
+        </div>
+      )}
+
+      {startConfirmOpen && gatesMet && !used && (
+        <div className="epp-modal-backdrop" onClick={() => { if (!starting) setStartConfirmOpen(false); }}>
+          <div className="epp-modal epp-start-confirm" role="dialog" aria-label="Start Episode with warnings" data-testid="start-confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="epp-modal-header">
+              <h3><AlertTriangle size={15} aria-hidden="true" /> Start with {readiness.warningItems.length} warning{readiness.warningItems.length === 1 ? '' : 's'}?</h3>
+              <button className="epp-icon-btn" onClick={() => setStartConfirmOpen(false)} aria-label="Close" disabled={starting}>
+                <X size={16} />
+              </button>
+            </div>
+            <ul className="epp-start-warnings">
+              {readiness.warningItems.map((w) => (
+                <li key={`${w.section}.${w.key}`} data-testid={`start-warning-${w.section}-${w.key}`}>
+                  <div className="epp-start-warning-head">{w.sectionLabel}: {w.label}{w.note ? <span className="epp-rsection-note"> · {w.note}</span> : null}</div>
+                  {w.consequence && <div className="epp-start-warning-consequence">{w.consequence}</div>}
+                </li>
+              ))}
+            </ul>
+            <div className="epp-start-confirm-actions">
+              <button type="button" className="epp-btn epp-btn-secondary" onClick={() => setStartConfirmOpen(false)} disabled={starting} data-testid="start-go-back">
+                <ArrowLeft size={15} /> Go back
+              </button>
+              <button type="button" className="epp-btn epp-btn-primary" onClick={handleStartEpisode} disabled={starting} data-testid="start-anyway">
+                <PlayCircle size={15} /> {starting ? 'Starting…' : 'Start Anyway'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

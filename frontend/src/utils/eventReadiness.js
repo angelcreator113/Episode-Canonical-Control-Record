@@ -8,10 +8,9 @@
  *
  * Readiness itself lives in eventReadinessSections.js (Task #1775):
  * computeEventPackageReadiness reports each Event Package section, and
- * SECTION_GATES there says which sections block Start Episode. The old
- * flat computeEventReadiness (outfit / venue / scene / invite) was
- * replaced by it; those four checks are now the Look, Place and
- * Invitation sections, and they are still the only gates.
+ * READINESS_ITEMS there says which items block Start Episode (Evoni's
+ * gates of 2026-09-24). It replaced the old flat computeEventReadiness
+ * (outfit / venue / scene / invite).
  */
 
 // Resolves an event's venue and date/time fields, top-level column first
