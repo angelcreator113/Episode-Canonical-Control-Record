@@ -324,8 +324,9 @@ $ git log --oneline b4624e92d..6a4760753
 ```
 
 #1781 changes five files under `frontend/src/` and adds one test under
-`tests/unit/`; it changes nothing under `src/`. It is not live in
-production as of this record.
+`tests/unit/`; it changes nothing under `src/`. Neither commit was
+deployed at this record's basis. Any later deploy of them belongs to a
+later record, not this one.
 
 ## §11. Observations — not findings, not ruled on
 
