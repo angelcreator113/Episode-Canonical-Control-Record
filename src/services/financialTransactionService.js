@@ -473,7 +473,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
       if (contentBonus > 0) {
         await addTx({
           type: 'income', category: 'content_revenue', amount: contentBonus,
-          description: `Content delivery bonus for ${event.host_brand || event.name}`,
+          description: `Brand deal content fee for ${event.host_brand || event.name}`,
           source_type: 'event', source_id: event.id, source_name: event.name,
         });
       }
