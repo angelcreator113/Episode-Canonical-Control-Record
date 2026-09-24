@@ -59,9 +59,11 @@ describe('compensation', () => {
   test('summary', () => {
     expect(describeCompensation({ is_paid: true, payment_amount: 1500 }).summary).toBe('Paid: 1500 coins');
     expect(describeCompensation({ is_paid: false, payment_amount: 0 }).summary).toBe('Unpaid');
+    // Carried from an opportunity with is_paid off (Evoni, 2026-09-24).
+    expect(describeCompensation({ is_paid: false, payment_amount: 1500 }).summary).toBe('Agreed: 1500 coins (not paid out)');
   });
 
-  test('paid needs a whole amount above 0; unpaid sends 0', () => {
+  test('paid needs a whole amount above 0; unpaid keeps the stored amount', () => {
     const ev = { is_paid: false, payment_amount: 0 };
     expect(buildCompensationUpdate(ev, { is_paid: true, payment_amount: '1500' }))
       .toEqual({ body: { is_paid: true, payment_amount: 1500 }, unchanged: false, errors: [] });
@@ -69,7 +71,9 @@ describe('compensation', () => {
     expect(buildCompensationUpdate(ev, { is_paid: true, payment_amount: '12.5' }).errors).toHaveLength(1);
     expect(buildCompensationUpdate(ev, compensationDraftFrom(ev)).unchanged).toBe(true);
     const paid = { is_paid: true, payment_amount: 1500 };
-    expect(buildCompensationUpdate(paid, { is_paid: false, payment_amount: '1500' }).body).toEqual({ is_paid: false, payment_amount: 0 });
+    expect(buildCompensationUpdate(paid, { is_paid: false, payment_amount: '1500' }).body).toEqual({ is_paid: false, payment_amount: 1500 });
+    const agreed = { is_paid: false, payment_amount: 1500 };
+    expect(buildCompensationUpdate(agreed, compensationDraftFrom(agreed)).unchanged).toBe(true);
   });
 });
 

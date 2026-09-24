@@ -71,10 +71,10 @@ describe('restrictionsFromOpportunity', () => {
 });
 
 describe('compensationFromOpportunity', () => {
-  test('DECIMAL string rounds to the INTEGER column; paid when above zero', () => {
-    expect(compensationFromOpportunity({ payment_amount: '1500.00' })).toEqual({ is_paid: true, payment_amount: 1500 });
-    expect(compensationFromOpportunity({ payment_amount: '249.50' })).toEqual({ is_paid: true, payment_amount: 250 });
-    expect(compensationFromOpportunity({ payment_amount: 99.49 })).toEqual({ is_paid: true, payment_amount: 99 });
+  test('DECIMAL string rounds to the INTEGER column; is_paid stays off until the money slice', () => {
+    expect(compensationFromOpportunity({ payment_amount: '1500.00' })).toEqual({ is_paid: false, payment_amount: 1500 });
+    expect(compensationFromOpportunity({ payment_amount: '249.50' })).toEqual({ is_paid: false, payment_amount: 250 });
+    expect(compensationFromOpportunity({ payment_amount: 99.49 })).toEqual({ is_paid: false, payment_amount: 99 });
   });
 
   test('zero, missing, rounding to zero, or junk is unpaid with 0', () => {

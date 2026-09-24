@@ -76,17 +76,19 @@ function restrictionsFromOpportunity(opp) {
 
 /**
  * Opportunity.payment_amount (DECIMAL(10,2), which node-postgres returns
- * as a string) → the event's is_paid / payment_amount. The event column is
- * INTEGER, so the amount is rounded to the nearest whole number; is_paid
- * is true when that rounded amount is above zero. Contractual pay only:
- * rewards are not touched.
+ * as a string) → the event's payment_amount. The event column is INTEGER,
+ * so the amount is rounded to the nearest whole number. Contractual pay
+ * only: rewards are not touched.
+ *
+ * is_paid is always false here (Evoni, 2026-09-24): the pay is carried as a
+ * recorded term, but finalizeEpisodeFinancials pays only when is_paid is
+ * set, and whether opportunity events pay out is the money slice's
+ * decision. Setting is_paid here would change what Lala earns today.
  */
 function compensationFromOpportunity(opp) {
   const amount = Number.parseFloat(opp?.payment_amount);
   const rounded = Number.isFinite(amount) ? Math.round(amount) : 0;
-  return rounded > 0
-    ? { is_paid: true, payment_amount: rounded }
-    : { is_paid: false, payment_amount: 0 };
+  return { is_paid: false, payment_amount: rounded > 0 ? rounded : 0 };
 }
 
 /**

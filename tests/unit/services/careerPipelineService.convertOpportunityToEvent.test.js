@@ -64,7 +64,7 @@ function makeModels({ opp, failDeliverables = false, withModel = true } = {}) {
 }
 
 describe('convertOpportunityToEvent — terms carry (Task #1814)', () => {
-  test('restrictions, is_paid and payment_amount go on the event; automation.payment_amount is kept', async () => {
+  test('restrictions and payment_amount go on the event, is_paid stays off; automation.payment_amount is kept', async () => {
     const opp = makeOpportunity();
     const { models, created } = makeModels({ opp });
     await convertOpportunityToEvent('opp-1', 'show-1', models);
@@ -72,7 +72,7 @@ describe('convertOpportunityToEvent — terms carry (Task #1814)', () => {
     expect(created).toHaveLength(1);
     const ev = created[0];
     expect(ev.restrictions).toEqual([{ type: 'exclusivity', description: 'No competing beauty brands for 90 days' }]);
-    expect(ev.is_paid).toBe(true);
+    expect(ev.is_paid).toBe(false);
     expect(ev.payment_amount).toBe(1500);
     expect(ev.opportunity_id).toBe('opp-1');
     expect(ev.canon_consequences.automation.payment_amount).toBe('1500.00');
@@ -97,10 +97,10 @@ describe('convertOpportunityToEvent — terms carry (Task #1814)', () => {
     expect(opp.update).toHaveBeenCalledWith({ event_id: created[0].id });
   });
 
-  test('payment rounds to the INTEGER column; zero is unpaid', async () => {
+  test('payment rounds to the INTEGER column; is_paid stays off either way', async () => {
     const a = makeModels({ opp: makeOpportunity({ payment_amount: '99.50' }) });
     await convertOpportunityToEvent('opp-1', 'show-1', a.models);
-    expect(a.created[0]).toMatchObject({ is_paid: true, payment_amount: 100 });
+    expect(a.created[0]).toMatchObject({ is_paid: false, payment_amount: 100 });
 
     const b = makeModels({ opp: makeOpportunity({ payment_amount: '0.00', exclusivity: null, deliverables: [] }) });
     const result = await convertOpportunityToEvent('opp-1', 'show-1', b.models);
@@ -133,7 +133,7 @@ describe('convertOpportunityToEvent — terms carry (Task #1814)', () => {
     expect(insert.sql).toMatch(/restrictions, is_paid, payment_amount/);
     expect(JSON.parse(insert.opts.replacements.restrictions))
       .toEqual([{ type: 'exclusivity', description: 'No competing beauty brands for 90 days' }]);
-    expect(insert.opts.replacements).toMatchObject({ is_paid: true, payment_amount: 1500 });
+    expect(insert.opts.replacements).toMatchObject({ is_paid: false, payment_amount: 1500 });
     expect(queries.filter(q => /INSERT INTO event_deliverables/.test(q.sql))).toHaveLength(1);
   });
 });

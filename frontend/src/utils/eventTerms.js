@@ -147,9 +147,12 @@ export function describeCompensation(event) {
   return {
     isPaid: paid,
     amount: Number.isFinite(amount) ? amount : 0,
+    // An unpaid event can still carry an agreed amount from its opportunity:
+    // the pay is recorded as a term, and payout waits on the money slice
+    // (Evoni, 2026-09-24).
     summary: paid
       ? `Paid: ${Number.isFinite(amount) ? amount : 0} coins`
-      : 'Unpaid',
+      : (Number.isFinite(amount) && amount > 0 ? `Agreed: ${amount} coins (not paid out)` : 'Unpaid'),
   };
 }
 
@@ -160,14 +163,15 @@ export function compensationDraftFrom(event) {
 
 /**
  * PUT body for the compensation draft: is_paid and payment_amount (an
- * INTEGER column). Unpaid sends payment_amount 0. Returns
+ * INTEGER column). Unpaid keeps the stored amount, so an agreed amount
+ * carried from an opportunity is not erased. Returns
  * { body, unchanged, errors }.
  */
 export function buildCompensationUpdate(event, draft) {
   const current = describeCompensation(event);
   const errors = [];
   const isPaid = !!draft?.is_paid;
-  let amount = 0;
+  let amount = current.amount > 0 ? current.amount : 0;
   if (isPaid) {
     const raw = String(draft?.payment_amount ?? '').trim();
     const n = Number(raw);
@@ -179,7 +183,7 @@ export function buildCompensationUpdate(event, draft) {
   }
   return {
     body: { is_paid: isPaid, payment_amount: amount },
-    unchanged: current.isPaid === isPaid && (isPaid ? current.amount === amount : current.amount === 0),
+    unchanged: current.isPaid === isPaid && current.amount === amount,
     errors,
   };
 }

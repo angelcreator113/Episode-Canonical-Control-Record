@@ -199,8 +199,9 @@ async function convertOpportunityToEvent(opportunityId, showId, models) {
   if (!opp) throw new Error('Opportunity not found');
 
   // Terms the opportunity proposes (Task #1814, eventTermsService.js).
-  // automation.payment_amount below stays as it was; is_paid /
-  // payment_amount are the event's own contractual-pay columns.
+  // automation.payment_amount below stays as it was; payment_amount is the
+  // event's own contractual-pay column. is_paid stays off until the money
+  // slice rules on payout (see compensationFromOpportunity).
   const compensation = compensationFromOpportunity(opp);
 
   const eventData = {

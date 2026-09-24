@@ -240,7 +240,7 @@ describe('scheduleOpportunityAsEvent carries the opportunity terms (Task #1814)'
       .toBeLessThan(order.findIndex(s => /INSERT INTO event_deliverables/.test(s)));
   });
 
-  it('exclusivity becomes a restriction; payment becomes is_paid / payment_amount (rounded to the INTEGER column)', async () => {
+  it('exclusivity becomes a restriction; payment is carried to payment_amount (rounded), is_paid stays off', async () => {
     const { models, queries } = makeModels({ opportunity: { ...termsOpportunity(), payment_amount: '249.50' } });
     const result = await scheduleOpportunityAsEvent('opp-1', 'show-1', models);
 
@@ -249,7 +249,7 @@ describe('scheduleOpportunityAsEvent carries the opportunity terms (Task #1814)'
     expect(insert.sql).toMatch(/:restrictions, :is_paid, :payment_amount/);
     expect(JSON.parse(insert.opts.replacements.restrictions))
       .toEqual([{ type: 'exclusivity', description: 'No competing beauty brands for 90 days' }]);
-    expect(insert.opts.replacements.is_paid).toBe(true);
+    expect(insert.opts.replacements.is_paid).toBe(false);
     expect(insert.opts.replacements.payment_amount).toBe(250);
     // Requirements are not touched: access requirements stay their own term.
     expect(insert.sql).not.toMatch(/requirements/);
