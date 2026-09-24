@@ -2073,6 +2073,101 @@ Two limits:
 
 Nothing was backfilled.
 
+**(s) Deliverables and the social package (Evoni, 2026-09-24, Task
+#1772).** Docs only: no code, and neither system is built by this entry.
+
+**1. LALA'S DELIVERABLES** are what a brand or organizer requires of her
+inside the story: a tagged post, a story, an appearance. They belong to
+the event, they affect her career and relationships, and they are canon.
+
+**2. THE SHOW'S SOCIAL PACKAGE** is what Prime Studios publishes to
+promote an episode: thumbnails, titles, descriptions, short-form clips,
+captions, schedules. It belongs to the episode's distribution and is not
+canon. Nothing in it happens inside LalaVerse.
+
+**3. They may share assets, and neither is the other.** A venue image, a
+wardrobe cutout or a clip can serve both. Completing one never completes
+the other: Lala posting her tagged story does not publish the episode's
+Reel, and publishing the Reel does not satisfy the brand.
+
+**4. What exists today.**
+
+*Lala's deliverables: no dedicated field on the event.* `WorldEvent`
+(`src/models/WorldEvent.js`) has no deliverables column. What exists is
+scattered:
+
+- `requirements`, a free-form JSONB object on the event. The Event
+  Package (`EventPackagePage`) lists its entries as "Requirements" under
+  its "Style & Deliverables" section. Nothing defines which keys it holds,
+  and nothing marks an entry as a deliverable or tracks it as done.
+- `canon_consequences.automation.social_tasks`, Lala's in-story posting
+  tasks ("Post outfit details… tag <brand>", "Tease the <brand>
+  collaboration without disclosing deliverables"). `buildSocialTasks`
+  (`src/services/episodeGeneratorService.js`) writes them. At episode
+  generation they are copied into `episode_todo_lists.social_tasks`, and
+  `generateSocialChecklist` (`src/services/socialChecklistService.js`)
+  renders them as a checklist image. These are closer to a to-do list
+  than to a brand's contract: generated from the event type, outfit and
+  guests, not from what an organizer asked for.
+- `Opportunity.deliverables` (`src/models/Opportunity.js`, JSONB
+  `[{type, description, due_date, completed}]`) is the one real
+  deliverables structure, with per-type defaults in `opportunityRoutes.js`
+  (for example `brand_deal`: sponsored content, story mentions, engagement
+  targets). It lives on the career opportunity, not the event, and
+  neither `convertOpportunityToEvent` (`careerPipelineService.js`) nor
+  `scheduleOpportunityAsEvent` (`feedEventPipelineService.js`) carries it
+  onto the event it creates.
+- `event_type` includes `deliverable` and `brand_deal` as mechanics
+  (`WorldEvent.js` comment), which name the kind of event, not what is
+  owed.
+
+So a brand's actual requirements of Lala have no home on the event, and
+nothing records whether she met them.
+
+*The show's social package: distribution metadata is built; the package
+is not.* `Episode.distribution_metadata` (`src/models/Episode.js`, JSONB,
+"Per-platform distribution: titles, descriptions, hashtags, schedule per
+platform") is read and written by `GET` and `PUT
+/world/:showId/episodes/:episodeId/distribution` and filled by `POST
+…/generate-distribution` (`src/routes/worldEvents.js`), which calls
+`generateDistribution` (`src/services/distributionService.js`, an AI call
+for YouTube, TikTok, Instagram and Facebook). `EpisodeDistributionTab`
+(`frontend/src/components/Episodes/EpisodeDistributionTab.jsx`) edits
+title, caption, thumbnail, hashtags, schedule, status, URL and aspect
+ratio per platform. Thumbnails have their own system
+(`docs/THUMBNAIL_SYSTEM.md`, §7 decision 10). What is not built: any
+store of short-form clips, stills or teasers for an episode, or anything
+that proposes them.
+
+**5. Intended, not built: a social package derived from the script's
+canonical beats.** The beats are where the moments worth clipping are
+(the invitation reveal, the transformation, the arrival, the
+cliffhanger), so the package should be proposed from them rather than
+found by scrubbing the finished video. This depends on Generate Script
+instantiating the 14 canonical beats with their numbers and keys, which
+§8(j) rules and `docs/SCRIPT_PIPELINE.md` records as not yet true of the
+code.
+
+**6. Ordering.** The social package follows production, because that is
+when the assets exist. Some of its text (titles, descriptions, a
+thumbnail concept) can be drafted earlier, from the script.
+
+**7. Why this ruling exists.** The two have been, or can easily be,
+conflated, and keeping them apart prevents a shared store forming.
+
+- *The same distinction was drawn once before.* §7 decision 10 separated
+  the Episode Run Sheet (the producer's tracker, `EpisodeTodoPage`) from
+  the Episode To-Do Overlays, and its Task #1615 amendment settled that
+  those lists are Lala's, seen on her phone, with only their presentation
+  styling belonging to the show. That is the same line, inside LalaVerse
+  versus Prime Studios' own work, drawn for production tracking. This
+  entry draws it for publishing. It is the second time the distinction has
+  needed drawing.
+- *The word "social" is on both sides.* Lala's in-story posting tasks are
+  called `social_tasks` and render as a "social checklist"; the show's
+  publishing work is what this entry calls the social package. The
+  shared name is the likeliest place for one store to start holding both.
+
 ---
 
 ## 9. Owed before enforcement
