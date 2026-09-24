@@ -385,6 +385,12 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
   const venueTheme = await generateUniqueVenue(opp.name, opp.opportunity_type, opp.connector_handle, prestige, showId);
 
   // Find guest profiles from feed (connected to the host)
+  // Task #1797: never JustAWoman (she is the host, not an attendee; the
+  // same exclusion assembleGuestList's guestWhere carries) and never a
+  // real-world profile at a LalaVerse event (feed_layer defaults to
+  // 'real_world'). Fewer than six guests when the eligible LalaVerse pool
+  // is small is the correct result, not a regression — do not relax
+  // these filters to fill the list.
   let guestProfiles = [];
   if (opp.connector_profile_id) {
     try {
@@ -393,6 +399,8 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
          FROM social_profiles
          WHERE id != :hostId AND status IN ('generated', 'finalized', 'crossed')
          AND lala_relevance_score >= 3
+         AND is_justawoman_record IS NOT TRUE
+         AND feed_layer = 'lalaverse'
          ORDER BY RANDOM() LIMIT 6`,
         { replacements: { hostId: opp.connector_profile_id } }
       );
