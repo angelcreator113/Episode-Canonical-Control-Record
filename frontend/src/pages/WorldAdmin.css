@@ -126,3 +126,80 @@
     font-size: var(--text-xs) !important;
   }
 }
+
+/* ── Wardrobe cards: upload processing state (Task #1769) ─────────────
+   Overlay on the card image while background removal runs, and when it
+   did not finish inside the give-up window (utils/wardrobeProcessingState). */
+.wa-wd-processing {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  line-height: 1.3;
+  cursor: default;
+}
+
+.wa-wd-processing--running {
+  background: rgba(250, 247, 240, 0.94);
+  border: 1px solid var(--lala-gold, #B8962E);
+  color: var(--lala-ink, #2C2C2C);
+}
+
+.wa-wd-processing--stalled {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+}
+
+.wa-wd-processing-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wa-wd-processing-spin {
+  flex-shrink: 0;
+  animation: wa-wd-spin 1s linear infinite;
+}
+
+@keyframes wa-wd-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wa-wd-processing-spin { animation: none; }
+}
+
+.wa-wd-processing-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wa-wd-processing-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #fdba74;
+  background: #fff;
+  color: #9a3412;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.wa-wd-processing-btn:focus-visible {
+  outline: 2px solid var(--lala-gold, #B8962E);
+  outline-offset: 2px;
+}
