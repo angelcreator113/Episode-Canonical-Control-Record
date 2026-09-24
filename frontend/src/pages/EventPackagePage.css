@@ -971,6 +971,7 @@
   padding: 14px 16px;
 }
 .epp-basics-dialog input,
+.epp-basics-dialog select,
 .epp-basics-dialog textarea {
   width: 100%;
   box-sizing: border-box;

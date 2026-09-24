@@ -17,6 +17,11 @@
  * (resolveEventBasics, utils/eventBasics.js). A suggestion is shown only,
  * never saved, until Evoni accepts it.
  *
+ * Category and format (Task #1780) are Basics fields too, chosen from
+ * the model's allowed values (utils/eventTaxonomy.js). They are set or
+ * missing, never suggested; setting a format is what lets the time and
+ * dress-code suggestions above appear.
+ *
  * Organizer (Task #1761): Change Organizer picks a creator (a Social
  * Profile) or a brand (a lalaverse_brands row, written to host_brand by
  * name). Choosing one kind clears the other kind in both of its homes;
@@ -59,6 +64,9 @@ import {
   resolveEventStakes, stakesDraftFrom, buildStakesUpdate,
   DEADLINE_TYPES, CAREER_TIERS, COST_READ_ONLY_REASON, STORED_ORIGIN_NOTE,
 } from '../utils/eventStakes';
+import {
+  EVENT_CATEGORIES, EVENT_FORMATS, taxonomyLabel, resolveTaxonomyField,
+} from '../utils/eventTaxonomy';
 import { InvitationButton } from './InvitationGenerator';
 import './EventPackagePage.css';
 
@@ -80,6 +88,10 @@ const BASICS_FIELDS = {
   time: { label: 'Time', title: 'Start time', column: 'event_time', input: 'time', maxLength: 50 },
   description: { label: 'Description', title: 'Description', column: 'description', input: 'textarea' },
   dressCode: { label: 'Dress code', title: 'Dress code', column: 'dress_code', input: 'text', maxLength: 200 },
+  // Category and format (Task #1780): chosen from the model's allowed
+  // values (utils/eventTaxonomy.js), set or missing only — no suggestion.
+  category: { label: 'Category', title: 'Category', column: 'category', input: 'select', options: EVENT_CATEGORIES },
+  format: { label: 'Format', title: 'Format', column: 'format', input: 'select', options: EVENT_FORMATS },
 };
 const BASICS_ORDER = ['date', 'time', 'description', 'dressCode'];
 const BASICS_STATE_LABEL = { set: 'Set', suggested: 'Suggested', missing: 'Missing' };
@@ -97,6 +109,7 @@ const HH_MM = /^\d{2}:\d{2}$/;
 // Anything else (older free-text values) is shown as stored.
 function fmtBasicsValue(key, value) {
   if (!value) return value;
+  if (key === 'category' || key === 'format') return taxonomyLabel(value);
   if (key === 'date' && ISO_DATE.test(value)) {
     const d = new Date(`${value}T00:00:00Z`);
     if (!Number.isNaN(d.getTime())) {
@@ -321,7 +334,13 @@ export default function EventPackagePage() {
   const readiness = computeEventPackageReadiness(event, { suggest: !used });
   const { gatesMet } = readiness;
   const blockedBy = describeMissing(readiness.blocking);
-  const basics = resolveEventBasics(event, venueLocation, { suggest: !used });
+  // Category and format (Task #1780) ride alongside the four Basics fields
+  // resolveEventBasics returns; they carry no suggestion.
+  const basics = {
+    ...resolveEventBasics(event, venueLocation, { suggest: !used }),
+    category: resolveTaxonomyField(event.category, EVENT_CATEGORIES),
+    format: resolveTaxonomyField(event.format, EVENT_FORMATS),
+  };
   const venueDate = resolveEventVenueAndDate(event);
   const organizer = describeEventOrganizer(event, sourceProfile);
   const stakes = resolveEventStakes(event);
@@ -400,6 +419,9 @@ export default function EventPackagePage() {
             <span className="epp-auto-chip" title="System default: 45 days after the event was created. Change it to make it yours.">
               <CalendarClock size={11} aria-hidden="true" /> Auto-scheduled
             </span>
+          )}
+          {f.state === 'set' && f.inList === false && (
+            <span className="epp-saved-copy" data-testid={`basics-${key}-unlisted`} title="Stored before the Event Package offered a list; not one of the allowed values. Choose one to replace it.">not an allowed value</span>
           )}
           {f.fromSavedCopy && (
             <span className="epp-saved-copy" title="Not yet in the event's own fields — shown from its saved automation copy">saved copy</span>
@@ -816,8 +838,8 @@ export default function EventPackagePage() {
             <div><dt>Name</dt><dd>{event.name}</dd></div>
             {BASICS_ORDER.map(renderBasicsRow)}
             <div><dt>Brand</dt><dd>{event.host_brand || 'Not set'}</dd></div>
-            <div><dt>Category</dt><dd>{fmtLabel(event.category)}</dd></div>
-            <div><dt>Format</dt><dd>{fmtLabel(event.format)}</dd></div>
+            {renderBasicsRow('category')}
+            {renderBasicsRow('format')}
           </dl>
 
           {nameSuggestOpen && (
@@ -1298,7 +1320,20 @@ export default function EventPackagePage() {
                     <CalendarClock size={13} aria-hidden="true" /> Auto-scheduled 45 days after the event was created. Saving makes this date yours.
                   </p>
                 )}
-                {spec.input === 'textarea' ? (
+                {spec.input === 'select' ? (
+                  <select
+                    autoFocus value={basicsDraft}
+                    onChange={(e) => setBasicsDraft(e.target.value)}
+                    aria-label={spec.title}
+                    data-testid={`basics-input-${key}`}
+                  >
+                    <option value="">Choose {spec.label.toLowerCase()}…</option>
+                    {basicsDraft && !spec.options.includes(basicsDraft) && (
+                      <option value={basicsDraft} disabled>{basicsDraft} (not an allowed value)</option>
+                    )}
+                    {spec.options.map((o) => <option key={o} value={o}>{taxonomyLabel(o)}</option>)}
+                  </select>
+                ) : spec.input === 'textarea' ? (
                   <textarea
                     autoFocus rows={5} value={basicsDraft}
                     onChange={(e) => setBasicsDraft(e.target.value)}
@@ -1330,7 +1365,8 @@ export default function EventPackagePage() {
                 <button type="button" className="epp-btn epp-btn-small" onClick={closeBasics} disabled={basicsSaving}>Cancel</button>
                 <button
                   type="button" className="epp-btn epp-btn-small epp-btn-primary"
-                  onClick={() => saveBasicsField(key, basicsDraft)} disabled={basicsSaving || !basicsDraft.trim()}
+                  onClick={() => saveBasicsField(key, basicsDraft)}
+                  disabled={basicsSaving || !basicsDraft.trim() || (spec.input === 'select' && !spec.options.includes(basicsDraft))}
                 >
                   {basicsSaving ? 'Saving…' : 'Save'}
                 </button>

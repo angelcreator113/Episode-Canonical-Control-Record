@@ -1,0 +1,24 @@
+{
+  "category": [
+    "fashion",
+    "social",
+    "brunch_dining",
+    "beauty_wellness",
+    "creator_brand",
+    "arts_entertainment",
+    "luxury_prestige",
+    "community_local",
+    "travel_destination",
+    "personal_relationship"
+  ],
+  "format": [
+    "cocktail_party",
+    "garden_soiree",
+    "gallery_opening",
+    "gala",
+    "brunch",
+    "concert",
+    "brand_launch",
+    "premiere"
+  ]
+}
