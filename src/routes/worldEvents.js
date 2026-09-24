@@ -28,6 +28,7 @@ const { mergeCanonConsequences } = require('../utils/canonConsequencesMerge');
 const { parseExpectedVersion, versionMatches, staleSaveBody } = require('../utils/eventVersion');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../utils/eventEpisodeLink');
 const { withAutoScheduledDate, autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
+const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -3342,12 +3343,12 @@ router.post('/world/:showId/events/:eventId/generate-overlay/:overlayType', requ
       if (!Array.isArray(socialTasks) || socialTasks.length === 0) {
         try {
           const { buildSocialTasks } = require('../services/episodeGeneratorService');
-          const auto = event.canon_consequences?.automation || {};
           let hostProfile = null;
-          if (auto.host_profile_id) {
+          const creator = eventCreatorOrganizer(event);
+          if (creator) {
             const [rows] = await sequelize.query(
               'SELECT platform, content_category, archetype FROM social_profiles WHERE id = :id LIMIT 1',
-              { replacements: { id: auto.host_profile_id } }
+              { replacements: { id: creator.profileId } }
             );
             hostProfile = rows?.[0] || null;
           }

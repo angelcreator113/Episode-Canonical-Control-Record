@@ -22,6 +22,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { createCanvas, registerFont } = require('canvas');
 const _sharp = require('sharp');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -497,13 +498,11 @@ async function generateEpisodeTodoList(episodeId, showId, models) {
       const eventType = event.event_type || 'invite';
       // Try to load host profile for platform-aware tasks
       let hostProfile = null;
-      const automation = typeof event.canon_consequences === 'string'
-        ? JSON.parse(event.canon_consequences)?.automation
-        : event.canon_consequences?.automation;
-      if (automation?.host_profile_id) {
+      const creator = eventCreatorOrganizer(event);
+      if (creator) {
         const [rows] = await sequelize.query(
           'SELECT platform, content_category, archetype FROM social_profiles WHERE id = :id LIMIT 1',
-          { replacements: { id: automation.host_profile_id } }
+          { replacements: { id: creator.profileId } }
         );
         hostProfile = rows?.[0] || null;
       }

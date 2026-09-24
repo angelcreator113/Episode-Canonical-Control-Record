@@ -18,6 +18,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const crypto = require('crypto');
+const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 let client = null;
@@ -234,7 +235,7 @@ async function loadScriptContext(episodeId, showId, models) {
     const storyRoleByProfileId = new Map(
       featuredGuests.map(g => [g.profile_id || g.id, g.story_role || null])
     );
-    const profileIds = [auto.host_profile_id, ...promptGuests.map(g => g.profile_id || g.id)].filter(Boolean);
+    const profileIds = [eventCreatorOrganizer(context.event)?.profileId, ...promptGuests.map(g => g.profile_id || g.id)].filter(Boolean);
     if (profileIds.length > 0) {
       const [rows] = await sequelize.query(
         `SELECT sp.id, sp.handle, sp.display_name, sp.creator_name, sp.platform, sp.archetype,

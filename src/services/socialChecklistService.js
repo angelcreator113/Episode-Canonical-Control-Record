@@ -12,6 +12,7 @@ const { createCanvas, registerFont } = require('canvas');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const fs = require('fs');
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -261,19 +262,20 @@ async function generateSocialChecklist(event, models, options = {}) {
       try { return JSON.parse(event.outfit_pieces); } catch { return []; }
     })();
     let hostProfile = null;
-    if (auto.host_profile_id) {
+    const creator = eventCreatorOrganizer(event);
+    if (creator) {
       try {
         const [rows] = await models.sequelize.query(
           'SELECT platform, content_category, archetype, handle, display_name FROM social_profiles WHERE id = :id LIMIT 1',
-          { replacements: { id: auto.host_profile_id } }
+          { replacements: { id: creator.profileId } }
         );
         hostProfile = rows?.[0] || null;
       } catch { /* non-blocking */ }
     }
     tasks = buildSocialTasks(eventType, hostProfile, outfitPieces, {
       event_name: event.name,
-      host_name: event.host || auto.host_display_name,
-      host_handle: auto.host_handle,
+      host_name: event.host || creator?.displayName,
+      host_handle: creator?.handle,
       host_brand: event.host_brand || auto.host_brand,
       venue_name: event.venue_name || auto.venue_name,
       dress_code: event.dress_code,

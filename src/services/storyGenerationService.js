@@ -12,6 +12,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const Anthropic = require('@anthropic-ai/sdk');
+const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 
 function getClient() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -65,7 +66,7 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
   // Load event
   const [event] = await sequelize.query(
     `SELECT name, event_type, host, host_brand, prestige, dress_code, venue_name,
-            narrative_stakes, outfit_pieces, canon_consequences
+            narrative_stakes, outfit_pieces, canon_consequences, source_profile_id
      FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => []);
@@ -89,7 +90,7 @@ async function generateEpisodeStory(episodeId, showId, sequelize, options = {}) 
     // g.id is the pre-fix shape a guest written by the opportunity
     // pipeline may still carry (Task #1686, docs/GUEST_OWNERSHIP_READ.md
     // §6) — g.profile_id is preferred, g.id is the fallback.
-    const profileIds = [auto.host_profile_id, ...(auto.guest_profiles || []).map(g => g.profile_id || g.id)].filter(Boolean);
+    const profileIds = [eventCreatorOrganizer(event)?.profileId, ...(auto.guest_profiles || []).map(g => g.profile_id || g.id)].filter(Boolean);
     if (profileIds.length > 0) {
       const [rows] = await sequelize.query(
         `SELECT sp.handle, sp.display_name, sp.creator_name, sp.archetype, sp.posting_voice,

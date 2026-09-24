@@ -8,6 +8,8 @@
  * based on event outcomes.
  */
 
+const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+
 // ─── AUTO-STATE CALCULATOR ──────────────────────────────────────────────────
 // Determines a profile's state based on their event history + trajectory
 
@@ -96,8 +98,12 @@ async function syncAfterEvent(event, episode, models) {
   const { SocialProfile } = models;
   if (!SocialProfile) return { updated: 0 };
 
+  // The creator organizer is read from source_profile_id first
+  // (eventCreatorOrganizer); an event whose organizer was chosen in the
+  // Event Package may have no automation copy at all.
+  const creator = eventCreatorOrganizer(event);
   const automation = event.canon_consequences?.automation;
-  if (!automation) return { updated: 0 };
+  if (!automation && !creator) return { updated: 0 };
 
   // Get episode evaluation for tier
   const evalTier = episode.evaluation_json?.tier_final || null;
@@ -105,9 +111,9 @@ async function syncAfterEvent(event, episode, models) {
   let updated = 0;
 
   // Update host profile
-  if (automation.host_profile_id) {
+  if (creator) {
     try {
-      const host = await SocialProfile.findByPk(automation.host_profile_id);
+      const host = await SocialProfile.findByPk(creator.profileId);
       if (host) {
         const fullProfile = host.full_profile || {};
         const hostedEvents = fullProfile.hosted_events || [];
@@ -149,7 +155,7 @@ async function syncAfterEvent(event, episode, models) {
   }
 
   // Update guest profiles
-  const guests = automation.guest_profiles || [];
+  const guests = automation?.guest_profiles || [];
   for (const guest of guests) {
     // profile_id is the current shape (assembleGuestList); id is the
     // pre-fix shape a guest written by the opportunity pipeline may still
@@ -188,7 +194,7 @@ async function syncAfterEvent(event, episode, models) {
     }
   }
 
-  return { updated, host_id: automation.host_profile_id, guests_updated: guests.length };
+  return { updated, host_id: creator?.profileId ?? null, guests_updated: guests.length };
 }
 
 // ─── POST-EVENT OPPORTUNITY GENERATOR ────────────────────────────────────────
@@ -250,7 +256,7 @@ async function generatePostEventOpportunities(event, episode, models) {
       category: auto.content_category || 'fashion',
       status: 'offered',
       brand_or_company: brand,
-      connector_handle: auto.host_handle || null,
+      connector_handle: eventCreatorOrganizer(event)?.handle || null,
       connection_story: `Met at ${event.name}. ${tier === 'slay' ? 'Lala crushed it and caught their attention.' : 'Made a connection during the event.'}`,
       payment_amount: payment,
       prestige: oppPrestige,
