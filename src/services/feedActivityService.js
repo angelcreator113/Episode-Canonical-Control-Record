@@ -15,6 +15,8 @@
  * - Lala: her version of the night (user controls this)
  */
 
+const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+
 const POST_TEMPLATES = {
   host: [
     { template: 'Thank you to everyone who made {event} unforgettable ✨', platform: 'instagram', type: 'caption' },
@@ -48,20 +50,36 @@ const POST_TEMPLATES = {
  * @returns {Array} Generated posts
  */
 async function generatePostEventActivity(event, models) {
+  // The creator organizer is read from source_profile_id first
+  // (eventCreatorOrganizer); an event whose organizer was chosen in the
+  // Event Package may have no automation copy at all.
+  const creator = eventCreatorOrganizer(event);
   const automation = event.canon_consequences?.automation;
-  if (!automation) return [];
+  if (!automation && !creator) return [];
+
+  // The copy's handle is used only when it names this creator; otherwise
+  // the handle comes from the creator's own social_profiles row.
+  let creatorHandle = creator?.handle || null;
+  if (creator && !creatorHandle && models.SocialProfile) {
+    try {
+      const profile = await models.SocialProfile.findByPk(creator.profileId, { attributes: ['id', 'handle'] });
+      creatorHandle = profile?.handle || null;
+    } catch (err) {
+      console.warn('[FeedActivity] Organizer profile lookup failed:', err.message);
+    }
+  }
 
   const posts = [];
   const eventName = event.name;
-  const hostHandle = automation.host_handle || 'the host';
+  const hostHandle = creatorHandle || 'the host';
 
   // Host posts (1-2)
-  if (automation.host_profile_id) {
+  if (creator) {
     const hostTemplates = POST_TEMPLATES.host;
     const tpl = hostTemplates[Math.floor(Math.random() * hostTemplates.length)];
     posts.push({
-      profile_id: automation.host_profile_id,
-      handle: automation.host_handle,
+      profile_id: creator.profileId,
+      handle: creatorHandle,
       role: 'host',
       content: tpl.template.replace('{event}', eventName).replace('{host}', hostHandle),
       platform: tpl.platform,
@@ -72,7 +90,7 @@ async function generatePostEventActivity(event, models) {
   }
 
   // Guest posts (1 each)
-  const guests = automation.guest_profiles || [];
+  const guests = automation?.guest_profiles || [];
   for (const guest of guests) {
     const relationship = guest.relationship || 'industry';
     const templates = POST_TEMPLATES[relationship] || POST_TEMPLATES.industry;

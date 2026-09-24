@@ -14,6 +14,7 @@ import ProfileCard from './feed/ProfileCard';
 import { DetailPanel, FeedStatePicker } from './feed/ProfileDetailPanel';
 import { ProfileComparison, LalaReactions, FeedTimeline, RelationshipWeb } from './feed/FeedEnhancements';
 import FeedViewContent from './feed/FeedViews';
+import { isOrganizedByProfile } from '../utils/eventOrganizer';
 
 // Local Spinner — avoid named import that fails during code-splitting
 function Spinner() {
@@ -1320,10 +1321,8 @@ function ProfileEventSection({ profileId, profileName, showId, showToast, onNavi
     listWorldEventsApi(showId)
       .then(d => {
         const all = d.events || d.success && d.events || [];
-        const hosted = all.filter(ev => {
-          const auto = ev.canon_consequences?.automation;
-          return auto?.host_profile_id === profileId;
-        });
+        // "Events Hosted" means organized by this creator (Evoni, #1790).
+        const hosted = all.filter(ev => isOrganizedByProfile(ev, profileId));
         setEvents(hosted);
       })
       .catch(() => setEvents([]));

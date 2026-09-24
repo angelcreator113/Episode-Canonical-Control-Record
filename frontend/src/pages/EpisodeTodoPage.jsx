@@ -10,6 +10,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import apiClient from '../services/api';
+import { eventCreatorOrganizer } from '../utils/eventOrganizer';
 import './WorldAdmin.css';
 
 // ─── Track 6 CP7 module-scope helpers (Pattern F prophylactic — Api suffix) ───
@@ -128,6 +129,8 @@ export default function EpisodeTodoPage() {
   const timingKeys = Object.keys(socialByTiming).sort((a, b) => (TIMING_ORDER[a] || 1) - (TIMING_ORDER[b] || 1));
 
   const automation = event?.canon_consequences?.automation;
+  const creator = eventCreatorOrganizer(event);
+  const hostedBy = creator ? (creator.displayName || event?.host || null) : null;
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '24px 16px' }}>
@@ -141,7 +144,7 @@ export default function EpisodeTodoPage() {
         </h1>
         {event && (
           <div style={{ fontSize: 12, color: '#64748b' }}>
-            {event.name}{automation?.host_display_name ? ` · Hosted by ${automation.host_display_name}` : ''}
+            {event.name}{hostedBy ? ` · Hosted by ${hostedBy}` : ''}
             {automation?.venue_name ? ` · ${automation.venue_name}` : ''}
           </div>
         )}
