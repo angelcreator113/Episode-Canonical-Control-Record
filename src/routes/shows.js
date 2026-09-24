@@ -167,7 +167,8 @@ router.get('/', requireAuth, async (req, res) => {
         const { fn, col } = require('sequelize');
         const counts = await Episode.findAll({
           attributes: ['show_id', [fn('COUNT', col('id')), 'episodeCount']],
-          where: { show_id: shows.map(s => s.id || s.dataValues?.id) },
+          // Episode is paranoid:false (manual soft delete), so filter deleted_at explicitly
+          where: { show_id: shows.map(s => s.id || s.dataValues?.id), deleted_at: null },
           group: ['show_id'],
           raw: true,
         });
@@ -248,7 +249,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     if (!show) {
       try {
         const { Episode, sequelize } = require('../models');
-        const episodeCount = await Episode.count({ where: { show_id: id } });
+        const episodeCount = await Episode.count({ where: { show_id: id, deleted_at: null } });
         if (episodeCount > 0) {
           try {
             show = await Show.create({ id, name: 'Untitled Show', slug: `show-${id.slice(0, 8)}`, status: 'in_development' });
