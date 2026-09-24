@@ -25,6 +25,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 const { mergeCanonConsequences } = require('../utils/canonConsequencesMerge');
+const { parseExpectedVersion, versionMatches, staleSaveBody } = require('../utils/eventVersion');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../utils/eventEpisodeLink');
 const { withAutoScheduledDate, autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 
@@ -578,6 +579,25 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
 
+    // Stale-save check (Task #1788, src/utils/eventVersion.js). A client
+    // that composed this save from an earlier read sends the row's
+    // updated_at as it read it; the write is refused with 409 when the
+    // stored row is newer. Optional: without it, last write wins, as before.
+    const expected = parseExpectedVersion(updates);
+    if (expected.error) {
+      return res.status(400).json({ success: false, error: expected.error, code: 'INVALID_EXPECTED_UPDATED_AT' });
+    }
+    if (!expected.present) {
+      console.warn('[WorldEvents] PUT without expected_updated_at (last write wins) — keys:', Object.keys(updates).join(', '));
+    }
+    const refuseStale = async () => {
+      const [current] = await models.sequelize.query(
+        'SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId', { replacements: { eventId, showId } }
+      );
+      if (!current[0]) return res.status(404).json({ success: false, error: 'Event not found' });
+      return res.status(409).json(staleSaveBody(expected, current[0]));
+    };
+
     // Build dynamic SET clause
     const allowedFields = [
       'name', 'event_type', 'category', 'format', 'host', 'host_brand', 'description',
@@ -749,29 +769,51 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // Try full update, if columns don't exist, retry without them
     try {
       const updateSql = `UPDATE world_events SET ${setClauses.join(', ')} WHERE id = :eventId AND show_id = :showId`;
-      if (ccIncoming !== undefined) {
+      if (ccIncoming !== undefined || expected.present) {
         // Merge canon_consequences with the stored value instead of
         // replacing it (Task #1747; depth and null-removal rules in
         // mergeCanonConsequences). The row is locked from the read to the
         // write so a concurrent writer can't land in between. The merged
         // string stays in `replacements`, so the core-only retry below
         // writes the merged value too.
+        //
+        // A versioned save (Task #1788) takes the same lock, and compares
+        // the stored updated_at with the one the client read before
+        // writing anything — the check and the write are one transaction,
+        // so no other writer can land between them.
         await models.sequelize.transaction(async (transaction) => {
           const [rows] = await models.sequelize.query(
-            'SELECT canon_consequences FROM world_events WHERE id = :eventId AND show_id = :showId FOR UPDATE',
+            `SELECT canon_consequences${expected.present ? ', updated_at' : ''} FROM world_events WHERE id = :eventId AND show_id = :showId FOR UPDATE`,
             { replacements: { eventId, showId }, transaction }
           );
-          replacements.canon_consequences = JSON.stringify(
-            mergeCanonConsequences(rows[0]?.canon_consequences, ccIncoming)
-          );
+          if (expected.present && (!rows[0] || !versionMatches(rows[0].updated_at, expected.ms))) {
+            const stale = new Error('Stale event save refused');
+            stale.staleSave = true;
+            throw stale;
+          }
+          if (ccIncoming !== undefined) {
+            replacements.canon_consequences = JSON.stringify(
+              mergeCanonConsequences(rows[0]?.canon_consequences, ccIncoming)
+            );
+          }
           await models.sequelize.query(updateSql, { replacements, transaction });
         });
       } else {
         await models.sequelize.query(updateSql, { replacements });
       }
     } catch (updateErr) {
+      if (updateErr.staleSave) return refuseStale();
       const errMsg = String(updateErr.message || '');
       if (errMsg.includes('does not exist') || errMsg.includes('column')) {
+        // The retry below runs outside the transaction above, so a
+        // versioned save re-checks its version first (best effort: this
+        // path only runs when a column is missing).
+        if (expected.present) {
+          const [cur] = await models.sequelize.query(
+            'SELECT updated_at FROM world_events WHERE id = :eventId AND show_id = :showId', { replacements: { eventId, showId } }
+          );
+          if (!cur[0] || !versionMatches(cur[0].updated_at, expected.ms)) return refuseStale();
+        }
         // Extract which column is missing from error message
         const missingCol = errMsg.match(/column "([^"]+)"/)?.[1];
         console.warn(`[WorldEvents] Column missing: ${missingCol || 'unknown'} — retrying without it`);

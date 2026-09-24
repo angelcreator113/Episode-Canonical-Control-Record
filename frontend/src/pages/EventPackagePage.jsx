@@ -43,7 +43,7 @@
  * does. Start Episode with warnings open asks first, listing each warning
  * and its consequence, with Start Anyway / Go back.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
@@ -67,6 +67,7 @@ import {
 import {
   EVENT_CATEGORIES, EVENT_FORMATS, taxonomyLabel, resolveTaxonomyField,
 } from '../utils/eventTaxonomy';
+import { createEventSaveQueue, isStaleSaveError } from '../utils/eventSaveVersion';
 import { InvitationButton } from './InvitationGenerator';
 import './EventPackagePage.css';
 
@@ -222,10 +223,21 @@ export default function EventPackagePage() {
   const [stakesDraft, setStakesDraft] = useState(null);
   const [stakesSaving, setStakesSaving] = useState(false);
 
+  // Versioned saves (Task #1788): every save sends the updated_at this page
+  // last loaded, runs one at a time, and a save refused because the event
+  // changed elsewhere reloads the page (utils/eventSaveVersion.js).
+  const loadedEventRef = useRef(null);
+  const saveQueueRef = useRef(null);
+  if (!saveQueueRef.current) {
+    saveQueueRef.current = createEventSaveQueue((url, body) => api.put(url, body), { getBase: () => loadedEventRef.current });
+  }
+
   const load = useCallback(async () => {
     setLoading(true); setLoadError(null);
     try {
       const res = await api.get(`/api/v1/world/${showId}/events/${eventId}`);
+      loadedEventRef.current = res.data?.event || null;
+      saveQueueRef.current.setVersion(res.data?.event?.updated_at);
       setData(res.data);
     } catch (err) {
       setLoadError(err.response?.data?.error || err.message || 'Failed to load event');
@@ -235,6 +247,18 @@ export default function EventPackagePage() {
   }, [showId, eventId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Every event save on this page goes through here. A refusal (409,
+  // EVENT_CHANGED) reloads the page so the person sees what changed; the
+  // caller's own catch shows the route's message.
+  const putEvent = async (body) => {
+    try {
+      return await saveQueueRef.current.save(`/api/v1/world/${showId}/events/${eventId}`, body);
+    } catch (err) {
+      if (isStaleSaveError(err)) load();
+      throw err;
+    }
+  };
 
   useEffect(() => {
     if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); }
@@ -375,7 +399,7 @@ export default function EventPackagePage() {
     }
     setBasicsSaving(true);
     try {
-      await api.put(`/api/v1/world/${showId}/events/${eventId}`, body);
+      await putEvent(body);
       setBasicsEditing(null);
       setBasicsDraft('');
       setToast(successMessage || (value ? `${spec.label} saved` : `${spec.label} cleared`));
@@ -463,7 +487,7 @@ export default function EventPackagePage() {
     if (used || stakesSaving || !stakesUpdate || stakesUpdate.unchanged || stakesUpdate.errors.length) return;
     setStakesSaving(true);
     try {
-      await api.put(`/api/v1/world/${showId}/events/${eventId}`, stakesUpdate.body);
+      await putEvent(stakesUpdate.body);
       setStakesDraft(null);
       setToast('Stakes saved');
       await load();
@@ -501,7 +525,7 @@ export default function EventPackagePage() {
     }
     setOrganizerSaving(true);
     try {
-      await api.put(`/api/v1/world/${showId}/events/${eventId}`, pending.update.body);
+      await putEvent(pending.update.body);
       closeOrganizerPicker();
       setToast(`Organizer set to ${pending.label} (${pending.kind})`);
       await load();
@@ -553,7 +577,7 @@ export default function EventPackagePage() {
           guest_profiles: newGuestProfiles,
         },
       };
-      await api.put(`/api/v1/world/${showId}/events/${eventId}`, { canon_consequences: updatedCC });
+      await putEvent({ canon_consequences: updatedCC });
       if (successMessage) setToast(successMessage);
       await load();
     } catch (err) {
@@ -625,7 +649,7 @@ export default function EventPackagePage() {
     if (!trimmed || nameSaving) return;
     setNameSaving(true);
     try {
-      await api.put(`/api/v1/world/${showId}/events/${eventId}`, { name: trimmed });
+      await putEvent({ name: trimmed });
       setToast(`Name changed to "${trimmed}"`);
       setNameSuggestOpen(false);
       setNameSuggestions([]);
@@ -662,7 +686,7 @@ export default function EventPackagePage() {
     setVenueSaving(true);
     try {
       const address = [location.street_address, location.district, location.city].filter(Boolean).join(', ');
-      await api.put(`/api/v1/world/${showId}/events/${eventId}`, {
+      await putEvent({
         venue_location_id: location.id,
         venue_name: location.name,
         venue_address: address || null,
@@ -725,7 +749,7 @@ export default function EventPackagePage() {
   const chooseSceneSet = async (set) => {
     setSceneSaving(true);
     try {
-      await api.put(`/api/v1/world/${showId}/events/${eventId}`, { scene_set_id: set.id });
+      await putEvent({ scene_set_id: set.id });
       closeScenePicker();
       setToast(`Scene set changed to ${set.name}`);
       await load();

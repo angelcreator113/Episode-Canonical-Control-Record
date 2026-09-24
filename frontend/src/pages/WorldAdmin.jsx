@@ -28,6 +28,9 @@ import { computeEventPackageReadiness, computeEventState, describeMissing, EVENT
 import {
   hydrateEventForModal, sameEditorValue, changedFields, withoutOrganizerKeys, missingForMarkReady,
 } from '../utils/eventEditorChanges';
+import {
+  createEventSaveQueue, putEventVersioned, isStaleSaveError, saveErrorMessage,
+} from '../utils/eventSaveVersion';
 import { MoreHorizontal, ArrowRight, Plus, Calendar, Sparkles, ChevronDown, ChevronRight, Lightbulb, AlertTriangle, Loader2, RotateCw, X } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
@@ -402,6 +405,10 @@ function WorldAdmin() {
   // compares against, so only edited fields are sent. Cleared on close so a
   // reopen starts from the row as it is then.
   const eventModalStoredRef = useRef(null);
+  // The modal's versioned save queue (Task #1788): saves run in order, each
+  // sending the updated_at the one before it returned; base is the stored
+  // snapshot above (utils/eventSaveVersion.js).
+  const eventModalQueueRef = useRef(null);
   useEffect(() => {
     if (!eventDetailModal) eventModalStoredRef.current = null;
   }, [eventDetailModal]);
@@ -678,10 +685,14 @@ function WorldAdmin() {
           setSuccessMsg('No changes to save');
           return;
         }
-        const res = await api.put(`/api/v1/world/${showId}/events/${editingEvent}`, changes);
+        // Versioned (Task #1788): refused if the event changed elsewhere
+        // since the form opened, unless none of these fields did.
+        const res = await putEventVersioned((u, b) => api.put(u, b), `/api/v1/world/${showId}/events/${editingEvent}`, changes, {
+          version: eventFormOpenedRef.current?.updated_at, base: eventFormOpenedRef.current,
+        });
         if (res.data.success) { setWorldEvents(p => p.map(e => e.id === editingEvent ? { ...e, ...res.data.event } : e)); setEditingEvent(null); setSuccessMsg('Event updated!'); }
       }
-    } catch (err) { setError(err.response?.data?.error || err.message); }
+    } catch (err) { setError(saveErrorMessage(err)); if (isStaleSaveError(err)) loadData(); }
     finally { setSavingEvent(false); }
   };
 
@@ -744,13 +755,16 @@ function WorldAdmin() {
   const STATUS_OVERRIDE_OPTIONS = ['draft', 'ready'];
   const changeEventStatus = async (ev, status) => {
     try {
-      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, { status });
+      const res = await putEventVersioned((u, b) => api.put(u, b), `/api/v1/world/${showId}/events/${ev.id}`, { status }, { version: ev.updated_at, base: ev });
       if (res.data.success) {
         setWorldEvents(prev => prev.map(e => e.id === ev.id ? { ...e, ...res.data.event, status } : e));
         setToast(`${ev.name} → ${status}`);
         setTimeout(() => setToast(null), 3000);
       }
-    } catch (err) { setToast('Failed: ' + (err.response?.data?.error || err.message)); }
+    } catch (err) {
+      setToast(isStaleSaveError(err) ? saveErrorMessage(err) : 'Failed: ' + (err.response?.data?.error || err.message));
+      if (isStaleSaveError(err)) loadData();
+    }
   };
 
   const bulkInject = async (episodeId) => {
@@ -1073,7 +1087,7 @@ function WorldAdmin() {
       // Only the suggestion's own fields (Task #1786). Spreading the list
       // row here resent every field it had, canon_consequences and
       // outfit_pieces included.
-      const res = await api.put(`/api/v1/world/${showId}/events/${ev.id}`, updates);
+      const res = await putEventVersioned((u, b) => api.put(u, b), `/api/v1/world/${showId}/events/${ev.id}`, updates, { version: ev.updated_at, base: ev });
       if (res.data.success) {
         const nextEvents = worldEvents.map(e => e.id === ev.id ? { ...e, ...res.data.event } : e);
         setWorldEvents(nextEvents);
@@ -1082,6 +1096,7 @@ function WorldAdmin() {
           || `Applied: ${suggestion.suggestion.slice(0, 60)}`);
       }
     } catch (err) {
+      if (isStaleSaveError(err)) { flash(saveErrorMessage(err)); loadData(); return; }
       flash(`Failed: ${err.response?.data?.error || err.message}`);
     }
   };
@@ -1167,6 +1182,7 @@ The revised event should feel like a completely different experience from the si
     if (!window.confirm(`Enhance ${drafts.length} incomplete events with AI? This may take a minute.`)) return;
     setAiFixLoading(true);
     let enhanced = 0;
+    let changedElsewhere = 0;
     for (const ev of drafts.slice(0, 10)) {
       try {
         const res = await api.post(`/api/v1/world/${showId}/events/ai-fix`, {
@@ -1184,14 +1200,18 @@ The revised event should feel like a completely different experience from the si
             if (v && !ev[k]) toSave[k] = v;
           }
           if (Object.keys(toSave).length > 0) {
-            await api.put(`/api/v1/world/${showId}/events/${ev.id}`, toSave);
+            await putEventVersioned((u, b) => api.put(u, b), `/api/v1/world/${showId}/events/${ev.id}`, toSave, { version: ev.updated_at, base: ev });
             enhanced++;
           }
         }
-      } catch {}
+      } catch (err) {
+        // Counted and reported, not swallowed (Task #1788): an event that
+        // changed elsewhere since the list loaded is skipped.
+        if (isStaleSaveError(err)) changedElsewhere++;
+      }
     }
     setAiFixLoading(false);
-    setToast(`✨ Enhanced ${enhanced} events`);
+    setToast(`✨ Enhanced ${enhanced} events${changedElsewhere ? ` — ${changedElsewhere} skipped because they changed elsewhere; run Enhance again after the list reloads` : ''}`);
     setTimeout(() => setToast(null), 3000);
     loadData();
   };
@@ -3443,6 +3463,10 @@ The revised event should feel like a completely different experience from the si
             // shown — including a value invented at render — is never sent.
             if (eventModalStoredRef.current?.id !== eventDetailModal.id) {
               eventModalStoredRef.current = { ...eventDetailModal };
+              eventModalQueueRef.current = createEventSaveQueue((url, body) => api.put(url, body), {
+                getBase: () => eventModalStoredRef.current,
+              });
+              eventModalQueueRef.current.setVersion(eventDetailModal.updated_at);
             }
             const stored = eventModalStoredRef.current;
             const baseline = hydrateEventForModal(stored).values;
@@ -3450,6 +3474,17 @@ The revised event should feel like a completely different experience from the si
             const auto = eventDetailModal.canon_consequences?.automation || {};
             const recordSaved = (fields) => {
               eventModalStoredRef.current = { ...eventModalStoredRef.current, ...fields };
+            };
+            // Every save from this modal: versioned and in order. A save
+            // refused because the event changed elsewhere refreshes the
+            // Events list, so closing and reopening shows the latest.
+            const modalSave = async (body) => {
+              try {
+                return await eventModalQueueRef.current.save(`/api/v1/world/${showId}/events/${md.id}`, body);
+              } catch (err) {
+                if (isStaleSaveError(err)) loadData();
+                throw err;
+              }
             };
             const updateField = async (field, value) => {
               // A blur or change that leaves the value as opened sends
@@ -3460,7 +3495,7 @@ The revised event should feel like a completely different experience from the si
                 return;
               }
               try {
-                const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [field]: value });
+                const res = await modalSave({ [field]: value });
                 if (res.data.success && res.data.event) {
                   recordSaved({ [field]: value });
                   setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event } : ev));
@@ -3469,14 +3504,14 @@ The revised event should feel like a completely different experience from the si
                 }
               } catch (err) {
                 console.warn(`[Event] Failed to save ${field}:`, err.response?.data?.error || err.message);
-                setError(err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save event field');
+                setError(isStaleSaveError(err) ? `${saveErrorMessage(err)} Close this editor and reopen the event.` : (err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save event field'));
               }
             };
             const updateMultipleFields = async (fields) => {
               const changed = changedFields(baseline, fields, Object.keys(fields));
               if (Object.keys(changed).length === 0) return;
               try {
-                const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, changed);
+                const res = await modalSave(changed);
                 if (res.data.success) {
                   recordSaved(changed);
                   const updated = res.data.event;
@@ -3485,7 +3520,7 @@ The revised event should feel like a completely different experience from the si
                 }
               } catch (err) {
                 console.warn('[Event] Batch save failed:', err.response?.data?.error || err.message);
-                setError(err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save event field');
+                setError(isStaleSaveError(err) ? `${saveErrorMessage(err)} Close this editor and reopen the event.` : (err.response?.data?.error || err.response?.data?.message || err.message || 'Failed to save event field'));
               }
             };
             const linkedScene = md.scene_set_id ? sceneSets.find(s => s.id === md.scene_set_id) : null;
@@ -3806,7 +3841,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                             const toSave = withoutOrganizerKeys(changedFields(baseline, merged, saveable));
                             if (Object.keys(toSave).length > 0) {
                               try {
-                                const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, toSave);
+                                const res = await modalSave(toSave);
                                 if (res.data.success) {
                                   recordSaved(toSave);
                                   // The list keeps the server's row only — not
@@ -3816,11 +3851,18 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                                   setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...serverData } : ev));
                                 }
                               } catch (err) {
+                                // A refusal is not retried field by field: the
+                                // event changed elsewhere (Task #1788).
+                                if (isStaleSaveError(err)) {
+                                  setToast(`${saveErrorMessage(err)} Close this editor and reopen the event.`);
+                                  setTimeout(() => setToast(null), 6000);
+                                  return;
+                                }
                                 // If batch fails (e.g. missing column), try saving fields one by one
                                 console.warn('[Event] Batch save failed, trying individual:', err.response?.data?.error);
                                 for (const [key, val] of Object.entries(toSave)) {
                                   try {
-                                    await api.put(`/api/v1/world/${showId}/events/${md.id}`, { [key]: val });
+                                    await modalSave({ [key]: val });
                                     recordSaved({ [key]: val });
                                   } catch (e2) {
                                     console.warn(`[Event] Skip ${key}:`, e2.response?.data?.error || e2.message);
@@ -4357,7 +4399,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                         // saved yet — never a resave of the hydrated copy
                         // (Task #1786).
                         const fieldsToSave = { ...pending, status: 'ready' };
-                        const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, fieldsToSave);
+                        const res = await modalSave(fieldsToSave);
                         if (res.data.success) {
                           recordSaved(fieldsToSave);
                           const updated = { ...md, ...fieldsToSave };
@@ -4394,9 +4436,15 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           } catch { /* non-blocking — checklist can be generated later */ }
                         }
                       } catch (err) {
+                        // Refused because the event changed elsewhere: say
+                        // so, and do not retry (Task #1788).
+                        if (isStaleSaveError(err)) {
+                          setToast(`${saveErrorMessage(err)} Close this editor and reopen the event.`);
+                          return;
+                        }
                         // If full save fails (columns missing), at least save status
                         try {
-                          await api.put(`/api/v1/world/${showId}/events/${md.id}`, { status: 'ready' });
+                          await modalSave({ status: 'ready' });
                           setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, status: 'ready' } : ev));
                           setEventDetailModal({ ...md, status: 'ready' });
                           setToast('Marked ready (some fields saved to automation only)');
@@ -4443,14 +4491,14 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                       return;
                     }
                     try {
-                      const res = await api.put(`/api/v1/world/${showId}/events/${md.id}`, toSave);
+                      const res = await modalSave(toSave);
                       if (res.data.success) {
                         recordSaved(toSave);
                         setWorldEvents(prev => prev.map(ev => ev.id === md.id ? { ...ev, ...res.data.event } : ev));
                         setToast('Event saved');
                       }
                     } catch (err) {
-                      setToast('Save failed: ' + (err.response?.data?.error || err.message));
+                      setToast(isStaleSaveError(err) ? `${saveErrorMessage(err)} Close this editor and reopen the event.` : 'Save failed: ' + (err.response?.data?.error || err.message));
                     }
                   }} style={{ ...S.primaryBtn, padding: '6px 20px', fontSize: 13 }}>
                     💾 Save
