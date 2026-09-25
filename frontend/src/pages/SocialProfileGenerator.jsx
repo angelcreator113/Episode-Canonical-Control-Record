@@ -225,7 +225,10 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const [autofilling,setAutofilling] = useState(false);
   const [autofilledOnce,setAutofilledOnce] = useState(false);
   const [autofillError,setAutofillError] = useState(null);
-  const [autofillNote,setAutofillNote] = useState(null);
+  // Task #1886: the taken-handle message (from Autofill's handleTaken or a
+  // 409 from /generate). Clears when the handle is edited; while set, both
+  // Create buttons are disabled.
+  const [handleTaken,setHandleTaken] = useState(null);
   const [justAwomanProfile,setJustAwomanProfile] = useState(null);
 
   // ── Load profiles ──────────────────────────────────────────────────
@@ -365,7 +368,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
 
   // ── Generate ───────────────────────────────────────────────────────
   const generateProfile = async()=>{
-    if(!handle.trim()||!vibe.trim())return;
+    if(!handle.trim()||!vibe.trim()||handleTaken)return;
     setGenerating(true);setError(null);
     try{
       const hasAdv=Object.values(advFields).some(v=>v);
@@ -377,9 +380,18 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       // continues straight into event creation, same as clicking
       // "Start an Event" on an existing card — one step, not two.
       if(chooseHost&&data.profile)await handleHostEvent(data.profile);
-    }catch(err){setError(err.response?.data?.error||err.message||'Generation failed');}
+    }catch(err){
+      // 409: the handle is taken (live or deleted) — refused before generation.
+      if(err.response?.status===409)setHandleTaken(err.response?.data?.error||`${handle.trim()} is already taken — change the handle before creating.`);
+      else setError(err.response?.data?.error||err.message||'Generation failed');
+    }
     finally{setGenerating(false);}
   };
+  const changeHandle=v=>{setHandle(v);setHandleTaken(null);};
+  const createDisabled=generating||!handle.trim()||!vibe.trim()||!!handleTaken;
+  const handleTakenNote=handleTaken&&(
+    <div className="spg-autofill-error spg-handle-taken" role="alert">{handleTaken}</div>
+  );
 
   // ── Autofill (Task #1828) ─────────────────────────────────────────
   // One handler for both creator-form blocks ("+ Create New Creator" in
@@ -392,7 +404,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     if(autofilling||generating)return;
     const replaceAll=autofillReplacesAll;
     const lv=feedLayer==='lalaverse';
-    setAutofilling(true);setAutofillError(null);setAutofillNote(null);
+    setAutofilling(true);setAutofillError(null);
     try{
       const res=await autofillDraftApi({
         layer:lv?'lalaverse':'real_world',
@@ -406,7 +418,12 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       });
       const d=res.data||{};
       const apply=(current,next,set)=>{if(next&&(replaceAll||!current))set(next);};
-      apply(handle.trim(),d.handle,setHandle);
+      // A drafted handle that lands in the field replaces the flag: set when
+      // the server found every attempt taken, cleared otherwise (Task #1886).
+      if(d.handle&&(replaceAll||!handle.trim())){
+        setHandle(d.handle);
+        setHandleTaken(d.handleTaken?`${d.handle} is already taken — change the handle before creating.`:null);
+      }
       apply(replaceAll?'':platform,d.platform,setPlatform);
       apply(vibe.trim(),d.vibe,setVibe);
       if(lv){
@@ -415,7 +432,6 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
         apply(replaceAll?'':lvPressure,d.careerPressure,setLvPressure);
       }
       setAutofilledOnce(true);
-      if(d.handleTaken&&d.handle&&(replaceAll||!handle.trim()))setAutofillNote(`${d.handle} is already taken — change the handle before creating.`);
     }catch(err){
       console.error('Autofill failed',err);
       setAutofillError(err.response?.data?.error||err.message||'Autofill failed');
@@ -428,8 +444,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       {autofilling?'Autofilling…':'Autofill'}
     </button>
   );
-  const autofillStatus=(autofillError||autofillNote)&&(
-    <div className={autofillError?'spg-autofill-error':'spg-autofill-note'} role={autofillError?'alert':'status'}>{autofillError||autofillNote}</div>
+  const autofillStatus=autofillError&&(
+    <div className="spg-autofill-error" role="alert">{autofillError}</div>
   );
 
   // ── Choose-host mode: create the event and open its Event Package page ──
@@ -858,7 +874,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                 <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
                   <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
                     <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Handle</label>
-                    <input value={handle} onChange={e=>setHandle(e.target.value)} disabled={generating} placeholder="@username" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}/>
+                    <input value={handle} onChange={e=>changeHandle(e.target.value)} disabled={generating} aria-invalid={!!handleTaken} placeholder="@username" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}/>
+                    {handleTakenNote}
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
                     <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Platform</label>
@@ -871,9 +888,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                     <input value={vibe} onChange={e=>setVibe(e.target.value)} disabled={generating} placeholder="One sentence — who is this creator?" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}
                       onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&generateProfile()}/>
                   </div>
-                  <button onClick={generateProfile} disabled={generating||!handle.trim()||!vibe.trim()||!lvCity} style={{
-                    padding:'9px 20px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',cursor:generating||!handle.trim()||!vibe.trim()?'not-allowed':'pointer',
-                    background:generating||!handle.trim()||!vibe.trim()?C.border:C.lavender,color:generating||!handle.trim()||!vibe.trim()?C.inkLight:'#fff',
+                  <button onClick={generateProfile} disabled={createDisabled||!lvCity} style={{
+                    padding:'9px 20px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',cursor:createDisabled?'not-allowed':'pointer',
+                    background:createDisabled?C.border:C.lavender,color:createDisabled?C.inkLight:'#fff',
                     display:'flex',alignItems:'center',gap:6,transition:'all 0.15s',
                   }}>
                     {generating?<><Spinner/> Creating…</>:'Create & Start Event'}
@@ -1003,7 +1020,8 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
               <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
                 <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
                   <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Handle</label>
-                  <input value={handle} onChange={e=>setHandle(e.target.value)} disabled={generating} placeholder="@username" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}/>
+                  <input value={handle} onChange={e=>changeHandle(e.target.value)} disabled={generating} aria-invalid={!!handleTaken} placeholder="@username" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}/>
+                  {handleTakenNote}
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
                   <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Platform</label>
@@ -1016,9 +1034,9 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
                   <input value={vibe} onChange={e=>setVibe(e.target.value)} disabled={generating} placeholder="One sentence — who is this creator?" style={{padding:'8px 12px',borderRadius:C.radiusSm,border:`1.5px solid ${C.border}`,fontSize:13,color:C.ink,background:C.surface,fontFamily:C.font,outline:'none'}}
                     onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&generateProfile()}/>
                 </div>
-                <button onClick={generateProfile} disabled={generating||!handle.trim()||!vibe.trim()||(feedLayer==='lalaverse'&&!lvCity)} style={{
-                  padding:'9px 20px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',cursor:generating||!handle.trim()||!vibe.trim()?'not-allowed':'pointer',
-                  background:generating||!handle.trim()||!vibe.trim()?C.border:C.lavender,color:generating||!handle.trim()||!vibe.trim()?C.inkLight:'#fff',
+                <button onClick={generateProfile} disabled={createDisabled||(feedLayer==='lalaverse'&&!lvCity)} style={{
+                  padding:'9px 20px',borderRadius:C.radiusSm,fontSize:13,fontWeight:700,border:'none',cursor:createDisabled?'not-allowed':'pointer',
+                  background:createDisabled?C.border:C.lavender,color:createDisabled?C.inkLight:'#fff',
                   display:'flex',alignItems:'center',gap:6,transition:'all 0.15s',
                 }}>
                   {generating?<><Spinner/> Generating…</>:'Generate'}

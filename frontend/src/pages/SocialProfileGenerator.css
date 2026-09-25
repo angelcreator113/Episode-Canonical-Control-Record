@@ -884,3 +884,8 @@
 }
 .spg-autofill-error { color: #b42318; }
 .spg-autofill-note  { color: var(--ps-ink-mid); }
+/* Task #1886: taken-handle note, beside (under) the handle field */
+.spg-autofill-error.spg-handle-taken {
+  margin: 2px 0 0;
+  max-width: 240px;
+}

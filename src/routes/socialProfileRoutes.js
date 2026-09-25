@@ -2,7 +2,7 @@
 // socialProfileRoutes.js — The Feed: Social Media Creator Profile Generator
 //
 // Routes:
-// POST /generate          — 3-field spark → full AI-generated profile
+// POST /generate          — 3-field spark → full AI-generated profile (409 if the handle is taken)
 // POST /autofill-draft    — AI-drafted spark for the creator form (no DB write)
 // GET  /                  — list all profiles (filterable)
 // GET  /:id               — single profile
@@ -289,6 +289,47 @@ function checkRateLimit(req, res) {
   return true;
 }
 
+// ── Handle uniqueness (Task #1886) ───────────────────────────────────────────
+// A handle already held by a profile — live OR soft-deleted — is taken.
+// Evoni's ruling (2026-09-25): a deleted creator can be restored, so a live and
+// a deleted profile sharing a handle is the ambiguity being removed; to reuse a
+// handle, restore or purge the holder first. The column has no unique index
+// (idx_social_profiles_handle is (handle, platform), non-unique), so this check
+// is the only guard.
+function normaliseHandle(handle) {
+  // Same normalisation as the /generate create: add a leading @ when missing.
+  return handle.startsWith('@') ? handle : `@${handle}`;
+}
+
+function escapeLike(value) {
+  // LIKE wildcards escaped — handles often contain underscores.
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+// Returns the profile holding `handle` (case-insensitive, with or without the
+// leading @, soft-deleted rows included), or null.
+async function findHandleHolder(db, handle) {
+  const { Op } = require('sequelize');
+  const withAt = normaliseHandle(handle);
+  const forms = [withAt, withAt.slice(1)].filter(Boolean);
+  return db.SocialProfile.findOne({
+    where: { [Op.or]: forms.map((f) => ({ handle: { [Op.iLike]: escapeLike(f) } })) },
+    attributes: ['id', 'handle', 'deletedAt'],
+    paranoid: false,
+  });
+}
+
+function handleHolderIsDeleted(holder) {
+  return !!(holder && (holder.deletedAt || holder.deleted_at));
+}
+
+function handleTakenMessage(handle, holder) {
+  const h = normaliseHandle(handle);
+  return handleHolderIsDeleted(holder)
+    ? `${h} belongs to a deleted creator (id ${holder.id}) — restore or purge it to reuse the handle.`
+    : `${h} is already taken by an existing creator (id ${holder.id}) — pick another handle.`;
+}
+
 // ── POST /generate ───────────────────────────────────────────────────────────
 // Three inputs + optional advanced context → full profile generated
 // Supports feed_layer: 'real_world' (default) or 'lalaverse'
@@ -303,6 +344,9 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   if (!handle || !platform || !vibe_sentence) {
     return res.status(400).json({ error: 'handle, platform, and vibe_sentence are required' });
   }
+  if (typeof handle !== 'string') {
+    return res.status(400).json({ error: 'handle must be a string' });
+  }
 
   const layer = feed_layer || 'real_world';
   if (layer === 'lalaverse' && !city) {
@@ -313,6 +357,18 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   let attempted = null;
 
   try {
+    // Task #1886: refuse a taken handle (live or soft-deleted) BEFORE the
+    // Sonnet call — no generation cost, no duplicate row.
+    const holder = await findHandleHolder(db, handle);
+    if (holder) {
+      return res.status(409).json({
+        error: handleTakenMessage(handle, holder),
+        handleTaken: true,
+        handle: normaliseHandle(handle),
+        holder: { id: holder.id, deleted: handleHolderIsDeleted(holder) },
+      });
+    }
+
     // Layer-aware cap check — soft warning, never hard block.
     // The number has meaning without preventing deliberate overrides.
     const capCheck = await checkFeedCap(db, layer);
@@ -550,7 +606,7 @@ function autofillVibe(value) {
   return v && v.length <= AUTOFILL_VIBE_MAX ? v : '';
 }
 
-function buildAutofillPrompt({ layer, platformHint, platforms, cities, relationships, careerPressures }) {
+function buildAutofillPrompt({ layer, platformHint, platforms, cities, relationships, careerPressures, takenHandles = [], existingHandles = [] }) {
   const lines = [
     'You are drafting the starting spark for ONE new social media creator in a literary fiction franchise.',
     layer === 'lalaverse'
@@ -569,6 +625,17 @@ function buildAutofillPrompt({ layer, platformHint, platforms, cities, relations
     '',
     'handle: a realistic, specific platform handle starting with @ (letters, numbers, dots, underscores; 3-31 chars).',
     'vibe: ONE sentence, under 200 characters — who this creator is and what is interesting about them.',
+  );
+  // Task #1886: on a retry, name the handles already found taken and show a
+  // capped sample of existing handles, so the model drafts a different creator
+  // instead of converging on the same one.
+  if (takenHandles.length) {
+    lines.push('', `These handles are already taken — do NOT use them, or anything close to them: ${takenHandles.join(', ')}`);
+  }
+  if (existingHandles.length) {
+    lines.push(`Creators that already exist (draft someone clearly different, with a handle unlike these): ${existingHandles.join(', ')}`);
+  }
+  lines.push(
     '',
     'Return ONLY this JSON, no other text:',
     layer === 'lalaverse'
@@ -576,6 +643,78 @@ function buildAutofillPrompt({ layer, platformHint, platforms, cities, relations
       : '{"handle": "...", "platform": "...", "vibe": "..."}',
   );
   return lines.join('\n');
+}
+
+// Retries after a taken handle (Task #1886). Each is a paid Haiku call.
+const AUTOFILL_MAX_RETRIES = 2;
+// Existing handles shown to the model on a retry — capped, most recent first.
+const AUTOFILL_EXISTING_SAMPLE = 25;
+
+async function sampleExistingHandles(db, layer) {
+  const rows = await db.SocialProfile.findAll({
+    where: { feed_layer: layer },
+    attributes: ['handle'],
+    order: [['created_at', 'DESC']],
+    limit: AUTOFILL_EXISTING_SAMPLE,
+    paranoid: false,
+  });
+  return (rows || []).map((r) => r.handle).filter((h) => typeof h === 'string' && h);
+}
+
+// Model + retry copied from src/routes/worldEvents.js (the event-name
+// suggester's MODELS loop): Haiku 4.5, up to 2 attempts per model with a
+// 2s backoff on 529/503, next model on repeated overload or 404. Called
+// through the SDK client so aiCostTracker logs and budget-gates it.
+// Returns the response, or null when every model was overloaded/missing.
+async function callAutofillModel(prompt) {
+  const MODELS = ['claude-haiku-4-5-20251001'];
+  for (const model of MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await client.messages.create({
+          model,
+          max_tokens: 300,
+          messages: [{ role: 'user', content: prompt }],
+        });
+      } catch (apiErr) {
+        const status = apiErr?.status || apiErr?.error?.status;
+        console.error(`[autofill-draft] ${model} attempt ${attempt + 1} failed:`, status || apiErr?.message);
+        if ((status === 529 || status === 503) && attempt < 1) {
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        if (status === 529 || status === 503 || status === 404) break;
+        throw apiErr;
+      }
+    }
+  }
+  return null;
+}
+
+// Parses one model reply into a draft whose values are limited to the allowed
+// lists. Returns { draft } or { error }.
+function parseAutofillReply(response, { platforms, cities, relationships, careerPressures }) {
+  const text = response.content?.[0]?.text || '';
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return { error: 'Autofill returned no draft. Try again.' };
+  let parsed;
+  try {
+    parsed = JSON.parse(match[0]);
+  } catch (parseErr) {
+    console.error('[autofill-draft] JSON parse failed:', parseErr.message);
+    return { error: 'Autofill returned an unreadable draft. Try again.' };
+  }
+  if (!parsed || typeof parsed !== 'object') parsed = {};
+  return {
+    draft: {
+      handle:         autofillHandle(parsed.handle),
+      platform:       autofillPick(parsed.platform, platforms),
+      vibe:           autofillVibe(parsed.vibe),
+      city:           autofillPick(parsed.city, cities),
+      relationship:   autofillPick(parsed.relationship, relationships),
+      careerPressure: autofillPick(parsed.careerPressure, careerPressures),
+    },
+  };
 }
 
 router.post('/autofill-draft', requireAuth, aiRateLimiter, async (req, res) => {
@@ -597,74 +736,41 @@ router.post('/autofill-draft', requireAuth, aiRateLimiter, async (req, res) => {
     const careerPressures = layer === 'lalaverse' ? autofillAllowedList(allowed.careerPressures) : [];
     const platformHint = platforms.includes(body.platform) ? body.platform : null;
 
-    const prompt = buildAutofillPrompt({ layer, platformHint, platforms, cities, relationships, careerPressures });
-
-    // Model + retry copied from src/routes/worldEvents.js (the event-name
-    // suggester's MODELS loop): Haiku 4.5, up to 2 attempts per model with a
-    // 2s backoff on 529/503, next model on repeated overload or 404. Called
-    // through the SDK client so aiCostTracker logs and budget-gates it.
-    const MODELS = ['claude-haiku-4-5-20251001'];
-    let response;
-    for (const model of MODELS) {
-      let succeeded = false;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          response = await client.messages.create({
-            model,
-            max_tokens: 300,
-            messages: [{ role: 'user', content: prompt }],
-          });
-          succeeded = true;
-          break;
-        } catch (apiErr) {
-          const status = apiErr?.status || apiErr?.error?.status;
-          console.error(`[autofill-draft] ${model} attempt ${attempt + 1} failed:`, status || apiErr?.message);
-          if ((status === 529 || status === 503) && attempt < 1) {
-            await new Promise((r) => setTimeout(r, 2000));
-            continue;
-          }
-          if (status === 529 || status === 503 || status === 404) break;
-          throw apiErr;
-        }
+    // Task #1886: a drafted handle that is taken (live or soft-deleted) is
+    // re-asked at most AUTOFILL_MAX_RETRIES times, naming the taken handles and
+    // a capped sample of existing ones. handleTaken is returned only when every
+    // attempt came back taken. Bound: at most 1 + AUTOFILL_MAX_RETRIES paid
+    // Haiku calls per click, each one through the SDK client (aiCostTracker).
+    const takenHandles = [];
+    let existingHandles = null;
+    let draft = null;
+    for (let round = 0; round <= AUTOFILL_MAX_RETRIES; round++) {
+      if (round > 0 && existingHandles === null) {
+        existingHandles = await sampleExistingHandles(db, layer);
       }
-      if (succeeded) break;
-    }
-
-    if (!response) {
-      return res.status(503).json({ error: 'The AI service is temporarily overloaded. Please try again.' });
-    }
-
-    const text = response.content?.[0]?.text || '';
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return res.status(502).json({ error: 'Autofill returned no draft. Try again.' });
-    let parsed;
-    try {
-      parsed = JSON.parse(match[0]);
-    } catch (parseErr) {
-      console.error('[autofill-draft] JSON parse failed:', parseErr.message);
-      return res.status(502).json({ error: 'Autofill returned an unreadable draft. Try again.' });
-    }
-    if (!parsed || typeof parsed !== 'object') parsed = {};
-
-    const draft = {
-      handle:         autofillHandle(parsed.handle),
-      platform:       autofillPick(parsed.platform, platforms),
-      vibe:           autofillVibe(parsed.vibe),
-      city:           autofillPick(parsed.city, cities),
-      relationship:   autofillPick(parsed.relationship, relationships),
-      careerPressure: autofillPick(parsed.careerPressure, careerPressures),
-    };
-
-    // Handle must be unique against existing profiles: case-insensitive, with
-    // LIKE wildcards escaped (handles often contain underscores).
-    if (draft.handle) {
-      const { Op } = require('sequelize');
-      const escaped = draft.handle.replace(/[\\%_]/g, (c) => `\\${c}`);
-      const existing = await db.SocialProfile.findOne({
-        where: { handle: { [Op.iLike]: escaped } },
-        attributes: ['id'],
+      const prompt = buildAutofillPrompt({
+        layer, platformHint, platforms, cities, relationships, careerPressures,
+        takenHandles, existingHandles: existingHandles || [],
       });
-      if (existing) draft.handleTaken = true;
+
+      const response = await callAutofillModel(prompt);
+      if (!response) {
+        if (draft) break; // a retry failed: return the last (taken, flagged) draft
+        return res.status(503).json({ error: 'The AI service is temporarily overloaded. Please try again.' });
+      }
+
+      const result = parseAutofillReply(response, { platforms, cities, relationships, careerPressures });
+      if (result.error) {
+        if (draft) break;
+        return res.status(502).json({ error: result.error });
+      }
+      draft = result.draft;
+
+      if (!draft.handle) break;
+      const holder = await findHandleHolder(db, draft.handle);
+      if (!holder) break;
+      takenHandles.push(draft.handle);
+      draft.handleTaken = true;
     }
 
     return res.json(draft);
