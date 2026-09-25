@@ -1451,7 +1451,8 @@ router.post('/bulk/delete', requireAuth, async (req, res) => {
       skipped.push({ id: p.id, handle: p.handle, reason: 'crossed' });
     });
 
-    // Entanglement rows cascade on delete, so a profile with any is kept.
+    // Delete only sets deleted_at (no cascade fires), but an entangled profile hidden from the Feed would
+    // leave story rows pointing at it, so a profile with any is kept.
     const candidates = allowedIds.filter(id => byId.has(String(id)) && !crossedIds.has(String(id)));
     const entangledIds = new Set();
     if (candidates.length) {
@@ -1911,7 +1912,7 @@ router.post('/:id/crossing-preview', requireAuth, async (req, res) => {
 });
 
 // ── DELETE /:id ──────────────────────────────────────────────────────────────
-// Permanently delete a profile
+// Soft-delete a profile: SocialProfile is paranoid, so destroy() sets deleted_at. Restorable by clearing it.
 router.delete('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
