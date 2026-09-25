@@ -52,6 +52,22 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      // Task #1870: these three are in the 2026-09-17 canon capture
+      // (boolean NOT NULL / jsonb / varchar) but were undeclared, so
+      // CompositionService.createComposition's values were dropped.
+      include_justawomaninherprime: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      justawomaninherprime_position: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
+      approval_status: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       selected_formats: {
         type: DataTypes.JSONB,
         allowNull: true,

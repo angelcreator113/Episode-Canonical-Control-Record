@@ -118,6 +118,19 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'What is ultimately at risk (e.g. "the extinction of sorcery")',
     },
+    // Arc stage tracker (Task #1870). Migration 20260307120000 added both
+    // columns and the 2026-09-17 canon capture has them (USER-DEFINED enum /
+    // jsonb, nullable). Undeclared, POST /memories/arc-stage's
+    // StorytellerBook.update issued no SQL at all. No defaultValue here: the
+    // columns carry their own database defaults.
+    current_arc_stage: {
+      type: DataTypes.ENUM('establishment', 'pressure', 'crisis', 'integration'),
+      allowNull: true,
+    },
+    arc_stage_scores: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
   }, {
     tableName: 'storyteller_books',
     timestamps: true,
