@@ -16,6 +16,7 @@ import { DetailPanel, FeedStatePicker } from './feed/ProfileDetailPanel';
 import { ProfileComparison, LalaReactions, FeedTimeline, RelationshipWeb } from './feed/FeedEnhancements';
 import FeedViewContent from './feed/FeedViews';
 import { isOrganizedByProfile } from '../utils/eventOrganizer';
+import { openAuthedEventStream } from '../utils/authedEventStream';
 
 // Local Spinner — avoid named import that fails during code-splitting
 function Spinner() {
@@ -279,32 +280,47 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const connectJobSSE = useCallback((jobId)=>{
     if(sseRef.current){sseRef.current.close();sseRef.current=null;}
     if(sseRetryTimer.current){clearTimeout(sseRetryTimer.current);sseRetryTimer.current=null;}
-    const es=new EventSource(`${API}/bulk/jobs/${jobId}/stream`);
-    sseRef.current=es;
-    es.addEventListener('connected',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,id:jobId}));}catch{}});
-    es.addEventListener('status',e=>{try{const d=JSON.parse(e.data);const job=d.job||d;let s=job.status||'pending';
+    // Task #1887: fetch + Authorization + getReader (the route is behind
+    // requireAuth, which EventSource cannot satisfy). `handle` stands in for
+    // the old EventSource: sseRef.current.close() still ends everything.
+    let stream=null,pendingFallback=null,stuckFallback=null,pollTimer=null;
+    const handle={close:()=>{clearTimeout(pendingFallback);clearTimeout(stuckFallback);if(pollTimer){clearInterval(pollTimer);pollTimer=null;}if(stream)stream.close();}};
+    sseRef.current=handle;
+    const finish=()=>{localStorage.removeItem('spg_active_job');handle.close();if(sseRef.current===handle)sseRef.current=null;loadProfiles();};
+    // REST check: applies the job's current state; closes on a terminal or stuck job.
+    const pollJob=async()=>{try{const res=await fetchBulkJob(jobId);const d=res.data;if(d.job){
+      const isStuck=d.job.status==='processing'&&d.job.error_message&&(d.job.completed||0)===0&&(d.job.failed||0)===0;
+      if(isStuck){setActiveJob({...d.job,status:'failed'});finish();}
+      else{setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status))finish();}
+    }}catch(err){console.error('Bulk job poll failed',err);const st=err?.response?.status;if((st===401||st===403)&&pollTimer){clearInterval(pollTimer);pollTimer=null;}}};
+    const h={};
+    h.connected=e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,id:jobId}));}catch(err){console.error('job stream connected parse',err);}};
+    h.status=e=>{try{const d=JSON.parse(e.data);const job=d.job||d;let s=job.status||'pending';
       // Detect stuck jobs: if status is still processing but error_message is set and no progress made, treat as failed
       if(s==='processing'&&job.error_message&&(job.completed||0)===0&&(job.failed||0)===0){s='failed';}
-      setActiveJob(p=>({...p,id:jobId,status:s,completed:job.completed??p?.completed??0,failed:job.failed??p?.failed??0,total:job.total??p?.total??0,error_message:job.error_message||p?.error_message}));if(['completed','failed','cancelled'].includes(s)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}catch{}});
-    es.addEventListener('started',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'processing'}));}catch{}});
-    es.addEventListener('profile_generating',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,current:d.current,total:d.total,status:'processing'}));}catch{}});
-    es.addEventListener('profile_complete',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,total:d.total,status:'processing'}));}catch{}});
-    es.addEventListener('profile_failed',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,failed:d.failed,total:d.total,status:'processing',lastError:d.error||p?.lastError}));}catch{}});
-    es.addEventListener('cancelled',()=>{setActiveJob(p=>p?{...p,status:'cancelled'}:p);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
-    es.addEventListener('done',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'completed'}));}catch{}localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();});
-    // Listen for job_error (custom named event from backend — NOT the built-in EventSource error)
-    es.addEventListener('job_error',e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,status:'failed',error_message:d.error||'Unknown error'}));localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}catch{}});
-    es.addEventListener('error',()=>{es.close();sseRef.current=null;sseRetryTimer.current=setTimeout(async()=>{sseRetryTimer.current=null;try{const res=await fetchBulkJob(jobId);const d=res.data;if(d.job){
-      // Detect stuck: processing with error_message but 0 progress
-      const isStuck=d.job.status==='processing'&&d.job.error_message&&(d.job.completed||0)===0&&(d.job.failed||0)===0;
-      if(isStuck){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');loadProfiles();}
-      else{setActiveJob(d.job);if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');loadProfiles();}else{connectJobSSE(jobId);}}
-    }}catch{}},3000);});
+      setActiveJob(p=>({...p,id:jobId,status:s,completed:job.completed??p?.completed??0,failed:job.failed??p?.failed??0,total:job.total??p?.total??0,error_message:job.error_message||p?.error_message}));if(['completed','failed','cancelled'].includes(s))finish();}catch(err){console.error('job stream status parse',err);}};
+    h.started=e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'processing'}));}catch(err){console.error('job stream started parse',err);}};
+    h.profile_generating=e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,current:d.current,total:d.total,status:'processing'}));}catch(err){console.error('job stream profile_generating parse',err);}};
+    h.profile_complete=e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,total:d.total,status:'processing'}));}catch(err){console.error('job stream profile_complete parse',err);}};
+    h.profile_failed=e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,completed:d.completed,failed:d.failed,total:d.total,status:'processing',lastError:d.error||p?.lastError}));}catch(err){console.error('job stream profile_failed parse',err);}};
+    h.cancelled=()=>{setActiveJob(p=>p?{...p,status:'cancelled'}:p);finish();};
+    h.done=e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,...d,status:'completed'}));}catch(err){console.error('job stream done parse',err);}finish();};
+    // job_error is the backend's named event, not a transport error
+    h.job_error=e=>{try{const d=JSON.parse(e.data);setActiveJob(p=>({...p,status:'failed',error_message:d.error||'Unknown error'}));finish();}catch(err){console.error('job stream job_error parse',err);}};
+    stream=openAuthedEventStream(`${API}/bulk/jobs/${jobId}/stream`,{
+      handlers:h,
+      // 401/403: never reconnect (Evoni, 2026-09-25). Surface once; progress
+      // continues through the authorized REST poll.
+      onAuthError:(status)=>{setError(`Live job progress is unavailable (HTTP ${status}); progress will update by polling.`);pollJob();pollTimer=setInterval(pollJob,5000);},
+      // Network/non-auth error: the helper retries with bounded backoff; check
+      // REST meanwhile so a job that finished during the drop is caught. When
+      // retries run out, fall back to polling.
+      onError:(err,{willRetry})=>{console.error('Bulk job stream error',err);pollJob();if(!willRetry&&!pollTimer)pollTimer=setInterval(pollJob,5000);},
+    });
     // Safety-net: if still pending after 4s, poll REST to catch missed SSE events
-    const pendingFallback=setTimeout(async()=>{try{const res=await fetchBulkJob(jobId);const d=res.data;if(d.job&&d.job.status!=='pending'){setActiveJob(prev=>{if(prev?.status==='pending')return{...prev,...d.job};return prev;});if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},4000);
+    pendingFallback=setTimeout(async()=>{try{const res=await fetchBulkJob(jobId);const d=res.data;if(d.job&&d.job.status!=='pending'){setActiveJob(prev=>{if(prev?.status==='pending')return{...prev,...d.job};return prev;});if(['completed','failed','cancelled'].includes(d.job.status)){localStorage.removeItem('spg_active_job');handle.close();if(sseRef.current===handle)sseRef.current=null;loadProfiles();}}}catch(err){console.error('Bulk job pending fallback failed',err);}},4000);
     // Safety-net: if stuck at 0 progress for 2 minutes, poll REST to detect dead jobs
-    const stuckFallback=setTimeout(async()=>{try{const res=await fetchBulkJob(jobId);const d=res.data;if(d.job){if(['completed','failed','cancelled'].includes(d.job.status)){setActiveJob(d.job);localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}else if((d.job.completed||0)===0&&(d.job.failed||0)===0&&d.job.error_message){setActiveJob({...d.job,status:'failed'});localStorage.removeItem('spg_active_job');es.close();sseRef.current=null;loadProfiles();}}}catch{}},120000);
-    const origClose=es.close.bind(es);es.close=()=>{clearTimeout(pendingFallback);clearTimeout(stuckFallback);origClose();};
+    stuckFallback=setTimeout(async()=>{try{const res=await fetchBulkJob(jobId);const d=res.data;if(d.job){if(['completed','failed','cancelled'].includes(d.job.status)){setActiveJob(d.job);finish();}else if((d.job.completed||0)===0&&(d.job.failed||0)===0&&d.job.error_message){setActiveJob({...d.job,status:'failed'});finish();}}}catch(err){console.error('Bulk job stuck fallback failed',err);}},120000);
   },[loadProfiles]);
 
   useEffect(()=>{
@@ -543,14 +559,20 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   // Connect to scheduler SSE when automation tab is active
   useEffect(()=>{
     if(feedView!=='automation')return;
-    const es=new EventSource(`${SCHED_API}/events`);
+    // Task #1887: fetch + Authorization + getReader (route is behind requireAuth).
+    const es=openAuthedEventStream(`${SCHED_API}/events`,{
+      handlers:{
+        connected:e=>{try{setAutoStatus(JSON.parse(e.data));}catch(err){console.error('scheduler stream connected parse',err);}},
+        cycle_start:()=>{setAutoRunning(true);},
+        cycle_complete:e=>{try{const d=JSON.parse(e.data);showToast(`Cycle complete: ${d.summary?.profiles_created||0} created`);loadAutoStatus();loadProfiles();}catch(err){console.error('scheduler stream cycle_complete parse',err);}},
+        cycle_end:()=>{setAutoRunning(false);},
+        cycle_error:e=>{try{const d=JSON.parse(e.data);showToast('Cycle error: '+d.error,'error');}catch(err){console.error('scheduler stream cycle_error parse',err);}setAutoRunning(false);},
+      },
+      // 401/403: stop, no reconnect (the helper logs it once); surface it.
+      onAuthError:(status)=>{if(schedSSERef.current===es)schedSSERef.current=null;showToast(`Scheduler live updates unavailable (HTTP ${status})`,'error');},
+      onError:(err,{willRetry})=>{console.error('Scheduler stream error',err);if(!willRetry&&schedSSERef.current===es)schedSSERef.current=null;},
+    });
     schedSSERef.current=es;
-    es.addEventListener('connected',e=>{try{setAutoStatus(JSON.parse(e.data));}catch{}});
-    es.addEventListener('cycle_start',()=>{setAutoRunning(true);});
-    es.addEventListener('cycle_complete',e=>{try{const d=JSON.parse(e.data);showToast(`Cycle complete: ${d.summary?.profiles_created||0} created`);loadAutoStatus();loadProfiles();}catch{}});
-    es.addEventListener('cycle_end',()=>{setAutoRunning(false);});
-    es.addEventListener('cycle_error',e=>{try{const d=JSON.parse(e.data);showToast('Cycle error: '+d.error,'error');}catch{}setAutoRunning(false);});
-    es.onerror=()=>{es.close();schedSSERef.current=null;};
     return()=>{es.close();schedSSERef.current=null;};
   },[feedView]);
   const loadAutoStatus = async ()=>{
