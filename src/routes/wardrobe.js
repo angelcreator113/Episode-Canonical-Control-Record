@@ -956,10 +956,11 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
 
     // Auto-lookup event from episode if caller didn't supply prestige
     if (episode_id && !prestige) {
-      const ev = await models.WorldEvent.unscoped().findOne({
+      const ev = await models.WorldEvent.findOne({
         attributes: ['name', 'event_type', 'dress_code', 'dress_code_keywords',
           'prestige', 'strictness', 'host_brand'],
         where: { used_in_episode_id: episode_id },
+        paranoid: false,
         raw: true,
       });
 
