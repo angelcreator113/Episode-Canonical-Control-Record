@@ -387,21 +387,25 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
   const guests = [];
   const { Op } = require('sequelize');
 
-  // 1. Get profiles with direct relationships to the host
+  // 1. Get profiles with direct relationships to the host, in either
+  // direction. The columns are source_profile_id / target_profile_id (the
+  // model and migration 20260311120000); this stage queried profile_a_id /
+  // profile_b_id from #453 until Task #1860, so every lookup failed and no
+  // related guest was ever chosen.
   if (SocialProfileRelationship && hostProfile) {
     try {
       const relationships = await SocialProfileRelationship.findAll({
         where: {
           [Op.or]: [
-            { profile_a_id: hostProfile.id },
-            { profile_b_id: hostProfile.id },
+            { source_profile_id: hostProfile.id },
+            { target_profile_id: hostProfile.id },
           ],
         },
         limit: maxGuests,
       });
 
       const relatedIds = relationships.map(r =>
-        r.profile_a_id === hostProfile.id ? r.profile_b_id : r.profile_a_id
+        r.source_profile_id === hostProfile.id ? r.target_profile_id : r.source_profile_id
       ).filter(Boolean);
 
       if (relatedIds.length > 0) {
@@ -416,7 +420,7 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
 
         for (const p of relatedProfiles) {
           const rel = relationships.find(r =>
-            r.profile_a_id === p.id || r.profile_b_id === p.id
+            r.source_profile_id === p.id || r.target_profile_id === p.id
           );
           guests.push({
             profile_id: p.id,
