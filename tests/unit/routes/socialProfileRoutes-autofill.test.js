@@ -38,6 +38,7 @@ function buildDb() {
     SocialProfile: {
       rawAttributes: { platform: { values: ['tiktok', 'instagram', 'youtube', 'twitter'] } },
       findOne: jest.fn().mockResolvedValue(null),
+      findAll: jest.fn().mockResolvedValue([{ handle: '@older_one' }, { handle: '@older_two' }]),
       create: jest.fn(),
       update: jest.fn(),
     },
@@ -103,7 +104,7 @@ describe('POST /autofill-draft', () => {
     expect(db.SocialProfile.update).not.toHaveBeenCalled();
   });
 
-  it('keeps in-list values and flags a handle that already exists', async () => {
+  it('keeps in-list values and flags a handle only when every attempt is taken (1 + 2 retries)', async () => {
     db.SocialProfile.findOne.mockResolvedValue({ id: 9 });
     mockCreate.mockResolvedValue(modelReply({
       handle: '@taken_one', platform: 'youtube', vibe: 'Runway critic.',
@@ -118,6 +119,80 @@ describe('POST /autofill-draft', () => {
       city: 'radiance_row', relationship: 'one_sided', careerPressure: 'level',
       handleTaken: true,
     });
+    // Bounded: the first draft plus at most two retries — three paid calls.
+    expect(mockCreate).toHaveBeenCalledTimes(3);
+  });
+
+  // ── Task #1886: retries after a taken handle ─────────────────────────────
+  it('checks the drafted handle with paranoid:false, so a soft-deleted holder counts as taken', async () => {
+    mockCreate.mockResolvedValue(modelReply({ handle: '@free_one', platform: 'tiktok', vibe: 'x' }));
+
+    await post({ layer: 'real_world', allowed: ALLOWED });
+
+    expect(db.SocialProfile.findOne).toHaveBeenCalledTimes(1);
+    expect(db.SocialProfile.findOne.mock.calls[0][0].paranoid).toBe(false);
+  });
+
+  it('re-asks when the first draft is taken, naming the taken handle and a sample of existing handles', async () => {
+    db.SocialProfile.findOne
+      .mockResolvedValueOnce({ id: 9, handle: '@studiobysable', deletedAt: null })
+      .mockResolvedValueOnce(null);
+    mockCreate
+      .mockResolvedValueOnce(modelReply({ handle: '@studiobysable', platform: 'instagram', vibe: 'Studio owner.' }))
+      .mockResolvedValueOnce(modelReply({ handle: '@thread_and_vow', platform: 'tiktok', vibe: 'Bridal tailor.' }));
+
+    const res = await post({ layer: 'real_world', allowed: ALLOWED });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      handle: '@thread_and_vow', platform: 'tiktok', vibe: 'Bridal tailor.',
+      city: '', relationship: '', careerPressure: '',
+    });
+    expect(res.body.handleTaken).toBeUndefined();
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+
+    const firstPrompt = mockCreate.mock.calls[0][0].messages[0].content;
+    const retryPrompt = mockCreate.mock.calls[1][0].messages[0].content;
+    expect(firstPrompt).not.toContain('@studiobysable');
+    expect(retryPrompt).toMatch(/already taken — do NOT use them[^\n]*@studiobysable/);
+    expect(retryPrompt).toContain('@older_one');
+    expect(retryPrompt).toContain('@older_two');
+    expect(mockCreate.mock.calls[1][0].model).toBe('claude-haiku-4-5-20251001');
+
+    // The sample is capped, same-layer, and includes soft-deleted rows.
+    expect(db.SocialProfile.findAll).toHaveBeenCalledTimes(1);
+    const sampleQuery = db.SocialProfile.findAll.mock.calls[0][0];
+    expect(sampleQuery.where).toEqual({ feed_layer: 'real_world' });
+    expect(sampleQuery.limit).toBe(25);
+    expect(sampleQuery.paranoid).toBe(false);
+  });
+
+  it('names every taken handle so far on the last retry', async () => {
+    db.SocialProfile.findOne.mockResolvedValue({ id: 9 });
+    mockCreate
+      .mockResolvedValueOnce(modelReply({ handle: '@one_taken', platform: 'tiktok', vibe: 'a' }))
+      .mockResolvedValueOnce(modelReply({ handle: '@two_taken', platform: 'tiktok', vibe: 'b' }))
+      .mockResolvedValueOnce(modelReply({ handle: '@three_taken', platform: 'tiktok', vibe: 'c' }));
+
+    const res = await post({ layer: 'real_world', allowed: ALLOWED });
+
+    expect(res.body).toMatchObject({ handle: '@three_taken', handleTaken: true });
+    expect(mockCreate).toHaveBeenCalledTimes(3);
+    const lastPrompt = mockCreate.mock.calls[2][0].messages[0].content;
+    expect(lastPrompt).toContain('@one_taken, @two_taken');
+  });
+
+  it('returns the last taken draft, flagged, when a retry reply is unreadable', async () => {
+    db.SocialProfile.findOne.mockResolvedValue({ id: 9 });
+    mockCreate
+      .mockResolvedValueOnce(modelReply({ handle: '@one_taken', platform: 'tiktok', vibe: 'a' }))
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'sorry' }] });
+
+    const res = await post({ layer: 'real_world', allowed: ALLOWED });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ handle: '@one_taken', handleTaken: true });
+    expect(mockCreate).toHaveBeenCalledTimes(2);
   });
 
   it('leaves the LalaVerse fields blank on the real-world layer', async () => {

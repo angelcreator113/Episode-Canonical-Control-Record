@@ -65,6 +65,7 @@ function buildDb(rawAttributes = RealSocialProfile.rawAttributes) {
     SocialProfile: {
       rawAttributes,
       count: jest.fn().mockResolvedValue(0),
+      findOne: jest.fn().mockResolvedValue(null), // handle free (Task #1886 guard)
       create: jest.fn(async (record) => ({ id: 42, ...record, update: jest.fn() })),
       findByPk: jest.fn().mockResolvedValue(existing),
     },
