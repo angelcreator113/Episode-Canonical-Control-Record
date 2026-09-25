@@ -110,22 +110,50 @@ describe('StorytellerBook.update — POST /arc-stage (src/routes/sceneProposeRou
 
 describe('ThumbnailComposition — CompositionService (src/services/CompositionService.js)', () => {
   // Task #1884 retired CompositionService.createComposition, the #1870 site
-  // that wrote all three columns: it served only the legacy POST format, and
-  // threw a TypeError on every call (it called canonicalRoles helpers that
-  // were never written). The three columns stay declared (canon has them;
-  // tests/unit/models/declaredWriteColumns.test.js pins them). Two of them
-  // still have live writers, exercised here through instance fakes;
-  // justawomaninherprime_position has no writer left. The fakes record what
-  // each call writes and the test checks the column under test is declared.
-  // (Only that column: approveComposition's approved_by / approved_at and
-  // updateComposition's version are in canon but undeclared on the model, a
-  // separate finding outside #1884's scope.)
+  // that wrote include_justawomaninherprime, justawomaninherprime_position
+  // and approval_status: it served only the legacy POST format, and threw a
+  // TypeError on every call (it called canonicalRoles helpers that were never
+  // written). Those columns stay declared (canon has them;
+  // tests/unit/models/declaredWriteColumns.test.js pins them).
+  //
+  // Task #1897: the live writers here go through a loaded instance
+  // (findByPk, then instance.update({...}) or instance.x = ...; save()),
+  // which scripts/check-schema-agreement.js step 1 does not see. The instance
+  // fake below is schema-checked against the real model's declared
+  // attributes: update() and save() throw when a key they would write is not
+  // declared (Sequelize drops it with no error), and each write is recorded in
+  // instance.saved.
   let ThumbnailComposition;
+  function checkedInstance(row) {
+    const target = { ...row };
+    const changed = new Set();
+    const saved = [];
+    const flush = (method) => {
+      for (const k of changed) {
+        if (!ThumbnailComposition.DECLARED.has(k)) {
+          throw new Error(`ThumbnailComposition.${k} is not a declared attribute; instance ${method} would drop it`);
+        }
+      }
+      const out = {};
+      for (const k of changed) out[k] = target[k];
+      saved.push(out);
+      changed.clear();
+    };
+    const proxy = new Proxy(target, {
+      set(t, k, v) {
+        t[k] = v;
+        if (typeof k === 'string' && typeof v !== 'function') changed.add(k);
+        return true;
+      },
+    });
+    target.update = jest.fn(async (values) => { Object.assign(proxy, values); flush('update'); return proxy; });
+    target.save = jest.fn(async () => { flush('save'); return proxy; });
+    target.toJSON = () => Object.fromEntries(Object.entries(target).filter(([, v]) => typeof v !== 'function'));
+    target.saved = saved;
+    return proxy;
+  }
   function loadService(instance) {
     ThumbnailComposition = schemaChecked('ThumbnailComposition', { findByPk: async () => instance });
-    instance.update = jest.fn(async (values) => { Object.assign(instance, values); });
-    instance.save = jest.fn(async () => {});
-    instance.toJSON = () => ({ id: instance.id });
     jest.doMock(MODELS, () => ({ models: { ThumbnailComposition } }));
     jest.doMock('../../../src/services/AssetService', () => ({}));
     jest.doMock('../../../src/services/S3Service', () => ({}));
@@ -133,28 +161,51 @@ describe('ThumbnailComposition — CompositionService (src/services/CompositionS
   }
 
   test('createComposition is retired (#1884)', () => {
-    const CompositionService = loadService({ id: 'comp-1' });
+    const CompositionService = loadService(checkedInstance({ id: 'comp-1' }));
     expect(CompositionService.createComposition).toBeUndefined();
   });
 
-  test('approval_status reaches approveComposition\'s update', async () => {
-    const instance = { id: 'comp-1' };
+  test('approveComposition saves approval_status, approved_by and approved_at (#1897)', async () => {
+    const instance = checkedInstance({ id: 'comp-1', approval_status: 'PENDING' });
     const CompositionService = loadService(instance);
-    await CompositionService.approveComposition('comp-1', 'u1');
+    const before = Date.now();
+    const out = await CompositionService.approveComposition('comp-1', 'u1');
 
-    expect(ThumbnailComposition.DECLARED.has('approval_status')).toBe(true);
     expect(instance.update).toHaveBeenCalledTimes(1);
-    expect(instance.update.mock.calls[0][0]).toMatchObject({ approval_status: 'APPROVED' });
+    expect(instance.saved).toHaveLength(1);
+    const written = instance.saved[0];
+    expect(written).toMatchObject({ approval_status: 'APPROVED', approved_by: 'u1' });
+    expect(written.approved_at).toBeInstanceOf(Date);
+    expect(written.approved_at.getTime()).toBeGreaterThanOrEqual(before);
+    expect(out).toMatchObject({ approval_status: 'APPROVED', approved_by: 'u1' });
   });
 
   test('include_justawomaninherprime reaches updateComposition\'s save', async () => {
-    const instance = { id: 'comp-1', version: 1 };
+    const instance = checkedInstance({ id: 'comp-1', current_version: 1 });
     const CompositionService = loadService(instance);
     await CompositionService.updateComposition('comp-1', { justawomen_asset_id: 'jaw-1', include_justawomaninherprime: true });
 
-    expect(ThumbnailComposition.DECLARED.has('include_justawomaninherprime')).toBe(true);
     expect(instance.save).toHaveBeenCalledTimes(1);
-    expect(instance).toMatchObject({ include_justawomaninherprime: true, justawomen_asset_id: 'jaw-1' });
+    expect(instance.saved[0]).toMatchObject({ include_justawomaninherprime: true, justawomen_asset_id: 'jaw-1' });
+  });
+
+  test('updateComposition increments and saves current_version, and writes no version key (#1897)', async () => {
+    const instance = checkedInstance({ id: 'comp-1', current_version: 3 });
+    const CompositionService = loadService(instance);
+    await CompositionService.updateComposition('comp-1', { lala_asset_id: 'lala-1' });
+
+    expect(instance.save).toHaveBeenCalledTimes(1);
+    expect(instance.saved[0]).toEqual({ lala_asset_id: 'lala-1', current_version: 4 });
+    expect(Object.prototype.hasOwnProperty.call(instance, 'version')).toBe(false);
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('(version 4)'));
+  });
+
+  test('updateComposition treats a missing current_version as 1, so the first edit saves 2 (#1897)', async () => {
+    const instance = checkedInstance({ id: 'comp-1', current_version: null });
+    const CompositionService = loadService(instance);
+    await CompositionService.updateComposition('comp-1', {});
+
+    expect(instance.saved).toEqual([{ current_version: 2 }]);
   });
 });
 
