@@ -3538,7 +3538,7 @@ router.post('/generate-next-chapter', requireAuth, aiRateLimiter, async (req, re
       existingTasks = seTaskArcCache.get(characterKey).tasks || [];
     } else if (db.StoryTaskArc) {
       try {
-        const dbArc = await db.StoryTaskArc.unscoped().findOne({ where: { character_key: characterKey } });
+        const dbArc = await db.StoryTaskArc.findOne({ where: { character_key: characterKey } });
         if (dbArc?.tasks?.length) existingTasks = dbArc.tasks;
       } catch (arcErr) {
         console.warn('[generate-next-chapter] StoryTaskArc query failed:', arcErr.message);
@@ -3548,10 +3548,13 @@ router.post('/generate-next-chapter', requireAuth, aiRateLimiter, async (req, re
     // Load approved story texts for context
     let _approvedStories = [];
     try {
-      _approvedStories = await db.StorytellerStory.unscoped().findAll({
+      // Soft-deleted stories included, as 908f93090 intended; in Sequelize 6
+      // only paranoid: false (not .unscoped()) drops the deleted_at predicate.
+      _approvedStories = await db.StorytellerStory.findAll({
         where: { character_key: characterKey, status: 'approved' },
         order: [['story_number', 'ASC']],
         attributes: ['story_number', 'title', 'scene_brief', 'status'],
+        paranoid: false,
       });
     } catch (storyErr) {
       console.warn('[generate-next-chapter] StorytellerStory query failed:', storyErr.message);
