@@ -3,6 +3,7 @@
 //
 // Routes:
 // POST /generate          — 3-field spark → full AI-generated profile
+// POST /autofill-draft    — AI-drafted spark for the creator form (no DB write)
 // GET  /                  — list all profiles (filterable)
 // GET  /:id               — single profile
 // POST /:id/finalize      — lock profile
@@ -512,6 +513,166 @@ Lala does not know she was built. The world she lives in feels complete and self
   } catch (err) {
     console.error('Social profile generation error:', err);
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /autofill-draft ─────────────────────────────────────────────────────
+// Task #1828: drafts the six Create New Creator / Manual Spark form fields
+// (handle, platform, vibe, city, Lala's relationship, career pressure). No DB
+// write — nothing is saved until the form itself is submitted to /generate.
+// The client sends the form's own option lists in `allowed`; any model value
+// outside them is dropped (returned as ''), never passed through.
+const AUTOFILL_HANDLE_RE = /^@[A-Za-z0-9._]{2,30}$/;
+const AUTOFILL_VIBE_MAX = 300;
+
+function autofillAllowedList(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v) => typeof v === 'string' && v.trim() && v.length <= 64)
+    .map((v) => v.trim())
+    .slice(0, 50);
+}
+
+function autofillPick(value, allowedList) {
+  if (typeof value !== 'string') return '';
+  const v = value.trim();
+  return allowedList.includes(v) ? v : '';
+}
+
+function autofillHandle(value) {
+  if (typeof value !== 'string') return '';
+  const h = value.trim().replace(/\s+/g, '');
+  const withAt = h.startsWith('@') ? h : `@${h}`;
+  return AUTOFILL_HANDLE_RE.test(withAt) ? withAt : '';
+}
+
+function autofillVibe(value) {
+  if (typeof value !== 'string') return '';
+  const v = value.trim().replace(/\s+/g, ' ');
+  return v && v.length <= AUTOFILL_VIBE_MAX ? v : '';
+}
+
+function buildAutofillPrompt({ layer, platformHint, platforms, cities, relationships, careerPressures }) {
+  const lines = [
+    'You are drafting the starting spark for ONE new social media creator in a literary fiction franchise.',
+    layer === 'lalaverse'
+      ? 'This creator lives in the LalaVerse, the online world of the character Lala. Keep everything native to that world.'
+      : 'This creator is a real-world social media creator the protagonist watches online.',
+    '',
+    'Pick every categorical value from the lists given. Use the exact value string. Do not invent new values.',
+    `platform — one of: ${platforms.join(', ')}${platformHint ? ` (prefer ${platformHint})` : ''}`,
+  ];
+  if (layer === 'lalaverse') {
+    lines.push(`city — one of: ${cities.map((c) => (CITY_CULTURE[c] ? `${c} (${CITY_CULTURE[c]})` : c)).join('; ')}`);
+    lines.push(`relationship (Lala's relationship to this creator) — one of: ${relationships.join(', ')}`);
+    lines.push(`careerPressure (career position relative to Lala) — one of: ${careerPressures.join(', ')}`);
+  }
+  lines.push(
+    '',
+    'handle: a realistic, specific platform handle starting with @ (letters, numbers, dots, underscores; 3-31 chars).',
+    'vibe: ONE sentence, under 200 characters — who this creator is and what is interesting about them.',
+    '',
+    'Return ONLY this JSON, no other text:',
+    layer === 'lalaverse'
+      ? '{"handle": "...", "platform": "...", "vibe": "...", "city": "...", "relationship": "...", "careerPressure": "..."}'
+      : '{"handle": "...", "platform": "...", "vibe": "..."}',
+  );
+  return lines.join('\n');
+}
+
+router.post('/autofill-draft', requireAuth, aiRateLimiter, async (req, res) => {
+  const body = req.body || {};
+  const layer = body.layer === 'lalaverse' ? 'lalaverse' : 'real_world';
+  const allowed = body.allowed && typeof body.allowed === 'object' ? body.allowed : {};
+  const db = req.app.locals.db || require('../models');
+
+  try {
+    // Platform values are bounded by the model's own ENUM (and by the form's
+    // list when sent), so a drafted platform can always be saved by /generate.
+    const enumPlatforms = db.SocialProfile?.rawAttributes?.platform?.values || [];
+    const formPlatforms = autofillAllowedList(allowed.platforms);
+    const platforms = formPlatforms.length
+      ? formPlatforms.filter((p) => enumPlatforms.length === 0 || enumPlatforms.includes(p))
+      : enumPlatforms.slice();
+    const cities = layer === 'lalaverse' ? autofillAllowedList(allowed.cities) : [];
+    const relationships = layer === 'lalaverse' ? autofillAllowedList(allowed.relationships) : [];
+    const careerPressures = layer === 'lalaverse' ? autofillAllowedList(allowed.careerPressures) : [];
+    const platformHint = platforms.includes(body.platform) ? body.platform : null;
+
+    const prompt = buildAutofillPrompt({ layer, platformHint, platforms, cities, relationships, careerPressures });
+
+    // Model + retry copied from src/routes/worldEvents.js (the event-name
+    // suggester's MODELS loop): Haiku 4.5, up to 2 attempts per model with a
+    // 2s backoff on 529/503, next model on repeated overload or 404. Called
+    // through the SDK client so aiCostTracker logs and budget-gates it.
+    const MODELS = ['claude-haiku-4-5-20251001'];
+    let response;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          response = await client.messages.create({
+            model,
+            max_tokens: 300,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          succeeded = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          console.error(`[autofill-draft] ${model} attempt ${attempt + 1} failed:`, status || apiErr?.message);
+          if ((status === 529 || status === 503) && attempt < 1) {
+            await new Promise((r) => setTimeout(r, 2000));
+            continue;
+          }
+          if (status === 529 || status === 503 || status === 404) break;
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!response) {
+      return res.status(503).json({ error: 'The AI service is temporarily overloaded. Please try again.' });
+    }
+
+    const text = response.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(502).json({ error: 'Autofill returned no draft. Try again.' });
+    let parsed;
+    try {
+      parsed = JSON.parse(match[0]);
+    } catch (parseErr) {
+      console.error('[autofill-draft] JSON parse failed:', parseErr.message);
+      return res.status(502).json({ error: 'Autofill returned an unreadable draft. Try again.' });
+    }
+    if (!parsed || typeof parsed !== 'object') parsed = {};
+
+    const draft = {
+      handle:         autofillHandle(parsed.handle),
+      platform:       autofillPick(parsed.platform, platforms),
+      vibe:           autofillVibe(parsed.vibe),
+      city:           autofillPick(parsed.city, cities),
+      relationship:   autofillPick(parsed.relationship, relationships),
+      careerPressure: autofillPick(parsed.careerPressure, careerPressures),
+    };
+
+    // Handle must be unique against existing profiles: case-insensitive, with
+    // LIKE wildcards escaped (handles often contain underscores).
+    if (draft.handle) {
+      const { Op } = require('sequelize');
+      const escaped = draft.handle.replace(/[\\%_]/g, (c) => `\\${c}`);
+      const existing = await db.SocialProfile.findOne({
+        where: { handle: { [Op.iLike]: escaped } },
+        attributes: ['id'],
+      });
+      if (existing) draft.handleTaken = true;
+    }
+
+    return res.json(draft);
+  } catch (err) {
+    console.error('[autofill-draft] error:', err);
+    return res.status(500).json({ error: err.message || 'Autofill failed' });
   }
 });
 
