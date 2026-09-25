@@ -46,6 +46,77 @@ function sanitizeEnum(value, validSet, fallback) {
   return fallback;
 }
 
+// ── Column-length fitting (Task #1844) ───────────────────────────────────────
+// Generated text can run longer than a VARCHAR column. Lengths come from the
+// model's declared STRING(n) types, never a hard-coded list; TEXT, JSONB and
+// ENUM attributes are left alone. Lengths are counted in code points, as
+// Postgres counts characters.
+function stringLengthLimits(Model) {
+  const limits = {};
+  for (const [name, attr] of Object.entries(Model?.rawAttributes || {})) {
+    const type = attr?.type;
+    if (!type || (type.key !== 'STRING' && type.key !== 'CHAR')) continue;
+    const n = type.options?.length ?? type._length ?? 255; // bare STRING is VARCHAR(255)
+    if (Number.isInteger(n) && n > 0) limits[name] = n;
+  }
+  return limits;
+}
+
+function fitToLength(value, limit) {
+  const chars = Array.from(value);
+  if (chars.length <= limit) return value;
+  const cut = chars.slice(0, limit).join('');
+  const space = cut.lastIndexOf(' ');
+  // Break at a word boundary when one falls in the back half; else hard-cut.
+  if (/\s/.test(chars[limit])) return cut.trimEnd();
+  if (space >= Math.floor(cut.length / 2)) return cut.slice(0, space).trimEnd();
+  return cut;
+}
+
+// Returns a copy of `record` with every string fitted to its column, and the
+// list of fields that were cut ({ field, length, limit } — no content).
+function fitRecordToModel(Model, record) {
+  const limits = stringLengthLimits(Model);
+  const fitted = { ...record };
+  const truncated = [];
+  for (const [field, limit] of Object.entries(limits)) {
+    const value = fitted[field];
+    if (typeof value !== 'string') continue;
+    const length = Array.from(value).length;
+    if (length > limit) {
+      fitted[field] = fitToLength(value, limit);
+      truncated.push({ field, length, limit });
+    }
+  }
+  return { fitted, truncated };
+}
+
+function warnTruncated(label, truncated) {
+  if (!truncated.length) return;
+  console.warn(`[socialProfiles] ${label}: truncated to column length — ` +
+    truncated.map(t => `${t.field} (${t.length} > ${t.limit})`).join(', '));
+}
+
+// A Postgres "value too long for type character varying(N)" error (22001)
+// does not name the column. Name the candidates so the log diagnoses itself.
+function logValueTooLong(label, err, Model, record) {
+  const code = err?.original?.code || err?.parent?.code || err?.code;
+  if (code !== '22001' || !record) return;
+  const limits = stringLengthLimits(Model);
+  const strings = Object.entries(limits)
+    .filter(([field]) => typeof record[field] === 'string')
+    .map(([field, limit]) => ({ field, length: Array.from(record[field]).length, limit }));
+  const over = strings.filter(s => s.length > s.limit);
+  if (over.length) {
+    console.error(`[socialProfiles] ${label}: value too long (22001) — over declared model length: ` +
+      over.map(s => `${s.field} (${s.length} > ${s.limit})`).join(', '));
+  } else {
+    console.error(`[socialProfiles] ${label}: value too long (22001) but no field exceeds its declared model length, ` +
+      'so a model length does not match its column. String fields (length/declared): ' +
+      strings.sort((a, b) => b.length - a.length).map(s => `${s.field} ${s.length}/${s.limit}`).join(', '));
+  }
+}
+
 // ── Feed caps ─────────────────────────────────────────────────────────────────
 const FEED_CAPS = { real_world: 443, lalaverse: 200 };
 
@@ -317,6 +388,7 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
   }
 
   const db = req.app.locals.db || require('../models');
+  let attempted = null;
 
   try {
     // Layer-aware cap check — soft warning, never hard block.
@@ -365,8 +437,8 @@ Lala does not know she was built. The world she lives in feels complete and self
     const safeArchetype = sanitizeEnum(generated.archetype, VALID_ARCHETYPES, 'polished_curator');
     const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
 
-    // Save as draft
-    const profile = await db.SocialProfile.create({
+    // Save as draft — every string fitted to its column (Task #1844)
+    const { fitted: createRecord, truncated } = fitRecordToModel(db.SocialProfile, {
       series_id:       series_id || null,
       handle:          handle.startsWith('@') ? handle : `@${handle}`,
       platform,
@@ -426,6 +498,9 @@ Lala does not know she was built. The world she lives in feels complete and self
       lala_relationship:     layer === 'lalaverse' ? (lala_relationship || 'mutual_unaware') : null,
       career_pressure:       layer === 'lalaverse' ? (career_pressure || 'level') : null,
     });
+    warnTruncated('generate', truncated);
+    attempted = createRecord;
+    const profile = await db.SocialProfile.create(createRecord);
 
     // Auto-assign ALL characters as followers based on intelligent follow engine
     const followResults = await autoAssignAllFollowers(db, profile.id, {
@@ -512,6 +587,7 @@ Lala does not know she was built. The world she lives in feels complete and self
     return res.json({ profile: fullProfile || profile, follow_results: followResults });
   } catch (err) {
     console.error('Social profile generation error:', err);
+    logValueTooLong('generate', err, db.SocialProfile, attempted);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -1769,6 +1845,7 @@ router.patch('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
 router.post('/:id/regenerate', requireAuth, aiRateLimiter, guardJustAWomanRecord, async (req, res) => {
   if (!checkRateLimit(req, res)) return;
   const db = req.app.locals.db || require('../models');
+  let attempted = null;
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Not found' });
@@ -1812,7 +1889,8 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     const safeArchetype = sanitizeEnum(generated.archetype, VALID_ARCHETYPES, 'polished_curator');
     const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
 
-    await profile.update({
+    // Every string fitted to its column before the write (Task #1844)
+    const { fitted: updateRecord, truncated } = fitRecordToModel(db.SocialProfile, {
       vibe_sentence,
       full_profile: generated,
       generation_model: 'claude-sonnet-4-6',
@@ -1859,6 +1937,9 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
       collab_style: generated.collab_style,
       influencer_tier_detail: generated.influencer_tier_detail,
     });
+    warnTruncated('regenerate', truncated);
+    attempted = updateRecord;
+    await profile.update(updateRecord);
 
     const fullProfile = await db.SocialProfile.findByPk(profile.id, {
       include: db.SocialProfileFollower ? [{ model: db.SocialProfileFollower, as: 'followers' }] : [],
@@ -1867,6 +1948,7 @@ Career position relative to Lala: ${profile.career_pressure || 'level'}.`;
     return res.json({ profile: fullProfile || profile, regenerated: true });
   } catch (err) {
     console.error('Social profile regeneration error:', err);
+    logValueTooLong('regenerate', err, db.SocialProfile, attempted);
     return res.status(500).json({ error: err.message });
   }
 });
