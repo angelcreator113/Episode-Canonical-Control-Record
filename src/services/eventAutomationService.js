@@ -394,52 +394,88 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
   // related guest was ever chosen.
   if (SocialProfileRelationship && hostProfile) {
     try {
-      // Hidden relations never become invitations (Evoni, Task #1860): the
-      // stage had never run, so its first run must not surface a secret
-      // link as a guest. NULL visibility reads as the model default,
-      // 'public'. Direction, drama_level ordering and eligibility before
-      // the limit are open product questions, deliberately not decided here.
+      // Which relations invite (Evoni, Tasks #1860 and #1866):
+      //   - hidden relations never do (#1860); NULL visibility reads as the
+      //     model default, 'public'; 'rumored' is treated as public — a
+      //     rumour is known in the world, just not confirmed (#1866 rule 4);
+      //   - direction gates: mutual, or pointing from host to guest. A
+      //     guest-to-host link means someone knows the host, not that the
+      //     host would invite them. NULL direction reads as the model and
+      //     migration default, 'mutual' (#1866 rule 1);
+      //   - secret_link never invites, whatever its visibility; feud and ex
+      //     do (#1866 rule 5).
+      // The same rules are applied in the query and to the rows it returns.
+      const hostId = hostProfile.id;
+      const invites = (r) => {
+        if (r.public_visibility === 'hidden') return false;
+        if (r.relationship_type === 'secret_link') return false;
+        const direction = r.direction ?? 'mutual';
+        if (direction === 'mutual') return true;
+        if (direction === 'source_to_target') return r.source_profile_id === hostId;
+        if (direction === 'target_to_source') return r.target_profile_id === hostId;
+        return false;
+      };
+
+      // No row limit and no drama_level ordering (#1866 rules 2 and 3):
+      // eligibility applies before maxGuests, so an ineligible relation
+      // cannot use up a slot, and drama is a signal for the script, not a
+      // selection weight. id ASC is the order until relevance to the event
+      // is defined — the same data always gives the same list (#1796).
+      const byId = (a, b) => (typeof a.id === 'number' ? a.id : Infinity) - (typeof b.id === 'number' ? b.id : Infinity) || 0;
       const relationships = (await SocialProfileRelationship.findAll({
         where: {
           [Op.and]: [
             { [Op.or]: [
-              { source_profile_id: hostProfile.id },
-              { target_profile_id: hostProfile.id },
+              { source_profile_id: hostId },
+              { target_profile_id: hostId },
             ] },
             { [Op.or]: [
               { public_visibility: { [Op.ne]: 'hidden' } },
               { public_visibility: null },
             ] },
+            { relationship_type: { [Op.ne]: 'secret_link' } },
+            { [Op.or]: [
+              { direction: 'mutual' },
+              { direction: null },
+              { source_profile_id: hostId, direction: 'source_to_target' },
+              { target_profile_id: hostId, direction: 'target_to_source' },
+            ] },
           ],
         },
-        limit: maxGuests,
-      })).filter(r => r.public_visibility !== 'hidden');
+        order: [['id', 'ASC']],
+      })).filter(invites).sort(byId);
 
-      // One entry per person: two relationship types to the same profile
-      // (collab and rival, say) still make one guest.
-      const relatedIds = [...new Set(relationships.map(r =>
-        r.source_profile_id === hostProfile.id ? r.target_profile_id : r.source_profile_id
-      ).filter(Boolean))];
+      // One entry per person, labelled by their first relation by id: two
+      // relationship types to the same profile (collab and rival, say)
+      // still make one guest.
+      const relationByPerson = new Map();
+      for (const r of relationships) {
+        const other = r.source_profile_id === hostId ? r.target_profile_id : r.source_profile_id;
+        if (other && !relationByPerson.has(other)) relationByPerson.set(other, r);
+      }
+      const relatedIds = [...relationByPerson.keys()];
 
       if (relatedIds.length > 0) {
         // A guest arriving through a relationship is no more eligible than
         // one arriving through the fill query below (Evoni, Tasks #1796 and
         // #1800), so this stage applies the same rules: guestEligibilityWhere.
-        // A related profile filtered out here leaves its slot to the fill stage.
+        // A related profile filtered out here leaves its slot to the fill
+        // stage, and to the next eligible relation (#1866 rule 3).
         const relatedProfiles = await SocialProfile.findAll({
           where: { ...guestEligibilityWhere(Op), id: { [Op.in]: relatedIds } },
           attributes: ['id', 'handle', 'display_name'],
         });
+        const profileById = new Map(relatedProfiles.map(p => [p.id, p]));
 
-        for (const p of relatedProfiles) {
-          const rel = relationships.find(r =>
-            r.source_profile_id === p.id || r.target_profile_id === p.id
-          );
+        for (const id of relatedIds) {
+          if (guests.length >= maxGuests) break;
+          const p = profileById.get(id);
+          if (!p) continue;
           guests.push({
             profile_id: p.id,
             handle: p.handle,
             display_name: p.display_name,
-            relationship: rel?.relationship_type || 'network',
+            relationship: relationByPerson.get(id).relationship_type || 'network',
           });
         }
       }
