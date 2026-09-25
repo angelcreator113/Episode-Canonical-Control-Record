@@ -106,6 +106,10 @@ module.exports = (sequelize) => {
     time_of_day: { type: DataTypes.STRING(20), allowNull: true },
     season: { type: DataTypes.STRING(20), allowNull: true },
     scene_spec: { type: DataTypes.JSONB, allowNull: true, defaultValue: null },
+    // Task #1870: migration 20260625100000; in the 2026-09-17 canon capture
+    // (jsonb, nullable). Scene Studio's canvas save and the property room
+    // create write it.
+    canvas_settings: { type: DataTypes.JSONB, allowNull: true },
   }, {
     sequelize,
     modelName: 'SceneSet',

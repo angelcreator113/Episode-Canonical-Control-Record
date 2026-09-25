@@ -271,7 +271,11 @@ describe('relationship stage — queries the columns the model declares', () => 
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const relationships = [
       { source_profile_id: HOST_ID, target_profile_id: 7, relationship_type: 'rival', direction: 'mutual' },
-      { source_profile_id: 8, target_profile_id: HOST_ID, relationship_type: 'mentor', direction: 'source_to_target' },
+      // Host is the target and the relation points target to source: the
+      // host mentors 8, so 8 is invited (Task #1866 rule 1). Until #1866
+      // this fixture was 'source_to_target' — 8 mentoring the host, a
+      // guest-to-host link that no longer invites.
+      { source_profile_id: 8, target_profile_id: HOST_ID, relationship_type: 'mentor', direction: 'target_to_source' },
     ];
     const related = [
       { id: 7, handle: 'rival-7', display_name: 'Rival' },
@@ -283,10 +287,21 @@ describe('relationship stage — queries the columns the model declares', () => 
 
     expect(warn).not.toHaveBeenCalled();
     const relQuery = models.SocialProfileRelationship.findAll.mock.calls[0][0];
+    // Task #1866 adds the secret_link and direction conditions, an id order
+    // and no row limit.
     expect(relQuery.where).toEqual({ [Op.and]: [
       { [Op.or]: [{ source_profile_id: HOST_ID }, { target_profile_id: HOST_ID }] },
       { [Op.or]: [{ public_visibility: { [Op.ne]: 'hidden' } }, { public_visibility: null }] },
+      { relationship_type: { [Op.ne]: 'secret_link' } },
+      { [Op.or]: [
+        { direction: 'mutual' },
+        { direction: null },
+        { source_profile_id: HOST_ID, direction: 'source_to_target' },
+        { target_profile_id: HOST_ID, direction: 'target_to_source' },
+      ] },
     ] });
+    expect(relQuery.order).toEqual([['id', 'ASC']]);
+    expect(relQuery).not.toHaveProperty('limit');
     expect(calls.related[0].where.id).toEqual({ [Op.in]: [7, 8] });
     expect(guests.slice(0, 2)).toEqual([
       { profile_id: 7, handle: 'rival-7', display_name: 'Rival', relationship: 'rival' },
@@ -326,5 +341,112 @@ describe('relationship stage — queries the columns the model declares', () => 
     expect(guests.filter(g => g.profile_id === 7)).toEqual([
       { profile_id: 7, handle: 'both-7', display_name: 'Both', relationship: 'collab' },
     ]);
+  });
+});
+
+// Task #1866 — Evoni's selection rules for the relationship stage (issue
+// comment, 2026-09-25). One test per rule. The fakes here behave like the
+// database: the relationship fake honours `limit` (as Postgres would), and
+// the profile fake applies the eligibility rules to the ids asked for and
+// returns them in reverse id order, so the stage's own order is what shows.
+describe('relationship stage — selection rules (Task #1866)', () => {
+  const HOST_ID = HOST.id;
+  const r = (id, other, over = {}) => ({
+    id, source_profile_id: HOST_ID, target_profile_id: other,
+    relationship_type: 'bestie', direction: 'mutual', public_visibility: 'public', drama_level: 0, ...over,
+  });
+  // A key set to undefined is dropped, standing for a NULL column (the
+  // strict fake rejects null as an enum value in a fixture).
+  const omitUndefined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+  const person = (id, over = {}) => ({ id, handle: `p${id}`, display_name: `P${id}`, status: 'finalized', feed_layer: 'lalaverse', celebrity_tier: null, ...over });
+  const eligible = (p) => ['finalized', 'generated', 'crossed'].includes(p.status) && p.feed_layer === 'lalaverse'
+    && p.is_justawoman_record !== true && [null, 'accessible', 'selective'].includes(p.celebrity_tier ?? null);
+
+  function world({ rows, people, pool = [] }) {
+    const SocialProfile = {
+      findAll: jest.fn(async (opts) => {
+        const ids = opts.where?.id?.[Op.in];
+        if (!ids) return pool;
+        return people.filter(p => ids.includes(p.id) && eligible(p))
+          .sort((a, b) => b.id - a.id)
+          .map(({ id, handle, display_name }) => ({ id, handle, display_name }));
+      }),
+    };
+    const SocialProfileRelationship = strictSocialProfileRelationship((opts) =>
+      (opts.limit ? rows.slice(0, opts.limit) : rows));
+    return { SocialProfile, SocialProfileRelationship };
+  }
+  const related = async (w, max = 6) => (await assembleGuestList(HOST, FASHION, w, max))
+    .filter(g => !['industry', 'scene'].includes(g.relationship))
+    .map(g => g.profile_id);
+  // Rules 1, 4 and 5 are about who is invited, not the order (rule 2).
+  const invited = async (w, max) => (await related(w, max)).sort((a, b) => a - b);
+
+  test('rule 1 — direction gates: mutual, host-to-guest and NULL (the model default, mutual) invite; guest-to-host does not', async () => {
+    const rows = [
+      r(1, 11, { direction: 'mutual' }),
+      r(2, 12, { direction: 'source_to_target' }),                                            // host → 12
+      { ...r(3, 0), source_profile_id: 13, target_profile_id: HOST_ID, direction: 'target_to_source' }, // host → 13
+      { ...r(4, 0), source_profile_id: 14, target_profile_id: HOST_ID, direction: 'source_to_target' }, // 14 → host
+      r(5, 15, { direction: 'target_to_source' }),                                            // 15 → host
+      omitUndefined(r(6, 16, { direction: undefined })),                                             // NULL
+    ];
+    const people = [11, 12, 13, 14, 15, 16].map(id => person(id));
+    expect(await invited(world({ rows, people }))).toEqual([11, 12, 13, 16]);
+  });
+
+  test('rule 2 — ordered by id, not drama_level; the same data in any row order gives the same list', async () => {
+    const rows = [
+      r(30, 23, { drama_level: 10, relationship_type: 'feud' }),
+      r(10, 21, { drama_level: 0 }),
+      r(20, 22, { drama_level: 5, relationship_type: 'rival' }),
+    ];
+    const people = [21, 22, 23].map(id => person(id));
+    const first = await related(world({ rows, people }), 2);
+    expect(first).toEqual([21, 22]);
+    expect(await related(world({ rows: [...rows].reverse(), people }), 2)).toEqual(first);
+    const w = world({ rows, people });
+    await related(w, 2);
+    expect(w.SocialProfileRelationship.findAll.mock.calls[0][0].order).toEqual([['id', 'ASC']]);
+  });
+
+  test('rule 3 — eligibility applies before the limit: ineligible relations and a second relation to one person use no slot', async () => {
+    const rows = [
+      r(1, 31), r(2, 32), r(3, 31, { relationship_type: 'rival' }), r(4, 33), r(5, 34), r(6, 35),
+    ];
+    const people = [
+      person(31, { status: 'draft' }), person(32, { celebrity_tier: 'untouchable' }),
+      person(33), person(34), person(35),
+    ];
+    // Before #1866 the first two rows (maxGuests) were fetched, both
+    // ineligible, and no related guest was chosen.
+    expect(await related(world({ rows, people }), 2)).toEqual([33, 34]);
+  });
+
+  // Already true before #1866 (the #1860 guard excludes only 'hidden');
+  // this pins it.
+  test('rule 4 — a rumored relation invites, as public does; hidden still does not', async () => {
+    const rows = [
+      r(1, 41, { public_visibility: 'rumored' }),
+      r(2, 42, { public_visibility: 'public' }),
+      omitUndefined(r(3, 43, { public_visibility: undefined })),                                  // NULL
+      r(4, 44, { public_visibility: 'hidden' }),
+    ];
+    const people = [41, 42, 43, 44].map(id => person(id));
+    expect(await invited(world({ rows, people }))).toEqual([41, 42, 43]);
+  });
+
+  test('rule 5 — feud and ex invite; secret_link does not, whatever its visibility', async () => {
+    const rows = [
+      r(1, 51, { relationship_type: 'feud' }),
+      r(2, 52, { relationship_type: 'ex', public_visibility: 'rumored' }),
+      r(3, 53, { relationship_type: 'secret_link', public_visibility: 'public' }),
+      r(4, 54, { relationship_type: 'secret_link', public_visibility: 'rumored' }),
+    ];
+    const people = [51, 52, 53, 54].map(id => person(id));
+    const w = world({ rows, people });
+    const guests = await assembleGuestList(HOST, FASHION, w, 6);
+    expect(guests.filter(g => g.profile_id > 50).map(g => [g.profile_id, g.relationship])
+      .sort((a, b) => a[0] - b[0])).toEqual([[51, 'feud'], [52, 'ex']]);
   });
 });
