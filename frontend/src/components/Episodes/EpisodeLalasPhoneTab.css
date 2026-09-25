@@ -1,0 +1,251 @@
+/* EpisodeLalasPhoneTab.css — Production → Phone (issue #1908) */
+
+.lalas-phone-tab {
+  max-width: 900px;
+  margin: 0 auto;
+  overflow-x: hidden;
+  color: var(--lala-ink, #2C2C2C);
+}
+
+.lalas-phone-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.lalas-phone-header-text {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.lalas-phone-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.lalas-phone-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.lalas-phone-preview-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--lala-h-control, 40px);
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--lala-radius, 8px);
+  background: var(--lala-gold, #B8962E);
+  color: #fff;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+}
+
+.lalas-phone-preview-btn:hover:not(:disabled) {
+  background: var(--lala-gold-hover, #A68324);
+}
+
+.lalas-phone-preview-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lalas-phone-section {
+  margin-bottom: 20px;
+}
+
+.lalas-phone-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.lalas-phone-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.lalas-phone-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: var(--lala-gold-soft, #FDF8EE);
+  border: 1px solid var(--lala-gold-line, #E8D9A8);
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lalas-phone-pill-warn {
+  background: var(--lala-danger-soft, #F7E4DC);
+  border-color: var(--lala-danger-soft, #F7E4DC);
+  color: var(--lala-danger, #B84D2E);
+}
+
+.lalas-phone-muted {
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--lala-ink-faint, #A09889);
+}
+
+.lalas-phone-error {
+  padding: 12px 14px;
+  border-radius: var(--lala-radius, 8px);
+  background: var(--lala-danger-soft, #F7E4DC);
+  color: var(--lala-danger, #B84D2E);
+  font-size: 12px;
+}
+
+.lalas-phone-empty,
+.lalas-phone-deferred {
+  padding: 14px 16px;
+  border-radius: var(--lala-radius, 8px);
+  border: 1px solid var(--lala-gold-line, #E8D9A8);
+  background: var(--lala-surface, #fff);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.lalas-phone-deferred {
+  border-style: dashed;
+  background: var(--lala-parchment, #FAF7F0);
+}
+
+.lalas-phone-screens {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+}
+
+.lalas-phone-screen {
+  min-width: 0;
+  padding: 6px;
+  border-radius: var(--lala-radius, 8px);
+  border: 1px solid var(--lala-gold-line, #E8D9A8);
+  background: var(--lala-surface, #fff);
+}
+
+.lalas-phone-thumb {
+  aspect-ratio: 9 / 19.5;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--lala-parchment, #FAF7F0);
+}
+
+.lalas-phone-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lalas-phone-screen-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.lalas-phone-screen-meta {
+  margin-top: 2px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--lala-ink-faint, #A09889);
+}
+
+.lalas-phone-badge {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--lala-gold, #B8962E);
+  color: #fff;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.lalas-phone-moments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lalas-phone-moment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--lala-radius, 8px);
+  border: 1px solid var(--lala-gold-line, #E8D9A8);
+  background: var(--lala-surface, #fff);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.lalas-phone-moment-type,
+.lalas-phone-moment-handle {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--lala-ink-muted, #6B6557);
+  text-transform: uppercase;
+}
+
+.lalas-phone-moment-text {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-family: 'Lora', serif;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .lalas-phone-preview-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .lalas-phone-screens {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

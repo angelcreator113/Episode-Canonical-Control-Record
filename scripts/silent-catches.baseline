@@ -116,12 +116,8 @@
 6	src/services/episodeCompletionService.js	} catch { /* non-blocking */ }
 1	src/services/episodeCompletionService.js	} catch { /* wardrobe scoring not available */ }
 1	src/services/episodeGeneratorService.js	).catch(() => []);
-1	src/services/episodeGeneratorService.js	} catch { /* feed_moment column may not exist yet */ }
-3	src/services/episodeGeneratorService.js	} catch { /* non-blocking */ }
+1	src/services/episodeGeneratorService.js	} catch { /* non-blocking */ }
 1	src/services/episodeGeneratorService.js	} catch { /* scene_sets query failed — no scene sets linked */ }
-1	src/services/episodeGeneratorService.js	} catch { /* skip */ }
-1	src/services/episodeGeneratorService.js	} catch { /* skip individual failures */ }
-1	src/services/episodeGeneratorService.js	}).catch(() => []);
 13	src/services/episodeScriptWriterService.js	} catch { /* non-blocking */ }
 1	src/services/episodeScriptWriterService.js	}).catch(() => null);
 1	src/services/episodeScriptWriterService.js	}).then(b => b?.toJSON()).catch(() => null);

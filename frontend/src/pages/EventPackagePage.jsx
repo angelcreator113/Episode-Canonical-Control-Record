@@ -810,7 +810,11 @@ export default function EventPackagePage() {
       const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, { draft_script: false });
       if (res.data.success) {
         const ep = res.data.data.episode;
-        if (ep?.id) navigate(`/episodes/${ep.id}`);
+        // Start Episode lands on Production -> Assets, where the building
+        // happens (Evoni's ruling, 2026-09-25, Task #1905). A scoped
+        // reversal of #1531's Checklist landing for this caller only;
+        // EpisodeDetail's default tab stays 'checklist'.
+        if (ep?.id) navigate(`/episodes/${ep.id}?tab=assets`);
         else setToast('Episode created but no episode id was returned.');
       } else {
         setToast(res.data.error || 'Failed to start episode');

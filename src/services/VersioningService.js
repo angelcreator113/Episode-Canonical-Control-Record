@@ -1,10 +1,15 @@
 'use strict';
 
 const { pool } = require('../db');
+const { assertCompositionVersionsInCanon } = require('./compositionVersionsGuard');
 
 /**
  * VersioningService
  * Handles composition versioning, history tracking, and version reversion
+ *
+ * Every method needs the composition_versions table, which is not in canon.
+ * Each one refuses first (error.status 501) while Task #1910 is undecided;
+ * see ./compositionVersionsGuard.js.
  */
 class VersioningService {
   /**
@@ -13,6 +18,7 @@ class VersioningService {
    * @returns {Object} Version history with metadata
    */
   async getVersionHistory(compositionId) {
+    assertCompositionVersionsInCanon(); // #1910: table not in canon, 501 until ruled
     const query = `
       SELECT 
         tc.id as composition_id,
@@ -51,6 +57,7 @@ class VersioningService {
    * @returns {Object} Specific version snapshot and metadata
    */
   async getSpecificVersion(compositionId, versionNumber) {
+    assertCompositionVersionsInCanon(); // #1910: table not in canon, 501 until ruled
     const query = `
       SELECT 
         version_number,
@@ -82,6 +89,7 @@ class VersioningService {
    * @returns {Object} Detailed comparison
    */
   async compareVersions(compositionId, versionA, versionB) {
+    assertCompositionVersionsInCanon(); // #1910: table not in canon, 501 until ruled
     const v1 = await this.getSpecificVersion(compositionId, versionA);
     const v2 = await this.getSpecificVersion(compositionId, versionB);
 
@@ -138,6 +146,7 @@ class VersioningService {
    * @returns {Object} Updated composition
    */
   async revertToVersion(compositionId, targetVersion, userId, reason) {
+    assertCompositionVersionsInCanon(); // #1910: table not in canon, 501 until ruled
     // Validate target version exists
     const targetVersionData = await this.getSpecificVersion(compositionId, targetVersion);
 
@@ -237,6 +246,7 @@ class VersioningService {
    * @returns {Object} Version statistics
    */
   async getVersionStats(compositionId) {
+    assertCompositionVersionsInCanon(); // #1910: table not in canon, 501 until ruled
     const query = `
       SELECT 
         COUNT(*) as total_versions,
@@ -258,6 +268,7 @@ class VersioningService {
    * @returns {Array} List of compositions
    */
   async getModifiedSince(sinceDate) {
+    assertCompositionVersionsInCanon(); // #1910: table not in canon, 501 until ruled
     const query = `
       SELECT DISTINCT
         tc.id,
@@ -284,6 +295,7 @@ class VersioningService {
    * @returns {Object} Deletion stats
    */
   async cleanupOldVersions(compositionId, retentionDays = 90) {
+    assertCompositionVersionsInCanon(); // #1910: table not in canon, 501 until ruled
     const deleteQuery = `
       DELETE FROM composition_versions
       WHERE composition_id = $1

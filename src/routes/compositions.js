@@ -977,6 +977,19 @@ router.post('/:id/assets', requireAuth, async (req, res) => {
 });
 
 /**
+ * Status and body for a failed version-history route. composition_versions is
+ * not in canon, so VersioningService refuses with error.status 501 until
+ * Task #1910 is ruled (see src/services/compositionVersionsGuard.js); remove the
+ * 501 branch with the guard.
+ */
+const versionRouteError = (error) => {
+  if (error.status === 501) {
+    return { status: 501, body: { error: error.message, code: error.code } };
+  }
+  return { status: error.message.includes('not found') ? 404 : 500, body: { error: error.message } };
+};
+
+/**
  * GET /api/v1/compositions/:id/versions
  * Get complete version history for a composition
  */
@@ -994,9 +1007,8 @@ router.get('/:id/versions', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to get version history:', error);
-    res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message,
-    });
+    const { status, body } = versionRouteError(error);
+    res.status(status).json(body);
   }
 });
 
@@ -1023,9 +1035,8 @@ router.get('/:id/versions/:versionNumber', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to get specific version:', error);
-    res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message,
-    });
+    const { status, body } = versionRouteError(error);
+    res.status(status).json(body);
   }
 });
 
@@ -1054,9 +1065,8 @@ router.get('/:id/versions/:versionA/compare/:versionB', requireAuth, async (req,
     });
   } catch (error) {
     console.error('Failed to compare versions:', error);
-    res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message,
-    });
+    const { status, body } = versionRouteError(error);
+    res.status(status).json(body);
   }
 });
 
@@ -1088,9 +1098,8 @@ router.post('/:id/revert/:versionNumber', requireAuth, async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Failed to revert version:', error);
-    res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message,
-    });
+    const { status, body } = versionRouteError(error);
+    res.status(status).json(body);
   }
 });
 
@@ -1112,9 +1121,8 @@ router.get('/:id/version-stats', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to get version stats:', error);
-    res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message,
-    });
+    const { status, body } = versionRouteError(error);
+    res.status(status).json(body);
   }
 });
 
