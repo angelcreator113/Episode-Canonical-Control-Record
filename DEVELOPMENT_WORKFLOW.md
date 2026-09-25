@@ -249,6 +249,21 @@ Commands and skills are the same mechanism in Claude Code; these live in `.claud
 | Merging PRs | Squash-merge is the ancestry contract the register relies on. | GitHub Mobile, Step 5. |
 | Rotating or storing credentials | Method of record is paper + SHA256 fingerprint (onboarding §4.11). | Never in a Claude session, never in a repo file. |
 
+### 7.1 Manual deploy: check for pending migrations before the restart
+
+The manual deploy is Evoni's own action on the box: fast-forward the working tree to `origin/main`, then `pm2 restart`. A fast-forward runs no migration, so add one read-only step between the two:
+
+1. Fast-forward the working tree to `origin/main`.
+2. From the repo root: `NODE_ENV=production node scripts/check-pending-migrations.js`. Pin `NODE_ENV=production` — the API runs under it, and without it the script falls back to the `development` block, which prefers a `DATABASE_URL` over the `DB_*` the API uses. It sends only `SELECT name FROM "SequelizeMeta"` (no DDL) and lists every `src/migrations/*.js` file the database has not recorded, in run order.
+   - First, read its `reading SequelizeMeta:` line (host, port, database and user; never the password). If that is not the database the API uses, stop: whatever it reports is about the wrong ledger.
+   - Exit 0: nothing pending. Go to step 3.
+   - Exit 1: files are pending. **Do not restart.** Deal with the listed files first.
+   - Exit 2: the ledger could not be read (connection, query or permission error, printed). **Do not restart.** An unreadable ledger is not "nothing pending".
+   - Until the drifted files in `docs/MIGRATION_DRIFT_READ.md` §1 are cleared, `--report-only` prints the same list but exits 0 on pending files. It still exits 2 on errors.
+3. `pm2 restart`, only after step 2 exited 0.
+
+Whether the app's database user can `SELECT` from `SequelizeMeta` is unverified; if the first run exits 2 with "permission denied", that is the answer.
+
 ---
 
 ## 8. Optional automation lanes (off by default — each is a Rule 7 decision)
