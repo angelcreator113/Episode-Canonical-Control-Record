@@ -24,16 +24,13 @@
  *    retry timer. Call it on job switch, tab change, and unmount.
  */
 
-const AUTH_STATUSES = new Set([401, 403]);
+import { readAuthToken } from './authToken';
 
-export function readAuthToken() {
-  try {
-    return localStorage.getItem('authToken') || localStorage.getItem('token');
-  } catch (err) {
-    console.error('authedEventStream: could not read the auth token', err);
-    return null;
-  }
-}
+// Re-exported so existing importers keep working; the one source is
+// ./authToken (shared with the one-shot POST streams, Task #1894).
+export { readAuthToken };
+
+const AUTH_STATUSES = new Set([401, 403]);
 
 /**
  * Split a text buffer into complete SSE frames. Returns the parsed frames and

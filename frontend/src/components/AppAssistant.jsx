@@ -7,11 +7,15 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import apiClient from '../services/api';
+import { readAuthToken } from '../utils/authToken';
 import AmberPromptLibrary from './AmberPromptLibrary';
 import './AppAssistant.css';
 
 const API        = '/api/v1/memories/assistant-command';
 const STREAM_API = '/api/v1/memories/assistant-command-stream';
+
+// Shown in the chat when the stream is refused with 401/403 (Task #1894).
+export const AUTH_ERROR_REPLY = 'Your session has expired — sign in again to talk to Amber.';
 
 // File-local helpers for non-streaming sites. The STREAM_API site (SSE
 // + getReader pair) is a Pattern G locked exception — see the comment
@@ -208,19 +212,39 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       // + WriteMode:980/1145 + WriteModeAIWriter:273 SSE streaming sites.
       // The AbortController.signal here also depends on raw fetch — apiClient
       // wraps cancellation differently (CancelToken / AbortController via
-      // adapter). When this site moves under requireAuth post-Step 3, follow
-      // the WriteMode:980 inline-Bearer pattern. The fallback non-streaming
-      // POST a few lines below uses apiClient (assistantCommandApi).
+      // adapter). The route is behind requireAuth, which reads only the
+      // Authorization header, so this fetch attaches `Authorization: Bearer`
+      // itself (WriteMode generateProse's inline-Bearer pattern; token from
+      // utils/authToken, never in the URL). One POST, no automatic retry —
+      // each call starts a billed Claude call. A 401/403 is surfaced in the
+      // chat and does NOT fall back; the fallback non-streaming POST a few
+      // lines below (apiClient, assistantCommandApi) is for other non-OK
+      // statuses only. Task #1894.
       // ───────────────────────────────────────────────────────────────────
+      const token = readAuthToken();
       const res = await fetch(STREAM_API, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(body),
         signal: controller.signal,
       });
 
+      if (res.status === 401 || res.status === 403) {
+        // Auth refused: say so, and do not start a second (non-streaming) AI call.
+        console.error(`AppAssistant: ${STREAM_API} refused with ${res.status}; not falling back`);
+        setStreamText('');
+        setMessages(prev => [...prev, {
+          role: 'assistant', text: AUTH_ERROR_REPLY, ts: Date.now(), error: true,
+        }]);
+        resumeListeningAfterReplyRef.current?.();
+        return;
+      }
+
       if (!res.ok || !res.body) {
-        // Fall back to non-streaming endpoint
+        // Fall back to non-streaming endpoint (non-auth failures only)
         const data = await assistantCommandApi(body);
         const reply = data.reply || 'Done.';
         setMessages(prev => [...prev, {

@@ -18,6 +18,7 @@
 
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import apiClient from '../services/api';
+import { readAuthToken } from '../utils/authToken';
 
 // File-local helpers for non-streaming sites. The streaming-fetch site
 // at runAction (line 251 + 259 getReader pair) is a Pattern G locked
@@ -99,6 +100,9 @@ const ACTIONS = [
     action:   'lala',
   },
 ];
+
+// Shown when /ai-writer-action is refused with 401/403 (Task #1894).
+export const AUTH_ERROR_MESSAGE = 'Your session has expired — sign in again.';
 
 const TONE_OPTIONS = [
   { id: 'default', label: 'Natural' },
@@ -264,17 +268,31 @@ const WriteModeAIWriter = forwardRef(function WriteModeAIWriter({
       // browser (only in Node), so this site CANNOT migrate to apiClient.
       // Locked alongside BookEditor:55 keepalive + WriteMode:980/1145 SSE
       // streaming sites. Inline raw fetch + interceptor-bypass-by-design.
-      // Auth: this endpoint is currently unauth-by-fetch — once Step 3
-      // backend sweep completes, the streaming endpoints' auth posture is
-      // determined server-side; the fetch here will need a manual Bearer
-      // header attach (see WriteMode:980 precedent for the inline-auth pattern
-      // when this site moves under requireAuth).
+      // Auth: /ai-writer-action is behind requireAuth, which reads only the
+      // Authorization header, so this fetch attaches `Authorization: Bearer`
+      // itself (WriteMode generateProse's inline-Bearer pattern; token from
+      // utils/authToken, never in the URL). One POST, no automatic retry —
+      // each call starts a billed Claude call; the manual Retry (retryRef)
+      // is unchanged. A 401/403 sets an auth error instead of falling into
+      // the JSON branch's "No content returned". Task #1894.
       // ───────────────────────────────────────────────────────────────────
+      const token = readAuthToken();
       const res = await fetch(action.endpoint, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body:    JSON.stringify(payload),
       });
+
+      if (res.status === 401 || res.status === 403) {
+        console.error(`WriteModeAIWriter: ${action.endpoint} refused with ${res.status}`);
+        if (!retryRef.current) setResult(null);
+        setError(AUTH_ERROR_MESSAGE);
+        setLoading(false);
+        return;
+      }
 
       // ── SSE streaming path ──
       if (res.headers.get('content-type')?.includes('text/event-stream')) {
