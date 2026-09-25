@@ -3020,7 +3020,10 @@ async function buildArcGenerationContext(characterKey) {
         };
       }
     }
-  } catch (_) { /* defaults */ }
+  } catch (err) {
+    console.warn(`[buildArcGenerationContext] arc read failed for ${characterKey}, using default arc context:`, err?.message);
+    return { wound_clock: 75, stakes_level: 1, visibility_score: 20, usedDefaults: true };
+  }
   return { wound_clock: 75, stakes_level: 1, visibility_score: 20 };
 }
 
@@ -3184,6 +3187,7 @@ router.post('/generate-story-tasks', requireAuth, aiRateLimiter, async (req, res
     seTaskArcCache.set(characterKey, result);
 
     // Persist to database so it survives server restarts
+    let saved = false;
     try {
       await db.StoryTaskArc.sync();
       await db.StoryTaskArc.upsert({
@@ -3193,11 +3197,12 @@ router.post('/generate-story-tasks', requireAuth, aiRateLimiter, async (req, res
         narrative_spine: result.narrative_spine,
         tasks: result.tasks,
       });
+      saved = true;
     } catch (persistErr) {
       console.warn('[generate-story-tasks] DB persist failed:', persistErr.message);
     }
 
-    return res.json({ cached: false, ...result });
+    return res.json({ cached: false, ...result, saved });
 
   } catch (err) {
     console.error('[generate-story-tasks] error:', err?.message);
@@ -3471,6 +3476,7 @@ router.post('/generate-story-tasks-stream', requireAuth, aiRateLimiter, async (r
 
     seTaskArcCache.set(characterKey, result);
 
+    let saved = false;
     try {
       await db.StoryTaskArc.sync();
       await db.StoryTaskArc.upsert({
@@ -3480,11 +3486,16 @@ router.post('/generate-story-tasks-stream', requireAuth, aiRateLimiter, async (r
         narrative_spine: result.narrative_spine,
         tasks: result.tasks,
       });
+      saved = true;
     } catch (persistErr) {
       console.warn('[generate-story-tasks-stream] DB persist failed:', persistErr.message);
     }
 
-    send('saving', { message: 'Arc saved', done: true });
+    if (saved) {
+      send('saving', { message: 'Arc saved', saved: true, done: true });
+    } else {
+      send('saving', { message: 'Arc generated but not saved', saved: false, done: true });
+    }
 
     // Final: send the full result
     send('done', { cached: false, ...result });
@@ -3538,7 +3549,7 @@ router.post('/generate-next-chapter', requireAuth, aiRateLimiter, async (req, re
       existingTasks = seTaskArcCache.get(characterKey).tasks || [];
     } else if (db.StoryTaskArc) {
       try {
-        const dbArc = await db.StoryTaskArc.unscoped().findOne({ where: { character_key: characterKey } });
+        const dbArc = await db.StoryTaskArc.findOne({ where: { character_key: characterKey } });
         if (dbArc?.tasks?.length) existingTasks = dbArc.tasks;
       } catch (arcErr) {
         console.warn('[generate-next-chapter] StoryTaskArc query failed:', arcErr.message);
@@ -3548,10 +3559,13 @@ router.post('/generate-next-chapter', requireAuth, aiRateLimiter, async (req, re
     // Load approved story texts for context
     let _approvedStories = [];
     try {
-      _approvedStories = await db.StorytellerStory.unscoped().findAll({
+      // Soft-deleted stories included, as 908f93090 intended; in Sequelize 6
+      // only paranoid: false (not .unscoped()) drops the deleted_at predicate.
+      _approvedStories = await db.StorytellerStory.findAll({
         where: { character_key: characterKey, status: 'approved' },
         order: [['story_number', 'ASC']],
         attributes: ['story_number', 'title', 'scene_brief', 'status'],
+        paranoid: false,
       });
     } catch (storyErr) {
       console.warn('[generate-next-chapter] StorytellerStory query failed:', storyErr.message);
@@ -3663,6 +3677,7 @@ Use this exact structure:
     };
     seTaskArcCache.set(characterKey, result);
 
+    let saved = false;
     try {
       await db.StoryTaskArc.sync();
       await db.StoryTaskArc.upsert({
@@ -3672,11 +3687,12 @@ Use this exact structure:
         narrative_spine: null,
         tasks: updatedTasks,
       });
+      saved = true;
     } catch (persistErr) {
       console.warn('[generate-next-chapter] DB persist failed:', persistErr.message);
     }
 
-    res.json({ chapter, allTasks: updatedTasks, chapterNumber: nextChapterNum, totalGenerated: updatedTasks.length });
+    res.json({ chapter, allTasks: updatedTasks, chapterNumber: nextChapterNum, totalGenerated: updatedTasks.length, saved });
   } catch (err) {
     console.error('[generate-next-chapter] error:', err?.message);
     console.error('[generate-next-chapter] stack:', err?.stack?.split('\n').slice(0, 5).join('\n'));
@@ -5514,3 +5530,4 @@ module.exports = router;
 module.exports.router = router;
 module.exports.loadWriteModeContext = loadWriteModeContext;
 module.exports.buildWriteModeContextBlock = buildWriteModeContextBlock;
+module.exports.buildArcGenerationContext = buildArcGenerationContext;
