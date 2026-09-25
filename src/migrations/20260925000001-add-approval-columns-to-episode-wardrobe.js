@@ -37,7 +37,10 @@
  * New styling-game picks set 'approved' themselves (src/routes/wardrobe.js,
  * POST /wardrobe/select).
  *
- * No CREATE TABLE: the table exists in canon. Additive and idempotent: each
+ * No CREATE TABLE: the table exists in canon, but no live migration creates
+ * it, so a fresh database (CI, a new dev box) has no episode_wardrobe. There
+ * the migration logs and does nothing — it adds columns to the table where the
+ * table exists and never invents the table. Additive and idempotent: each
  * column is added only when describeTable does not already show it; down
  * removes those that are there.
  *
@@ -84,6 +87,10 @@ module.exports = {
   // the columns are not left behind without it, and a re-run starts clean.
   async up(queryInterface, Sequelize) {
     await queryInterface.sequelize.transaction(async (transaction) => {
+      if (!(await queryInterface.tableExists(TABLE, { transaction }))) {
+        console.warn(`[migration 20260925000001] ${TABLE} does not exist here; no live migration creates it, so there is nothing to add to (fresh database).`);
+        return;
+      }
       const existing = await queryInterface.describeTable(TABLE, { transaction });
       const cols = COLUMNS(Sequelize);
       const addedApprovalStatus = !existing.approval_status;
@@ -115,6 +122,10 @@ module.exports = {
 
   async down(queryInterface) {
     await queryInterface.sequelize.transaction(async (transaction) => {
+      if (!(await queryInterface.tableExists(TABLE, { transaction }))) {
+        console.warn(`[migration 20260925000001] ${TABLE} does not exist here; nothing to remove.`);
+        return;
+      }
       const existing = await queryInterface.describeTable(TABLE, { transaction });
       for (const col of [...ORDER].reverse()) {
         if (existing[col]) await queryInterface.removeColumn(TABLE, col, { transaction });

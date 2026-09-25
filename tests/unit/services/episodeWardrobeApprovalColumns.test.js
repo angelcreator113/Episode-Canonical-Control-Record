@@ -100,6 +100,17 @@ describe(`the migration ${MIGRATION}`, () => {
     expect(qi.calls).toEqual([]);
   });
 
+  test('skips cleanly on a fresh database with no episode_wardrobe (CI): logs, adds nothing, never creates it', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const qi = recordingQueryInterface([], { tableExists: false });
+    await require(MIGRATION_PATH).up(qi, Sequelize);
+    await require(MIGRATION_PATH).down(qi, Sequelize);
+    expect(qi.calls).toEqual([]);
+    expect(qi.describeTable).not.toHaveBeenCalled();
+    expect(warn.mock.calls.some(([m]) => /does not exist here/.test(String(m)))).toBe(true);
+    warn.mockRestore();
+  });
+
   test('down removes the five columns and leaves canon as it was', async () => {
     const qi = recordingQueryInterface([...canonColumns(), ...NEW_COLUMNS]);
     await require(MIGRATION_PATH).down(qi, Sequelize);

@@ -38,12 +38,13 @@ function canonColumns(table = TABLE) {
 }
 
 /** A recording query interface over a column set. */
-function recordingQueryInterface(columns) {
+function recordingQueryInterface(columns, { tableExists = true } = {}) {
   const cols = new Set(columns);
   const calls = [];
   const qi = {
     calls,
     cols,
+    tableExists: jest.fn(async (t) => t === TABLE && tableExists),
     describeTable: jest.fn(async (t) => {
       if (t !== TABLE) throw new Error(`describeTable ${t}: not this table`);
       return Object.fromEntries([...cols].map((c) => [c, {}]));
