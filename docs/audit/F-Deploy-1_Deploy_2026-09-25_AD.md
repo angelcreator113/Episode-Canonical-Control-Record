@@ -7,7 +7,7 @@ New record, not a Fix Plan revision, and not an amendment of
 `F-Deploy-1_Deploy_2026-09-24_2026-09-25.md` (the X–AC record). This
 document follows that one rather than editing it. Basis: `51e64f3ff6ffec209b0f95bbfa3432eff4562c88`
 (#1882), the tree Deploy AD moved production to. `origin/main` at filing
-is `348a0233435a6e9ddc85ca8c0bd03680944a99e2`, two commits past the basis
+is `608a5d2c499a32eb81a02f1eb12631cb7b9dbb6f`, five commits past the basis
 (§8).
 
 **Author**
@@ -52,7 +52,7 @@ beside what the repository measures.
 $ git rev-parse 79b9a5e6b 51e64f3ff origin/main
 79b9a5e6b02426edd38327333cb981e53132e620
 51e64f3ff6ffec209b0f95bbfa3432eff4562c88
-348a0233435a6e9ddc85ca8c0bd03680944a99e2
+608a5d2c499a32eb81a02f1eb12631cb7b9dbb6f
 $ git merge-base --is-ancestor 79b9a5e6b 51e64f3ff; echo "exit=$?"
 exit=0
 ```
@@ -348,13 +348,13 @@ That these are live rests on the ATTESTED deploy (§2).
   §1.1 records that the read "fails: column does not exist" (line 151)
   and that, before #1879, the update "issues no SQL" (line 191). With
   #1879's declarations, the update now carries both columns, so the
-  route stores the fallback. Issue #1883 (open) names this first:
-  "`/arc-stage` now **stores** that fallback". The fix is not merged:
-  `git merge-base --is-ancestor b3e3047b6 origin/main` exits 1 for the
-  branch `claude/issue-1883-hidden-schema-failures`, whose
-  `sceneProposeRoute.js` answers 501 and writes nothing when no stage is
-  computed; `sceneProposeRoute.js` is unchanged between `51e64f3ff` and
-  `origin/main`. Until that fix is merged and deployed, production
+  route stores the fallback. Issue #1883 names this first:
+  "`/arc-stage` now **stores** that fallback". Its fix merged after AD,
+  as #1895 (`8a5ea42b9`, first-parent on `origin/main`), which makes
+  `/arc-stage` answer 501 and write nothing when no stage is computed.
+  `sceneProposeRoute.js` is unchanged between `51e64f3ff` and
+  `348a02334`; #1895 is the first commit after the basis to change it.
+  #1895 is not in AD (§8). Until a deploy carries it, production
   stores the fallback when this route is called. Whether it has been
   called is not attested and not inferred.
 
@@ -385,9 +385,15 @@ undeployed** (MEASURED at filing):
 
 ```
 $ git log --oneline --first-parent 51e64f3ff..origin/main
+608a5d2c4 fix(feed): bulk-job and scheduler streams authenticate [skip-automerge] (#1896)
+8a5ea42b9 fix: hidden schema failures stop hiding (#1870 step 2) [skip-automerge] (#1895)
+784866ef5 feat(frontend): Event Package suggests category and format [skip-automerge] (#1892)
 348a02334 fix(feed): a taken handle is refused before generation, and Autofill never hands one back [skip-automerge] (#1891)
 f7d452e74 fix(routes): approving an entanglement proposal creates its StoryTeller line [skip-automerge] (#1890)
 ```
+
+Five commits, measured at `origin/main` = `608a5d2c4`. #1892 and #1896
+change `frontend/` only; the next deploy needs a frontend build.
 
 ## §9. What this document does not do
 
