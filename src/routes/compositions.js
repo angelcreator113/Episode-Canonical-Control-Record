@@ -1526,14 +1526,19 @@ router.post('/:id/apply-draft', requireAuth, async (req, res) => {
     // Increment version
     const newVersion = (composition.current_version || 1) + 1;
 
-    // Update version history
-    const versionHistory = composition.version_history || {};
-    versionHistory[`v${newVersion}`] = {
-      timestamp: new Date().toISOString(),
-      user: req.user?.id || 'system',
-      changes: {
-        type: 'layout_adjustment',
-        overrides: draftOverrides,
+    // Update version history. A new object, never the loaded one edited in
+    // place: Sequelize compares the value with the one it loaded, and the
+    // same reference counts as unchanged, so version_history was never
+    // saved (Task #1909).
+    const versionHistory = {
+      ...(composition.version_history || {}),
+      [`v${newVersion}`]: {
+        timestamp: new Date().toISOString(),
+        user: req.user?.id || 'system',
+        changes: {
+          type: 'layout_adjustment',
+          overrides: draftOverrides,
+        },
       },
     };
 

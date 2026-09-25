@@ -55,7 +55,7 @@ function recordingInstance(Model, row) {
  * @param {boolean} opts.declared — does the model declare the five draft columns?
  * @param {string[]} opts.tableHas — draft columns the live table has
  */
-function harness({ declared, tableHas = [], row = { id: ID, current_version: 1, version_history: {} } }) {
+function harness({ declared, tableHas = [], row = { id: ID, current_version: 1, version_history: {} }, real = false }) {
   const { loadModel } = require('../helpers/schemaCheckedModel');
   const Model = loadModel('ThumbnailComposition');
   if (!declared) for (const c of DRAFT_COLUMNS) if (has(Model.rawAttributes, c)) Model.removeAttribute(c);
@@ -68,7 +68,16 @@ function harness({ declared, tableHas = [], row = { id: ID, current_version: 1, 
     .spyOn(Model.sequelize.getQueryInterface(), 'describeTable')
     .mockImplementation(async () => Object.fromEntries([...table.cols].map((c) => [c, {}])));
 
-  const instance = recordingInstance(Model, row);
+  // real: a Sequelize instance of the real model, as findByPk returns it, with
+  // the query interface's update stubbed to record what save() sends.
+  const saves = [];
+  if (real) {
+    jest.spyOn(Model.sequelize.getQueryInterface(), 'update').mockImplementation(async (inst, _t, values, _w, opts) => {
+      saves.push({ values: { ...values }, fields: [...(opts.fields || [])] });
+      return [inst, 1];
+    });
+  }
+  const instance = real ? Model.build(row, { isNewRecord: false, raw: true }) : recordingInstance(Model, row);
   const findByPk = jest.spyOn(Model, 'findByPk').mockImplementation(async () => instance);
 
   jest.doMock('../../../src/models', () => ({ models: { ThumbnailComposition: Model, CompositionOutput: {} } }));
@@ -88,7 +97,7 @@ function harness({ declared, tableHas = [], row = { id: ID, current_version: 1, 
   const app = express();
   app.use(express.json());
   app.use('/api/v1/compositions', require('../../../src/routes/compositions'));
-  return { app, Model, instance, findByPk, describeTable, table };
+  return { app, Model, instance, findByPk, describeTable, table, saves };
 }
 
 const DRAFT = { roles: { lala: { x: 120, y: 40, scale: 1.1 } } };
@@ -224,5 +233,32 @@ describe('a detached draft column is in no SELECT or INSERT (deploy before migra
 
     await Model.findAll({ where: { episode_id: ID } });
     for (const c of DRAFT_COLUMNS) expect(sql[0]).toContain(c);
+  });
+});
+
+describe('apply-draft saves version_history (Task #1909)', () => {
+  // The handler used to add the new version to the loaded version_history
+  // object in place and pass the same reference back. Sequelize compares a
+  // JSONB value with the one it holds, sees no change, and leaves the column
+  // out of the UPDATE: the version bumped but its history entry was lost.
+  test('the new version entry is in the saved fields, next to the old ones', async () => {
+    const v1 = { timestamp: '2026-09-01T00:00:00.000Z', user: 'u0', changes: { type: 'created' } };
+    const { app, saves } = harness({
+      declared: true,
+      tableHas: DRAFT_COLUMNS,
+      real: true,
+      row: { id: ID, current_version: 1, version_history: { v1 }, draft_overrides: DRAFT, layout_overrides: null },
+    });
+
+    const res = await request(app).post(`/api/v1/compositions/${ID}/apply-draft`).send({});
+
+    expect(res.status).toBe(200);
+    expect(saves).toHaveLength(1);
+    expect(saves[0].fields).toEqual(expect.arrayContaining(['version_history', 'current_version', 'layout_overrides']));
+    expect(saves[0].values.version_history).toEqual({
+      v1,
+      v2: expect.objectContaining({ user: 'u1', changes: { type: 'layout_adjustment', overrides: DRAFT } }),
+    });
+    expect(saves[0].values).toMatchObject({ current_version: 2, layout_overrides: { roles: DRAFT.roles }, draft_overrides: null });
   });
 });
