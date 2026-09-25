@@ -41,6 +41,12 @@ jobs:
       - name: Lint silent catches
         run: bash scripts/lint-silent-catches.sh
 
+      # Ratchet (Task #1871): a query or write naming an attribute its model does
+      # not declare fails only if its key is not in the baseline. Baseline entries
+      # that no longer occur are printed as GONE and do not fail.
+      - name: Schema agreement (step 1, query vs model)
+        run: node scripts/check-schema-agreement.js --baseline scripts/schema-agreement.baseline
+
   tests:
     name: Tests
     runs-on: ubuntu-latest
