@@ -9,9 +9,10 @@
  * (getOutfitScore) scored every episode_wardrobe row, approved or not.
  *
  * Now: the approved look is counted and labelled as the episode's own; a
- * failing query is logged; an episode with no approved look is scored on
- * the event's pieces only with an explicit label (the PROPOSAL; Evoni
- * rules), and the outfit match scores only the approved look.
+ * failing query is logged; an episode with no approved look has both its
+ * wardrobe bonuses and its outfit match scored on the event's pieces, with
+ * an explicit label (Evoni's rulings, 2026-09-25). EVENT_PIECES_FALLBACK
+ * (here the eventPiecesFallback option) turns both off at once.
  *
  * sequelize.query is mocked; getOutfitScore is a jest.fn. No database.
  */
@@ -122,20 +123,59 @@ describe('completeEpisode — the episode\'s look (Task #1924)', () => {
       `[episodeCompletion] episode ${EPISODE_ID}: the look query failed:`,
       'column ew.approval_status does not exist'
     );
-    expect(result.outfit).toMatchObject({ source: 'event_pieces', label: "scored on the event's pieces", pieces: 1, reason: 'look_query_failed' });
+    expect(result.outfit).toEqual({
+      source: 'event_pieces', label: "scored on the event's pieces", pieces: 1, reason: 'look_query_failed', match_scored: true,
+    });
     expect(result.wardrobe.brands).toEqual(['Other']);
+    // The match is scored on the same event pieces, not on episode_wardrobe.
+    expect(mockGetOutfitScore.mock.calls[0][5]).toEqual({ pieces: EVENT_PIECES });
     const history = queries.find((q) => /INSERT INTO character_state_history/.test(q.sql));
     expect(history.opts.replacements.notes).toMatch(/Outfit: 1 pieces \(scored on the event's pieces\)/);
     expect(savedEvaluation(queries).outfit.label).toBe("scored on the event's pieces");
   });
 
-  test('no approved look: scored on the event\'s pieces with the label, and a warning', async () => {
-    const { sequelize } = makeSequelize({ look: [] });
+  test('no approved look: the bonuses and the outfit match are scored on the event\'s pieces, labelled', async () => {
+    // A real scorer answer only for the event's pieces; the approved look is empty.
+    mockGetOutfitScore.mockImplementation(async (_m, _e, _ev, _cs, _arc, opts = {}) => (opts.pieces
+      ? { hasOutfit: true, score: 60, breakdown: { aesthetic: 6, coverage: 4 } }
+      : { hasOutfit: false, score: 0, breakdown: {} }));
+    const { sequelize, queries } = makeSequelize({ look: [] });
     const result = await completeEpisode(EPISODE_ID, SHOW_ID, sequelize);
 
-    expect(result.outfit).toMatchObject({ source: 'event_pieces', label: "scored on the event's pieces", reason: 'no_approved_look' });
-    expect(warn.mock.calls.some(([m]) => /no_approved_look; wardrobe bonuses scored on the event's pieces/.test(m))).toBe(true);
+    expect(result.outfit).toEqual({
+      source: 'event_pieces', label: "scored on the event's pieces", pieces: 1, reason: 'no_approved_look', match_scored: true,
+    });
+    expect(mockGetOutfitScore).toHaveBeenCalledTimes(1);
+    expect(mockGetOutfitScore.mock.calls[0][5]).toEqual({ pieces: EVENT_PIECES });
+    // 60 * 0.35 = 21 of the 35 outfit points, where before #1924 it was 0.
+    expect(result.evaluation.breakdown.outfit_match.value).toBe(21);
+    expect(savedEvaluation(queries).outfit).toMatchObject({ source: 'event_pieces', match_scored: true });
+    expect(warn.mock.calls.some(([m]) => /no_approved_look; outfit match and wardrobe bonuses scored on the event's pieces/.test(m))).toBe(true);
     expect(error).not.toHaveBeenCalled();
+  });
+
+  test('EVENT_PIECES_FALLBACK off: neither the outfit match nor the bonuses fall back', async () => {
+    mockGetOutfitScore.mockImplementation(async (_m, _e, _ev, _cs, _arc, opts = {}) => (opts.pieces
+      ? { hasOutfit: true, score: 60, breakdown: { aesthetic: 6, coverage: 4 } }
+      : { hasOutfit: false, score: 0, breakdown: {} }));
+    const { sequelize } = makeSequelize({ look: [] });
+    const result = await completeEpisode(EPISODE_ID, SHOW_ID, sequelize, { eventPiecesFallback: false });
+
+    expect(result.outfit).toEqual({
+      source: 'none', label: 'no approved look; not scored for outfit', pieces: 0, reason: 'no_approved_look', match_scored: false,
+    });
+    expect(result.wardrobe).toBeUndefined();
+    expect(mockGetOutfitScore.mock.calls.map((c) => c[5])).toEqual([{ approvedOnly: true }]);
+    expect(result.evaluation.breakdown.outfit_match.value).toBe(0);
+  });
+
+  test('one constant decides both: EVENT_PIECES_FALLBACK is true and is the only default', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', '..', 'src', 'services', 'episodeCompletionService.js'), 'utf8');
+    expect(src).toMatch(/^const EVENT_PIECES_FALLBACK = true;$/m);
+    // Used only as the default of the eventPiecesFallback option; the match
+    // follows look.outfit.source, so it has no switch of its own.
+    expect(src.match(/= EVENT_PIECES_FALLBACK\b/g)).toHaveLength(2);
+    expect(src).toMatch(/look\.outfit\.source === 'event_pieces' \? \{ pieces: look\.pieces \}/);
   });
 
   test('no approved look and no event pieces: not scored for outfit, and it says so', async () => {

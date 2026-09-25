@@ -124,13 +124,14 @@ function computeWardrobeBonuses(outfitPieces, event) {
 // were scored on the event's outfit_pieces every time, with nothing in the
 // result saying so.
 //
-// PROPOSAL, not a ruling (Evoni rules): when the episode has no approved
-// look, score the wardrobe bonuses on the event's pieces and say so in the
-// result (outfit.source 'event_pieces', outfit.label). Setting
-// EVENT_PIECES_FALLBACK to false is the other option: no look, no wardrobe
-// bonuses (outfit.source 'none'). Either way the outfit match (outfit_match,
-// accessory_match) scores only the approved look and is 0 without one
-// (outfit.match_scored says which).
+// Evoni's rulings (2026-09-25): when the episode has no approved look, both
+// the wardrobe bonuses and the outfit match (outfit_match, accessory_match)
+// are scored on the event's pieces, and the result says so
+// (outfit.source 'event_pieces', outfit.label, outfit.match_scored). "An
+// episode scored on the event's pieces and *told* so beats an episode
+// silently scoring zero." Before #1924 the match scored 0 for every episode.
+// EVENT_PIECES_FALLBACK covers both: false means no look, no wardrobe
+// bonuses and no outfit match (outfit.source 'none').
 const EVENT_PIECES_FALLBACK = true;
 const EVENT_PIECES_LABEL = "scored on the event's pieces";
 const NO_LOOK_LABEL = 'no approved look; not scored for outfit';
@@ -148,12 +149,14 @@ function parseEventPieces(event) {
 
 /**
  * The approved, not-removed episode_wardrobe rows of an episode, or (with
- * EVENT_PIECES_FALLBACK) the event's pieces, labelled as such.
+ * eventPiecesFallback, default EVENT_PIECES_FALLBACK) the event's pieces,
+ * labelled as such. completeEpisode scores both the wardrobe bonuses and the
+ * outfit match on whatever this returns, so the one value decides both.
  *
  * @returns {Promise<{ pieces: object[], outfit: { source: 'episode_look'|'event_pieces'|'none',
  *   label: string|null, pieces: number, reason: string|null, match_scored: boolean } }>}
  */
-async function loadEpisodeLook(sequelize, episodeId, event) {
+async function loadEpisodeLook(sequelize, episodeId, event, { eventPiecesFallback = EVENT_PIECES_FALLBACK } = {}) {
   let reason = 'no_approved_look';
   try {
     const rows = await sequelize.query(
@@ -171,9 +174,9 @@ async function loadEpisodeLook(sequelize, episodeId, event) {
     console.error(`[episodeCompletion] episode ${episodeId}: the look query failed:`, lookErr?.message);
   }
 
-  const eventPieces = EVENT_PIECES_FALLBACK ? parseEventPieces(event) : [];
+  const eventPieces = eventPiecesFallback ? parseEventPieces(event) : [];
   if (eventPieces.length) {
-    console.warn(`[episodeCompletion] episode ${episodeId}: ${reason}; wardrobe bonuses ${EVENT_PIECES_LABEL} (${eventPieces.length})`);
+    console.warn(`[episodeCompletion] episode ${episodeId}: ${reason}; outfit match and wardrobe bonuses ${EVENT_PIECES_LABEL} (${eventPieces.length})`);
     return { pieces: eventPieces, outfit: { source: 'event_pieces', label: EVENT_PIECES_LABEL, pieces: eventPieces.length, reason, match_scored: false } };
   }
   console.warn(`[episodeCompletion] episode ${episodeId}: ${reason}; ${NO_LOOK_LABEL}`);
@@ -182,7 +185,9 @@ async function loadEpisodeLook(sequelize, episodeId, event) {
 
 // ─── MAIN: COMPLETE EPISODE ──────────────────────────────────────────────────
 
-async function completeEpisode(episodeId, showId, sequelize) {
+// options.eventPiecesFallback overrides EVENT_PIECES_FALLBACK for one call
+// (tests); callers pass nothing.
+async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallback = EVENT_PIECES_FALLBACK } = {}) {
   // ── 1. Load episode ──
   const [episode] = await sequelize.query(
     `SELECT id, title, episode_number, show_id, evaluation_json, evaluation_status, total_income, total_expenses
@@ -204,7 +209,7 @@ async function completeEpisode(episodeId, showId, sequelize) {
 
   // The episode's look: its approved episode_wardrobe rows (Task #1924).
   // Never the event's pieces without saying so — see loadEpisodeLook.
-  const look = await loadEpisodeLook(sequelize, episodeId, event);
+  const look = await loadEpisodeLook(sequelize, episodeId, event, { eventPiecesFallback });
   const outfitPieces = look.pieces;
 
   // ── 3. Load social tasks ──
@@ -263,8 +268,10 @@ async function completeEpisode(episodeId, showId, sequelize) {
         const arc = await getWardrobeGrowthArc(showId, models);
         arcStage = arc?.arc_stage || null;
       } catch { /* no-op — authenticity signal just doesn't fire */ }
-      // Task #1924: the approved look only, the same pieces as `look`.
-      const outfitResult = await getOutfitScore(models, episodeId, eventContext, characterState, arcStage, { approvedOnly: true });
+      // Task #1924: the same pieces as `look` — the approved look, or the
+      // event's pieces when look.outfit.source says so (EVENT_PIECES_FALLBACK).
+      const matchOptions = look.outfit.source === 'event_pieces' ? { pieces: look.pieces } : { approvedOnly: true };
+      const outfitResult = await getOutfitScore(models, episodeId, eventContext, characterState, arcStage, matchOptions);
       // Outfit match scaled to the 0-35 cap (formerly 0-25). Score is 0-100
       // from scoreOutfitForEvent; multiply by 0.35 to use the full new range.
       outfitMatch = Math.round((outfitResult?.score || 0) * 0.35);

@@ -285,28 +285,33 @@ router.post('/:episodeId/lock-outfit', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'wardrobe_ids array is required' });
     }
 
-    const { EpisodeWardrobe, Wardrobe } = require('../models');
+    const { EpisodeWardrobe, Wardrobe, sequelize } = require('../models');
     const { linkEpisodeWardrobe } = require('../services/episodeWardrobeLinks');
 
-    // Remove existing outfit links for this episode. EpisodeWardrobe is
-    // paranoid (Task #1924): this soft-deletes them, so a piece locked again
-    // is restored by linkEpisodeWardrobe rather than re-created (the pair is
-    // unique in the table).
-    await EpisodeWardrobe.destroy({ where: { episode_id: episodeId } });
+    // Task #1924: on main this hard-deleted the episode's links and then
+    // failed to re-create them, wiping the outfit and answering 500. Now the
+    // remove and the re-link are one transaction: either the new outfit is
+    // locked or nothing changes. EpisodeWardrobe is paranoid, so the remove
+    // is a soft delete, and a piece locked again is restored by
+    // linkEpisodeWardrobe rather than re-created (the pair is unique).
+    const links = await sequelize.transaction(async (transaction) => {
+      await EpisodeWardrobe.destroy({ where: { episode_id: episodeId }, transaction });
 
-    // Create new links
-    const links = [];
-    for (const wardrobeId of wardrobe_ids) {
-      const item = await Wardrobe.findByPk(wardrobeId);
-      if (item) {
-        const [link] = await linkEpisodeWardrobe(
-          EpisodeWardrobe,
-          { episode_id: episodeId, wardrobe_id: wardrobeId },
-          { approval_status: 'approved', approved_at: new Date(), worn_at: new Date() }
-        );
-        links.push({ link, item: item.toJSON() });
+      const locked = [];
+      for (const wardrobeId of wardrobe_ids) {
+        const item = await Wardrobe.findByPk(wardrobeId, { transaction });
+        if (item) {
+          const [link] = await linkEpisodeWardrobe(
+            EpisodeWardrobe,
+            { episode_id: episodeId, wardrobe_id: wardrobeId },
+            { approval_status: 'approved', approved_at: new Date(), worn_at: new Date() },
+            { transaction }
+          );
+          locked.push({ link, item: item.toJSON() });
+        }
       }
-    }
+      return locked;
+    });
 
     return res.json({
       success: true,

@@ -1483,6 +1483,26 @@ const CONFIDENCE_LEVELS = [
   { min: 85, label: 'Slaying', emoji: '👑', color: '#8b5cf6' },
 ];
 
+// The event's outfit_pieces as scorer rows (Task #1924): their wardrobe rows
+// by id, or the snapshots themselves (category as clothing_category) when
+// no row is found.
+async function loadEventPieceRows(models, pieces) {
+  const ids = pieces.map((p) => p && p.id).filter(Boolean);
+  let rows = [];
+  if (ids.length) {
+    [rows] = await models.sequelize.query(
+      `SELECT w.* FROM wardrobe w
+       WHERE w.id IN (:ids) AND w.deleted_at IS NULL
+       ORDER BY w.clothing_category`,
+      { replacements: { ids } }
+    );
+  }
+  if (rows && rows.length) return rows;
+  return pieces
+    .filter((p) => p && typeof p === 'object')
+    .map((p) => ({ ...p, clothing_category: p.clothing_category || p.category }));
+}
+
 /**
  * getOutfitScore — fetches an episode's wardrobe and scores it for the
  * given event. Now a thin adapter over wardrobeIntelligenceService's
@@ -1499,20 +1519,25 @@ const CONFIDENCE_LEVELS = [
  * Task #1924: removed links (ew.deleted_at) are never scored. With
  * { approvedOnly: true } (episode completion) only the approved look is
  * scored, the same pieces completion reads for its wardrobe bonuses.
+ * With { pieces } (completion, an episode with no approved look; Evoni's
+ * ruling 2026-09-25) the event's outfit_pieces are scored instead of
+ * episode_wardrobe (loadEventPieceRows).
  */
-async function getOutfitScore(models, episodeId, event = {}, characterState = null, arcStage = null, { approvedOnly = false } = {}) {
+async function getOutfitScore(models, episodeId, event = {}, characterState = null, arcStage = null, { approvedOnly = false, pieces = null } = {}) {
   try {
-    const [rows] = await models.sequelize.query(
-      `SELECT w.*
-       FROM episode_wardrobe ew
-       JOIN wardrobe w ON w.id = ew.wardrobe_id
-       WHERE ew.episode_id = :episodeId
-       AND ew.deleted_at IS NULL
-       ${approvedOnly ? "AND ew.approval_status = 'approved'" : ''}
-       AND w.deleted_at IS NULL
-       ORDER BY w.clothing_category`,
-      { replacements: { episodeId } }
-    );
+    const [rows] = Array.isArray(pieces)
+      ? [await loadEventPieceRows(models, pieces)]
+      : await models.sequelize.query(
+        `SELECT w.*
+         FROM episode_wardrobe ew
+         JOIN wardrobe w ON w.id = ew.wardrobe_id
+         WHERE ew.episode_id = :episodeId
+         AND ew.deleted_at IS NULL
+         ${approvedOnly ? "AND ew.approval_status = 'approved'" : ''}
+         AND w.deleted_at IS NULL
+         ORDER BY w.clothing_category`,
+        { replacements: { episodeId } }
+      );
 
     if (!rows || rows.length === 0) {
       return {
