@@ -289,45 +289,28 @@ function checkRateLimit(req, res) {
   return true;
 }
 
-// ── Handle uniqueness (Task #1886) ───────────────────────────────────────────
-// A handle already held by a profile — live OR soft-deleted — is taken.
-// Evoni's ruling (2026-09-25): a deleted creator can be restored, so a live and
-// a deleted profile sharing a handle is the ambiguity being removed; to reuse a
-// handle, restore or purge the holder first. The column has no unique index
-// (idx_social_profiles_handle is (handle, platform), non-unique), so this check
-// is the only guard.
-function normaliseHandle(handle) {
-  // Same normalisation as the /generate create: add a leading @ when missing.
-  return handle.startsWith('@') ? handle : `@${handle}`;
-}
+// ── Handle uniqueness (Tasks #1886, #1893) ───────────────────────────────────
+// A handle held by any profile — live OR soft-deleted, any case, with or
+// without the leading @ — is taken. The check lives in one shared module so
+// every create/rename path (this file, bulk generate, /confirm-feed, the feed
+// scheduler, feed auto-generation) applies the same rule.
+const { findHandleHolder, handleTakenBody } = require('../utils/socialProfileHandle');
 
-function escapeLike(value) {
-  // LIKE wildcards escaped — handles often contain underscores.
-  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
-
-// Returns the profile holding `handle` (case-insensitive, with or without the
-// leading @, soft-deleted rows included), or null.
-async function findHandleHolder(db, handle) {
-  const { Op } = require('sequelize');
-  const withAt = normaliseHandle(handle);
-  const forms = [withAt, withAt.slice(1)].filter(Boolean);
-  return db.SocialProfile.findOne({
-    where: { [Op.or]: forms.map((f) => ({ handle: { [Op.iLike]: escapeLike(f) } })) },
-    attributes: ['id', 'handle', 'deletedAt'],
-    paranoid: false,
-  });
-}
-
-function handleHolderIsDeleted(holder) {
-  return !!(holder && (holder.deletedAt || holder.deleted_at));
-}
-
-function handleTakenMessage(handle, holder) {
-  const h = normaliseHandle(handle);
-  return handleHolderIsDeleted(holder)
-    ? `${h} belongs to a deleted creator (id ${holder.id}) — restore or purge it to reuse the handle.`
-    : `${h} is already taken by an existing creator (id ${holder.id}) — pick another handle.`;
+// PUT/PATCH /:id rename guard (Task #1893). When the body carries a handle,
+// refuse it with 400 unless it is a non-empty string, and with 409 when another
+// profile (live or soft-deleted) holds it. The profile's own id is excluded,
+// so re-saving the same handle, or changing only its case or its @, succeeds.
+// Returns true when it has sent the response.
+async function refuseTakenRename(db, profile, body, res) {
+  if (body.handle === undefined) return false;
+  if (typeof body.handle !== 'string' || !body.handle.trim()) {
+    res.status(400).json({ error: 'handle must be a non-empty string' });
+    return true;
+  }
+  const holder = await findHandleHolder(db, body.handle, { excludeId: profile.id });
+  if (!holder) return false;
+  res.status(409).json(handleTakenBody(body.handle, holder));
+  return true;
 }
 
 // ── POST /generate ───────────────────────────────────────────────────────────
@@ -361,12 +344,7 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
     // Sonnet call — no generation cost, no duplicate row.
     const holder = await findHandleHolder(db, handle);
     if (holder) {
-      return res.status(409).json({
-        error: handleTakenMessage(handle, holder),
-        handleTaken: true,
-        handle: normaliseHandle(handle),
-        holder: { id: holder.id, deleted: handleHolderIsDeleted(holder) },
-      });
+      return res.status(409).json(handleTakenBody(handle, holder));
     }
 
     // Layer-aware cap check — soft warning, never hard block.
@@ -1782,6 +1760,7 @@ router.put('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Not found' });
+    if (await refuseTakenRename(db, profile, req.body, res)) return;
 
     const allowed = [
       'handle', 'platform', 'vibe_sentence', 'display_name',
@@ -1828,6 +1807,7 @@ router.patch('/:id', requireAuth, guardJustAWomanRecord, async (req, res) => {
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Not found' });
+    if (await refuseTakenRename(db, profile, req.body, res)) return;
 
     const allowed = [
       'handle', 'platform', 'vibe_sentence', 'display_name',

@@ -55,6 +55,8 @@ function createMockDb(overrides = {}) {
     SocialProfile: {
       count: jest.fn().mockResolvedValue(0),
       findAll: jest.fn().mockResolvedValue([]),
+      // Handle-uniqueness lookup (Task #1893): the spark's handle is free.
+      findOne: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockImplementation(data =>
         Promise.resolve({ id: 1, ...data, update: jest.fn().mockResolvedValue() })
       ),

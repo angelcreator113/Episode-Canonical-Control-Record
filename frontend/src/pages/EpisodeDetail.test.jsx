@@ -20,7 +20,7 @@
  */
 
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -77,7 +77,9 @@ vi.mock('../components/Episodes/EpisodeTodoList', () => ({
   default: () => <div data-testid="episode-todo-overlays">Episode to-do overlays</div>,
 }));
 
-vi.mock('../components/Episodes/EpisodeAssetsTab', () => ({ default: () => null }));
+vi.mock('../components/Episodes/EpisodeAssetsTab', () => ({
+  default: () => <div data-testid="episode-assets">Assets body</div>,
+}));
 vi.mock('../components/Episodes/EpisodeLalasPhoneTab', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeScriptTab', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeDistributionTab', () => ({ default: () => null }));
@@ -139,6 +141,38 @@ describe('EpisodeDetail — Track 6 CP14 module-scope helpers', () => {
 
     await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
     expect(screen.queryByTestId('episode-checklist')).toBeNull();
+  });
+
+  // Task #1905: Start Episode sends ?tab=assets, Open Episode ?tab=overview.
+  // The default above (#1531's Checklist) is unchanged for a bare URL.
+  test('?tab=assets (Start Episode) lands on Production -> Assets', async () => {
+    renderEpisodeDetail('/episodes/ep-1?tab=assets');
+
+    await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
+    expect(screen.queryByTestId('episode-checklist')).toBeNull();
+    expect(screen.queryByTestId('episode-overview')).toBeNull();
+    expect(screen.getByTitle('Production').className).toContain('ed-tab-active');
+  });
+
+  test('the Checklist is still reachable from Assets via its Production sub-tab', async () => {
+    renderEpisodeDetail('/episodes/ep-1?tab=assets');
+    await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Production Checklist' }));
+
+    await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
+    expect(screen.queryByTestId('episode-assets')).toBeNull();
+  });
+
+  test('the Checklist is still reachable from Overview via Production', async () => {
+    renderEpisodeDetail('/episodes/ep-1?tab=overview');
+    await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+
+    fireEvent.click(screen.getByTitle('Production'));
+    await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Production Checklist' }));
+
+    await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
   });
 
   // ── Loaders ─────────────────────────────────────────────────────────────
