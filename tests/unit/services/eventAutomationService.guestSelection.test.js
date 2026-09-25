@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
 const { assembleGuestList, scoreGuestCandidate, guestEligibilityWhere } = require('../../../src/services/eventAutomationService');
+const { strictSocialProfileRelationship, DECLARED, ENUMS } = require('../helpers/strictSocialProfileRelationship');
 
 const HOST = { id: 1, handle: 'host' };
 const FASHION = { cultural_category: 'fashion' };
@@ -34,7 +35,8 @@ function makeModels({ pool = [], relationships = [], related = [] } = {}) {
       return pool;
     }),
   };
-  const SocialProfileRelationship = { findAll: jest.fn(async () => relationships) };
+  // Task #1860: the fake knows the real model's columns and enums.
+  const SocialProfileRelationship = strictSocialProfileRelationship(relationships);
   return { models: { SocialProfile, SocialProfileRelationship }, calls };
 }
 
@@ -141,7 +143,7 @@ describe('both callers keep their contract: shape and count', () => {
 });
 
 describe('relationship stage — the same two filters as the fill stage', () => {
-  const rel = (b, type = 'friend') => ({ profile_a_id: HOST.id, profile_b_id: b, relationship_type: type });
+  const rel = (b, type = 'bestie') => ({ source_profile_id: HOST.id, target_profile_id: b, relationship_type: type });
 
   test('the related-profile lookup excludes JustAWoman and real-world profiles', async () => {
     const { models, calls } = makeModels({ relationships: [rel(7)], related: [] });
@@ -166,7 +168,7 @@ describe('relationship stage — the same two filters as the fill stage', () => 
     const { models } = makeModels({ relationships: [rel(7), rel(8, 'rival')], related: [kept], pool });
     const guests = await assembleGuestList(HOST, FASHION, models, 6);
     expect(guests).toHaveLength(6);
-    expect(guests[0]).toEqual({ profile_id: 7, handle: 'kept-friend', display_name: 'Kept', relationship: 'friend' });
+    expect(guests[0]).toEqual({ profile_id: 7, handle: 'kept-friend', display_name: 'Kept', relationship: 'bestie' });
     expect(guests.slice(1).every(g => g.handle.startsWith('fill'))).toBe(true);
   });
 });
@@ -174,7 +176,7 @@ describe('relationship stage — the same two filters as the fill stage', () => 
 // Task #1800 — both stages apply the same eligibility rules, from
 // guestEligibilityWhere: status, layer, JustAWoman, celebrity tier.
 describe('eligibility — one set of rules for both stages', () => {
-  const rel = (b, type = 'friend') => ({ profile_a_id: HOST.id, profile_b_id: b, relationship_type: type });
+  const rel = (b, type = 'bestie') => ({ source_profile_id: HOST.id, target_profile_id: b, relationship_type: type });
   const SHARED = {
     status: { [Op.in]: ['finalized', 'generated', 'crossed'] },
     feed_layer: 'lalaverse',
@@ -221,7 +223,7 @@ describe('eligibility — one set of rules for both stages', () => {
         return pool;
       }),
     };
-    const SocialProfileRelationship = { findAll: jest.fn(async () => [rel(7), rel(8), rel(9), rel(10)]) };
+    const SocialProfileRelationship = strictSocialProfileRelationship([rel(7), rel(8), rel(9), rel(10)]);
     const guests = await assembleGuestList(HOST, FASHION, { SocialProfile, SocialProfileRelationship }, 6);
     expect(guests).toHaveLength(6);
     expect(guests.map(g => g.handle)).toEqual(['ok-friend', 'fill0', 'fill1', 'fill2', 'fill3', 'fill4']);
@@ -237,5 +239,92 @@ describe('eligibility — one set of rules for both stages', () => {
     expect(warn).toHaveBeenCalledWith('[EventAutomation] Relationship-stage guest lookup failed:', 'relation "social_profile_relationships" does not exist');
     expect(guests).toHaveLength(6);
     warn.mockRestore();
+  });
+});
+
+// Task #1860 — the relationship stage queried profile_a_id / profile_b_id,
+// which the table never had (production, 2026-09-25: "column
+// SocialProfileRelationship.profile_a_id does not exist"). The mocks used
+// the same wrong names, so the tests passed. This fake reads the declared
+// names from the real model's rawAttributes and rejects anything else.
+describe('relationship stage — queries the columns the model declares', () => {
+  const HOST_ID = HOST.id;
+
+  test('the strict fake knows the real columns, and not the old names', () => {
+    expect(DECLARED.has('source_profile_id')).toBe(true);
+    expect(DECLARED.has('target_profile_id')).toBe(true);
+    expect(DECLARED.has('profile_a_id')).toBe(false);
+    expect(DECLARED.has('profile_b_id')).toBe(false);
+    expect(ENUMS.relationship_type).toContain('bestie');
+    expect(ENUMS.relationship_type).not.toContain('friend');
+  });
+
+  test('the strict fake rejects an undeclared where key, attribute, fixture key or enum value', async () => {
+    const fake = strictSocialProfileRelationship([]);
+    await expect(fake.findAll({ where: { [Op.or]: [{ profile_a_id: 1 }] } })).rejects.toThrow('profile_a_id does not exist');
+    await expect(fake.findAll({ attributes: ['profile_b_id'] })).rejects.toThrow('profile_b_id does not exist');
+    await expect(strictSocialProfileRelationship([{ profile_a_id: 1 }]).findAll({})).rejects.toThrow('profile_a_id does not exist');
+    await expect(strictSocialProfileRelationship([{ relationship_type: 'friend' }]).findAll({})).rejects.toThrow("'friend' is not in the model's enum");
+  });
+
+  test('host on either side: related guests come first, labelled by type, and nothing is logged', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const relationships = [
+      { source_profile_id: HOST_ID, target_profile_id: 7, relationship_type: 'rival', direction: 'mutual' },
+      { source_profile_id: 8, target_profile_id: HOST_ID, relationship_type: 'mentor', direction: 'source_to_target' },
+    ];
+    const related = [
+      { id: 7, handle: 'rival-7', display_name: 'Rival' },
+      { id: 8, handle: 'mentor-8', display_name: 'Mentor' },
+    ];
+    const pool = Array.from({ length: 10 }, (_, i) => cand({ handle: `fill${i}`, archetype: `a${i}` }));
+    const { models, calls } = makeModels({ relationships, related, pool });
+    const guests = await assembleGuestList(HOST, FASHION, models, 6);
+
+    expect(warn).not.toHaveBeenCalled();
+    const relQuery = models.SocialProfileRelationship.findAll.mock.calls[0][0];
+    expect(relQuery.where).toEqual({ [Op.and]: [
+      { [Op.or]: [{ source_profile_id: HOST_ID }, { target_profile_id: HOST_ID }] },
+      { [Op.or]: [{ public_visibility: { [Op.ne]: 'hidden' } }, { public_visibility: null }] },
+    ] });
+    expect(calls.related[0].where.id).toEqual({ [Op.in]: [7, 8] });
+    expect(guests.slice(0, 2)).toEqual([
+      { profile_id: 7, handle: 'rival-7', display_name: 'Rival', relationship: 'rival' },
+      { profile_id: 8, handle: 'mentor-8', display_name: 'Mentor', relationship: 'mentor' },
+    ]);
+    expect(guests).toHaveLength(6);
+    expect(calls.pool[0].where.id).toEqual({ [Op.notIn]: [HOST_ID, 7, 8] });
+    warn.mockRestore();
+  });
+  test('a hidden relation never becomes an invitation (Task #1860 guard)', async () => {
+    const relationships = [
+      { source_profile_id: HOST_ID, target_profile_id: 7, relationship_type: 'secret_link', public_visibility: 'hidden' },
+      { source_profile_id: HOST_ID, target_profile_id: 8, relationship_type: 'bestie', public_visibility: 'public' },
+      { source_profile_id: 9, target_profile_id: HOST_ID, relationship_type: 'ex', public_visibility: 'rumored' },
+    ];
+    const related = [
+      { id: 8, handle: 'bestie-8', display_name: 'Bestie' },
+      { id: 9, handle: 'ex-9', display_name: 'Ex' },
+    ];
+    const { models, calls } = makeModels({ relationships, related });
+    const guests = await assembleGuestList(HOST, FASHION, models, 6);
+
+    expect(calls.related[0].where.id).toEqual({ [Op.in]: [8, 9] });
+    expect(guests.map(g => g.profile_id)).not.toContain(7);
+  });
+
+  test('two relationship types to one person make one guest (Task #1860 guard)', async () => {
+    const relationships = [
+      { source_profile_id: HOST_ID, target_profile_id: 7, relationship_type: 'collab' },
+      { source_profile_id: 7, target_profile_id: HOST_ID, relationship_type: 'rival' },
+    ];
+    const related = [{ id: 7, handle: 'both-7', display_name: 'Both' }];
+    const { models, calls } = makeModels({ relationships, related });
+    const guests = await assembleGuestList(HOST, FASHION, models, 6);
+
+    expect(calls.related[0].where.id).toEqual({ [Op.in]: [7] });
+    expect(guests.filter(g => g.profile_id === 7)).toEqual([
+      { profile_id: 7, handle: 'both-7', display_name: 'Both', relationship: 'collab' },
+    ]);
   });
 });

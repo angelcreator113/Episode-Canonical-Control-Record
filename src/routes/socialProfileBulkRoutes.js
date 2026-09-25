@@ -91,14 +91,24 @@ function categorizeError(err) {
 
 async function generateSingleProfile(creator, { db, seriesId, characterContext, characterKey: _characterKey, feedLayer }) {
   const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext);
-  const aiRes = await Promise.race([
-    client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 3000,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('AI call timed out after 120s')), 120000)),
-  ]);
+  // Keep the timer handle and clear it once the race settles (Task #1859),
+  // so no 120s timer outlives its profile and holds the event loop open.
+  let timeoutHandle;
+  let aiRes;
+  try {
+    aiRes = await Promise.race([
+      client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 3000,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      new Promise((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error('AI call timed out after 120s')), 120000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
 
   const text = aiRes.content[0].text;
   const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
@@ -833,3 +843,5 @@ async function processJobInBackground(jobId, concurrency = 3) {
 module.exports = router;
 module.exports.notifyJobSSE = notifyJobSSE;
 module.exports.jobSSEClients = jobSSEClients;
+// Exported for tests (Task #1859).
+module.exports.generateSingleProfile = generateSingleProfile;
