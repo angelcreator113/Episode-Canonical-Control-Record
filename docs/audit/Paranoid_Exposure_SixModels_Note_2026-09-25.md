@@ -112,10 +112,10 @@ marker, `removed_at`, which its callers filter on directly
 | CharacterArc | none | — | nothing changes |
 | WardrobeContentAssignment | none | — | nothing changes |
 | UniverseCharacter | none | — | nothing changes |
-| HairLibrary | `hairLibraryRoutes.js:127` `item.destroy()` | `DELETE /api/v1/hair-library/:id` (`requireAuth`) | still fails first at `findByPk` (see §3) |
-| HairLibrary | `hairLibraryRoutes.js:194` `destroy({ where: { show_id } })` | `POST /api/v1/hair-library/generate` with `replace_existing: true` (`requireAuth`, `aiRateLimiter`) | a real `DELETE` of every `hair_library` row for the show, then the inserts fail (see §3) |
-| MakeupLibrary | `makeupLibraryRoutes.js:125` `item.destroy()` | `DELETE /api/v1/makeup-library/:id` (`requireAuth`) | still fails first at `findByPk` (see §3) |
-| MakeupLibrary | `makeupLibraryRoutes.js:192` `destroy({ where: { show_id } })` | `POST /api/v1/makeup-library/generate` with `replace_existing: true` (`requireAuth`, `aiRateLimiter`) | a real `DELETE` of every `makeup_library` row for the show, then the inserts fail (see §3) |
+| HairLibrary | `hairLibraryRoutes.js:127` `item.destroy()` | `DELETE /api/v1/hair-library/:id` (`requireAuth`) | a real `DELETE` of the row (see §3) |
+| HairLibrary | `hairLibraryRoutes.js:194` `destroy({ where: { show_id } })` | `POST /api/v1/hair-library/generate` with `replace_existing: true` (`requireAuth`, `aiRateLimiter`) | a real `DELETE` of every `hair_library` row for the show, then the new rows are inserted, with no transaction (see §3) |
+| MakeupLibrary | `makeupLibraryRoutes.js:125` `item.destroy()` | `DELETE /api/v1/makeup-library/:id` (`requireAuth`) | a real `DELETE` of the row (see §3) |
+| MakeupLibrary | `makeupLibraryRoutes.js:192` `destroy({ where: { show_id } })` | `POST /api/v1/makeup-library/generate` with `replace_existing: true` (`requireAuth`, `aiRateLimiter`) | a real `DELETE` of every `makeup_library` row for the show, then the new rows are inserted, with no transaction (see §3) |
 
 Mounts: `src/app.js:1085` (`/api/v1/hair-library`) and
 `src/app.js:1094` (`/api/v1/makeup-library`).
@@ -133,31 +133,37 @@ nothing. After it, `destroy()` is `DELETE FROM`. The test pins this.
 For CharacterTherapyProfile, CharacterArc, WardrobeContentAssignment
 and UniverseCharacter there is no caller, so the change is latent.
 
-For HairLibrary and MakeupLibrary the fix is not enough on its own. Both
-models still map `is_justAWoman_style` to `is_just_a_woman_style`
-(`underscored: true`), and production's column is spelled
-`is_justAWoman_style` (`docs/SCHEMA_AGREEMENT_READ.md` §2.2; capture
-lines 868 and 950). So after this fix:
+For HairLibrary and MakeupLibrary, `paranoid: false` was not enough on
+its own. Both models mapped `is_justAWoman_style` to
+`is_just_a_woman_style` (`underscored: true`), and production's column is
+spelled `is_justAWoman_style` (`docs/SCHEMA_AGREEMENT_READ.md` §2.2;
+capture lines 868 and 950). With only `paranoid: false`, every read and
+create would still have failed, and `POST /generate` with
+`replace_existing: true` would have deleted the show's rows and then
+failed every insert: two dead features turned into one that destroys
+rows. At Evoni's direction (option 1, 2026-09-25) the same change
+therefore maps the attribute to its real column with
+`field: 'is_justAWoman_style'`. MEASURED: every column the two models
+map to now exists in the capture; the test pins it and fails without
+the mapping.
 
-- every read and every create on the two models still fails, on that
-  column instead of on `deleted_at`;
-- `DELETE /:id` still fails at `findByPk` and deletes nothing;
-- `POST /generate` with `replace_existing: true` now **deletes the
-  show's rows, then fails every insert.** Before, it deleted nothing.
-  The handler has no transaction.
+So after this change the two libraries work for the first time:
+`DELETE /:id` removes the row, and `generate` with `replace_existing`
+deletes the show's rows and inserts the new ones. The delete and the
+inserts are not in one transaction, so a failure part-way through
+still loses the old rows; that is filed separately, not fixed here.
 
 Whether either production table holds rows is not measured here. Every
 create through the model has failed since the models were paranoid, and
 no seeder under `src/seeders/` names the tables, so the tables are
-**INFERRED** to be empty.
-Evoni can settle it with the read-only query in the PR for Task #1869.
-The field-mapping fix (`SCHEMA_AGREEMENT_READ.md` §6) removes the hazard.
+**INFERRED** to be empty. The read-only count query in the PR for Task
+#1869 settles it.
 
 ## 4. What this note does not do
 
 - It edits no filed document. It does not add a migration or a
   `deleted_at` column, and it does not change any caller.
-- It does not fix the `is_justAWoman_style` mapping.
+- It does not add a transaction to the replace path.
 - It mints no FD, XK or PE number and rules nothing.
 - The filing session made no host, AWS, database or Cognito contact. The
   SQL in §1 was generated offline against a stubbed connection.

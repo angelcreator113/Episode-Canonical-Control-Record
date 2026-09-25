@@ -103,3 +103,28 @@ describe('six models: generated SQL has no deleted_at (Task #1869)', () => {
     });
   });
 });
+
+// HairLibrary and MakeupLibrary had a second break (Task #1869, Evoni's
+// option 1): underscored: true mapped is_justAWoman_style to
+// is_just_a_woman_style, a column production does not have. With paranoid
+// fixed but not that, replace_existing would delete a show's rows and then
+// fail every insert. Every column the two models map to must exist in the
+// production capture.
+describe('HairLibrary and MakeupLibrary map only to columns production has (Task #1869)', () => {
+  const fs = require('fs');
+  const capture = fs.readFileSync(
+    path.join(ROOT, 'docs', 'audit', 'EvidenceNote_Canon_Schema_Capture_2026-09-17.txt'), 'utf8');
+  const productionColumns = (table) => new Set(capture.split('\n')
+    .map((line) => line.split('|').map((cell) => cell.trim()))
+    .filter((cells) => cells[0] === table)
+    .map((cells) => cells[1]));
+
+  it.each(['HairLibrary.js', 'MakeupLibrary.js'])('%s', (file) => {
+    const { Model } = loadModel(file);
+    const columns = productionColumns(Model.getTableName());
+    expect(columns.size).toBeGreaterThan(0);
+    const missing = Object.values(Model.rawAttributes).map((a) => a.field).filter((f) => !columns.has(f));
+    expect(missing).toEqual([]);
+    expect(Model.rawAttributes.is_justAWoman_style.field).toBe('is_justAWoman_style');
+  });
+});
