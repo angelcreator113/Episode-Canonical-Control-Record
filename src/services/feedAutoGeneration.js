@@ -13,6 +13,7 @@ const {
   inferFollowerTier,
 } = require('../utils/feedProfileUtils');
 const { fitRecordToModel, warnTruncated, logValueTooLong } = require('../utils/fitToModel');
+const { findHandleHolder, handleTakenMessage } = require('../utils/socialProfileHandle');
 
 const LALAVERSE_CAP = 200;
 const REAL_WORLD_CAP = 443;
@@ -23,7 +24,8 @@ const REAL_WORLD_CAP = 443;
  * @param {object} character - RegistryCharacter instance
  * @param {string} feedLayer - 'real_world' or 'lalaverse'
  * @param {object} [opts] - Optional overrides (city, platform, etc.)
- * @returns {{ feedProfile: object|null, skipped: boolean, reason?: string, cap?: number, current?: number }}
+ * @returns {{ feedProfile: object|null, skipped: boolean, reason?: string, cap?: number, current?: number,
+ *            handle?: string, holder_id?: number|string, message?: string }}
  */
 async function autoCreateFeedProfile(db, character, feedLayer, opts = {}) {
   const cap = feedLayer === 'lalaverse' ? LALAVERSE_CAP : REAL_WORLD_CAP;
@@ -78,6 +80,23 @@ async function autoCreateFeedProfile(db, character, feedLayer, opts = {}) {
     lalaverse_cap_exempt: false,
   });
   warnTruncated('feed-auto-generation', truncated);
+
+  // Task #1893: a handle another profile holds (live or soft-deleted, any
+  // case, with or without @) is skipped and logged, never duplicated. Like the
+  // cap, it does not block the registry character's creation.
+  const holder = await findHandleHolder(db, createRecord.handle);
+  if (holder) {
+    const message = handleTakenMessage(createRecord.handle, holder);
+    console.warn(`[feedAutoGeneration] Skipped Feed profile for character ${character.id}: ${message}`);
+    return {
+      feedProfile: null,
+      skipped: true,
+      reason: 'handle_taken',
+      handle: createRecord.handle,
+      holder_id: holder.id,
+      message,
+    };
+  }
 
   let feedProfile;
   try {

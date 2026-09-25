@@ -313,7 +313,8 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
 
       const succeeded = allResults.filter(r => r.status === 'success').length;
       const failed    = allResults.filter(r => r.status === 'failed').length;
-      setSummary({ total, succeeded, failed });
+      const skipped   = allResults.filter(r => r.status === 'skipped').length;
+      setSummary({ total, succeeded, failed, skipped });
     } catch (e) { setErr(e.message); }
     finally { setGenerating(false); }
   }
@@ -447,6 +448,9 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
             {summary.failed > 0 && (
               <div style={{ fontSize: '12px', color: C.red, marginBottom: '6px' }}>{summary.failed} failed</div>
             )}
+            {summary.skipped > 0 && (
+              <div style={{ fontSize: '12px', color: C.orange, marginBottom: '6px' }}>{summary.skipped} skipped — handle already taken</div>
+            )}
           </div>
 
           {/* Results list with animated appearance (#10) */}
@@ -462,13 +466,18 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
                     <span style={{ fontSize: '9px', color: C.lavender, background: C.lavSoft, padding: '2px 6px', borderRadius: '4px' }}>{r.archetype}</span>
                   )}
                   <ErrorBadge result={r} />
-                  <span style={{ fontSize: '11px', color: r.status === 'success' ? C.green : C.red }}>
-                    {r.status === 'success' ? '✓ Generated' : '✕ Failed'}
+                  <span style={{ fontSize: '11px', color: r.status === 'success' ? C.green : r.status === 'skipped' ? C.orange : C.red }}>
+                    {r.status === 'success' ? '✓ Generated' : r.status === 'skipped' ? '⤼ Skipped' : '✕ Failed'}
                   </span>
                 </div>
                 {r.status === 'failed' && r.error && (
                   <div style={{ fontSize: '11px', color: C.textFaint, marginTop: '4px', lineHeight: '1.4', wordBreak: 'break-word' }}>
                     {r.error}
+                  </div>
+                )}
+                {r.status === 'skipped' && r.reason && (
+                  <div style={{ fontSize: '11px', color: C.textFaint, marginTop: '4px', lineHeight: '1.4', wordBreak: 'break-word' }}>
+                    {r.reason}
                   </div>
                 )}
               </div>

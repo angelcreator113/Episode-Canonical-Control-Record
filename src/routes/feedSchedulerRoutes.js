@@ -115,6 +115,10 @@ router.post('/fill-one', requireAuth, async (req, res) => {
   try {
     const spark = generateCreatorSpark(layer);
     const profile = await generateAndSaveProfile(db, spark, layer);
+    if (!profile) {
+      // Task #1893: the random spark's handle is taken; nothing was written.
+      return res.status(409).json({ error: `${spark.handle} is already taken — nothing was created. Try again.`, handleTaken: true, spark });
+    }
     res.json({
       message: `Auto-generated profile for ${layer}`,
       spark,
@@ -176,7 +180,7 @@ router.post('/auto-generate', requireAuth, aiRateLimiter, async (req, res) => {
         res.write(`data: ${JSON.stringify({ type: 'progress', ...progress })}\n\n`);
       });
 
-      res.write(`data: ${JSON.stringify({ type: 'done', created: result.created.length, errors: result.errors.length, sparks_generated: result.sparks_generated })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done', created: result.created.length, errors: result.errors.length, skipped: (result.skipped || []).length, sparks_generated: result.sparks_generated })}\n\n`);
     } catch (err) {
       res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
     }
@@ -191,6 +195,7 @@ router.post('/auto-generate', requireAuth, aiRateLimiter, async (req, res) => {
       message: `Auto-generated ${result.created.length} profiles for ${layer}`,
       created: result.created.length,
       errors: result.errors,
+      skipped: result.skipped || [],
       sparks_generated: result.sparks_generated,
       profiles: result.created.map(p => ({
         id: p.id,

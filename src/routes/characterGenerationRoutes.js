@@ -35,6 +35,7 @@ const {
   calculateDepthLevel,
 } = require('../services/characterGenerationService');
 const { fitRecordToModel, warnTruncated, logValueTooLong } = require('../utils/fitToModel');
+const { findHandleHolder, handleTakenBody } = require('../utils/socialProfileHandle');
 
 router.use(requireAuth);
 // Every response from this router: author-only character fields for the admin group only
@@ -212,6 +213,16 @@ router.post('/confirm-feed', async (req, res) => {
       auto_generated:  true,
     });
     warnTruncated('confirm-feed', truncated);
+
+    // Task #1893: refuse a handle another profile holds (live or soft-deleted,
+    // any case, with or without @) — 409, nothing written, character unlinked.
+    if (createRecord.handle) {
+      const holder = await findHandleHolder(models, createRecord.handle);
+      if (holder) {
+        return res.status(409).json(handleTakenBody(createRecord.handle, holder));
+      }
+    }
+
     attempted = createRecord;
     const profile = await SocialProfile.create(createRecord);
 
