@@ -66,39 +66,24 @@ Lala appears in Book 1 as ONE intrusive thought — tonal rupture, brief, styled
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ARC STAGE CALCULATOR
-// Reads approved story counts and advances the stage
+// ARC STAGE CALCULATOR — not computable (#1883)
 // ─────────────────────────────────────────────────────────────────────────────
-const ARC_THRESHOLDS = {
-  establishment: { min: 0, advance_at: 8 },
-  pressure:      { min: 8, advance_at: 16 },
-  crisis:        { min: 16, advance_at: 22 },
-  integration:   { min: 22, advance_at: Infinity },
-};
+// The stage used to be counted from a book's approved StorytellerStory rows by
+// `book_id` and `arc_stage`. StorytellerStory declares neither, and production's
+// storyteller_stories has neither column (docs/SCHEMA_AGREEMENT_READ.md §1.1),
+// so that query failed on every call and its catch returned an invented
+// { stage: 'establishment' }. Once #1879 declared StorytellerBook.current_arc_stage
+// and arc_stage_scores, POST /arc-stage began STORING that invention.
+//
+// Until stories carry a book link and a stage, no stage can be computed. The
+// calculator therefore runs no query and returns null; callers must never
+// persist or present a default in its place.
+const ARC_STAGE_UNAVAILABLE =
+  'Arc stage cannot be computed: storyteller_stories has no book_id or arc_stage column '
+  + '(StorytellerStory declares neither), so approved stories cannot be counted per book.';
 
-async function calculateArcStage(bookId) {
-  try {
-    const stories = await db.StorytellerStory.findAll({
-      where: { book_id: bookId, status: { [Op.in]: ['evaluated', 'written_back'] } },
-      attributes: ['arc_stage', 'id'],
-    });
-
-    const scores = { establishment: 0, pressure: 0, crisis: 0, integration: 0 };
-    stories.forEach(s => { if (s.arc_stage && scores[s.arc_stage] !== undefined) scores[s.arc_stage]++; });
-
-    const total = stories.length;
-    let stage = 'establishment';
-    if (total >= ARC_THRESHOLDS.crisis.min) stage = 'crisis';
-    else if (total >= ARC_THRESHOLDS.pressure.min) stage = 'pressure';
-
-    // Also check if integration has started
-    if (scores.integration > 0 && total >= ARC_THRESHOLDS.integration.min) stage = 'integration';
-
-    return { stage, scores, total };
-  } catch (err) {
-    console.error('Arc stage calculation error:', err);
-    return { stage: 'establishment', scores: {}, total: 0 };
-  }
+function calculateArcStage(_bookId) {
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -215,7 +200,12 @@ router.post('/propose-scene', requireAuth, aiRateLimiter, async (req, res) => {
 
   try {
     // ── 1. Calculate arc stage ──────────────────────────────────────────────
-    const { stage, scores, total } = await calculateArcStage(book_id);
+    // null: not computable (see ARC_STAGE_UNAVAILABLE). The prompt says so and
+    // the proposal stores no stage, rather than an invented 'establishment'.
+    const arcState = calculateArcStage(book_id);
+    if (!arcState) console.warn(`[propose-scene] ${ARC_STAGE_UNAVAILABLE}`);
+    const stage = arcState ? arcState.stage : null;
+    const scores = arcState ? arcState.scores : {};
 
     // ── 2. Read all character context ───────────────────────────────────────
     const context = await readCharacterContext(registry_id);
@@ -256,17 +246,17 @@ Your job: read everything about where this story is right now and propose the ne
 ${BOOK1_INTELLIGENCE}
 
 CURRENT ARC STATE:
-Stage: ${stage.toUpperCase()}
-Total approved scenes: ${total}
+${arcState ? `Stage: ${stage.toUpperCase()}
+Total approved scenes: ${arcState.total}
 Establishment scenes: ${scores.establishment || 0}
 Pressure scenes: ${scores.pressure || 0}
 Crisis scenes: ${scores.crisis || 0}
-Integration scenes: ${scores.integration || 0}
+Integration scenes: ${scores.integration || 0}` : 'Stage: UNKNOWN — the system cannot compute the arc stage yet. Infer it from the context below; do not assume establishment.'}
 
 ${force_scene_type ? `AUTHOR REQUESTED SCENE TYPE: ${force_scene_type}` : ''}
 ${author_note ? `AUTHOR NOTE: ${author_note}` : ''}
 
-LALA SEED STATUS: ${lalaAlreadyBorn ? 'Already planted — do NOT propose another lala_seed scene' : stage === 'pressure' || stage === 'crisis' ? 'Not yet planted — this is the right arc window if the moment is earned' : 'Too early — not yet'}
+LALA SEED STATUS: ${lalaAlreadyBorn ? 'Already planted — do NOT propose another lala_seed scene' : !stage ? 'Unknown — arc stage not computed; judge from the context whether the moment is earned' : stage === 'pressure' || stage === 'crisis' ? 'Not yet planted — this is the right arc window if the moment is earned' : 'Too early — not yet'}
 
 CHARACTERS IN REGISTRY:
 ${context.characters.map(c => `- ${c.name} (${c.character_type}) | Wound: ${c.wound || 'undocumented'} | Arc: ${c.arc_summary || 'undocumented'} | Appearance: ${c.appearance_mode}`).join('\n')}
@@ -331,7 +321,7 @@ Respond ONLY in valid JSON. No markdown. No backticks. No explanation outside th
       chapter_id: chapter_id || null,
       registry_id: registry_id || null,
       arc_stage: stage,
-      arc_stage_score: scores,
+      arc_stage_score: arcState ? scores : null,
       wounds_unaddressed: context.characters.filter(c => c.wound).map(c => ({ name: c.name, wound: c.wound })),
       tensions_unresolved: context.relationships.filter(r => r.tension_state),
       recent_beats: context.recentBeats,
@@ -351,7 +341,7 @@ Respond ONLY in valid JSON. No markdown. No backticks. No explanation outside th
     return res.json({
       proposal_id: record.id,
       proposal,
-      arc_state: { stage, scores, total },
+      arc_state: arcState,
       context_used: {
         characters_read: context.characters.length,
         relationships_read: context.relationships.length,
@@ -479,14 +469,23 @@ router.post('/scene-proposals/:id/dismiss', requireAuth, async (req, res) => {
 router.post('/arc-stage', requireAuth, async (req, res) => {
   const { book_id } = req.body;
   if (!book_id) return res.status(400).json({ error: 'book_id required' });
+  // Never write a stage that was not computed (#1883): with no computable
+  // stage, StorytellerBook.current_arc_stage / arc_stage_scores are left as
+  // they are and the caller is told why.
+  const arcState = calculateArcStage(book_id);
+  if (!arcState) {
+    console.error(`[arc-stage] ${ARC_STAGE_UNAVAILABLE} book_id=${book_id}`);
+    return res.status(501).json({ error: ARC_STAGE_UNAVAILABLE });
+  }
   try {
-    const { stage, scores, total } = await calculateArcStage(book_id);
+    const { stage, scores, total } = arcState;
     await db.StorytellerBook.update(
       { current_arc_stage: stage, arc_stage_scores: scores },
       { where: { id: book_id } }
     );
     return res.json({ stage, scores, total });
   } catch (err) {
+    console.error('[arc-stage] update error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

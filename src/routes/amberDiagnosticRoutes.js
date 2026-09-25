@@ -56,7 +56,8 @@ async function checkDuplicateBrainEntries() {
   const findings = [];
   try {
     const entries = await db.FranchiseKnowledge?.findAll({
-      attributes: ['id', 'title', 'content', 'source'],
+      // #1883: FranchiseKnowledge declares source_document, not source.
+      attributes: ['id', 'title', 'content', 'source_document'],
       where: { deleted_at: null },
     }) || [];
 
@@ -94,8 +95,10 @@ async function checkUnapprovedMemories() {
     if (!db.StorytellerMemory) return findings;
 
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    // #1883: StorytellerMemory has no status column; a pending proposal is
+    // one not yet confirmed.
     const stale  = await db.StorytellerMemory.count({
-      where: { status: 'pending', createdAt: { [Op.lt]: cutoff } },
+      where: { confirmed: false, createdAt: { [Op.lt]: cutoff } },
     });
 
     if (stale > 0) {
@@ -125,19 +128,20 @@ async function checkCharactersStuckInDraft() {
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const stuck  = await db.RegistryCharacter?.findAll({
       where: { status: 'draft', updatedAt: { [Op.lt]: cutoff } },
-      attributes: ['id', 'name', 'updatedAt'],
+      // #1883: RegistryCharacter declares display_name, not name.
+      attributes: ['id', 'display_name', 'updatedAt'],
       limit: 10,
     }) || [];
 
     if (stuck.length > 0) {
-      const names = stuck.map(c => c.name).join(', ');
+      const names = stuck.map(c => c.display_name).join(', ');
       findings.push({
         type:        'narrative_gap',
         severity:    'medium',
         title:       `${stuck.length} character${stuck.length > 1 ? 's' : ''} stuck in draft for 30+ days`,
         description: `Characters in draft are not readable by the story engine. ${names} cannot appear in generated scenes until finalized.`,
         affected_table: 'registry_characters',
-        evidence:    JSON.stringify(stuck.map(c => ({ id: c.id, name: c.name }))),
+        evidence:    JSON.stringify(stuck.map(c => ({ id: c.id, name: c.display_name }))),
         proposed_fix: `Review and finalize or archive these characters: ${names}`,
         fix_category: 'content_correction',
         fix_confidence: 85,

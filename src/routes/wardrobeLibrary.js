@@ -218,15 +218,15 @@ router.post('/analyze-image', requireAuth, aiRateLimiter, upload.single('image')
         // Episode event — if the item is being uploaded for a specific episode,
         // Claude can tailor event_types and lala_reaction blurbs to it.
         if (episodeId && models.Episode) {
+          // #1883: Episode has no event_type / event_name / dress_code
+          // columns; asking for them failed the query on every call and the
+          // catch below dropped the whole context block. Read the declared
+          // fields only.
           const episode = await models.Episode.findByPk(episodeId, {
-            attributes: ['id', 'title', 'episode_number', 'event_type', 'event_name', 'dress_code'],
+            attributes: ['id', 'title', 'episode_number'],
           });
           if (episode) {
-            const ep = [`Episode ${episode.episode_number || '?'}: "${episode.title || 'Untitled'}"`];
-            if (episode.event_type) ep.push(`event: ${episode.event_type}`);
-            if (episode.event_name) ep.push(`"${episode.event_name}"`);
-            if (episode.dress_code) ep.push(`dress code: ${episode.dress_code}`);
-            contextLines.push(ep.join(' — '));
+            contextLines.push(`Episode ${episode.episode_number || '?'}: "${episode.title || 'Untitled'}"`);
           }
         }
 
