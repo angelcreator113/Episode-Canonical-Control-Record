@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../db');
+const { COMPOSITION_VERSIONS_IN_CANON } = require('./compositionVersionsGuard');
 
 /**
  * FilterService
@@ -141,6 +142,21 @@ class FilterService {
 
     const whereClause = whereClauses.join(' AND ');
 
+    // composition_versions is not in canon (#1910). Until Evoni rules, the
+    // version columns are NULL (unknown), never a counted 0; the original
+    // subqueries return when the flag in compositionVersionsGuard.js flips.
+    const versionColumns = COMPOSITION_VERSIONS_IN_CANON
+      ? `(
+          SELECT COUNT(*) FROM composition_versions
+          WHERE composition_id = tc.id
+        ) as version_count,
+        (
+          SELECT MAX(created_at) FROM composition_versions
+          WHERE composition_id = tc.id
+        ) as last_version_date`
+      : `NULL::integer as version_count,
+        NULL::timestamp as last_version_date`;
+
     // Build main query
     const countQuery = `
       SELECT COUNT(*) as total_count
@@ -165,14 +181,7 @@ class FilterService {
         tc.guest_asset_id,
         tc.justawomen_asset_id,
         tc.include_justawomaninherprime,
-        (
-          SELECT COUNT(*) FROM composition_versions 
-          WHERE composition_id = tc.id
-        ) as version_count,
-        (
-          SELECT MAX(created_at) FROM composition_versions 
-          WHERE composition_id = tc.id
-        ) as last_version_date
+        ${versionColumns}
       FROM thumbnail_compositions tc
       WHERE ${whereClause}
       ORDER BY tc.${sortField} ${order}
