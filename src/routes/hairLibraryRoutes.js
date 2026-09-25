@@ -17,6 +17,43 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const Anthropic = require('@anthropic-ai/sdk');
 const client = new Anthropic();
 
+// Validate generated rows against the model's own column definitions
+// (rawAttributes), so a bad AI response is rejected before anything is
+// deleted (Task #1876). Returns a list of problems; empty means valid.
+function validateGeneratedRows(Model, rows) {
+  const problems = [];
+  const attrs = Model.rawAttributes || {};
+  rows.forEach((row, i) => {
+    for (const [key, value] of Object.entries(row)) {
+      const attr = attrs[key];
+      if (!attr) continue;
+      const typeKey = attr.type && attr.type.key;
+      if (value === undefined || value === null || value === '') {
+        if (attr.allowNull === false) problems.push(`item ${i}: ${key} is required`);
+        continue;
+      }
+      if (typeKey === 'STRING') {
+        const max = attr.type._length;
+        if (typeof value !== 'string') problems.push(`item ${i}: ${key} must be a string`);
+        else if (max && value.length > max) problems.push(`item ${i}: ${key} exceeds ${max} characters`);
+      } else if (typeKey === 'TEXT') {
+        if (typeof value !== 'string') problems.push(`item ${i}: ${key} must be a string`);
+      } else if (typeKey === 'JSONB') {
+        if (!Array.isArray(value)) problems.push(`item ${i}: ${key} must be an array`);
+      } else if (typeKey === 'BOOLEAN') {
+        if (typeof value !== 'boolean' && value !== 'true' && value !== 'false') {
+          problems.push(`item ${i}: ${key} must be a boolean`);
+        }
+      } else if (typeKey === 'INTEGER') {
+        if (!Number.isInteger(value) && !(typeof value === 'string' && /^-?\d+$/.test(value))) {
+          problems.push(`item ${i}: ${key} must be an integer`);
+        }
+      }
+    }
+  });
+  return problems;
+}
+
 // ── GET /api/v1/hair-library ──────────────────────────────────────────────
 // List all hair styles for a show, with optional filters
 router.get('/', requireAuth, async (req, res) => {
@@ -190,28 +227,54 @@ Return exactly ${count} objects. No other text.`,
     } catch {
       return res.status(500).json({ error: 'Claude returned invalid JSON', raw });
     }
+    // Row mapping is unchanged from the original create payload.
+    const toRow = (s) => ({
+      show_id,
+      name: s.name,
+      description: s.description,
+      vibe_tags: s.vibe_tags || [],
+      occasion_tags: s.occasion_tags || [],
+      event_types: s.event_types || [],
+      color_state: s.color_state,
+      length: s.length,
+      texture: s.texture,
+      career_echo_potential: s.career_echo_potential || null,
+      is_justAWoman_style: s.is_justAWoman_style || false,
+      is_active: true,
+      sort_order: s.sort_order || 0,
+    });
     if (replace_existing) {
-      await db.HairLibrary.destroy({ where: { show_id } });
+      // Parsed above; now validate every item BEFORE the destroy, so an
+      // empty or invalid response deletes nothing (Task #1876).
+      if (!Array.isArray(styles) || styles.length === 0) {
+        return res.status(500).json({ error: 'Claude returned no hair styles; nothing was replaced', raw });
+      }
+      const badShape = styles.findIndex(x => !x || typeof x !== 'object' || Array.isArray(x));
+      if (badShape !== -1) {
+        return res.status(500).json({ error: `Claude returned an invalid item at index ${badShape}; nothing was replaced`, raw });
+      }
+      const rows = styles.map(toRow);
+      const problems = validateGeneratedRows(db.HairLibrary, rows);
+      if (problems.length) {
+        return res.status(500).json({ error: 'Claude returned invalid hair styles; nothing was replaced', problems, raw });
+      }
+      // Destroy and every create commit or roll back together.
+      const t = await db.sequelize.transaction();
+      const created = [];
+      try {
+        await db.HairLibrary.destroy({ where: { show_id }, transaction: t });
+        for (const row of rows) {
+          created.push(await db.HairLibrary.create(row, { transaction: t }));
+        }
+        await t.commit();
+      } catch (txErr) {
+        console.error('hair styles replace-generate rolled back:', txErr);
+        await t.rollback();
+        throw txErr;
+      }
+      return res.status(201).json({ generated: created.length, items: created });
     }
-    const created = await Promise.all(
-      styles.map(s =>
-        db.HairLibrary.create({
-          show_id,
-          name: s.name,
-          description: s.description,
-          vibe_tags: s.vibe_tags || [],
-          occasion_tags: s.occasion_tags || [],
-          event_types: s.event_types || [],
-          color_state: s.color_state,
-          length: s.length,
-          texture: s.texture,
-          career_echo_potential: s.career_echo_potential || null,
-          is_justAWoman_style: s.is_justAWoman_style || false,
-          is_active: true,
-          sort_order: s.sort_order || 0,
-        })
-      )
-    );
+    const created = await Promise.all(styles.map(toRow).map(row => db.HairLibrary.create(row)));
     res.status(201).json({ generated: created.length, items: created });
   } catch (err) {
     console.error('hair-library generate error:', err);

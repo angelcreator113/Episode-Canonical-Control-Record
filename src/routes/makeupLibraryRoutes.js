@@ -17,6 +17,43 @@ const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const Anthropic = require('@anthropic-ai/sdk');
 const client = new Anthropic();
 
+// Validate generated rows against the model's own column definitions
+// (rawAttributes), so a bad AI response is rejected before anything is
+// deleted (Task #1876). Returns a list of problems; empty means valid.
+function validateGeneratedRows(Model, rows) {
+  const problems = [];
+  const attrs = Model.rawAttributes || {};
+  rows.forEach((row, i) => {
+    for (const [key, value] of Object.entries(row)) {
+      const attr = attrs[key];
+      if (!attr) continue;
+      const typeKey = attr.type && attr.type.key;
+      if (value === undefined || value === null || value === '') {
+        if (attr.allowNull === false) problems.push(`item ${i}: ${key} is required`);
+        continue;
+      }
+      if (typeKey === 'STRING') {
+        const max = attr.type._length;
+        if (typeof value !== 'string') problems.push(`item ${i}: ${key} must be a string`);
+        else if (max && value.length > max) problems.push(`item ${i}: ${key} exceeds ${max} characters`);
+      } else if (typeKey === 'TEXT') {
+        if (typeof value !== 'string') problems.push(`item ${i}: ${key} must be a string`);
+      } else if (typeKey === 'JSONB') {
+        if (!Array.isArray(value)) problems.push(`item ${i}: ${key} must be an array`);
+      } else if (typeKey === 'BOOLEAN') {
+        if (typeof value !== 'boolean' && value !== 'true' && value !== 'false') {
+          problems.push(`item ${i}: ${key} must be a boolean`);
+        }
+      } else if (typeKey === 'INTEGER') {
+        if (!Number.isInteger(value) && !(typeof value === 'string' && /^-?\d+$/.test(value))) {
+          problems.push(`item ${i}: ${key} must be an integer`);
+        }
+      }
+    }
+  });
+  return problems;
+}
+
 // ── GET /api/v1/makeup-library ────────────────────────────────────────────
 router.get('/', requireAuth, async (req, res) => {
   const db = require('../models');
@@ -188,30 +225,56 @@ Return exactly ${count} objects. No other text.`,
     } catch {
       return res.status(500).json({ error: 'Claude returned invalid JSON', raw });
     }
+    // Row mapping is unchanged from the original create payload.
+    const toRow = (l) => ({
+      show_id,
+      name: l.name,
+      description: l.description,
+      mood_tag: l.mood_tag,
+      occasion_tags: l.occasion_tags || [],
+      event_types: l.event_types || [],
+      aesthetic_tags: l.aesthetic_tags || [],
+      skin_finish: l.skin_finish,
+      eye_look: l.eye_look,
+      lip_look: l.lip_look,
+      career_echo_potential: l.career_echo_potential || null,
+      is_justAWoman_style: l.is_justAWoman_style || false,
+      featured_brand: l.featured_brand || null,
+      is_active: true,
+      sort_order: l.sort_order || 0,
+    });
     if (replace_existing) {
-      await db.MakeupLibrary.destroy({ where: { show_id } });
+      // Parsed above; now validate every item BEFORE the destroy, so an
+      // empty or invalid response deletes nothing (Task #1876).
+      if (!Array.isArray(looks) || looks.length === 0) {
+        return res.status(500).json({ error: 'Claude returned no makeup looks; nothing was replaced', raw });
+      }
+      const badShape = looks.findIndex(x => !x || typeof x !== 'object' || Array.isArray(x));
+      if (badShape !== -1) {
+        return res.status(500).json({ error: `Claude returned an invalid item at index ${badShape}; nothing was replaced`, raw });
+      }
+      const rows = looks.map(toRow);
+      const problems = validateGeneratedRows(db.MakeupLibrary, rows);
+      if (problems.length) {
+        return res.status(500).json({ error: 'Claude returned invalid makeup looks; nothing was replaced', problems, raw });
+      }
+      // Destroy and every create commit or roll back together.
+      const t = await db.sequelize.transaction();
+      const created = [];
+      try {
+        await db.MakeupLibrary.destroy({ where: { show_id }, transaction: t });
+        for (const row of rows) {
+          created.push(await db.MakeupLibrary.create(row, { transaction: t }));
+        }
+        await t.commit();
+      } catch (txErr) {
+        console.error('makeup looks replace-generate rolled back:', txErr);
+        await t.rollback();
+        throw txErr;
+      }
+      return res.status(201).json({ generated: created.length, items: created });
     }
-    const created = await Promise.all(
-      looks.map(l =>
-        db.MakeupLibrary.create({
-          show_id,
-          name: l.name,
-          description: l.description,
-          mood_tag: l.mood_tag,
-          occasion_tags: l.occasion_tags || [],
-          event_types: l.event_types || [],
-          aesthetic_tags: l.aesthetic_tags || [],
-          skin_finish: l.skin_finish,
-          eye_look: l.eye_look,
-          lip_look: l.lip_look,
-          career_echo_potential: l.career_echo_potential || null,
-          is_justAWoman_style: l.is_justAWoman_style || false,
-          featured_brand: l.featured_brand || null,
-          is_active: true,
-          sort_order: l.sort_order || 0,
-        })
-      )
-    );
+    const created = await Promise.all(looks.map(toRow).map(row => db.MakeupLibrary.create(row)));
     res.status(201).json({ generated: created.length, items: created });
   } catch (err) {
     console.error('makeup-library generate error:', err);
