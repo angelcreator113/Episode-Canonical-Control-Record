@@ -80,6 +80,8 @@ Thumbnail	publishedAt	missing-column
 Thumbnail	publishedBy	missing-column
 Thumbnail	unpublishedAt	missing-column
 ThumbnailComposition	approval_status	missing-column
+ThumbnailComposition	approved_at	missing-column
+ThumbnailComposition	approved_by	missing-column
 ThumbnailComposition	include_justawomaninherprime	missing-column
 ThumbnailComposition	justawomaninherprime_position	missing-column
 ThumbnailTemplate	-	no-table

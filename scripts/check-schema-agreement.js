@@ -93,8 +93,16 @@
  *     another table with the same gaps, or a gap closed and reopened, is not
  *     reported. Tables with unresolved ops ([table has unresolved ops]) are
  *     compared all the same; an unresolved createTable can hide a gap.
- *   - Instance calls are not checked: row.update({...}), row.save(), row.set()
- *     and other methods on a fetched instance have a non-model receiver.
+ *   - Instance writes are not checked, so a green step 1 does NOT mean "no
+ *     dropped writes" (Task #1897). A row loaded with findByPk/findOne/
+ *     findAll/create and then written with row.update({...}), or with
+ *     row.x = ...; row.save() (or row.set()), has a non-model receiver, and
+ *     Sequelize drops an undeclared key there exactly as it does in a static
+ *     Model.update. #1897's own case: CompositionService.approveComposition's
+ *     approved_by / approved_at and updateComposition's `version` were all
+ *     dropped with the gate green. The #1897 report counted about 255 instance
+ *     .update() calls and 42 assign-then-save() calls in src/ that go
+ *     unchecked (a one-off AST count, not part of this script).
  *   - Non-model receivers are not checked: a call is attributed only when the
  *     receiver is a model name (`Foo`), a property named after one
  *     (`models.Foo`, `db.Foo`), or a local variable assigned from either.
