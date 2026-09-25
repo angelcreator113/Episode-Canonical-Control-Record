@@ -283,7 +283,10 @@ describe('relationship stage — queries the columns the model declares', () => 
 
     expect(warn).not.toHaveBeenCalled();
     const relQuery = models.SocialProfileRelationship.findAll.mock.calls[0][0];
-    expect(relQuery.where).toEqual({ [Op.or]: [{ source_profile_id: HOST_ID }, { target_profile_id: HOST_ID }] });
+    expect(relQuery.where).toEqual({ [Op.and]: [
+      { [Op.or]: [{ source_profile_id: HOST_ID }, { target_profile_id: HOST_ID }] },
+      { [Op.or]: [{ public_visibility: { [Op.ne]: 'hidden' } }, { public_visibility: null }] },
+    ] });
     expect(calls.related[0].where.id).toEqual({ [Op.in]: [7, 8] });
     expect(guests.slice(0, 2)).toEqual([
       { profile_id: 7, handle: 'rival-7', display_name: 'Rival', relationship: 'rival' },
@@ -292,5 +295,36 @@ describe('relationship stage — queries the columns the model declares', () => 
     expect(guests).toHaveLength(6);
     expect(calls.pool[0].where.id).toEqual({ [Op.notIn]: [HOST_ID, 7, 8] });
     warn.mockRestore();
+  });
+  test('a hidden relation never becomes an invitation (Task #1860 guard)', async () => {
+    const relationships = [
+      { source_profile_id: HOST_ID, target_profile_id: 7, relationship_type: 'secret_link', public_visibility: 'hidden' },
+      { source_profile_id: HOST_ID, target_profile_id: 8, relationship_type: 'bestie', public_visibility: 'public' },
+      { source_profile_id: 9, target_profile_id: HOST_ID, relationship_type: 'ex', public_visibility: 'rumored' },
+    ];
+    const related = [
+      { id: 8, handle: 'bestie-8', display_name: 'Bestie' },
+      { id: 9, handle: 'ex-9', display_name: 'Ex' },
+    ];
+    const { models, calls } = makeModels({ relationships, related });
+    const guests = await assembleGuestList(HOST, FASHION, models, 6);
+
+    expect(calls.related[0].where.id).toEqual({ [Op.in]: [8, 9] });
+    expect(guests.map(g => g.profile_id)).not.toContain(7);
+  });
+
+  test('two relationship types to one person make one guest (Task #1860 guard)', async () => {
+    const relationships = [
+      { source_profile_id: HOST_ID, target_profile_id: 7, relationship_type: 'collab' },
+      { source_profile_id: 7, target_profile_id: HOST_ID, relationship_type: 'rival' },
+    ];
+    const related = [{ id: 7, handle: 'both-7', display_name: 'Both' }];
+    const { models, calls } = makeModels({ relationships, related });
+    const guests = await assembleGuestList(HOST, FASHION, models, 6);
+
+    expect(calls.related[0].where.id).toEqual({ [Op.in]: [7] });
+    expect(guests.filter(g => g.profile_id === 7)).toEqual([
+      { profile_id: 7, handle: 'both-7', display_name: 'Both', relationship: 'collab' },
+    ]);
   });
 });

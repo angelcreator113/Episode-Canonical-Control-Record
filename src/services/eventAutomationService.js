@@ -394,19 +394,32 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
   // related guest was ever chosen.
   if (SocialProfileRelationship && hostProfile) {
     try {
-      const relationships = await SocialProfileRelationship.findAll({
+      // Hidden relations never become invitations (Evoni, Task #1860): the
+      // stage had never run, so its first run must not surface a secret
+      // link as a guest. NULL visibility reads as the model default,
+      // 'public'. Direction, drama_level ordering and eligibility before
+      // the limit are open product questions, deliberately not decided here.
+      const relationships = (await SocialProfileRelationship.findAll({
         where: {
-          [Op.or]: [
-            { source_profile_id: hostProfile.id },
-            { target_profile_id: hostProfile.id },
+          [Op.and]: [
+            { [Op.or]: [
+              { source_profile_id: hostProfile.id },
+              { target_profile_id: hostProfile.id },
+            ] },
+            { [Op.or]: [
+              { public_visibility: { [Op.ne]: 'hidden' } },
+              { public_visibility: null },
+            ] },
           ],
         },
         limit: maxGuests,
-      });
+      })).filter(r => r.public_visibility !== 'hidden');
 
-      const relatedIds = relationships.map(r =>
+      // One entry per person: two relationship types to the same profile
+      // (collab and rival, say) still make one guest.
+      const relatedIds = [...new Set(relationships.map(r =>
         r.source_profile_id === hostProfile.id ? r.target_profile_id : r.source_profile_id
-      ).filter(Boolean);
+      ).filter(Boolean))];
 
       if (relatedIds.length > 0) {
         // A guest arriving through a relationship is no more eligible than

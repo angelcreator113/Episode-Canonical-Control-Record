@@ -11,7 +11,7 @@
  *   - rejects a findAll whose where clause (at any depth, through Op.or /
  *     Op.and) or attributes list names an undeclared attribute;
  *   - rejects fixture rows with an undeclared key or a relationship_type /
- *     direction outside the model's enums;
+ *     direction / public_visibility outside the model's enums;
  *   - returns rows that throw when code reads an undeclared attribute.
  */
 const { Sequelize, DataTypes } = require('sequelize');
@@ -27,6 +27,7 @@ const DECLARED = new Set(Object.entries(raw).flatMap(([name, a]) => [name, a.fie
 const ENUMS = {
   relationship_type: raw.relationship_type.values,
   direction: raw.direction.values,
+  public_visibility: raw.public_visibility.values,
 };
 
 function assertDeclared(key, where) {
