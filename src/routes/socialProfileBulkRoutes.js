@@ -20,6 +20,14 @@ const path    = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const { buildGenerationPrompt, autoAssignAllFollowers } = require('./socialProfileRoutes');
+const {
+  VALID_ARCHETYPES,
+  VALID_TRAJECTORIES,
+  sanitizeEnum,
+  fitRecordToModel,
+  warnTruncated,
+  logValueTooLong,
+} = require('../utils/fitToModel');
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
@@ -105,56 +113,75 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
     throw new Error(`Profile JSON parse failed: ${parseErr.message}`);
   }
 
+  // Sanitize ENUM fields and fit every string to its column (Task #1851) so
+  // an AI variation or an over-long value cannot fail the insert.
+  const safeArchetype = sanitizeEnum(profile.archetype, VALID_ARCHETYPES, 'polished_curator');
+  const safeTrajectory = sanitizeEnum(profile.current_trajectory, VALID_TRAJECTORIES, 'rising');
+
   // Save to DB — findOrCreate to prevent duplicates on retry
   let saved = null;
   if (db && db.SocialProfile) {
-    const [record, created] = await db.SocialProfile.findOrCreate({
-      where: { handle: creator.handle, platform: creator.platform },
-      defaults: {
-        vibe_sentence: creator.vibe_sentence,
-        display_name: profile.display_name,
-        archetype: profile.archetype,
-        content_persona: profile.content_persona,
-        real_signal: profile.real_signal,
-        posting_voice: profile.posting_voice,
-        comment_energy: profile.comment_energy,
-        follower_count_approx: profile.follower_count_approx,
-        parasocial_function: profile.parasocial_function,
-        emotional_activation: profile.emotional_activation,
-        watch_reason: profile.watch_reason,
-        what_it_costs_her: profile.what_it_costs_her,
-        current_trajectory: profile.current_trajectory,
-        trajectory_detail: profile.trajectory_detail,
-        lala_relevance_score: profile.lala_relevance_score,
-        lala_relevance_reason: profile.lala_relevance_reason,
-        pinned_post: profile.pinned_post,
-        sample_captions: profile.sample_captions,
-        sample_comments: profile.sample_comments,
-        adult_content_present: profile.adult_content_present || false,
-        adult_content_type: profile.adult_content_type,
-        adult_content_framing: profile.adult_content_framing,
-        crossing_trigger: profile.crossing_trigger,
-        crossing_mechanism: profile.crossing_mechanism,
-        book_relevance: profile.book_relevance,
-        moment_log: profile.moment_log || [],
-        full_profile: profile,
-        status: 'generated',
-        series_id: seriesId || null,
-        feed_layer: feedLayer || 'real_world',
-      },
+    const { fitted: defaults, truncated } = fitRecordToModel(db.SocialProfile, {
+      vibe_sentence: creator.vibe_sentence,
+      display_name: profile.display_name,
+      archetype: safeArchetype,
+      content_persona: profile.content_persona,
+      real_signal: profile.real_signal,
+      posting_voice: profile.posting_voice,
+      comment_energy: profile.comment_energy,
+      follower_count_approx: profile.follower_count_approx,
+      parasocial_function: profile.parasocial_function,
+      emotional_activation: profile.emotional_activation,
+      watch_reason: profile.watch_reason,
+      what_it_costs_her: profile.what_it_costs_her,
+      current_trajectory: safeTrajectory,
+      trajectory_detail: profile.trajectory_detail,
+      lala_relevance_score: profile.lala_relevance_score,
+      lala_relevance_reason: profile.lala_relevance_reason,
+      pinned_post: profile.pinned_post,
+      sample_captions: profile.sample_captions,
+      sample_comments: profile.sample_comments,
+      adult_content_present: profile.adult_content_present || false,
+      adult_content_type: profile.adult_content_type,
+      adult_content_framing: profile.adult_content_framing,
+      crossing_trigger: profile.crossing_trigger,
+      crossing_mechanism: profile.crossing_mechanism,
+      book_relevance: profile.book_relevance,
+      moment_log: profile.moment_log || [],
+      full_profile: profile,
+      status: 'generated',
+      series_id: seriesId || null,
+      feed_layer: feedLayer || 'real_world',
     });
-    saved = record;
-    if (!created) {
-      await record.update({
-        vibe_sentence: creator.vibe_sentence,
-        display_name: profile.display_name,
-        archetype: profile.archetype,
-        content_persona: profile.content_persona,
-        full_profile: profile,
-        lala_relevance_score: profile.lala_relevance_score,
-        status: 'generated',
-        feed_layer: feedLayer || record.feed_layer || 'real_world',
-      });
+    // The lookup key is fitted too, so a retry finds the row it created.
+    const { fitted: where, truncated: whereTruncated } = fitRecordToModel(db.SocialProfile, {
+      handle: creator.handle, platform: creator.platform,
+    });
+    warnTruncated('bulk-generate', [...whereTruncated, ...truncated]);
+
+    let attempted = { ...where, ...defaults };
+    try {
+      const [record, created] = await db.SocialProfile.findOrCreate({ where, defaults });
+      saved = record;
+      if (!created) {
+        const { fitted: updateRecord, truncated: updateTruncated } = fitRecordToModel(db.SocialProfile, {
+          vibe_sentence: defaults.vibe_sentence,
+          display_name: defaults.display_name,
+          archetype: safeArchetype,
+          content_persona: profile.content_persona,
+          full_profile: profile,
+          lala_relevance_score: profile.lala_relevance_score,
+          status: 'generated',
+          feed_layer: feedLayer || record.feed_layer || 'real_world',
+        });
+        warnTruncated('bulk-generate update', updateTruncated);
+        attempted = updateRecord;
+        await record.update(updateRecord);
+      }
+    } catch (err) {
+      console.error(`[bulk-generate] Save failed for @${creator.handle}:`, err.message);
+      logValueTooLong('bulk-generate', err, db.SocialProfile, attempted);
+      throw err;
     }
 
     // Auto-assign ALL characters as followers via intelligent follow engine
@@ -172,7 +199,7 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
     status: 'success',
     profile_id: saved?.id || null,
     lala_score: profile.lala_relevance_score || 0,
-    archetype: profile.archetype || null,
+    archetype: saved ? safeArchetype : (profile.archetype || null),
   };
 }
 

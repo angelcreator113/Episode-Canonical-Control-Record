@@ -12,6 +12,7 @@ const {
   inferCareerPressure,
   inferFollowerTier,
 } = require('../utils/feedProfileUtils');
+const { fitRecordToModel, warnTruncated, logValueTooLong } = require('../utils/fitToModel');
 
 const LALAVERSE_CAP = 200;
 const REAL_WORLD_CAP = 443;
@@ -49,7 +50,9 @@ async function autoCreateFeedProfile(db, character, feedLayer, opts = {}) {
   const isLalaverse = feedLayer === 'lalaverse';
   const roleType = character.role_type || 'support';
 
-  const feedProfile = await db.SocialProfile.create({
+  // Every string fitted to its column (Task #1851): registry names and
+  // opts overrides are not bounded by the social_profiles VARCHAR lengths.
+  const { fitted: createRecord, truncated } = fitRecordToModel(db.SocialProfile, {
     // Layer
     feed_layer:            feedLayer,
     registry_character_id: character.id,
@@ -74,6 +77,16 @@ async function autoCreateFeedProfile(db, character, feedLayer, opts = {}) {
     is_justawoman_record: false,
     lalaverse_cap_exempt: false,
   });
+  warnTruncated('feed-auto-generation', truncated);
+
+  let feedProfile;
+  try {
+    feedProfile = await db.SocialProfile.create(createRecord);
+  } catch (err) {
+    console.error('[feedAutoGeneration] SocialProfile.create failed:', err.message);
+    logValueTooLong('feed-auto-generation', err, db.SocialProfile, createRecord);
+    throw err;
+  }
 
   return { feedProfile, skipped: false };
 }
