@@ -83,6 +83,14 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      // Task #1909: canon has it (2026-09-17 capture: timestamp without time
+      // zone, nullable); POST /:id/generate-thumbnails' instance update in
+      // src/routes/compositions.js wrote it and Sequelize dropped it. No
+      // migration in src/migrations/ creates it (step 2 baseline).
+      published_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       selected_formats: {
         type: DataTypes.JSONB,
         allowNull: true,
@@ -138,6 +146,34 @@ module.exports = (sequelize) => {
         allowNull: true,
         defaultValue: {},
         comment: 'Stores visibility toggles, text field values, and per-composition overrides',
+      },
+      // Task #1909: the Layout Editor's draft columns, written by
+      // save-draft / apply-draft in src/routes/compositions.js. Canon lacks
+      // all five until 20260925000000-add-draft-columns-to-thumbnail-
+      // compositions.js runs; run it BEFORE deploying this declaration, or
+      // every ThumbnailComposition query names columns the table lacks.
+      // Until then the two routes answer 501
+      // (src/services/compositionDraftColumns.js).
+      draft_overrides: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+      },
+      draft_updated_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      draft_updated_by: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      has_unsaved_changes: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      layout_overrides: {
+        type: DataTypes.JSONB,
+        allowNull: true,
       },
     },
     {

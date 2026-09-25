@@ -11,7 +11,9 @@
  * Sequelize instance and the capture is read from the repository.
  *
  * Task #1897 adds approveComposition's approved_by / approved_at (an
- * instance write, which the schema-agreement checker does not see).
+ * instance write, which the schema-agreement checker did not see then).
+ * Task #1909 adds the instance writes the checker's step 1 now reports for
+ * columns canon has.
  */
 const fs = require('fs');
 const path = require('path');
@@ -52,6 +54,11 @@ const SITES = [
   ['src/services/CompositionService.js (createComposition, retired #1884)', 'ThumbnailComposition', ['include_justawomaninherprime', 'justawomaninherprime_position', 'approval_status']],
   // Task #1897: an instance update (findByPk, then composition.update), which step 1 of the checker does not see.
   ['src/services/CompositionService.js (approveComposition, #1897)', 'ThumbnailComposition', ['approved_by', 'approved_at']],
+  // Task #1909: writes through a loaded record, found by step 1's instance check.
+  ['src/routes/compositions.js (POST /:id/generate-thumbnails, #1909)', 'ThumbnailComposition', ['published_at']],
+  ['src/controllers/wardrobeController.js (toggleEpisodeFavorite, #1909)', 'EpisodeWardrobe', ['is_episode_favorite']],
+  ['src/services/AssetService.js (processAsset, #1909)', 'Asset', ['s3_key_processed']],
+  ['src/routes/characterCrossingRoutes.js (PUT /:id/confirm-gap, #1909)', 'RegistryCharacter', ['performing_publicly', 'dimensions_performed', 'dimensions_hidden']],
   ['src/services/careerPipelineService.js (spawnUnlockOpportunities)', 'Opportunity', ['career_goal_id']],
   ['src/routes/characterGenerator.js (commit)', 'RegistryCharacter', ['world_character_id']],
   ['src/controllers/sceneStudioController.js (saveSceneSetCanvas)', 'SceneSet', ['canvas_settings']],

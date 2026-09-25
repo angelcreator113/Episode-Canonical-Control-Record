@@ -206,6 +206,9 @@ exports.updateEpisodeAsset = async (req, res) => {
     }
 
     // Update fields
+    // Baselined (Task #1909): folder, tags and sort_order are absent from
+    // canon's episode_assets (display_order / metadata instead), as for this
+    // file's reads and create; listed for Evoni, not migrated.
     if (folder !== undefined) episodeAsset.folder = folder;
     if (tags !== undefined) episodeAsset.tags = tags;
     if (sortOrder !== undefined) episodeAsset.sort_order = sortOrder;

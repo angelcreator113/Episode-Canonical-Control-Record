@@ -1343,6 +1343,8 @@ module.exports = {
       if (trimEnd !== undefined) updates.trim_end = trimEnd;
       if (sceneType !== undefined) updates.scene_type = sceneType;
       if (episodeNotes !== undefined) updates.episode_notes = episodeNotes;
+      // Baselined (Task #1909): production_status is absent from canon's
+      // episode_scenes and commented out in EpisodeScene.js; listed for Evoni.
       if (productionStatus !== undefined) updates.production_status = productionStatus;
 
       await episodeScene.update(updates);

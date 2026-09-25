@@ -1,0 +1,231 @@
+/**
+ * Task #1909 — "Save draft" in the Layout Editor kept nothing.
+ *
+ * POST /api/v1/compositions/:id/save-draft wrote draft_overrides,
+ * draft_updated_at, draft_updated_by and has_unsaved_changes on a loaded
+ * ThumbnailComposition. None of them was declared (or in canon), so
+ * Sequelize dropped all four and the route answered "Draft saved
+ * successfully". apply-draft then read a draft_overrides that was never
+ * stored, and its layout_overrides write was dropped the same way.
+ *
+ * The composition here is the real model, defined on a never-connected
+ * Sequelize instance (tests/unit/helpers/schemaCheckedModel.js). The loaded
+ * row is a recording fake that does what Sequelize does with an instance
+ * update: it keeps a key only when the model declares it and drops the rest
+ * with no error. describeTable is stubbed, so each test says which columns
+ * the live table has. No database.
+ */
+const express = require('express');
+const request = require('supertest');
+
+const DRAFT_COLUMNS = ['draft_overrides', 'draft_updated_at', 'draft_updated_by', 'has_unsaved_changes', 'layout_overrides'];
+const ID = '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b';
+
+beforeEach(() => {
+  jest.resetModules();
+  jest.spyOn(console, 'log').mockImplementation(() => {});
+  jest.spyOn(console, 'warn').mockImplementation(() => {});
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+});
+afterEach(() => jest.restoreAllMocks());
+
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+/** A loaded row whose update() keeps declared keys only, as Sequelize does. */
+function recordingInstance(Model, row) {
+  const inst = { ...row };
+  const stored = [];
+  const dropped = [];
+  inst.update = jest.fn(async (values) => {
+    const kept = {};
+    for (const [k, v] of Object.entries(values)) {
+      if (has(Model.rawAttributes, k)) { kept[k] = v; inst[k] = v; } else dropped.push(k);
+    }
+    stored.push(kept);
+    return inst;
+  });
+  inst.toJSON = () => Object.fromEntries(Object.entries(inst).filter(([, v]) => typeof v !== 'function'));
+  Object.defineProperty(inst, 'stored', { value: stored });
+  Object.defineProperty(inst, 'dropped', { value: dropped });
+  return inst;
+}
+
+/**
+ * @param {object} opts
+ * @param {boolean} opts.declared — does the model declare the five draft columns?
+ * @param {string[]} opts.tableHas — draft columns the live table has
+ */
+function harness({ declared, tableHas = [], row = { id: ID, current_version: 1, version_history: {} }, real = false }) {
+  const { loadModel } = require('../helpers/schemaCheckedModel');
+  const Model = loadModel('ThumbnailComposition');
+  if (!declared) for (const c of DRAFT_COLUMNS) if (has(Model.rawAttributes, c)) Model.removeAttribute(c);
+
+  const baseColumns = Object.values(Model.rawAttributes)
+    .map((a) => a.field)
+    .filter((c) => !DRAFT_COLUMNS.includes(c));
+  const table = { cols: new Set([...baseColumns, ...tableHas]) };
+  const describeTable = jest
+    .spyOn(Model.sequelize.getQueryInterface(), 'describeTable')
+    .mockImplementation(async () => Object.fromEntries([...table.cols].map((c) => [c, {}])));
+
+  // real: a Sequelize instance of the real model, as findByPk returns it, with
+  // the query interface's update stubbed to record what save() sends.
+  const saves = [];
+  if (real) {
+    jest.spyOn(Model.sequelize.getQueryInterface(), 'update').mockImplementation(async (inst, _t, values, _w, opts) => {
+      saves.push({ values: { ...values }, fields: [...(opts.fields || [])] });
+      return [inst, 1];
+    });
+  }
+  const instance = real ? Model.build(row, { isNewRecord: false, raw: true }) : recordingInstance(Model, row);
+  const findByPk = jest.spyOn(Model, 'findByPk').mockImplementation(async () => instance);
+
+  jest.doMock('../../../src/models', () => ({ models: { ThumbnailComposition: Model, CompositionOutput: {} } }));
+  jest.doMock('../../../src/services/CompositionService', () => ({}));
+  jest.doMock('../../../src/services/ThumbnailGeneratorService', () => ({}));
+  jest.doMock('../../../src/services/VersioningService', () => ({}));
+  jest.doMock('../../../src/services/FilterService', () => ({}));
+  jest.doMock('../../../src/middleware/jwtAuth', () => ({
+    authenticateJWT: (_q, _s, next) => next(),
+    requireGroup: () => (_q, _s, next) => next(),
+  }));
+  jest.doMock('../../../src/middleware/auth', () => {
+    const actual = jest.requireActual('../../../src/middleware/auth');
+    return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
+  });
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/v1/compositions', require('../../../src/routes/compositions'));
+  return { app, Model, instance, findByPk, describeTable, table, saves };
+}
+
+const DRAFT = { roles: { lala: { x: 120, y: 40, scale: 1.1 } } };
+
+describe('the model does not declare the draft columns', () => {
+  test('save-draft answers 501, never "saved", and touches no row', async () => {
+    const { app, instance, findByPk, describeTable } = harness({ declared: false });
+
+    const res = await request(app).post(`/api/v1/compositions/${ID}/save-draft`).send({ draft_overrides: DRAFT });
+
+    // On main this was 200 "Draft saved successfully" with all four keys dropped.
+    expect(res.status).toBe(501);
+    expect(res.body).toMatchObject({ status: 'ERROR', code: 'DRAFT_COLUMNS_MISSING' });
+    expect(JSON.stringify(res.body)).not.toMatch(/saved successfully/i);
+    expect(findByPk).not.toHaveBeenCalled();
+    expect(instance.update).not.toHaveBeenCalled();
+    // Undeclared columns are dropped whatever the table has: no schema query.
+    expect(describeTable).not.toHaveBeenCalled();
+  });
+
+  test('save-draft still answers 501 when the table has the columns but the model does not declare them', async () => {
+    const { app, instance } = harness({ declared: false, tableHas: DRAFT_COLUMNS });
+
+    const res = await request(app).post(`/api/v1/compositions/${ID}/save-draft`).send({ draft_overrides: DRAFT });
+
+    expect(res.status).toBe(501);
+    expect(instance.update).not.toHaveBeenCalled();
+  });
+
+  test('apply-draft answers 501 and writes nothing', async () => {
+    const { app, instance, findByPk } = harness({
+      declared: false,
+      row: { id: ID, current_version: 1, version_history: {}, draft_overrides: DRAFT },
+    });
+
+    const res = await request(app).post(`/api/v1/compositions/${ID}/apply-draft`).send({});
+
+    // On main this was 200 "Draft applied successfully (v2)" with layout_overrides dropped.
+    expect(res.status).toBe(501);
+    expect(res.body.code).toBe('DRAFT_COLUMNS_MISSING');
+    expect(findByPk).not.toHaveBeenCalled();
+    expect(instance.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('the model declares the draft columns (Task #1909 migration)', () => {
+  test('before the migration runs: 501, nothing written, and the model is left as declared', async () => {
+    const { app, Model, instance, describeTable } = harness({ declared: true, tableHas: [] });
+    expect(Object.keys(Model.rawAttributes)).toEqual(expect.arrayContaining(DRAFT_COLUMNS));
+
+    const res = await request(app).post(`/api/v1/compositions/${ID}/save-draft`).send({ draft_overrides: DRAFT });
+
+    expect(res.status).toBe(501);
+    expect(res.body.code).toBe('DRAFT_COLUMNS_MISSING');
+    expect(instance.update).not.toHaveBeenCalled();
+    expect(describeTable).toHaveBeenCalledWith('thumbnail_compositions');
+    // The guard only reads (Evoni, option (b)): it never rewrites the model.
+    expect(Object.keys(Model.rawAttributes)).toEqual(expect.arrayContaining(DRAFT_COLUMNS));
+  });
+
+  test('after the migration: save-draft stores all four draft values, and apply-draft reads them back', async () => {
+    const { app, instance } = harness({ declared: true, tableHas: DRAFT_COLUMNS });
+
+    const saved = await request(app).post(`/api/v1/compositions/${ID}/save-draft`).send({ draft_overrides: DRAFT });
+    expect(saved.status).toBe(200);
+    expect(saved.body.message).toBe('Draft saved successfully');
+    expect(instance.dropped).toEqual([]);
+    expect(instance.stored[0]).toMatchObject({ draft_overrides: DRAFT, draft_updated_by: 'u1', has_unsaved_changes: true });
+    expect(new Date(instance.stored[0].draft_updated_at).getTime()).not.toBeNaN();
+
+    const applied = await request(app).post(`/api/v1/compositions/${ID}/apply-draft`).send({});
+    expect(applied.status).toBe(200);
+    expect(applied.body.message).toBe('Draft applied successfully (v2)');
+    expect(instance.dropped).toEqual([]);
+    expect(instance.stored[1]).toMatchObject({
+      layout_overrides: { roles: DRAFT.roles },
+      draft_overrides: null,
+      draft_updated_at: null,
+      draft_updated_by: null,
+      has_unsaved_changes: false,
+      current_version: 2,
+    });
+  });
+
+  test('501 while the columns are missing, and it saves once they exist (the false answer is not memoised)', async () => {
+    const { app, instance, table } = harness({ declared: true, tableHas: [] });
+
+    const before = await request(app).post(`/api/v1/compositions/${ID}/save-draft`).send({ draft_overrides: DRAFT });
+    expect(before.status).toBe(501);
+
+    for (const c of DRAFT_COLUMNS) table.cols.add(c); // Evoni runs the migration
+    const after = await request(app).post(`/api/v1/compositions/${ID}/save-draft`).send({ draft_overrides: DRAFT });
+    expect(after.status).toBe(200);
+    expect(instance.dropped).toEqual([]);
+    expect(instance.stored[0]).toMatchObject({ draft_overrides: DRAFT, has_unsaved_changes: true });
+  });
+
+  test('once the columns are confirmed, later requests make no schema query', async () => {
+    const { app, describeTable } = harness({ declared: true, tableHas: DRAFT_COLUMNS });
+    await request(app).post(`/api/v1/compositions/${ID}/save-draft`).send({ draft_overrides: DRAFT });
+    await request(app).post(`/api/v1/compositions/${ID}/save-draft`).send({ draft_overrides: DRAFT });
+    expect(describeTable).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('apply-draft saves version_history (Task #1909)', () => {
+  // The handler used to add the new version to the loaded version_history
+  // object in place and pass the same reference back. Sequelize compares a
+  // JSONB value with the one it holds, sees no change, and leaves the column
+  // out of the UPDATE: the version bumped but its history entry was lost.
+  test('the new version entry is in the saved fields, next to the old ones', async () => {
+    const v1 = { timestamp: '2026-09-01T00:00:00.000Z', user: 'u0', changes: { type: 'created' } };
+    const { app, saves } = harness({
+      declared: true,
+      tableHas: DRAFT_COLUMNS,
+      real: true,
+      row: { id: ID, current_version: 1, version_history: { v1 }, draft_overrides: DRAFT, layout_overrides: null },
+    });
+
+    const res = await request(app).post(`/api/v1/compositions/${ID}/apply-draft`).send({});
+
+    expect(res.status).toBe(200);
+    expect(saves).toHaveLength(1);
+    expect(saves[0].fields).toEqual(expect.arrayContaining(['version_history', 'current_version', 'layout_overrides']));
+    expect(saves[0].values.version_history).toEqual({
+      v1,
+      v2: expect.objectContaining({ user: 'u1', changes: { type: 'layout_adjustment', overrides: DRAFT } }),
+    });
+    expect(saves[0].values).toMatchObject({ current_version: 2, layout_overrides: { roles: DRAFT.roles }, draft_overrides: null });
+  });
+});

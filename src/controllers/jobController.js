@@ -217,7 +217,10 @@ class JobController {
         metadata: job.data?.metadata,
       });
 
-      // Update job record
+      // Update job record. Baselined in scripts/schema-agreement.baseline
+      // (Task #1909): progress and error are absent from canon, whose
+      // processing_queue has six columns the model largely disagrees with;
+      // listed for Evoni, not migrated.
       await job.update({
         status: 'pending',
         progress: 0,

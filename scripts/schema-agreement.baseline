@@ -7,6 +7,9 @@ src/controllers/episodeAssetsController.js	EpisodeAsset.findAll	order	added_at
 src/controllers/episodeAssetsController.js	EpisodeAsset.findAll	order	folder
 src/controllers/episodeAssetsController.js	EpisodeAsset.findAll	order	sort_order
 src/controllers/episodeAssetsController.js	EpisodeAsset.findAll	where(assigned)	folder
+src/controllers/episodeAssetsController.js	EpisodeAsset.instance.save	assigned	folder
+src/controllers/episodeAssetsController.js	EpisodeAsset.instance.save	assigned	sort_order
+src/controllers/episodeAssetsController.js	EpisodeAsset.instance.save	assigned	tags
 src/controllers/episodeController.js	Episode.create	values	collaborators
 src/controllers/episodeController.js	Episode.create	values	content_strategy
 src/controllers/episodeController.js	Episode.create	values	content_types
@@ -19,9 +22,12 @@ src/controllers/episodeController.js	Episode.create	values	primary_audience
 src/controllers/episodeController.js	Episode.create	values	structure
 src/controllers/episodeController.js	Episode.create	values	tones
 src/controllers/episodeController.js	Episode.create	values	visual_requirements
+src/controllers/episodeController.js	EpisodeScene.instance.update	values(assigned)	production_status
 src/controllers/jobController.js	ProcessingQueue.create	values	data
 src/controllers/jobController.js	ProcessingQueue.create	values	file_id
 src/controllers/jobController.js	ProcessingQueue.create	values	progress
+src/controllers/jobController.js	ProcessingQueue.instance.update	values	error
+src/controllers/jobController.js	ProcessingQueue.instance.update	values	progress
 src/controllers/metadataController.js	Episode.findByPk	attributes	episodeNumber
 src/controllers/metadataController.js	Episode.findByPk	attributes	episodeTitle
 src/controllers/metadataController.js	Episode.findByPk	attributes	seasonNumber
@@ -57,9 +63,6 @@ src/controllers/wardrobeLibraryController.js	Wardrobe.create	values	created_by
 src/controllers/wardrobeLibraryController.js	Wardrobe.create	values	imageUrl
 src/controllers/wardrobeLibraryController.js	Wardrobe.create	values	thumbnailUrl
 src/controllers/wardrobeLibraryController.js	WardrobeUsageHistory.findAll	include(as)	sceneDetails
-src/routes/characterCrossingRoutes.js	RegistryCharacter.findAll	attributes	dimensions_hidden
-src/routes/characterCrossingRoutes.js	RegistryCharacter.findAll	attributes	dimensions_performed
-src/routes/characterCrossingRoutes.js	RegistryCharacter.findAll	attributes	performing_publicly
 src/routes/characterGenerationRoutes.js	RegistryCharacter.create	values	world_exists
 src/routes/characterGenerationRoutes.js	RegistryCharacter.findAll	where	world_exists
 src/routes/characterGenerationRoutes.js	Universe.findByPk	attributes	tone

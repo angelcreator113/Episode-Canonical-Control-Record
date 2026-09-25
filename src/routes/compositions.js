@@ -16,6 +16,7 @@ const CompositionService = require('../services/CompositionService');
 const ThumbnailGeneratorService = require('../services/ThumbnailGeneratorService');
 const VersioningService = require('../services/VersioningService');
 const FilterService = require('../services/FilterService');
+const { draftColumnsReady, DRAFT_UNAVAILABLE } = require('../services/compositionDraftColumns');
 const { models } = require('../models');
 const { requireAuth } = require('../middleware/auth');
 const { authenticateJWT, requireGroup } = require('../middleware/jwtAuth');
@@ -1440,6 +1441,13 @@ router.post('/:id/save-draft', requireAuth, async (req, res) => {
     const { draft_overrides } = req.body;
     const { ThumbnailComposition } = models;
 
+    // Task #1909: until the draft columns are declared AND in the table,
+    // Sequelize would drop every value below and the answer would be a false
+    // "saved". Refuse instead (src/services/compositionDraftColumns.js).
+    if (!(await draftColumnsReady(ThumbnailComposition))) {
+      return res.status(501).json(DRAFT_UNAVAILABLE);
+    }
+
     if (!draft_overrides || typeof draft_overrides !== 'object') {
       return res.status(400).json({
         status: 'ERROR',
@@ -1489,6 +1497,12 @@ router.post('/:id/apply-draft', requireAuth, async (req, res) => {
     const { regenerate_formats = [] } = req.body;
     const { ThumbnailComposition } = models;
 
+    // Task #1909: no stored draft to read, and layout_overrides would be
+    // dropped, until the draft columns exist (see save-draft).
+    if (!(await draftColumnsReady(ThumbnailComposition))) {
+      return res.status(501).json(DRAFT_UNAVAILABLE);
+    }
+
     const composition = await ThumbnailComposition.findByPk(id);
 
     if (!composition) {
@@ -1520,14 +1534,19 @@ router.post('/:id/apply-draft', requireAuth, async (req, res) => {
     // Increment version
     const newVersion = (composition.current_version || 1) + 1;
 
-    // Update version history
-    const versionHistory = composition.version_history || {};
-    versionHistory[`v${newVersion}`] = {
-      timestamp: new Date().toISOString(),
-      user: req.user?.id || 'system',
-      changes: {
-        type: 'layout_adjustment',
-        overrides: draftOverrides,
+    // Update version history. A new object, never the loaded one edited in
+    // place: Sequelize compares the value with the one it loaded, and the
+    // same reference counts as unchanged, so version_history was never
+    // saved (Task #1909).
+    const versionHistory = {
+      ...(composition.version_history || {}),
+      [`v${newVersion}`]: {
+        timestamp: new Date().toISOString(),
+        user: req.user?.id || 'system',
+        changes: {
+          type: 'layout_adjustment',
+          overrides: draftOverrides,
+        },
       },
     };
 

@@ -94,6 +94,12 @@ router.post('/:id/propose-gap', aiRateLimiter, async (req, res) => {
 
     let score = null;
     let reasoning = '';
+    // Task #1909: the proposed dimensions are returned for Evoni to confirm
+    // (PUT /:id/confirm-gap takes them in its body); they are not crossing
+    // columns. They used to be assigned onto the crossing before save(),
+    // where Sequelize dropped them.
+    let proposedPerformed = [];
+    let proposedHidden = [];
     try {
       const Anthropic = require('@anthropic-ai/sdk');
       const client = new Anthropic();
@@ -124,9 +130,8 @@ Trigger for going public: ${crossing.trigger || 'unknown'}`,
       const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
       score = parsed.score || null;
       reasoning = parsed.reasoning || '';
-      // Store dimensions for later confirmation
-      crossing._proposed_dimensions_performed = parsed.dimensions_performed || [];
-      crossing._proposed_dimensions_hidden = parsed.dimensions_hidden || [];
+      proposedPerformed = parsed.dimensions_performed || [];
+      proposedHidden = parsed.dimensions_hidden || [];
     } catch (aiErr) {
       console.warn('[Crossings] Claude gap proposal failed:', aiErr.message);
       return res.status(503).json({ error: 'AI service unavailable' });
@@ -142,8 +147,8 @@ Trigger for going public: ${crossing.trigger || 'unknown'}`,
       character: char.selected_name || char.display_name,
       score,
       reasoning,
-      dimensions_performed: crossing._proposed_dimensions_performed,
-      dimensions_hidden: crossing._proposed_dimensions_hidden,
+      dimensions_performed: proposedPerformed,
+      dimensions_hidden: proposedHidden,
       note: 'Proposal only — confirm via PUT /:id/confirm-gap',
     });
   } catch (err) {
