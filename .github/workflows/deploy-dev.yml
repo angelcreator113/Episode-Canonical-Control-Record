@@ -293,6 +293,48 @@ jobs:
           curl -fsSL "$ARTIFACT_URL" -o /tmp/dev-deploy.tar.gz
           echo "Artifact: $(du -sh /tmp/dev-deploy.tar.gz | cut -f1) (sha ${DEPLOY_SHA})"
 
+          # ─── Migrate FIRST, from a staged copy of the new backend (#1856) ───
+          # The migration must run the NEW tree's src/migrations, but nothing
+          # live may move until it succeeds. So the backend is extracted into
+          # STAGE_DIR (same filesystem as APP_DIR), DB env is resolved and
+          # migrations run there. On failure the script exits here: no trap is
+          # armed yet, so PM2 is NOT restarted; frontend, nginx and the live
+          # backend tree are untouched; the old process keeps serving.
+          STAGE_DIR=$HOME/episode-metadata-stage
+          rm -rf "$STAGE_DIR"
+          mkdir -p "$STAGE_DIR"
+          tar -xzf /tmp/dev-deploy.tar.gz -C "$STAGE_DIR" --strip-components=1 \
+            deploy/src deploy/scripts deploy/node_modules \
+            deploy/package.json deploy/package-lock.json \
+            deploy/ecosystem.dev.config.js deploy/.sequelizerc
+          # src/config/sequelize.js calls dotenv on its cwd; link the live .env
+          # (if any) so the staged run reads the same config the in-place run
+          # did. A symlink: no copy of the file is made.
+          if [ -f "$APP_DIR/.env" ]; then
+            ln -s "$APP_DIR/.env" "$STAGE_DIR/.env"
+          fi
+          cd "$STAGE_DIR"
+
+          # DB env from Secrets Manager via instance role — NO secrets arrive
+          # with this deploy (P3/P4). print-db-env.js emits export lines.
+          echo '🔐 Resolving DB env from episode-metadata/dev/database...'
+          eval "$(node scripts/print-db-env.js)"
+          # DB_SSL is config, not a secret — staged here, NOT in the loader's
+          # 5-export contract. Must precede the trap (RF-2): first-dispatch
+          # finding, run 29357042127 ("no encryption" pg_hba rejection).
+          export DB_SSL=true
+
+          echo '🔧 Bootstrapping migration metadata...'
+          node scripts/bootstrap-sequelize-meta.js
+
+          # Full output, no tail: the migration's own error must reach the log.
+          echo '🗃  Running migrations...'
+          if ! npx sequelize-cli db:migrate --env development 2>&1; then
+            echo "❌ Migration failed (sha ${DEPLOY_SHA}) — deploy STOPPED before any change to frontend, nginx, backend tree or PM2. The error is above. Staged tree left at $STAGE_DIR."
+            exit 1
+          fi
+          cd "$HOME"
+
           # ─── Frontend + nginx (P5: fails loudly if nginx absent — correct) ───
           echo '🎨 Deploying frontend...'
           mkdir -p /tmp/deploy-tmp
@@ -317,31 +359,17 @@ jobs:
             deploy/package.json deploy/package-lock.json \
             deploy/ecosystem.dev.config.js deploy/.sequelizerc
           rm -f /tmp/dev-deploy.tar.gz
+          rm -rf "$STAGE_DIR"
           echo "Disk after extract: $(df -h / | tail -1 | awk '{print $4}')"
 
-          # DB env from Secrets Manager via instance role — NO secrets arrive
-          # with this deploy (P3/P4). print-db-env.js emits export lines.
-          echo '🔐 Resolving DB env from episode-metadata/dev/database...'
-          eval "$(node scripts/print-db-env.js)"
-          # DB_SSL is config, not a secret — staged here, NOT in the loader's
-          # 5-export contract. Must precede the trap (RF-2): first-dispatch
-          # finding, run 29357042127 ("no encryption" pg_hba rejection).
-          export DB_SSL=true
+          # DB_* and DB_SSL were resolved and exported above, before the
+          # migration; the schema is already migrated.
 
-          # Trap armed HERE — after DB env exists, per RF-2 (see comment at
-          # restore_pm2 above). From this point, any exit path restarts the
-          # two dev processes with a complete environment.
+          # Trap armed HERE — after DB env exists (RF-2) and after migrations
+          # succeeded (#1856): the trap never fires on a migration failure.
+          # From this point, any exit path restarts the two dev processes
+          # with a complete environment.
           trap restore_pm2 EXIT
-
-          echo '🔧 Bootstrapping migration metadata...'
-          node scripts/bootstrap-sequelize-meta.js
-
-          echo '🗃  Running migrations...'
-          MIGRATION_FAILED=false
-          if ! npx sequelize-cli db:migrate --env development 2>&1 | tail -20; then
-            echo '⚠ Migration failed — trap will still restart PM2 so the site stays up'
-            MIGRATION_FAILED=true
-          fi
 
           # Explicit restart BEFORE the health check — RF-3 (v1.31): the trap
           # fires at EXIT, i.e. AFTER the health check runs; relying on it
@@ -382,10 +410,6 @@ jobs:
           echo "  Episodes route: $EPISODES_OK"
 
           echo "Disk final: $(df -h / | tail -1 | awk '{print $4}')"
-          if [ "$MIGRATION_FAILED" = "true" ]; then
-            echo '❌ Deployment completed but migrations failed'
-            exit 1
-          fi
           echo '✅ Full deployment complete'
           ONBOX
           chmod +x deploy-on-box.sh
@@ -433,15 +457,17 @@ jobs:
             esac
           done
 
-          echo '─── On-box output (stdout tail) ───'
+          # Printed in full, not tailed (#1856): a migration error must reach
+          # the job log. SSM itself returns at most the first 24,000 chars.
+          echo '─── On-box output (stdout) ───'
           aws ssm get-command-invocation \
             --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
-            --query "StandardOutputContent" --output text | tail -80
+            --query "StandardOutputContent" --output text
           if [ "$STATUS" != "Success" ]; then
-            echo '─── On-box stderr tail ───'
+            echo '─── On-box stderr ───'
             aws ssm get-command-invocation \
               --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
-              --query "StandardErrorContent" --output text | tail -40
+              --query "StandardErrorContent" --output text
             echo "::error title=Deploy failed::SSM command ended $STATUS"
             exit 1
           fi
