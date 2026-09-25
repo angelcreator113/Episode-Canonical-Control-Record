@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
+import { getEpisodeEvents } from '../../services/episodeEventsApi';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import TimelinePlacementsSection from '../episode/TimelinePlacementsSection';
 
@@ -66,7 +67,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [allEvents, setAllEvents] = useState([]);  // every event in the show — drives the linker dropdown
-  const [linkedEvents, setLinkedEvents] = useState([]);  // events whose used_in_episode_id is this episode
+  const [linkedEvents, setLinkedEvents] = useState([]);  // GET /episodes/:id/events — the brief's source event first, then events whose used_in_episode_id is this episode
   const [sceneSets, setSceneSets] = useState([]);
   const [scriptInfo, setScriptInfo] = useState(null);
   const [totalEpisodes, setTotalEpisodes] = useState(0);
@@ -115,11 +116,16 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
   }, [episode?.id]);
 
   const loadContext = async () => {
+    // The episode's own events (Task #1906): the brief's source event
+    // first, then any additional linked events.
+    getEpisodeEvents(episode.id).then((data) => {
+      setLinkedEvents(data?.events || []);
+    }).catch((err) => console.error('[Episode] Failed to load episode events:', err));
     if (showId) {
+      // The show's event list feeds only the linker dropdown (events not
+      // yet linked anywhere). It is not how this episode finds its events.
       api.get(`/api/v1/world/${showId}/events`).then(({ data }) => {
-        const events = data?.events || [];
-        setAllEvents(events);
-        setLinkedEvents(events.filter(e => e.used_in_episode_id === episode.id));
+        setAllEvents(data?.events || []);
       }).catch(() => {});
       api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(({ data }) => {
         setTotalEpisodes((data?.data || data || []).length);
@@ -590,7 +596,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.name}</div>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
-                      {ev.host && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#64748b' }}>{ev.host}</span>}
+                      {/* The brief's source event (Task #1906). It stays
+                          listed while the brief names it, even if its
+                          used_in_episode_id link is cleared. */}
+                      {ev.link?.anchor && <span title={ev.link.stamped ? 'The event this episode was started from' : 'The event this episode was started from; its link to this episode is missing or points elsewhere'} style={{ padding: '1px 5px', background: '#B8962E', borderRadius: 3, fontSize: 9, color: '#fff', fontWeight: 700 }}>source{ev.link.stamped ? '' : ' · unlinked'}</span>}
+                      {ev.host &&<span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#64748b' }}>{ev.host}</span>}
                       {ev.dress_code && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#B8962E' }}>{ev.dress_code}</span>}
                       {ev.event_type && <span style={{ padding: '1px 5px', background: '#fff', borderRadius: 3, fontSize: 9, color: '#6366f1' }}>{ev.event_type}</span>}
                     </div>

@@ -404,6 +404,23 @@ async function createScenePlanRows(episode, event, models) {
 // ─── MAIN: GENERATE EPISODE FROM EVENT ───────────────────────────────────────
 
 /**
+ * Stamp the source event with the episode it started (Task #1906):
+ * used_in_episode_id, status 'used' and times_used + 1, inside the
+ * caller's transaction. Throws when the UPDATE fails or matches no row, so
+ * Start Episode never commits an episode whose event does not point back
+ * at it.
+ */
+async function stampEventUsed(sequelize, eventId, episodeId, { transaction } = {}) {
+  const [rows] = await sequelize.query(
+    `UPDATE world_events SET status = 'used', used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, updated_at = NOW() WHERE id = :eventId RETURNING id`,
+    { replacements: { episodeId, eventId }, transaction }
+  );
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error(`Event ${eventId} could not be linked to episode ${episodeId}: no world_events row was updated`);
+  }
+}
+
+/**
  * Generate a complete episode blueprint from a world event.
  *
  * @param {object} event — WorldEvent instance or plain object
@@ -412,7 +429,7 @@ async function createScenePlanRows(episode, event, models) {
  * @returns {object} { episode, brief, scenePlan, todoList, financials }
  */
 async function generateEpisodeFromEvent(event, models, options = {}) {
-  const { Episode, EpisodeBrief, ScenePlan } = models;
+  const { Episode, EpisodeBrief } = models;
   const showId = options.showId || event.show_id;
 
   if (!showId) throw new Error('show_id is required');
@@ -582,19 +599,7 @@ Return ONLY JSON.` }],
     console.warn('[EpisodeGenerator] AI title generation failed (using event name):', titleErr.message);
   }
 
-  // ── 1b. Create Episode ──
-  const episode = await Episode.create({
-    show_id: showId,
-    title: episodeTitle,
-    description: episodeDescription,
-    episode_number: nextNumber,
-    status: 'draft',
-    categories: episodeTags,
-    total_income: 0,
-    total_expenses: 0,
-  });
-
-  // ── 2. Snapshot the accepted terms (Task #1814) ──
+  // ── 1b. Snapshot the accepted terms (Task #1814) ──
   // Start Episode snapshots the four kinds of term the Event Package owns
   // (docs/EVENT_EPISODE_FLOW.md §8(t) item 2) onto the brief, so the
   // episode never reaches back to the event or a live opportunity to find
@@ -608,84 +613,106 @@ Return ONLY JSON.` }],
   }
   const termsSnapshot = buildTermsSnapshot(event, eventDeliverables);
 
-  // ── 2a. Create Episode Brief ──
-  let brief = null;
-  if (EpisodeBrief) {
-    // Snapshot every load-bearing field from the event onto the brief at
-    // generate time. Closes the long list of silent data drops surfaced by
-    // the field-level audit. Snapshot semantics (not read-through) for
-    // story-progression metadata so re-edits to the event don't retroactively
-    // change what an already-generated episode "remembers."
-    brief = await EpisodeBrief.create({
-      episode_id: episode.id,
+  // ── 2. Create the Episode, its Brief and the event link — one transaction ──
+  // Task #1906: the Episode, the Brief (which records the source event in
+  // event_id) and the event's used_in_episode_id / status / times_used
+  // stamp commit together or not at all. A stamp failure fails the Start
+  // and leaves no episode and no brief behind. Everything after this block
+  // is non-blocking by design, runs after the commit, and logs its own
+  // failures.
+  const { episode, brief } = await models.sequelize.transaction(async (transaction) => {
+    const episode = await Episode.create({
       show_id: showId,
-      event_id: event.id,
-      // Capture the OutfitSet that drove this episode (when the event
-      // had one picked). Pieces still get exploded into EpisodeWardrobe
-      // rows; this preserves the "which set" audit trail those rows
-      // alone would lose.
-      outfit_set_id: event.outfit_set_id || null,
-      // Direct invite asset reference so the episode doesn't have to
-      // join through assets.metadata to find its invite.
-      invitation_asset_id: event.invitation_asset_id || null,
-      // Story scaffolding — season + arc the event belongs to.
-      season_id: event.season_id || null,
-      arc_id: event.arc_id || null,
-      // Cross-episode narrative chain. Everything related to "this event
-      // came from / leads to" lives here so the brief alone tells you
-      // where in the chain this episode sits.
-      narrative_chain: {
-        parent_event_id: event.parent_event_id || null,
-        chain_position: event.chain_position ?? null,
-        chain_reason: event.chain_reason || null,
-        seeds_future_events: event.seeds_future_events || [],
-      },
-      // Full canon_consequences (previously only the automation key was
-      // read; the rest was dropped).
-      canon_consequences: event.canon_consequences || {},
-      // Career-progression context the player runtime gates on.
-      career_context: {
-        career_tier: event.career_tier ?? null,
-        career_milestone: event.career_milestone || null,
-        fail_consequence: event.fail_consequence || null,
-        success_unlock: event.success_unlock || null,
-      },
-      // Difficulty knobs — strictness + deadline_*. event_difficulty is
-      // an existing column, finally getting populated.
-      event_difficulty: {
-        strictness: event.strictness ?? null,
-        deadline_type: event.deadline_type || null,
-        deadline_minutes: event.deadline_minutes ?? null,
-      },
-      // Catch-all for the rest of the event metadata that influences
-      // gameplay/visuals but isn't story-critical.
-      event_metadata: {
-        rewards: event.rewards || null,
-        requirements: event.requirements || null,
-        affordability_warning: affordabilityWarning,
-        browse_pool_bias: event.browse_pool_bias || null,
-        browse_pool_size: event.browse_pool_size ?? null,
-        overlay_template: event.overlay_template || null,
-        required_ui_overlays: event.required_ui_overlays || [],
-        host_brand: event.host_brand || null,
-        dress_code_keywords: event.dress_code_keywords || [],
-        location_hint: event.location_hint || null,
-        // The accepted terms at Start Episode (Task #1814): access
-        // requirements, deliverables, restrictions, compensation. A
-        // snapshot; completion readers still read the event, not this.
-        terms: termsSnapshot,
-      },
-      // AI-drafted beat outline from the same Claude call that generated
-      // the title — gives creators something to anchor edits against and
-      // feeds Suggest-Scenes before any script exists.
-      beat_outline: aiBeatOutline,
-      episode_archetype: inferArchetype(event),
-      designed_intent: inferIntent(event),
-      narrative_purpose: `${event.name} — ${event.description || 'Event-driven episode'}`,
-      forward_hook: aiForwardHook,
+      title: episodeTitle,
+      description: episodeDescription,
+      episode_number: nextNumber,
       status: 'draft',
-    });
-  }
+      categories: episodeTags,
+      total_income: 0,
+      total_expenses: 0,
+    }, { transaction });
+
+    let brief = null;
+    if (EpisodeBrief) {
+      // Snapshot every load-bearing field from the event onto the brief at
+      // generate time. Closes the long list of silent data drops surfaced by
+      // the field-level audit. Snapshot semantics (not read-through) for
+      // story-progression metadata so re-edits to the event don't retroactively
+      // change what an already-generated episode "remembers."
+      brief = await EpisodeBrief.create({
+        episode_id: episode.id,
+        show_id: showId,
+        event_id: event.id,
+        // Capture the OutfitSet that drove this episode (when the event
+        // had one picked). Pieces still get exploded into EpisodeWardrobe
+        // rows; this preserves the "which set" audit trail those rows
+        // alone would lose.
+        outfit_set_id: event.outfit_set_id || null,
+        // Direct invite asset reference so the episode doesn't have to
+        // join through assets.metadata to find its invite.
+        invitation_asset_id: event.invitation_asset_id || null,
+        // Story scaffolding — season + arc the event belongs to.
+        season_id: event.season_id || null,
+        arc_id: event.arc_id || null,
+        // Cross-episode narrative chain. Everything related to "this event
+        // came from / leads to" lives here so the brief alone tells you
+        // where in the chain this episode sits.
+        narrative_chain: {
+          parent_event_id: event.parent_event_id || null,
+          chain_position: event.chain_position ?? null,
+          chain_reason: event.chain_reason || null,
+          seeds_future_events: event.seeds_future_events || [],
+        },
+        // Full canon_consequences (previously only the automation key was
+        // read; the rest was dropped).
+        canon_consequences: event.canon_consequences || {},
+        // Career-progression context the player runtime gates on.
+        career_context: {
+          career_tier: event.career_tier ?? null,
+          career_milestone: event.career_milestone || null,
+          fail_consequence: event.fail_consequence || null,
+          success_unlock: event.success_unlock || null,
+        },
+        // Difficulty knobs — strictness + deadline_*. event_difficulty is
+        // an existing column, finally getting populated.
+        event_difficulty: {
+          strictness: event.strictness ?? null,
+          deadline_type: event.deadline_type || null,
+          deadline_minutes: event.deadline_minutes ?? null,
+        },
+        // Catch-all for the rest of the event metadata that influences
+        // gameplay/visuals but isn't story-critical.
+        event_metadata: {
+          rewards: event.rewards || null,
+          requirements: event.requirements || null,
+          affordability_warning: affordabilityWarning,
+          browse_pool_bias: event.browse_pool_bias || null,
+          browse_pool_size: event.browse_pool_size ?? null,
+          overlay_template: event.overlay_template || null,
+          required_ui_overlays: event.required_ui_overlays || [],
+          host_brand: event.host_brand || null,
+          dress_code_keywords: event.dress_code_keywords || [],
+          location_hint: event.location_hint || null,
+          // The accepted terms at Start Episode (Task #1814): access
+          // requirements, deliverables, restrictions, compensation. A
+          // snapshot; completion readers still read the event, not this.
+          terms: termsSnapshot,
+        },
+        // AI-drafted beat outline from the same Claude call that generated
+        // the title — gives creators something to anchor edits against and
+        // feeds Suggest-Scenes before any script exists.
+        beat_outline: aiBeatOutline,
+        episode_archetype: inferArchetype(event),
+        designed_intent: inferIntent(event),
+        narrative_purpose: `${event.name} — ${event.description || 'Event-driven episode'}`,
+        forward_hook: aiForwardHook,
+        status: 'draft',
+      }, { transaction });
+    }
+
+    await stampEventUsed(models.sequelize, eventId, episode.id, { transaction });
+    return { episode, brief };
+  });
 
   // Stamp the episode on the event's deliverables (Task #1814). Logged,
   // never fatal: the snapshot above already holds them.
@@ -776,7 +803,10 @@ Return ONLY JSON.` }],
           const updates = { feed_moment: moment };
           if (moment.script_lines) updates.script_lines = moment.script_lines;
           await row.update(updates);
-        } catch { /* feed_moment column may not exist yet */ }
+        } catch (momentErr) {
+          // feed_moment column may not exist yet — non-blocking, logged.
+          console.warn(`[EpisodeGenerator] Feed moment attach failed for beat ${beatNum} (non-blocking):`, momentErr.message);
+        }
       }
     }
   } catch (fmErr) {
@@ -800,7 +830,9 @@ Return ONLY JSON.` }],
         );
         hostProfile = rows?.[0] || null;
       }
-    } catch { /* non-blocking */ }
+    } catch (hostErr) {
+      console.warn('[EpisodeGenerator] Host profile read for social tasks failed (non-blocking):', hostErr.message);
+    }
     socialTasks = buildSocialTasks(eventType, hostProfile, outfitPieces, {
       event_name: event.name,
       host_name: event.host || creator?.displayName,
@@ -891,7 +923,10 @@ Return ONLY JSON.` }],
             models.sequelize.literal(`metadata->>'event_id' = '${eventId.replace(/'/g, "''")}'`),
           ],
         },
-      }).catch(() => []);
+      }).catch((findErr) => {
+        console.warn('[EpisodeGenerator] Event asset lookup failed, trying raw SQL (non-blocking):', findErr.message);
+        return [];
+      });
 
       // Fallback: raw SQL if JSONB query fails
       let assets = eventAssets;
@@ -902,7 +937,9 @@ Return ONLY JSON.` }],
             { replacements: { eventId } }
           );
           assets = rows || [];
-        } catch { /* skip */ }
+        } catch (rawErr) {
+          console.warn('[EpisodeGenerator] Event asset raw lookup failed (non-blocking):', rawErr.message);
+        }
       }
 
       let linked = 0;
@@ -914,28 +951,15 @@ Return ONLY JSON.` }],
             { replacements: { episodeId: episode.id, assetId } }
           );
           linked++;
-        } catch { /* skip individual failures */ }
+        } catch (oneErr) {
+          console.warn(`[EpisodeGenerator] Asset ${assetId} link failed (non-blocking):`, oneErr.message);
+        }
       }
       if (linked > 0) console.log(`[EpisodeGenerator] ${linked} event assets linked to episode`);
     }
   } catch (assetErr) {
     console.warn('[EpisodeGenerator] Asset linking failed (non-blocking):', assetErr.message);
   }
-
-  // Mark event as used
-  try {
-    if (models.WorldEvent) {
-      await models.WorldEvent.update(
-        { status: 'used', used_in_episode_id: episode.id },
-        { where: { id: event.id } }
-      );
-    } else {
-      await models.sequelize.query(
-        `UPDATE world_events SET status = 'used', used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, updated_at = NOW() WHERE id = :eventId`,
-        { replacements: { episodeId: episode.id, eventId: event.id } }
-      );
-    }
-  } catch { /* non-blocking */ }
 
   // Record the event in host + guest history (Task #1818). History only:
   // no episode is evaluated yet, so the relevance boost, the tier-based
@@ -975,6 +999,7 @@ Return ONLY JSON.` }],
 
 module.exports = {
   generateEpisodeFromEvent,
+  stampEventUsed,
   createScenePlanRows,
   buildSocialTasks,
   calculateFinancials,
