@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 
 /**
  * EpisodeProductionChecklist
@@ -184,9 +185,9 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       // ── Check Event, Venue, Invitation, Outfit ──
       try {
         if (showId) {
-          const { data } = await api.get(`/api/v1/world/${showId}/events`);
-          const events = data?.events || [];
-          const linkedEvent = events.find(ev => ev.used_in_episode_id === episode.id);
+          // The episode's source event (Task #1906): anchor from the
+          // brief, never a scan of the show's event list.
+          const linkedEvent = await getEpisodeAnchorEvent(episode.id);
           results.event_linked = !!linkedEvent;
           results.invitation_exists = !!linkedEvent?.invitation_asset_id;
           const auto = linkedEvent?.canon_consequences?.automation || {};

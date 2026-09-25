@@ -25,6 +25,7 @@ const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenes
 const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
+import { getEpisodeEvents } from '../services/episodeEventsApi';
 import './EpisodeDetail.css';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
@@ -303,18 +304,21 @@ const EpisodeDetail = () => {
     fetchEpisodeScenes();
   }, [episodeId, activeTab, toast]);
 
-  // Load events + character state for wardrobe gameplay
+  // Load events + character state for wardrobe gameplay. Gated on the
+  // Production → Wardrobe sub-tab: since #534 resolveEpTab maps `wardrobe`
+  // to activeTab 'production' / sub 'wardrobe', so the old
+  // `activeTab !== 'wardrobe'` gate never let this run (Task #1906).
   useEffect(() => {
-    if (!episode || activeTab !== 'wardrobe') return;
+    if (!episode || tabKey !== 'production.wardrobe') return;
     const showId = episode.show_id || episode.showId;
     if (!showId) return;
 
-    // Fetch events injected into this episode
+    // The episode's own events — anchor from the brief first, then any
+    // additional linked events. No scan of the show's event list.
     const fetchEvents = async () => {
       try {
-        const data = await listWorldEventsApi(showId);
-        const allEvents = data.events || [];
-        const linked = allEvents.filter(e => e.used_in_episode_id === episodeId);
+        const data = await getEpisodeEvents(episodeId);
+        const linked = data?.events || [];
         setEpisodeEvents(linked);
         if (linked.length > 0 && !selectedEvent) setSelectedEvent(linked[0]);
       } catch (err) {
@@ -334,7 +338,7 @@ const EpisodeDetail = () => {
 
     fetchEvents();
     fetchCharState();
-  }, [episode, activeTab, episodeId]);
+  }, [episode, tabKey, episodeId]);
 
   // Handle scene selection from library
   const handleSceneSelect = async (libraryScene) => {

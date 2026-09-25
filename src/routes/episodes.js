@@ -299,6 +299,28 @@ router.post(
 // ==================== STANDARD EPISODE ROUTES ====================
 router.get('/:id/status', requireAuth, asyncHandler(episodeController.getEpisodeStatus));
 
+// The events this episode was made from (Task #1906). The anchor comes
+// from EpisodeBrief.event_id; additional events from
+// world_events.used_in_episode_id. The one reader the episode tabs use —
+// they never scan the show's whole event list to find their event.
+router.get('/:id/events', validateUUIDParam('id'), requireAuth, async (req, res) => {
+  try {
+    // The module's top-level exports carry WorldEvent and EpisodeBrief;
+    // its `models` map does not.
+    const models = require('../models');
+    const episode = await models.Episode.findByPk(req.params.id, { attributes: ['id', 'deleted_at'] });
+    if (!episode || episode.deleted_at) {
+      return res.status(404).json({ success: false, error: 'Episode not found' });
+    }
+    const { listEpisodeEvents } = require('../services/episodeEventsService');
+    const data = await listEpisodeEvents(models, episode.id);
+    return res.json({ success: true, ...data });
+  } catch (error) {
+    console.error('[Episodes] GET /:id/events failed:', error.message);
+    return res.status(500).json({ success: false, error: 'Failed to load episode events' });
+  }
+});
+
 // Get single episode
 router.get('/:id', validateUUIDParam('id'), requireAuth, asyncHandler(episodeController.getEpisode));
 
