@@ -395,7 +395,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const finalizeProfile = async id=>{try{const res=await finalizeProfileApi(id);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
   const crossProfile   = async id=>{try{const res=await crossProfileApi(id);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
   const editProfile    = async(id,updates)=>{try{const res=await editProfileApi(id,updates);const d=res.data;setProfiles(p=>p.map(x=>x.id===id?d.profile:x));if(selected?.id===id)setSelected(d.profile);}catch(err){setError(err.response?.data?.error||err.message);}};
-  const deleteProfile  = async id=>{if(!window.confirm('Delete this profile permanently?'))return;try{await deleteProfileById(id);setProfiles(p=>p.filter(x=>x.id!==id));if(selected?.id===id)setSelected(null);}catch(err){setError(err.response?.data?.error||err.message);}};
+  const deleteProfile  = async id=>{if(!window.confirm("Delete this profile? It'll be hidden from the Feed. It can be restored, though not from this screen yet."))return;try{await deleteProfileById(id);setProfiles(p=>p.filter(x=>x.id!==id));if(selected?.id===id)setSelected(null);}catch(err){setError(err.response?.data?.error||err.message);}};
 
   // ── Regenerate profile ────────────────────────────────────────────
   const regenerateProfile = async (id, overrides={})=>{
@@ -1411,7 +1411,7 @@ function BulkDeleteDialog({ count, onCancel, onConfirm }) {
   return createPortal(
     <div className="spg-delete-overlay" role="dialog" aria-modal="true" aria-labelledby="spg-delete-title" onClick={e=>{if(e.target===e.currentTarget&&!busy)onCancel();}}>
       <div className="spg-delete-dialog">
-        <div id="spg-delete-title" className="spg-delete-title">Permanently delete {count} profile{count===1?'':'s'} and their follows/relationships? This cannot be undone.</div>
+        <div id="spg-delete-title" className="spg-delete-title">Delete {count} profile{count===1?'':'s'}? They'll be hidden from the Feed. Their follows and relationships are kept. They can be restored, though not from this screen yet.</div>
         <p className="spg-delete-note">Locked, crossed and entangled profiles are kept automatically.</p>
         <label className="spg-delete-label" htmlFor="spg-delete-input">Type <strong>{count}</strong> to confirm</label>
         <input id="spg-delete-input" className="spg-delete-input" inputMode="numeric" autoFocus value={typed} disabled={busy}
