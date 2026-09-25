@@ -34,6 +34,7 @@ const {
   generateFullCharacter,
   calculateDepthLevel,
 } = require('../services/characterGenerationService');
+const { fitRecordToModel, warnTruncated, logValueTooLong } = require('../utils/fitToModel');
 
 router.use(requireAuth);
 // Every response from this router: author-only character fields for the admin group only
@@ -184,6 +185,7 @@ router.post('/confirm-feed', async (req, res) => {
 
   const models = getModels(req);
   const { RegistryCharacter, SocialProfile } = models;
+  let attempted = null;
 
   try {
     const character = await RegistryCharacter.findByPk(character_id);
@@ -197,7 +199,9 @@ router.post('/confirm-feed', async (req, res) => {
       'macro': 1000000,
     };
 
-    const profile = await SocialProfile.create({
+    // Every string fitted to its column (Task #1851) — the proposal is
+    // AI-generated, and confirming it must not fail on "value too long".
+    const { fitted: createRecord, truncated } = fitRecordToModel(SocialProfile, {
       handle:          feed_proposal.handle,
       display_name:    feed_proposal.display_name,
       platform:        feed_proposal.platform,
@@ -207,6 +211,9 @@ router.post('/confirm-feed', async (req, res) => {
       status:          'generated',
       auto_generated:  true,
     });
+    warnTruncated('confirm-feed', truncated);
+    attempted = createRecord;
+    const profile = await SocialProfile.create(createRecord);
 
     // Link the profile back to the character
     await character.update({
@@ -236,6 +243,7 @@ router.post('/confirm-feed', async (req, res) => {
     });
   } catch (err) {
     console.error('[characterGenerationRoutes] /confirm-feed error:', err);
+    logValueTooLong('confirm-feed', err, SocialProfile, attempted);
     res.status(500).json({ error: err.message });
   }
 });
