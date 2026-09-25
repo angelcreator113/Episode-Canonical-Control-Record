@@ -1,3 +1,15 @@
+> **POINTER BANNER - "`CharacterState` IS NOT PARANOID" WAS INACCURATE UNTIL
+> THE FIX IS DEPLOYED (added 2026-09-25, additive, Task #1832).**
+>
+> The "`.unscoped()` question" section says `CharacterState` is not paranoid.
+> The model set no `paranoid`, so it inherited `paranoid: true` from the global
+> `define`, and its generated SQL carried `deleted_at`. Task #1832 adds
+> `paranoid: false`. The line's guidance (plain `findOne`, no `.unscoped()`)
+> holds once that fix is live.
+> `F-Stats-1_CharacterState_Paranoid_Note_2026-09-25.md` carries the evidence
+> and the period. **This banner points; it does not carry.** This document's
+> body is unedited.
+
 # F-Stats-1 Fix Plan v1.17
 
 ## What changed in v1.17

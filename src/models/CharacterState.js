@@ -32,6 +32,7 @@ module.exports = (sequelize) => {
     tableName: 'character_state',
     underscored: true,
     timestamps: true,
+    paranoid: false, // table has no deleted_at; never soft-deleted (Task #1832)
   });
   return CharacterState;
 };
