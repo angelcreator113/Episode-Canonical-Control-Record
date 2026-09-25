@@ -29,6 +29,12 @@ const {
   logValueTooLong,
 } = require('../utils/fitToModel');
 
+const {
+  handleKey,
+  findHandleHolder,
+  handleTakenMessage,
+} = require('../utils/socialProfileHandle');
+
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
@@ -89,7 +95,26 @@ function categorizeError(err) {
 // SHARED PROFILE GENERATION — Deduplicated (#4)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Task #1893: a bulk item whose handle is taken (live or soft-deleted, any
+// case, with or without @) is skipped and reported, never saved over.
+function skippedResult(creator, reason) {
+  return { handle: creator.handle, platform: creator.platform, status: 'skipped', reason };
+}
+
 async function generateSingleProfile(creator, { db, seriesId, characterContext, characterKey: _characterKey, feedLayer }) {
+  const canSave = !!(db && db.SocialProfile);
+
+  // The handle is known before the model call (it is the candidate's own
+  // input), so a taken handle is refused here — no Sonnet cost, no write.
+  if (canSave) {
+    const holder = await findHandleHolder(db, creator.handle);
+    if (holder) {
+      const reason = handleTakenMessage(creator.handle, holder);
+      console.warn(`[bulk-generate] Skipped ${creator.handle} before generation: ${reason}`);
+      return skippedResult(creator, reason);
+    }
+  }
+
   const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext);
   // Keep the timer handle and clear it once the race settles (Task #1859),
   // so no 120s timer outlives its profile and holds the event loop open.
@@ -128,9 +153,11 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
   const safeArchetype = sanitizeEnum(profile.archetype, VALID_ARCHETYPES, 'polished_curator');
   const safeTrajectory = sanitizeEnum(profile.current_trajectory, VALID_TRAJECTORIES, 'rising');
 
-  // Save to DB — findOrCreate to prevent duplicates on retry
+  // Save to DB — a plain create. The old findOrCreate reused an existing
+  // (handle, platform) row and overwrote its fields (Task #1893); a retry of
+  // the same batch now reports the rows it made the first time as skipped.
   let saved = null;
-  if (db && db.SocialProfile) {
+  if (canSave) {
     const { fitted: defaults, truncated } = fitRecordToModel(db.SocialProfile, {
       vibe_sentence: creator.vibe_sentence,
       display_name: profile.display_name,
@@ -163,31 +190,23 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
       series_id: seriesId || null,
       feed_layer: feedLayer || 'real_world',
     });
-    // The lookup key is fitted too, so a retry finds the row it created.
-    const { fitted: where, truncated: whereTruncated } = fitRecordToModel(db.SocialProfile, {
+    const { fitted: identity, truncated: identityTruncated } = fitRecordToModel(db.SocialProfile, {
       handle: creator.handle, platform: creator.platform,
     });
-    warnTruncated('bulk-generate', [...whereTruncated, ...truncated]);
+    warnTruncated('bulk-generate', [...identityTruncated, ...truncated]);
 
-    let attempted = { ...where, ...defaults };
+    // Re-check the stored (fitted) handle just before the insert: the model
+    // call takes seconds, and another path may have taken the handle since.
+    const holder = await findHandleHolder(db, identity.handle);
+    if (holder) {
+      const reason = handleTakenMessage(identity.handle, holder);
+      console.warn(`[bulk-generate] Skipped ${creator.handle} before save: ${reason}`);
+      return skippedResult(creator, reason);
+    }
+
+    const attempted = { ...identity, ...defaults };
     try {
-      const [record, created] = await db.SocialProfile.findOrCreate({ where, defaults });
-      saved = record;
-      if (!created) {
-        const { fitted: updateRecord, truncated: updateTruncated } = fitRecordToModel(db.SocialProfile, {
-          vibe_sentence: defaults.vibe_sentence,
-          display_name: defaults.display_name,
-          archetype: safeArchetype,
-          content_persona: profile.content_persona,
-          full_profile: profile,
-          lala_relevance_score: profile.lala_relevance_score,
-          status: 'generated',
-          feed_layer: feedLayer || record.feed_layer || 'real_world',
-        });
-        warnTruncated('bulk-generate update', updateTruncated);
-        attempted = updateRecord;
-        await record.update(updateRecord);
-      }
+      saved = await db.SocialProfile.create(attempted);
     } catch (err) {
       console.error(`[bulk-generate] Save failed for @${creator.handle}:`, err.message);
       logValueTooLong('bulk-generate', err, db.SocialProfile, attempted);
@@ -211,6 +230,28 @@ async function generateSingleProfile(creator, { db, seriesId, characterContext, 
     lala_score: profile.lala_relevance_score || 0,
     archetype: saved ? safeArchetype : (profile.archetype || null),
   };
+}
+
+// Two items in one batch with the same handle (any case, with or without @)
+// would both pass the lookup before either is saved; the later ones are
+// skipped up front (Task #1893). Returns a Map index → skipped result.
+function duplicatesInBatch(creators) {
+  const seen = new Map();
+  const dupes = new Map();
+  creators.forEach((c, i) => {
+    const key = handleKey(c && c.handle);
+    if (!key) return;
+    if (seen.has(key)) {
+      dupes.set(i, skippedResult(c, `${c.handle} appears earlier in this batch (as ${creators[seen.get(key)].handle}) — skipped.`));
+    } else {
+      seen.set(key, i);
+    }
+  });
+  return dupes;
+}
+
+function skippedList(results) {
+  return results.filter(r => r && r.status === 'skipped').map(r => ({ handle: r.handle, reason: r.reason }));
 }
 
 // ── Concurrency limiter for parallel generation (#2) ─────────────────────────
@@ -540,7 +581,9 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
     const db = getModels();
     const CONCURRENCY = Math.min(Math.max(concurrency || 3, 1), 5);
 
-    const tasks = creators.map(c => async () => {
+    const batchDupes = duplicatesInBatch(creators);
+    const tasks = creators.map((c, i) => async () => {
+      if (batchDupes.has(i)) return batchDupes.get(i);
       try {
         return await generateSingleProfile(c, { db, seriesId: series_id, characterContext: character_context, characterKey: character_key, feedLayer: feed_layer });
       } catch (creatorErr) {
@@ -562,10 +605,12 @@ router.post('/generate', requireAuth, aiRateLimiter, async (req, res) => {
 
     const succeeded = results.filter(r => r.status === 'success').length;
     const failed    = results.filter(r => r.status === 'failed').length;
+    const skipped   = skippedList(results);
 
     return res.json({
       results,
-      summary: { total: creators.length, succeeded, failed },
+      skipped,
+      summary: { total: creators.length, succeeded, failed, skipped: skipped.length },
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -735,10 +780,16 @@ async function processJobInBackground(jobId, concurrency = 3) {
       let failedCount = 0;
 
       // Build tasks for concurrent processing
+      const batchDupes = duplicatesInBatch(candidates);
       const tasks = candidates.map((c, idx) => async () => {
         // Check cancellation before starting (#5)
         if (cancelledJobs.has(String(jobId))) {
           return { handle: c.handle, platform: c.platform, status: 'failed', error: 'Job cancelled', error_category: 'cancelled', skipped: true };
+        }
+        if (batchDupes.has(idx)) {
+          const dupe = batchDupes.get(idx);
+          notifyJobSSE(jobId, 'profile_skipped', { index: idx, result: dupe, completed: completedCount, failed: failedCount, total: candidates.length });
+          return dupe;
         }
 
         try {
@@ -749,6 +800,10 @@ async function processJobInBackground(jobId, concurrency = 3) {
             characterKey: job.character_key,
             feedLayer: job.character_context?.feed_layer || 'real_world',
           });
+          if (result.status === 'skipped') {
+            notifyJobSSE(jobId, 'profile_skipped', { index: idx, result, completed: completedCount, failed: failedCount, total: candidates.length });
+            return result;
+          }
           completedCount++;
 
           // SSE: push each completed profile in real-time (#1, #10)
@@ -794,6 +849,8 @@ async function processJobInBackground(jobId, concurrency = 3) {
       completedCount = results.filter(r => r.status === 'success').length;
       failedCount = results.filter(r => r.status === 'failed').length;
 
+      const skipped = skippedList(results);
+
       // Check if we were cancelled mid-run
       const finalStatus = cancelledJobs.has(String(jobId)) ? 'cancelled' : 'completed';
       cancelledJobs.delete(String(jobId));
@@ -811,6 +868,7 @@ async function processJobInBackground(jobId, concurrency = 3) {
         status: finalStatus,
         completed: completedCount,
         failed: failedCount,
+        skipped,
         total: candidates.length,
         results,
       });
@@ -824,7 +882,7 @@ async function processJobInBackground(jobId, concurrency = 3) {
         jobSSEClients.delete(String(jobId));
       }
 
-      console.log(`✅ Bulk job #${jobId} ${finalStatus}: ${completedCount} succeeded, ${failedCount} failed out of ${candidates.length}`);
+      console.log(`✅ Bulk job #${jobId} ${finalStatus}: ${completedCount} succeeded, ${failedCount} failed, ${skipped.length} skipped (handle taken) out of ${candidates.length}`);
     } catch (err) {
       console.error(`❌ Bulk job #${jobId} fatal error:`, err.message);
       cancelledJobs.delete(String(jobId));

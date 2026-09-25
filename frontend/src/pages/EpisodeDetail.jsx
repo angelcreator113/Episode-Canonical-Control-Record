@@ -16,7 +16,7 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // fetched when the user clicks into the tab. PhonePreviewMode is lazy
 // because the player overlay only mounts when "Preview Phone" is clicked.
 const EpisodeAssetsTab = lazy(() => import('../components/Episodes/EpisodeAssetsTab'));
-const EpisodePhoneMissionsTab = lazy(() => import('../components/Episodes/EpisodePhoneMissionsTab'));
+const EpisodeLalasPhoneTab = lazy(() => import('../components/Episodes/EpisodeLalasPhoneTab'));
 const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
 const EpisodeDistributionTab = lazy(() => import('../components/Episodes/EpisodeDistributionTab'));
 const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobeGameplay'));
@@ -25,6 +25,7 @@ const EpisodeScenesTab = lazy(() => import('../components/Episodes/EpisodeScenes
 const PhonePreviewMode = lazy(() => import('../components/PhonePreviewMode'));
 import usePhonePlayback from '../hooks/usePhonePlayback';
 import api from '../services/api';
+import { getEpisodeEvents } from '../services/episodeEventsApi';
 import './EpisodeDetail.css';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
@@ -303,18 +304,21 @@ const EpisodeDetail = () => {
     fetchEpisodeScenes();
   }, [episodeId, activeTab, toast]);
 
-  // Load events + character state for wardrobe gameplay
+  // Load events + character state for wardrobe gameplay. Gated on the
+  // Production → Wardrobe sub-tab: since #534 resolveEpTab maps `wardrobe`
+  // to activeTab 'production' / sub 'wardrobe', so the old
+  // `activeTab !== 'wardrobe'` gate never let this run (Task #1906).
   useEffect(() => {
-    if (!episode || activeTab !== 'wardrobe') return;
+    if (!episode || tabKey !== 'production.wardrobe') return;
     const showId = episode.show_id || episode.showId;
     if (!showId) return;
 
-    // Fetch events injected into this episode
+    // The episode's own events — anchor from the brief first, then any
+    // additional linked events. No scan of the show's event list.
     const fetchEvents = async () => {
       try {
-        const data = await listWorldEventsApi(showId);
-        const allEvents = data.events || [];
-        const linked = allEvents.filter(e => e.used_in_episode_id === episodeId);
+        const data = await getEpisodeEvents(episodeId);
+        const linked = data?.events || [];
         setEpisodeEvents(linked);
         if (linked.length > 0 && !selectedEvent) setSelectedEvent(linked[0]);
       } catch (err) {
@@ -334,7 +338,7 @@ const EpisodeDetail = () => {
 
     fetchEvents();
     fetchCharState();
-  }, [episode, activeTab, episodeId]);
+  }, [episode, tabKey, episodeId]);
 
   // Handle scene selection from library
   const handleSceneSelect = async (libraryScene) => {
@@ -828,28 +832,13 @@ const EpisodeDetail = () => {
           <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
         )}
 
-        {/* Phone missions sub-tab — episode-scoped view of show-wide +
-            episode-specific missions, with inline active toggle and a jump
-            into the existing MissionEditor for full CRUD. */}
+        {/* Phone tab — Lala's Phone for this episode (issue #1908): the
+            Preview Phone action (issue #1601 moved it here, #1605 relabelled
+            it; same phone.start handler and overlay), what is on the phone,
+            the deferred beat-requirements notice, and missions as a section
+            (EpisodePhoneMissionsTab, unchanged toggles + MissionEditor). */}
         {tabKey === 'production.phone' && (
-          <>
-            {/* Preview Phone — relocated from the Episode Detail header
-                (issue #1601), relabelled from "Play on Phone" (issue #1605,
-                a producer previews the phone experience, doesn't play it
-                for an audience). Same phone.start handler and overlay as
-                before; the mobile icon-only treatment it needed in the
-                header's tight row no longer applies here. */}
-            <div style={{ marginBottom: 16 }}>
-              <button
-                onClick={phone.start}
-                title="Preview Phone"
-                style={{padding:'5px 12px', background:'linear-gradient(135deg,#B8962E,#8a6c1d)', border:'none', borderRadius:6, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontFamily:"'DM Mono', monospace", letterSpacing:0.3}}
-              >
-                ▶ Preview Phone
-              </button>
-            </div>
-            <EpisodePhoneMissionsTab episode={episode} />
-          </>
+          <EpisodeLalasPhoneTab episode={episode} onPreview={phone.start} />
         )}
 
         {/* Checklist Tab */}
