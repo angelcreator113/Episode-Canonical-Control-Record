@@ -102,6 +102,8 @@ function makeSequelize() {
       return /^\s*SELECT/.test(sql) ? DELIVERABLES.map((d) => ({ ...d })) : [[], 0];
     }
     if (/^\s*SELECT/.test(sql)) return [];
+    // Task #1933: the character_state write is conditional and returns the new balance.
+    if (/UPDATE character_state\b[\s\S]*RETURNING coins/.test(sql)) return [[{ coins: 500 }], 1];
     return [[], 0];
   });
   return { queries, sequelize: { query, QueryTypes: { SELECT: 'SELECT' } } };

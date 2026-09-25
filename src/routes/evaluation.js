@@ -29,6 +29,7 @@ const {
 } = require('../utils/evaluationFormula');
 
 const { requireAuth, authorize } = require('../middleware/auth');
+const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 
 
 // ─── HELPERS ───
@@ -550,6 +551,10 @@ router.post('/episodes/:id/accept', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Accept error:', error);
+    // Task #1933: completion refuses a result that would take coins below zero.
+    if (error instanceof InsufficientCoinsError) {
+      return res.status(error.status).json(insufficientCoinsBody(error));
+    }
     return res.status(500).json({ error: 'Accept failed', message: error.message });
   }
 });
@@ -567,6 +572,19 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
 
     if (!show_id) return res.status(400).json({ error: 'show_id is required' });
 
+    // Task #1933: coins are never below zero. A manual edit that sets a
+    // negative (or non-numeric) balance is refused, not clamped.
+    if (coins !== undefined) {
+      const blank = coins === null || (typeof coins === 'string' && coins.trim() === '');
+      const parsedCoins = blank ? NaN : Number(coins);
+      if (!Number.isInteger(parsedCoins) || parsedCoins < 0) {
+        return res.status(400).json({
+          error: `coins must be a whole number of at least 0 — got ${JSON.stringify(coins)}`,
+          code: 'INVALID_COINS',
+        });
+      }
+    }
+
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
@@ -582,7 +600,7 @@ router.post('/characters/:key/state/update', requireAuth, async (req, res) => {
     };
 
     const newState = {
-      coins: coins !== undefined ? parseInt(coins) : state.coins,
+      coins: coins !== undefined ? Number(coins) : state.coins,
       reputation: reputation !== undefined ? Math.max(0, Math.min(10, parseInt(reputation))) : state.reputation,
       brand_trust: brand_trust !== undefined ? Math.max(0, Math.min(10, parseInt(brand_trust))) : state.brand_trust,
       influence: influence !== undefined ? Math.max(0, Math.min(10, parseInt(influence))) : state.influence,

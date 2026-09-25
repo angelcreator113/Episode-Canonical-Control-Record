@@ -25,6 +25,7 @@ const {
   generateNarrativeLine,
   FORMULA_VERSION,
 } = require('../utils/evaluationFormula');
+const { changeCoins, InsufficientCoinsError } = require('./coinBalanceGuard');
 
 // ─── SOCIAL TASK STAT BONUSES ────────────────────────────────────────────────
 // Completing social tasks should affect more than just coins
@@ -350,15 +351,30 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     }
   }
 
-  // ── 11. Finalize financials (coins come from here, not evaluation) ──
-  const { finalizeEpisodeFinancials } = require('./financialTransactionService');
-  const financialResult = await finalizeEpisodeFinancials(episodeId, showId, sequelize);
-
   // Replace evaluation coin delta with financial pipeline result
   // Tier reward gets added as a transaction too
   const tierCoinRewards = { slay: 150, pass: 75, safe: 25, fail: -25 };
   const tierReward = tierCoinRewards[evalResult.tier_final] || 0;
   const paidBonus = (eventContext.cost > 0) ? (evalResult.tier_final === 'slay' ? 50 : evalResult.tier_final === 'pass' ? 25 : 0) : 0;
+  const coinDeltaFrom = (result) => Math.round(
+    (result?.summary?.total_income || 0) - (result?.summary?.total_expenses || 0) + tierReward + paidBonus
+  );
+
+  // ── 10c. Refuse a completion that would take coins below zero (Task #1933) ──
+  // Before #1933 the coin delta was applied with no check (applyDeltas
+  // floors coins at −9999), so an episode whose entry cost, wardrobe and
+  // extras exceeded Lala's balance left character_state negative. The
+  // financials are computed first without writing anything, so a refusal
+  // leaves no ledger rows behind.
+  const { finalizeEpisodeFinancials } = require('./financialTransactionService');
+  const financialPreview = await finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun: true });
+  const projectedCoinDelta = coinDeltaFrom(financialPreview);
+  if (projectedCoinDelta < 0 && currentStats.coins + projectedCoinDelta < 0) {
+    throw new InsufficientCoinsError({ needed: -projectedCoinDelta, have: currentStats.coins, action: 'episode_completion' });
+  }
+
+  // ── 11. Finalize financials (coins come from here, not evaluation) ──
+  const financialResult = await finalizeEpisodeFinancials(episodeId, showId, sequelize);
 
   // Log tier reward as a financial transaction
   if (tierReward !== 0) {
@@ -413,7 +429,7 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
 
   // Final coin delta = financial pipeline net + tier reward + paid bonus
   const financialNet = (financialResult.summary?.total_income || 0) - (financialResult.summary?.total_expenses || 0);
-  mergedDeltas.coins = financialNet + tierReward + paidBonus;
+  mergedDeltas.coins = coinDeltaFrom(financialResult);
 
   // ── 11b. Financial mood deltas ──
   // Translate the episode's financial outcome into stress deltas so Lala's
@@ -462,14 +478,22 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   // ── 12. Apply all deltas to character state ──
   const newState = applyDeltas(currentStats, mergedDeltas);
 
-  await sequelize.query(
-    `UPDATE character_state
-     SET coins = :coins, reputation = :reputation, brand_trust = :brand_trust,
+  // Task #1933: coins move by the delta in the same statement that checks
+  // the balance (changeCoins: `coins + :delta >= 0`), not by writing back a
+  // total computed from the read in step 4. A spend that landed after that
+  // read can no longer make this write go below zero; it is refused.
+  newState.coins = await changeCoins(sequelize, {
+    stateId: characterState.id,
+    delta: mergedDeltas.coins,
+    action: 'episode_completion',
+    extraSet: `reputation = :reputation, brand_trust = :brand_trust,
          influence = :influence, stress = :stress,
-         last_applied_episode_id = :episodeId, updated_at = NOW()
-     WHERE id = :stateId`,
-    { replacements: { ...newState, episodeId, stateId: characterState.id } }
-  );
+         last_applied_episode_id = :episodeId`,
+    extraReplacements: {
+      reputation: newState.reputation, brand_trust: newState.brand_trust,
+      influence: newState.influence, stress: newState.stress, episodeId,
+    },
+  });
 
   // ── 13. Write character_state_history with evaluation reference ──
   const evaluationId = uuidv4();
