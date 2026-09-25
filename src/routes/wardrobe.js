@@ -111,6 +111,7 @@ router.get('/outfit/:episode_id', requireAuth, async (req, res) => {
       FROM episode_wardrobe ew
       JOIN wardrobe w ON w.id = ew.wardrobe_id
       WHERE ew.episode_id = :episode_id
+        AND ew.deleted_at IS NULL
         AND (w.deleted_at IS NULL)
         AND w.parent_item_id IS NULL
       ORDER BY ew.created_at ASC
@@ -1283,12 +1284,22 @@ router.post('/select', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
     }
 
-    // 2. Upsert link — use ONLY guaranteed columns (id, episode_id, wardrobe_id, created_at, updated_at)
-    //    The RDS table may have been created from a simpler migration that lacks approval_status, worn_at, etc.
+    // 2. Upsert link. Task #1924: the styling game's pick is a deliberate
+    //    choice, so it is the episode's approved look (Evoni's ruling,
+    //    2026-09-25: existing picks are 'approved', and new ones must be
+    //    too). approval_status, approved_at and deleted_at arrive with
+    //    20260925000001-add-approval-columns-to-episode-wardrobe.js, which
+    //    runs before this code deploys. Picking a removed (soft-deleted) or
+    //    unapproved pair again brings it back as approved.
     await models.sequelize.query(
-      `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, created_at, updated_at)
-       VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, NOW(), NOW())
-       ON CONFLICT (episode_id, wardrobe_id) DO UPDATE SET updated_at = NOW()`,
+      `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, approved_at, created_at, updated_at)
+       VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW(), NOW())
+       ON CONFLICT (episode_id, wardrobe_id) DO UPDATE SET
+         approval_status = 'approved',
+         approved_at = COALESCE(episode_wardrobe.approved_at, NOW()),
+         rejection_reason = NULL,
+         deleted_at = NULL,
+         updated_at = NOW()`,
       { replacements: { episode_id, wardrobe_id } }
     );
 
@@ -1484,14 +1495,20 @@ const CONFIDENCE_LEVELS = [
  * so existing consumers (EpisodeWardrobeTab, completion service) keep
  * working without changes. Adds `signals`, `narrative_mood`, `slots`
  * for richer UIs that opt in.
+ *
+ * Task #1924: removed links (ew.deleted_at) are never scored. With
+ * { approvedOnly: true } (episode completion) only the approved look is
+ * scored, the same pieces completion reads for its wardrobe bonuses.
  */
-async function getOutfitScore(models, episodeId, event = {}, characterState = null, arcStage = null) {
+async function getOutfitScore(models, episodeId, event = {}, characterState = null, arcStage = null, { approvedOnly = false } = {}) {
   try {
     const [rows] = await models.sequelize.query(
       `SELECT w.*
        FROM episode_wardrobe ew
        JOIN wardrobe w ON w.id = ew.wardrobe_id
        WHERE ew.episode_id = :episodeId
+       AND ew.deleted_at IS NULL
+       ${approvedOnly ? "AND ew.approval_status = 'approved'" : ''}
        AND w.deleted_at IS NULL
        ORDER BY w.clothing_category`,
       { replacements: { episodeId } }
@@ -1592,7 +1609,7 @@ router.get('/outfit-history/:showId', requireAuth, async (req, res) => {
        JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
        JOIN episodes e ON e.id = ew.episode_id AND e.deleted_at IS NULL
        LEFT JOIN world_events we ON we.used_in_episode_id = e.id
-       WHERE e.show_id = :showId
+       WHERE e.show_id = :showId AND ew.deleted_at IS NULL
        ORDER BY e.episode_number ASC, w.clothing_category ASC`,
       { replacements: { showId } }
     );

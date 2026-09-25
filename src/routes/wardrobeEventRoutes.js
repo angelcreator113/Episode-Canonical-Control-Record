@@ -286,8 +286,12 @@ router.post('/:episodeId/lock-outfit', requireAuth, async (req, res) => {
     }
 
     const { EpisodeWardrobe, Wardrobe } = require('../models');
+    const { linkEpisodeWardrobe } = require('../services/episodeWardrobeLinks');
 
-    // Remove existing outfit links for this episode
+    // Remove existing outfit links for this episode. EpisodeWardrobe is
+    // paranoid (Task #1924): this soft-deletes them, so a piece locked again
+    // is restored by linkEpisodeWardrobe rather than re-created (the pair is
+    // unique in the table).
     await EpisodeWardrobe.destroy({ where: { episode_id: episodeId } });
 
     // Create new links
@@ -295,12 +299,11 @@ router.post('/:episodeId/lock-outfit', requireAuth, async (req, res) => {
     for (const wardrobeId of wardrobe_ids) {
       const item = await Wardrobe.findByPk(wardrobeId);
       if (item) {
-        const link = await EpisodeWardrobe.create({
-          episode_id: episodeId,
-          wardrobe_id: wardrobeId,
-          approval_status: 'approved',
-          worn_at: new Date(),
-        });
+        const [link] = await linkEpisodeWardrobe(
+          EpisodeWardrobe,
+          { episode_id: episodeId, wardrobe_id: wardrobeId },
+          { approval_status: 'approved', approved_at: new Date(), worn_at: new Date() }
+        );
         links.push({ link, item: item.toJSON() });
       }
     }

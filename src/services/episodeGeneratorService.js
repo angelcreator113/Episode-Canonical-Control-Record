@@ -898,16 +898,22 @@ Return ONLY JSON.` }],
   try {
     const outfitPieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : (event.outfit_pieces || []);
     if (outfitPieces.length > 0 && models.EpisodeWardrobe) {
+      // Task #1924: the copy is the episode's approved look. Until the
+      // approval columns existed every one of these writes failed here.
+      // linkEpisodeWardrobe also restores a pair whose link was removed
+      // (EpisodeWardrobe is paranoid; findOrCreate would hit the unique pair).
+      const { linkEpisodeWardrobe } = require('./episodeWardrobeLinks');
       for (const piece of outfitPieces) {
-        await models.EpisodeWardrobe.findOrCreate({
-          where: { episode_id: episode.id, wardrobe_id: piece.id },
-          defaults: { episode_id: episode.id, wardrobe_id: piece.id, approval_status: 'approved', worn_at: new Date() },
-        });
+        await linkEpisodeWardrobe(
+          models.EpisodeWardrobe,
+          { episode_id: episode.id, wardrobe_id: piece.id },
+          { approval_status: 'approved', approved_at: new Date(), worn_at: new Date() }
+        );
       }
       console.log(`[EpisodeGenerator] ${outfitPieces.length} outfit pieces linked from event`);
     }
   } catch (outfitErr) {
-    console.warn('[EpisodeGenerator] Outfit linking failed (non-blocking):', outfitErr.message);
+    console.error('[EpisodeGenerator] Outfit linking failed (non-blocking):', outfitErr.message);
   }
 
   // Auto-link all event assets (invitation, checklist, notification) to this episode

@@ -117,6 +117,69 @@ function computeWardrobeBonuses(outfitPieces, event) {
   };
 }
 
+// ─── THE EPISODE'S LOOK (Task #1924) ─────────────────────────────────────────
+// Before #1924 the look query named approval_status and deleted_at, neither
+// of which episode_wardrobe had (Evoni's production read, ATTESTED
+// 2026-09-25), so it failed into a silent catch and the wardrobe bonuses
+// were scored on the event's outfit_pieces every time, with nothing in the
+// result saying so.
+//
+// PROPOSAL, not a ruling (Evoni rules): when the episode has no approved
+// look, score the wardrobe bonuses on the event's pieces and say so in the
+// result (outfit.source 'event_pieces', outfit.label). Setting
+// EVENT_PIECES_FALLBACK to false is the other option: no look, no wardrobe
+// bonuses (outfit.source 'none'). Either way the outfit match (outfit_match,
+// accessory_match) scores only the approved look and is 0 without one
+// (outfit.match_scored says which).
+const EVENT_PIECES_FALLBACK = true;
+const EVENT_PIECES_LABEL = "scored on the event's pieces";
+const NO_LOOK_LABEL = 'no approved look; not scored for outfit';
+
+function parseEventPieces(event) {
+  if (!event?.outfit_pieces) return [];
+  try {
+    const pieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : event.outfit_pieces;
+    return Array.isArray(pieces) ? pieces : [];
+  } catch (parseErr) {
+    console.error('[episodeCompletion] event outfit_pieces is not valid JSON:', parseErr?.message);
+    return [];
+  }
+}
+
+/**
+ * The approved, not-removed episode_wardrobe rows of an episode, or (with
+ * EVENT_PIECES_FALLBACK) the event's pieces, labelled as such.
+ *
+ * @returns {Promise<{ pieces: object[], outfit: { source: 'episode_look'|'event_pieces'|'none',
+ *   label: string|null, pieces: number, reason: string|null, match_scored: boolean } }>}
+ */
+async function loadEpisodeLook(sequelize, episodeId, event) {
+  let reason = 'no_approved_look';
+  try {
+    const rows = await sequelize.query(
+      `SELECT w.brand, w.name, w.price, w.tier, w.clothing_category AS category
+       FROM episode_wardrobe ew
+       JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
+       WHERE ew.episode_id = :episodeId AND ew.approval_status = 'approved' AND ew.deleted_at IS NULL`,
+      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (rows && rows.length) {
+      return { pieces: rows, outfit: { source: 'episode_look', label: null, pieces: rows.length, reason: null, match_scored: false } };
+    }
+  } catch (lookErr) {
+    reason = 'look_query_failed';
+    console.error(`[episodeCompletion] episode ${episodeId}: the look query failed:`, lookErr?.message);
+  }
+
+  const eventPieces = EVENT_PIECES_FALLBACK ? parseEventPieces(event) : [];
+  if (eventPieces.length) {
+    console.warn(`[episodeCompletion] episode ${episodeId}: ${reason}; wardrobe bonuses ${EVENT_PIECES_LABEL} (${eventPieces.length})`);
+    return { pieces: eventPieces, outfit: { source: 'event_pieces', label: EVENT_PIECES_LABEL, pieces: eventPieces.length, reason, match_scored: false } };
+  }
+  console.warn(`[episodeCompletion] episode ${episodeId}: ${reason}; ${NO_LOOK_LABEL}`);
+  return { pieces: [], outfit: { source: 'none', label: NO_LOOK_LABEL, pieces: 0, reason, match_scored: false } };
+}
+
 // ─── MAIN: COMPLETE EPISODE ──────────────────────────────────────────────────
 
 async function completeEpisode(episodeId, showId, sequelize) {
@@ -139,23 +202,10 @@ async function completeEpisode(episodeId, showId, sequelize) {
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => []);
 
-  // Parse outfit pieces — prefer episode_wardrobe table over event column (which doesn't exist)
-  let outfitPieces = [];
-  try {
-    const wardrobeRows = await sequelize.query(
-      `SELECT w.brand, w.name, w.price, w.tier, w.clothing_category AS category
-       FROM episode_wardrobe ew
-       JOIN wardrobe w ON w.id = ew.wardrobe_id
-       WHERE ew.episode_id = :episodeId AND ew.approval_status = 'approved' AND ew.deleted_at IS NULL`,
-      { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
-    );
-    outfitPieces = wardrobeRows || [];
-  } catch { /* non-blocking */ }
-
-  // Fallback: parse from event column if wardrobe table returned nothing
-  if (!outfitPieces.length && event?.outfit_pieces) {
-    outfitPieces = typeof event.outfit_pieces === 'string' ? JSON.parse(event.outfit_pieces) : (event.outfit_pieces || []);
-  }
+  // The episode's look: its approved episode_wardrobe rows (Task #1924).
+  // Never the event's pieces without saying so — see loadEpisodeLook.
+  const look = await loadEpisodeLook(sequelize, episodeId, event);
+  const outfitPieces = look.pieces;
 
   // ── 3. Load social tasks ──
   let socialTasks = [];
@@ -213,13 +263,17 @@ async function completeEpisode(episodeId, showId, sequelize) {
         const arc = await getWardrobeGrowthArc(showId, models);
         arcStage = arc?.arc_stage || null;
       } catch { /* no-op — authenticity signal just doesn't fire */ }
-      const outfitResult = await getOutfitScore(models, episodeId, eventContext, characterState, arcStage);
+      // Task #1924: the approved look only, the same pieces as `look`.
+      const outfitResult = await getOutfitScore(models, episodeId, eventContext, characterState, arcStage, { approvedOnly: true });
       // Outfit match scaled to the 0-35 cap (formerly 0-25). Score is 0-100
       // from scoreOutfitForEvent; multiply by 0.35 to use the full new range.
       outfitMatch = Math.round((outfitResult?.score || 0) * 0.35);
       accessoryMatch = Math.round(((outfitResult?.breakdown?.aesthetic || 0) + (outfitResult?.breakdown?.coverage || 0)) * 0.5);
+      look.outfit.match_scored = !!outfitResult?.hasOutfit;
     }
-  } catch { /* wardrobe scoring not available */ }
+  } catch (scoreErr) {
+    console.error('[episodeCompletion] outfit match scoring failed; outfit_match is 0:', scoreErr?.message);
+  }
 
   // ── 6. Run evaluation formula ──
   const currentStats = {
@@ -420,7 +474,7 @@ async function completeEpisode(episodeId, showId, sequelize) {
       id: uuidv4(), showId, episodeId, evaluationId,
       deltas: JSON.stringify(mergedDeltas),
       stateAfter: JSON.stringify(newState),
-      notes: `${evalResult.tier_final.toUpperCase()} (${evalResult.score}/100) | Coins: ${mergedDeltas.coins >= 0 ? '+' : ''}${mergedDeltas.coins} | Social: ${socialBonuses.detail?.completed || 0}/${socialBonuses.detail?.total || 0} tasks | Outfit: ${outfitPieces.length} pieces`,
+      notes: `${evalResult.tier_final.toUpperCase()} (${evalResult.score}/100) | Coins: ${mergedDeltas.coins >= 0 ? '+' : ''}${mergedDeltas.coins} | Social: ${socialBonuses.detail?.completed || 0}/${socialBonuses.detail?.total || 0} tasks | Outfit: ${outfitPieces.length} pieces${look.outfit.label ? ` (${look.outfit.label})` : ''}`,
     }}
   );
 
@@ -433,6 +487,7 @@ async function completeEpisode(episodeId, showId, sequelize) {
     evaluation_id: evaluationId,
     social_task_bonuses: socialBonuses,
     wardrobe_bonuses: wardrobeBonuses,
+    outfit: look.outfit,
     financial_summary: financialResult.summary,
     completed_at: new Date().toISOString(),
   };
@@ -471,7 +526,7 @@ async function completeEpisode(episodeId, showId, sequelize) {
 Event: ${event?.name || 'No event'}. Venue: ${event?.venue_name || 'Unknown'}.
 Stat changes: ${Object.entries(mergedDeltas).filter(([,v]) => v !== 0).map(([k,v]) => `${k}: ${v >= 0 ? '+' : ''}${v}`).join(', ')}.
 Final state: coins=${newState.coins}, reputation=${newState.reputation}, influence=${newState.influence}, brand_trust=${newState.brand_trust}, stress=${newState.stress}.
-Social tasks: ${socialBonuses.detail?.completed || 0}/${socialBonuses.detail?.total || 0} completed. Outfit: ${outfitPieces.length} pieces.
+Social tasks: ${socialBonuses.detail?.completed || 0}/${socialBonuses.detail?.total || 0} completed. Outfit: ${outfitPieces.length} pieces${look.outfit.label ? ` (${look.outfit.label})` : ''}.
 ${narrativeLines.short || ''}`,
         category: 'narrative',
         severity: evalResult.tier_final === 'slay' ? 'important' : 'context',
@@ -640,6 +695,7 @@ ${narrativeLines.short || ''}`,
     new_state: newState,
     social_tasks: socialBonuses.detail,
     wardrobe: wardrobeBonuses.detail,
+    outfit: look.outfit,
     financials: financialResult.summary,
     transactions: (financialResult.transactions || []).length,
     career: careerSummary,
@@ -649,6 +705,7 @@ ${narrativeLines.short || ''}`,
 
 module.exports = {
   completeEpisode,
+  loadEpisodeLook,
   computeSocialTaskBonuses,
   computeWardrobeBonuses,
 };

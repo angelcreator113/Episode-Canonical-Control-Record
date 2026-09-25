@@ -6,6 +6,7 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const { v4: uuidv4 } = require('uuid');
 const wardrobeImageService = require('../services/wardrobeImageService');
 const { applyRemoveBgParams } = require('../services/removeBgParams');
+const { linkEpisodeWardrobe } = require('../services/episodeWardrobeLinks');
 
 // S3 client setup (reuse from assets)
 const s3Client = new S3Client({
@@ -595,7 +596,9 @@ module.exports = {
           {
             model: Episode,
             as: 'episodes',
-            through: { attributes: ['scene_id', 'worn_at', 'notes'] },
+            // Task #1924: Sequelize applies no paranoid filter to a
+            // belongsToMany through model, so removed links are excluded here.
+            through: { attributes: ['scene_id', 'worn_at', 'notes'], where: { deleted_at: null } },
             attributes: ['id', 'episode_number', 'title', 'air_date'],
           },
         ],
@@ -869,6 +872,7 @@ module.exports = {
          FROM episode_wardrobe ew
          JOIN wardrobe w ON w.id = ew.wardrobe_id
          WHERE ew.episode_id = :episode_id 
+         AND ew.deleted_at IS NULL
          AND w.deleted_at IS NULL
          ORDER BY ew.created_at DESC`,
         {
@@ -928,13 +932,13 @@ module.exports = {
         });
       }
 
-      // Create link
-      const link = await EpisodeWardrobe.create({
-        episode_id: episodeId,
-        wardrobe_id: wardrobeId,
-        scene: scene || null,
-        notes: notes || null,
-      });
+      // Create link, or restore one that was removed (Task #1924:
+      // EpisodeWardrobe is paranoid and the pair is unique in the table).
+      const [link] = await linkEpisodeWardrobe(
+        EpisodeWardrobe,
+        { episode_id: episodeId, wardrobe_id: wardrobeId },
+        { scene: scene || null, notes: notes || null }
+      );
 
       // Update wardrobe wear count - disabled until columns are added to model
       // await wardrobeItem.incrementWearCount(new Date());
@@ -1533,6 +1537,7 @@ module.exports = {
         LEFT JOIN (
           SELECT wardrobe_id, COUNT(*) as usage_count
           FROM episode_wardrobe
+          WHERE deleted_at IS NULL
           GROUP BY wardrobe_id
         ) usage ON usage.wardrobe_id = w.id
         WHERE w.deleted_at IS NULL
@@ -1630,6 +1635,7 @@ module.exports = {
         JOIN episodes e ON e.id = ew.episode_id
         LEFT JOIN shows s ON s.id = e.show_id
         WHERE ew.wardrobe_id = :itemId
+        AND ew.deleted_at IS NULL
         AND e.deleted_at IS NULL
         ORDER BY e.episode_number DESC
       `;
