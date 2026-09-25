@@ -67,10 +67,6 @@ src/routes/characterRegistry.js	RegistryCharacter.create	values	sexuality
 src/routes/compositions.js	EpisodeAsset.findOne	where	role
 src/routes/compositions.js	ThumbnailComposition.create	values	template_studio_id
 src/routes/entanglementRoutes.js	SocialProfile.findAll	attributes	follower_count
-src/routes/entanglementRoutes.js	StorytellerLine.create	values	book_id
-src/routes/entanglementRoutes.js	StorytellerLine.create	values	character
-src/routes/entanglementRoutes.js	StorytellerLine.create	values	content
-src/routes/entanglementRoutes.js	StorytellerLine.create	values	source
 src/routes/episodes.js	SceneSet.findAll	attributes	set_type
 src/routes/footage.js	Scene.create	values	type
 src/routes/memories/engine.js	RegistryCharacter.create	values	metadata
