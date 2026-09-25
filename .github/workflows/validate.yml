@@ -47,6 +47,15 @@ jobs:
       - name: Schema agreement (step 1, query vs model)
         run: node scripts/check-schema-agreement.js --baseline scripts/schema-agreement.baseline
 
+      # Ratchet (Task #1875): a model declaring a column, a paranoid deleted_at or
+      # a table that no live migration creates fails only if its key is not in
+      # the baseline; GONE entries are printed and do not fail. Migrations are
+      # not production: this catches drift introduced in code against
+      # src/migrations/, not drift between migrations and the live database
+      # (scripts/check-pending-migrations.js, docs/MIGRATION_DRIFT_READ.md).
+      - name: Schema agreement (step 2, model vs migrations)
+        run: node scripts/check-schema-agreement.js --step2-baseline scripts/schema-agreement-step2.baseline
+
   tests:
     name: Tests
     runs-on: ubuntu-latest
