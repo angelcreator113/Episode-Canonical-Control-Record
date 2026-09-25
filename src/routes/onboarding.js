@@ -503,11 +503,16 @@ router.post('/session-state', requireAuth, async (req, res) => {
   try {
     // Get recent activity
     const [recentLines, recentStories] = await Promise.all([
+      // #1883: StorytellerLine declares text, not content; the old query
+      // failed on every call and this catch swallowed it silently.
       db.StorytellerLine?.findAll({
         limit: 1,
         order: [['updatedAt', 'DESC']],
-        attributes: ['id', 'content', 'status', 'updatedAt'],
-      }).catch(() => []),
+        attributes: ['id', 'text', 'status', 'updatedAt'],
+      }).catch((err) => {
+        console.error('[session-state] recent lines query error:', err?.message);
+        return [];
+      }),
       db.StorytellerChapter?.findAll({
         where: { story_number: { [db.Sequelize?.Op?.gt || 'gt']: 0 } },
         limit: 1,
