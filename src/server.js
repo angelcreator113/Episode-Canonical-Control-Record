@@ -166,6 +166,18 @@ async function startServer() {
       } catch (migErr) {
         console.warn('⚠️  Auto-migration warning:', migErr.message);
       }
+
+      // Task #1909: match ThumbnailComposition's draft columns to the live
+      // table before any request runs, so a model that declares them ahead
+      // of the migration never names a missing column in a SELECT. Read-only
+      // (describeTable); never alters the schema.
+      try {
+        const { syncDraftColumns } = require('./services/compositionDraftColumns');
+        const ready = await syncDraftColumns(sequelize.models.ThumbnailComposition);
+        console.log(`✓ Composition draft columns: ${ready ? 'present' : 'absent (save-draft/apply-draft answer 501)'}`);
+      } catch (draftErr) {
+        console.error('⚠️  Composition draft column check failed:', draftErr.message);
+      }
     } catch (dbError) {
       console.warn(
         '⚠️  Database not available, starting in degraded mode:',
