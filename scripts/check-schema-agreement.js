@@ -79,9 +79,22 @@
  *   paranoid-no-deleted_at  a paranoid model whose table has no deletedAt column
  *   no-table                a model whose table no live migration creates
  *                           (column slot is `-`)
+ *   canon-missing-column    (Task #1924) a model whose table no live migration
+ *                           creates (NOTABLE or ALTERONLY) declares a column
+ *                           that is neither in the canon capture nor added by
+ *                           a live migration. The capture defaults to
+ *                           docs/audit/EvidenceNote_Canon_Schema_Capture_2026-09-17.txt;
+ *                           --step2-capture <file> names another and
+ *                           --step2-capture none turns it off. A table the
+ *                           capture does not list is not compared.
  * generated with --update-baseline, never edited by hand. Models whose table
- * the live tree only alters (ALTERONLY) have no columns compared and are not
- * keyed.
+ * the live tree only alters (ALTERONLY) have no columns compared with the
+ * migration tree and are not keyed as such; since Task #1924 both NOTABLE and
+ * ALTERONLY models are compared with the canon capture (canon-missing-column).
+ * That comparison reads canon as of 2026-09-17 plus every live addColumn, so
+ * a column a live migration adds counts as present whether or not that
+ * migration has run in production, and a column removed from production
+ * after the capture is not seen.
  *
  * Boundary of step 2 (Evoni, 2026-09-25): MIGRATIONS ARE NOT PRODUCTION.
  * Step 2 compares models with the migration tree replayed statically, not
@@ -147,6 +160,12 @@ const CAPTURE = argVal('--capture');
 // checker's own fixtures, tests/fixtures/schema-agreement/). Models still
 // come from <root>/src/models.
 const STEP1_SRC = argVal('--step1-src');
+// Task #1924: step 2 compares a model whose table the live tree does not
+// create (NOTABLE / ALTERONLY) with the canon capture. Default: the
+// 2026-09-17 capture committed in the register; --step2-capture <file>
+// names another; --step2-capture none turns the comparison off.
+const CANON_CAPTURE_DEFAULT = 'docs/audit/EvidenceNote_Canon_Schema_Capture_2026-09-17.txt';
+const STEP2_CAPTURE = argVal('--step2-capture') || CANON_CAPTURE_DEFAULT;
 
 const parser = require(require.resolve('@babel/parser', { paths: [ROOT, __dirname] }));
 
@@ -1352,13 +1371,24 @@ function returnsOf(fn) {
 }
 
 // ─── compare step 2 tables with models ──────────────────────────────────────
-function compareModels(tables) {
+function compareModels(tables, canonCols) {
   const noTable = []; const alteredOnly = []; const missing = []; const paranoidNoDeleted = []; const extra = [];
+  const canonMissing = []; const canonCompared = [];
+  const fieldsOf = (m) => new Set([...m.attrs].filter(a => !m.virtual.has(a)).map(a => m.fieldOf[a]));
+  // Task #1924: a table the live tree does not create has no migration
+  // baseline to compare with, so compare it with canon instead: the canon
+  // capture's columns plus whatever live migrations add to it.
+  const compareWithCanon = (m, t) => {
+    if (!canonCols || !canonCols[m.table]) return;
+    const cols = new Set([...canonCols[m.table], ...(t && !t.dropped ? t.cols.keys() : [])].map(c => c.toLowerCase()));
+    canonCompared.push({ model: m.name, table: m.table });
+    for (const c of fieldsOf(m)) if (!cols.has(c.toLowerCase())) canonMissing.push({ model: m.name, table: m.table, column: c });
+  };
   for (const m of Object.values(MODELS)) {
     const t = tables[m.table];
-    if (!t || (t.cols.size === 0 && !t.uncertain.length)) { noTable.push({ model: m.name, table: m.table, dropped: t && t.dropped }); continue; }
-    if (!t.createdBy) { alteredOnly.push({ model: m.name, table: m.table, columnsAdded: t.cols.size }); continue; }
-    const fields = new Set([...m.attrs].filter(a => !m.virtual.has(a)).map(a => m.fieldOf[a]));
+    if (!t || (t.cols.size === 0 && !t.uncertain.length)) { noTable.push({ model: m.name, table: m.table, dropped: t && t.dropped }); compareWithCanon(m, t); continue; }
+    if (!t.createdBy) { alteredOnly.push({ model: m.name, table: m.table, columnsAdded: t.cols.size }); compareWithCanon(m, t); continue; }
+    const fields = fieldsOf(m);
     const has = (c) => t.cols.has(c) || [...t.cols.keys()].some(k => k.toLowerCase() === c.toLowerCase());
     for (const c of fields) {
       if (has(c)) continue;
@@ -1368,18 +1398,29 @@ function compareModels(tables) {
     }
     for (const c of t.cols.keys()) if (![...fields].some(x => x.toLowerCase() === c.toLowerCase())) extra.push({ model: m.name, table: m.table, column: c, from: t.cols.get(c) });
   }
-  return { noTable, alteredOnly, missing, paranoidNoDeleted, extra };
+  return { noTable, alteredOnly, missing, paranoidNoDeleted, extra, canonMissing, canonCompared };
 }
 
 // ─── optional: a column-level schema capture ────────────────────────────────
-let CAP = null;
-if (CAPTURE) {
-  CAP = {};
-  for (const line of fs.readFileSync(CAPTURE, 'utf8').split('\n')) {
+function readCapture(file) {
+  const out = {};
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
     const parts = line.split('|').map(x => x.trim());
     if (parts.length < 2 || !parts[0] || !parts[1] || parts[0] === 'table_name' || /^-+$/.test(parts[0])) continue;
-    (CAP[parts[0]] = CAP[parts[0]] || new Set()).add(parts[1]);
+    (out[parts[0]] = out[parts[0]] || new Set()).add(parts[1]);
   }
+  return out;
+}
+const CAP = CAPTURE ? readCapture(CAPTURE) : null;
+// Step 2's canon capture (Task #1924). A missing default file is reported
+// and the comparison is skipped; a missing named file is an error.
+let CANON = null;
+let CANON_NOTE = 'off (--step2-capture none)';
+if (STEP2_CAPTURE !== 'none') {
+  const file = path.resolve(ROOT, STEP2_CAPTURE);
+  if (fs.existsSync(file)) { CANON = readCapture(file); CANON_NOTE = path.relative(ROOT, file); }
+  else if (argVal('--step2-capture')) { console.error(`--step2-capture: no such file ${file}`); process.exit(2); }
+  else CANON_NOTE = `skipped: ${STEP2_CAPTURE} not found under ${ROOT}`;
 }
 function cap(table, col) {
   if (!CAP) return '';
@@ -1391,7 +1432,7 @@ function cap(table, col) {
 // ─── run ────────────────────────────────────────────────────────────────────
 const s1 = step1();
 const s2 = step2();
-const cmp = compareModels(s2.tables);
+const cmp = compareModels(s2.tables, CANON);
 const s3 = step3(s2.tables);
 const s4 = step4();
 
@@ -1417,6 +1458,8 @@ for (const x of cmp.paranoidNoDeleted) console.log(`  PARANOID ${x.model} (${x.t
 console.log(`  declared columns no migration creates: ${cmp.missing.length}`);
 for (const x of cmp.missing) console.log(`  MISSING ${x.model} (${x.table}).${x.column}${x.tableUncertain ? '  [table has unresolved ops]' : ''}${cap(x.table, x.column)}`);
 console.log(`  migration columns the model does not declare (report only): ${cmp.extra.length}`);
+console.log(`  NOTABLE/ALTERONLY models compared with the canon capture (${CANON_NOTE}): ${cmp.canonCompared.length}; declared columns absent from canon and from live migrations: ${cmp.canonMissing.length}`);
+for (const x of cmp.canonMissing) console.log(`  CANONMISSING ${x.model} (${x.table}).${x.column}`);
 console.log('');
 console.log(`STEP 3 raw SQL: ${s3.calls} sequelize.query calls (${s3.literal} literal, ${s3.template} template with interpolation, ${s3.calls - s3.literal - s3.template} other); ${s3.callsWithRefs} had a checkable column reference; ${s3.checkedRefs} references checked`);
 console.log(`  hits: ${s3.hits.length}; uncheckable calls: ${s3.uncheckable.length}; tables named but not created by the live tree: ${Object.keys(s3.unknownTables).length}; other .query receivers (not sequelize): ${s3.otherReceivers.length}`);
@@ -1463,6 +1506,7 @@ if (BASELINE2) {
     ...cmp.missing.map(x => `${x.model}\t${x.column}\tmissing-column`),
     ...cmp.paranoidNoDeleted.map(x => `${x.model}\t${x.column}\tparanoid-no-deleted_at`),
     ...cmp.noTable.map(x => `${x.model}\t-\tno-table`),
+    ...cmp.canonMissing.map(x => `${x.model}\t${x.column}\tcanon-missing-column`),
   ];
   exit = Math.max(exit, ratchet(BASELINE2, cur));
 }
