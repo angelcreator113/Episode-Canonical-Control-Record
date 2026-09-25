@@ -14,7 +14,14 @@
  *           findOrCreate/upsert/increment/decrement/sum/max/min calls in src/
  *           (where incl. Op.or/Op.and/Op.not, attributes, order, group, include,
  *           create/update values) checked against rawAttributes (names and
- *           fields) and association aliases.
+ *           fields) and association aliases. Also writes through a loaded
+ *           record (Task #1909): a variable declared in the same block as
+ *           `const x = [await] Model.findByPk|findOne|create(...)`, or
+ *           `for (const x of [await] Model.findAll(...))` (or of a local
+ *           `rows` from findAll), has x.update(values) checked like a static
+ *           update (keys `Model.instance.update`) and each x.attr = ...
+ *           followed by an x.save() on the same binding checked as a write
+ *           (keys `Model.instance.save`, clause `assigned`).
  *   Step 2  model vs migrations: every table rebuilt by replaying src/migrations/
  *           statically (createTable/addColumn/removeColumn/renameColumn/
  *           renameTable/dropTable and DDL inside sequelize.query strings),
@@ -39,6 +46,9 @@
  *                                                          reachable from it)
  *   node scripts/check-schema-agreement.js --json <file>   full report as JSON
  *   node scripts/check-schema-agreement.js --unresolved    also list unresolved
+ *   node scripts/check-schema-agreement.js --step1-src <dir>
+ *        read step 1 from <dir> instead of src/ (models still from src/models;
+ *        the checker's fixtures are tests/fixtures/schema-agreement-step1/)
  *   node scripts/check-schema-agreement.js --capture <file>
  *        annotate every hit with a column-level schema capture (psql output of
  *        table_name | column_name | ..., e.g. docs/audit/
@@ -93,16 +103,21 @@
  *     another table with the same gaps, or a gap closed and reopened, is not
  *     reported. Tables with unresolved ops ([table has unresolved ops]) are
  *     compared all the same; an unresolved createTable can hide a gap.
- *   - Instance writes are not checked, so a green step 1 does NOT mean "no
- *     dropped writes" (Task #1897). A row loaded with findByPk/findOne/
- *     findAll/create and then written with row.update({...}), or with
- *     row.x = ...; row.save() (or row.set()), has a non-model receiver, and
- *     Sequelize drops an undeclared key there exactly as it does in a static
- *     Model.update. #1897's own case: CompositionService.approveComposition's
- *     approved_by / approved_at and updateComposition's `version` were all
- *     dropped with the gate green. The #1897 report counted about 255 instance
- *     .update() calls and 42 assign-then-save() calls in src/ that go
- *     unchecked (a one-off AST count, not part of this script).
+ *   - Instance writes are checked only where the row's source is visible in
+ *     the same block (Task #1909; #1897 found them wholly unchecked). Not
+ *     seen: a row passed in as a parameter, returned from a helper or a
+ *     service (`const c = await Service.get(id)`), taken from an array
+ *     destructure (`const [row] = await Model.findOrCreate(...)`), from
+ *     `this.x`, or loaded in one function and written in another; writes
+ *     through x.set({...}), x.setDataValue(), x.increment() or
+ *     x.save({ fields }) key lists; and assignments made before a save in a
+ *     different function. A name bound twice in one block to different
+ *     models is left unchecked, not guessed.
+ *   - In-place mutation of a JSON/JSONB value is not seen: `x.col.key = v`
+ *     or `const h = x.col; h.k = v; x.update({ col: h })` passes the loaded
+ *     reference back, Sequelize sees no change and saves nothing for that
+ *     column, and the checker (which checks names, not values) reports
+ *     nothing. apply-draft's version_history was one (Task #1909).
  *   - Non-model receivers are not checked: a call is attributed only when the
  *     receiver is a model name (`Foo`), a property named after one
  *     (`models.Foo`, `db.Foo`), or a local variable assigned from either.
@@ -128,6 +143,10 @@ const BASELINE = argVal('--baseline');
 const BASELINE2 = argVal('--step2-baseline');
 const UPDATE_BASELINE = argv.includes('--update-baseline');
 const CAPTURE = argVal('--capture');
+// Task #1909: read step 1 from another directory instead of src/ (the
+// checker's own fixtures, tests/fixtures/schema-agreement/). Models still
+// come from <root>/src/models.
+const STEP1_SRC = argVal('--step1-src');
 
 const parser = require(require.resolve('@babel/parser', { paths: [ROOT, __dirname] }));
 
@@ -241,9 +260,10 @@ const MODEL_ONLY = new Set(['findAll', 'findOne', 'findByPk', 'findAndCountAll',
 const DIRECTIONS = /^(ASC|DESC|NULLS FIRST|NULLS LAST|ASC NULLS (FIRST|LAST)|DESC NULLS (FIRST|LAST))$/i;
 
 function step1() {
-  const files = walkFiles(path.join(ROOT, 'src')).filter(f => !rel(f).startsWith('src/migrations/'));
+  const files = walkFiles(STEP1_SRC ? path.resolve(STEP1_SRC) : path.join(ROOT, 'src')).filter(f => !rel(f).startsWith('src/migrations/'));
   const hits = []; const unresolved = []; const unknownOther = [];
   let calls = 0; let callsPartial = 0; let namesChecked = 0;
+  let instanceBindings = 0; let instanceUpdates = 0; let instanceSaves = 0;
 
   for (const file of files) {
     let ast; try { ast = parse(file); } catch (e) { unresolved.push({ file: rel(file), line: 0, reason: `parse error: ${e.message}` }); continue; }
@@ -300,12 +320,91 @@ function step1() {
       return null;
     }
 
+    // ── instances (Task #1909) ──────────────────────────────────────────────
+    // A variable holding a row loaded from a known model, in the block that
+    // declares it:
+    //   const x = [await] Model.findByPk|findOne|create(...)
+    //   for (const x of [await] Model.findAll(...))
+    //   for (const x of rows), rows = [await] Model.findAll(...) in scope
+    // Writes through it are then checked: x.update(values) like a static
+    // update, and x.attr = ... when an x.save() on the same binding follows.
+    const INSTANCE_SOURCES = new Set(['findByPk', 'findOne', 'create']);
+    const SCOPE_RE = /^(BlockStatement|Program|ForStatement|ForInStatement|ForOfStatement|SwitchCase|StaticBlock)$/;
+    const isScope = (x) => SCOPE_RE.test(x.type) || isFn(x);
+    const scopeOf = (node) => { let c = node._parent; while (c && !isScope(c)) c = c._parent; return c; };
+    const bindings = new Map(); // scope -> Map(name -> { kind: 'row'|'list', model, name })
+    const shadows = new Map(); // scope -> Set(names declared there some other way)
+    const patNames = (p, out = []) => {
+      if (!p) return out;
+      if (p.type === 'Identifier') out.push(p.name);
+      else if (p.type === 'AssignmentPattern') patNames(p.left, out);
+      else if (p.type === 'RestElement') patNames(p.argument, out);
+      else if (p.type === 'ArrayPattern') p.elements.forEach(e => patNames(e, out));
+      else if (p.type === 'ObjectPattern') p.properties.forEach(q => patNames(q.type === 'RestElement' ? q.argument : q.value, out));
+      return out;
+    };
+    const unwrap = (x) => (x && x.type === 'AwaitExpression' ? x.argument : x);
+    const sourceOf = (init, methods) => {
+      const c = unwrap(init);
+      if (!c || (c.type !== 'CallExpression' && c.type !== 'OptionalCallExpression')) return null;
+      const m = memberProp(c.callee);
+      return m && methods.has(m) ? resolveModel(c.callee.object) : null;
+    };
+    const resolveBinding = (name, from) => {
+      for (let c = from._parent; c; c = c._parent) {
+        if (!isScope(c)) continue;
+        const b = bindings.get(c) && bindings.get(c).get(name);
+        if (b) return b;
+        if (shadows.get(c) && shadows.get(c).has(name)) return null;
+        if (isFn(c) && c.params.some(p => patNames(p).includes(name))) return null;
+      }
+      return null;
+    };
+    const bind = (scope, name, b) => {
+      if (!bindings.has(scope)) bindings.set(scope, new Map());
+      const m = bindings.get(scope);
+      // a name bound twice in one block to different sources: not guessed
+      if (m.has(name) && (m.get(name).model !== b.model || m.get(name).kind !== b.kind)) { m.delete(name); shadow(scope, name); return; }
+      if (!(shadows.get(scope) && shadows.get(scope).has(name))) { m.set(name, b); if (b.kind === 'row') instanceBindings++; }
+    };
+    const shadow = (scope, name) => { if (!shadows.has(scope)) shadows.set(scope, new Set()); shadows.get(scope).add(name); };
+    walk(ast, (x) => {
+      if (x.type === 'CatchClause' && x.param) patNames(x.param).forEach(nm => shadow(x.body, nm));
+      if (x.type !== 'VariableDeclarator') return;
+      const scope = scopeOf(x);
+      if (x.id.type !== 'Identifier') { patNames(x.id).forEach(nm => shadow(scope, nm)); return; }
+      const decl = x._parent;
+      const loop = decl && decl._parent && decl._parent.type === 'ForOfStatement' && decl._parent.left === decl ? decl._parent : null;
+      let model = null; let kind = 'row';
+      if (loop) {
+        model = sourceOf(loop.right, new Set(['findAll']));
+        const r = unwrap(loop.right);
+        if (!model && r && r.type === 'Identifier') { const lb = resolveBinding(r.name, loop); if (lb && lb.kind === 'list') model = lb.model; }
+      } else if (x.init) {
+        model = sourceOf(x.init, INSTANCE_SOURCES);
+        if (!model) { model = sourceOf(x.init, new Set(['findAll'])); if (model) kind = 'list'; }
+      }
+      if (model) bind(scope, x.id.name, { kind, model, name: x.id.name });
+      else shadow(scope, x.id.name);
+    });
+    const rowBinding = (node, from) => {
+      if (!node || node.type !== 'Identifier') return null;
+      const b = resolveBinding(node.name, from);
+      return b && b.kind === 'row' ? b : null;
+    };
+
     walk(ast, (n) => {
       if (n.type !== 'CallExpression' && n.type !== 'OptionalCallExpression') return;
       const method = memberProp(n.callee);
       if (!method || !MODEL_METHODS.has(method)) return;
       const recv = n.callee.object;
-      const model = resolveModel(recv);
+      let model = resolveModel(recv);
+      let viaInstance = false;
+      if (!model && method === 'update') {
+        const b = rowBinding(recv, n);
+        if (b) { model = b.model; viaInstance = true; instanceUpdates++; }
+      }
+      const label = viaInstance ? 'instance.update' : method;
       const f = rel(file);
       if (!model) {
         const text = srcText(file, recv);
@@ -317,7 +416,7 @@ function step1() {
       const ctx = { file: f, model, method, partial: false };
       const hit = (m, name, where, node) => {
         namesChecked++;
-        if (!declared(m, name)) hits.push({ file: f, line: lineOf(node), model: m, method, clause: where, name, callLine: lineOf(n), recv: srcText(file, recv) });
+        if (!declared(m, name)) hits.push({ file: f, line: lineOf(node), model: m, method: label, clause: where, name, callLine: lineOf(n), recv: srcText(file, recv) });
       };
       const unres = (reason, node) => { ctx.partial = true; unresolved.push({ file: f, line: lineOf(node), reason: `${model}.${method}: ${reason}` }); };
 
@@ -498,8 +597,33 @@ function step1() {
       }
       if (ctx.partial) callsPartial++;
     });
+
+    // x.attr = ... followed by x.save() on the same binding (Task #1909)
+    const saves = new Map(); // binding -> [save call]
+    const assigns = [];
+    walk(ast, (x) => {
+      if ((x.type === 'CallExpression' || x.type === 'OptionalCallExpression') && memberProp(x.callee) === 'save') {
+        const b = rowBinding(x.callee.object, x);
+        if (b) { if (!saves.has(b)) saves.set(b, []); saves.get(b).push(x); }
+      }
+      if (x.type === 'AssignmentExpression' && /MemberExpression$/.test(x.left.type)) {
+        const b = rowBinding(x.left.object, x);
+        if (b) assigns.push({ b, x });
+      }
+    });
+    for (const s of saves.values()) instanceSaves += s.length;
+    const f = rel(file);
+    for (const { b, x } of assigns) {
+      const later = (saves.get(b) || []).find(sv => sv.start > x.start);
+      if (!later) continue;
+      const name = memberProp(x.left);
+      if (!name) { unresolved.push({ file: f, line: lineOf(x), reason: `${b.model} instance ${b.name}: computed key assigned before save()` }); continue; }
+      if (name === 'dataValues') continue;
+      namesChecked++;
+      if (!declared(b.model, name)) hits.push({ file: f, line: lineOf(x), model: b.model, method: 'instance.save', clause: 'assigned', name, callLine: lineOf(later), recv: b.name });
+    }
   }
-  return { hits, unresolved, unknownOther, calls, callsPartial, namesChecked, files: files.length };
+  return { hits, unresolved, unknownOther, calls, callsPartial, namesChecked, files: files.length, instanceBindings, instanceUpdates, instanceSaves };
 }
 
 const SRC_CACHE = {};
@@ -1279,6 +1403,7 @@ console.log(`STEP 1 query vs model: ${s1.files} files, ${s1.calls} resolved mode
 console.log(`  hits (undeclared names): ${s1.hits.length}`);
 console.log(`  resolved calls with an unresolved part: ${s1.callsPartial} (${pct(s1.callsPartial, s1.calls)})`);
 console.log(`  unresolved items: ${s1.unresolved.length} (of which unknown receiver on a model-only method: ${s1.unresolved.filter(u => /unknown receiver/.test(u.reason)).length})`);
+console.log(`  loaded-record bindings: ${s1.instanceBindings}; x.update() through one: ${s1.instanceUpdates}; x.save() through one: ${s1.instanceSaves} (Task #1909)`);
 console.log(`  create/update/destroy/count/... on a non-model receiver (instance or other object, not checked): ${s1.unknownOther.length}`);
 for (const h of s1.hits) console.log(`  HIT ${h.file}:${h.line}  ${h.model}.${h.method}  ${h.clause}  ${h.name}${h.clause.startsWith('include') ? '' : cap(MODELS[h.model].table, h.name)}`);
 console.log('');
