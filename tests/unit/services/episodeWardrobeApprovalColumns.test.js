@@ -64,9 +64,10 @@ describe('the table and the model agree (Task #1924)', () => {
 });
 
 describe(`the migration ${MIGRATION}`, () => {
-  test('exists, is the only live migration naming the table, and adds the five columns with the model\'s types', async () => {
+  test('exists, is the only live migration adding the table\'s columns, and adds the five columns with the model\'s types', async () => {
     expect(fs.existsSync(MIGRATION_PATH)).toBe(true);
-    expect(tableMigrations()).toEqual([MIGRATION]);
+    // Task #1933's migration also names the table; it changes only indexes.
+    expect(tableMigrations()).toEqual([MIGRATION, '20260926000000-dedupe-episode-wardrobe-indexes.js']);
 
     const qi = recordingQueryInterface(canonColumns());
     await require(MIGRATION_PATH).up(qi, Sequelize);
