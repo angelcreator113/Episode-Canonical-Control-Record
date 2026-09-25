@@ -186,17 +186,6 @@ router.post('/opportunities/:showId/:id/advance', requireAuth, async (req, res) 
 
     await opp.update(updates);
 
-    // Auto-adjust Lala's state if this is a major milestone
-    if (['booked', 'completed'].includes(to_status) && opp.prestige >= 7) {
-      try {
-        const { SocialProfile } = models;
-        const lala = await SocialProfile.findOne({ where: { is_justawoman_record: true } });
-        if (lala && lala.current_state !== 'peaking') {
-          await lala.update({ previous_state: lala.current_state, current_state: 'peaking', state_changed_at: new Date() });
-        }
-      } catch { /* non-blocking */ }
-    }
-
     // Career pipeline: cascade to career goals on completion/payment
     let pipelineResult = null;
     if (['completed', 'paid'].includes(to_status)) {
