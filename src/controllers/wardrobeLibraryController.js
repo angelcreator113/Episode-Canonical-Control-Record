@@ -1340,10 +1340,11 @@ module.exports = {
       // Get already assigned items for this episode
       const assignedWardrobe = await EpisodeWardrobe.findAll({
         where: { episode_id: episodeId },
+        // Task #1926: the registered alias is 'wardrobeItem' (src/models/index.js).
         include: [
           {
             model: Wardrobe,
-            as: 'wardrobe',
+            as: 'wardrobeItem',
             attributes: ['library_item_id'],
             where: { library_item_id: { [Op.ne]: null } },
             required: true,
@@ -1352,7 +1353,7 @@ module.exports = {
       });
 
       const excludeIds = assignedWardrobe
-        .map((ew) => ew.wardrobe?.library_item_id)
+        .map((ew) => ew.wardrobeItem?.library_item_id)
         .filter((id) => id);
 
       // Build query for similar items
@@ -1362,7 +1363,9 @@ module.exports = {
       };
 
       // Match show or cross-show items
-      whereClause[Op.or] = [{ showId: episode.showId }, { showId: null }];
+      // Episode's attribute is show_id; showId was undefined and Sequelize
+      // rejects an undefined WHERE value.
+      whereClause[Op.or] = [{ showId: episode.show_id }, { showId: null }];
 
       // Match context
       if (character) {
