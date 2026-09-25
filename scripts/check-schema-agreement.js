@@ -46,10 +46,15 @@
  *        ABSENT | no table]. Reads a file only; no database.
  *   node scripts/check-schema-agreement.js --baseline <file> [--update-baseline]
  *        step 1 as a ratchet: fail only on hits whose key is not in the baseline
+ *   node scripts/check-schema-agreement.js --step2-baseline <file> [--update-baseline]
+ *        step 2 as a ratchet (Task #1875): fail only on model-vs-migration
+ *        findings whose key is not in the baseline. The two flags are
+ *        independent; with both, --update-baseline rewrites both files.
  *
- * Exit code: 0 always in report mode; in --baseline mode 1 when step 1 has a
- * hit the baseline does not list. A baseline entry that no longer occurs is
- * printed as GONE and does not fail; the baseline should only shrink.
+ * Exit code: 0 always in report mode; in --baseline / --step2-baseline mode 1
+ * when the gated step has a finding its baseline does not list. A baseline
+ * entry that no longer occurs is printed as GONE and does not fail; the
+ * baseline should only shrink.
  *
  * CI (Task #1871): .github/workflows/validate.yml runs
  *   node scripts/check-schema-agreement.js --baseline scripts/schema-agreement.baseline
@@ -57,9 +62,37 @@
  * `file<TAB>Model.method<TAB>clause<TAB>name` (no line numbers), one per line,
  * generated with --update-baseline, never edited by hand.
  *
+ * CI (Task #1875): the same job also runs
+ *   node scripts/check-schema-agreement.js --step2-baseline scripts/schema-agreement-step2.baseline
+ * Step 2 keys are `Model<TAB>column<TAB>kind` (no line numbers), kind one of
+ *   missing-column          a declared (non-VIRTUAL) column no live migration creates
+ *   paranoid-no-deleted_at  a paranoid model whose table has no deletedAt column
+ *   no-table                a model whose table no live migration creates
+ *                           (column slot is `-`)
+ * generated with --update-baseline, never edited by hand. Models whose table
+ * the live tree only alters (ALTERONLY) have no columns compared and are not
+ * keyed.
+ *
+ * Boundary of step 2 (Evoni, 2026-09-25): MIGRATIONS ARE NOT PRODUCTION.
+ * Step 2 compares models with the migration tree replayed statically, not
+ * with any database; 35 of the 49 "missing" columns in docs/
+ * SCHEMA_AGREEMENT_READ.md exist in production. This gate catches drift
+ * introduced in code against the migration tree (a model declaring a column,
+ * a paranoid deleted_at or a table that no live migration creates). Drift
+ * between the migrations and the live database is a different job, done by
+ * scripts/check-pending-migrations.js and docs/MIGRATION_DRIFT_READ.md.
+ * Two tools, two jobs.
+ *
  * Blind spots of the ratchet (what a green run does NOT prove):
- *   - Only step 1 is gated. Steps 2-4 (model vs migrations, raw SQL, mocks)
- *     print a report and never affect the exit code.
+ *   - Only steps 1 and 2 are gated. Steps 3-4 (raw SQL, mocks) print a report
+ *     and never affect the exit code.
+ *   - Step 2 says nothing about production: a baselined missing-column may
+ *     exist in the live database, and a column every migration creates may
+ *     still be absent there.
+ *   - Step 2 keys ignore the table name and migration line: a model moved to
+ *     another table with the same gaps, or a gap closed and reopened, is not
+ *     reported. Tables with unresolved ops ([table has unresolved ops]) are
+ *     compared all the same; an unresolved createTable can hide a gap.
  *   - Instance calls are not checked: row.update({...}), row.save(), row.set()
  *     and other methods on a fetched instance have a non-model receiver.
  *   - Non-model receivers are not checked: a call is attributed only when the
@@ -84,6 +117,7 @@ const ROOT = path.resolve(argVal('--root') || path.join(__dirname, '..'));
 const JSON_OUT = argVal('--json');
 const SHOW_UNRESOLVED = argv.includes('--unresolved');
 const BASELINE = argVal('--baseline');
+const BASELINE2 = argVal('--step2-baseline');
 const UPDATE_BASELINE = argv.includes('--update-baseline');
 const CAPTURE = argVal('--capture');
 
@@ -1273,19 +1307,30 @@ if (JSON_OUT) {
   fs.writeFileSync(JSON_OUT, JSON.stringify({ step1: s1, step2: { ...cmp, unresolved: s2.unresolved, tables: tablesOut }, step3: s3, step4: s4 }, null, 1));
 }
 
+// A ratchet over a list of keys: write it with --update-baseline, otherwise
+// fail on keys the baseline does not list and report (not fail) GONE keys.
+function ratchet(file, cur) {
+  if (UPDATE_BASELINE) { fs.writeFileSync(file, `${[...new Set(cur)].sort().join('\n')}\n`); console.log(`\nbaseline written: ${file} (${new Set(cur).size} entries)`); return 0; }
+  const base = new Set(fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean) : []);
+  const fresh = [...new Set(cur)].filter(k => !base.has(k));
+  const gone = [...base].filter(k => !cur.includes(k));
+  console.log(`\nbaseline ${file}: ${base.size} entries, ${fresh.length} new, ${gone.length} no longer occur`);
+  for (const k of fresh) console.log(`  NEW ${k}`);
+  for (const k of gone) console.log(`  GONE ${k}`);
+  return fresh.length ? 1 : 0;
+}
+
 let exit = 0;
 if (BASELINE) {
   const key = (h) => `${h.file}\t${h.model}.${h.method}\t${h.clause}\t${h.name}`;
-  const cur = s1.hits.map(key);
-  if (UPDATE_BASELINE) { fs.writeFileSync(BASELINE, `${[...new Set(cur)].sort().join('\n')}\n`); console.log(`\nbaseline written: ${BASELINE} (${new Set(cur).size} entries)`); }
-  else {
-    const base = new Set(fs.existsSync(BASELINE) ? fs.readFileSync(BASELINE, 'utf8').split('\n').filter(Boolean) : []);
-    const fresh = [...new Set(cur)].filter(k => !base.has(k));
-    const gone = [...base].filter(k => !cur.includes(k));
-    console.log(`\nbaseline ${BASELINE}: ${base.size} entries, ${fresh.length} new, ${gone.length} no longer occur`);
-    for (const k of fresh) console.log(`  NEW ${k}`);
-    for (const k of gone) console.log(`  GONE ${k}`);
-    if (fresh.length) exit = 1;
-  }
+  exit = Math.max(exit, ratchet(BASELINE, s1.hits.map(key)));
+}
+if (BASELINE2) {
+  const cur = [
+    ...cmp.missing.map(x => `${x.model}\t${x.column}\tmissing-column`),
+    ...cmp.paranoidNoDeleted.map(x => `${x.model}\t${x.column}\tparanoid-no-deleted_at`),
+    ...cmp.noTable.map(x => `${x.model}\t-\tno-table`),
+  ];
+  exit = Math.max(exit, ratchet(BASELINE2, cur));
 }
 process.exit(exit);
