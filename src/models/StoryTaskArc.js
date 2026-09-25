@@ -36,6 +36,7 @@ module.exports = (sequelize) => {
     timestamps: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
+    paranoid: false, // table has no deleted_at; never soft-deleted
   });
 
   return StoryTaskArc;
