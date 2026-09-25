@@ -824,7 +824,7 @@ async function detectRepeats(wardrobeItems, showId, models, context = {}) {
          FROM episode_wardrobe ew
          JOIN episodes e ON e.id = ew.episode_id AND e.deleted_at IS NULL
          LEFT JOIN world_events we ON we.used_in_episode_id = e.id
-         WHERE ew.wardrobe_id = :wardrobeId AND e.show_id = :showId
+         WHERE ew.wardrobe_id = :wardrobeId AND ew.deleted_at IS NULL AND e.show_id = :showId
            AND (:currentEventId IS NULL OR we.id IS DISTINCT FROM :currentEventId)
          ORDER BY e.episode_number DESC`,
         { replacements: { wardrobeId: item.id, showId, currentEventId } }
@@ -863,6 +863,7 @@ async function getBrandRelationships(showId, models) {
               ARRAY_AGG(DISTINCT w.clothing_category) as categories
        FROM episode_wardrobe ew
        JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.brand IS NOT NULL AND w.brand != ''
+         AND ew.deleted_at IS NULL
        JOIN episodes e ON e.id = ew.episode_id AND e.show_id = :showId AND e.deleted_at IS NULL
        GROUP BY w.brand
        ORDER BY wear_count DESC`,
@@ -897,7 +898,7 @@ async function getWardrobeGrowthArc(showId, models) {
          COALESCE(SUM(w.price), 0) as outfit_value,
          COUNT(DISTINCT w.brand) as unique_brands
        FROM episodes e
-       LEFT JOIN episode_wardrobe ew ON ew.episode_id = e.id
+       LEFT JOIN episode_wardrobe ew ON ew.episode_id = e.id AND ew.deleted_at IS NULL
        LEFT JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
        WHERE e.show_id = :showId AND e.deleted_at IS NULL
        GROUP BY e.episode_number

@@ -68,6 +68,12 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: false,
       },
+      // Task #1924: approval_status, approved_by, approved_at and
+      // rejection_reason were declared here and absent from the table
+      // (Evoni's production read, ATTESTED 2026-09-25), so every
+      // EpisodeWardrobe query failed. They arrive with
+      // src/migrations/20260925000001-add-approval-columns-to-episode-wardrobe.js,
+      // which must run before this code deploys.
       approval_status: {
         type: DataTypes.STRING(50),
         allowNull: true,
@@ -89,20 +95,18 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: 'Reason for rejection if applicable',
       },
-      created_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-      },
-      updated_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-      },
     },
     {
       tableName: 'episode_wardrobe',
-      timestamps: false,
+      // Task #1924, Evoni's ruling (a): paranoid, so removing a wardrobe row
+      // keeps its record ("a removed wardrobe row is a styling decision").
+      // Paranoid needs timestamps; the three map onto the snake_case
+      // columns (deleted_at arrives with the #1924 migration).
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+      deletedAt: 'deleted_at',
+      paranoid: true,
       underscored: true,
       indexes: [
         {

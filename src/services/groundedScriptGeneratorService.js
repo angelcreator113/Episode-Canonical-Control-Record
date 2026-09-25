@@ -125,7 +125,7 @@ async function generateGroundedScript(episodeId, showId, models) {
       `SELECT w.name, w.clothing_category, w.tier, w.aesthetic_tags
        FROM episode_wardrobe ew
        JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
-       WHERE ew.episode_id = :episodeId`,
+       WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL`,
       { replacements: { episodeId } }
     );
     if (scoreRows.length > 0) {

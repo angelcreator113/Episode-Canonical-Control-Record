@@ -211,7 +211,7 @@ router.post('/world/:showId/browse-pool', requireAuth, async (req, res) => {
       // Get assigned wardrobe
       try {
         const [assigned] = await models.sequelize.query(
-          `SELECT w.* FROM wardrobe w JOIN episode_wardrobe ew ON ew.wardrobe_id = w.id WHERE ew.episode_id = :episodeId`,
+          `SELECT w.* FROM wardrobe w JOIN episode_wardrobe ew ON ew.wardrobe_id = w.id WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL`,
           { replacements: { episodeId: episode_id } }
         );
         if (assigned?.length > 0) {

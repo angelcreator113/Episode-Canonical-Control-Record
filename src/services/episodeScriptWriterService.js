@@ -152,7 +152,7 @@ async function loadScriptContext(episodeId, showId, models) {
               w.s3_url_processed, w.thumbnail_url
        FROM episode_wardrobe ew
        JOIN wardrobe w ON w.id = ew.wardrobe_id AND w.deleted_at IS NULL
-       WHERE ew.episode_id = :episodeId`,
+       WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL`,
       { replacements: { episodeId } }
     );
     context.wardrobe = rows || [];

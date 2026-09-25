@@ -563,7 +563,7 @@ async function getTodoList(episodeId, models) {
     `SELECT w.clothing_category
      FROM episode_wardrobe ew
      JOIN wardrobe w ON w.id = ew.wardrobe_id
-     WHERE ew.episode_id = :episodeId`,
+     WHERE ew.episode_id = :episodeId AND ew.deleted_at IS NULL`,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   );
 
