@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
+import { Sparkles } from 'lucide-react';
 import apiClient from '../services/api';
 import FeedBulkImport from '../components/FeedBulkImport';
 import ProfileCard from './feed/ProfileCard';
@@ -45,6 +46,8 @@ export const fetchJustAWomanProfile = () =>
 // Profile lifecycle (Api suffix avoids name shadow vs the component-local
 // user-facing handlers — those wrap these network helpers + UI state).
 export const generateProfileApi = (payload) => apiClient.post(`${API}/generate`, payload);
+// Task #1828: AI-drafted form fields only — the server saves nothing.
+export const autofillDraftApi = (payload) => apiClient.post(`${API}/autofill-draft`, payload);
 export const finalizeProfileApi = (id) => apiClient.post(`${API}/${id}/finalize`);
 export const crossProfileApi = (id) => apiClient.post(`${API}/${id}/cross`, {});
 export const editProfileApi = (id, updates) => apiClient.put(`${API}/${id}`, updates);
@@ -218,6 +221,11 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
   const [lvCity,setLvCity]       = useState('');
   const [lvRelationship,setLvRelationship] = useState('mutual_unaware');
   const [lvPressure,setLvPressure] = useState('level');
+  // Creator-form Autofill (Task #1828) — shared by both form blocks
+  const [autofilling,setAutofilling] = useState(false);
+  const [autofilledOnce,setAutofilledOnce] = useState(false);
+  const [autofillError,setAutofillError] = useState(null);
+  const [autofillNote,setAutofillNote] = useState(null);
   const [justAwomanProfile,setJustAwomanProfile] = useState(null);
 
   // ── Load profiles ──────────────────────────────────────────────────
@@ -372,6 +380,57 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     }catch(err){setError(err.response?.data?.error||err.message||'Generation failed');}
     finally{setGenerating(false);}
   };
+
+  // ── Autofill (Task #1828) ─────────────────────────────────────────
+  // One handler for both creator-form blocks ("+ Create New Creator" in
+  // choose-host mode, "Manual Spark" on the Feed). First click fills only
+  // empty fields; once a draft has been applied, the next click replaces
+  // all of them. Runs only on click and saves nothing — the profile is
+  // created only when the form itself is submitted.
+  const autofillReplacesAll=autofilledOnce&&!!(handle.trim()||vibe.trim());
+  const autofillCreator=async()=>{
+    if(autofilling||generating)return;
+    const replaceAll=autofillReplacesAll;
+    const lv=feedLayer==='lalaverse';
+    setAutofilling(true);setAutofillError(null);setAutofillNote(null);
+    try{
+      const res=await autofillDraftApi({
+        layer:lv?'lalaverse':'real_world',
+        ...(replaceAll?{}:{platform}),
+        allowed:{
+          platforms:PLATFORMS.map(p=>p.value),
+          cities:LALAVERSE_CITIES.map(c=>c.value),
+          relationships:LALA_RELATIONSHIPS.map(r=>r.value),
+          careerPressures:CAREER_PRESSURES.map(p=>p.value),
+        },
+      });
+      const d=res.data||{};
+      const apply=(current,next,set)=>{if(next&&(replaceAll||!current))set(next);};
+      apply(handle.trim(),d.handle,setHandle);
+      apply(replaceAll?'':platform,d.platform,setPlatform);
+      apply(vibe.trim(),d.vibe,setVibe);
+      if(lv){
+        apply(lvCity,d.city,setLvCity);
+        apply(replaceAll?'':lvRelationship,d.relationship,setLvRelationship);
+        apply(replaceAll?'':lvPressure,d.careerPressure,setLvPressure);
+      }
+      setAutofilledOnce(true);
+      if(d.handleTaken&&d.handle&&(replaceAll||!handle.trim()))setAutofillNote(`${d.handle} is already taken — change the handle before creating.`);
+    }catch(err){
+      console.error('Autofill failed',err);
+      setAutofillError(err.response?.data?.error||err.message||'Autofill failed');
+    }finally{setAutofilling(false);}
+  };
+  const autofillButton=(
+    <button type="button" className="spg-autofill-btn" onClick={autofillCreator} disabled={autofilling||generating}
+      title={autofillReplacesAll?'Replace all fields with a new AI draft':'Fill empty fields with an AI draft'}>
+      {autofilling?<Spinner/>:<Sparkles size={14} aria-hidden="true"/>}
+      {autofilling?'Autofilling…':'Autofill'}
+    </button>
+  );
+  const autofillStatus=(autofillError||autofillNote)&&(
+    <div className={autofillError?'spg-autofill-error':'spg-autofill-note'} role={autofillError?'alert':'status'}>{autofillError||autofillNote}</div>
+  );
 
   // ── Choose-host mode: create the event and open its Event Package page ──
   // (Task #1642 — New Episode lands on the Event Package page instead of
@@ -786,12 +845,16 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
         <div className="spg-autogen-bar" style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:chooseHost?'12px 24px':(stats.total>0&&!activeJob?'0':'16px 24px')}}>
         {chooseHost ? (
           <div>
+            <div className="spg-autofill-head">
             <button onClick={()=>setShowManualSpark(!showManualSpark)} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,fontWeight:700,color:C.lavender,display:'flex',alignItems:'center',gap:4,padding:'4px 0'}}>
               <span style={{transition:'transform 0.2s',display:'inline-block',transform:showManualSpark?'rotate(90deg)':'none'}}>▸</span>
               + Create New Creator
             </button>
+            {showManualSpark && autofillButton}
+            </div>
             {showManualSpark && (
               <div style={{marginTop:10,padding:14,background:C.surfaceAlt,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
+                {autofillStatus}
                 <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
                   <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
                     <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Handle</label>
@@ -924,15 +987,19 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
           )}
 
           {/* Manual Spark toggle */}
-          <button onClick={()=>setShowManualSpark(!showManualSpark)} style={{marginTop:10,background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.inkLight,display:'flex',alignItems:'center',gap:4,padding:'4px 0'}}>
+          <div className="spg-autofill-head" style={{marginTop:10}}>
+          <button onClick={()=>setShowManualSpark(!showManualSpark)} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.inkLight,display:'flex',alignItems:'center',gap:4,padding:'4px 0'}}>
             <span style={{transition:'transform 0.2s',display:'inline-block',transform:showManualSpark?'rotate(90deg)':'none'}}>▸</span>
             Manual Spark
             <span style={{color:C.inkLight,opacity:0.6,fontSize:11}}>— type a specific creator yourself</span>
           </button>
+          {showManualSpark && autofillButton}
+          </div>
 
           {/* Manual Spark Form (collapsed by default) */}
           {showManualSpark && (
             <div style={{marginTop:10,padding:14,background:C.surfaceAlt,borderRadius:C.radiusSm,border:`1px solid ${C.border}`}}>
+              {autofillStatus}
               <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end'}}>
                 <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:140}}>
                   <label style={{fontSize:11,fontWeight:600,color:C.inkLight}}>Handle</label>

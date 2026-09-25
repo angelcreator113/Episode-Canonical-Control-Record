@@ -50,6 +50,7 @@ import {
   fetchJustAWomanProfile,
   // Lifecycle (Api-suffix)
   generateProfileApi,
+  autofillDraftApi,
   finalizeProfileApi,
   crossProfileApi,
   editProfileApi,
@@ -120,6 +121,13 @@ describe('SocialProfileGenerator — Track 3 module-scope helpers', () => {
         '/api/v1/social-profiles/generate',
         { handle: 'x', vibe_sentence: 'y' }
       );
+    });
+
+    test('autofillDraftApi POST on /autofill-draft (Task #1828)', async () => {
+      vi.mocked(apiClient.post).mockResolvedValue({ data: { handle: '@x' } });
+      const payload = { layer: 'lalaverse', allowed: { cities: ['dazzle_district'] } };
+      await autofillDraftApi(payload);
+      expect(apiClient.post).toHaveBeenCalledWith('/api/v1/social-profiles/autofill-draft', payload);
     });
 
     test('finalizeProfileApi POST on /:id/finalize', async () => {

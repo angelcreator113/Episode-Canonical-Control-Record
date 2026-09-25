@@ -845,3 +845,42 @@
 @media (max-width: 400px) {
   .spg-delete-actions button { flex: 1 1 auto; }
 }
+
+/* ── Creator-form Autofill (Task #1828) ────────────────────────────── */
+.spg-autofill-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.spg-autofill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  min-height: 32px;
+  border-radius: var(--ps-radius-sm);
+  border: 1px solid var(--ps-lavender);
+  background: var(--ps-lav-light);
+  color: #5c2d8a;
+  font-family: var(--ps-font);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.spg-autofill-btn:hover:not(:disabled) {
+  background: #e0d4f0;
+}
+.spg-autofill-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.spg-autofill-error,
+.spg-autofill-note {
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.spg-autofill-error { color: #b42318; }
+.spg-autofill-note  { color: var(--ps-ink-mid); }
