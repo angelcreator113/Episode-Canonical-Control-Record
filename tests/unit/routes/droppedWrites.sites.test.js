@@ -82,13 +82,15 @@ describe('WorldEvent.create — POST /world/:showId/events/from-profile (src/rou
 });
 
 describe('StorytellerBook.update — POST /arc-stage (src/routes/sceneProposeRoute.js)', () => {
-  test('current_arc_stage and arc_stage_scores reach the update', async () => {
+  // #1879 declared current_arc_stage / arc_stage_scores so this write stores
+  // its values (the declarations are pinned in declaredWriteColumns.test.js).
+  // Task #1883 then found the stage itself can never be computed
+  // (calculateArcStage's story query names columns storyteller_stories
+  // lacks), so /arc-stage now answers 501 and writes nothing rather than
+  // persisting a fallback. See hiddenSchemaFailures.sites.test.js.
+  test('writes nothing: the stage cannot be computed (Task #1883)', async () => {
     const StorytellerBook = schemaChecked('StorytellerBook');
     jest.doMock(MODELS, () => ({
-      // Eight stories, so the stage is 'pressure'. calculateArcStage's own
-      // query (book_id / arc_stage, which storyteller_stories lacks) is one of
-      // the 18 hidden failures and is not under test here; the rows carry
-      // only declared keys so this mock does not vouch for it.
       StorytellerStory: { findAll: jest.fn(async () => Array.from({ length: 8 }, (_, i) => ({ id: `s${i}` }))) },
       StorytellerBook,
     }));
@@ -101,11 +103,8 @@ describe('StorytellerBook.update — POST /arc-stage (src/routes/sceneProposeRou
     app.use('/', require('../../../src/routes/sceneProposeRoute'));
 
     const res = await request(app).post('/arc-stage').send({ book_id: 'book-1' });
-    expect(res.status).toBe(200);
-    expect(StorytellerBook.update).toHaveBeenCalledWith(
-      { current_arc_stage: 'pressure', arc_stage_scores: { establishment: 0, pressure: 0, crisis: 0, integration: 0 } },
-      { where: { id: 'book-1' } },
-    );
+    expect(res.status).toBe(501);
+    expect(StorytellerBook.update).not.toHaveBeenCalled();
   });
 });
 

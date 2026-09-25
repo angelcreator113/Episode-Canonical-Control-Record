@@ -103,13 +103,14 @@ async function readSystemState(_userId) {
     state.pendingStories = pending || 0;
 
     // Total approved lines + rough word count
+    // #1883: StorytellerLine declares text, not content.
     const approved = await db.StorytellerLine?.findAll({
       where: { status: 'approved' },
-      attributes: ['content'],
+      attributes: ['text'],
     });
     state.totalApprovedStories = approved?.length || 0;
     state.novelWordCount = approved?.reduce((acc, l) =>
-      acc + (l.content?.split(' ')?.length || 0), 0) || 0;
+      acc + (l.text?.split(' ')?.length || 0), 0) || 0;
 
     // Characters stuck in draft
     const draftChars = await db.RegistryCharacter?.count({ where: { status: 'draft' } });
@@ -117,7 +118,8 @@ async function readSystemState(_userId) {
 
     // Pending memory proposals — uses StorytellerMemory (the actual model name)
     if (db.StorytellerMemory) {
-      const pendingMem = await db.StorytellerMemory.count({ where: { status: 'pending' } });
+      // #1883: no status column; pending means not yet confirmed.
+      const pendingMem = await db.StorytellerMemory.count({ where: { confirmed: false } });
       state.pendingMemories = pendingMem || 0;
     }
 
@@ -126,10 +128,10 @@ async function readSystemState(_userId) {
       where: { status: 'approved' },
       order: [['updatedAt', 'DESC']],
       limit: 3,
-      attributes: ['content', 'updatedAt'],
+      attributes: ['text', 'updatedAt'],
     });
     state.recentActivity = recent?.map(r => ({
-      excerpt: r.content?.slice(0, 80),
+      excerpt: r.text?.slice(0, 80),
       date:    r.updatedAt,
     })) || [];
 

@@ -191,9 +191,11 @@ const registrySync = {
       if (approvedCount % 5 !== 0) return; // only on 5, 10, 15, 20...
 
       // Get the last 10 approved lines for context
+      // #1883: StorytellerLine declares sort_order, not order_index; the old
+      // order failed on every call.
       const recentLines = await models.StorytellerLine.findAll({
         where:  { chapter_id: line.chapter_id, status: 'approved' },
-        order:  [['order_index', 'DESC']],
+        order:  [['sort_order', 'DESC']],
         limit:  10,
       });
 
@@ -215,7 +217,7 @@ CHARACTERS IN THIS STORY:
 ${allCharacters.map(c => `- ${c.selected_name || c.name} (${c.type}): ${c.role}`).join('\n')}
 
 RECENT APPROVED LINES:
-${recentLines.map(l => l.content).reverse().join('\n')}
+${recentLines.map(l => l.text).reverse().join('\n')}
 
 Extract character moments — specific things revealed about each character through action, 
 dialogue, or implication. Only extract what is genuinely new information about who they are.

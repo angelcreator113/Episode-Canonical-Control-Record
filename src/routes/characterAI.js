@@ -109,18 +109,37 @@ async function gatherCharacterContext(characterId) {
   } catch (e) { /* no memories */ }
 
   // 4. Relationships
+  // #1883: CharacterRelationship has no source_name / target_name columns, so
+  // the old name match failed on every call and was swallowed. Match on the
+  // declared character_id_a / character_id_b, then resolve both sides' names
+  // (formatRelationships reads source_name / target_name).
   let relationships = [];
   try {
-    const charName = character.selected_name || character.display_name;
-    relationships = await CharacterRelationship.findAll({
+    const rows = await CharacterRelationship.findAll({
       where: {
         [Op.or]: [
-          { source_name: { [Op.iLike]: `%${charName}%` } },
-          { target_name: { [Op.iLike]: `%${charName}%` } },
+          { character_id_a: characterId },
+          { character_id_b: characterId },
         ],
       },
     });
-  } catch (e) { /* no relationships */ }
+    const ids = [...new Set(rows.flatMap(r => [r.character_id_a, r.character_id_b]))];
+    const people = ids.length
+      ? await RegistryCharacter.findAll({ where: { id: ids }, attributes: ['id', 'selected_name', 'display_name'] })
+      : [];
+    const nameOf = new Map(people.map(p => [p.id, p.selected_name || p.display_name]));
+    relationships = rows.map(r => {
+      const plain = typeof r.toJSON === 'function' ? r.toJSON() : { ...r };
+      return {
+        ...plain,
+        label: plain.relationship_type,
+        source_name: nameOf.get(plain.character_id_a) || '?',
+        target_name: nameOf.get(plain.character_id_b) || '?',
+      };
+    });
+  } catch (e) {
+    console.error('[CharacterAI] relationships query error:', e.message);
+  }
 
   // 5. Therapy profile
   let therapy = null;

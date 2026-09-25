@@ -10,6 +10,13 @@
  *     is it canonical.
  *   - Each field is in exactly one of three states: set, suggested, missing.
  *
+ * Category and format (Task #1888) are suggested the same way, from small
+ * explicit tables below, never from a guess. An accepted format is what
+ * the time and dress-code suggestions read, so accepting one makes those
+ * two appear (the page reloads the event after every save). A suggested
+ * but unaccepted format feeds nothing: suggestEventTime and
+ * suggestDressCode read the saved event.format only.
+ *
  * Everything here is pure and deterministic: no AI call, no I/O, no clock.
  * A suggestion is display-only. Readiness (eventReadinessSections.js,
  * Task #1775) reads resolveEventBasics but counts a field only in the
@@ -19,6 +26,7 @@
  * is added to the readiness gate later.
  */
 import { resolveEventVenueAndDate } from './eventReadiness';
+import { EVENT_CATEGORIES, EVENT_FORMATS, resolveTaxonomyField } from './eventTaxonomy';
 
 // Key written by the create paths next to the 45-day default
 // (src/utils/eventDateDefault.js, AUTO_DATE_KEY). Kept in step by hand;
@@ -115,6 +123,185 @@ export function suggestDressCode(event, venueLocation) {
   return { value, basis: `From ${basis.join(' · ')}` };
 }
 
+// ─── Category and format suggestions (Task #1888) ─────────────────────────
+//
+// What an event carries when it reaches the Event Package (measured at
+// 51e64f3ff; the per-path report is in the Task #1888 PR body):
+//   - from-profile: automation.content_category (the Feed creator's); a
+//     name "Event with <creator>" (no signal); usually a linked venue whose
+//     venue_type was itself picked from that content category.
+//   - calendar spawn: a name built from the calendar category's template
+//     (e.g. "… Beauty Pop-Up", "… Gallery Night"). The calendar's
+//     cultural_category is not saved, and the venue_location_id column is
+//     not set, so the Package sees no linked venue.
+//   - opportunity pipeline: automation.opportunity_type and the
+//     opportunity's own name; no linked venue.
+// event_type is never read: it is the mechanic, an axis separate from
+// category and format (docs/EVENT_EPISODE_FLOW.md §8(k)). Prestige is never
+// read: every event has one.
+//
+// Each table maps one fact to one taxonomy value; a fact not listed (e.g.
+// content category "lifestyle") suggests nothing. Sources are tried in a
+// fixed order and the first that yields a value wins. A name whose words
+// point at two different values is ambiguous and suggests nothing.
+
+// Content category (SocialProfile.content_category, free text) → category.
+// Whole value only, trimmed and lower-cased.
+export const CONTENT_CATEGORY_TO_CATEGORY = {
+  fashion: 'fashion',
+  style: 'fashion',
+  modeling: 'fashion',
+  beauty: 'beauty_wellness',
+  skincare: 'beauty_wellness',
+  makeup: 'beauty_wellness',
+  wellness: 'beauty_wellness',
+  fitness: 'beauty_wellness',
+  food: 'brunch_dining',
+  culinary: 'brunch_dining',
+  music: 'arts_entertainment',
+  art: 'arts_entertainment',
+  film: 'arts_entertainment',
+  entertainment: 'arts_entertainment',
+  photography: 'arts_entertainment',
+  luxury: 'luxury_prestige',
+  travel: 'travel_destination',
+  community: 'community_local',
+  philanthropy: 'community_local',
+  activism: 'community_local',
+  creator_economy: 'creator_brand',
+};
+
+// Opportunity type (automation.opportunity_type) → category / format. Only
+// the types whose world or shape is plain.
+export const OPPORTUNITY_TYPE_TO_CATEGORY = {
+  runway: 'fashion',
+  casting_call: 'fashion',
+  editorial: 'fashion',
+  modeling: 'fashion',
+  award_show: 'arts_entertainment',
+};
+export const OPPORTUNITY_TYPE_TO_FORMAT = {
+  award_show: 'gala',
+};
+
+// No venue_type table (Evoni, Task #1888): on automated events the venue was
+// itself chosen from the creator's content category, so a venue-based
+// suggestion would echo that choice rather than add a fact. If a mapping is
+// not deliberately defined, no suggestion beats one from a table nobody chose.
+
+// Words in the event's name → category / format. Whole words only.
+export const NAME_WORDS_TO_CATEGORY = [
+  { pattern: /\b(fashion|runway|couture|collection preview)\b/i, value: 'fashion' },
+  { pattern: /\b(beauty|skincare|wellness|spa)\b/i, value: 'beauty_wellness' },
+  { pattern: /\b(brunch|dinner|supper)\b/i, value: 'brunch_dining' },
+  { pattern: /\b(gallery|art|concert|premiere|film)\b/i, value: 'arts_entertainment' },
+  { pattern: /\bluxury\b/i, value: 'luxury_prestige' },
+  { pattern: /\btravel\b/i, value: 'travel_destination' },
+  { pattern: /\b(charity|community|fundraiser)\b/i, value: 'community_local' },
+];
+export const NAME_WORDS_TO_FORMAT = [
+  { pattern: /\bcocktails?\b/i, value: 'cocktail_party' },
+  { pattern: /\bgarden (party|soiree|soirée)(?![\p{L}])/iu, value: 'garden_soiree' },
+  { pattern: /\b(gallery|opening reception)\b/i, value: 'gallery_opening' },
+  { pattern: /\bgala\b/i, value: 'gala' },
+  { pattern: /\bbrunch\b/i, value: 'brunch' },
+  { pattern: /\bconcert\b/i, value: 'concert' },
+  { pattern: /\blaunch\b/i, value: 'brand_launch' },
+  { pattern: /\b(premiere|première)(?![\p{L}])/iu, value: 'premiere' },
+];
+
+const lower = (v) => text(v).toLowerCase();
+
+const automationOf = (event) => {
+  const auto = event?.canon_consequences?.automation;
+  return auto && typeof auto === 'object' && !Array.isArray(auto) ? auto : {};
+};
+
+// Only a value the taxonomy allows is ever suggested.
+const allowed = (value, list) => (value && list.includes(value) ? value : null);
+
+// One { value, word } from the name, or null when no word matches or the
+// words point at two different values.
+function fromName(name, table, list) {
+  const n = text(name);
+  if (!n) return null;
+  const hits = [];
+  for (const { pattern, value } of table) {
+    const m = n.match(pattern);
+    if (m && allowed(value, list) && !hits.some((h) => h.value === value)) {
+      hits.push({ value, word: m[0].toLowerCase() });
+    }
+  }
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * Category suggestion. Sources, first match wins:
+ *   1. the organizer's content_category (organizer: the linked creator
+ *      profile; a brand organizer carries none);
+ *   2. the Feed creator the event was started from
+ *      (automation.content_category, written by from-profile);
+ *   3. automation.opportunity_type (opportunity pipeline);
+ *   4. a word in the event's name.
+ * The linked venue is not a source (see the note above the name tables).
+ * Returns { value, basis } or null when none of them says.
+ */
+export function suggestEventCategory(event, organizer) {
+  const ev = event || {};
+  const auto = automationOf(ev);
+
+  const orgCat = lower(organizer?.content_category);
+  const fromOrg = allowed(CONTENT_CATEGORY_TO_CATEGORY[orgCat], EVENT_CATEGORIES);
+  if (fromOrg) return { value: fromOrg, basis: `From organizer: ${fmtFormat(orgCat)} creator` };
+
+  const feedCat = lower(auto.content_category);
+  const fromFeed = allowed(CONTENT_CATEGORY_TO_CATEGORY[feedCat], EVENT_CATEGORIES);
+  if (fromFeed) return { value: fromFeed, basis: `From Feed creator: ${fmtFormat(feedCat)} creator` };
+
+  const oppType = lower(auto.opportunity_type);
+  const fromOpp = allowed(OPPORTUNITY_TYPE_TO_CATEGORY[oppType], EVENT_CATEGORIES);
+  if (fromOpp) return { value: fromOpp, basis: `From opportunity: ${fmtFormat(oppType)}` };
+
+  const byName = fromName(ev.name, NAME_WORDS_TO_CATEGORY, EVENT_CATEGORIES);
+  if (byName) return { value: byName.value, basis: `From name: "${byName.word}"` };
+
+  return null;
+}
+
+/**
+ * Format suggestion. Sources, first match wins:
+ *   1. a word in the event's name (it names the gathering directly);
+ *   2. automation.opportunity_type (opportunity pipeline).
+ * The linked venue is not a source (see the note above the name tables).
+ * `organizer` is taken for symmetry with suggestEventCategory, but no
+ * organizer fact names a format: a creator's content category says what
+ * world they are in, not what shape their event takes.
+ * Returns { value, basis } or null when none of them says.
+ */
+export function suggestEventFormat(event, organizer) {
+  const ev = event || {};
+  const auto = automationOf(ev);
+
+  const byName = fromName(ev.name, NAME_WORDS_TO_FORMAT, EVENT_FORMATS);
+  if (byName) return { value: byName.value, basis: `From name: "${byName.word}"` };
+
+  const oppType = lower(auto.opportunity_type);
+  const fromOpp = allowed(OPPORTUNITY_TYPE_TO_FORMAT[oppType], EVENT_FORMATS);
+  if (fromOpp) return { value: fromOpp, basis: `From opportunity: ${fmtFormat(oppType)}` };
+
+  return null;
+}
+
+// A category or format field: a stored value is set, with inList false
+// when the model would not allow it (Task #1780's flag); otherwise the
+// suggestion, else missing.
+function taxonomyField(stored, allowedValues, suggestion) {
+  const base = resolveTaxonomyField(stored, allowedValues);
+  if (base.state === 'set') return { ...base, suggestion: null };
+  if (suggestion) return { state: 'suggested', value: null, suggestion, inList: true };
+  return { ...base, suggestion: null };
+}
+
 /**
  * True when event_date is the system default the create path wrote and
  * nobody has changed it since. The flag alone is not enough: the old
@@ -136,7 +323,7 @@ function field(value, suggestion, extra = {}) {
 }
 
 /**
- * The four Basics fields, each { state: 'set'|'suggested'|'missing',
+ * The Basics fields, each { state: 'set'|'suggested'|'missing',
  * value, suggestion, ... }.
  *   - date: column, else the automation copy (shown "saved copy", as
  *     before — resolveEventVenueAndDate). Never suggested.
@@ -145,10 +332,14 @@ function field(value, suggestion, extra = {}) {
  *   - description: column only. Never suggested.
  *   - dressCode: column only (what the Package has always shown); else a
  *     format/venue/prestige suggestion.
+ *   - category, format (Task #1888): column only; else a suggestion
+ *     (suggestEventCategory / suggestEventFormat). Each also carries
+ *     inList, false for a stored value outside the taxonomy (Task #1780).
  * Pass { suggest: false } for a used (read-only) event: nothing can be
- * accepted there, so an unset field reads as missing.
+ * accepted there, so an unset field reads as missing. `organizer` is the
+ * linked creator profile, when the caller has one.
  */
-export function resolveEventBasics(event, venueLocation, { suggest = true } = {}) {
+export function resolveEventBasics(event, venueLocation, { suggest = true, organizer = null } = {}) {
   const ev = event || {};
   const vd = resolveEventVenueAndDate(ev);
 
@@ -162,5 +353,9 @@ export function resolveEventBasics(event, venueLocation, { suggest = true } = {}
     }),
     description: field(text(ev.description) || null, null),
     dressCode: field(text(ev.dress_code) || null, suggest ? suggestDressCode(ev, venueLocation) : null),
+    category: taxonomyField(ev.category, EVENT_CATEGORIES,
+      suggest ? suggestEventCategory(ev, organizer) : null),
+    format: taxonomyField(ev.format, EVENT_FORMATS,
+      suggest ? suggestEventFormat(ev, organizer) : null),
   };
 }
