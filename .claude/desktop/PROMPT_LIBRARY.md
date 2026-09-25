@@ -31,7 +31,7 @@ Run /wake-up. The branch claude/issue-<N>-<slug> already has commits; do not rec
 ```
 Run /wake-up, then /audit-file amendment "<short title>".
 Content to record: <the finding or ruling, with standings: MEASURED / ATTESTED / RULED>.
-Basis: origin/main at the SHA /wake-up reported. Re-derive the FD/XK/PE tails with pasted grep instruments. This amendment mints nothing and edits no other file. Prod FROZEN. Commit as docs(audit): <title> [skip-automerge]. Then /pr <N>.
+Basis: origin/main at the SHA /wake-up reported. Re-derive the FD/XK/PE tails with pasted grep instruments. This amendment mints nothing and edits no other file. Production's freeze is lifted (`F-Deploy-1_Fix_Plan_v1.53.md` §1); agent sessions still never touch hosts, AWS, RDS or Cognito (`CLAUDE.md`). Commit as docs(audit): <title> [skip-automerge]. Then /pr <N>.
 No host, AWS, database, or Cognito contact.
 ```
 
@@ -123,7 +123,7 @@ Run /wake-up, then on branch claude/issue-<N>-context-refresh: update PROJECT_CO
 
 **Retire a dangerous instruction file**
 ```
-Run /wake-up, then on branch claude/issue-<N>-retire-deploy-prompts: replace the bodies of .github/agents/deploy.agent.md and .github/prompts/deploy-dev.prompt.md with a short notice that production is FROZEN, that deploys are Evoni-only via workflow_dispatch of deploy-dev.yml, and a pointer to F-Deploy-1_PROD_SplitBrain_HAZARD.md and DEVELOPMENT_WORKFLOW.md §7. Keep the frontmatter so Copilot still resolves the files. Commit `docs(tooling): retire SSH/pm2 deploy prompts [skip-automerge]`. No host, AWS, database, or Cognito contact.
+Run /wake-up, then on branch claude/issue-<N>-retire-deploy-prompts: replace the bodies of .github/agents/deploy.agent.md and .github/prompts/deploy-dev.prompt.md with a short notice that production actions are Evoni's alone (the freeze is lifted by F-Deploy-1_Fix_Plan_v1.53.md; agent sessions still never contact hosts), that deploys are Evoni-only via workflow_dispatch of deploy-dev.yml, and a pointer to F-Deploy-1_PROD_SplitBrain_HAZARD.md and DEVELOPMENT_WORKFLOW.md §7. Keep the frontmatter so Copilot still resolves the files. Commit `docs(tooling): retire SSH/pm2 deploy prompts [skip-automerge]`. No host, AWS, database, or Cognito contact.
 ```
 
 **Archive phase-era docs**

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // PreToolUse guard for Bash / PowerShell commands.
-// Blocks anything that would touch the FROZEN production box, AWS, RDS, PM2,
+// Blocks anything that would touch a production host, AWS, RDS, PM2,
 // dispatch or enable a workflow, push straight to main/dev, or force-sync the DB.
+// Agent sessions never contact hosts; production actions are Evoni's (CLAUDE.md).
 // Exit 2 = block (stderr is shown to Claude). Exit 0 = allow.
 // It matches COMMAND POSITION only, so prose or documents that merely mention
 // `pm2` or an RDS hostname are not blocked. Heredoc bodies written to files with
@@ -21,7 +22,7 @@ process.stdin.on('end', () => {
   // "command position": start of string, start of a line, or after ; & | ( ` $( or sudo/env prefixes.
   const at = (name) => new RegExp(`(^|[\\n;&|(\`]\\s*|\\$\\(\\s*)(sudo\\s+|env\\s+[A-Z_]+=\\S+\\s+)*${name}(\\s|$)`);
   const rules = [
-    [at('(ssh|scp|sftp|rsync)'), 'SSH/SCP/rsync to any host. Prod is FROZEN; agent sessions never contact hosts.'],
+    [at('(ssh|scp|sftp|rsync)'), 'SSH/SCP/rsync to any host. Agent sessions never contact hosts; production actions are Evoni\'s (CLAUDE.md).'],
     [at('pm2'), 'pm2 on any box. A process reload can silently swap prod onto the empty DB.'],
     [at('aws'), 'AWS CLI. Evoni runs AWS commands personally (v25 Owed Index Amd30 AF2.6).'],
     [/(psql|pg_dump|pg_restore|pg_isready|DATABASE_URL=|DB_HOST=|postgres(ql)?:\/\/)[^\n]*(rds\.amazonaws\.com|episode-control-(dev|prod))/i, 'A connection to a live RDS instance. No DB contact from agent sessions; identity by query, never by name.'],
