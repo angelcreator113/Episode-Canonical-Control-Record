@@ -84,6 +84,9 @@ module.exports = (sequelize, DataTypes) => {
     // ── Linked Episode ───────────────────────────────────────────────────
     event_id: { type: DataTypes.UUID, allowNull: true },                  // world event if created
     episode_id: { type: DataTypes.UUID, allowNull: true },                // episode if produced
+    // Task #1870: migration 20260719000000; in the 2026-09-17 canon capture
+    // (uuid, nullable). careerPipelineService's spawned opportunities set it.
+    career_goal_id: { type: DataTypes.UUID, allowNull: true },            // goal whose completion spawned this
 
     // ── Feed Impact ──────────────────────────────────────────────────────
     feed_reactions: { type: DataTypes.JSONB, defaultValue: [] },          // [{profile_handle, reaction_type, content}]

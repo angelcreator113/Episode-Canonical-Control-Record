@@ -626,6 +626,11 @@ module.exports = (sequelize) => {
     secret_connections: { type: DataTypes.JSONB, allowNull: true },        // hidden relationships
     rebrand_history: { type: DataTypes.JSONB, allowNull: true },           // past handles/niches
     social_synced_at: { type: DataTypes.DATE, allowNull: true },           // last sync from feed profile
+
+    // ── World cross-link (Task #1870) ─────────────────────────────────────────
+    // Migration 20260302210000; in the 2026-09-17 canon capture (uuid,
+    // nullable). The character generator's commit sets it.
+    world_character_id: { type: DataTypes.UUID, allowNull: true },
   }, {
     tableName: 'registry_characters',
     underscored: true,

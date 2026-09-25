@@ -129,6 +129,16 @@ module.exports = (sequelize) => {
 
     // ── Invitation ──
     invitation_asset_id: { type: DataTypes.UUID, allowNull: true },
+    // Invitation style (Task #1870). Migration 20260703000000 added these
+    // five columns and the 2026-09-17 canon capture has them (varchar /
+    // jsonb, nullable). The model did not declare them, so Sequelize dropped
+    // them from every WorldEvent.create — POST /events/from-profile sent
+    // them and only the canon_consequences.automation copy was stored.
+    theme: { type: DataTypes.STRING(100), allowNull: true },
+    mood: { type: DataTypes.STRING(100), allowNull: true },
+    color_palette: { type: DataTypes.JSONB, allowNull: true },
+    floral_style: { type: DataTypes.STRING(50), allowNull: true },
+    border_style: { type: DataTypes.STRING(50), allowNull: true },
     // invitation_details — migration 20260709 (may not exist)
 
     // ── Feed Origin ──
@@ -399,6 +409,8 @@ module.exports = (sequelize) => {
   // oversight, so call sites that pass this constant as `attributes` keep
   // returning exactly what they always have without requesting the two
   // columns a not-yet-migrated database won't have yet.
+  // theme/mood/color_palette/floral_style/border_style (Task #1870) are
+  // included: all five are in the 2026-09-17 canon capture.
   // restrictions and opportunity_id (Task #1814) ARE included:
   // opportunity_id is in the 2026-09-17 canon capture, and restrictions
   // arrives with migration 20260924000000, which both deploy workflows run
@@ -410,7 +422,8 @@ module.exports = (sequelize) => {
     'id', 'show_id', 'season_id', 'arc_id', 'name', 'event_type',
     'host', 'host_brand', 'description', 'location_hint', 'scene_set_id',
     'venue_location_id', 'venue_name', 'venue_address', 'event_date', 'event_time',
-    'invitation_asset_id', 'source_profile_id', 'prestige', 'cost_coins',
+    'invitation_asset_id', 'theme', 'mood', 'color_palette', 'floral_style',
+    'border_style', 'source_profile_id', 'prestige', 'cost_coins',
     'strictness', 'deadline_type', 'deadline_minutes', 'dress_code',
     'dress_code_keywords', 'outfit_set_id', 'outfit_pieces',
     'narrative_stakes', 'canon_consequences', 'seeds_future_events',
