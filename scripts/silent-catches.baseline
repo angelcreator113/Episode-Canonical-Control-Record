@@ -1,0 +1,177 @@
+# Silent-catch ratchet baseline for scripts/lint-silent-catches.sh.
+# Format: count<TAB>path<TAB>normalised line text. No line numbers.
+# Regenerate: bash scripts/lint-silent-catches.sh --update-baseline
+# This file should only shrink. Do not add entries to silence a new catch;
+# log the error, or mark an intentional swallow with // silent-ok: <reason>.
+3	src/routes/amberSessionRoutes.js	} catch { /* silent */ }
+1	src/routes/assets.js	} catch (e) { /* skip invalid JSON */ }
+1	src/routes/careerGoals.js	} catch (e) { /* no state */ }
+1	src/routes/careerGoals.js	} catch { /* default to 5 — no gating */ }
+1	src/routes/careerGoals.js	} catch { /* table may not exist yet */ }
+1	src/routes/characterAI.js	} catch (e) { /* no cast */ }
+2	src/routes/characterAI.js	} catch (e) { /* no lines */ }
+1	src/routes/characterAI.js	} catch (e) { /* no memories */ }
+1	src/routes/characterAI.js	} catch (e) { /* no relationships */ }
+1	src/routes/characterAI.js	} catch (e) { /* no therapy */ }
+1	src/routes/characterAI.js	} catch (e) { /* no universe context */ }
+1	src/routes/characterRegistry.js	try { fs.unlinkSync(filePath); } catch { /* intentionally empty */ }
+1	src/routes/characterRegistry.js	} catch (_) { /* world_characters table may not exist in all environments */ }
+1	src/routes/characterRegistry.js	} catch { /* characterFollowService not available yet */ }
+1	src/routes/episodeScriptWriterRoutes.js	} catch { /* non-blocking */ }
+1	src/routes/episodes.js	} catch (e) { /* no state yet */ }
+1	src/routes/episodes.js	} catch (e) { /* no world_events table or no match */ }
+1	src/routes/evaluation.js	} catch (e) { /* skip check */ }
+1	src/routes/evaluation.js	} catch (weErr) { /* world_events join optional */ }
+1	src/routes/evaluation.js	}).catch(() => []);
+1	src/routes/eventGeneratorRoute.js	} catch (e) { /* franchise_knowledge may not exist */ }
+1	src/routes/eventGeneratorRoute.js	} catch (e) { /* world_locations may not exist */ }
+1	src/routes/memories/assistant.js	} catch { /* table may not exist yet */ }
+1	src/routes/memories/assistant.js	} catch { /* use raw text as reply */ }
+1	src/routes/memories/engine.js	const existing = await WorldLocation.findOne({ where: { name: loc.name } }).catch(() => null);
+1	src/routes/memories/engine.js	if (!finished) try { res.write(' '); } catch (_) { /* connection already closed */ }
+1	src/routes/memories/engine.js	try { res.write(': keepalive\n\n'); } catch (_) { /* intentionally empty */ }
+1	src/routes/memories/engine.js	} catch (_) { /* defaults */ }
+1	src/routes/memories/engine.js	} catch { /* StoryRevision table may not exist yet */ }
+1	src/routes/memories/engine.js	} catch { /* fine — optional enrichment */ }
+2	src/routes/memories/engine.js	}).catch(() => null);
+2	src/routes/memories/engine.js	}).then(rows => rows.map(r => r.get({ plain: true }))).catch(() => null),
+1	src/routes/memories/interview.js	} catch (_) { /* non-fatal */ }
+1	src/routes/memories/interview.js	} catch (_) { /* proceed without */ }
+1	src/routes/memories/interview.js	} catch (e) { /* never interrupt writing */ }
+1	src/routes/memories/voice.js	} catch (_) { /* proceed without */ }
+1	src/routes/onboarding.js	db.Universe ? db.Universe.findAll({ attributes: ['id', 'name'] }).catch(() => []) : Promise.resolve([]),
+4	src/routes/onboarding.js	}).catch(() => []),
+1	src/routes/phoneAIRoutes.js	try { meta = JSON.parse(rows?.[0]?.metadata_text || '{}'); } catch { /* noop */ }
+1	src/routes/phonePlaythroughRoutes.js	try { meta = JSON.parse(row.metadata_text || '{}'); } catch { /* noop */ }
+1	src/routes/sceneProposeRoute.js	? db.CharacterCrossing.findAll({ where: { character_id: charIds }, order: [['created_at', 'DESC']], limit: 10 }).catch(() => [])
+1	src/routes/sceneProposeRoute.js	? db.CharacterGrowthLog.findAll({ where: { character_id: charIds, author_decision: { [Op.or]: ['accepted', null] } }, order: [['created_at', 'DESC']], limit: 20 }).catch(() => [])
+1	src/routes/sceneProposeRoute.js	? db.PainPointMemory.findAll({ where: { memory_type: 'character_revelation' }, order: [['created_at', 'DESC']], limit: 10 }).catch(() => [])
+1	src/routes/sceneProposeRoute.js	db.ContinuityBeat.findAll({ order: [['created_at', 'DESC']], limit: 8 }).catch(() => []),
+1	src/routes/sceneProposeRoute.js	} catch (e) { /* graceful */ }
+1	src/routes/sceneSetRoutes.js	} catch (_) { /* best-effort cleanup */ }
+1	src/routes/sceneSetRoutes.js	} catch { /* non-blocking */ }
+1	src/routes/sceneStudioEpisodeRoutes.js	} catch { /* non-blocking */ }
+1	src/routes/scriptParse.js	} catch (e) { /* ignore */ }
+1	src/routes/session.js	} catch (_) { /* ignore */ }
+1	src/routes/session.js	} catch (_) { /* table may not exist */ }
+1	src/routes/shows.js	} catch { /* events table issue — skip this suggestion, not fatal */ }
+1	src/routes/shows.js	} catch { /* non-blocking */ }
+1	src/routes/shows.js	} catch { /* skip */ }
+1	src/routes/shows.js	} catch { /* skip malformed */ }
+1	src/routes/shows.js	} catch { /* wardrobe query issue — skip */ }
+1	src/routes/shows.js	} catch { /* wardrobe query issue — skip closet section gracefully */ }
+1	src/routes/socialProfileBulkRoutes.js	try { client.end(); } catch { /* intentionally empty */ }
+3	src/routes/socialProfileRoutes.js	} catch (e) { /* CharacterFollowProfile table may not exist yet */ }
+1	src/routes/socialProfileRoutes.js	} catch { /* WorldTimelineEvent table may not exist yet */ }
+1	src/routes/socialProfileRoutes.js	} catch { /* fall through */ }
+2	src/routes/socialProfileRoutes.js	} catch { /* fall through to in-memory */ }
+2	src/routes/socialProfileRoutes.js	} catch { /* non-blocking */ }
+1	src/routes/socialProfileRoutes.js	}).catch(() => []);
+2	src/routes/socialProfileRoutes.js	}).catch(() => null);
+1	src/routes/storyEvaluationRoutes.js	} catch { /* PipelineTracking table may not exist yet */ }
+1	src/routes/storyEvaluationRoutes.js	} catch { /* StoryRevision table may not exist yet */ }
+1	src/routes/storyEvaluationRoutes.js	} catch { /* relationship_events table may not exist yet */ }
+1	src/routes/storyEvaluationRoutes.js	} catch { /* social_profiles table may not exist yet */ }
+1	src/routes/storyEvaluationRoutes.js	} catch { /* table may not exist */ }
+1	src/routes/storyHealth.js	} catch { /* evaluation column may not exist */ }
+4	src/routes/storyHealth.js	} catch { /* ignore */ }
+11	src/routes/storyHealth.js	} catch { /* table may not exist */ }
+2	src/routes/storyteller.js	} catch (e) { /* graceful */ }
+2	src/routes/tierFeatures.js	).catch(() => []);
+1	src/routes/tierFeatures.js	} catch { /* table may not exist */ }
+1	src/routes/tierFeatures.js	}).catch(() => []);
+3	src/routes/uiOverlayRoutes.js	try { meta = JSON.parse(rows[0].metadata_text || '{}'); } catch { /* skip */ }
+1	src/routes/uiOverlayRoutes.js	try { meta = r.metadata_text ? JSON.parse(r.metadata_text) : {}; } catch { /* skip */ }
+1	src/routes/wardrobe.js	} catch (e) { /* non-fatal */ }
+1	src/routes/wardrobeEventRoutes.js	} catch { /* return raw */ }
+1	src/routes/wardrobeEventRoutes.js	} catch { /* skip */ }
+1	src/routes/wardrobeEventRoutes.js	} catch { /* use default */ }
+1	src/routes/world.js	} catch (e) { /* no assigned wardrobe */ }
+1	src/routes/world.js	} catch (e) { /* table might not exist */ }
+1	src/routes/world.js	} catch (e2) { /* no wardrobe */ }
+1	src/routes/worldEvents.js	const show = await models.Show.findByPk(showId, { attributes: ['name'] }).catch(() => null);
+1	src/routes/worldEvents.js	} catch (e) { /* no state yet */ }
+1	src/routes/worldEvents.js	} catch { /* asset_scope/episode_id columns may not exist */ }
+1	src/routes/worldEvents.js	} catch { /* columns may not exist */ }
+1	src/routes/worldEvents.js	} catch { /* fall through */ }
+1	src/routes/worldEvents.js	} catch { /* model query failed too */ }
+9	src/routes/worldEvents.js	} catch { /* non-blocking */ }
+1	src/routes/worldEvents.js	} catch { /* non-fatal */ }
+1	src/routes/worldEvents.js	} catch { /* skip */ }
+1	src/routes/worldEvents.js	} catch { /* table may not exist */ }
+1	src/routes/worldEvents.js	} catch { /* table may not have status=declined */ }
+2	src/routes/worldEvents.js	} catch { /* use default */ }
+2	src/routes/worldEvents.js	} catch { /* wardrobe may not exist yet */ }
+1	src/routes/worldEvents.js	} catch { /* wardrobe table may not exist yet */ }
+5	src/routes/worldEvents.js	}).catch(() => null);
+2	src/routes/worldStudio.js	).catch(() => []);
+1	src/routes/worldStudio.js	const exists = await WorldLocation.findOne({ where: { slug } }).catch(() => null);
+1	src/routes/worldStudio.js	} catch (_) { /* registry lookup failed, non-critical */ }
+3	src/routes/worldStudio.js	} catch { /* association may not exist */ }
+2	src/services/arcProgressionService.js	} catch { /* non-critical */ }
+1	src/services/careerPipelineService.js	} catch { /* no event */ }
+2	src/services/distributionService.js	).catch(() => []);
+4	src/services/episodeCompletionService.js	).catch(() => []);
+1	src/services/episodeCompletionService.js	} catch { /* no-op — authenticity signal just doesn't fire */ }
+6	src/services/episodeCompletionService.js	} catch { /* non-blocking */ }
+1	src/services/episodeCompletionService.js	} catch { /* wardrobe scoring not available */ }
+1	src/services/episodeGeneratorService.js	).catch(() => []);
+1	src/services/episodeGeneratorService.js	} catch { /* feed_moment column may not exist yet */ }
+3	src/services/episodeGeneratorService.js	} catch { /* non-blocking */ }
+1	src/services/episodeGeneratorService.js	} catch { /* scene_sets query failed — no scene sets linked */ }
+1	src/services/episodeGeneratorService.js	} catch { /* skip */ }
+1	src/services/episodeGeneratorService.js	} catch { /* skip individual failures */ }
+1	src/services/episodeGeneratorService.js	}).catch(() => []);
+13	src/services/episodeScriptWriterService.js	} catch { /* non-blocking */ }
+1	src/services/episodeScriptWriterService.js	}).catch(() => null);
+1	src/services/episodeScriptWriterService.js	}).then(b => b?.toJSON()).catch(() => null);
+1	src/services/episodeScriptWriterService.js	}).then(plans => plans.map(p => p.toJSON())).catch(() => []);
+1	src/services/eventAutomationService.js	} catch { /* iLike may not work on all DBs */ }
+4	src/services/eventAutomationService.js	}).catch(() => null);
+2	src/services/feedEngagementService.js	} catch { /* non-critical */ }
+1	src/services/feedEngagementService.js	} catch { /* non-critical — continue analysis */ }
+1	src/services/feedEventPipelineService.js	} catch { /* arc system not available */ }
+1	src/services/feedEventPipelineService.js	} catch { /* non-critical */ }
+1	src/services/feedEventPipelineService.js	} catch { /* skip */ }
+1	src/services/feedEventPipelineService.js	} catch { /* table may not exist */ }
+1	src/services/feedEventPipelineService.js	} catch { /* use empty */ }
+1	src/services/feedPostGeneratorService.js	} catch { /* arc system not available — continue without */ }
+4	src/services/feedPostGeneratorService.js	} catch { /* skip */ }
+2	src/services/feedScheduler.js	try { return JSON.parse(cleaned); } catch { /* ignore parse error, try regex extraction */ }
+1	src/services/feedScheduler.js	try { return JSON.parse(fixed); } catch { /* try truncation repair */ }
+1	src/services/feedScheduler.js	} catch { /* arc system not available */ }
+1	src/services/feedScheduler.js	} catch { /* non-blocking */ }
+1	src/services/financialFeedService.js	} catch { /* table might not exist on legacy env */ }
+1	src/services/financialTransactionService.js	).catch(() => [[]]);
+1	src/services/financialTransactionService.js	).catch(() => []);
+1	src/services/financialTransactionService.js	} catch { /* fall through */ }
+1	src/services/financialTransactionService.js	} catch { /* fall through to default */ }
+2	src/services/financialTransactionService.js	} catch { /* non-blocking */ }
+1	src/services/groundedScriptGeneratorService.js	const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId } }).catch(() => null);
+4	src/services/groundedScriptGeneratorService.js	} catch { /* non-blocking */ }
+2	src/services/groundedScriptGeneratorService.js	}).catch(() => []);
+1	src/services/invitationGeneratorService.js	} catch { /* non-blocking */ }
+3	src/services/phoneContextBuilder.js	).catch(() => [[]]);
+2	src/services/phoneContextBuilder.js	try { meta = JSON.parse(r.metadata_text || '{}'); } catch { /* noop */ }
+1	src/services/phoneContextBuilder.js	try { meta = JSON.parse(row.metadata_text || '{}'); } catch { /* noop */ }
+1	src/services/phoneContextBuilder.js	try { payload = JSON.parse(r.payload_text || '{}'); } catch { /* noop */ }
+1	src/services/phoneContextBuilder.js	} catch { /* noop */ }
+1	src/services/phoneContextBuilder.js	} catch { /* table not yet created */ }
+1	src/services/postProcessingService.js	} catch (_) { /* best effort */ }
+1	src/services/registrySyncService.js	} catch { /* non-blocking */ }
+1	src/services/sceneGenerationService.js	} catch { /* non-blocking */ }
+1	src/services/scenePlannerService.js	} catch (e) { /* world_events may not exist */ }
+1	src/services/siteOrganizerAgent.js	} catch { /* skip */ }
+2	src/services/socialChecklistService.js	} catch { /* non-blocking */ }
+1	src/services/storyGenerationService.js	).catch(() => []);
+1	src/services/storyGenerationService.js	} catch { /* non-blocking */ }
+1	src/services/timelinePlacementService.js	}).catch(() => null);
+1	src/services/todoListService.js	} catch { /* episodeGeneratorService not available — skip */ }
+1	src/services/uiOverlayService.js	try { meta = JSON.parse(row.metadata_text || '{}'); } catch { /* noop */ }
+1	src/services/uiOverlayService.js	} catch { /* malformed JSON — use empty */ }
+1	src/services/uiOverlayService.js	} catch { /* popularity is a bonus, not a requirement */ }
+2	src/services/venueGenerationService.js	} catch { /* non-blocking */ }
+1	src/services/wardrobeIntelligenceService.js	} catch { /* no character state */ }
+1	src/services/wardrobeIntelligenceService.js	} catch { /* non-blocking per item */ }
+1	src/services/worldTemperatureService.js	}).catch(() => []);
+1	src/services/worldTemperatureService.js	}).catch(() => null);
