@@ -580,13 +580,18 @@ class AssetService {
         throw new Error('Asset not found');
       }
 
-      const metadata = asset.metadata || {};
-      metadata.approved_by = approvedBy;
-      metadata.approved_at = new Date().toISOString();
+      // Task #1909: a new object, not the loaded one edited in place
+      // (Sequelize saw the same reference as unchanged and never saved it).
+      // No processed_at: canon's assets table has no such column, and
+      // metadata.approved_at records the moment.
+      const metadata = {
+        ...(asset.metadata || {}),
+        approved_by: approvedBy,
+        approved_at: new Date().toISOString(),
+      };
 
       await asset.update({
         approval_status: 'APPROVED',
-        processed_at: new Date(),
         metadata,
         updated_at: new Date(),
       });
@@ -612,13 +617,17 @@ class AssetService {
         throw new Error('Asset not found');
       }
 
-      const metadata = asset.metadata || {};
-      metadata.rejected_at = new Date().toISOString();
-      metadata.rejection_reason = reason;
+      // Task #1909: a new object (see approveAsset). No processing_error:
+      // canon's assets table has no such column; the reason is kept in
+      // metadata.rejection_reason, which now actually saves.
+      const metadata = {
+        ...(asset.metadata || {}),
+        rejected_at: new Date().toISOString(),
+        rejection_reason: reason,
+      };
 
       await asset.update({
         approval_status: 'REJECTED',
-        processing_error: reason,
         metadata,
         updated_at: new Date(),
       });
@@ -854,11 +863,13 @@ class AssetService {
 
       const processedUrl = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${processedKey}`;
 
+      // Task #1909: s3_key_processed is now declared on Asset (canon has
+      // it). processed_at is not written: canon's assets table has no such
+      // column; updated_at records the moment.
       await asset.update({
         s3_key_processed: processedKey,
         s3_url_processed: processedUrl,
         approval_status: 'APPROVED',
-        processed_at: new Date(),
         updated_at: new Date(),
       });
 

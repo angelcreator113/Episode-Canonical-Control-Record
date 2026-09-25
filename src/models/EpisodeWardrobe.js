@@ -59,6 +59,15 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: 'Episode-specific notes about wearing this item',
       },
+      // Task #1909: canon has it (2026-09-17 capture: boolean NOT NULL).
+      // toggleEpisodeFavorite (src/controllers/wardrobeController.js) wrote
+      // it through a loaded link and Sequelize dropped it, so the toggle
+      // never stuck. The default keeps creates that do not set it valid.
+      is_episode_favorite: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
       approval_status: {
         type: DataTypes.STRING(50),
         allowNull: true,

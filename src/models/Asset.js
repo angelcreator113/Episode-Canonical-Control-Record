@@ -116,6 +116,13 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(50),
         allowNull: true,
       },
+      // Task #1909: canon has it (2026-09-17 capture: character varying,
+      // nullable). AssetService.processAsset wrote it through a loaded asset
+      // and Sequelize dropped it, so the processed S3 key was never kept.
+      s3_key_processed: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       metadata: {
         type: DataTypes.JSONB,
         allowNull: true,

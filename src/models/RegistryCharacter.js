@@ -631,6 +631,15 @@ module.exports = (sequelize) => {
     // Migration 20260302210000; in the 2026-09-17 canon capture (uuid,
     // nullable). The character generator's commit sets it.
     world_character_id: { type: DataTypes.UUID, allowNull: true },
+
+    // ── Character crossings (Task #1909) ──────────────────────────────────────
+    // Migration 20260312220000-character-crossings; in the 2026-09-17 canon
+    // capture (boolean / jsonb / jsonb, nullable). PUT /character-crossings/
+    // :id/confirm-gap assigns them on a loaded character and saves; undeclared,
+    // Sequelize dropped all three.
+    performing_publicly: { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: false },
+    dimensions_performed: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },
+    dimensions_hidden: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },
   }, {
     tableName: 'registry_characters',
     underscored: true,

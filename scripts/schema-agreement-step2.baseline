@@ -11,6 +11,7 @@ ActivityLog	user_agent	missing-column
 ActivityLog	user_id	missing-column
 Asset	processing_metadata	missing-column
 Asset	processing_status	missing-column
+Asset	s3_key_processed	missing-column
 Asset	s3_url_enhanced	missing-column
 Asset	s3_url_no_bg	missing-column
 AssetLabel	-	no-table
@@ -84,6 +85,7 @@ ThumbnailComposition	approved_at	missing-column
 ThumbnailComposition	approved_by	missing-column
 ThumbnailComposition	include_justawomaninherprime	missing-column
 ThumbnailComposition	justawomaninherprime_position	missing-column
+ThumbnailComposition	published_at	missing-column
 ThumbnailTemplate	-	no-table
 TimelinePlacement	-	no-table
 VideoProcessingJob	-	no-table

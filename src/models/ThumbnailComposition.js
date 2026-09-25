@@ -83,6 +83,14 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      // Task #1909: canon has it (2026-09-17 capture: timestamp without time
+      // zone, nullable); POST /:id/generate-thumbnails' instance update in
+      // src/routes/compositions.js wrote it and Sequelize dropped it. No
+      // migration in src/migrations/ creates it (step 2 baseline).
+      published_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       selected_formats: {
         type: DataTypes.JSONB,
         allowNull: true,
