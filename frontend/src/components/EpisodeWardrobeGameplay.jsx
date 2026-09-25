@@ -32,6 +32,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../services/api';
+import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
 
 // ─── CONSTANTS ───
 
@@ -73,6 +74,51 @@ function getConfidence(score) {
     if (score >= CONFIDENCE_LEVELS[i].min) return CONFIDENCE_LEVELS[i];
   }
   return CONFIDENCE_LEVELS[0];
+}
+
+// ─── GARMENT IMAGE ───
+// Draws the item's real picture through the shared resolver. The category
+// emoji stays as the placeholder when the item has no image, and replaces the
+// image if it fails to load. Keyed by URL so a new URL gets a fresh attempt.
+
+function GarmentImage({ item, fallback, size, height, radius = 8 }) {
+  const url = resolveWardrobeImageUrl(item);
+  return <GarmentImageInner key={url || 'none'} url={url} name={item?.name} fallback={fallback} size={size} height={height} radius={radius} />;
+}
+
+function GarmentImageInner({ url, name, fallback, size, height, radius }) {
+  const [failed, setFailed] = useState(false);
+  const box = {
+    width: size || '100%',
+    height: height || size,
+    borderRadius: radius,
+    background: '#f8fafc',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+  };
+  if (!url || failed) {
+    const emojiSize = Math.min(40, Math.max(16, Math.round((height || size || 40) * 0.5)));
+    return (
+      <div data-testid="garment-fallback" role="img" aria-label={name || 'Wardrobe item'} style={box}>
+        <span style={{ fontSize: emojiSize }}>{fallback}</span>
+      </div>
+    );
+  }
+  return (
+    <div style={box}>
+      <img
+        src={url}
+        alt={name || 'Wardrobe item'}
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailed(true)}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+      />
+    </div>
+  );
 }
 
 // ─── SYNERGY CALCULATOR ───
@@ -588,8 +634,12 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     cursor: item ? 'default' : 'pointer',
                   }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 20 }}>{slot.icon}</span>
-                    <div style={{ flex: 1 }}>
+                    {item ? (
+                      <GarmentImage item={item} fallback={slot.icon} size={40} />
+                    ) : (
+                      <span style={{ fontSize: 20 }}>{slot.icon}</span>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e' }}>
                         {slot.label}
                         {slot.required && !item && <span style={{ color: '#dc2626', fontSize: 9 }}> *</span>}
@@ -707,9 +757,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span style={{ ...W.rolePill, background: rs.bg, color: rs.color }}>{rs.label}</span>
-                      <span style={{ ...W.tierPill, background: ts.bg, color: ts.color }}>{ts.emoji} {ts.label}</span>
+                      <span style={{ ...W.tierPill, background: ts.bg, color: ts.color }}>{ts.emoji} {item.tier || 'basic'}</span>
                     </div>
-                    <div style={{ fontSize: 20, marginBottom: 2 }}>{CAT_ICONS[item.clothing_category] || '👕'}</div>
+                    <div style={{ marginBottom: 6 }}>
+                      <GarmentImage item={item} fallback={CAT_ICONS[item.clothing_category] || '👕'} height={120} />
+                    </div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 1 }}>{item.name}</div>
                     <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>{item.color || '—'} · {item.era_alignment || '—'}</div>
                     <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -785,7 +837,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           <div style={W.modal} onClick={e => e.stopPropagation()}>
             <button onClick={() => setInspecting(null)} style={W.modalClose}>✕</button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-              <span style={{ fontSize: 32 }}>{CAT_ICONS[inspecting.clothing_category] || '👕'}</span>
+              <GarmentImage item={inspecting} fallback={CAT_ICONS[inspecting.clothing_category] || '👕'} size={96} radius={12} />
               <div>
                 <div style={{ fontSize: 18, fontWeight: 800 }}>{inspecting.name}</div>
                 <div style={{ fontSize: 12, color: '#64748b' }}>{inspecting.clothing_category} · {inspecting.color || '—'} · {inspecting.tier}</div>
