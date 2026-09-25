@@ -118,6 +118,15 @@ cd /home/ubuntu/episode-metadata
 echo "📦 Installing backend dependencies..."
 npm ci
 
+# Run migrations — BEFORE the frontend build, nginx and the PM2 restart
+# (#1856). Unmasked: under `set -e` a failed migration stops the deploy here,
+# with its own error output above this point in the log. NODE_ENV is scoped
+# to this command, not exported: exported here it would reach the frontend's
+# `npm ci` below and omit devDependencies (the restart block exports it).
+echo "🗄️  Running database migrations..."
+export DATABASE_URL="${DATABASE_URL}"
+NODE_ENV=production npm run migrate:up
+
 # Build frontend
 echo "🎨 Building frontend..."
 cd frontend
@@ -204,12 +213,6 @@ if [ -f nginx/episode-prod.conf ]; then
 else
   echo "⚠️  No nginx/episode-prod.conf found — skipping nginx deploy"
 fi
-
-# Run migrations
-echo "🗄️  Running database migrations..."
-export DATABASE_URL="${DATABASE_URL}"
-export NODE_ENV=production
-npm run migrate:up || echo "⚠️  Migrations completed with warnings"
 
 # Restart backend application
 echo "🔄 Restarting backend application..."
