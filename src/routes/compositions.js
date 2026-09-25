@@ -16,7 +16,7 @@ const CompositionService = require('../services/CompositionService');
 const ThumbnailGeneratorService = require('../services/ThumbnailGeneratorService');
 const VersioningService = require('../services/VersioningService');
 const FilterService = require('../services/FilterService');
-const { syncDraftColumns, DRAFT_UNAVAILABLE } = require('../services/compositionDraftColumns');
+const { draftColumnsReady, DRAFT_UNAVAILABLE } = require('../services/compositionDraftColumns');
 const { models } = require('../models');
 const { requireAuth } = require('../middleware/auth');
 const { authenticateJWT, requireGroup } = require('../middleware/jwtAuth');
@@ -1436,7 +1436,7 @@ router.post('/:id/save-draft', requireAuth, async (req, res) => {
     // Task #1909: until the draft columns are declared AND in the table,
     // Sequelize would drop every value below and the answer would be a false
     // "saved". Refuse instead (src/services/compositionDraftColumns.js).
-    if (!(await syncDraftColumns(ThumbnailComposition))) {
+    if (!(await draftColumnsReady(ThumbnailComposition))) {
       return res.status(501).json(DRAFT_UNAVAILABLE);
     }
 
@@ -1491,7 +1491,7 @@ router.post('/:id/apply-draft', requireAuth, async (req, res) => {
 
     // Task #1909: no stored draft to read, and layout_overrides would be
     // dropped, until the draft columns exist (see save-draft).
-    if (!(await syncDraftColumns(ThumbnailComposition))) {
+    if (!(await draftColumnsReady(ThumbnailComposition))) {
       return res.status(501).json(DRAFT_UNAVAILABLE);
     }
 
