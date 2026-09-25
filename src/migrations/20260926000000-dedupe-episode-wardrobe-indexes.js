@@ -43,7 +43,10 @@
  * object's own definition (pg_get_indexdef / pg_get_constraintdef), into
  * the comment of the kept unique index. down reads that record, drops what
  * up created, renames back what up renamed, and recreates each dropped
- * index or constraint from its recorded definition.
+ * index or constraint from its recorded definition. A second up never
+ * replaces that record: when it finds nothing to change it leaves the
+ * record as it is, and when it does change something it appends to it
+ * (measured on Postgres 16: before this, up → up → down restored nothing).
  *
  * No CREATE TABLE: no live migration creates episode_wardrobe, so a fresh
  * database (CI, a new dev box) has none. There, like
@@ -208,11 +211,35 @@ module.exports = {
         console.warn(`${LOG} ${KNOWN_DUPLICATE_UNIQUE} exists but is not an exact duplicate of UNIQUE (episode_id, wardrobe_id); left in place.`);
       }
 
-      // The record down needs, on the kept unique index.
-      await sequelize.query(
-        `COMMENT ON INDEX ${q(keptUnique)} IS ${lit(RECORD_MARKER + JSON.stringify(record))}`,
-        { transaction }
-      );
+      // The record down needs, on the kept unique index. A re-run (Evoni
+      // runs migrations by hand) must not replace an earlier run's record:
+      // a run that changed nothing leaves it untouched, and a run that did
+      // change something appends to it, so down still undoes every run.
+      const holder = indexes.find((r) => typeof r.comment === 'string' && r.comment.startsWith(RECORD_MARKER));
+      const changedNothing = !record.dropped.length && !record.renamed.length && !record.created.length;
+      if (holder && changedNothing) {
+        console.log(`${LOG} nothing to change; the Task #1933 record on ${holder.indexname} is left as it is.`);
+      } else {
+        let merged = record;
+        if (holder) {
+          const earlier = JSON.parse(holder.comment.slice(RECORD_MARKER.length));
+          merged = {
+            task: '#1933',
+            dropped: [...earlier.dropped, ...record.dropped],
+            renamed: [...earlier.renamed, ...record.renamed],
+            created: [...earlier.created, ...record.created],
+          };
+          // The holder may have been renamed or dropped in this run.
+          if (await relationExists(sequelize, holder.indexname, transaction) && holder.indexname !== keptUnique) {
+            await sequelize.query(`COMMENT ON INDEX ${q(holder.indexname)} IS NULL`, { transaction });
+          }
+          console.log(`${LOG} appended this run to the Task #1933 record from an earlier run.`);
+        }
+        await sequelize.query(
+          `COMMENT ON INDEX ${q(keptUnique)} IS ${lit(RECORD_MARKER + JSON.stringify(merged))}`,
+          { transaction }
+        );
+      }
 
       const after = await readIndexes(sequelize, transaction);
       console.log(`${LOG} ${TABLE} has ${after.length} indexes after: ${after.map((r) => r.indexname).join(', ')}`);

@@ -153,6 +153,35 @@ describe('20260926000000-dedupe-episode-wardrobe-indexes (Task #1933)', () => {
     expect(cat.rows.every((r) => r.comment === null)).toBe(true);
   });
 
+  test('a second up leaves the first run\'s record, so up → up → down still restores everything', async () => {
+    // Measured on Postgres 16 before the fix: the second up wrote an empty
+    // record over the first, and down restored nothing.
+    const before = evoniTwelve();
+    const cat = makeCatalog(before);
+    await migration.up(cat.queryInterface);
+    const recordAfterFirst = cat.rows.find((r) => r.indexname === 'unique_episode_wardrobe').comment;
+    await migration.up(cat.queryInterface);
+    expect(cat.rows.find((r) => r.indexname === 'unique_episode_wardrobe').comment).toBe(recordAfterFirst);
+    await migration.down(cat.queryInterface);
+
+    const shape = (rows) => rows.map((r) => [r.indexname, r.indexdef, r.conname || null]).sort();
+    expect(shape(cat.rows)).toEqual(shape(before.map((r) => ({ conname: null, ...r }))));
+  });
+
+  test('a second up that finds a new duplicate appends to the record; down undoes both runs', async () => {
+    const before = evoniTwelve();
+    const cat = makeCatalog(before);
+    await migration.up(cat.queryInterface);
+    cat.rows.push({ indexname: 'late_dup_episode', indexdef: def('late_dup_episode', 'episode_id'), conname: null, contype: null, condef: null, comment: null });
+    await migration.up(cat.queryInterface);
+    expect(onCols(cat, 'episode_id', false)).toHaveLength(1);
+    await migration.down(cat.queryInterface);
+
+    const shape = (rows) => rows.map((r) => [r.indexname, r.indexdef, r.conname || null]).sort();
+    const expected = [...before, { indexname: 'late_dup_episode', indexdef: def('late_dup_episode', 'episode_id') }];
+    expect(shape(cat.rows)).toEqual(shape(expected.map((r) => ({ conname: null, ...r }))));
+  });
+
   test('when no index has the model name, the first by name is kept and renamed; down renames it back', async () => {
     const initial = evoniTwelve()
       .filter((r) => !['episode_wardrobe_episode_id', 'unique_episode_wardrobe'].includes(r.indexname))
