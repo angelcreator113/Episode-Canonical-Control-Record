@@ -96,17 +96,27 @@ async function generateGroundedScript(episodeId, showId, models) {
   } catch { /* non-blocking */ }
 
   // 5. Load Wardrobe
+  // #1883: this read WardrobeLibrary, which declares none of is_owned, slot,
+  // tier, aesthetic_tags or lala_reaction_equipped (production's
+  // wardrobe_library lacks is_owned, slot and lala_reaction_equipped), so it
+  // failed on every call and the catch swallowed it: every script was built
+  // with "Wardrobe not loaded". Lala's owned items live on Wardrobe, which
+  // declares is_owned, tier and aesthetic_tags; its slot is clothing_category
+  // (as the outfit query in 5b reads it). lala_reaction_equipped exists
+  // nowhere and is dropped.
   let wardrobeItems = [];
   try {
-    const { WardrobeLibrary } = models;
-    if (WardrobeLibrary) {
-      wardrobeItems = await WardrobeLibrary.findAll({
-        where: { is_owned: true },
-        attributes: ['name', 'slot', 'tier', 'aesthetic_tags', 'lala_reaction_equipped'],
+    const { Wardrobe } = models;
+    if (Wardrobe) {
+      wardrobeItems = await Wardrobe.findAll({
+        where: { is_owned: true, deleted_at: null },
+        attributes: ['name', 'clothing_category', 'tier', 'aesthetic_tags'],
         limit: 40,
       });
     }
-  } catch { /* non-blocking */ }
+  } catch (err) {
+    console.error('[ScriptGen] wardrobe query error:', err?.message);
+  }
 
   // 5b. Load outfit synergy score for this episode
   let outfitScore = null;
@@ -169,8 +179,9 @@ function buildScriptPrompt({ brief, scenePlan, franchiseLaws, eventData, wardrob
   const wardrobeBySlot = {};
   wardrobeItems.forEach(item => {
     const d = item.toJSON ? item.toJSON() : item;
-    if (!wardrobeBySlot[d.slot]) wardrobeBySlot[d.slot] = [];
-    wardrobeBySlot[d.slot].push(d.name);
+    const slot = d.clothing_category || 'other';
+    if (!wardrobeBySlot[slot]) wardrobeBySlot[slot] = [];
+    wardrobeBySlot[slot].push(d.name);
   });
   const wardrobeContext = Object.entries(wardrobeBySlot)
     .map(([slot, items]) => `${slot}: ${items.slice(0, 3).join(', ')}`)

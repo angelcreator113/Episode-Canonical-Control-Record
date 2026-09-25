@@ -56,12 +56,12 @@ const MAX_CHAPTERS_FOR_VISIBILITY = 10;
  * Compute current world temperature.
  *
  * @param {string} universeId  — scope for StoryThread + WorldStateSnapshot
- * @param {object} models      — { StoryThread, CharacterRelationship, WorldStateSnapshot, Character }
- * @param {object} options     — { characterIds: [] } optional pre-fetched character IDs for relationship scoping
+ * @param {object} models      — { StoryThread, CharacterRelationship, WorldStateSnapshot }
+ * @param {object} options     — { characterIds: [] } RegistryCharacter IDs for relationship scoping; without them no relationships are read
  * @returns {object} World temperature reading
  */
 async function computeWorldTemperature(universeId, models, options = {}) {
-  const { StoryThread, CharacterRelationship, WorldStateSnapshot, Character } = models;
+  const { StoryThread, CharacterRelationship, WorldStateSnapshot } = models;
 
   // ── Load StoryThreads scoped by universe_id ───────────────────────────────
   const threads = await StoryThread.findAll({
@@ -76,20 +76,21 @@ async function computeWorldTemperature(universeId, models, options = {}) {
   }).catch(() => []);
 
   // ── Load CharacterRelationships scoped through characters ─────────────────
-  // CharacterRelationship has no universe_id — scope via character IDs
+  // CharacterRelationship has no universe_id — scope via character IDs.
+  // #1883: the IDs used to come from Character.findAll({ where: { universe_id } }),
+  // but Character (the characters table) has no universe_id, so that query
+  // failed on every call and the warn below hid it (and CharacterRelationship
+  // references registry_characters, not characters). No declared path leads
+  // from a universe to its registry characters, so relationships are read only
+  // when the caller passes characterIds, and the result says whether they were.
   let relationships = [];
+  const characterIds = options.characterIds || [];
+  const relationshipsScoped = characterIds.length > 0;
+  if (!relationshipsScoped) {
+    console.warn(`[WorldTemp] no characterIds for universe ${universeId}: brand/social domains computed without relationships`);
+  }
   try {
-    // Get character IDs for this universe
-    let characterIds = options.characterIds || [];
-    if (!characterIds.length && Character) {
-      const chars = await Character.findAll({
-        where: { universe_id: universeId },
-        attributes: ['id'],
-      });
-      characterIds = chars.map(c => c.id);
-    }
-
-    if (characterIds.length > 0) {
+    if (relationshipsScoped) {
       relationships = await CharacterRelationship.findAll({
         where: {
           [Op.or]: [
@@ -155,6 +156,7 @@ async function computeWorldTemperature(universeId, models, options = {}) {
     dataPoints: {
       threadsAnalyzed: threads.length,
       relationshipsAnalyzed: relationships.length,
+      relationshipsScoped,
       hasSnapshot: !!latestSnapshot,
     },
   };

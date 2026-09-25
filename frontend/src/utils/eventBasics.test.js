@@ -6,6 +6,9 @@ import { describe, test, expect } from 'vitest';
 import {
   AUTO_DATE_KEY, FORMAT_START_TIMES, FORMAT_DRESS_CODES,
   suggestEventTime, suggestDressCode, isAutoScheduledDate, resolveEventBasics,
+  suggestEventCategory, suggestEventFormat,
+  CONTENT_CATEGORY_TO_CATEGORY, OPPORTUNITY_TYPE_TO_CATEGORY, OPPORTUNITY_TYPE_TO_FORMAT,
+  NAME_WORDS_TO_CATEGORY, NAME_WORDS_TO_FORMAT,
 } from './eventBasics';
 import { computeEventPackageReadiness, computeEventState } from './eventReadinessSections';
 import { createRequire } from 'module';
@@ -231,5 +234,177 @@ describe('auto-scheduled label across real saves (PUT merge replayed)', () => {
 
   test('date equals the default with no flag (an existing or Package-saved event): no label', () => {
     expect(isAutoScheduledDate({ event_date: D, canon_consequences: { automation: {} } })).toBe(false);
+  });
+});
+
+// ─── Category and format suggestions (Task #1888) ─────────────────────────
+describe('category and format suggestions (Task #1888)', () => {
+  const taxonomy = createRequire(import.meta.url)('../constants/eventTaxonomy.json');
+  const tableValues = (t) => (Array.isArray(t) ? t.map((r) => r.value) : Object.values(t));
+
+  test('every table value is in eventTaxonomy.json', () => {
+    for (const t of [CONTENT_CATEGORY_TO_CATEGORY, OPPORTUNITY_TYPE_TO_CATEGORY, NAME_WORDS_TO_CATEGORY]) {
+      for (const v of tableValues(t)) expect(taxonomy.category).toContain(v);
+    }
+    for (const t of [OPPORTUNITY_TYPE_TO_FORMAT, NAME_WORDS_TO_FORMAT]) {
+      for (const v of tableValues(t)) expect(taxonomy.format).toContain(v);
+    }
+  });
+
+  // Representative events, one per creation path, as they reach the Package.
+  const fromProfile = {
+    name: 'Event with Maya Sterling', event_type: 'invite', prestige: 6,
+    canon_consequences: { automation: { started_from_profile_id: 'p-1', content_category: 'Fashion' } },
+  };
+  const calendarSpawn = {
+    name: 'Glow Hour: Jade\'s Spring Beauty Launch', event_type: 'invite', prestige: 7,
+    canon_consequences: { automation: { host_profile_id: 'p-2', source_calendar_title: 'Spring Beauty' } },
+  };
+  const opportunity = {
+    name: 'Velour Awards Night', event_type: 'invite', prestige: 8,
+    canon_consequences: { automation: { source: 'opportunity_pipeline', opportunity_type: 'award_show' } },
+  };
+
+  describe('suggestEventCategory', () => {
+    test('from the organizer', () => {
+      expect(suggestEventCategory({}, { content_category: 'beauty' }))
+        .toEqual({ value: 'beauty_wellness', basis: 'From organizer: beauty creator' });
+    });
+
+    test('from the Feed creator the event was started from (from-profile)', () => {
+      expect(suggestEventCategory(fromProfile, null))
+        .toEqual({ value: 'fashion', basis: 'From Feed creator: fashion creator' });
+    });
+
+    test('the organizer wins over the Feed creator', () => {
+      expect(suggestEventCategory(fromProfile, { content_category: 'music' }).value).toBe('arts_entertainment');
+    });
+
+    test('from the opportunity type (opportunity pipeline)', () => {
+      expect(suggestEventCategory(opportunity, null))
+        .toEqual({ value: 'arts_entertainment', basis: 'From opportunity: award show' });
+      expect(suggestEventCategory({ canon_consequences: { automation: { opportunity_type: 'runway' } } }).value).toBe('fashion');
+    });
+
+    test('from a word in the name (calendar spawn)', () => {
+      expect(suggestEventCategory(calendarSpawn, null))
+        .toEqual({ value: 'beauty_wellness', basis: 'From name: "beauty"' });
+    });
+
+    test('a linked venue is not a source (its type was chosen from the creator\'s category)', () => {
+      expect(suggestEventCategory({ name: 'Event with Kai' }, null, { name: 'The Loft', venue_type: 'salon' })).toBeNull();
+    });
+
+    test('null when facts are thin', () => {
+      expect(suggestEventCategory(null)).toBeNull();
+      expect(suggestEventCategory({ name: 'Event with Kai', event_type: 'invite', prestige: 9 })).toBeNull();
+      // A content category with no plain mapping suggests nothing.
+      expect(suggestEventCategory({ canon_consequences: { automation: { content_category: 'lifestyle' } } }, { content_category: 'drama' })).toBeNull();
+      // An opportunity type with no plain mapping suggests nothing.
+      expect(suggestEventCategory({ canon_consequences: { automation: { opportunity_type: 'podcast' } } })).toBeNull();
+      // A name whose words point two ways is ambiguous.
+      expect(suggestEventCategory({ name: 'Fashion Brunch' })).toBeNull();
+      // event_type is never read.
+      expect(suggestEventCategory({ event_type: 'brand_deal' })).toBeNull();
+    });
+  });
+
+  describe('suggestEventFormat', () => {
+    test('from a word in the name', () => {
+      expect(suggestEventFormat(calendarSpawn, null))
+        .toEqual({ value: 'brand_launch', basis: 'From name: "launch"' });
+      expect(suggestEventFormat({ name: 'The Winter Gala' }).value).toBe('gala');
+      expect(suggestEventFormat({ name: 'Sunday Brunch at Ivy' }).value).toBe('brunch');
+      expect(suggestEventFormat({ name: 'Midnight Première' }).value).toBe('premiere');
+      expect(suggestEventFormat({ name: 'Rose Garden Soirée' }).value).toBe('garden_soiree');
+    });
+
+    test('from the opportunity type', () => {
+      expect(suggestEventFormat(opportunity, null))
+        .toEqual({ value: 'gala', basis: 'From opportunity: award show' });
+    });
+
+    test('a linked venue is not a source: a fashion event at a gallery gets no gallery_opening', () => {
+      expect(suggestEventFormat({ name: 'Event with Kai' }, null, { venue_type: 'gallery' })).toBeNull();
+    });
+
+    test('null when facts are thin', () => {
+      expect(suggestEventFormat(null)).toBeNull();
+      // A from-profile name carries no format, and a content category is not a format.
+      expect(suggestEventFormat(fromProfile, { content_category: 'music' })).toBeNull();
+      expect(suggestEventFormat({ canon_consequences: { automation: { opportunity_type: 'campaign' } } })).toBeNull();
+      expect(suggestEventFormat({ name: 'Gala Brunch' })).toBeNull();
+      expect(suggestEventFormat({ name: 'Soirée at Nine' })).toBeNull();
+      expect(suggestEventFormat({ event_type: 'brand_deal', prestige: 10 })).toBeNull();
+    });
+  });
+
+  describe('resolveEventBasics', () => {
+    test('category and format are suggested, not set, until accepted', () => {
+      const b = resolveEventBasics(opportunity);
+      expect(b.category).toMatchObject({ state: 'suggested', value: null, suggestion: { value: 'arts_entertainment' }, inList: true });
+      expect(b.format).toMatchObject({ state: 'suggested', value: null, suggestion: { value: 'gala' }, inList: true });
+    });
+
+    test('the organizer is read from options', () => {
+      const b = resolveEventBasics({}, null, { organizer: { content_category: 'fashion' } });
+      expect(b.category.suggestion).toEqual({ value: 'fashion', basis: 'From organizer: fashion creator' });
+    });
+
+    test('missing when facts are thin', () => {
+      const b = resolveEventBasics({ name: 'Event with Kai', prestige: 9 });
+      expect(b.category).toEqual({ state: 'missing', value: null, suggestion: null, inList: true });
+      expect(b.format).toEqual({ state: 'missing', value: null, suggestion: null, inList: true });
+    });
+
+    test('a saved value beats a suggestion', () => {
+      const b = resolveEventBasics({ ...opportunity, category: 'luxury_prestige', format: 'premiere' });
+      expect(b.category).toMatchObject({ state: 'set', value: 'luxury_prestige', suggestion: null, inList: true });
+      expect(b.format).toMatchObject({ state: 'set', value: 'premiere', suggestion: null, inList: true });
+    });
+
+    test('a stored value outside the taxonomy is set and flagged, as Task #1780 does', () => {
+      const b = resolveEventBasics({ ...opportunity, category: 'nightlife', format: 'red_carpet' });
+      expect(b.category).toMatchObject({ state: 'set', value: 'nightlife', inList: false, suggestion: null });
+      expect(b.format).toMatchObject({ state: 'set', value: 'red_carpet', inList: false, suggestion: null });
+    });
+
+    test('suggest: false (a used event) turns them into missing', () => {
+      const b = resolveEventBasics(opportunity, null, { suggest: false });
+      expect(b.category.state).toBe('missing');
+      expect(b.format.state).toBe('missing');
+    });
+
+    test('a suggested format feeds no time or dress-code suggestion', () => {
+      const b = resolveEventBasics(opportunity);
+      expect(b.format.state).toBe('suggested');
+      expect(b.time.state).toBe('missing');
+      expect(b.dressCode.state).toBe('missing');
+    });
+
+    test('accepting the format yields the time and dress-code suggestions (the cascade)', () => {
+      const before = resolveEventBasics(opportunity);
+      const accepted = { ...opportunity, format: before.format.suggestion.value };
+      const after = resolveEventBasics(accepted);
+      expect(after.format).toMatchObject({ state: 'set', value: 'gala' });
+      expect(after.time).toMatchObject({ state: 'suggested', suggestion: { value: '20:00', basis: 'From format: gala' } });
+      expect(after.dressCode).toMatchObject({ state: 'suggested', suggestion: { value: 'black tie formal' } });
+    });
+  });
+
+  describe('readiness counts only accepted values', () => {
+    const identityMissing = (ev) => computeEventPackageReadiness(ev)
+      .sections.find((s) => s.key === 'identity').missing.map((m) => m.key);
+
+    test('an unaccepted suggestion does not satisfy category or format', () => {
+      expect(resolveEventBasics(opportunity).category.state).toBe('suggested');
+      expect(identityMissing(opportunity)).toEqual(expect.arrayContaining(['category', 'format']));
+    });
+
+    test('accepted values do', () => {
+      const missing = identityMissing({ ...opportunity, category: 'arts_entertainment', format: 'gala' });
+      expect(missing).not.toContain('category');
+      expect(missing).not.toContain('format');
+    });
   });
 });

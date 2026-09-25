@@ -41,7 +41,8 @@ const PG_TYPE = {
 const SITES = [
   ['src/routes/worldEvents.js (POST /events/from-profile)', 'WorldEvent', ['theme', 'mood', 'color_palette', 'floral_style', 'border_style']],
   ['src/routes/sceneProposeRoute.js (POST /arc-stage)', 'StorytellerBook', ['current_arc_stage', 'arc_stage_scores']],
-  ['src/services/CompositionService.js (createComposition)', 'ThumbnailComposition', ['include_justawomaninherprime', 'justawomaninherprime_position', 'approval_status']],
+  // createComposition was retired by Task #1884; the columns stay declared (canon has them).
+  ['src/services/CompositionService.js (createComposition, retired #1884)', 'ThumbnailComposition', ['include_justawomaninherprime', 'justawomaninherprime_position', 'approval_status']],
   ['src/services/careerPipelineService.js (spawnUnlockOpportunities)', 'Opportunity', ['career_goal_id']],
   ['src/routes/characterGenerator.js (commit)', 'RegistryCharacter', ['world_character_id']],
   ['src/controllers/sceneStudioController.js (saveSceneSetCanvas)', 'SceneSet', ['canvas_settings']],

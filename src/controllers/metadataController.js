@@ -25,11 +25,14 @@ module.exports = {
         where,
         limit: parseInt(limit),
         offset,
-        order: [['createdAt', 'DESC']],
+        // #1883: MetadataStorage has timestamps: false (no createdAt) and
+        // Episode declares neither episodeTitle nor showName; order by the
+        // autoincrement id and select the declared title instead.
+        order: [['id', 'DESC']],
         include: {
           model: Episode,
           as: 'episode',
-          attributes: ['id', 'episodeTitle', 'showName'],
+          attributes: ['id', 'title'],
         },
         raw: false,
       });
@@ -50,18 +53,10 @@ module.exports = {
         },
       });
     } catch (error) {
-      // If metadata table schema is mismatched, return empty list
-      console.error('Metadata query error (schema mismatch):', error.message);
-      res.json({
-        data: [],
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: 0,
-          pages: 0,
-        },
-        warning: 'Metadata table schema mismatch - returning empty results',
-      });
+      // #1883: this used to answer 200 with an empty list and a "schema
+      // mismatch" warning, which hid a query that fails on every call. Fail.
+      console.error('Metadata list query error:', error.message);
+      res.status(500).json({ error: 'Failed to list metadata', message: error.message });
     }
   },
 

@@ -82,13 +82,15 @@ describe('WorldEvent.create — POST /world/:showId/events/from-profile (src/rou
 });
 
 describe('StorytellerBook.update — POST /arc-stage (src/routes/sceneProposeRoute.js)', () => {
-  test('current_arc_stage and arc_stage_scores reach the update', async () => {
+  // #1879 declared current_arc_stage / arc_stage_scores so this write stores
+  // its values (the declarations are pinned in declaredWriteColumns.test.js).
+  // Task #1883 then found the stage itself can never be computed
+  // (calculateArcStage's story query names columns storyteller_stories
+  // lacks), so /arc-stage now answers 501 and writes nothing rather than
+  // persisting a fallback. See hiddenSchemaFailures.sites.test.js.
+  test('writes nothing: the stage cannot be computed (Task #1883)', async () => {
     const StorytellerBook = schemaChecked('StorytellerBook');
     jest.doMock(MODELS, () => ({
-      // Eight stories, so the stage is 'pressure'. calculateArcStage's own
-      // query (book_id / arc_stage, which storyteller_stories lacks) is one of
-      // the 18 hidden failures and is not under test here; the rows carry
-      // only declared keys so this mock does not vouch for it.
       StorytellerStory: { findAll: jest.fn(async () => Array.from({ length: 8 }, (_, i) => ({ id: `s${i}` }))) },
       StorytellerBook,
     }));
@@ -101,54 +103,58 @@ describe('StorytellerBook.update — POST /arc-stage (src/routes/sceneProposeRou
     app.use('/', require('../../../src/routes/sceneProposeRoute'));
 
     const res = await request(app).post('/arc-stage').send({ book_id: 'book-1' });
-    expect(res.status).toBe(200);
-    expect(StorytellerBook.update).toHaveBeenCalledWith(
-      { current_arc_stage: 'pressure', arc_stage_scores: { establishment: 0, pressure: 0, crisis: 0, integration: 0 } },
-      { where: { id: 'book-1' } },
-    );
+    expect(res.status).toBe(501);
+    expect(StorytellerBook.update).not.toHaveBeenCalled();
   });
 });
 
-describe('ThumbnailComposition.create — CompositionService.createComposition (src/services/CompositionService.js)', () => {
-  test('include_justawomaninherprime, justawomaninherprime_position and approval_status reach the create', async () => {
-    const ThumbnailComposition = schemaChecked('ThumbnailComposition', {
-      create: async (data) => ({ id: 'comp-1', ...data, toJSON: () => ({ id: 'comp-1', ...data }) }),
-    });
-    jest.doMock(MODELS, () => ({
-      models: {
-        ThumbnailTemplate: { findByPk: async () => ({ id: 'tpl-1', layout_config: { lala: {} } }) },
-        Asset: { findByPk: async (id) => ({ id }) },
-        CompositionAsset: { bulkCreate: jest.fn() },
-        ThumbnailComposition,
-      },
-    }));
+describe('ThumbnailComposition — CompositionService (src/services/CompositionService.js)', () => {
+  // Task #1884 retired CompositionService.createComposition, the #1870 site
+  // that wrote all three columns: it served only the legacy POST format, and
+  // threw a TypeError on every call (it called canonicalRoles helpers that
+  // were never written). The three columns stay declared (canon has them;
+  // tests/unit/models/declaredWriteColumns.test.js pins them). Two of them
+  // still have live writers, exercised here through instance fakes;
+  // justawomaninherprime_position has no writer left. The fakes record what
+  // each call writes and the test checks the column under test is declared.
+  // (Only that column: approveComposition's approved_by / approved_at and
+  // updateComposition's version are in canon but undeclared on the model, a
+  // separate finding outside #1884's scope.)
+  let ThumbnailComposition;
+  function loadService(instance) {
+    ThumbnailComposition = schemaChecked('ThumbnailComposition', { findByPk: async () => instance });
+    instance.update = jest.fn(async (values) => { Object.assign(instance, values); });
+    instance.save = jest.fn(async () => {});
+    instance.toJSON = () => ({ id: instance.id });
+    jest.doMock(MODELS, () => ({ models: { ThumbnailComposition } }));
     jest.doMock('../../../src/services/AssetService', () => ({}));
     jest.doMock('../../../src/services/S3Service', () => ({}));
-    // canonicalRoles does not export the three helpers CompositionService
-    // imports, so on every branch createComposition throws a TypeError before
-    // it reaches the create (reported separately; loud, not in #1870's scope).
-    // Supply them so the write itself is exercised.
-    jest.doMock('../../../src/constants/canonicalRoles', () => ({
-      shouldRequireIconHolder: () => false,
-      getTextRoles: () => [],
-      getRoleMetadata: () => ({}),
-    }));
+    return require('../../../src/services/CompositionService');
+  }
 
-    const CompositionService = require('../../../src/services/CompositionService');
-    const position = { width_percent: 20, left_percent: 75, top_percent: 5 };
-    await CompositionService.createComposition('ep-1', {
-      template_id: 'tpl-1',
-      justawomen_asset_id: 'jaw-1',
-      include_justawomaninherprime: true,
-      justawomaninherprime_position: position,
-    }, 'u1');
+  test('createComposition is retired (#1884)', () => {
+    const CompositionService = loadService({ id: 'comp-1' });
+    expect(CompositionService.createComposition).toBeUndefined();
+  });
 
-    expect(ThumbnailComposition.create).toHaveBeenCalledTimes(1);
-    expect(ThumbnailComposition.create.mock.calls[0][0]).toMatchObject({
-      include_justawomaninherprime: true,
-      justawomaninherprime_position: position,
-      approval_status: 'DRAFT',
-    });
+  test('approval_status reaches approveComposition\'s update', async () => {
+    const instance = { id: 'comp-1' };
+    const CompositionService = loadService(instance);
+    await CompositionService.approveComposition('comp-1', 'u1');
+
+    expect(ThumbnailComposition.DECLARED.has('approval_status')).toBe(true);
+    expect(instance.update).toHaveBeenCalledTimes(1);
+    expect(instance.update.mock.calls[0][0]).toMatchObject({ approval_status: 'APPROVED' });
+  });
+
+  test('include_justawomaninherprime reaches updateComposition\'s save', async () => {
+    const instance = { id: 'comp-1', version: 1 };
+    const CompositionService = loadService(instance);
+    await CompositionService.updateComposition('comp-1', { justawomen_asset_id: 'jaw-1', include_justawomaninherprime: true });
+
+    expect(ThumbnailComposition.DECLARED.has('include_justawomaninherprime')).toBe(true);
+    expect(instance.save).toHaveBeenCalledTimes(1);
+    expect(instance).toMatchObject({ include_justawomaninherprime: true, justawomen_asset_id: 'jaw-1' });
   });
 });
 
