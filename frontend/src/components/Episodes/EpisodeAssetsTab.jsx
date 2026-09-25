@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import EpisodeTodoList from './EpisodeTodoList';
 
 /**
@@ -38,10 +39,9 @@ function EpisodeAssetsTab({ episode, show }) {
     try {
       // Load all data sources in parallel
       const [eventRes, todoRes, assetsRes, scriptRes, feedRes] = await Promise.allSettled([
-        api.get(`/api/v1/world/${showId}/events`).then(r => {
-          const events = r.data?.events || [];
-          return events.find(e => e.used_in_episode_id === episodeId) || null;
-        }),
+        // The episode's source event (Task #1906): anchor from the brief,
+        // never a scan of the show's event list.
+        getEpisodeAnchorEvent(episodeId),
         api.get(`/api/v1/episodes/${episodeId}/todo`).catch(() => ({ data: null })),
         api.get(`/api/v1/assets?episode_id=${episodeId}&limit=100`).catch(() => ({ data: { data: [] } })),
         api.get(`/api/v1/episodes/${episodeId}`).catch(() => ({ data: {} })),

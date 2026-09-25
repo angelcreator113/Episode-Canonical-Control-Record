@@ -47,9 +47,13 @@ function makeModels({ deliverables = DELIVERABLES, failList = false, failStamp =
           return [[], { rowCount: deliverables.length }];
         }
         if (/MAX\(episode_number\)/.test(sql)) return [[{ next_num: 4 }]];
+        // The event link stamp inside Start's transaction (Task #1906).
+        if (/^UPDATE world_events SET status = 'used'/.test(sql)) return [[{ id: opts.replacements.eventId }]];
         if (/INSERT INTO episode_todo_lists/.test(sql)) return [[{ id: 'todo-1' }]];
         return [[]];
       }),
+      // Start Episode's managed transaction (Task #1906).
+      transaction: jest.fn(async (cb) => cb({ id: 'tx' })),
     },
     Episode: { create: jest.fn(async () => episode) },
     EpisodeBrief: {
