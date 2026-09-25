@@ -8,9 +8,10 @@
  * tests/unit/models/WorldEvent.taxonomyMirror.test.js fails if the mirror
  * and the model ever disagree. Change the model first, then the JSON.
  *
- * Both fields are set or missing, never suggested: nothing on the event
- * says what its category or format should be (format is itself the input
- * the time and dress-code suggestions read, eventBasics.js).
+ * Each field is set, suggested or missing. Suggestions come from
+ * suggestEventCategory / suggestEventFormat in eventBasics.js (Task #1888)
+ * and are saved only when accepted; format is itself the input the time
+ * and dress-code suggestions read.
  *
  * The event PUT writes with raw SQL, so the model's isIn does not run
  * there; a stored value outside the list is possible. It is shown as set
