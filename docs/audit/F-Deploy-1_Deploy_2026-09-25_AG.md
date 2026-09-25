@@ -343,11 +343,15 @@ verbatim and as ATTESTED.
 >
 > Also observed and filed: the styling game renders no images at all, only emoji (#1931).
 
+**ATTESTED correction (Evoni, 2026-09-25, before this record merged, verbatim).** It supersedes the ownership clause of step 3 above; the quote above is kept as given.
+
+> Correction to the attested read, 2026-09-25: "all 45 wardrobe items are unowned" was wrong — that counted every show. For show 9bd0655f (Styling Adventures with Lala): 10 basic items owned with lock_type 'none' at 0 coins, 4 mid coin-locked items owned, 1 luxury owned — 15 owned in total. No row has an empty tier, so the WorldAdmin edit-form bug has not touched this show. The seed evidently did run here. #1932's premise needs revising: the starting closet exists, and the styling game is usable today. The blocked lock in the AG app test was only because Evoni opened a 385-coin item against 350 coins.
+
 | Step | What was checked | Standing |
 |---|---|---|
 | 1 | Production → Wardrobe shows the event | ATTESTED PASS |
 | 2 | The styling game is reachable and renders | ATTESTED PASS |
-| 3 | A locked pick writes the first `episode_wardrobe` row | ATTESTED BLOCKED, not failed; the blockage is #1932. `episode_wardrobe` still holds 0 rows |
+| 3 | A locked pick writes the first `episode_wardrobe` row | ATTESTED BLOCKED, not failed: the item tried (Sage Corset, 385 coins) was out of reach against 350 coins. Per the correction, 15 of the show's items are owned. `episode_wardrobe` still holds 0 rows; a lock from owned items is not yet attested |
 | 4 | The row reads back as the episode's look | Not reached; NOT ATTESTED |
 | — | The styling game renders no images, only emoji | ATTESTED observation, filed as #1931; no ruling here |
 
@@ -358,10 +362,15 @@ sets it was gated off the Wardrobe tab until #1913 (AF). Zero rows is
 what an unreachable game produces. Step 2 above is the first attested
 render since.
 
-**Beside step 3, MEASURED.** `POST /wardrobe/select` refuses an unowned
-item with 400 before any write (`src/routes/wardrobe.js` line 1284), so
-an unowned closet cannot produce a row through the game's lock. This
-record makes no ruling on the coin or ownership state; #1932 acts on it.
+**Beside step 3, MEASURED.** `POST /wardrobe/select` refuses an item
+that is neither owned, affordable (coin lock) nor qualified (reputation
+lock) with 400 before any write (`src/routes/wardrobe.js`, the
+`is_owned` check near line 1283). A 385-coin item against 350 coins is
+refused there. Owned items pass that check at 0 cost. The seed's owned
+BASIC items include a dress (Cotton Sundress), a top and bottom (Everyday
+White Tee, High-Rise Black Jeans) and shoes (White Canvas Sneakers), so
+a lockable look exists at 0 coins (`SEED_WARDROBE`, `src/routes/wardrobe.js`).
+This record makes no ruling on the coin or ownership state.
 
 **Carried forward from the AF record §5.1 and the AE record §5.1.** AG's
 step 1 attests AF's "Production → Wardrobe shows the episode's event"
@@ -512,8 +521,9 @@ This document:
   on none of them;
 - does not rule on the pending host restart (§2.2), and does not act on
   it;
-- does not rule on any §5.1 check, on the coin or ownership blockage
-  (#1932), or on the missing images (#1931), beyond citing the issues;
+- does not rule on any §5.1 check, on the coin or ownership state
+  (#1932, whose premise the correction revises), or on the missing
+  images (#1931), beyond citing the issues;
 - does not file the index cleanup (§7.1);
 - does not edit the AF record, the AE record, `DEVELOPMENT_WORKFLOW.md`
   or any migration. Every document named above is cited, not edited.
@@ -563,7 +573,8 @@ Unchanged from the AF record §10. Nothing minted here.
 - §2.1 and §2.2 are ATTESTED only; the host restart is still pending.
 - §5 is MEASURED for what the code does; that it is live rests on §2.
   §5.1's app-test steps 1 and 2 are ATTESTED PASS, step 3 is ATTESTED
-  BLOCKED (not failed, #1932), step 4 was not reached. AF's #1913 check
+  BLOCKED (not failed; an out-of-reach 385-coin item, per Evoni's
+  correction), step 4 was not reached. AF's #1913 check
   is ATTESTED by step 1; the other seven carried checks are NOT
   ATTESTED at filing.
 - §7.1's constraint and index read is ATTESTED, with no ruling.
