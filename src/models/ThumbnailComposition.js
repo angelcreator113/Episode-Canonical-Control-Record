@@ -70,6 +70,19 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      // Task #1897: canon has both (2026-09-17 capture: approved_by
+      // character varying, approved_at timestamp without time zone, both
+      // nullable) but they were undeclared, so approveComposition's
+      // instance update dropped who approved and when. No migration in
+      // src/migrations/ creates either column (step 2 of the checker).
+      approved_by: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      approved_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       selected_formats: {
         type: DataTypes.JSONB,
         allowNull: true,
