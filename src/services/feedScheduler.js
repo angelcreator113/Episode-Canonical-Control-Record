@@ -441,6 +441,7 @@ Return ONLY the JSON array. No markdown, no explanation.`;
 async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) {
   const created = [];
   const errors = [];
+  const skipped = [];
 
   // Check cap
   const cap = FEED_CAPS[layer];
@@ -448,7 +449,7 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
     where: { feed_layer: layer, lalaverse_cap_exempt: false },
   });
   const remaining = cap - currentCount;
-  if (remaining <= 0) return { created: [], errors: [], sparks_generated: 0 };
+  if (remaining <= 0) return { created: [], errors: [], skipped: [], sparks_generated: 0 };
   const toCreate = Math.min(count, remaining);
 
   // Generate smart sparks
@@ -489,6 +490,14 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
         if (progressCallback) {
           await progressCallback({ current: idx + 1, total: sparks.length, profile: result.value, status: 'created' });
         }
+      } else if (result.status === 'fulfilled') {
+        // generateAndSaveProfile returns null only for a taken handle (Task
+        // #1893); it has already logged the holder. Skipped, not an error.
+        const handle = batch[j]?.handle || `spark_${idx}`;
+        skipped.push({ handle, reason: 'handle taken' });
+        if (progressCallback) {
+          await progressCallback({ current: idx + 1, total: sparks.length, spark: batch[j], status: 'skipped' });
+        }
       } else {
         const errMsg = result.status === 'rejected' ? result.reason?.message : 'No profile returned';
         errors.push({ spark: batch[j]?.handle || `spark_${idx}`, error: errMsg });
@@ -499,7 +508,7 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
     }
   }
 
-  return { created, errors, sparks_generated: sparks.length };
+  return { created, errors, skipped, sparks_generated: sparks.length };
 }
 
 // ── ENUM validation + column-length fitting (Task #1851) ────────────────────
@@ -514,12 +523,29 @@ const {
   logValueTooLong,
   asText,
 } = require('../utils/fitToModel');
+const { findHandleHolder, handleTakenMessage } = require('../utils/socialProfileHandle');
+
+// Task #1893: returns the reason a spark's handle cannot be used (another
+// profile, live or soft-deleted, holds it in any case, with or without @), or
+// null when it is free. The caller skips the spark and logs; it never throws.
+async function sparkHandleTakenReason(db, handle) {
+  const holder = await findHandleHolder(db, handle);
+  return holder ? handleTakenMessage(handle, holder) : null;
+}
 
 /**
  * Call Claude to generate a full profile from a spark, then save it.
  * Uses a compact prompt optimized for batch generation speed.
  */
 async function generateAndSaveProfile(db, spark, layer) {
+  // The spark's handle is known before the model call: refuse a taken one
+  // here, with no AI cost. Returns null (skipped), logged, never thrown.
+  const takenBefore = await sparkHandleTakenReason(db, spark.handle);
+  if (takenBefore) {
+    console.warn(`[FeedScheduler] Skipped spark ${spark.handle} before generation: ${takenBefore}`);
+    return null;
+  }
+
   const characterContext = layer === 'lalaverse'
     ? {
         name: 'Lala',
@@ -744,6 +770,14 @@ Return ONLY valid JSON with these fields:
     aesthetic_power:      generated.aesthetic_power || null,
   });
   warnTruncated('feed-scheduler', truncated);
+
+  // Re-check the stored (normalised, fitted) handle just before the insert:
+  // the model call takes seconds, and another path may have taken it since.
+  const takenAtSave = await sparkHandleTakenReason(db, createRecord.handle);
+  if (takenAtSave) {
+    console.warn(`[FeedScheduler] Skipped spark ${spark.handle} before save: ${takenAtSave}`);
+    return null;
+  }
 
   let profile;
   try {

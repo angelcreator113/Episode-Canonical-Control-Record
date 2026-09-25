@@ -54,7 +54,8 @@ function socialProfileModel() {
     rawAttributes: RealSocialProfile.rawAttributes,
     count: jest.fn().mockResolvedValue(0),
     create: jest.fn(async (record) => ({ id: 42, ...record, update: jest.fn().mockResolvedValue(undefined) })),
-    findOrCreate: jest.fn(async ({ where, defaults }) => [{ id: 42, ...where, ...defaults }, true]),
+    // The handle is free (Task #1893 guard on every write path).
+    findOne: jest.fn().mockResolvedValue(null),
   };
 }
 
@@ -108,7 +109,7 @@ describe('bulk generateSingleProfile (POST /social-profiles/bulk/generate)', () 
     .set('x-test-user', '1')
     .send({ creators: [creator] });
 
-  it('fits over-long fields in findOrCreate, warns by field name, and sanitizes enums', async () => {
+  it('fits over-long fields in the create, warns by field name, and sanitizes enums', async () => {
     mockModels.SocialProfile = socialProfileModel();
     mockCreate.mockResolvedValue(modelReply({
       display_name: LONG_NAME,
@@ -122,9 +123,10 @@ describe('bulk generateSingleProfile (POST /social-profiles/bulk/generate)', () 
     const res = await postBulk(mountBulk(), { handle: 'glow_theory', platform: 'tiktok', vibe_sentence: 'Skincare chemist.' });
 
     expect(res.status).toBe(200);
-    expect(res.body.summary).toEqual({ total: 1, succeeded: 1, failed: 0 });
-    const { where, defaults } = mockModels.SocialProfile.findOrCreate.mock.calls[0][0];
-    expect(where).toEqual({ handle: 'glow_theory', platform: 'tiktok' });
+    expect(res.body.summary).toEqual({ total: 1, succeeded: 1, failed: 0, skipped: 0 });
+    // Task #1893: a plain create; the old findOrCreate reused and overwrote.
+    const defaults = mockModels.SocialProfile.create.mock.calls[0][0];
+    expect(defaults).toMatchObject({ handle: 'glow_theory', platform: 'tiktok' });
     expect(Array.from(defaults.display_name).length).toBeLessThanOrEqual(200);
     expect(LONG_NAME.startsWith(defaults.display_name)).toBe(true);
     expect(defaults.follower_count_approx.length).toBeLessThanOrEqual(50);
@@ -143,18 +145,18 @@ describe('bulk generateSingleProfile (POST /social-profiles/bulk/generate)', () 
     expect(warns[0]).not.toContain('Skincare Lab');
   });
 
-  it('fits and sanitizes the update() of an existing row', async () => {
-    const existing = { id: 9, feed_layer: 'real_world', update: jest.fn().mockResolvedValue(undefined) };
+  it('never updates an existing row: a taken handle is skipped (Task #1893 removed the update path)', async () => {
+    const existing = { id: 9, handle: 'glow_theory', deletedAt: null, update: jest.fn().mockResolvedValue(undefined) };
     mockModels.SocialProfile = socialProfileModel();
-    mockModels.SocialProfile.findOrCreate.mockResolvedValue([existing, false]);
+    mockModels.SocialProfile.findOne.mockResolvedValue(existing);
     mockCreate.mockResolvedValue(modelReply({ display_name: LONG_NAME, archetype: 'nonsense' }));
 
     const res = await postBulk(mountBulk(), { handle: 'glow_theory', platform: 'tiktok', vibe_sentence: 'x' });
 
     expect(res.status).toBe(200);
-    const record = existing.update.mock.calls[0][0];
-    expect(Array.from(record.display_name).length).toBeLessThanOrEqual(200);
-    expect(record.archetype).toBe('polished_curator');
+    expect(res.body.skipped).toHaveLength(1);
+    expect(existing.update).not.toHaveBeenCalled();
+    expect(mockModels.SocialProfile.create).not.toHaveBeenCalled();
   });
 
   it('names the over-length field when the write still fails with 22001', async () => {
@@ -162,7 +164,7 @@ describe('bulk generateSingleProfile (POST /social-profiles/bulk/generate)', () 
     mockModels.SocialProfile = { ...socialProfileModel(), rawAttributes: mismatched };
     const err = new Error('value too long for type character varying(200)');
     err.original = { code: '22001' };
-    mockModels.SocialProfile.findOrCreate.mockRejectedValue(err);
+    mockModels.SocialProfile.create.mockRejectedValue(err);
     mockCreate.mockResolvedValue(modelReply({ display_name: LONG_NAME }));
 
     const res = await postBulk(mountBulk(), { handle: 'glow_theory', platform: 'tiktok', vibe_sentence: 'x' });
