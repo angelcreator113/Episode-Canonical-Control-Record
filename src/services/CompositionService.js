@@ -422,12 +422,16 @@ class CompositionService {
         composition.include_justawomaninherprime = include_justawomaninherprime;
       }
 
-      // Increment version
-      composition.version = (composition.version || 1) + 1;
+      // Increment version. current_version is the declared version column
+      // (the apply-draft route in compositions.js and VersioningService use
+      // it); `version` is undeclared, so writing it was dropped (Task #1897).
+      composition.current_version = (composition.current_version || 1) + 1;
 
       await composition.save();
 
-      console.log(`✅ Composition updated: ${compositionId} (version ${composition.version})`);
+      console.log(
+        `✅ Composition updated: ${compositionId} (version ${composition.current_version})`
+      );
       return composition;
     } catch (error) {
       console.error('❌ Failed to update composition:', error);

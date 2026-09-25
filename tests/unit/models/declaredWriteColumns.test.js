@@ -9,6 +9,9 @@
  * the capture, and the model's type and nullability must match what the
  * capture shows. No database: models are defined on a never-connected
  * Sequelize instance and the capture is read from the repository.
+ *
+ * Task #1897 adds approveComposition's approved_by / approved_at (an
+ * instance write, which the schema-agreement checker does not see).
  */
 const fs = require('fs');
 const path = require('path');
@@ -35,6 +38,10 @@ const PG_TYPE = {
   UUID: 'uuid',
   BOOLEAN: 'boolean',
   ENUM: 'USER-DEFINED',
+  // Sequelize 6 has one DATE type for Postgres; the model convention
+  // (ThumbnailComposition.created_at, updated_at) declares DATE for canon's
+  // `timestamp without time zone` columns too. Either timestamp kind matches.
+  DATE: ['timestamp with time zone', 'timestamp without time zone'],
 };
 
 // [call site, model, columns]
@@ -43,6 +50,8 @@ const SITES = [
   ['src/routes/sceneProposeRoute.js (POST /arc-stage)', 'StorytellerBook', ['current_arc_stage', 'arc_stage_scores']],
   // createComposition was retired by Task #1884; the columns stay declared (canon has them).
   ['src/services/CompositionService.js (createComposition, retired #1884)', 'ThumbnailComposition', ['include_justawomaninherprime', 'justawomaninherprime_position', 'approval_status']],
+  // Task #1897: an instance update (findByPk, then composition.update), which step 1 of the checker does not see.
+  ['src/services/CompositionService.js (approveComposition, #1897)', 'ThumbnailComposition', ['approved_by', 'approved_at']],
   ['src/services/careerPipelineService.js (spawnUnlockOpportunities)', 'Opportunity', ['career_goal_id']],
   ['src/routes/characterGenerator.js (commit)', 'RegistryCharacter', ['world_character_id']],
   ['src/controllers/sceneStudioController.js (saveSceneSetCanvas)', 'SceneSet', ['canvas_settings']],
@@ -52,7 +61,7 @@ const SITES = [
 const capture = readCapture();
 const rows = SITES.flatMap(([site, model, cols]) => cols.map(col => [model, col, site]));
 
-describe('columns the seven dropping writes send are declared, as the capture shows them', () => {
+describe('columns the dropping writes send are declared, as the capture shows them', () => {
   test.each(rows)('%s.%s (%s)', (modelName, column) => {
     const Model = loadModel(modelName);
     const table = Model.getTableName();
@@ -61,7 +70,7 @@ describe('columns the seven dropping writes send are declared, as the capture sh
 
     const attr = Model.rawAttributes[column];
     expect(attr).toBeDefined();
-    expect(PG_TYPE[attr.type.key]).toBe(cap.dataType);
+    expect([].concat(PG_TYPE[attr.type.key])).toContain(cap.dataType);
     expect(attr.allowNull !== false).toBe(cap.nullable === 'YES');
   });
 
@@ -79,5 +88,14 @@ describe('columns the seven dropping writes send are declared, as the capture sh
 
   test('ThumbnailComposition.include_justawomaninherprime (NOT NULL) defaults to false', () => {
     expect(loadModel('ThumbnailComposition').rawAttributes.include_justawomaninherprime.defaultValue).toBe(false);
+  });
+
+  test('ThumbnailComposition keeps one version column: current_version, not version (#1897)', () => {
+    // Evoni, 2026-09-25: point the code at current_version; do not declare
+    // `version` (canon has it, but two version columns on one table is the
+    // two-homes problem).
+    const attrs = loadModel('ThumbnailComposition').rawAttributes;
+    expect(attrs.current_version).toBeDefined();
+    expect(attrs.version).toBeUndefined();
   });
 });
