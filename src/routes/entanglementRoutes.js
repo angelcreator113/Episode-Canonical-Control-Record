@@ -275,23 +275,32 @@ router.post('/events/:eventId/proposals/:characterId/approve', async (req, res) 
     const proposal  = proposals.find(p => p.character_id === req.params.characterId);
     if (!proposal) return res.status(404).json({ error: 'Proposal not found for this character' });
 
-    // Mark proposal approved
-    proposal.approved = true;
-    await event.update({ scene_proposals: proposals });
+    // The approved copy is built without touching the loaded event, so a
+    // failure below leaves the stored proposal unapproved.
+    const approved  = { ...proposal, approved: true };
+    const updated   = proposals.map(p => (p === proposal ? approved : p));
+    const sendLine  = Boolean(book_id && chapter_id && models.StorytellerLine);
 
-    // If book_id + chapter_id provided, create a StoryTeller pending line
-    if (book_id && chapter_id && models.StorytellerLine) {
-      await models.StorytellerLine.create({
-        book_id,
-        chapter_id,
-        content:     `[SCENE BRIEF — from entanglement event]\n\n${proposal.brief}`,
-        status:      'pending',
-        source:      'amber_entanglement',
-        character:   proposal.character_name,
-      });
-    }
+    // One transaction: the StoryTeller line is created first, then the
+    // approval is saved. A failed line create never reaches the save; a
+    // failed save rolls the line back. (Task #1885)
+    await models.sequelize.transaction(async (transaction) => {
+      if (sendLine) {
+        // Declared StorytellerLine attributes only. book_id is not a column
+        // (the chapter carries the book); the character's name has no column
+        // either, so it goes into the brief's header line.
+        const who = proposal.character_name ? ` · ${proposal.character_name}` : '';
+        await models.StorytellerLine.create({
+          chapter_id,
+          text:        `[SCENE BRIEF — from entanglement event${who}]\n\n${proposal.brief}`,
+          status:      'pending',
+          source_tags: ['amber_entanglement'],
+        }, { transaction });
+      }
+      await event.update({ scene_proposals: updated }, { transaction });
+    });
 
-    res.json({ proposal, message: 'Scene proposal approved.' + (book_id ? ' Sent to StoryTeller.' : '') });
+    res.json({ proposal: approved, message: 'Scene proposal approved.' + (sendLine ? ' Sent to StoryTeller.' : '') });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
