@@ -22,6 +22,7 @@
 
 const { Op } = require('sequelize');
 const { scheduleOpportunityAsEvent, opportunityGuestCategory } = require('../../../src/services/feedEventPipelineService');
+const { strictSocialProfileRelationship } = require('../helpers/strictSocialProfileRelationship');
 
 // Since Task #1804 the pipeline takes its guests from assembleGuestList
 // (models.SocialProfile / SocialProfileRelationship), not a raw query.
@@ -65,7 +66,8 @@ function makeModels({ opportunity, guests = [], relationships = [], related = []
           return guests;
         }),
       },
-      SocialProfileRelationship: { findAll: jest.fn(async () => relationships) },
+      // Task #1860: the fake knows the real model's columns and enums.
+      SocialProfileRelationship: strictSocialProfileRelationship(relationships),
     },
   };
 }
@@ -150,12 +152,12 @@ describe('scheduleOpportunityAsEvent', () => {
     it('the connector is the host: their circle is considered first', async () => {
       const friend = { id: 'friend-1', handle: 'friend', display_name: 'Friend' };
       const { guests, profileCalls } = await run({
-        relationships: [{ profile_a_id: 'host-profile-1', profile_b_id: 'friend-1', relationship_type: 'friend' }],
+        relationships: [{ source_profile_id: 'host-profile-1', target_profile_id: 'friend-1', relationship_type: 'bestie' }],
         related: [friend],
         guests: [cand(1), cand(2, { archetype: 'soft_life' })],
       });
       expect(profileCalls.related[0].where.id).toEqual({ [Op.in]: ['friend-1'] });
-      expect(guests[0]).toEqual({ profile_id: 'friend-1', handle: 'friend', display_name: 'Friend', relationship: 'friend' });
+      expect(guests[0]).toEqual({ profile_id: 'friend-1', handle: 'friend', display_name: 'Friend', relationship: 'bestie' });
       expect(guests).toHaveLength(3);
     });
 

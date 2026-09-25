@@ -387,22 +387,39 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
   const guests = [];
   const { Op } = require('sequelize');
 
-  // 1. Get profiles with direct relationships to the host
+  // 1. Get profiles with direct relationships to the host, in either
+  // direction. The columns are source_profile_id / target_profile_id (the
+  // model and migration 20260311120000); this stage queried profile_a_id /
+  // profile_b_id from #453 until Task #1860, so every lookup failed and no
+  // related guest was ever chosen.
   if (SocialProfileRelationship && hostProfile) {
     try {
-      const relationships = await SocialProfileRelationship.findAll({
+      // Hidden relations never become invitations (Evoni, Task #1860): the
+      // stage had never run, so its first run must not surface a secret
+      // link as a guest. NULL visibility reads as the model default,
+      // 'public'. Direction, drama_level ordering and eligibility before
+      // the limit are open product questions, deliberately not decided here.
+      const relationships = (await SocialProfileRelationship.findAll({
         where: {
-          [Op.or]: [
-            { profile_a_id: hostProfile.id },
-            { profile_b_id: hostProfile.id },
+          [Op.and]: [
+            { [Op.or]: [
+              { source_profile_id: hostProfile.id },
+              { target_profile_id: hostProfile.id },
+            ] },
+            { [Op.or]: [
+              { public_visibility: { [Op.ne]: 'hidden' } },
+              { public_visibility: null },
+            ] },
           ],
         },
         limit: maxGuests,
-      });
+      })).filter(r => r.public_visibility !== 'hidden');
 
-      const relatedIds = relationships.map(r =>
-        r.profile_a_id === hostProfile.id ? r.profile_b_id : r.profile_a_id
-      ).filter(Boolean);
+      // One entry per person: two relationship types to the same profile
+      // (collab and rival, say) still make one guest.
+      const relatedIds = [...new Set(relationships.map(r =>
+        r.source_profile_id === hostProfile.id ? r.target_profile_id : r.source_profile_id
+      ).filter(Boolean))];
 
       if (relatedIds.length > 0) {
         // A guest arriving through a relationship is no more eligible than
@@ -416,7 +433,7 @@ async function assembleGuestList(hostProfile, calendarEvent, models, maxGuests =
 
         for (const p of relatedProfiles) {
           const rel = relationships.find(r =>
-            r.profile_a_id === p.id || r.profile_b_id === p.id
+            r.source_profile_id === p.id || r.target_profile_id === p.id
           );
           guests.push({
             profile_id: p.id,
