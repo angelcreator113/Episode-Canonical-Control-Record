@@ -7,7 +7,7 @@
  *
  * A static read, no database. It loads the Sequelize models with no connection
  * (Sequelize does not connect until a query runs) and parses source with
- * @babel/parser (installed as a jest dependency; nothing is added).
+ * @babel/parser (pinned exactly in devDependencies, Task #1871).
  *
  *   Step 1  query vs model:   literal attribute names in Model.findAll/findOne/
  *           findByPk/findAndCountAll/count/update/destroy/create/bulkCreate/
@@ -48,7 +48,27 @@
  *        step 1 as a ratchet: fail only on hits whose key is not in the baseline
  *
  * Exit code: 0 always in report mode; in --baseline mode 1 when step 1 has a
- * hit the baseline does not list. Not wired into CI (Task #1861 step 5).
+ * hit the baseline does not list. A baseline entry that no longer occurs is
+ * printed as GONE and does not fail; the baseline should only shrink.
+ *
+ * CI (Task #1871): .github/workflows/validate.yml runs
+ *   node scripts/check-schema-agreement.js --baseline scripts/schema-agreement.baseline
+ * in the Route Validation job, next to the silent-catch lint. Baseline keys are
+ * `file<TAB>Model.method<TAB>clause<TAB>name` (no line numbers), one per line,
+ * generated with --update-baseline, never edited by hand.
+ *
+ * Blind spots of the ratchet (what a green run does NOT prove):
+ *   - Only step 1 is gated. Steps 2-4 (model vs migrations, raw SQL, mocks)
+ *     print a report and never affect the exit code.
+ *   - Instance calls are not checked: row.update({...}), row.save(), row.set()
+ *     and other methods on a fetched instance have a non-model receiver.
+ *   - Non-model receivers are not checked: a call is attributed only when the
+ *     receiver is a model name (`Foo`), a property named after one
+ *     (`models.Foo`, `db.Foo`), or a local variable assigned from either.
+ *     Anything else (services, dynamic `models[name]`, `this.model`) is
+ *     counted, not checked.
+ *   - Unresolved names (dynamic keys, spreads of unknown objects, computed
+ *     attribute lists) are counted as unresolved, never flagged.
  */
 
 const fs = require('fs');
