@@ -55,6 +55,8 @@ module.exports = (sequelize) => {
       // Task #1870: these three are in the 2026-09-17 canon capture
       // (boolean NOT NULL / jsonb / varchar) but were undeclared, so
       // CompositionService.createComposition's values were dropped.
+      // Task #1884 retired that writer (the legacy POST format); the
+      // columns stay declared because canon has them.
       include_justawomaninherprime: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
@@ -144,14 +146,6 @@ module.exports = (sequelize) => {
    */
   ThumbnailComposition.prototype.getTextField = function (role) {
     return this.composition_config?.text_fields?.[role] ?? null;
-  };
-
-  /**
-   * Check if icon holder is required based on enabled icons
-   */
-  ThumbnailComposition.prototype.requiresIconHolder = function () {
-    const { shouldRequireIconHolder } = require('../constants/canonicalRoles');
-    return shouldRequireIconHolder(this.composition_config?.visibility || {});
   };
 
   /**
