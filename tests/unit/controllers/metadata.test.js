@@ -297,11 +297,11 @@ describe('Metadata Controller', () => {
 
       await metadataController.listMetadata(mockReq, mockRes);
 
-      // Controller returns empty JSON response with warning when query fails
-      expect(mockRes.json).toHaveBeenCalled();
+      // #1883: a failed query is a 500, not an empty list with a warning
+      expect(mockRes.status).toHaveBeenCalledWith(500);
       const call = mockRes.json.mock.calls[0][0];
-      expect(call.data).toEqual([]);
-      expect(call.warning).toBeDefined();
+      expect(call.error).toBe('Failed to list metadata');
+      expect(call.data).toBeUndefined();
     });
   });
 });

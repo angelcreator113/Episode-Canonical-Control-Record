@@ -298,10 +298,13 @@ module.exports = {
                 episode_id: episodeId,
                 wardrobe_id: wardrobeId,
               },
+              // #1883: index.js registers EpisodeWardrobe → Wardrobe as
+              // 'wardrobeItem'; 'wardrobe' threw on every call and the error
+              // went into the response's errors array with no log.
               include: [
                 {
                   model: Wardrobe,
-                  as: 'wardrobe',
+                  as: 'wardrobeItem',
                 },
                 {
                   model: Episode,
@@ -336,10 +339,10 @@ module.exports = {
             );
 
             // Record in usage history
-            if (episodeWardrobe.wardrobe?.library_item_id) {
+            if (episodeWardrobe.wardrobeItem?.library_item_id) {
               await WardrobeUsageHistory.create(
                 {
-                  libraryItemId: episodeWardrobe.wardrobe.library_item_id,
+                  libraryItemId: episodeWardrobe.wardrobeItem.library_item_id,
                   episodeId: episodeId,
                   showId: episodeWardrobe.episode?.showId,
                   usageType: 'approved',
@@ -352,6 +355,7 @@ module.exports = {
 
             approvedCount++;
           } catch (error) {
+            console.error(`Error in bulk approve (wardrobe ${wardrobeId}):`, error.message);
             errors.push({
               wardrobeId,
               error: error.message,

@@ -687,10 +687,11 @@ router.post('/generate-relationship-web', requireAuth, aiRateLimiter, async (req
       include: [{
         model: db.StorytellerChapter,
         as: 'chapter',
-        attributes: ['title', 'order_index'],
+        // #1883: StorytellerChapter declares sort_order, not order_index.
+        attributes: ['title', 'sort_order'],
         required: true,
       }],
-      order: [[{ model: db.StorytellerChapter, as: 'chapter' }, 'order_index', 'ASC']],
+      order: [[{ model: db.StorytellerChapter, as: 'chapter' }, 'sort_order', 'ASC']],
       limit: 100,
     });
 
@@ -1664,8 +1665,12 @@ async function loadCharacterRelationships(characterKey) {
     const charIds = charRows.map(r => r.id);
     const _charName = charRows[0].display_name;
 
-    // Fetch all relationships where this character is either side
-    const rels = await CharacterRelationship.findAll({
+    // Fetch all relationships where this character is either side.
+    // #1883: no include — src/models/index.js never calls
+    // CharacterRelationship.associate, so the characterA / characterB aliases
+    // are not registered and the include threw on every call. Both sides are
+    // resolved with a second RegistryCharacter query instead.
+    const relRows = await CharacterRelationship.findAll({
       where: {
         [Op.or]: [
           { character_id_a: charIds },
@@ -1673,14 +1678,22 @@ async function loadCharacterRelationships(characterKey) {
         ],
         status: 'Active',
       },
-      include: [
-        { model: RegistryCharacter, as: 'characterA', attributes: ['display_name', 'character_key'] },
-        { model: RegistryCharacter, as: 'characterB', attributes: ['display_name', 'character_key'] },
-      ],
       limit: 30,
     });
 
-    if (!rels.length) return null;
+    if (!relRows.length) return null;
+
+    const sideIds = [...new Set(relRows.flatMap(r => [r.character_id_a, r.character_id_b]))];
+    const sides = await RegistryCharacter.findAll({
+      where: { id: sideIds },
+      attributes: ['id', 'display_name', 'character_key'],
+    });
+    const byId = new Map(sides.map(c => [c.id, c]));
+    const rels = relRows.map(r => ({
+      ...(typeof r.toJSON === 'function' ? r.toJSON() : r),
+      characterA: byId.get(r.character_id_a) || null,
+      characterB: byId.get(r.character_id_b) || null,
+    }));
 
     const lines = [];
 
@@ -5531,3 +5544,4 @@ module.exports.router = router;
 module.exports.loadWriteModeContext = loadWriteModeContext;
 module.exports.buildWriteModeContextBlock = buildWriteModeContextBlock;
 module.exports.buildArcGenerationContext = buildArcGenerationContext;
+module.exports.loadCharacterRelationships = loadCharacterRelationships;

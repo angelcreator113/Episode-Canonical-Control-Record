@@ -18,9 +18,12 @@
  * never saved, until Evoni accepts it.
  *
  * Category and format (Task #1780) are Basics fields too, chosen from
- * the model's allowed values (utils/eventTaxonomy.js). They are set or
- * missing, never suggested; setting a format is what lets the time and
- * dress-code suggestions above appear.
+ * the model's allowed values (utils/eventTaxonomy.js). Since Task #1888
+ * each is suggested too, when the event's facts name one
+ * (suggestEventCategory / suggestEventFormat), and saved only when Evoni
+ * accepts. Accepting a format is what lets the time and dress-code
+ * suggestions above appear: the save reloads the event, and those two
+ * read its saved format.
  *
  * Organizer (Task #1761): Change Organizer picks a creator (a Social
  * Profile) or a brand (a lalaverse_brands row, written to host_brand by
@@ -78,7 +81,7 @@ import {
   DEADLINE_TYPES, CAREER_TIERS, COST_READ_ONLY_REASON, STORED_ORIGIN_NOTE,
 } from '../utils/eventStakes';
 import {
-  EVENT_CATEGORIES, EVENT_FORMATS, taxonomyLabel, resolveTaxonomyField,
+  EVENT_CATEGORIES, EVENT_FORMATS, taxonomyLabel,
 } from '../utils/eventTaxonomy';
 import { createEventSaveQueue, isStaleSaveError } from '../utils/eventSaveVersion';
 import { InvitationButton } from './InvitationGenerator';
@@ -104,7 +107,7 @@ const BASICS_FIELDS = {
   description: { label: 'Description', title: 'Description', column: 'description', input: 'textarea' },
   dressCode: { label: 'Dress code', title: 'Dress code', column: 'dress_code', input: 'text', maxLength: 200 },
   // Category and format (Task #1780): chosen from the model's allowed
-  // values (utils/eventTaxonomy.js), set or missing only — no suggestion.
+  // values (utils/eventTaxonomy.js); suggested per Task #1888.
   category: { label: 'Category', title: 'Category', column: 'category', input: 'select', options: EVENT_CATEGORIES },
   format: { label: 'Format', title: 'Format', column: 'format', input: 'select', options: EVENT_FORMATS },
 };
@@ -358,13 +361,10 @@ export default function EventPackagePage() {
   const readiness = computeEventPackageReadiness(event, { suggest: !used });
   const { gatesMet } = readiness;
   const blockedBy = describeMissing(readiness.blocking);
-  // Category and format (Task #1780) ride alongside the four Basics fields
-  // resolveEventBasics returns; they carry no suggestion.
-  const basics = {
-    ...resolveEventBasics(event, venueLocation, { suggest: !used }),
-    category: resolveTaxonomyField(event.category, EVENT_CATEGORIES),
-    format: resolveTaxonomyField(event.format, EVENT_FORMATS),
-  };
+  // Category and format (Tasks #1780, #1888) come from resolveEventBasics
+  // too, set / suggested / missing like the others. The organizer is the
+  // linked creator profile, when there is one.
+  const basics = resolveEventBasics(event, venueLocation, { suggest: !used, organizer: sourceProfile });
   const venueDate = resolveEventVenueAndDate(event);
   const organizer = describeEventOrganizer(event, sourceProfile);
   const startedFrom = used ? null : describeStartedFrom(event, startedFromProfile);
@@ -454,13 +454,13 @@ export default function EventPackagePage() {
             </button>
           )}
           {f.state === 'suggested' && (
-            <div className="epp-suggestion">
+            <div className="epp-suggestion" data-testid={`basics-${key}-suggestion`}>
               <span className="epp-suggestion-text">
                 <Lightbulb size={12} aria-hidden="true" /> Suggestion: <strong>{fmtBasicsValue(key, f.suggestion.value)}</strong>
                 <span className="epp-suggestion-basis">{f.suggestion.basis}</span>
               </span>
               <button
-                type="button" className="epp-btn epp-btn-small epp-suggestion-accept"
+                type="button" className="epp-btn epp-btn-small epp-suggestion-accept" data-testid={`basics-${key}-accept`}
                 onClick={() => acceptBasicsSuggestion(key)} disabled={basicsSaving}
               >
                 <CheckCircle2 size={13} /> Use this
