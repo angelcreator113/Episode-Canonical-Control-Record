@@ -55,4 +55,4 @@ cd frontend && npx vite build    # production build
 
 ## Stale files (do not follow)
 
-`README.md` (Jan 2026 plan), `SESSION_HANDOFF.md` (Apr 2026), `.github/copilot-instructions.md`, `.github/agents/deploy.agent.md` and `.github/prompts/deploy-dev.prompt.md` (instruct SSH + pm2 on the frozen prod box), most of `docs/*.md`. `PROJECT_CONTEXT.md` §9 has the full list.
+`README.md` (Jan 2026 plan), `SESSION_HANDOFF.md` (Apr 2026), `.github/copilot-instructions.md`, `.github/agents/deploy.agent.md` and `.github/prompts/deploy-dev.prompt.md` (instruct SSH + pm2 on the prod box, which only Evoni touches), most of `docs/*.md`. `PROJECT_CONTEXT.md` §9 has the full list.
