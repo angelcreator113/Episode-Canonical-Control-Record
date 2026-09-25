@@ -80,6 +80,9 @@ module.exports = (sequelize) => {
       is_justAWoman_style: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
+        // underscored: true would map this to is_just_a_woman_style; the
+        // production column is is_justAWoman_style (Task #1869).
+        field: 'is_justAWoman_style',
         comment: 'True when this represents one of JustAWoman\'s actual real-world makeup looks',
       },
       // ── Brand ────────────────────────────────────────────────────────
@@ -105,6 +108,15 @@ module.exports = (sequelize) => {
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
+      // Not paranoid (Task #1869). The global define in src/config/sequelize.js
+      // sets paranoid: true; the production table has no deleted_at column
+      // (docs/audit/EvidenceNote_Canon_Schema_Capture_2026-09-17.txt:941-959),
+      // so every model read and create failed on it. destroy() is now a real DELETE.
+      // is_justAWoman_style is mapped to its real column with field: above
+      // (docs/SCHEMA_AGREEMENT_READ.md section 2.2); without it, reads and
+      // creates would still fail after this fix, and replace_existing would
+      // delete rows it could not re-insert.
+      paranoid: false,
     }
   );
   return MakeupLibrary;
