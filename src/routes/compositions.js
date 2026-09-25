@@ -162,16 +162,6 @@ router.post('/', requireAuth, async (req, res) => {
 
     let template_id = provided_template_id;
 
-    // LEGACY SUPPORT: Handle old format with individual asset fields
-    const {
-      lala_asset_id,
-      justawomen_asset_id,
-      include_justawomaninherprime,
-      justawomaninherprime_position,
-      guest_asset_id,
-      background_frame_asset_id,
-    } = req.body;
-
     // Determine if this is new role-based format or legacy format
     // Check for template_studio_id OR asset_map/assets to determine format
     const isRoleBasedFormat =
@@ -189,32 +179,27 @@ router.post('/', requireAuth, async (req, res) => {
     // Use asset_map if provided, otherwise fall back to assets
     const assetData = asset_map || assets;
 
-    // Validate required fields based on format
-    if (isRoleBasedFormat) {
-      // New role-based format validation
-      if (!episode_id || !assetData) {
-        return res.status(400).json({
-          error: 'Missing required fields',
-          required: ['episode_id', 'asset_map or assets'],
-          received: {
-            episode_id: !!episode_id,
-            asset_map: !!asset_map,
-            assets: !!assets,
-          },
-        });
-      }
-    } else {
-      // Legacy format validation
-      if (!episode_id || !lala_asset_id) {
-        return res.status(400).json({
-          error: 'Missing required fields',
-          required: ['episode_id', 'lala_asset_id'],
-          received: {
-            episode_id: !!episode_id,
-            lala_asset_id: !!lala_asset_id,
-          },
-        });
-      }
+    // Legacy format (individual asset fields: lala_asset_id, justawomen_asset_id, …)
+    // is refused before any lookup or service call (Task #1884). Its only path,
+    // CompositionService.createComposition, threw a TypeError on every call:
+    // it called helpers canonicalRoles never exported.
+    if (!isRoleBasedFormat) {
+      return res.status(400).json({
+        error: 'Legacy composition format is not supported; use the studio format.',
+      });
+    }
+
+    // New role-based format validation
+    if (!episode_id || !assetData) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['episode_id', 'asset_map or assets'],
+        received: {
+          episode_id: !!episode_id,
+          asset_map: !!asset_map,
+          assets: !!assets,
+        },
+      });
     }
 
     // Validate episode_id format (should be UUID)
@@ -247,146 +232,116 @@ router.post('/', requireAuth, async (req, res) => {
       });
     }
 
-    // Create composition with appropriate format
-    let composition;
+    // Create composition (role-based / studio format)
+    console.log('✨ Creating composition with role-based assets');
 
-    if (isRoleBasedFormat) {
-      // NEW ROLE-BASED FORMAT
-      console.log('✨ Creating composition with role-based assets');
+    // If template_studio_id is provided, validate it and skip old template validation
+    if (template_studio_id) {
+      console.log('🎨 Using Template Studio template:', template_studio_id);
 
-      // If template_studio_id is provided, validate it and skip old template validation
-      if (template_studio_id) {
-        console.log('🎨 Using Template Studio template:', template_studio_id);
+      // Fetch template from template_studio through the shared connection.
+      const { sequelize } = require('../models');
 
-        // Fetch template from template_studio through the shared connection.
-        const { sequelize } = require('../models');
-
-        const [templates] = await sequelize.query(
-          `
+      const [templates] = await sequelize.query(
+        `
           SELECT * FROM template_studio WHERE id = $1
         `,
-          { bind: [template_studio_id] }
-        );
+        { bind: [template_studio_id] }
+      );
 
-        if (templates.length === 0) {
-          return res.status(400).json({
-            error: 'Invalid template_studio_id',
-            message: `Template ${template_studio_id} not found`,
-          });
-        }
-
-        const studioTemplate = templates[0];
-        console.log(`✅ Found template: ${studioTemplate.name} v${studioTemplate.version}`);
-
-        // Validate required roles from template
-        const requiredRoles = studioTemplate.required_roles || [];
-        const missingRoles = requiredRoles.filter((role) => !assetData[role]);
-
-        if (missingRoles.length > 0) {
-          console.warn('⚠️  Missing required roles:', missingRoles);
-          // Don't fail - allow partial compositions for now
-        }
-      } else if (template_id) {
-        // Legacy template validation
-        const template = await models.ThumbnailTemplate.findByPk(template_id);
-        if (!template) {
-          return res.status(400).json({
-            error: 'Invalid template_id',
-            message: `Template ${template_id} not found`,
-          });
-        }
-
-        const requiredRoles = template.required_roles || [];
-        const missingRoles = requiredRoles.filter((role) => !assetData[role]);
-
-        if (missingRoles.length > 0) {
-          return res.status(400).json({
-            error: 'Missing required asset roles',
-            required: requiredRoles,
-            missing: missingRoles,
-            received: Object.keys(assetData),
-          });
-        }
-      }
-
-      // Create composition record
-      composition = await models.ThumbnailComposition.create({
-        episode_id,
-        template_id,
-        template_studio_id, // NEW: Store template_studio_id
-        selected_formats,
-        composition_config: composition_config || {},
-        status: 'PENDING',
-        created_by: req.user?.id || 'test-user',
-      });
-
-      // Create composition_assets records for each role
-      const compositionAssetRecords = Object.entries(assetData)
-        .filter(([_role, assetId]) => assetId && typeof assetId === 'string') // Only real asset IDs, not text values
-        .map(([role, assetId]) => ({
-          composition_id: composition.id,
-          asset_id: assetId,
-          asset_role: role,
-        }));
-
-      if (compositionAssetRecords.length > 0) {
-        await models.CompositionAsset.bulkCreate(compositionAssetRecords);
-        console.log(`✅ Created ${compositionAssetRecords.length} composition_assets records`);
-      }
-
-      // Store text field values in composition_config
-      const textFields = Object.entries(assetData)
-        .filter(([role, value]) => typeof value === 'string' && role.startsWith('TEXT.'))
-        .reduce((acc, [role, value]) => {
-          acc[role] = value;
-          return acc;
-        }, {});
-
-      if (Object.keys(textFields).length > 0) {
-        composition.composition_config = {
-          ...composition.composition_config,
-          text_fields: textFields,
-        };
-        await composition.save();
-        console.log(`✅ Stored ${Object.keys(textFields).length} text field values`);
-      }
-
-      // Create composition_output records for selected formats
-      const outputRecords = selected_formats.map((format) => ({
-        composition_id: composition.id,
-        format,
-        status: 'PROCESSING',
-        generated_by: req.user?.id || 'test-user',
-      }));
-
-      await models.CompositionOutput.bulkCreate(outputRecords);
-      console.log(`✅ Created ${outputRecords.length} composition_output records`);
-    } else {
-      // LEGACY FORMAT - use old service method
-      console.log('⚠️  Using legacy format (individual asset fields)');
-
-      // Validate that if include_justawomaninherprime is true, asset is provided
-      if (include_justawomaninherprime && !justawomen_asset_id) {
+      if (templates.length === 0) {
         return res.status(400).json({
-          error: 'When include_justawomaninherprime is true, justawomen_asset_id is required',
+          error: 'Invalid template_studio_id',
+          message: `Template ${template_studio_id} not found`,
         });
       }
 
-      composition = await CompositionService.createComposition(
-        episode_id,
-        {
-          template_id,
-          lala_asset_id,
-          justawomen_asset_id,
-          include_justawomaninherprime: include_justawomaninherprime || false,
-          justawomaninherprime_position,
-          guest_asset_id,
-          background_frame_asset_id,
-          selected_formats,
-        },
-        req.user?.id || 'test-user'
-      );
+      const studioTemplate = templates[0];
+      console.log(`✅ Found template: ${studioTemplate.name} v${studioTemplate.version}`);
+
+      // Validate required roles from template
+      const requiredRoles = studioTemplate.required_roles || [];
+      const missingRoles = requiredRoles.filter((role) => !assetData[role]);
+
+      if (missingRoles.length > 0) {
+        console.warn('⚠️  Missing required roles:', missingRoles);
+        // Don't fail - allow partial compositions for now
+      }
+    } else if (template_id) {
+      // Legacy template validation
+      const template = await models.ThumbnailTemplate.findByPk(template_id);
+      if (!template) {
+        return res.status(400).json({
+          error: 'Invalid template_id',
+          message: `Template ${template_id} not found`,
+        });
+      }
+
+      const requiredRoles = template.required_roles || [];
+      const missingRoles = requiredRoles.filter((role) => !assetData[role]);
+
+      if (missingRoles.length > 0) {
+        return res.status(400).json({
+          error: 'Missing required asset roles',
+          required: requiredRoles,
+          missing: missingRoles,
+          received: Object.keys(assetData),
+        });
+      }
     }
+
+    // Create composition record
+    const composition = await models.ThumbnailComposition.create({
+      episode_id,
+      template_id,
+      template_studio_id, // NEW: Store template_studio_id
+      selected_formats,
+      composition_config: composition_config || {},
+      status: 'PENDING',
+      created_by: req.user?.id || 'test-user',
+    });
+
+    // Create composition_assets records for each role
+    const compositionAssetRecords = Object.entries(assetData)
+      .filter(([_role, assetId]) => assetId && typeof assetId === 'string') // Only real asset IDs, not text values
+      .map(([role, assetId]) => ({
+        composition_id: composition.id,
+        asset_id: assetId,
+        asset_role: role,
+      }));
+
+    if (compositionAssetRecords.length > 0) {
+      await models.CompositionAsset.bulkCreate(compositionAssetRecords);
+      console.log(`✅ Created ${compositionAssetRecords.length} composition_assets records`);
+    }
+
+    // Store text field values in composition_config
+    const textFields = Object.entries(assetData)
+      .filter(([role, value]) => typeof value === 'string' && role.startsWith('TEXT.'))
+      .reduce((acc, [role, value]) => {
+        acc[role] = value;
+        return acc;
+      }, {});
+
+    if (Object.keys(textFields).length > 0) {
+      composition.composition_config = {
+        ...composition.composition_config,
+        text_fields: textFields,
+      };
+      await composition.save();
+      console.log(`✅ Stored ${Object.keys(textFields).length} text field values`);
+    }
+
+    // Create composition_output records for selected formats
+    const outputRecords = selected_formats.map((format) => ({
+      composition_id: composition.id,
+      format,
+      status: 'PROCESSING',
+      generated_by: req.user?.id || 'test-user',
+    }));
+
+    await models.CompositionOutput.bulkCreate(outputRecords);
+    console.log(`✅ Created ${outputRecords.length} composition_output records`);
 
     // Generate thumbnails for selected formats
     console.log('🎬 About to generate thumbnails for composition:', composition.id);
