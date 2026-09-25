@@ -2750,7 +2750,10 @@ The revised event should feel like a completely different experience from the si
               const menuOpen = openEventMenuId === ev.id;
               const openPackage = () => navigate(`/shows/${showId}/events/${ev.id}`);
               const primaryAction = () => {
-                if (state === 'used') { if (linkedEpisode) navigate(`/episodes/${linkedEpisode.id}`); return; }
+                // Open Episode (a Used event) lands on Overview: it orients
+                // (Evoni's ruling, 2026-09-25, Task #1905; scoped reversal
+                // of #1531's Checklist landing for this caller only).
+                if (state === 'used') { if (linkedEpisode) navigate(`/episodes/${linkedEpisode.id}?tab=overview`); return; }
                 openPackage();
               };
               return (
@@ -5159,7 +5162,8 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => {
                 const epId = episodeBlueprint.episode?.id;
-                if (epId) window.location.href = `/episodes/${epId}`;
+                // Open Episode lands on Overview (Task #1905), as the queue's does.
+                if (epId) window.location.href = `/episodes/${epId}?tab=overview`;
                 else { setActiveTab('episodes'); setEpisodeBlueprint(null); }
               }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#B8962E', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
                 Open Episode →
