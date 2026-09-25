@@ -123,10 +123,13 @@ router.post('/admin/reset-character-stats', requireAuth, authorize(['ADMIN']), a
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    // List ALL shows so we can see what's in the DB
-    const showRows = await models.Show.unscoped().findAll({
+    // List ALL shows so we can see what's in the DB, soft-deleted ones included
+    // (the raw SELECT this replaced had no deleted_at predicate). In Sequelize 6
+    // .unscoped() does not drop the paranoid predicate; paranoid: false does.
+    const showRows = await models.Show.findAll({
       attributes: ['id', 'name'],
       order: [['created_at', 'ASC']],
+      paranoid: false,
     });
     const shows = showRows.map(r => r.get({ plain: true }));
     if (!shows.length) {
