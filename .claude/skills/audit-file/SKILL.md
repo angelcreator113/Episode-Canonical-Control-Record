@@ -14,7 +14,7 @@ The register under `docs/audit/` is the project's memory. It has rules; a docume
 3. Numbers: FD numbers are minted only by a Fix Plan revision; XK by the Cross-Keystone Register via a ratifying revision; PE by `Session_PE_Roster.md`. A standalone note mints nothing and says so in its footer.
 4. Standing labels on every claim: MEASURED (repo read, anyone can check, paste the command and output), ATTESTED (session record only), RULED (Evoni's decision, quoted), INFERRED (say so). Do not upgrade a standing.
 5. Tails: re-derive, do not carry. Paste `grep -ro 'FD-70' docs/audit/ | wc -l`-style instruments with their output.
-6. Footer: type, what it rules (usually nothing), what it mints (usually nothing), host/AWS/DB contact (none), and `Prod FROZEN`.
+6. Footer: type, what it rules (usually nothing), what it mints (usually nothing), host/AWS/DB/Cognito contact by the filing session (none), and the production standing as the register states it: "Production's freeze is lifted (`F-Deploy-1_Fix_Plan_v1.53.md` §1); agent sessions still never touch hosts, AWS, RDS or Cognito (`CLAUDE.md`)." If a newer Fix Plan revision changes that standing, cite it instead.
 7. Filename: `<Family>_<Title>_<YYYY-MM-DD>.md`; use `_DRAFT` suffix if not ruled.
 8. Commit subject: `docs(audit): <what it files> [skip-automerge]`. Body must not carry a closing keyword next to `#NNN`.
 
