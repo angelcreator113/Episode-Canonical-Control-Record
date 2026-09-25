@@ -4,7 +4,9 @@ import api from '../../services/api';
 import MissionEditor from '../phone-editor/MissionEditor';
 
 /**
- * EpisodePhoneMissionsTab — per-episode missions surface.
+ * EpisodePhoneMissionsTab — per-episode missions surface. Since issue
+ * #1908 it renders as the Missions section of EpisodeLalasPhoneTab rather
+ * than as the whole Production → Phone tab.
  *
  * Lists every mission visible to this episode (show-wide + episode-scoped),
  * with inline is_active toggles and a one-click jump into the existing
@@ -93,10 +95,11 @@ function EpisodePhoneMissionsTab({ episode }) {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      {/* Header + manage button */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>📱 Phone Missions</h2>
+      {/* Header + manage button. Rendered as a section of Lala's Phone
+          (EpisodeLalasPhoneTab, issue #1908), so the heading is an h3. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 16 }}>
+        <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#6B6557', textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: "'DM Mono', monospace" }}>Missions</h3>
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
             Read-only observers that watch playthrough state and report progress. Show-wide missions run on every episode; episode-scoped missions only run here.
           </div>
@@ -134,7 +137,7 @@ function EpisodePhoneMissionsTab({ episode }) {
           <div key={m.id} style={{ ...S.card, opacity: m.is_active ? 1 : 0.55 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{m.name}</div>
                   <span style={S.scopeBadge(isShowWide)}>{isShowWide ? 'SHOW-WIDE' : 'THIS EPISODE'}</span>
                   {!m.is_active && <span style={{ ...S.scopeBadge(false), background: '#f1f5f9', color: '#64748b' }}>INACTIVE</span>}
@@ -142,7 +145,7 @@ function EpisodePhoneMissionsTab({ episode }) {
                 {m.description && (
                   <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5, marginBottom: 6 }}>{m.description}</div>
                 )}
-                <div style={{ display: 'flex', gap: 10, fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 10, color: '#94a3b8', fontFamily: "'DM Mono', monospace" }}>
                   <span>🎯 {objectivesCount} {objectivesCount === 1 ? 'objective' : 'objectives'}</span>
                   {Array.isArray(m.reward_actions) && m.reward_actions.length > 0 && (
                     <span>🎁 {m.reward_actions.length} reward {m.reward_actions.length === 1 ? 'action' : 'actions'}</span>

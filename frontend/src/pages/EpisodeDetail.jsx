@@ -16,7 +16,7 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 // fetched when the user clicks into the tab. PhonePreviewMode is lazy
 // because the player overlay only mounts when "Preview Phone" is clicked.
 const EpisodeAssetsTab = lazy(() => import('../components/Episodes/EpisodeAssetsTab'));
-const EpisodePhoneMissionsTab = lazy(() => import('../components/Episodes/EpisodePhoneMissionsTab'));
+const EpisodeLalasPhoneTab = lazy(() => import('../components/Episodes/EpisodeLalasPhoneTab'));
 const EpisodeScriptTab = lazy(() => import('../components/Episodes/EpisodeScriptTab'));
 const EpisodeDistributionTab = lazy(() => import('../components/Episodes/EpisodeDistributionTab'));
 const EpisodeWardrobeGameplay = lazy(() => import('../components/EpisodeWardrobeGameplay'));
@@ -828,28 +828,13 @@ const EpisodeDetail = () => {
           <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
         )}
 
-        {/* Phone missions sub-tab — episode-scoped view of show-wide +
-            episode-specific missions, with inline active toggle and a jump
-            into the existing MissionEditor for full CRUD. */}
+        {/* Phone tab — Lala's Phone for this episode (issue #1908): the
+            Preview Phone action (issue #1601 moved it here, #1605 relabelled
+            it; same phone.start handler and overlay), what is on the phone,
+            the deferred beat-requirements notice, and missions as a section
+            (EpisodePhoneMissionsTab, unchanged toggles + MissionEditor). */}
         {tabKey === 'production.phone' && (
-          <>
-            {/* Preview Phone — relocated from the Episode Detail header
-                (issue #1601), relabelled from "Play on Phone" (issue #1605,
-                a producer previews the phone experience, doesn't play it
-                for an audience). Same phone.start handler and overlay as
-                before; the mobile icon-only treatment it needed in the
-                header's tight row no longer applies here. */}
-            <div style={{ marginBottom: 16 }}>
-              <button
-                onClick={phone.start}
-                title="Preview Phone"
-                style={{padding:'5px 12px', background:'linear-gradient(135deg,#B8962E,#8a6c1d)', border:'none', borderRadius:6, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px', fontFamily:"'DM Mono', monospace", letterSpacing:0.3}}
-              >
-                ▶ Preview Phone
-              </button>
-            </div>
-            <EpisodePhoneMissionsTab episode={episode} />
-          </>
+          <EpisodeLalasPhoneTab episode={episode} onPreview={phone.start} />
         )}
 
         {/* Checklist Tab */}

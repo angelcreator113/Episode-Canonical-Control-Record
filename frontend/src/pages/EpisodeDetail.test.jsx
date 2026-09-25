@@ -78,7 +78,7 @@ vi.mock('../components/Episodes/EpisodeTodoList', () => ({
 }));
 
 vi.mock('../components/Episodes/EpisodeAssetsTab', () => ({ default: () => null }));
-vi.mock('../components/Episodes/EpisodePhoneMissionsTab', () => ({ default: () => null }));
+vi.mock('../components/Episodes/EpisodeLalasPhoneTab', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeScriptTab', () => ({ default: () => null }));
 vi.mock('../components/Episodes/EpisodeDistributionTab', () => ({ default: () => null }));
 vi.mock('../components/EpisodeWardrobeGameplay', () => ({ default: () => null }));
