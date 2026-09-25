@@ -8,7 +8,7 @@ import {
   suggestEventTime, suggestDressCode, isAutoScheduledDate, resolveEventBasics,
   suggestEventCategory, suggestEventFormat,
   CONTENT_CATEGORY_TO_CATEGORY, OPPORTUNITY_TYPE_TO_CATEGORY, OPPORTUNITY_TYPE_TO_FORMAT,
-  VENUE_TYPE_TO_CATEGORY, VENUE_TYPE_TO_FORMAT, NAME_WORDS_TO_CATEGORY, NAME_WORDS_TO_FORMAT,
+  NAME_WORDS_TO_CATEGORY, NAME_WORDS_TO_FORMAT,
 } from './eventBasics';
 import { computeEventPackageReadiness, computeEventState } from './eventReadinessSections';
 import { createRequire } from 'module';
@@ -243,10 +243,10 @@ describe('category and format suggestions (Task #1888)', () => {
   const tableValues = (t) => (Array.isArray(t) ? t.map((r) => r.value) : Object.values(t));
 
   test('every table value is in eventTaxonomy.json', () => {
-    for (const t of [CONTENT_CATEGORY_TO_CATEGORY, OPPORTUNITY_TYPE_TO_CATEGORY, VENUE_TYPE_TO_CATEGORY, NAME_WORDS_TO_CATEGORY]) {
+    for (const t of [CONTENT_CATEGORY_TO_CATEGORY, OPPORTUNITY_TYPE_TO_CATEGORY, NAME_WORDS_TO_CATEGORY]) {
       for (const v of tableValues(t)) expect(taxonomy.category).toContain(v);
     }
-    for (const t of [OPPORTUNITY_TYPE_TO_FORMAT, VENUE_TYPE_TO_FORMAT, NAME_WORDS_TO_FORMAT]) {
+    for (const t of [OPPORTUNITY_TYPE_TO_FORMAT, NAME_WORDS_TO_FORMAT]) {
       for (const v of tableValues(t)) expect(taxonomy.format).toContain(v);
     }
   });
@@ -291,9 +291,8 @@ describe('category and format suggestions (Task #1888)', () => {
         .toEqual({ value: 'beauty_wellness', basis: 'From name: "beauty"' });
     });
 
-    test('from the venue', () => {
-      expect(suggestEventCategory({ name: 'Event with Kai' }, null, { name: 'The Loft', venue_type: 'salon' }))
-        .toEqual({ value: 'beauty_wellness', basis: 'From venue: salon' });
+    test('a linked venue is not a source (its type was chosen from the creator\'s category)', () => {
+      expect(suggestEventCategory({ name: 'Event with Kai' }, null, { name: 'The Loft', venue_type: 'salon' })).toBeNull();
     });
 
     test('null when facts are thin', () => {
@@ -303,8 +302,6 @@ describe('category and format suggestions (Task #1888)', () => {
       expect(suggestEventCategory({ canon_consequences: { automation: { content_category: 'lifestyle' } } }, { content_category: 'drama' })).toBeNull();
       // An opportunity type with no plain mapping suggests nothing.
       expect(suggestEventCategory({ canon_consequences: { automation: { opportunity_type: 'podcast' } } })).toBeNull();
-      // A venue type with no plain mapping suggests nothing.
-      expect(suggestEventCategory({}, null, { venue_type: 'rooftop' })).toBeNull();
       // A name whose words point two ways is ambiguous.
       expect(suggestEventCategory({ name: 'Fashion Brunch' })).toBeNull();
       // event_type is never read.
@@ -327,13 +324,8 @@ describe('category and format suggestions (Task #1888)', () => {
         .toEqual({ value: 'gala', basis: 'From opportunity: award show' });
     });
 
-    test('from the venue', () => {
-      expect(suggestEventFormat({ name: 'Event with Kai' }, null, { venue_type: 'gallery' }))
-        .toEqual({ value: 'gallery_opening', basis: 'From venue: gallery' });
-    });
-
-    test('the name wins over the venue', () => {
-      expect(suggestEventFormat({ name: 'Cocktails at Nine' }, null, { venue_type: 'gallery' }).value).toBe('cocktail_party');
+    test('a linked venue is not a source: a fashion event at a gallery gets no gallery_opening', () => {
+      expect(suggestEventFormat({ name: 'Event with Kai' }, null, { venue_type: 'gallery' })).toBeNull();
     });
 
     test('null when facts are thin', () => {
@@ -341,7 +333,6 @@ describe('category and format suggestions (Task #1888)', () => {
       // A from-profile name carries no format, and a content category is not a format.
       expect(suggestEventFormat(fromProfile, { content_category: 'music' })).toBeNull();
       expect(suggestEventFormat({ canon_consequences: { automation: { opportunity_type: 'campaign' } } })).toBeNull();
-      expect(suggestEventFormat({}, null, { venue_type: 'rooftop' })).toBeNull();
       expect(suggestEventFormat({ name: 'Gala Brunch' })).toBeNull();
       expect(suggestEventFormat({ name: 'Soirée at Nine' })).toBeNull();
       expect(suggestEventFormat({ event_type: 'brand_deal', prestige: 10 })).toBeNull();

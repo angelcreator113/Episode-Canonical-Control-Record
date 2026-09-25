@@ -184,23 +184,10 @@ export const OPPORTUNITY_TYPE_TO_FORMAT = {
   award_show: 'gala',
 };
 
-// Linked venue's venue_type (WorldLocation) → category / format.
-export const VENUE_TYPE_TO_CATEGORY = {
-  gallery: 'arts_entertainment',
-  museum: 'arts_entertainment',
-  theater: 'arts_entertainment',
-  cinema: 'arts_entertainment',
-  salon: 'beauty_wellness',
-  spa: 'beauty_wellness',
-  restaurant: 'brunch_dining',
-  cafe: 'brunch_dining',
-};
-export const VENUE_TYPE_TO_FORMAT = {
-  gallery: 'gallery_opening',
-  museum: 'gallery_opening',
-  cinema: 'premiere',
-  cafe: 'brunch',
-};
+// No venue_type table (Evoni, Task #1888): on automated events the venue was
+// itself chosen from the creator's content category, so a venue-based
+// suggestion would echo that choice rather than add a fact. If a mapping is
+// not deliberately defined, no suggestion beats one from a table nobody chose.
 
 // Words in the event's name → category / format. Whole words only.
 export const NAME_WORDS_TO_CATEGORY = [
@@ -255,11 +242,11 @@ function fromName(name, table, list) {
  *   2. the Feed creator the event was started from
  *      (automation.content_category, written by from-profile);
  *   3. automation.opportunity_type (opportunity pipeline);
- *   4. a word in the event's name;
- *   5. the linked venue's venue_type.
+ *   4. a word in the event's name.
+ * The linked venue is not a source (see the note above the name tables).
  * Returns { value, basis } or null when none of them says.
  */
-export function suggestEventCategory(event, organizer, venueLocation) {
+export function suggestEventCategory(event, organizer) {
   const ev = event || {};
   const auto = automationOf(ev);
 
@@ -278,24 +265,20 @@ export function suggestEventCategory(event, organizer, venueLocation) {
   const byName = fromName(ev.name, NAME_WORDS_TO_CATEGORY, EVENT_CATEGORIES);
   if (byName) return { value: byName.value, basis: `From name: "${byName.word}"` };
 
-  const venueType = lower(venueLocation?.venue_type);
-  const fromVenue = allowed(VENUE_TYPE_TO_CATEGORY[venueType], EVENT_CATEGORIES);
-  if (fromVenue) return { value: fromVenue, basis: `From venue: ${fmtFormat(venueType)}` };
-
   return null;
 }
 
 /**
  * Format suggestion. Sources, first match wins:
  *   1. a word in the event's name (it names the gathering directly);
- *   2. automation.opportunity_type (opportunity pipeline);
- *   3. the linked venue's venue_type.
+ *   2. automation.opportunity_type (opportunity pipeline).
+ * The linked venue is not a source (see the note above the name tables).
  * `organizer` is taken for symmetry with suggestEventCategory, but no
  * organizer fact names a format: a creator's content category says what
  * world they are in, not what shape their event takes.
  * Returns { value, basis } or null when none of them says.
  */
-export function suggestEventFormat(event, organizer, venueLocation) {
+export function suggestEventFormat(event, organizer) {
   const ev = event || {};
   const auto = automationOf(ev);
 
@@ -305,10 +288,6 @@ export function suggestEventFormat(event, organizer, venueLocation) {
   const oppType = lower(auto.opportunity_type);
   const fromOpp = allowed(OPPORTUNITY_TYPE_TO_FORMAT[oppType], EVENT_FORMATS);
   if (fromOpp) return { value: fromOpp, basis: `From opportunity: ${fmtFormat(oppType)}` };
-
-  const venueType = lower(venueLocation?.venue_type);
-  const fromVenue = allowed(VENUE_TYPE_TO_FORMAT[venueType], EVENT_FORMATS);
-  if (fromVenue) return { value: fromVenue, basis: `From venue: ${fmtFormat(venueType)}` };
 
   return null;
 }
@@ -375,8 +354,8 @@ export function resolveEventBasics(event, venueLocation, { suggest = true, organ
     description: field(text(ev.description) || null, null),
     dressCode: field(text(ev.dress_code) || null, suggest ? suggestDressCode(ev, venueLocation) : null),
     category: taxonomyField(ev.category, EVENT_CATEGORIES,
-      suggest ? suggestEventCategory(ev, organizer, venueLocation) : null),
+      suggest ? suggestEventCategory(ev, organizer) : null),
     format: taxonomyField(ev.format, EVENT_FORMATS,
-      suggest ? suggestEventFormat(ev, organizer, venueLocation) : null),
+      suggest ? suggestEventFormat(ev, organizer) : null),
   };
 }
