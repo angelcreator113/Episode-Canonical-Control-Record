@@ -1,3 +1,16 @@
+> **POINTER BANNER - `.unscoped()` DOES NOT STRIP THE SOFT-DELETE PREDICATE
+> (added 2026-09-25, additive, Task #1838).**
+>
+> The 4e gate outcome says `.unscoped()` "strips only the soft-delete
+> predicate", and the "`.unscoped()` question" section makes it mandatory on
+> `WorldEvent`. In Sequelize 6 `.unscoped()` clears default and named scopes
+> only; the paranoid predicate stays. Only `paranoid: false` removes it. The
+> browse-pool event lookup converted on this rule (d5746ca7b, 2026-08-03) has
+> excluded soft-deleted events since; Task #1838 fixes it.
+> `F-Stats-1_Unscoped_Not_Paranoid_Note_2026-09-25.md` carries the generated
+> SQL, the other call sites, and the relation to the CharacterState note below.
+> **This banner points; it does not carry.** This document's body is unedited.
+
 > **POINTER BANNER - "`CharacterState` IS NOT PARANOID" WAS INACCURATE UNTIL
 > THE FIX IS DEPLOYED (added 2026-09-25, additive, Task #1832).**
 >
