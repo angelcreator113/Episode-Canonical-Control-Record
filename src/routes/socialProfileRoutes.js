@@ -57,10 +57,15 @@ async function checkFeedCap(db, layer) {
 }
 
 // ── JustAWoman record guard ──────────────────────────────────────────────────
+// The single place that decides whether a profile is the locked record.
+function isLockedProfile(profile) {
+  return !!profile?.is_justawoman_record;
+}
+
 function guardJustAWomanRecord(req, res, next) {
   const db = req.app.locals.db || require('../models');
   db.SocialProfile.findByPk(req.params.id).then(profile => {
-    if (profile?.is_justawoman_record) {
+    if (isLockedProfile(profile)) {
       return res.status(403).json({
         error: 'This record is locked',
         message: "JustAWoman's LalaVerse profile is hand-authored and permanently locked.",
@@ -1157,6 +1162,24 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
+// ── Bulk guard helpers ───────────────────────────────────────────────────────
+// Bulk handlers act on ids chosen in the Feed (including "select all pages"),
+// so each one filters out the locked JustAWoman record server-side.
+async function splitLockedIds(db, ids) {
+  const { Op } = require('sequelize');
+  const profiles = await db.SocialProfile.findAll({
+    where: { id: { [Op.in]: ids } },
+    attributes: ['id', 'handle', 'status', 'is_justawoman_record'],
+  });
+  const locked = profiles.filter(isLockedProfile);
+  const lockedIds = new Set(locked.map(p => String(p.id)));
+  return {
+    profiles,
+    allowedIds: ids.filter(id => !lockedIds.has(String(id))),
+    locked: locked.map(p => ({ id: p.id, handle: p.handle, reason: 'locked' })),
+  };
+}
+
 // ── POST /bulk/finalize ──────────────────────────────────────────────────────
 // Finalize multiple profiles at once
 router.post('/bulk/finalize', requireAuth, async (req, res) => {
@@ -1170,12 +1193,16 @@ router.post('/bulk/finalize', requireAuth, async (req, res) => {
   }
   try {
     const { Op } = require('sequelize');
+    const { allowedIds, locked } = await splitLockedIds(db, ids);
+    if (allowedIds.length === 0) {
+      return res.json({ finalized: 0, skipped: ids.length, total: ids.length, locked });
+    }
     const [changed] = await db.SocialProfile.update(
       { status: 'finalized' },
-      { where: { id: { [Op.in]: ids }, status: 'generated' } }
+      { where: { id: { [Op.in]: allowedIds }, status: 'generated' } }
     );
     const skipped = ids.length - changed;
-    return res.json({ finalized: changed, skipped, total: ids.length });
+    return res.json({ finalized: changed, skipped, total: ids.length, locked });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -1194,12 +1221,16 @@ router.post('/bulk/cross', requireAuth, async (req, res) => {
   }
   try {
     const { Op } = require('sequelize');
+    const { allowedIds, locked } = await splitLockedIds(db, ids);
+    if (allowedIds.length === 0) {
+      return res.json({ crossed: 0, skipped: ids.length, total: ids.length, locked });
+    }
     const [changed] = await db.SocialProfile.update(
       { status: 'crossed', world_exists: true, crossed_at: new Date() },
-      { where: { id: { [Op.in]: ids }, status: 'finalized' } }
+      { where: { id: { [Op.in]: allowedIds }, status: 'finalized' } }
     );
     const skipped = ids.length - changed;
-    return res.json({ crossed: changed, skipped, total: ids.length });
+    return res.json({ crossed: changed, skipped, total: ids.length, locked });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -1218,12 +1249,16 @@ router.post('/bulk/archive', requireAuth, async (req, res) => {
   }
   try {
     const { Op } = require('sequelize');
+    const { allowedIds, locked } = await splitLockedIds(db, ids);
+    if (allowedIds.length === 0) {
+      return res.json({ archived: 0, skipped: ids.length, total: ids.length, locked });
+    }
     const [changed] = await db.SocialProfile.update(
       { status: 'archived' },
-      { where: { id: { [Op.in]: ids }, status: { [Op.ne]: 'archived' } } }
+      { where: { id: { [Op.in]: allowedIds }, status: { [Op.ne]: 'archived' } } }
     );
     const skipped = ids.length - changed;
-    return res.json({ archived: changed, skipped, total: ids.length });
+    return res.json({ archived: changed, skipped, total: ids.length, locked });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -1242,11 +1277,43 @@ router.post('/bulk/delete', requireAuth, async (req, res) => {
   }
   try {
     const { Op } = require('sequelize');
-    const count = await db.SocialProfile.destroy(
-      { where: { id: { [Op.in]: ids } } }
+    const { profiles, allowedIds, locked } = await splitLockedIds(db, ids);
+    const skipped = [...locked];
+
+    // Crossed profiles are story characters; deleting one strips its registry link.
+    const byId = new Map(profiles.map(p => [String(p.id), p]));
+    const crossedIds = new Set(
+      allowedIds.filter(id => byId.get(String(id))?.status === 'crossed').map(String)
     );
-    return res.json({ deleted: count });
+    allowedIds.filter(id => crossedIds.has(String(id))).forEach(id => {
+      const p = byId.get(String(id));
+      skipped.push({ id: p.id, handle: p.handle, reason: 'crossed' });
+    });
+
+    // Entanglement rows cascade on delete, so a profile with any is kept.
+    const candidates = allowedIds.filter(id => byId.has(String(id)) && !crossedIds.has(String(id)));
+    const entangledIds = new Set();
+    if (candidates.length) {
+      for (const model of [db.CharacterEntanglement, db.EntanglementEvent, db.EntanglementUnfollow]) {
+        const rows = await model.findAll({
+          where: { profile_id: { [Op.in]: candidates } },
+          attributes: ['profile_id'],
+        });
+        rows.forEach(r => entangledIds.add(String(r.profile_id)));
+      }
+    }
+    candidates.filter(id => entangledIds.has(String(id))).forEach(id => {
+      const p = byId.get(String(id));
+      skipped.push({ id: p.id, handle: p.handle, reason: 'entangled' });
+    });
+
+    const deleteIds = candidates.filter(id => !entangledIds.has(String(id)));
+    if (deleteIds.length) {
+      await db.SocialProfile.destroy({ where: { id: { [Op.in]: deleteIds } } });
+    }
+    return res.json({ deleted: deleteIds, skipped });
   } catch (err) {
+    console.error('POST /bulk/delete failed:', err);
     return res.status(500).json({ error: err.message });
   }
 });
