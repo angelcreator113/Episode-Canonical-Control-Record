@@ -502,25 +502,18 @@ async function autoGenerateBatch(db, layer, count = 5, progressCallback = null) 
   return { created, errors, sparks_generated: sparks.length };
 }
 
-// ── ENUM validation helpers ──────────────────────────────────────────────────
-const VALID_TRAJECTORIES = new Set(['rising', 'plateauing', 'unraveling', 'pivoting', 'silent', 'viral_moment']);
-const VALID_ARCHETYPES = new Set([
-  'polished_curator', 'messy_transparent', 'soft_life', 'explicitly_paid',
-  'overnight_rise', 'cautionary', 'the_peer', 'the_watcher',
-  'chaos_creator', 'community_builder',
-]);
-const VALID_FOLLOWER_TIERS = new Set(['micro', 'mid', 'macro', 'mega']);
-
-function sanitizeEnum(value, validSet, fallback) {
-  if (!value) return fallback;
-  const normalized = String(value).toLowerCase().replace(/[\s-]+/g, '_');
-  if (validSet.has(normalized)) return normalized;
-  // Try fuzzy match for common AI variations
-  for (const valid of validSet) {
-    if (normalized.includes(valid) || valid.includes(normalized)) return valid;
-  }
-  return fallback;
-}
+// ── ENUM validation + column-length fitting (Task #1851) ────────────────────
+// Shared with every other social_profiles write path; see src/utils/fitToModel.js.
+const {
+  VALID_TRAJECTORIES,
+  VALID_ARCHETYPES,
+  VALID_FOLLOWER_TIERS,
+  sanitizeEnum,
+  fitRecordToModel,
+  warnTruncated,
+  logValueTooLong,
+  asText,
+} = require('../utils/fitToModel');
 
 /**
  * Call Claude to generate a full profile from a spark, then save it.
@@ -661,18 +654,21 @@ Return ONLY valid JSON with these fields:
     }
   }
 
-  const profile = await db.SocialProfile.create({
+  // Every string fitted to its declared column length (Task #1851); a
+  // non-string model value (e.g. follower_count_approx: 250000) is coerced
+  // with String(...) first by asText, so it no longer throws.
+  const { fitted: createRecord, truncated } = fitRecordToModel(db.SocialProfile, {
     series_id:             null,
-    handle:                (spark.handle.startsWith('@') ? spark.handle : `@${spark.handle}`).slice(0, 100),
+    handle:                spark.handle.startsWith('@') ? spark.handle : `@${spark.handle}`,
     platform:              spark.platform,
     vibe_sentence:         spark.vibe_sentence,
     status:                'generated',
     generation_model:      AI_MODEL,
     full_profile:          generated,
-    display_name:          (generated.display_name || '').slice(0, 200) || null,
+    display_name:          asText(generated.display_name),
     follower_tier:         safeFollowerTier,
-    follower_count_approx: (generated.follower_count_approx || '').slice(0, 50) || null,
-    content_category:      (generated.content_category || '').slice(0, 100) || null,
+    follower_count_approx: asText(generated.follower_count_approx),
+    content_category:      asText(generated.content_category),
     archetype:             safeArchetype,
     content_persona:       generated.content_persona,
     real_signal:           generated.real_signal,
@@ -682,7 +678,7 @@ Return ONLY valid JSON with these fields:
     adult_content_type:    generated.adult_content_type,
     adult_content_framing: generated.adult_content_framing,
     parasocial_function:   generated.parasocial_function,
-    emotional_activation:  (generated.emotional_activation || '').slice(0, 200) || null,
+    emotional_activation:  asText(generated.emotional_activation),
     watch_reason:          generated.watch_reason,
     what_it_costs_her:     generated.what_it_costs_her,
     current_trajectory:    safeTrajectory,
@@ -697,13 +693,13 @@ Return ONLY valid JSON with these fields:
     world_exists:          generated.world_exists || false,
     crossing_trigger:      generated.crossing_trigger,
     crossing_mechanism:    generated.crossing_mechanism,
-    post_frequency:        (generated.post_frequency || '').slice(0, 100) || null,
-    engagement_rate:       (generated.engagement_rate || '').slice(0, 50) || null,
+    post_frequency:        asText(generated.post_frequency),
+    engagement_rate:       asText(generated.engagement_rate),
     platform_metrics:      generated.platform_metrics || {},
-    geographic_base:       (generated.geographic_base || '').slice(0, 200) || null,
-    geographic_cluster:    (generated.geographic_cluster || '').slice(0, 100) || null,
-    age_range:             (generated.age_range || '').slice(0, 30) || null,
-    relationship_status:   (generated.relationship_status || '').slice(0, 100) || null,
+    geographic_base:       asText(generated.geographic_base),
+    geographic_cluster:    asText(generated.geographic_cluster),
+    age_range:             asText(generated.age_range),
+    relationship_status:   asText(generated.relationship_status),
     known_associates:      generated.known_associates || [],
     revenue_streams:       generated.revenue_streams || [],
     brand_partnerships:    generated.brand_partnerships || [],
@@ -722,12 +718,12 @@ Return ONLY valid JSON with these fields:
     platform_presences:    generated.platform_presences || {},
     public_persona:        generated.public_persona || null,
     private_reality:       generated.private_reality || null,
-    front_platform:        (generated.front_platform || '').slice(0, 50) || null,
-    real_platform:         (generated.real_platform || '').slice(0, 50) || null,
+    front_platform:        asText(generated.front_platform),
+    real_platform:         asText(generated.real_platform),
     celebrity_tier:        (['accessible','selective','exclusive','untouchable'].includes(generated.celebrity_tier) ? generated.celebrity_tier : 'accessible'),
-    primary_income_source: (generated.primary_income_source || '').slice(0, 100) || null,
+    primary_income_source: asText(generated.primary_income_source),
     income_breakdown:      generated.income_breakdown || {},
-    monthly_earnings_range:(generated.monthly_earnings_range || '').slice(0, 50) || null,
+    monthly_earnings_range:asText(generated.monthly_earnings_range),
     clout_score:           Math.min(100, Math.max(0, parseInt(generated.clout_score) || 0)),
     drama_magnet:          generated.drama_magnet || false,
     secret_connections:    generated.secret_connections || [],
@@ -741,12 +737,22 @@ Return ONLY valid JSON with these fields:
     // Lifestyle layer
     lifestyle_claim:      generated.lifestyle_claim || null,
     lifestyle_reality:    generated.lifestyle_reality || null,
-    lifestyle_gap:        (generated.lifestyle_gap || '').slice(0, 100) || null,
+    lifestyle_gap:        asText(generated.lifestyle_gap),
     // Beauty & influence
     beauty_factor:        Math.min(10, Math.max(0, parseInt(generated.beauty_factor) || 0)),
     beauty_description:   generated.beauty_description || null,
     aesthetic_power:      generated.aesthetic_power || null,
   });
+  warnTruncated('feed-scheduler', truncated);
+
+  let profile;
+  try {
+    profile = await db.SocialProfile.create(createRecord);
+  } catch (err) {
+    console.error(`[FeedScheduler] SocialProfile.create failed for ${spark.handle}:`, err.message);
+    logValueTooLong('feed-scheduler', err, db.SocialProfile, createRecord);
+    throw err;
+  }
 
   // Auto-set initial state based on trajectory + clout
   try {
