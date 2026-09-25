@@ -22,6 +22,12 @@ module.exports = (sequelize) => {
     tableName:  'wardrobe_content_assignments',
     timestamps: true,
     underscored: true,
+    // Not paranoid (Task #1869). The global define in src/config/sequelize.js
+    // sets paranoid: true; the production table has no deleted_at column
+    // (docs/audit/EvidenceNote_Canon_Schema_Capture_2026-09-17.txt:2486-2498),
+    // so every model read and create failed on it. destroy() is now a real DELETE.
+    // Its own removal marker is removed_at, which callers filter on directly.
+    paranoid: false,
   });
 
   return WardrobeContentAssignment;

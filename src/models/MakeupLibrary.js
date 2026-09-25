@@ -105,6 +105,13 @@ module.exports = (sequelize) => {
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
+      // Not paranoid (Task #1869). The global define in src/config/sequelize.js
+      // sets paranoid: true; the production table has no deleted_at column
+      // (docs/audit/EvidenceNote_Canon_Schema_Capture_2026-09-17.txt:941-959),
+      // so every model read and create failed on it. destroy() is now a real DELETE.
+      // Not fixed here: is_justAWoman_style still maps to is_just_a_woman_style
+      // (docs/SCHEMA_AGREEMENT_READ.md section 2.2), so reads still fail on that.
+      paranoid: false,
     }
   );
   return MakeupLibrary;
