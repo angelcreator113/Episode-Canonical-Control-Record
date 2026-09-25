@@ -2,6 +2,7 @@
 const {
   checkPendingMigrations,
   listMigrationFiles,
+  describeTarget,
   LEDGER_QUERY,
 } = require('../../../scripts/check-pending-migrations');
 
@@ -81,5 +82,12 @@ describe('checkPendingMigrations', () => {
     expect(files.length).toBeGreaterThan(0);
     expect(files.every((f) => f.endsWith('.js'))).toBe(true);
     expect([...files].sort()).toEqual(files);
+  });
+  it('names the ledger it reads without the password', () => {
+    const line = describeTarget('production', {
+      host: 'db.example', port: 5432, database: 'episode', username: 'app_user', password: 'SECRET-PW',
+    });
+    expect(line).toBe('NODE_ENV=production → db.example:5432/episode as app_user');
+    expect(line).not.toContain('SECRET-PW');
   });
 });

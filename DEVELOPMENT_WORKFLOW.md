@@ -254,7 +254,8 @@ Commands and skills are the same mechanism in Claude Code; these live in `.claud
 The manual deploy is Evoni's own action on the box: fast-forward the working tree to `origin/main`, then `pm2 restart`. A fast-forward runs no migration, so add one read-only step between the two:
 
 1. Fast-forward the working tree to `origin/main`.
-2. From the repo root, with the same `NODE_ENV` the API process runs under: `node scripts/check-pending-migrations.js`. It sends only `SELECT name FROM "SequelizeMeta"` (no DDL) and lists every `src/migrations/*.js` file the database has not recorded, in run order.
+2. From the repo root: `NODE_ENV=production node scripts/check-pending-migrations.js`. Pin `NODE_ENV=production` — the API runs under it, and without it the script falls back to the `development` block, which prefers a `DATABASE_URL` over the `DB_*` the API uses. It sends only `SELECT name FROM "SequelizeMeta"` (no DDL) and lists every `src/migrations/*.js` file the database has not recorded, in run order.
+   - First, read its `reading SequelizeMeta:` line (host, port, database and user; never the password). If that is not the database the API uses, stop: whatever it reports is about the wrong ledger.
    - Exit 0: nothing pending. Go to step 3.
    - Exit 1: files are pending. **Do not restart.** Deal with the listed files first.
    - Exit 2: the ledger could not be read (connection, query or permission error, printed). **Do not restart.** An unreadable ledger is not "nothing pending".

@@ -96,8 +96,17 @@ async function checkPendingMigrations({
   return 1;
 }
 
+/**
+ * Which ledger is being read: config block, host, port, database and user.
+ * Never the password. Printed before the query so a run against the wrong
+ * database (a stale DATABASE_URL, the wrong NODE_ENV) is visible in its output.
+ */
+function describeTarget(env, dbConfig) {
+  return `NODE_ENV=${env} → ${dbConfig.host}:${dbConfig.port}/${dbConfig.database} as ${dbConfig.username}`;
+}
+
 /** Ledger reader built from the app's own config block for NODE_ENV. */
-function buildLedgerReader() {
+function buildLedgerReader({ log = console.log } = {}) {
   let sequelize = null;
   const queryNames = async () => {
     // Loading the config runs dotenv against the repo root .env (cwd set by main()).
@@ -106,6 +115,7 @@ function buildLedgerReader() {
     const env = process.env.NODE_ENV || 'development';
     const dbConfig = config[env];
     if (!dbConfig) throw new Error(`no database config for NODE_ENV=${env}`);
+    log(`[pending-migrations] reading SequelizeMeta: ${describeTarget(env, dbConfig)}`);
 
     // Same fields src/models/index.js passes; a one-connection pool.
     sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, {
@@ -162,4 +172,4 @@ if (require.main === module) {
   );
 }
 
-module.exports = { checkPendingMigrations, listMigrationFiles, main, LEDGER_QUERY };
+module.exports = { checkPendingMigrations, listMigrationFiles, describeTarget, main, LEDGER_QUERY };
