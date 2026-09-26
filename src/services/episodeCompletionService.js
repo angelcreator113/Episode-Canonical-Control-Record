@@ -26,6 +26,7 @@ const {
   FORMULA_VERSION,
 } = require('../utils/evaluationFormula');
 const { changeCoins, InsufficientCoinsError } = require('./coinBalanceGuard');
+const { EPISODE_EVENT_SQL, LALA_STATE_SQL, DEFAULT_LALA_STATE, buildOutfitScoreContext } = require('./outfitScoreContext');
 
 // ─── SOCIAL TASK STAT BONUSES ────────────────────────────────────────────────
 // Completing social tasks should affect more than just coins
@@ -203,8 +204,9 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   }
 
   // ── 2. Load event (prefer highest prestige for multi-event episodes) ──
+  // EPISODE_EVENT_SQL is shared with the styling game's score (Task #1943).
   const [event] = await sequelize.query(
-    `SELECT * FROM world_events WHERE used_in_episode_id = :episodeId ORDER BY prestige DESC NULLS LAST LIMIT 1`,
+    EPISODE_EVENT_SQL,
     { replacements: { episodeId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => []);
 
@@ -229,7 +231,7 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
   // Canonical character_key is 'lala' (F-Sec-3 decision; Task #1816).
   let characterState;
   const [existingState] = await sequelize.query(
-    `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
+    LALA_STATE_SQL,
     { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
   ).catch(() => []);
 
@@ -240,10 +242,10 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     const stateId = uuidv4();
     await sequelize.query(
       `INSERT INTO character_state (id, show_id, character_key, coins, reputation, brand_trust, influence, stress, created_at, updated_at)
-       VALUES (:id, :showId, 'lala', 500, 1, 1, 1, 0, NOW(), NOW())`,
-      { replacements: { id: stateId, showId } }
+       VALUES (:id, :showId, 'lala', :coins, :reputation, :brand_trust, :influence, :stress, NOW(), NOW())`,
+      { replacements: { id: stateId, showId, ...DEFAULT_LALA_STATE } }
     );
-    characterState = { id: stateId, coins: 500, reputation: 1, brand_trust: 1, influence: 1, stress: 0 };
+    characterState = { id: stateId, ...DEFAULT_LALA_STATE };
   }
 
   // ── 5. Get outfit score for evaluation ──
@@ -252,23 +254,13 @@ async function completeEpisode(episodeId, showId, sequelize, { eventPiecesFallba
     const { getOutfitScore } = require('../routes/wardrobe');
     if (typeof getOutfitScore === 'function') {
       const models = require('../models');
-      const eventContext = event ? {
-        dress_code: event.dress_code, prestige: event.prestige,
-        strictness: event.strictness, event_type: event.event_type,
-        host_brand: event.host_brand, dress_code_keywords: event.dress_code_keywords,
-        season: event.season,
-      } : {};
       // Pass characterState so the scorer can run evaluateCharacterMoodFit
       // (stress + reputation modulate the outfit signal). Also pass the
       // wardrobe arc stage so evaluateAuthenticityFit can penalize tier
       // overreach (foundation Lala in elite outfit reads as unearned).
-      // Both lookups fail-open (null) so a missing arc/state doesn't block.
-      let arcStage = null;
-      try {
-        const { getWardrobeGrowthArc } = require('./wardrobeIntelligenceService');
-        const arc = await getWardrobeGrowthArc(showId, models);
-        arcStage = arc?.arc_stage || null;
-      } catch { /* no-op — authenticity signal just doesn't fire */ }
+      // Task #1943: built by buildOutfitScoreContext, which the styling
+      // game's score (/outfit-score) uses too, so the two numbers agree.
+      const { eventContext, arcStage } = await buildOutfitScoreContext({ models, showId, event, characterState });
       // Task #1924: the same pieces as `look` — the approved look, or the
       // event's pieces when look.outfit.source says so (EVENT_PIECES_FALLBACK).
       const matchOptions = look.outfit.source === 'event_pieces' ? { pieces: look.pieces } : { approvedOnly: true };
