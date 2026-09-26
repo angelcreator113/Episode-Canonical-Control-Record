@@ -230,11 +230,15 @@ class DecisionLogger {
   /**
    * Log a browse pool generation
    */
-  async logBrowsePoolGenerated({ episode_id, show_id, bias, pool_size, total_items, has_wardrobe }) {
+  async logBrowsePoolGenerated({ episode_id, show_id, user_id, bias, pool_size, total_items, has_wardrobe }) {
+    // user_id is passed through as given — no fallback. It is the
+    // middleware-mapped req.user.id and is the F-AUTH-1 G3 clause 3 evidence
+    // path (#1942); a substituted default would mask a missing principal.
     return this.log({
       type: DECISION_TYPES.BROWSE_POOL_GENERATED,
       episode_id,
       show_id,
+      user_id,
       context: { has_wardrobe },
       decision: { bias, pool_size, total_items },
       source: 'evaluate_page',

@@ -912,15 +912,6 @@ try {
   console.error('✗ Failed to load decisions routes:', e.message);
 }
 
-// Decision Logs routes (for AI training)
-try {
-  const decisionLogsRoutes = require('./routes/decisionLogs');
-  app.use('/api/v1/decision-logs', decisionLogsRoutes);
-  console.log('✓ Decision Logs routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load decision logs routes:', e.message);
-}
-
 // Layer Management routes (Week 4 Day 1)
 try {
   const layersRoutes = require('./routes/layers');
