@@ -141,13 +141,17 @@ describe('PhoneHub device — characterization (Task #1983)', () => {
     expect(d.queryByTitle('Nav')).toBeNull();
   });
 
-  test('no screen shows "Select a screen"; an icon as the active item counts as no screen', () => {
+  // Changed on purpose by Task #2008 (doctrine rule 17): an icon as the active
+  // item used to count as no screen; the device now keeps a screen (here, with
+  // none shown before, the home screen). PhoneHub.iconSelection.test.jsx covers it.
+  test('no screen shows "Select a screen"; an icon as the active item keeps a screen', () => {
     const none = renderHub({ activeScreen: null });
     expect(none.d.getByText('Select a screen')).toBeTruthy();
     expect(none.d.queryByTestId('content-renderer')).toBeNull();
     cleanup();
     const icon = renderHub({ activeScreen: ICON });
-    expect(icon.d.getByText('Select a screen')).toBeTruthy();
+    expect(icon.d.queryByText('Select a screen')).toBeNull();
+    expect(icon.d.getByAltText('Home')).toBeTruthy();
   });
 
   test('an ungenerated screen reads "Not generated yet" in the built-in frame, "Not generated" in a custom one', () => {
