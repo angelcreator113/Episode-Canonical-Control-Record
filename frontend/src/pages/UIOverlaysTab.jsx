@@ -99,8 +99,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [customFrameUrl, setCustomFrameUrl] = useState(null);
   // Top-level tab bar state — replaces the old `editingLinks` boolean and
   // PhoneHub's internal `gridSection`. Values: 'screens' | 'icons' |
-  // 'placements' | 'zones' | 'missions'. Centralizing this here means the
-  // tab bar can host all five sections and the phone stays in one place.
+  // 'placements' | 'zones' | 'content' | 'missions' | 'preview'. The row
+  // shows them as stages (doctrine rule 18, Task #2010): Build (screens,
+  // icons), Connect (zones), Content, Preview, and Advanced ▾ (missions).
   const [activeTab, setActiveTab] = useState('screens');
   const editingLinks = activeTab === 'zones';  // kept as an alias so legacy
                                                 // references below keep working
@@ -934,6 +935,18 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // Opened when activeTab === 'missions'; closing reverts to the Screens tab.
   const missionsOpen = activeTab === 'missions';
 
+  // Preview stage (Task #2010): the embedded, non-saving Preview phone takes
+  // the device's place — no playthrough, nothing saved, as in the Episode
+  // tab. It starts on the selected screen when that screen has an image,
+  // otherwise on Home.
+  const previewing = activeTab === 'preview';
+  // Bumped on every screen-card pick in Preview, so picking the screen
+  // already selected still restarts the phone there.
+  const [previewRun, setPreviewRun] = useState(0);
+  const previewStart = (activeScreen && isScreen(activeScreen) && activeScreen.generated && activeScreen.url)
+    ? activeScreen
+    : (overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && isScreen(o)) || null);
+
   const handlePanelAddZones = async (hint) => {
     if (!activeScreen?.asset_id || !showId || panelAiBusy) return;
     setPanelAiBusy(true);
@@ -1374,6 +1387,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             hiddenCount={hiddenScreens.length}
             showHidden={showHidden}
             onToggleShowHidden={() => setShowHidden(h => !h)}
+            showPreview
           />
           {!((editingLinks || editingContent) && activeScreen?.url) && <div className="phone-hub-main">
             <OverlayErrorBoundary>
@@ -1386,6 +1400,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   // screens by clicking cards without committing to editing.
                   setActiveScreen(s);
                   setNavHistory([]);
+                  if (previewing) setPreviewRun(n => n + 1);
                 }}
                 onEditScreen={(s) => {
                   // Full edit: select + open the detail modal. Triggered
@@ -1413,9 +1428,28 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 customFrameUrl={customFrameUrl}
                 globalFit={globalFit}
                 onEditZones={() => setActiveTab('zones')}
-                activeTab={activeTab}
+                // Preview shows the screen list beside the embedded phone.
+                activeTab={previewing ? 'screens' : activeTab}
                 onChangeTab={setActiveTab}
                 suppressSectionTabs
+                devicePane={previewing ? (
+                  <div className="phone-hub-preview-pane">
+                    {/* Keyed on the starting screen and each pick: picking a
+                        screen card restarts the phone there. */}
+                    <PhonePreviewMode
+                      key={`${previewStart?.id || 'none'}:${previewRun}`}
+                      embedded
+                      screens={overlays}
+                      initialScreen={previewStart}
+                      globalFit={globalFit}
+                      phoneSkin={phoneSkin}
+                      customFrameUrl={customFrameUrl}
+                      playthrough={null}
+                      missions={[]}
+                    />
+                    <p className="phone-hub-preview-hint">Tap to try it. Nothing here is saved.</p>
+                  </div>
+                ) : null}
               />
             </OverlayErrorBoundary>
 

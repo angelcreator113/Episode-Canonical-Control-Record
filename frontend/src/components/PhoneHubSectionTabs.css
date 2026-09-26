@@ -12,9 +12,35 @@
   border-bottom: 1px solid var(--lala-parchment-3);
 }
 
+.phone-hub-section-tabs-wrap {
+  margin-bottom: 12px;
+}
+
+.phone-hub-section-tabs-wrap > .phone-hub-section-tabs {
+  margin-bottom: 0;
+}
+
+/* Stage row (doctrine rule 18): never wraps into two rows. On a narrow
+   screen the stages scroll sideways; Advanced sits outside the scroller so
+   its menu isn't clipped. */
+.phone-hub-stage-row {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .phone-hub-section-tab-group {
   display: flex;
   gap: 2px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.phone-hub-section-tab-group::-webkit-scrollbar {
+  display: none;
 }
 
 .phone-hub-section-tab {
@@ -31,6 +57,10 @@
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .phone-hub-section-tab:hover {
@@ -72,4 +102,85 @@
   background: var(--lala-gold-soft);
   color: var(--lala-gold);
   border-color: var(--lala-gold);
+}
+
+/* Advanced ▾ — a small menu holding Missions. */
+.phone-hub-advanced {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.phone-hub-advanced-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 30;
+  min-width: 160px;
+  margin-top: 4px;
+  padding: 4px;
+  background: var(--lala-surface, #fff);
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: var(--lala-radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.phone-hub-advanced-item {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: var(--text-sm, 13px);
+  font-family: var(--font-ui);
+  color: var(--lala-ink);
+  background: none;
+  border: none;
+  border-radius: var(--lala-radius);
+  cursor: pointer;
+}
+
+.phone-hub-advanced-item:hover,
+.phone-hub-advanced-item.active {
+  background: var(--lala-gold-soft);
+  color: var(--lala-gold);
+}
+
+/* Build stage: Screens | Icons, with today's counts. */
+.phone-hub-build-toggle {
+  display: inline-flex;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 2px;
+  background: var(--lala-parchment-2);
+  border-radius: var(--lala-radius);
+}
+
+.phone-hub-build-toggle-btn {
+  min-height: 32px;
+  padding: 6px 14px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-family: var(--font-ui);
+  letter-spacing: 0.04em;
+  color: var(--lala-ink-muted);
+  background: none;
+  border: none;
+  border-radius: var(--lala-radius);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.phone-hub-build-toggle-btn.active {
+  background: var(--lala-surface, #fff);
+  color: var(--lala-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Narrow screens: fade the stages' right edge so it reads as scrollable. */
+@media (max-width: 480px) {
+  .phone-hub-section-tab-group {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    padding-right: 20px;
+  }
 }
