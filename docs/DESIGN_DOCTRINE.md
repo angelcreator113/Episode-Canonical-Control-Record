@@ -122,6 +122,20 @@ Ready (can the outcome be judged fairly?), Acceptance Ready (may this
 version become canon?).
 *Why:* Event Ready is not Production Ready.
 
+**16. One phone device; the Episode phone is non-authoring.** Ruled by
+Evoni on 2026-09-26 ("yes, that's my ruling"), verbatim: "C, in four
+steps. Producer Mode is the only place the phone is authored. Episode →
+Lala's Phone renders the same phone with the episode as context: fully
+interactive, non-authoring, with an 'Edit in Phone Studio' link instead
+of editing controls. Only things that vary by episode carry episode_id;
+everything else inherits. Interacting in the Episode tab saves nothing;
+only the explicit Preview/Play saves a playthrough." Option C is that of
+`docs/PHONE_RENDERER_READ.md` §6; the four steps are C1–C4, each filed as
+its own task.
+*Why:* rule 10 holds by construction only with one device component; and
+opening Preview Phone today creates a playthrough row
+(`docs/PHONE_RENDERER_READ.md` §5), so an always-visible phone must not.
+
 ---
 
 ## Not decided here
