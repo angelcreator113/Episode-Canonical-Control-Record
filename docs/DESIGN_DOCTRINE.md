@@ -5,9 +5,11 @@
 **Living design authority**, the same status as `docs/EVENT_EPISODE_FLOW.md` —
 not filed under `docs/audit/`, no basis-SHA immutability rule, edited in
 place as the doctrine evolves. This document records rules, not a register:
-it mints no FD/XK/PE number, rules nothing beyond the nine items below, and
+it mints no FD/XK/PE number, rules nothing beyond the nine items of
+2026-09-22 and the rules of 2026-09-26 below, and
 decides none of the questions listed under "Not decided here." It exists so
-the same nine rules don't have to be restated in every issue that touches a
+the same rules — the nine of 2026-09-22 and the rules of 2026-09-26 — don't
+have to be restated in every issue that touches a
 page or a workflow.
 
 ---
@@ -73,6 +75,55 @@ confusion one click deeper.
 
 ---
 
+## Rules added (Evoni, 2026-09-26)
+
+**10. One Lala's Phone.** "Episode → Lala's Phone must render the same
+canonical phone shell, apps, navigation and visual language as Producer
+Mode's Lala's Phone. It is not a separate phone implementation. The
+Episode view scopes the phone's content to the current episode and adds a
+production-readiness rail alongside the device showing required phone
+moments by beat, their status, and the next missing item. Selecting a
+readiness item should navigate the phone preview to the corresponding
+episode screen. Missions remain one phone capability, not the definition
+of the Episode Phone tab." Producer Mode owns the phone system (home
+screen, apps, reusable screens, global missions, skin, navigation); the
+Episode is a second entrance to the same system.
+*Why:* two phones drift apart.
+
+**11. Event Name ≠ Episode Title.** The event name is what the event is
+called in Lala's world, written as its organizer would name it. It never
+uses the show name, episode number, "episode", "adventure" or
+"LalaVerse", and uses Lala's name only if she is literally part of the
+event's branding. The episode title comes later and may respond to what
+happened.
+*Why:* the two concepts had been bleeding together.
+
+**12. Public event description ≠ producer story angle.** The description
+is copy for someone deciding whether to attend: what happens, why go,
+what it feels like. It never restates database facts (guest counts,
+prestige numbers). The story angle is internal and separate.
+*Why:* a database summary is not copy.
+
+**13. Organizer, not Host, in the new-event flow.** Choosing or creating
+an organizer sets it; the Event Package shows it as set, with only
+"Change Organizer" reopening the choice.
+*Why:* extends rule 8.
+
+**14. Suggestions stay suggestions.** Anything Prime Studios proposes is
+shown as suggested until Evoni accepts it. Field states are Set,
+Suggested, Generating, Missing, or Waiting for <dependency>.
+*Why:* nothing is written as canon silently.
+
+**15. Readiness is phased.** The gates, and the question each answers:
+Event Ready (do we know what is happening?), Story Ready (what is this
+episode supposed to accomplish?), Script Ready (does the writer have
+everything?), Production Ready (can every beat be produced?), Evaluation
+Ready (can the outcome be judged fairly?), Acceptance Ready (may this
+version become canon?).
+*Why:* Event Ready is not Production Ready.
+
+---
+
 ## Not decided here
 
 Open navigation questions, not resolved by this document:
@@ -87,5 +138,13 @@ Open navigation questions, not resolved by this document:
 - **Home vs. Producer Mode.** How Home relates to Producer Mode when
   there is only one show — whether Home is still a distinct landing
   surface, or Producer Mode effectively is Home in the single-show case.
+- **Event Package enrichment on open.** Whether Event Package enrichment
+  runs automatically on open. Task #1670 made name suggestions on-click
+  only (`EventPackagePage`, the name-suggestion handler, line 179 at
+  `8c4b19b5`); running AI on open is a cost decision.
+- **What each readiness gate requires.** Rule 15 names the gates and
+  their questions only.
+- **Retiring `/episodes/create` and `/shows/:showId/quick-episode`.**
+  Pending the call-path census (`PROJECT_CONTEXT.md` §10 item 23).
 
 These are their own task, not this one.
