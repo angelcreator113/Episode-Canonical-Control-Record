@@ -16,6 +16,17 @@
  * (docs/audit/F-AUTH-1_G3Clause3_Retarget_2026-09-26.md). The filename is
  * kept because Fix Plan v2.52–v2.59 cite this file by name.
  *
+ * RETARGETED AGAIN (#1954). The world route above is not the one the app
+ * calls. The styling game's closet calls POST /api/v1/wardrobe/browse-pool
+ * (EpisodeWardrobeGameplay's loadPool), and the world route's only callers
+ * were tests, so after Deploy AK decision_log stayed empty through repeated
+ * closet loads (ATTESTED, Evoni, 2026-09-26). The attribution now sits on
+ * the live route: POST /api/v1/wardrobe/browse-pool (requireAuth) →
+ * recordBrowsePoolGenerated → DecisionLogger.logBrowsePoolGenerated →
+ * INSERT INTO decision_log. This file posts the body loadPool posts. The
+ * correction is recorded in the register
+ * (docs/audit/F-AUTH-1_G3Clause3_Retarget_Correction_2026-09-26.md).
+ *
  * Specified at Fix Plan v2.53 §1.1 and restated at v2.54 §2.1; the three
  * assertions are unchanged in substance:
  *
@@ -33,10 +44,10 @@
  *      a show created for that request alone, not by a count delta.
  *
  * WHY THE DATABASE, NOT THE RESPONSE. The route awaits the decision-log write
- * but DecisionLogger.log catches any write failure and buffers the entry on a
- * per-request logger instance that is then discarded, so the route returns 200
- * whether or not a row was written. The response proves nothing; only the
- * table does. Because the write is awaited before the response is sent, the
+ * but DecisionLogger.log catches any write failure (logging it at error
+ * level) and buffers the entry on a per-request logger instance that is then
+ * discarded, so the route returns 200 with the same pool whether or not a row
+ * was written. The response proves nothing; only the table does. Because the write is awaited before the response is sent, the
  * row (if any) is committed by the time the response arrives — no sleep and
  * no flush is needed, and none is used.
  *
@@ -124,7 +135,7 @@ const shouldSkip =
   process.env.DATABASE_URL?.includes('amazonaws.com') || !isDatabaseReachable(process.env.DATABASE_URL);
 
 const ME_URL = '/api/v1/auth/me';
-const browsePoolUrl = (showId) => `/api/v1/world/${showId}/browse-pool`;
+const BROWSE_POOL_URL = '/api/v1/wardrobe/browse-pool';
 
 // `decision_log.user_id` is uuid-typed, so the principal id must be a UUID
 // (a Cognito `sub` is one). crypto.randomUUID(), not the mocked uuid module.
@@ -139,34 +150,63 @@ const token = TokenService.generateToken(
   'access'
 );
 
-const postBrowsePool = (showId, bearer) => {
-  const req = request(app).post(browsePoolUrl(showId));
+// The body EpisodeWardrobeGameplay's loadPool sends.
+const postBrowsePool = ({ showId, episodeId }, bearer) => {
+  const req = request(app).post(BROWSE_POOL_URL);
   if (bearer) req.set('Authorization', `Bearer ${bearer}`);
-  return req.send({ bias: 'balanced', pool_size: 4 });
+  return req.send({
+    show_id: showId,
+    episode_id: episodeId,
+    event_name: 'g3c3 gala',
+    dress_code: 'black tie',
+    dress_code_keywords: [],
+    event_type: 'gala',
+    prestige: 5,
+    strictness: 5,
+    host_brand: '',
+    character_state: { coins: 100, reputation: 1 },
+  });
 };
 
 // Every decision_log row for the show, read straight from the table.
 const rowsForShow = async (showId) => {
   const [rows] = await models.sequelize.query(
-    `SELECT user_id::text AS user_id, type FROM decision_log WHERE show_id = :showId`,
+    `SELECT user_id::text AS user_id, type, episode_id::text AS episode_id, source
+       FROM decision_log WHERE show_id = :showId`,
     { replacements: { showId } }
   );
   return rows;
 };
 
 (shouldSkip ? describe.skip : describe)(
-  'F-AUTH-1 Gate G3 clause 3 — browse-pool decision_log user_id',
+  'F-AUTH-1 Gate G3 clause 3 — wardrobe browse-pool decision_log user_id',
   () => {
     const shows = [];
 
-    const makeShow = async (label) => {
+    // A show with one episode and one owned closet item: the minimum the
+    // styling game has when it loads a pool.
+    const makeFixture = async (label) => {
       const suffix = crypto.randomUUID();
       const show = await models.Show.create({
         name: `g3c3 ${label} ${suffix}`,
         slug: `g3c3-${label}-${suffix}`,
       });
       shows.push(show.id);
-      return show.id;
+      const episode = await models.Episode.create({
+        show_id: show.id,
+        episode_number: 1,
+        title: `g3c3 ${label}`,
+        status: 'draft',
+      });
+      await models.Wardrobe.create({
+        name: `g3c3 dress ${suffix}`,
+        character: 'lala',
+        clothing_category: 'dress',
+        show_id: show.id,
+        is_owned: true,
+        is_visible: true,
+      });
+      return { showId: show.id, episodeId: episode.id };
     };
 
     afterAll(async () => {
@@ -175,6 +215,8 @@ const rowsForShow = async (showId) => {
           await models.sequelize.query('DELETE FROM decision_log WHERE show_id = :showId', {
             replacements: { showId },
           });
+          await models.Wardrobe.destroy({ where: { show_id: showId }, force: true });
+          await models.Episode.destroy({ where: { show_id: showId }, force: true });
           await models.Show.destroy({ where: { id: showId }, force: true });
         } catch (err) {
           console.error('[g3c3 cleanup] failed for show', showId, err.message);
@@ -192,21 +234,24 @@ const rowsForShow = async (showId) => {
       });
       const middlewareMappedId = me.body.data.user.id;
 
-      const showId = await makeShow('auth');
-      const res = await postBrowsePool(showId, token);
+      const fixture = await makeFixture('auth');
+      const res = await postBrowsePool(fixture, token);
 
       // A 200 here does NOT show a row was written (see header); it only
-      // shows the handler ran to the logging step.
-      expect({ status: res.status, error: res.body?.error }).toEqual({
+      // shows the handler generated a pool.
+      expect({ status: res.status, error: res.body?.error, pooled: res.body?.pool?.length > 0 }).toEqual({
         status: 200,
         error: undefined,
+        pooled: true,
       });
 
       // Read the PERSISTED row, not the echo.
-      const rows = await rowsForShow(showId);
+      const rows = await rowsForShow(fixture.showId);
       expect(rows).toHaveLength(1);
       const [row] = rows;
       expect(row.type).toBe('browse_pool_generated');
+      expect(row.source).toBe('styling_game');
+      expect(row.episode_id).toBe(fixture.episodeId);
 
       // Assertion 1 — non-null, and not the string 'undefined'.
       expect(row.user_id).not.toBeNull();
@@ -219,15 +264,15 @@ const rowsForShow = async (showId) => {
     });
 
     test('anonymous POST is refused and persists no row', async () => {
-      const showId = await makeShow('anon');
+      const fixture = await makeFixture('anon');
 
-      const res = await postBrowsePool(showId, null);
+      const res = await postBrowsePool(fixture, null);
 
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty('code', 'AUTH_REQUIRED');
 
       // Assertion 3 — no row for this request's own show. Not a count delta.
-      const rows = await rowsForShow(showId);
+      const rows = await rowsForShow(fixture.showId);
       expect(rows).toEqual([]);
     });
   }
