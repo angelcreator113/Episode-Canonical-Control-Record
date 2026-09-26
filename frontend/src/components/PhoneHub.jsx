@@ -17,6 +17,7 @@
 import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { MoreVertical, Trash2, EyeOff, Edit3, Settings } from 'lucide-react';
 import PhoneDevice from './phone/PhoneDevice';
+import { isMapScreen } from './phone/PhoneMapView';
 import { PHONE_SKINS, getScreenImageStyle } from './phone/phoneStyle';
 import PhoneHubSectionTabs from './PhoneHubSectionTabs';
 import { isIcon, isScreen, getScreenLinks, getIconUrls, resolveZoneIconKey } from '../lib/overlayUtils';
@@ -217,15 +218,26 @@ export default function PhoneHub({
   // Only use custom frame if we have a URL AND it hasn't errored
   const useCustomFrame = customFrameUrl && !frameError;
 
-  // Don't show icons in the phone device — only screens
-  const isIconType = activeScreen?.type === 'icon' || activeScreen?.category === 'phone_icon';
-  const phoneScreen = isIconType ? null : activeScreen;
+  // Selecting an icon keeps the screen the device was showing (doctrine rule
+  // 17, Task #2008): the device shows only screens, so while an icon is
+  // selected it keeps the last screen shown, looked up by id so it is never
+  // stale, or the home screen if there was none.
+  // isIcon covers both icon categories; `type` is the older marker the page also checks.
+  const iconSelected = !!activeScreen && (isIcon(activeScreen) || activeScreen.type === 'icon');
+  const [lastScreenId, setLastScreenId] = useState(null);
+  if (activeScreen && !iconSelected && activeScreen.id !== lastScreenId) {
+    setLastScreenId(activeScreen.id);
+  }
 
   // Find the home screen — prefer is_home flag, then first generated screen
   const firstScreen = useMemo(() => {
     const generated = screens.filter(s => s.generated && s.url && isScreen(s));
     return generated.find(s => s.is_home) || generated[0] || null;
   }, [screens]);
+
+  const deviceScreen = iconSelected
+    ? (screens.find(s => s.id === lastScreenId && isScreen(s)) || firstScreen)
+    : activeScreen;
 
   // Find persistent icons from the first/home screen that should show on ALL screens
   const persistentLinks = useMemo(() => {
@@ -317,6 +329,16 @@ export default function PhoneHub({
     return { iconLinkByKey: iconOut, screenReachById };
   }, [screenTypes, iconTypes]);
 
+  // The selected icon's placements on the screen the device shows: its own
+  // zones, plus the home screen's persistent icons where the device draws them.
+  const highlightIconKey = iconSelected ? activeScreen.id : null;
+  const highlightedHere = useMemo(() => {
+    if (!highlightIconKey || !deviceScreen) return 0;
+    const own = getScreenLinks(deviceScreen);
+    const persistent = deviceScreen.id !== firstScreen?.id && !isMapScreen(deviceScreen) ? persistentLinks : [];
+    return [...own, ...persistent].filter(l => resolveZoneIconKey(l, iconTypes) === highlightIconKey).length;
+  }, [highlightIconKey, deviceScreen, firstScreen, persistentLinks, iconTypes]);
+
   return (
     <div className="phone-hub-inner">
       {/* Phone Device */}
@@ -326,16 +348,27 @@ export default function PhoneHub({
         customFrameUrl={customFrameUrl}
         useCustomFrame={useCustomFrame}
         onCustomFrameError={() => setFrameError(true)}
-        phoneScreen={phoneScreen}
-        activeScreen={activeScreen}
+        phoneScreen={deviceScreen}
+        activeScreen={deviceScreen}
         firstScreen={firstScreen}
         persistentLinks={persistentLinks}
         icons={iconTypes}
+        highlightIconKey={highlightIconKey}
         globalFit={globalFit}
-        onNavigate={onNavigate}
+        // While an icon is selected, Back must return to the screen the device
+        // showed, not to the icon, so that screen goes along as the origin.
+        onNavigate={onNavigate && iconSelected && deviceScreen
+          ? (target) => onNavigate(target, deviceScreen.id)
+          : onNavigate}
         navigationHistory={navigationHistory}
         onBack={onBack}
       />
+
+      {highlightIconKey && deviceScreen && highlightedHere === 0 && (
+        <div className="phone-hub-not-placed" style={{ marginTop: 8, fontSize: 11, textAlign: 'center', color: 'var(--lala-ink-muted)', fontFamily: 'var(--font-ui)' }}>
+          ○ {activeScreen.name} isn't placed on {deviceScreen.name}
+        </div>
+      )}
 
       {/* "Edit Tap Zones" button removed — the Zones tab in the section bar
           is the canonical entry point now. `onEditZones` prop kept for any

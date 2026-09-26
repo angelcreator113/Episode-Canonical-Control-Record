@@ -22,15 +22,23 @@
  * `icons` (Task #2005, doctrine rule 17) is the show's icon overlays. A tap
  * zone placed from an icon draws that icon's current image, looked up by key,
  * so an image change never leaves a placement stale.
+ *
+ * `highlightIconKey` (Task #2008) outlines the zones that resolve to that
+ * icon, persistent icons included, and marks them `data-highlighted`. PhoneHub
+ * passes the selected icon's key; without it nothing is outlined.
  */
 import ScreenContentRenderer from '../ScreenContentRenderer';
 import PhoneFrame from './PhoneFrame';
 import PhoneMapView, { isMapScreen } from './PhoneMapView';
 import { getScreenImageStyle } from './phoneStyle';
-import { resolveZoneIcon } from '../../lib/overlayUtils';
+import { resolveZoneIcon, resolveZoneIconKey } from '../../lib/overlayUtils';
+
+// The selected icon's placements are outlined (doctrine rule 17, Task #2008).
+const HIGHLIGHT_STYLE = { outline: '2px solid #B8962E', outlineOffset: 1, boxShadow: '0 0 0 4px rgba(184,150,46,0.3)' };
+const isHighlighted = (link, icons, key) => !!key && resolveZoneIconKey(link, icons) === key;
 
 // Renders interactive tap zone overlays on the phone screen
-function ScreenLinkOverlay({ links = [], icons = [], onNavigate }) {
+function ScreenLinkOverlay({ links = [], icons = [], onNavigate, highlightIconKey }) {
   if (!links.length || !onNavigate) return null;
   return (
     <>
@@ -42,7 +50,9 @@ function ScreenLinkOverlay({ links = [], icons = [], onNavigate }) {
             if (link.target) onNavigate(link.target);
           }}
           title={link.label || link.target}
+          data-highlighted={isHighlighted(link, icons, highlightIconKey) || undefined}
           style={{
+            ...(isHighlighted(link, icons, highlightIconKey) ? HIGHLIGHT_STYLE : null),
             position: 'absolute',
             left: `${link.x}%`, top: `${link.y}%`,
             width: `${link.w}%`, height: `${link.h}%`,
@@ -70,7 +80,7 @@ function ScreenLinkOverlay({ links = [], icons = [], onNavigate }) {
 }
 
 // Renders persistent icons (from home screen) that stay visible on all screens
-function PersistentOverlay({ links = [], icons = [], onNavigate }) {
+function PersistentOverlay({ links = [], icons = [], onNavigate, highlightIconKey }) {
   if (!links.length || !onNavigate) return null;
   return (
     <>
@@ -82,7 +92,9 @@ function PersistentOverlay({ links = [], icons = [], onNavigate }) {
             if (link.target) onNavigate(link.target);
           }}
           title={link.label || link.target}
+          data-highlighted={isHighlighted(link, icons, highlightIconKey) || undefined}
           style={{
+            ...(isHighlighted(link, icons, highlightIconKey) ? HIGHLIGHT_STYLE : null),
             position: 'absolute',
             left: `${link.x}%`, top: `${link.y}%`,
             width: `${link.w}%`, height: `${link.h}%`,
@@ -127,6 +139,7 @@ export default function PhoneDevice({
   episodeId,
   contentInteractive = false,
   icons = [],
+  highlightIconKey = null,
 }) {
   return (
       <PhoneFrame
@@ -163,13 +176,13 @@ export default function PhoneDevice({
               episodeId={episodeId}
             />
             {!tapLayer && (
-              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} icons={icons} onNavigate={onNavigate} />
+              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} icons={icons} onNavigate={onNavigate} highlightIconKey={highlightIconKey} />
             )}
             {/* Persistent icons from home screen — show on non-home screens
                 except the Map, which is meant to be a full-bleed canvas
                 where home-screen icons would just clutter the world view. */}
             {!tapLayer && activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && !isMapScreen(phoneScreen) && (
-              <PersistentOverlay links={persistentLinks} icons={icons} onNavigate={onNavigate} />
+              <PersistentOverlay links={persistentLinks} icons={icons} onNavigate={onNavigate} highlightIconKey={highlightIconKey} />
             )}
           </>
         ) : useCustomFrame ? (
