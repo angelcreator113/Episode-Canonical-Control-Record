@@ -20,7 +20,7 @@
  */
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader, Sparkles, ChevronLeft } from 'lucide-react';
-import { getIconUrls } from '../lib/overlayUtils';
+import { getIconUrls, resolveZoneIcon, resolveZoneIconKey } from '../lib/overlayUtils';
 import { getScreenImageStyle, PHONE_SKINS } from './phone/phoneStyle';
 import ScreenContentRenderer from './ScreenContentRenderer';
 import ZoneBadges from './phone-editor/ZoneBadges';
@@ -141,8 +141,10 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     const enriched = (links || []).map(z => {
       if (z.target) return z;
       const iconUrls = getIconUrls(z);
-      if (!iconUrls.length) return z;
-      const matchedIcon = iconOverlays.find(i => iconUrls.includes(i.url) && i.opens_screen);
+      if (!iconUrls.length && !z.icon_overlay_id) return z;
+      // Match by icon key first (doctrine rule 17), then by address.
+      const iconKey = resolveZoneIconKey(z, iconOverlays);
+      const matchedIcon = iconOverlays.find(i => ((iconKey && i.id === iconKey) || iconUrls.includes(i.url)) && i.opens_screen);
       if (!matchedIcon) return z;
       return { ...z, target: matchedIcon.opens_screen };
     });
@@ -473,7 +475,8 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     if (zone.label) return zone.label;
     const firstIcon = getIconUrls(zone)[0];
     if (firstIcon) {
-      const match = iconOverlays.find(i => i.url === firstIcon);
+      const iconKey = resolveZoneIconKey(zone, iconOverlays);
+      const match = iconOverlays.find(i => (iconKey ? i.id === iconKey : i.url === firstIcon));
       if (match?.name) return match.name.replace(/\s*Icon$/i, '').trim();
       const fromFile = deriveLabelFromUrl(firstIcon);
       if (fromFile) return fromFile;
@@ -799,8 +802,8 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
               };
             })()}
           >
-            {zone.icon_url ? (
-              <img src={zone.icon_url} alt={zone.label || zone.target} style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
+            {resolveZoneIcon(zone, iconOverlays) ? (
+              <img src={resolveZoneIcon(zone, iconOverlays)} alt={zone.label || zone.target} style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
             ) : (
               !preview && (
                 <span style={{ fontSize: 7, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.6)', fontFamily: "'DM Mono', monospace", textAlign: 'center', padding: 2 }}>

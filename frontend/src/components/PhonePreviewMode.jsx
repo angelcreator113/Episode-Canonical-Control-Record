@@ -5,6 +5,7 @@
 import { useState, useCallback, useEffect, useMemo, Fragment } from 'react';
 import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle } from 'lucide-react';
 import PhoneDevice from './phone/PhoneDevice';
+import { isIcon, resolveZoneIcon } from '../lib/overlayUtils';
 import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C' };
@@ -271,6 +272,9 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     return getLinks(homeScreen).filter(l => l.persistent && l.icon_url);
   }, [homeScreen, activeScreen]);
   const allLinks = [...getLinks(activeScreen), ...persistentLinks];
+  // The show's icons, so each tap zone draws its icon's current image
+  // (doctrine rule 17, Task #2005).
+  const icons = useMemo(() => screens.filter(isIcon), [screens]);
   const { visible: links } = filterZones(allLinks, evalContext);
 
   const slideTransform = slideDir === 'left'
@@ -345,8 +349,8 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(184,150,46,0.18)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >
-            {link.icon_url && (
-              <img src={link.icon_url} alt={link.label || ''} draggable={false}
+            {resolveZoneIcon(link, icons) && (
+              <img src={resolveZoneIcon(link, icons)} alt={link.label || ''} draggable={false}
                 style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }} />
             )}
           </div>
