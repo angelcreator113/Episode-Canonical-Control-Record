@@ -179,6 +179,9 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     if (!d || !d.hasOutfit) return null;
     return { total: d.score, confidence: d.confidence || {}, breakdown: d.breakdown || {} };
   }, [score.data]);
+  // Linked pieces the server did not count because they await approval
+  // (completion scores approved pieces only; Evoni's ruling, 2026-09-26).
+  const pendingPieces = outfitLocked && Array.isArray(score.data?.pending) ? score.data.pending : [];
   // What the panel says when there is no score to show.
   const scoreMessage = {
     empty: 'Equip a piece to see how Lala feels.',
@@ -605,6 +608,13 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                 ? <>Synergy: {synergy.total}/100 — {synergy.confidence.emoji} {synergy.confidence.label}</>
                 : scoreMessage}
             </div>
+            {pendingPieces.length > 0 && (
+              <div data-testid="pending-note" title={pendingPieces.map(p => p.name).filter(Boolean).join(', ')} style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>
+                {pendingPieces.length === 1
+                  ? "1 piece awaiting approval isn't counted yet"
+                  : `${pendingPieces.length} pieces awaiting approval aren't counted yet`}
+              </div>
+            )}
           </div>
           <button onClick={() => setOutfitLocked(false)} style={W.unlockBtn}>↩ Unlock</button>
         </div>

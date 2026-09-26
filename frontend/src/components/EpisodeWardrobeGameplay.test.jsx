@@ -430,6 +430,38 @@ describe('EpisodeWardrobeGameplay — the server scores the outfit (Task #1943)'
     expect(await screen.findByText('Outfit Locked')).toBeTruthy();
   });
 
+  test('a locked outfit with pieces awaiting approval says they are not counted yet', async () => {
+    const LINKED = [
+      { id: 'r-dress', name: 'Linked Gown', clothing_category: 'dress', tier: 'luxury' },
+      { id: 'r-shoes', name: 'Library Heels', clothing_category: 'shoes', tier: 'luxury' },
+    ];
+    api.get.mockImplementation((url) => {
+      if (url.startsWith('/api/v1/wardrobe/outfit/')) return Promise.resolve({ data: { items: LINKED } });
+      if (isScoreUrl(url)) return Promise.resolve({ data: { ...serverScore(64, 'Okay'), pending: [{ id: 'r-shoes', name: 'Library Heels' }] } });
+      if (url.startsWith('/api/v1/wardrobe/outfit-history/')) return Promise.resolve({ data: { history: [] } });
+      if (url.endsWith('/todo')) return Promise.resolve({ data: { data: null } });
+      return Promise.resolve({ data: { data: [] } });
+    });
+    await renderGame({}, 'Outfit Locked');
+    expect(await screen.findByText('Synergy: 64/100 — 🙂 Okay')).toBeTruthy();
+    const note = await screen.findByTestId('pending-note');
+    expect(note.textContent).toBe("1 piece awaiting approval isn't counted yet");
+    expect(note.getAttribute('title')).toBe('Library Heels');
+  });
+
+  test('no pending pieces: no note', async () => {
+    api.get.mockImplementation((url) => {
+      if (url.startsWith('/api/v1/wardrobe/outfit/')) return Promise.resolve({ data: { items: [{ id: 'r-dress', name: 'Linked Gown', clothing_category: 'dress' }] } });
+      if (isScoreUrl(url)) return Promise.resolve({ data: { ...serverScore(64, 'Okay'), pending: [] } });
+      if (url.startsWith('/api/v1/wardrobe/outfit-history/')) return Promise.resolve({ data: { history: [] } });
+      if (url.endsWith('/todo')) return Promise.resolve({ data: { data: null } });
+      return Promise.resolve({ data: { data: [] } });
+    });
+    await renderGame({}, 'Outfit Locked');
+    expect(await screen.findByText('Synergy: 64/100 — 🙂 Okay')).toBeTruthy();
+    expect(screen.queryByTestId('pending-note')).toBeNull();
+  });
+
   test('an unscorable draft says so instead of inventing a tier', async () => {
     api.post.mockImplementation((url) => {
       if (url === '/api/v1/wardrobe/browse-pool') return Promise.resolve({ data: { pool: POOL, pool_breakdown: {} } });

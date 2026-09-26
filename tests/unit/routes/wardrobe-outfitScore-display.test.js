@@ -52,6 +52,9 @@ const WARDROBE = [
 ];
 // The locked, approved outfit.
 const LINKED = ['w-dress', 'w-heels'];
+// episode_wardrobe rows: { id, status }. Reset before each test.
+let links;
+const linkedRows = (pred) => links.filter(pred).map((l) => ({ ...WARDROBE.find((w) => w.id === l.id) }));
 
 let queries;
 function answer(sql, opts = {}) {
@@ -77,11 +80,16 @@ function answer(sql, opts = {}) {
     const scoped = /w\.show_id = :showId OR w\.show_id IS NULL/.test(sql);
     return out(WARDROBE.filter((w) => r.ids.includes(w.id) && (!scoped || w.show_id === r.showId || w.show_id == null)).map((w) => ({ ...w })));
   }
+  const approvedOnly = /ew\.approval_status = 'approved'/.test(sql);
   if (/FROM episode_wardrobe ew\s+JOIN wardrobe w/.test(sql) && /SELECT w\.\*/.test(sql)) {
-    return out(WARDROBE.filter((w) => LINKED.includes(w.id)).map((w) => ({ ...w })));
+    return out(linkedRows((l) => !approvedOnly || l.status === 'approved'));
+  }
+  if (/FROM episode_wardrobe ew/.test(sql) && /ew\.approval_status IS DISTINCT FROM 'approved'/.test(sql)) {
+    return out(linkedRows((l) => l.status !== 'approved').map((w) => ({ id: w.id, name: w.name })));
   }
   if (/FROM episode_wardrobe ew/.test(sql) && /w\.brand, w\.name, w\.price/.test(sql)) {
-    return out(WARDROBE.filter((w) => LINKED.includes(w.id)).map((w) => ({ brand: w.brand, name: w.name, price: w.price, tier: w.tier, category: w.clothing_category })));
+    return out(linkedRows((l) => !approvedOnly || l.status === 'approved')
+      .map((w) => ({ brand: w.brand, name: w.name, price: w.price, tier: w.tier, category: w.clothing_category })));
   }
   if (/UPDATE character_state\b[\s\S]*RETURNING coins/.test(sql)) return [[{ coins: 900 }], 1];
   if (/^\s*SELECT/i.test(sql)) return out([]);
@@ -111,6 +119,7 @@ const WRITE = /^\s*(INSERT|UPDATE|DELETE|UPSERT|ALTER|CREATE|DROP|TRUNCATE)\b/i;
 let scoreSpy;
 beforeEach(() => {
   queries = [];
+  links = LINKED.map((id) => ({ id, status: 'approved' }));
   resetModels();
   scoreSpy = jest.spyOn(wis, 'scoreOutfitForEvent');
   jest.spyOn(wis, 'getWardrobeGrowthArc').mockImplementation(async () => ({ arc_stage: 'rising' }));
@@ -255,6 +264,43 @@ describe('display and completion score with the same inputs', () => {
     const state = await loadDisplayCharacterState(mockModels.sequelize, 'show-without-state');
     expect(state).toEqual(DEFAULT_LALA_STATE);
     expect(queries.filter((q) => WRITE.test(q.sql))).toEqual([]);
+  });
+});
+
+describe('the locked outfit counts approved pieces only, as completion does', () => {
+  test('one approved and one pending link: GET scores the approved one, equals completion, and names the pending one', async () => {
+    links = [{ id: 'w-dress', status: 'approved' }, { id: 'w-heels', status: 'pending' }];
+
+    await completeEpisode(EPISODE_ID, SHOW_ID, mockModels.sequelize);
+    expect(scoreSpy).toHaveBeenCalledTimes(1);
+    const completionItems = scoreSpy.mock.calls[0][0].map((i) => i.id);
+    const completionScore = Math.round(scoreSpy.mock.results[0].value.match_score);
+    expect(completionItems).toEqual(['w-dress']);
+
+    scoreSpy.mockClear();
+    const res = await request(buildApp()).get(`/api/v1/wardrobe/outfit-score/${EPISODE_ID}`);
+    expect(res.status).toBe(200);
+    expect(scoreSpy.mock.calls[0][0].map((i) => i.id)).toEqual(['w-dress']);
+    expect(res.body.items.map((i) => i.id)).toEqual(['w-dress']);
+    expect(res.body.score).toBe(completionScore);
+    expect(res.body.pending).toEqual([{ id: 'w-heels', name: 'Heels' }]);
+  });
+
+  test('only pending links: nothing is scored, and they are named', async () => {
+    links = [{ id: 'w-dress', status: 'pending' }];
+    const res = await request(buildApp()).get(`/api/v1/wardrobe/outfit-score/${EPISODE_ID}`);
+    expect(res.body.hasOutfit).toBe(false);
+    expect(res.body.pending).toEqual([{ id: 'w-dress', name: 'Gold gown' }]);
+    expect(scoreSpy).not.toHaveBeenCalled();
+  });
+
+  test('a draft scores the pieces on screen and reports no pending pieces', async () => {
+    links = [{ id: 'w-dress', status: 'approved' }, { id: 'w-heels', status: 'pending' }];
+    const res = await request(buildApp())
+      .post(`/api/v1/wardrobe/outfit-score/${EPISODE_ID}`)
+      .send({ wardrobe_ids: ['w-dress', 'w-heels'] });
+    expect(scoreSpy.mock.calls[0][0].map((i) => i.id).sort()).toEqual(['w-dress', 'w-heels']);
+    expect(res.body.pending).toEqual([]);
   });
 });
 

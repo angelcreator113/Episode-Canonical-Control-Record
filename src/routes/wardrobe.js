@@ -224,18 +224,42 @@ async function scoreEpisodeOutfitForDisplay(models, { episodeId, eventId = null,
   const characterState = await loadDisplayCharacterState(sequelize, showId);
   const { eventContext, arcStage } = await buildOutfitScoreContext({ models, showId, event, characterState });
 
-  const options = Array.isArray(pieceIds)
+  // A draft scores the pieces on screen. The linked outfit is scored as
+  // completion scores it: approved links only (Evoni's ruling, 2026-09-26),
+  // and the links still awaiting approval are reported, not counted.
+  const isDraft = Array.isArray(pieceIds);
+  const options = isDraft
     ? { pieces: pieceIds.map((id) => ({ id })), showId, rowsOnly: true }
-    : {};
+    : { approvedOnly: true };
   const result = await getOutfitScore(models, episodeId, eventContext, characterState, arcStage, options);
+  const pending = isDraft ? [] : await loadPendingOutfitPieces(sequelize, episodeId);
   return {
     status: 200,
-    body: { success: true, ...result, event: event ? { id: event.id, name: event.name } : null },
+    body: { success: true, ...result, pending, event: event ? { id: event.id, name: event.name } : null },
   };
 }
 
+// The episode's linked pieces that are not approved yet (e.g. assigned from
+// the wardrobe library, which links as 'pending'). Completion does not score
+// them, so the display does not either; it names them instead.
+async function loadPendingOutfitPieces(sequelize, episodeId) {
+  const [rows] = await sequelize.query(
+    `SELECT w.id, w.name
+     FROM episode_wardrobe ew
+     JOIN wardrobe w ON w.id = ew.wardrobe_id
+     WHERE ew.episode_id = :episodeId
+       AND ew.deleted_at IS NULL
+       AND w.deleted_at IS NULL
+       AND ew.approval_status IS DISTINCT FROM 'approved'
+     ORDER BY ew.created_at ASC`,
+    { replacements: { episodeId } }
+  );
+  return (rows || []).map((r) => ({ id: r.id, name: r.name }));
+}
+
 // GET /api/v1/wardrobe/outfit-score/:episodeId[?event_id=]
-// The episode's linked outfit, scored for event_id when given.
+// The episode's approved linked outfit (what completion scores), scored for
+// event_id when given; `pending` names the links not counted yet.
 router.get('/outfit-score/:episodeId', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
