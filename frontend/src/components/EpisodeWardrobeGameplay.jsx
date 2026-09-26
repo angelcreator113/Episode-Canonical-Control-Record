@@ -6,7 +6,6 @@
  * v3 additions:
  *   - Three browse modes: Pool (event-curated), Closet (full), Search
  *   - Live todo list sync from slot state
- *   - Score preview on hover (synergy delta)
  *   - Lala Suggests (auto-fill from best items)
  *   - Outfit history across episodes
  *
@@ -17,12 +16,12 @@
  *   💍 Jewelry (optional)
  *   🌸 Perfume (optional)
  * 
- * Scoring: Synergy system
- *   - Base match score per item (from browse-pool endpoint)
- *   - Aesthetic tag overlap bonus (items share tags = synergy)
- *   - Tier harmony bonus (same tier = cohesive, mixed = penalty)
- *   - Event alignment bonus (all items match event type)
- *   - Lala confidence meter based on total outfit synergy
+ * Scoring (Task #1943; Evoni's ruling, 2026-09-26): one scorer, one number.
+ *   Outfit Synergy, Lala's confidence line and the locked banner all show
+ *   the server's canonical score (scoreOutfitForEvent, the scorer episode
+ *   completion uses). A draft is scored by POST /outfit-score/:episodeId,
+ *   debounced; a locked outfit by GET /outfit-score/:episodeId. The browser
+ *   has no formula of its own.
  * 
  * Props:
  *   episodeId, showId, event, characterState, onOutfitComplete
@@ -30,10 +29,11 @@
  * Location: frontend/src/components/EpisodeWardrobeGameplay.jsx
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../services/api';
 import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
 import { withReach } from '../utils/wardrobeReach';
+import { CATEGORY_TO_SLOT, CATEGORY_ALIASES } from '../lib/wardrobeSlots';
 
 // ─── CONSTANTS ───
 
@@ -42,12 +42,11 @@ const SLOT_DEFS = [
   { key: 'top', icon: '👚', label: 'Top', categories: ['top'], required: false, desc: 'With bottom' },
   { key: 'bottom', icon: '👖', label: 'Bottom', categories: ['bottom'], required: false, desc: 'With top' },
   { key: 'shoes', icon: '👠', label: 'Shoes', categories: ['shoes'], required: true, desc: 'Required' },
-  { key: 'accessories', icon: '👜', label: 'Accessories', categories: ['accessories'], required: false, desc: 'Optional' },
+  { key: 'accessories', icon: '👜', label: 'Accessories', categories: ['accessory', 'bag'], required: false, desc: 'Optional' },
   { key: 'jewelry', icon: '💍', label: 'Jewelry', categories: ['jewelry'], required: false, desc: 'Optional' },
   { key: 'perfume', icon: '🌸', label: 'Perfume', categories: ['perfume'], required: false, desc: 'Optional' },
 ];
 
-const TIER_VALS = { basic: 1, mid: 2, luxury: 3, elite: 4 };
 const TIER_STYLES = {
   basic: { bg: '#f1f5f9', border: '#e2e8f0', color: '#64748b', emoji: '🧵' },
   mid: { bg: '#eef2ff', border: '#c7d2fe', color: '#6366f1', emoji: '💜' },
@@ -60,22 +59,24 @@ const ROLE_STYLES = {
   risky: { bg: '#fef2f2', border: '#fecaca', label: '⚡ Risky', color: '#dc2626' },
   locked_tease: { bg: '#f8fafc', border: '#e2e8f0', label: '🔒 Locked', color: '#94a3b8' },
 };
-const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', shoes: '👠', accessories: '👜', jewelry: '💍', perfume: '🌸' };
+const CAT_ICONS = { dress: '👗', top: '👚', bottom: '👖', shoes: '👠', accessories: '👜', accessory: '👜', bag: '👜', jewelry: '💍', perfume: '🌸' };
 
-const CONFIDENCE_LEVELS = [
-  { min: 0, label: 'Nervous', emoji: '😰', color: '#dc2626', lala: "I don't know about this..." },
-  { min: 30, label: 'Unsure', emoji: '😕', color: '#eab308', lala: "It's... something." },
-  { min: 50, label: 'Okay', emoji: '🙂', color: '#22c55e', lala: "This could work." },
-  { min: 70, label: 'Confident', emoji: '😊', color: '#6366f1', lala: "I feel good about this." },
-  { min: 85, label: 'Slaying', emoji: '👑', color: '#8b5cf6', lala: "They're not ready for me." },
-];
-
-function getConfidence(score) {
-  for (let i = CONFIDENCE_LEVELS.length - 1; i >= 0; i--) {
-    if (score >= CONFIDENCE_LEVELS[i].min) return CONFIDENCE_LEVELS[i];
-  }
-  return CONFIDENCE_LEVELS[0];
+// A wardrobe item's game slot. Its clothing_category is resolved to a
+// canonical category through the shared taxonomy (lib/wardrobeSlots: exact,
+// then alias — 'accessories' → 'accessory', 'handbag' → 'bag', 'heels' →
+// 'shoes'), then to the slot whose categories list it. Null when the game has
+// no slot for it (outerwear).
+function gameSlotFor(clothingCategory) {
+  const n = String(clothingCategory || '').toLowerCase().trim();
+  if (!n) return null;
+  const canonical = CATEGORY_TO_SLOT[n] ? n : CATEGORY_ALIASES[n];
+  if (!canonical) return null;
+  return SLOT_DEFS.find(s => s.categories.includes(canonical))?.key || null;
 }
+
+// How long the draft score waits after the last slot change before asking
+// the server (Task #1943).
+const SCORE_DEBOUNCE_MS = 350;
 
 // ─── GARMENT IMAGE ───
 // Draws the item's real picture through the shared resolver. The category
@@ -122,66 +123,6 @@ function GarmentImageInner({ url, name, fallback, size, height, radius }) {
   );
 }
 
-// ─── SYNERGY CALCULATOR ───
-
-function calculateSynergy(filledSlots, eventContext) {
-  const items = Object.values(filledSlots).filter(Boolean);
-  if (items.length === 0) return { total: 0, breakdown: {}, confidence: getConfidence(0) };
-
-  // 1. Base match scores (avg)
-  const baseAvg = items.reduce((s, i) => s + (i.match_score || 0), 0) / items.length;
-  const baseScore = Math.min(35, baseAvg * 0.6);
-
-  // 2. Aesthetic synergy — shared tags between items
-  let aestheticBonus = 0;
-  if (items.length >= 2) {
-    const tagSets = items.map(i => new Set((i.aesthetic_tags || []).map(t => t.toLowerCase())));
-    let sharedCount = 0;
-    let pairs = 0;
-    for (let a = 0; a < tagSets.length; a++) {
-      for (let b = a + 1; b < tagSets.length; b++) {
-        pairs++;
-        for (const tag of tagSets[a]) {
-          if (tagSets[b].has(tag)) sharedCount++;
-        }
-      }
-    }
-    aestheticBonus = Math.min(25, (sharedCount / Math.max(1, pairs)) * 15);
-  }
-
-  // 3. Tier harmony — items in same tier get bonus, mixed tiers get penalty
-  const tiers = items.map(i => TIER_VALS[i.tier] || 1);
-  const avgTier = tiers.reduce((a, b) => a + b, 0) / tiers.length;
-  const tierVariance = tiers.reduce((s, t) => s + Math.abs(t - avgTier), 0) / tiers.length;
-  const tierBonus = Math.max(0, 15 - tierVariance * 8);
-
-  // 4. Event alignment — do items' event_types include this event?
-  const eventType = (eventContext.event_type || '').toLowerCase();
-  let eventHits = 0;
-  items.forEach(i => {
-    const et = (i.event_types || []).map(e => e.toLowerCase());
-    if (et.some(e => e.includes(eventType) || eventType.includes(e))) eventHits++;
-  });
-  const eventBonus = items.length > 0 ? Math.min(15, (eventHits / items.length) * 15) : 0;
-
-  // 5. Slot coverage bonus — more slots filled = more polished
-  const slotBonus = Math.min(10, items.length * 1.5);
-
-  const total = Math.round(Math.min(100, baseScore + aestheticBonus + tierBonus + eventBonus + slotBonus));
-
-  return {
-    total,
-    breakdown: {
-      base: Math.round(baseScore),
-      aesthetic: Math.round(aestheticBonus),
-      tier_harmony: Math.round(tierBonus),
-      event_alignment: Math.round(eventBonus),
-      coverage: Math.round(slotBonus),
-    },
-    confidence: getConfidence(total),
-  };
-}
-
 // ─── MAIN COMPONENT ───
 
 export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {}, characterState = {}, onOutfitComplete }) {
@@ -211,7 +152,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const [todoList, setTodoList] = useState(null);
   const [outfitHistory, setOutfitHistory] = useState([]);
   const [suggestingOutfit, setSuggestingOutfit] = useState(false);
-  const [hoverItem, setHoverItem] = useState(null); // for score preview
+
+  // Task #1943: the score is the server's, for the draft and the locked outfit.
+  // status: 'empty' (nothing equipped) | 'loading' | 'ready' | 'error'
+  const [score, setScore] = useState({ status: 'empty', data: null });
+  const lockCompleteRef = useRef(null); // slots to report once the locked score arrives
 
   // Smart detection: dress vs top+bottom
   const bodyMode = useMemo(() => {
@@ -228,15 +173,24 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     });
   }, [bodyMode]);
 
-  const synergy = useMemo(() => calculateSynergy(filledSlots, event), [filledSlots, event]);
+  // The server's answer in the shape the panel reads.
+  const synergy = useMemo(() => {
+    const d = score.data;
+    if (!d || !d.hasOutfit) return null;
+    return { total: d.score, confidence: d.confidence || {}, breakdown: d.breakdown || {} };
+  }, [score.data]);
+  // What the panel says when there is no score to show.
+  const scoreMessage = {
+    empty: 'Equip a piece to see how Lala feels.',
+    loading: 'Lala is looking…',
+    error: "Couldn't score this outfit right now.",
+  }[score.status] || 'None of these pieces could be scored.';
 
   const filteredPool = useMemo(() => {
     const slot = SLOT_DEFS.find(s => s.key === activeSlot);
     if (!slot) return pool;
-    return pool.filter(item => {
-      const cat = (item.clothing_category || '').toLowerCase();
-      return slot.categories.includes(cat);
-    }).sort((a, b) => b.match_score - a.match_score);
+    return pool.filter(item => gameSlotFor(item.clothing_category) === slot.key)
+      .sort((a, b) => b.match_score - a.match_score);
   }, [pool, activeSlot]);
 
   // ─── Load pool ───
@@ -277,16 +231,14 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         const res = await api.get(`/api/v1/wardrobe/outfit/${episodeId}`);
         const backendItems = res.data?.items || [];
         if (!cancelled && backendItems.length > 0) {
+          // Task #1943: slots by the shared category taxonomy (so 'accessory',
+          // 'bag', 'handbag' … land in Accessories, not only 'accessories').
+          // A locked piece is linked to this episode, so it is selectable:
+          // without can_select a re-lock would silently leave it out.
           const restored = {};
           backendItems.forEach(item => {
-            const cat = (item.clothing_category || '').toLowerCase();
-            if (cat === 'dress') restored.body = item;
-            else if (cat === 'top') restored.top = item;
-            else if (cat === 'bottom') restored.bottom = item;
-            else if (cat === 'shoes') restored.shoes = item;
-            else if (cat === 'accessories') restored.accessories = item;
-            else if (cat === 'jewelry') restored.jewelry = item;
-            else if (cat === 'perfume') restored.perfume = item;
+            const slot = gameSlotFor(item.clothing_category);
+            if (slot) restored[slot] = { ...item, can_select: true };
           });
           setFilledSlots(restored);
           setOutfitLocked(true);
@@ -391,16 +343,60 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     return { tasks, done, total: tasks.length, allDone: done === tasks.length };
   }, [todoList, filledSlots]);
 
-  // ─── v3: Score preview — what would synergy be with this item? ───
-  const hoverSynergy = useMemo(() => {
-    if (!hoverItem) return null;
-    const cat = (hoverItem.clothing_category || '').toLowerCase();
-    let slotKey = cat === 'dress' ? 'body' : cat;
-    const testSlots = { ...filledSlots, [slotKey]: hoverItem };
-    if (cat === 'dress') { testSlots.top = undefined; testSlots.bottom = undefined; }
-    const test = calculateSynergy(testSlots, event);
-    return { total: test.total, delta: test.total - synergy.total };
-  }, [hoverItem, filledSlots, event, synergy.total]);
+  // ─── Task #1943: the server's score, for the draft and the locked outfit ───
+  // The ids on screen, order-free, so re-equipping the same pieces is not a
+  // change. The event is the one on screen (EpisodeDetail's selectedEvent).
+  const outfitIds = useMemo(() => {
+    const ids = Object.values(filledSlots).filter(Boolean).map(i => i.id).filter(Boolean);
+    return [...new Set(ids)].sort();
+  }, [filledSlots]);
+  const outfitKey = outfitIds.join(',');
+  const eventId = event?.id || null;
+
+  useEffect(() => {
+    if (!episodeId || !slotsReady) return undefined;
+    // Each run supersedes the last: its cleanup marks it stale (so a late
+    // answer is ignored), cancels its timer and aborts its request.
+    let stale = false;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const opts = controller ? { signal: controller.signal } : undefined;
+    const ids = outfitKey ? outfitKey.split(',') : [];
+
+    const run = async () => {
+      setScore(prev => ({ status: 'loading', data: prev.data }));
+      try {
+        const res = outfitLocked
+          ? await api.get(`/api/v1/wardrobe/outfit-score/${episodeId}${eventId ? `?event_id=${encodeURIComponent(eventId)}` : ''}`, opts)
+          : await api.post(`/api/v1/wardrobe/outfit-score/${episodeId}`, { wardrobe_ids: ids, ...(eventId ? { event_id: eventId } : {}) }, opts);
+        if (stale) return;
+        setScore({ status: 'ready', data: res.data || null });
+        if (outfitLocked && lockCompleteRef.current && onOutfitComplete) {
+          const slots = lockCompleteRef.current;
+          lockCompleteRef.current = null;
+          const d = res.data || {};
+          onOutfitComplete({ slots, synergy: { total: d.score ?? 0, confidence: d.confidence || null, breakdown: d.breakdown || {}, hasOutfit: !!d.hasOutfit } });
+        }
+      } catch (err) {
+        if (stale) return; // superseded or aborted — a newer request owns the panel
+        console.error('Outfit score failed:', err);
+        setScore({ status: 'error', data: null });
+      }
+    };
+
+    if (outfitLocked) {
+      run();
+      return () => { stale = true; controller?.abort(); };
+    }
+    if (ids.length === 0) {
+      setScore({ status: 'empty', data: null });
+      return undefined;
+    }
+    setScore(prev => ({ status: 'loading', data: prev.data }));
+    const timer = setTimeout(run, SCORE_DEBOUNCE_MS);
+    return () => { stale = true; clearTimeout(timer); controller?.abort(); };
+    // onOutfitComplete is read when the locked score arrives, not a trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [episodeId, eventId, outfitKey, outfitLocked, slotsReady]);
 
   // ─── v3: Lala Suggests ───
   const handleLalaSuggests = async () => {
@@ -416,7 +412,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       // For each slot, find best selectable item
       for (const slot of SLOT_DEFS) {
         const candidates = items
-          .filter(i => i.can_select && !used.has(i.id) && slot.categories.includes(i.clothing_category))
+          .filter(i => i.can_select && !used.has(i.id) && gameSlotFor(i.clothing_category) === slot.key)
           .sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
         if (candidates.length > 0) {
           newSlots[slot.key] = candidates[0];
@@ -436,15 +432,14 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
   // ─── v3: Browse items based on mode ───
   const filteredBrowseItems = useMemo(() => {
-    const slot = SLOT_DEFS.find(s => s.key === activeSlot);
-    const cats = slot?.categories || [];
+    const inSlot = (item) => gameSlotFor(item.clothing_category) === activeSlot;
 
     if (browseMode === 'pool') {
-      return pool.filter(item => cats.includes((item.clothing_category || '').toLowerCase()))
+      return pool.filter(inSlot)
         .sort((a, b) => b.match_score - a.match_score);
     }
     if (browseMode === 'closet') {
-      return closetWithReach.filter(item => cats.includes((item.clothing_category || '').toLowerCase()))
+      return closetWithReach.filter(inSlot)
         .sort((a, b) => (b.match_score || 0) - (a.match_score || 0) || a.name.localeCompare(b.name));
     }
     if (browseMode === 'search' && searchQuery.trim()) {
@@ -454,7 +449,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         const brand = (item.brand || '').toLowerCase();
         const tags = (item.aesthetic_tags || []).join(' ').toLowerCase();
         return (name.includes(q) || brand.includes(q) || tags.includes(q))
-          && cats.includes((item.clothing_category || '').toLowerCase());
+          && inSlot(item);
       });
     }
     return [];
@@ -463,15 +458,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   // ─── Assign item to slot ───
   const assignToSlot = (item) => {
     if (!item.can_select) { setError('Cannot equip a locked item — purchase or unlock it first'); return; }
-    const cat = (item.clothing_category || '').toLowerCase();
-    let slotKey = activeSlot;
-    if (cat === 'dress') slotKey = 'body';
-    else if (cat === 'top') slotKey = 'top';
-    else if (cat === 'bottom') slotKey = 'bottom';
-    else if (cat === 'shoes') slotKey = 'shoes';
-    else if (cat === 'accessories') slotKey = 'accessories';
-    else if (cat === 'jewelry') slotKey = 'jewelry';
-    else if (cat === 'perfume') slotKey = 'perfume';
+    const slotKey = gameSlotFor(item.clothing_category) || activeSlot;
 
     if (slotKey === 'body') {
       setFilledSlots(prev => ({ ...prev, body: item, top: undefined, bottom: undefined }));
@@ -533,11 +520,13 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       const bought = (res.data?.locked || []).filter(l => l.coin_purchased).map(l => l.id);
       if (bought.length > 0) markOwnedInCloset(bought);
       if (res.data?.coins_after != null) setLocalCoins(res.data.coins_after);
+      // Task #1943: onOutfitComplete gets the server's score for the locked
+      // outfit — the score effect reports it when the GET answers.
+      lockCompleteRef.current = filledSlots;
       setOutfitLocked(true);
       setSuccess('Outfit locked! 🔒✨');
       // Clear localStorage draft — outfit is now persisted on backend
-      try { localStorage.removeItem(`wardrobe_draft_${episodeId}`); } catch {}
-      if (onOutfitComplete) onOutfitComplete({ slots: filledSlots, synergy });
+      try { localStorage.removeItem(`wardrobe_draft_${episodeId}`); } catch (err) { console.error('Could not clear the outfit draft:', err); }
     } catch (err) { setError(err.response?.data?.error || 'Failed to lock outfit'); }
     finally { setConfirming(false); }
   };
@@ -611,7 +600,11 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           <span style={{ fontSize: 28 }}>🔒</span>
           <div>
             <div style={{ fontSize: 16, fontWeight: 800 }}>Outfit Locked</div>
-            <div style={{ fontSize: 12, color: '#64748b' }}>Synergy: {synergy.total}/100 — {synergy.confidence.emoji} {synergy.confidence.label}</div>
+            <div data-testid="locked-synergy" style={{ fontSize: 12, color: '#64748b' }}>
+              {synergy
+                ? <>Synergy: {synergy.total}/100 — {synergy.confidence.emoji} {synergy.confidence.label}</>
+                : scoreMessage}
+            </div>
           </div>
           <button onClick={() => setOutfitLocked(false)} style={W.unlockBtn}>↩ Unlock</button>
         </div>
@@ -624,20 +617,20 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           {/* ──── LEFT: SLOTS ──── */}
           <div style={W.slotsPanel}>
             {/* Confidence */}
-            <div style={W.confidenceCard}>
+            <div style={W.confidenceCard} aria-busy={score.status === 'loading'} data-score-status={score.status}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                 <span style={{ fontSize: 12, fontWeight: 700 }}>Outfit Synergy</span>
-                <span style={{ fontSize: 18, fontWeight: 800, color: synergy.confidence.color }}>
-                  {synergy.confidence.emoji} {synergy.total}
+                <span data-testid="synergy-score" style={{ fontSize: 18, fontWeight: 800, color: synergy ? synergy.confidence.color : '#94a3b8', opacity: score.status === 'loading' ? 0.5 : 1 }}>
+                  {synergy ? `${synergy.confidence.emoji || ''} ${synergy.total}` : (score.status === 'loading' ? '…' : '—')}
                 </span>
               </div>
               <div style={W.synergyBar}>
-                <div style={{ height: '100%', width: `${synergy.total}%`, borderRadius: 4, background: `linear-gradient(90deg, ${synergy.confidence.color}80, ${synergy.confidence.color})`, transition: 'width 0.5s' }} />
+                <div style={{ height: '100%', width: `${synergy ? synergy.total : 0}%`, borderRadius: 4, background: synergy ? `linear-gradient(90deg, ${synergy.confidence.color}80, ${synergy.confidence.color})` : 'transparent', transition: 'width 0.5s' }} />
               </div>
-              <div style={{ fontSize: 11, fontStyle: 'italic', color: synergy.confidence.color, marginTop: 5 }}>
-                "{synergy.confidence.lala}"
+              <div data-testid="lala-line" style={{ fontSize: 11, fontStyle: 'italic', color: synergy ? synergy.confidence.color : '#94a3b8', marginTop: 5 }}>
+                {synergy && synergy.confidence.lala ? `"${synergy.confidence.lala}"` : scoreMessage}
               </div>
-              {synergy.total > 0 && (
+              {synergy && synergy.total > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 6 }}>
                   {Object.entries(synergy.breakdown).filter(([, v]) => v > 0).map(([k, v]) => (
                     <span key={k} style={W.synBadge}>+{v} {k.replace(/_/g, ' ')}</span>
@@ -684,7 +677,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                   {item && (
                     <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                       <span style={W.miniTier(item.tier)}>{TIER_STYLES[item.tier]?.emoji} {item.tier}</span>
-                      <span style={{ fontSize: 9, color: '#64748b' }}>Match: {item.match_score}</span>
+                      {item.match_score != null && <span style={{ fontSize: 9, color: '#64748b' }}>Match: {item.match_score}</span>}
                     </div>
                   )}
                 </div>
@@ -772,15 +765,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       animation: `fadeSlide 0.25s ease ${idx * 0.05}s both`,
                       position: 'relative',
                     }}
-                    onMouseEnter={() => !isUsed && setHoverItem(item)}
-                    onMouseLeave={() => setHoverItem(null)}
                     >
-                    {/* Score preview badge */}
-                    {hoverItem?.id === item.id && hoverSynergy && !isUsed && (
-                      <div style={{ position: 'absolute', top: -8, right: -4, padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 800, zIndex: 2, background: hoverSynergy.delta >= 0 ? '#16a34a' : '#dc2626', color: '#fff', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
-                        {hoverSynergy.delta >= 0 ? '+' : ''}{hoverSynergy.delta} → {hoverSynergy.total}
-                      </div>
-                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span style={{ ...W.rolePill, background: rs.bg, color: rs.color }}>{rs.label}</span>
                       <span style={{ ...W.tierPill, background: ts.bg, color: ts.color }}>{ts.emoji} {item.tier || 'basic'}</span>

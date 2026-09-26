@@ -188,40 +188,97 @@ router.get('/outfit/:episode_id', requireAuth, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// GET /api/v1/wardrobe/outfit-score/:episodeId
-// Returns synergy score for the locked outfit
+// Outfit score — the canonical scorer, for the locked outfit (GET) and for a
+// draft (POST). Task #1943 (Evoni's ruling, 2026-09-26): the styling game
+// shows this score in both cases; the browser has no formula of its own.
+// Both routes score with the inputs completion uses (outfitScoreContext).
 // ═══════════════════════════════════════════
+
+// Largest draft the POST scores; the game has seven slots.
+const MAX_DRAFT_PIECES = 20;
+
+/**
+ * Scores an episode's outfit for display. Returns { status, body }.
+ *   eventId — the event on screen; absent → the event completion uses.
+ *   pieceIds — a draft's wardrobe ids; absent → the episode's linked outfit.
+ * Read-only.
+ */
+async function scoreEpisodeOutfitForDisplay(models, { episodeId, eventId = null, pieceIds = null }) {
+  const {
+    buildOutfitScoreContext, loadScoringEvent, loadDisplayCharacterState,
+  } = require('../services/outfitScoreContext');
+  const sequelize = models.sequelize;
+
+  const [episodes] = await sequelize.query(
+    'SELECT id, show_id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1',
+    { replacements: { episodeId } }
+  );
+  const episode = episodes?.[0];
+  if (!episode) return { status: 404, body: { success: false, error: 'Episode not found' } };
+  const showId = episode.show_id || null;
+
+  const event = await loadScoringEvent(sequelize, { episodeId, showId, eventId });
+  if (eventId && !event) {
+    return { status: 404, body: { success: false, error: "Event not found in this episode's show" } };
+  }
+  const characterState = await loadDisplayCharacterState(sequelize, showId);
+  const { eventContext, arcStage } = await buildOutfitScoreContext({ models, showId, event, characterState });
+
+  const options = Array.isArray(pieceIds)
+    ? { pieces: pieceIds.map((id) => ({ id })), showId, rowsOnly: true }
+    : {};
+  const result = await getOutfitScore(models, episodeId, eventContext, characterState, arcStage, options);
+  return {
+    status: 200,
+    body: { success: true, ...result, event: event ? { id: event.id, name: event.name } : null },
+  };
+}
+
+// GET /api/v1/wardrobe/outfit-score/:episodeId[?event_id=]
+// The episode's linked outfit, scored for event_id when given.
 router.get('/outfit-score/:episodeId', requireAuth, async (req, res) => {
   try {
     const { episodeId } = req.params;
+    const eventId = typeof req.query.event_id === 'string' && req.query.event_id ? req.query.event_id : null;
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not available' });
 
-    // Get the episode's event context from world_events
-    const [episodes] = await models.sequelize.query(
-      `SELECT e.*, we.name as event_name, we.event_type, we.dress_code,
-              we.dress_code_keywords, we.prestige, we.strictness, we.host_brand
-       FROM episodes e
-       LEFT JOIN world_events we ON we.used_in_episode_id = e.id
-       WHERE e.id = :episodeId`,
-      { replacements: { episodeId } }
-    );
-
-    const ep = episodes?.[0];
-    const event = ep ? {
-      name: ep.event_name,
-      event_type: ep.event_type,
-      dress_code: ep.dress_code,
-      dress_code_keywords: _parseJSON(ep.dress_code_keywords, []),
-      prestige: ep.prestige,
-      strictness: ep.strictness,
-      host_brand: ep.host_brand,
-    } : {};
-
-    const result = await getOutfitScore(models, episodeId, event);
-    return res.json({ success: true, ...result });
+    const { status, body } = await scoreEpisodeOutfitForDisplay(models, { episodeId, eventId });
+    return res.status(status).json(body);
   } catch (error) {
     console.error('Outfit score endpoint error:', error);
+    return res.status(500).json({ error: 'Failed to compute outfit score', detail: error.message });
+  }
+});
+
+// POST /api/v1/wardrobe/outfit-score/:episodeId  { wardrobe_ids, event_id }
+// A draft (not yet locked), scored by the same scorer. Writes nothing. Only
+// real, not-deleted wardrobe rows of the episode's show (or show-less rows)
+// are scored; when none match, hasOutfit is false.
+router.post('/outfit-score/:episodeId', requireAuth, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    const { wardrobe_ids: wardrobeIds, event_id: rawEventId } = req.body || {};
+    if (!Array.isArray(wardrobeIds) || wardrobeIds.some((id) => typeof id !== 'string' || !id)) {
+      return res.status(400).json({ error: 'wardrobe_ids must be an array of ids' });
+    }
+    if (wardrobeIds.length > MAX_DRAFT_PIECES) {
+      return res.status(400).json({ error: `At most ${MAX_DRAFT_PIECES} pieces can be scored` });
+    }
+    if (rawEventId != null && (typeof rawEventId !== 'string' || !rawEventId)) {
+      return res.status(400).json({ error: 'event_id must be an id' });
+    }
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not available' });
+
+    const { status, body } = await scoreEpisodeOutfitForDisplay(models, {
+      episodeId,
+      eventId: rawEventId || null,
+      pieceIds: [...new Set(wardrobeIds)],
+    });
+    return res.status(status).json(body);
+  } catch (error) {
+    console.error('Draft outfit score endpoint error:', error);
     return res.status(500).json({ error: 'Failed to compute outfit score', detail: error.message });
   }
 });
@@ -1710,29 +1767,38 @@ function _parseJSON(val, fallback) {
  */
 // Confidence levels — match_score → human label/emoji/color. Used by both
 // the UI shell and downstream consumers that key on the label.
+// `lala` is her line for the band; the styling game shows it (Task #1943 —
+// the lines live here, not in the browser).
 const CONFIDENCE_LEVELS = [
-  { min: 0, label: 'Nervous', emoji: '😰', color: '#dc2626' },
-  { min: 30, label: 'Unsure', emoji: '😕', color: '#eab308' },
-  { min: 50, label: 'Okay', emoji: '🙂', color: '#22c55e' },
-  { min: 70, label: 'Confident', emoji: '😊', color: '#6366f1' },
-  { min: 85, label: 'Slaying', emoji: '👑', color: '#8b5cf6' },
+  { min: 0, label: 'Nervous', emoji: '😰', color: '#dc2626', lala: "I don't know about this..." },
+  { min: 30, label: 'Unsure', emoji: '😕', color: '#eab308', lala: "It's... something." },
+  { min: 50, label: 'Okay', emoji: '🙂', color: '#22c55e', lala: 'This could work.' },
+  { min: 70, label: 'Confident', emoji: '😊', color: '#6366f1', lala: 'I feel good about this.' },
+  { min: 85, label: 'Slaying', emoji: '👑', color: '#8b5cf6', lala: "They're not ready for me." },
 ];
 
 // The event's outfit_pieces as scorer rows (Task #1924): their wardrobe rows
 // by id, or the snapshots themselves (category as clothing_category) when
 // no row is found.
-async function loadEventPieceRows(models, pieces) {
+// Task #1943, a draft from the styling game: { rowsOnly: true } never falls
+// back to the snapshots (a draft's pieces are bare { id }s), and { showId }
+// keeps the lookup to that show's rows and show-less rows.
+async function loadEventPieceRows(models, pieces, { showId = null, rowsOnly = false } = {}) {
   const ids = pieces.map((p) => p && p.id).filter(Boolean);
+  // A draft is always show-scoped; without a show only show-less rows match.
+  const scoped = rowsOnly || !!showId;
   let rows = [];
   if (ids.length) {
     [rows] = await models.sequelize.query(
       `SELECT w.* FROM wardrobe w
        WHERE w.id IN (:ids) AND w.deleted_at IS NULL
+       ${scoped ? 'AND (w.show_id = :showId OR w.show_id IS NULL)' : ''}
        ORDER BY w.clothing_category`,
-      { replacements: { ids } }
+      { replacements: scoped ? { ids, showId: showId || null } : { ids } }
     );
   }
   if (rows && rows.length) return rows;
+  if (rowsOnly) return [];
   return pieces
     .filter((p) => p && typeof p === 'object')
     .map((p) => ({ ...p, clothing_category: p.clothing_category || p.category }));
@@ -1757,11 +1823,13 @@ async function loadEventPieceRows(models, pieces) {
  * With { pieces } (completion, an episode with no approved look; Evoni's
  * ruling 2026-09-25) the event's outfit_pieces are scored instead of
  * episode_wardrobe (loadEventPieceRows).
+ * With { pieces, showId, rowsOnly: true } (Task #1943, the styling game's
+ * draft) only real wardrobe rows of that show (or show-less rows) are scored.
  */
-async function getOutfitScore(models, episodeId, event = {}, characterState = null, arcStage = null, { approvedOnly = false, pieces = null } = {}) {
+async function getOutfitScore(models, episodeId, event = {}, characterState = null, arcStage = null, { approvedOnly = false, pieces = null, showId = null, rowsOnly = false } = {}) {
   try {
     const [rows] = Array.isArray(pieces)
-      ? [await loadEventPieceRows(models, pieces)]
+      ? [await loadEventPieceRows(models, pieces, { showId, rowsOnly })]
       : await models.sequelize.query(
         `SELECT w.*
          FROM episode_wardrobe ew
@@ -2171,3 +2239,4 @@ router.post('/:showId/auto-tag-event-types', requireAuth, aiRateLimiter, async (
 
 module.exports = router;
 module.exports.getOutfitScore = getOutfitScore;
+module.exports.CONFIDENCE_LEVELS = CONFIDENCE_LEVELS;
