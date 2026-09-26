@@ -14,8 +14,6 @@ import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import IconPlacementMode from '../components/IconPlacementMode';
 import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey, pickZoneLibraryIcon, isZoneOutOfBounds, moveZoneInside } from '../lib/overlayUtils';
-import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
-import AIProposalReview from '../components/phone-editor/AIProposalReview';
 import MissionEditor from '../components/phone-editor/MissionEditor';
 import ConditionRow from '../components/phone-editor/ConditionRow';
 import ActionRow from '../components/phone-editor/ActionRow';
@@ -164,6 +162,14 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const pollRef = useRef(null);
   const genTimeoutRef = useRef(null);  // tracks the 5-min generation timeout
   const linkEditorRef = useRef(null);  // exposes save()/isDirty()/undo()/redo() from the inline zone editor
+  const iconEditorRef = useRef(null);  // exposes save()/isDirty() from ICON mode (Task #2016)
+  // Save whichever zones editor has unsaved changes — TAP or ICON, only one is
+  // mounted — before Done, a screen switch or a Tap / Icon switch, so ICON
+  // placements are kept exactly as TAP zones always were (Task #2016).
+  const saveZoneDrafts = () => {
+    if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+    if (iconEditorRef.current?.isDirty?.()) iconEditorRef.current.save();
+  };
   const [removingBg, setRemovingBg] = useState(false);  // loading state for Remove BG
 
   // Keep activeScreenRef in sync with activeScreen state
@@ -946,11 +952,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
-  // ── AI panel state — the panel lives outside ScreenLinkEditor so it needs its
-  //    own proposal holder + review modal. Separate from ScreenLinkEditor's
-  //    toolbar AI flow so both entry points can coexist without fighting. ──
-  const [panelProposal, setPanelProposal] = useState(null);
-  const [panelAiBusy, setPanelAiBusy] = useState(false);
   // Missions modal (PR4). No per-episode context here — missions are show-scoped,
   // optionally per-episode, and that's picked inside the editor form.
   // Opened when activeTab === 'missions'; closing reverts to the Screens tab.
@@ -967,27 +968,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const previewStart = (activeScreen && isScreen(activeScreen) && activeScreen.generated && activeScreen.url)
     ? activeScreen
     : (overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && isScreen(o)) || null);
-
-  const handlePanelAddZones = async (hint) => {
-    if (!activeScreen?.asset_id || !showId || panelAiBusy) return;
-    setPanelAiBusy(true);
-    try {
-      const data = await handleRequestAiZones(hint);
-      if (data?.proposal) setPanelProposal(data);
-    } finally {
-      setPanelAiBusy(false);
-    }
-  };
-
-  // When the user approves a panel-generated proposal, merge the new zones with
-  // whatever the screen already has and save through the existing PUT.
-  const handleApprovePanelProposal = async () => {
-    if (!panelProposal?.proposal?.zones?.length || !activeScreen) return;
-    const existing = getScreenLinks(activeScreen);
-    const merged = [...existing, ...panelProposal.proposal.zones];
-    await handleSaveLinks(merged);
-    setPanelProposal(null);
-  };
 
   // Zone-level AI — called from ContentZoneEditor via prop. Returns the proposal;
   // the editor renders an inline Apply/Discard surface and applies on approve.
@@ -1489,7 +1469,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               const editableScreens = overlays.filter(o => o.generated && o.url && isScreen(o));
               const switchToScreen = (target) => {
                 if (!target || target.id === activeScreen.id) return;
-                if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                saveZoneDrafts();
                 setActiveScreen(target);
                 setNavHistory([]);
                 setFlowAudit(null);
@@ -1520,7 +1500,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               };
               const switchMode = (next) => {
                 if (zoneEditorMode === next) return;
-                if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                saveZoneDrafts();
                 setZoneEditorMode(next);
               };
               const focusIssue = (issue) => {
@@ -1529,7 +1509,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 if (targetScreen && targetScreen.id !== activeScreen.id) switchToScreen(targetScreen);
                 // Content issues live on their own top-level tab now.
                 if (issue.mode === 'content') {
-                  if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                  saveZoneDrafts();
                   setActiveTab('content');
                   setPendingIssueFocus({
                     screenId: issue.screenId || activeScreen.id,
@@ -1695,6 +1675,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         customFrameUrl={customFrameUrl}
                         sidePanel={iconSidePanel}
                         onDirtyChange={setIconZonesDirty}
+                        controlRef={iconEditorRef}
                       />
                     )}
                   </div>
@@ -1710,7 +1691,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           <span className="zones-unsaved" role="status">● Unsaved</span>
                         )}
                         <button onClick={() => {
-                          if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                          saveZoneDrafts();
                           setActiveTab('screens');
                           setNavHistory([]);
                         }} className="zone-editor-done-btn">
@@ -2043,19 +2024,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       )}
                     </div>
 
-                    {/* AI Assistant — screen-scoped, proposes tap zones for the
-                        active screen. */}
-                      {activeScreen?.url && !activeScreen.placeholder && (
-                        <div className="zones-tab__sidebar-card">
-                        <AIAssistantPanel
-                          scope="screen"
-                          scopeLabel={`Screen: ${activeScreen.name}`}
-                          activeScreen={activeScreen}
-                          onRunAddZones={handlePanelAddZones}
-                          busy={panelAiBusy}
-                        />
-                        </div>
-                      )}
+                    {/* The AI Assistant panel was removed from the zones
+                        workspace (Task #2016); its component and routes stay. */}
                     </div>
                 </div>
                 </div>
@@ -2330,6 +2300,21 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       <button onClick={handleSetHome} className={`editor-home-btn ${activeScreen.is_home ? 'is-home' : ''}`}>
                         {activeScreen.is_home ? '★ Home Screen' : 'Set as Home Screen'}
                       </button>
+                      {/* With no home marked, say where the phone opens instead —
+                          the first generated screen, as PhoneHub picks it (Task #2016). */}
+                      {(() => {
+                        const generated = overlays.filter(o => o.generated && o.url && isScreen(o));
+                        if (generated.some(o => o.is_home)) return null;
+                        const opensOn = generated[0];
+                        if (!opensOn) return null;
+                        return (
+                          <p className="editor-home-hint">
+                            {opensOn.id === activeScreen.id
+                              ? 'No home screen set — the phone opens on this screen'
+                              : `No home screen set — the phone opens on ${opensOn.name}`}
+                          </p>
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -2568,18 +2553,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         showId={showId}
         onClose={() => setActiveTab('screens')}
       />
-
-      {/* AI proposal from the Assistant panel — separate modal from the one
-          ScreenLinkEditor's toolbar button uses so both entry points work. */}
-      {panelProposal && (
-        <AIProposalReview
-          proposal={panelProposal.proposal}
-          contextSummary={panelProposal.context_summary}
-          busy={panelAiBusy}
-          onReject={() => setPanelProposal(null)}
-          onApprove={handleApprovePanelProposal}
-        />
-      )}
 
       {/* Preview Mode */}
       {previewMode && (
