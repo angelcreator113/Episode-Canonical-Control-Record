@@ -2,6 +2,18 @@ const { models } = require('../models');
 const { EpisodeWardrobe, Wardrobe, WardrobeLibrary, WardrobeUsageHistory, Episode } = models;
 const { NotFoundError, ValidationError } = require('../middleware/errorHandler');
 
+// Task #1926: src/models/index.js registers EpisodeWardrobe → Wardrobe as
+// 'wardrobeItem' (the only declaration). These responses have always named
+// the item `wardrobe`, so the key is kept on the way out.
+function withWardrobeKey(link) {
+  const data = link.toJSON();
+  if ('wardrobeItem' in data) {
+    data.wardrobe = data.wardrobeItem;
+    delete data.wardrobeItem;
+  }
+  return data;
+}
+
 /**
  * Wardrobe Approval Controller
  * Handles approval workflow for episode wardrobe items
@@ -26,7 +38,7 @@ module.exports = {
         include: [
           {
             model: Wardrobe,
-            as: 'wardrobe',
+            as: 'wardrobeItem',
             include: [
               {
                 model: WardrobeLibrary,
@@ -49,7 +61,7 @@ module.exports = {
       if (episodeWardrobe.approval_status === 'approved') {
         return res.json({
           success: true,
-          data: episodeWardrobe,
+          data: withWardrobeKey(episodeWardrobe),
           message: 'Item already approved',
         });
       }
@@ -63,11 +75,11 @@ module.exports = {
       });
 
       // Record in usage history
-      if (episodeWardrobe.wardrobe?.library_item_id) {
+      if (episodeWardrobe.wardrobeItem?.library_item_id) {
         await WardrobeUsageHistory.create({
-          libraryItemId: episodeWardrobe.wardrobe.library_item_id,
+          libraryItemId: episodeWardrobe.wardrobeItem.library_item_id,
           episodeId: episodeId,
-          showId: episodeWardrobe.episode?.showId,
+          showId: episodeWardrobe.episode?.show_id,
           usageType: 'approved',
           userId: approvedBy || req.user?.id || 'system',
           notes: notes || 'Item approved',
@@ -79,7 +91,7 @@ module.exports = {
         include: [
           {
             model: Wardrobe,
-            as: 'wardrobe',
+            as: 'wardrobeItem',
             include: [
               {
                 model: WardrobeLibrary,
@@ -92,7 +104,7 @@ module.exports = {
 
       res.json({
         success: true,
-        data: episodeWardrobe,
+        data: withWardrobeKey(episodeWardrobe),
         message: 'Wardrobe item approved successfully',
       });
     } catch (error) {
@@ -126,7 +138,7 @@ module.exports = {
         include: [
           {
             model: Wardrobe,
-            as: 'wardrobe',
+            as: 'wardrobeItem',
             include: [
               {
                 model: WardrobeLibrary,
@@ -154,11 +166,11 @@ module.exports = {
       });
 
       // Record in usage history
-      if (episodeWardrobe.wardrobe?.library_item_id) {
+      if (episodeWardrobe.wardrobeItem?.library_item_id) {
         await WardrobeUsageHistory.create({
-          libraryItemId: episodeWardrobe.wardrobe.library_item_id,
+          libraryItemId: episodeWardrobe.wardrobeItem.library_item_id,
           episodeId: episodeId,
-          showId: episodeWardrobe.episode?.showId,
+          showId: episodeWardrobe.episode?.show_id,
           usageType: 'rejected',
           userId: rejectedBy || req.user?.id || 'system',
           notes: reason,
@@ -170,7 +182,7 @@ module.exports = {
         include: [
           {
             model: Wardrobe,
-            as: 'wardrobe',
+            as: 'wardrobeItem',
             include: [
               {
                 model: WardrobeLibrary,
@@ -183,7 +195,7 @@ module.exports = {
 
       res.json({
         success: true,
-        data: episodeWardrobe,
+        data: withWardrobeKey(episodeWardrobe),
         message: 'Wardrobe item rejected',
       });
     } catch (error) {
@@ -215,7 +227,7 @@ module.exports = {
         include: [
           {
             model: Wardrobe,
-            as: 'wardrobe',
+            as: 'wardrobeItem',
             include: [
               {
                 model: WardrobeLibrary,
@@ -248,7 +260,7 @@ module.exports = {
             approvedBy: item.approved_by,
             approvedAt: item.approved_at,
             rejectionReason: item.rejection_reason,
-            wardrobe: item.wardrobe,
+            wardrobe: item.wardrobeItem,
           });
         }
       });
@@ -344,7 +356,7 @@ module.exports = {
                 {
                   libraryItemId: episodeWardrobe.wardrobeItem.library_item_id,
                   episodeId: episodeId,
-                  showId: episodeWardrobe.episode?.showId,
+                  showId: episodeWardrobe.episode?.show_id,
                   usageType: 'approved',
                   userId: approvedBy || req.user?.id || 'system',
                   notes: notes || 'Bulk approval',
