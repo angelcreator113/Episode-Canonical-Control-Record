@@ -111,6 +111,14 @@ export default function IconPlacementMode({
     }
   });
   const containerRef = useRef(null);
+  // A press that started on an icon (Task #2018). Pressing an icon captures
+  // the pointer on the phone, so the release and the click that follows land
+  // on the phone, not the icon: without this, every drop and every click on
+  // an icon reached handleTap as an empty-spot tap and opened the picker.
+  // { id, additive, moved } while pressed.
+  const pressRef = useRef(null);
+  // Set on the release of an icon press, cleared once that click has passed.
+  const suppressClickRef = useRef(false);
 
   // Sync when links prop changes (switching screens)
   useEffect(() => {
@@ -145,6 +153,8 @@ export default function IconPlacementMode({
 
   // Tap empty area → open icon picker at that position
   const handleTap = (e) => {
+    // The click that ends an icon press or drag is not an empty-spot tap.
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
     if (dragging) return;
     if (e.target.closest('[data-icon-id]')) return;
     const pos = getRelativePos(e);
@@ -178,6 +188,8 @@ export default function IconPlacementMode({
 
   const handleZoneClick = useCallback((e, id) => {
     e.stopPropagation();
+    // Where the click does reach the icon, the release already selected it.
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
     setShowPicker(false);
     if (multiSelectMode || e.metaKey || e.ctrlKey || e.shiftKey) {
       toggleSelected(id);
@@ -219,6 +231,10 @@ export default function IconPlacementMode({
       try { containerRef.current.setPointerCapture(e.pointerId); } catch {}
     }
     const pos = getRelativePos(e);
+    // A modifier key or Multi Select adds to the selection on release instead
+    // of replacing it, as a click on an icon always did.
+    const additive = multiSelectMode || e.metaKey || e.ctrlKey || e.shiftKey;
+    pressRef.current = { id: zone.id, additive, moved: false };
     const activeIds = isSelected(zone.id) ? Array.from(selectedIds) : [zone.id];
     const originById = Object.fromEntries(
       zones
@@ -226,8 +242,13 @@ export default function IconPlacementMode({
         .map(z => [z.id, { x: z.x, y: z.y }])
     );
     setDragging({ ids: activeIds, startX: pos.x, startY: pos.y, originById });
-    if (!isSelected(zone.id)) selectSingle(zone.id);
+    if (!additive && !isSelected(zone.id)) selectSingle(zone.id);
   };
+
+  // A press becomes a drag once the pointer has moved this far (in % of the
+  // screen); below it, it is a click, so a steady click neither moves nor
+  // snaps the icon.
+  const DRAG_THRESHOLD = 0.5;
 
   const handleDragMove = (e) => {
     if (!dragging) return;
@@ -235,6 +256,11 @@ export default function IconPlacementMode({
     const pos = getRelativePos(e);
     const deltaX = pos.x - dragging.startX;
     const deltaY = pos.y - dragging.startY;
+    const press = pressRef.current;
+    if (press && !press.moved) {
+      if (Math.abs(deltaX) < DRAG_THRESHOLD && Math.abs(deltaY) < DRAG_THRESHOLD) return;
+      press.moved = true;
+    }
     setZones(prev => prev.map(z => {
       if (!dragging.ids.includes(z.id)) return z;
       const origin = dragging.originById[z.id];
@@ -248,13 +274,35 @@ export default function IconPlacementMode({
   };
 
   const handleDragEnd = (e) => {
-    if (e?.target?.releasePointerCapture && e?.pointerId !== undefined) {
-      try { e.target.releasePointerCapture(e.pointerId); } catch {}
+    // Release from the element that captured the pointer (the phone).
+    if (containerRef.current?.releasePointerCapture && e?.pointerId !== undefined) {
+      try {
+        if (!containerRef.current.hasPointerCapture || containerRef.current.hasPointerCapture(e.pointerId)) {
+          containerRef.current.releasePointerCapture(e.pointerId);
+        }
+      } catch (err) {
+        console.warn('[IconPlacementMode] releasePointerCapture failed:', err.message);
+      }
     }
-    if (dragging && gridSnap) {
+    const press = pressRef.current;
+    pressRef.current = null;
+    if (dragging && gridSnap && (!press || press.moved)) {
       setZones(prev => prev.map(z => dragging.ids.includes(z.id) ? snapZoneToGrid(z) : z));
     }
     setDragging(null);
+    if (press) {
+      // The click that follows this release lands on the phone, not the
+      // icon; it must not open the picker. Cleared after the click has had
+      // its turn, so a later empty-spot tap still works.
+      suppressClickRef.current = true;
+      setTimeout(() => { suppressClickRef.current = false; }, 0);
+      if (!press.moved) {
+        // A click on an icon: select it, as the icon's own click would have.
+        setShowPicker(false);
+        if (press.additive) toggleSelected(press.id);
+        else selectSingle(press.id);
+      }
+    }
   };
 
   const updateZone = (id, changes) => {
@@ -671,7 +719,7 @@ export default function IconPlacementMode({
               position: 'absolute',
               left: `${zone.x}%`, top: `${zone.y}%`,
               width: `${zone.w}%`, height: `${zone.h}%`,
-              cursor: dragging?.id === zone.id ? 'grabbing' : 'grab',
+              cursor: dragging?.ids?.includes(zone.id) ? 'grabbing' : 'grab',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               borderRadius: 6,
               border: isSelected(zone.id) ? '2px solid #B8962E' : '1px solid transparent',
