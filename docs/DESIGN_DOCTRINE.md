@@ -136,6 +136,25 @@ its own task.
 opening Preview Phone today creates a playthrough row
 (`docs/PHONE_RENDERER_READ.md` §5), so an always-visible phone must not.
 
+**17. Placements store identity, not image state.** Ruled by Evoni on
+2026-09-26, verbatim: "Phone icon placements reference a stable icon
+type/key. Rendering resolves the current icon asset at draw time. Asset
+mutations—including Change Image, Generate, and Remove Background—must not
+rewrite, create, delete, or reposition placements. Changing an image does
+not auto-place an icon. Selecting an icon preserves the active phone screen
+and highlights its placement(s) on that screen. Background-removal status
+reflects the actual processed asset state, and success messaging appears
+only after processing succeeds. Existing legacy placements that contain
+only image URLs are migrated/resolved to stable icon keys where possible."
+In plain words: a new icon is created in the icon library and placed
+deliberately; it is never auto-placed ("Create & Place" may be added later
+as an explicit action). Background status is one of Original, Removing…,
+Removed or Failed, with Retry on failure. The original upload and its
+processed derivative stay distinguishable. The read behind this is
+`docs/PHONE_ICONS_READ.md`.
+*Why:* a placement holding a copy of an image goes stale on every image
+change.
+
 ---
 
 ## Not decided here
