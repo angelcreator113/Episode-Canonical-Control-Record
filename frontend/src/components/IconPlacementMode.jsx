@@ -11,8 +11,14 @@
  *   onSave(links)    — callback to persist
  *   screenTypes      — for target picker
  *   generatedScreenKeys — set of screen keys that have images
+ *   sidePanel        — optional DOM element beside the phone (Task #2014). When
+ *                      given, the icon picker, the batch and selected-icon
+ *                      panels and the Save button render there instead of
+ *                      below the phone, so the picker is in view as you tap.
+ *   onDirtyChange(dirty) — optional; told when unsaved changes appear or clear.
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Grid3x3, Save, Trash2, X, Pin } from 'lucide-react';
 import PhoneFrame from './phone/PhoneFrame';
 import { resolveZoneIcon } from '../lib/overlayUtils';
@@ -78,6 +84,8 @@ export default function IconPlacementMode({
   // world map sit. Mirror of the screen-link ghosts in ContentZoneEditor.
   contentZones = [],
   showId,
+  sidePanel = null,
+  onDirtyChange,
 }) {
   const [zones, setZones] = useState(links);
   const [selectedId, setSelectedId] = useState(null);
@@ -114,6 +122,11 @@ export default function IconPlacementMode({
       localStorage.setItem('phone_hub_icon_grid_snap', gridSnap ? '1' : '0');
     } catch {}
   }, [gridSnap]);
+
+  // Report unsaved changes to the workspace (its "Unsaved" marker), and
+  // clear them when this editor goes away.
+  useEffect(() => { if (onDirtyChange) onDirtyChange(isDirty); }, [isDirty, onDirtyChange]);
+  useEffect(() => () => { if (onDirtyChange) onDirtyChange(false); }, [onDirtyChange]);
 
   const getRelativePos = useCallback((e) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -310,6 +323,195 @@ export default function IconPlacementMode({
   const selected = selectedId ? zones.find(z => z.id === selectedId) : null;
   const selectionCount = selectedIds.size;
   const showBatchActions = selectionCount > 1;
+
+  const panels = (
+    <>
+      {/* Icon picker — shows when tapping the screen. Surfaces both the icon
+          grid and a target-screen dropdown so placement and linking are a
+          single action. Target is optional and can be changed later from
+          the selected-icon panel below. */}
+      {showPicker && (
+        <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+              PICK AN ICON + WHERE IT OPENS
+            </span>
+            <button onClick={() => { setShowPicker(false); setPendingPos(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4 }}>
+              <X size={16} />
+            </button>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: '0.05em', marginBottom: 4, textTransform: 'uppercase' }}>
+              Opens screen
+            </label>
+            <select
+              value={pendingTarget}
+              onChange={(e) => setPendingTarget(e.target.value)}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, background: '#fff' }}
+            >
+              <option value="">— No target (set later) —</option>
+              {screenTypes.map(st => (
+                <option key={st.key} value={st.key}>
+                  {st.icon} {st.label}{generatedScreenKeys?.has(st.key) ? ' ✓' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          {iconOverlays.length > 0 ? (
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))',
+              gap: 6, maxHeight: 180, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+            }}>
+              {iconOverlays.map(ico => (
+                <button
+                  key={ico.id}
+                  onClick={() => handlePickIcon(ico)}
+                  title={ico.name}
+                  style={{
+                    width: '100%', aspectRatio: '1/1', borderRadius: 8,
+                    border: '1px solid #e0d9ce', background: '#fff',
+                    cursor: 'pointer', padding: 4,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+                  }}
+                >
+                  <img src={ico.url} alt={ico.name} style={{ width: '100%', flex: 1, objectFit: 'contain', borderRadius: 4 }} draggable={false} />
+                  <span style={{ fontSize: 7, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center', lineHeight: 1 }}>
+                    {(ico.name || '').replace(/\s*Icon$/i, '')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: '#999', padding: '12px 0', textAlign: 'center' }}>
+              No icon overlays uploaded yet. Create icons first.
+            </div>
+          )}
+        </div>
+      )}
+
+      {showBatchActions && !showPicker && (
+        <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+              {selectionCount} ICONS SELECTED
+            </span>
+            <button onClick={clearSelection} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4, display: 'flex', alignItems: 'center' }}>
+              <X size={16} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+            <button onClick={handleMakeRow} style={batchBtnStyle}>Make Row</button>
+            <button onClick={handleMakeColumn} style={batchBtnStyle}>Make Column</button>
+            <button onClick={handleSnapSelected} style={batchBtnStyle}>Snap Selected</button>
+            <button onClick={removeSelected} style={{ ...batchBtnStyle, color: '#B84D2E', borderColor: '#f3c5b8' }}>Delete Selected</button>
+          </div>
+          <div style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace", lineHeight: 1.5 }}>
+            Ctrl/Cmd-click icons, or turn on Multi Select, then drag a selected icon to move the whole group.
+          </div>
+        </div>
+      )}
+
+      {/* Selected icon controls */}
+      {selected && !showPicker && !showBatchActions && (
+        <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {resolveZoneIcon(selected, iconOverlays) && <img src={resolveZoneIcon(selected, iconOverlays)} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />}
+            <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{selected.label || 'Untitled'}</span>
+            <button onClick={() => removeZone(selected.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: 4 }}>
+              <Trash2 size={16} />
+            </button>
+          </div>
+
+          {/* Label + Target */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <input
+              value={selected.label || ''}
+              onChange={(e) => updateZone(selected.id, { label: e.target.value })}
+              placeholder="Label"
+              style={{ flex: 1, padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, minWidth: 100 }}
+            />
+            <select
+              value={selected.target || ''}
+              onChange={(e) => updateZone(selected.id, { target: e.target.value })}
+              style={{ flex: 1, padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, minWidth: 100 }}
+            >
+              <option value="">— Target —</option>
+              {screenTypes.map(st => (
+                <option key={st.key} value={st.key}>
+                  {st.icon} {st.label}{generatedScreenKeys?.has(st.key) ? ' ✓' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Size */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                <span style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>Width</span>
+                <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(selected.w)}%</span>
+              </div>
+              <input type="range" min={3} max={30} value={Math.round(selected.w)} onChange={e => { const w = parseInt(e.target.value); updateZone(selected.id, { w, x: clamp(selected.x, 0, 100 - w) }); }}
+                style={{ width: '100%', height: 4, cursor: 'pointer' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                <span style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>Height</span>
+                <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(selected.h)}%</span>
+              </div>
+              <input type="range" min={3} max={30} value={Math.round(selected.h)} onChange={e => { const h = parseInt(e.target.value); updateZone(selected.id, { h, y: clamp(selected.y, 0, 100 - h) }); }}
+                style={{ width: '100%', height: 4, cursor: 'pointer' }} />
+            </div>
+          </div>
+
+          {gridSnap && (
+            <button
+              type="button"
+              onClick={() => updateZone(selected.id, snapZoneToGrid(selected))}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                padding: '8px 12px', fontSize: 12, fontWeight: 600,
+                border: '1px solid #e0d9ce', borderRadius: 6,
+                background: '#fff', color: '#6B6557', cursor: 'pointer', minHeight: 36,
+              }}
+            >
+              <Grid3x3 size={12} /> Snap this icon to grid
+            </button>
+          )}
+
+          {/* Pin toggle */}
+          <button
+            onClick={() => updateZone(selected.id, { persistent: !selected.persistent })}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+              padding: '8px 12px', fontSize: 12, fontWeight: 600,
+              border: `1px solid ${selected.persistent ? '#B8962E' : '#e0d9ce'}`,
+              borderRadius: 6, cursor: 'pointer', minHeight: 36,
+              background: selected.persistent ? '#fdf8ee' : '#fff',
+              color: selected.persistent ? '#B8962E' : '#888',
+            }}
+          >
+            <Pin size={12} /> {selected.persistent ? 'Pinned — shows on all screens' : 'Pin to all screens'}
+          </button>
+        </div>
+      )}
+
+      {/* Save button */}
+      {isDirty && (
+        <button
+          onClick={handleSave}
+          style={{
+            padding: '12px 16px', fontSize: 14, fontWeight: 600, border: 'none',
+            borderRadius: 8, background: '#B8962E', color: '#fff', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44,
+            width: '100%',
+          }}
+        >
+          <Save size={16} /> Save Icon Placement
+        </button>
+      )}
+    </>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -508,190 +710,9 @@ export default function IconPlacementMode({
       </PhoneFrame>
       </div>
 
-      {/* Icon picker — shows when tapping the screen. Surfaces both the icon
-          grid and a target-screen dropdown so placement and linking are a
-          single action. Target is optional and can be changed later from
-          the selected-icon panel below. */}
-      {showPicker && (
-        <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
-              PICK AN ICON + WHERE IT OPENS
-            </span>
-            <button onClick={() => { setShowPicker(false); setPendingPos(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4 }}>
-              <X size={16} />
-            </button>
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: '0.05em', marginBottom: 4, textTransform: 'uppercase' }}>
-              Opens screen
-            </label>
-            <select
-              value={pendingTarget}
-              onChange={(e) => setPendingTarget(e.target.value)}
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, background: '#fff' }}
-            >
-              <option value="">— No target (set later) —</option>
-              {screenTypes.map(st => (
-                <option key={st.key} value={st.key}>
-                  {st.icon} {st.label}{generatedScreenKeys?.has(st.key) ? ' ✓' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          {iconOverlays.length > 0 ? (
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))',
-              gap: 6, maxHeight: 180, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-            }}>
-              {iconOverlays.map(ico => (
-                <button
-                  key={ico.id}
-                  onClick={() => handlePickIcon(ico)}
-                  title={ico.name}
-                  style={{
-                    width: '100%', aspectRatio: '1/1', borderRadius: 8,
-                    border: '1px solid #e0d9ce', background: '#fff',
-                    cursor: 'pointer', padding: 4,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
-                  }}
-                >
-                  <img src={ico.url} alt={ico.name} style={{ width: '100%', flex: 1, objectFit: 'contain', borderRadius: 4 }} draggable={false} />
-                  <span style={{ fontSize: 7, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center', lineHeight: 1 }}>
-                    {(ico.name || '').replace(/\s*Icon$/i, '')}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: 12, color: '#999', padding: '12px 0', textAlign: 'center' }}>
-              No icon overlays uploaded yet. Create icons first.
-            </div>
-          )}
-        </div>
-      )}
-
-      {showBatchActions && !showPicker && (
-        <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
-              {selectionCount} ICONS SELECTED
-            </span>
-            <button onClick={clearSelection} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4, display: 'flex', alignItems: 'center' }}>
-              <X size={16} />
-            </button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
-            <button onClick={handleMakeRow} style={batchBtnStyle}>Make Row</button>
-            <button onClick={handleMakeColumn} style={batchBtnStyle}>Make Column</button>
-            <button onClick={handleSnapSelected} style={batchBtnStyle}>Snap Selected</button>
-            <button onClick={removeSelected} style={{ ...batchBtnStyle, color: '#B84D2E', borderColor: '#f3c5b8' }}>Delete Selected</button>
-          </div>
-          <div style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace", lineHeight: 1.5 }}>
-            Ctrl/Cmd-click icons, or turn on Multi Select, then drag a selected icon to move the whole group.
-          </div>
-        </div>
-      )}
-
-      {/* Selected icon controls */}
-      {selected && !showPicker && !showBatchActions && (
-        <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {resolveZoneIcon(selected, iconOverlays) && <img src={resolveZoneIcon(selected, iconOverlays)} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />}
-            <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{selected.label || 'Untitled'}</span>
-            <button onClick={() => removeZone(selected.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: 4 }}>
-              <Trash2 size={16} />
-            </button>
-          </div>
-
-          {/* Label + Target */}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <input
-              value={selected.label || ''}
-              onChange={(e) => updateZone(selected.id, { label: e.target.value })}
-              placeholder="Label"
-              style={{ flex: 1, padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, minWidth: 100 }}
-            />
-            <select
-              value={selected.target || ''}
-              onChange={(e) => updateZone(selected.id, { target: e.target.value })}
-              style={{ flex: 1, padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, minWidth: 100 }}
-            >
-              <option value="">— Target —</option>
-              {screenTypes.map(st => (
-                <option key={st.key} value={st.key}>
-                  {st.icon} {st.label}{generatedScreenKeys?.has(st.key) ? ' ✓' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Size */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                <span style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>Width</span>
-                <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(selected.w)}%</span>
-              </div>
-              <input type="range" min={3} max={30} value={Math.round(selected.w)} onChange={e => updateZone(selected.id, { w: parseInt(e.target.value) })}
-                style={{ width: '100%', height: 4, cursor: 'pointer' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-                <span style={{ fontSize: 10, color: '#999', fontFamily: "'DM Mono', monospace" }}>Height</span>
-                <span style={{ fontSize: 10, color: '#666', fontFamily: "'DM Mono', monospace" }}>{Math.round(selected.h)}%</span>
-              </div>
-              <input type="range" min={3} max={30} value={Math.round(selected.h)} onChange={e => updateZone(selected.id, { h: parseInt(e.target.value) })}
-                style={{ width: '100%', height: 4, cursor: 'pointer' }} />
-            </div>
-          </div>
-
-          {gridSnap && (
-            <button
-              type="button"
-              onClick={() => updateZone(selected.id, snapZoneToGrid(selected))}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                padding: '8px 12px', fontSize: 12, fontWeight: 600,
-                border: '1px solid #e0d9ce', borderRadius: 6,
-                background: '#fff', color: '#6B6557', cursor: 'pointer', minHeight: 36,
-              }}
-            >
-              <Grid3x3 size={12} /> Snap this icon to grid
-            </button>
-          )}
-
-          {/* Pin toggle */}
-          <button
-            onClick={() => updateZone(selected.id, { persistent: !selected.persistent })}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-              padding: '8px 12px', fontSize: 12, fontWeight: 600,
-              border: `1px solid ${selected.persistent ? '#B8962E' : '#e0d9ce'}`,
-              borderRadius: 6, cursor: 'pointer', minHeight: 36,
-              background: selected.persistent ? '#fdf8ee' : '#fff',
-              color: selected.persistent ? '#B8962E' : '#888',
-            }}
-          >
-            <Pin size={12} /> {selected.persistent ? 'Pinned — shows on all screens' : 'Pin to all screens'}
-          </button>
-        </div>
-      )}
-
-      {/* Save button */}
-      {isDirty && (
-        <button
-          onClick={handleSave}
-          style={{
-            padding: '12px 16px', fontSize: 14, fontWeight: 600, border: 'none',
-            borderRadius: 8, background: '#B8962E', color: '#fff', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44,
-            width: '100%',
-          }}
-        >
-          <Save size={16} /> Save Icon Placement
-        </button>
-      )}
+      {/* Beside the phone when the workspace gives a side panel (Task #2014);
+          otherwise below it, as before. */}
+      {sidePanel ? createPortal(<div className="icon-placement-side">{panels}</div>, sidePanel) : panels}
 
       {/* Summary */}
       <div style={{ fontSize: 11, color: '#aaa', fontFamily: "'DM Mono', monospace", textAlign: 'center' }}>

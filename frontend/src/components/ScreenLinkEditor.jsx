@@ -20,13 +20,14 @@
  */
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader, Sparkles, ChevronLeft } from 'lucide-react';
-import { getIconUrls, resolveZoneIcon, resolveZoneIconKey } from '../lib/overlayUtils';
+import { getIconUrls, resolveZoneIcon, resolveZoneIconKey, pickZoneLibraryIcon } from '../lib/overlayUtils';
 import { getScreenImageStyle, PHONE_SKINS } from './phone/phoneStyle';
 import ScreenContentRenderer from './ScreenContentRenderer';
 import ZoneBadges from './phone-editor/ZoneBadges';
 import ConditionRow from './phone-editor/ConditionRow';
 import ActionRow from './phone-editor/ActionRow';
 import AIProposalReview from './phone-editor/AIProposalReview';
+import ZoneIconPicker, { ZoneIconSummary } from './phone-editor/ZoneIconPicker';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
@@ -41,12 +42,15 @@ const snapZone = (z, enabled) => {
   if (!enabled) return z;
   const colW = 100 / GRID_COLS;
   const rowH = 100 / GRID_ROWS;
+  const w = Math.min(100, Math.max(colW, snap(z.w, colW)));
+  const h = Math.min(100, Math.max(rowH, snap(z.h, rowH)));
+  // Snapping never pushes a zone past the screen's edge (Task #2014).
   return {
     ...z,
-    x: Math.max(0, Math.min(100, snap(z.x, colW))),
-    y: Math.max(0, Math.min(100, snap(z.y, rowH))),
-    w: Math.max(colW, snap(z.w, colW)),
-    h: Math.max(rowH, snap(z.h, rowH)),
+    x: Math.max(0, Math.min(100 - w, snap(z.x, colW))),
+    y: Math.max(0, Math.min(100 - h, snap(z.y, rowH))),
+    w,
+    h,
   };
 };
 
@@ -198,6 +202,9 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     addDefaultZone,
     setSelectedZone: (id) => setSelectedZone(id || null),
     updateZone: (id, changes) => updateZone(id, changes),
+    // The workspace's Tap Zones panel uploads a per-zone image through this
+    // editor's file input (Task #2014).
+    uploadIcon: (id) => handleIconUpload(id),
     removeZone: (id) => removeZone(id),
     transformZones: (kind) => transformZones(kind),
     undo,
@@ -771,8 +778,15 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
               const isSel = selectedZone === zone.id;
               const isHovered = hoveredZoneId === zone.id;
               const showOutline = !preview && (showSafeArea || isSel || isHovered);
+              // A zone with no icon keeps a dashed outline around its label, so it
+              // reads as a zone rather than stray text (Task #2014).
+              const noIcon = !resolveZoneIcon(zone, iconOverlays);
               let border = 'none';
               let background = 'transparent';
+              if (!showOutline && !preview && noIcon) {
+                border = '1.5px dashed rgba(255,255,255,0.85)';
+                background = 'rgba(0,0,0,0.18)';
+              }
               if (showOutline) {
                 if (isSel) {
                   border = '2px solid #B8962E';
@@ -984,10 +998,10 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: selectedZone === zone.id ? 10 : 0 }}>
                   <div style={{ width: 10, height: 10, borderRadius: 3, background: ZONE_COLORS[i % ZONE_COLORS.length], flexShrink: 0 }} />
                   {zone.persistent && <Pin size={12} color="#B8962E" style={{ flexShrink: 0 }} />}
-                  {getIconUrls(zone).slice(0, 3).map((url, idx) => (
-                    <img key={idx} src={url} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: 'contain', marginLeft: idx > 0 ? -4 : 0, padding: 2, background: '#fafafa', border: '1px solid #f0ece4' }} />
-                  ))}
-                  {getIconUrls(zone).length > 3 && <span style={{ fontSize: 10, color: '#aaa', fontFamily: "'DM Mono', monospace" }}>+{getIconUrls(zone).length - 3}</span>}
+                  {/* The icon the zone draws — its library icon's current image, looked up by key. */}
+                  {resolveZoneIcon(zone, iconOverlays) && (
+                    <img src={resolveZoneIcon(zone, iconOverlays)} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: 'contain', padding: 2, background: '#fafafa', border: '1px solid #f0ece4' }} />
+                  )}
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <span style={{
                       fontFamily: "'Lora', serif",
@@ -1117,133 +1131,18 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
                         />
                       ))}
                     </div>
-                    {/* Icons — selected row (if any) + always-visible picker with Upload as the first tile.
-                        Clicking a library tile toggles it on/off. Clicking the Upload tile opens the
-                        file picker; uploads auto-save any drawn zones first so local work isn't wiped. */}
-                    <div>
-                      {/* Header row — shows count + Clear All when any icons are attached */}
-                      {getIconUrls(zone).length > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
-                            ICONS ({getIconUrls(zone).length})
-                          </span>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); updateZone(zone.id, { icon_urls: [], icon_url: null }); }}
-                            style={{ padding: '4px 8px', fontSize: 10, fontWeight: 600, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: '#dc2626', fontFamily: "'DM Mono', monospace" }}
-                          >
-                            Clear all
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Selected icons row — small chips with remove button. Only shown when zone has icons. */}
-                      {getIconUrls(zone).length > 0 && (
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-                          {getIconUrls(zone).map((url, idx) => (
-                            <div key={idx} style={{ position: 'relative' }}>
-                              <img src={url} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'contain', padding: 3, background: '#fafafa', border: '1px solid #e0d9ce' }} />
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const updated = getIconUrls(zone).filter(u => u !== url);
-                                  updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null });
-                                }}
-                                aria-label="Remove icon"
-                                style={{ position: 'absolute', top: -5, right: -5, width: 16, height: 16, borderRadius: 8, background: '#dc2626', color: '#fff', border: '1.5px solid #fff', cursor: 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}
-                              >×</button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Always-visible picker. First tile is Upload (creates new icon); rest are
-                          library icons. Clicking a library icon toggles on/off; a gold check mark
-                          indicates selection. */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
-                          {getIconUrls(zone).length === 0 ? 'ADD AN ICON' : 'ADD ANOTHER'}
-                        </span>
-                        {/* Diagnostic: surface the library count so "where are my icons?" is obvious.
-                            If this says "3 in library" but you expected more, some icons are missing
-                            a URL or category — go to the screen grid and check their status dots. */}
-                        <span style={{ fontSize: 9, color: '#b0a890', fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
-                          {uniqueIcons.length} in library
-                        </span>
-                      </div>
-                      <div style={{
-                        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))',
-                        gap: 6, padding: 2,
-                      }}>
-                        {/* Upload tile — always first so it's easy to find */}
-                        <button
-                          onClick={() => handleIconUpload(zone.id)}
-                          disabled={uploadingForZone === zone.id}
-                          title="Upload a custom icon"
-                          style={{
-                            position: 'relative',
-                            width: '100%', aspectRatio: '1/1', borderRadius: 8,
-                            border: '1px dashed #B8962E',
-                            background: uploadingForZone === zone.id ? '#fdf8ee' : '#fafaf5',
-                            cursor: uploadingForZone === zone.id ? 'wait' : 'pointer',
-                            padding: 6,
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
-                            color: '#B8962E',
-                            transition: 'background 0.15s',
-                          }}
-                        >
-                          {uploadingForZone === zone.id ? (
-                            <Loader size={18} className="spin" />
-                          ) : (
-                            <Upload size={16} />
-                          )}
-                          <span style={{ fontSize: 8, fontWeight: 700, fontFamily: "'DM Mono', monospace", letterSpacing: 0.3 }}>
-                            {uploadingForZone === zone.id ? 'UPLOADING' : 'UPLOAD'}
-                          </span>
-                        </button>
-                        {uniqueIcons.map(ico => {
-                          const isSelected = getIconUrls(zone).includes(ico.url);
-                          return (
-                            <button
-                              key={ico.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const current = getIconUrls(zone);
-                                const updated = isSelected
-                                  ? current.filter(u => u !== ico.url)
-                                  : [...current, ico.url];
-                                // Auto-fill label from icon name if zone has no label yet —
-                                // saves a step and matches what the icon visually represents.
-                                const cleanName = (ico.name || '').replace(/\s*Icon$/i, '').trim();
-                                const labelUpdate = !zone.label && !isSelected && cleanName ? { label: cleanName } : {};
-                                // Auto-fill target from the icon's `opens_screen` field so the
-                                // "this icon opens X" info creators set at icon-creation time
-                                // is inherited by any tap zone that uses the icon. Only applied
-                                // when the zone doesn't already have a target (don't overwrite
-                                // intentional per-zone targets) and only when this is the
-                                // selection, not a deselection.
-                                const targetUpdate = !zone.target && !isSelected && ico.opens_screen ? { target: ico.opens_screen } : {};
-                                updateZone(zone.id, { icon_urls: updated, icon_url: updated[0] || null, ...labelUpdate, ...targetUpdate });
-                              }}
-                              title={ico.name}
-                              style={{
-                                position: 'relative',
-                                width: '100%', aspectRatio: '1/1', borderRadius: 8,
-                                border: isSelected ? '2px solid #B8962E' : '1px solid #e0d9ce',
-                                background: isSelected ? '#fdf8ee' : '#fff',
-                                cursor: 'pointer', padding: 6,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              }}
-                            >
-                              <img src={ico.url} alt={ico.name} style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 3 }} draggable={false} />
-                              {isSelected && (
-                                <div style={{ position: 'absolute', top: 3, right: 3, width: 16, height: 16, borderRadius: 8, background: '#B8962E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  <Check size={10} color="#fff" strokeWidth={3} />
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
+                    {/* Icon — one line saying what the zone draws, then the grid: Upload
+                        tile first, then the library. Picking a library icon stores its key
+                        at once (doctrine rule 17, Task #2014); picking it again removes it. */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <ZoneIconSummary zone={zone} icons={iconOverlays} />
+                      <ZoneIconPicker
+                        zone={zone}
+                        icons={iconOverlays}
+                        onPick={(ico) => updateZone(zone.id, pickZoneLibraryIcon(zone, ico, iconOverlays))}
+                        onUpload={() => handleIconUpload(zone.id)}
+                        uploading={uploadingForZone === zone.id}
+                      />
                       {uniqueIcons.length === 0 && (
                         <div style={{ fontSize: 10, color: '#999', textAlign: 'center', padding: '8px 0', fontFamily: "'DM Mono', monospace", lineHeight: 1.5 }}>
                           No library icons yet — upload one or create via "+ New Icon" in the toolbar

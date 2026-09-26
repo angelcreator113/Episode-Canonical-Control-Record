@@ -1,0 +1,121 @@
+/* ZoneIconPicker / ZoneIconSummary — a tap zone's icon (Task #2014). */
+
+.zone-icon-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  font-family: var(--font-ui, 'DM Mono', monospace);
+  color: var(--lala-ink, #2C2C2C);
+}
+
+.zone-icon-summary--none {
+  color: var(--lala-ink-muted, #888);
+}
+
+.zone-icon-summary__thumb {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  object-fit: contain;
+  padding: 2px;
+  border-radius: 5px;
+  background: #fafafa;
+  border: 1px solid #f0ece4;
+  box-sizing: border-box;
+}
+
+.zone-icon-summary__thumb--empty {
+  display: inline-block;
+  border-style: dashed;
+  border-color: var(--lala-ink-faint, #bbb);
+  background: transparent;
+}
+
+.zone-icon-summary__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-icon-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #888;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.3px;
+}
+
+.zone-icon-picker__count {
+  font-size: 9px;
+  font-weight: 400;
+  color: #b0a890;
+}
+
+.zone-icon-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 6px;
+  padding: 2px;
+}
+
+.zone-icon-picker__tile {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid #e0d9ce;
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zone-icon-picker__tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 3px;
+}
+
+.zone-icon-picker__tile--selected {
+  border: 2px solid #B8962E;
+  background: #fdf8ee;
+}
+
+.zone-icon-picker__tile--upload {
+  flex-direction: column;
+  gap: 3px;
+  border: 1px dashed #B8962E;
+  background: #fafaf5;
+  color: #B8962E;
+  font-size: 8px;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.3px;
+}
+
+.zone-icon-picker__tile--upload:disabled {
+  cursor: wait;
+  background: #fdf8ee;
+}
+
+.zone-icon-picker__check {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: #B8962E;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

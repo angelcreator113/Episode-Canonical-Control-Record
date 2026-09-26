@@ -132,3 +132,71 @@ export const withResolvedIconKey = (zone, icons = []) => {
   const key = resolveZoneIconKey(zone, icons);
   return key ? { ...zone, icon_overlay_id: key } : zone;
 };
+
+// ── Zone icons and bounds in the zones workspace (Task #2014) ─────────────
+
+/**
+ * What a zone's icon is, as its row describes it: a library icon it resolves
+ * to by key (doctrine rule 17), a per-zone image ("Custom image") or none.
+ * Returns { kind: 'library', key, icon, url } | { kind: 'custom', url } |
+ * { kind: 'none' }.
+ */
+export const describeZoneIcon = (zone, icons = []) => {
+  const key = resolveZoneIconKey(zone, icons);
+  if (key) {
+    const icon = (icons || []).find(i => i.id === key && isIcon(i)) || null;
+    return { kind: 'library', key, icon, url: icon?.url || zone?.icon_url || null };
+  }
+  const url = zone?.icon_url || getIconUrls(zone || {})[0] || null;
+  return url ? { kind: 'custom', url } : { kind: 'none' };
+};
+
+/**
+ * The changes that pick a library icon for a zone (doctrine rule 17): the
+ * icon's key is stored at once, and it becomes the zone's one icon. Picking
+ * the icon the zone already has removes it. A zone with no label or no
+ * target takes the icon's name and `opens_screen`, as the grid always has.
+ */
+export const pickZoneLibraryIcon = (zone, icon, icons = []) => {
+  if (!zone || !icon) return {};
+  if (resolveZoneIconKey(zone, icons) === icon.id) {
+    return { icon_overlay_id: undefined, icon_url: null, icon_urls: [] };
+  }
+  const cleanName = (icon.name || '').replace(/\s*Icon$/i, '').trim();
+  return {
+    icon_overlay_id: icon.id,
+    icon_url: icon.url || null,
+    icon_urls: icon.url ? [icon.url] : [],
+    ...(!zone.label && cleanName ? { label: cleanName } : {}),
+    ...(!zone.target && icon.opens_screen ? { target: icon.opens_screen } : {}),
+  };
+};
+
+/** Size given to a zone whose own size is missing, zero or negative (one icon cell). */
+export const ZONE_DEFAULT_SIZE = { w: 12, h: 9 };
+
+const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
+
+/** True when a zone's box isn't wholly inside the screen (0–100 on both axes) or has no usable size. */
+export const isZoneOutOfBounds = (zone) => {
+  if (!zone) return false;
+  const { x, y, w, h } = zone;
+  if (![x, y, w, h].every(isFiniteNumber)) return true;
+  if (w <= 0 || h <= 0) return true;
+  if (x < 0 || y < 0) return true;
+  return (x + w) > 100 || (y + h) > 100;
+};
+
+/**
+ * A zone moved inside the screen: its position is clamped into 0–100 and its
+ * size is kept unless it must change — larger than the screen shrinks to fit;
+ * missing, zero or negative takes ZONE_DEFAULT_SIZE.
+ */
+export const moveZoneInside = (zone) => {
+  if (!zone) return zone;
+  const size = (v, fallback) => (isFiniteNumber(v) && v > 0 ? Math.min(v, 100) : fallback);
+  const w = size(zone.w, ZONE_DEFAULT_SIZE.w);
+  const h = size(zone.h, ZONE_DEFAULT_SIZE.h);
+  const pos = (v, max) => Math.max(0, Math.min(max, isFiniteNumber(v) ? v : 0));
+  return { ...zone, x: pos(zone.x, 100 - w), y: pos(zone.y, 100 - h), w, h };
+};
