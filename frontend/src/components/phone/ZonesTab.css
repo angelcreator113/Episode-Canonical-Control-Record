@@ -691,3 +691,76 @@
   color: var(--lala-ink-faint);
   cursor: not-allowed;
 }
+
+/* ============================================
+   CONNECT REPAIR (Task #2014)
+   ============================================ */
+
+/* Each Tap Zones row: the zone's icon on one line, the grid on demand. */
+.zones-tap-row__icon {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.zones-tap-row__icon-picker {
+  grid-column: 1 / -1;
+  padding: 8px 2px 4px;
+  border-top: 1px solid var(--lala-parchment-3);
+}
+
+/* "Unsaved" beside Done. */
+.zones-unsaved {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-ui);
+  letter-spacing: 0.04em;
+  color: var(--lala-gold);
+  white-space: nowrap;
+}
+
+/* ICON mode's picker and icon panels, beside the phone. Empty when there is
+   nothing to show. */
+.zones-tab__icon-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.zones-tab__icon-panel:empty {
+  display: none;
+}
+
+.icon-placement-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Screen health: an issue with a one-click fix. */
+.zones-health__item--fixable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.zones-health__fix {
+  flex-shrink: 0;
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-ui);
+  color: var(--lala-gold);
+  background: var(--lala-gold-soft);
+  border: 1px solid var(--lala-gold);
+  border-radius: var(--lala-radius);
+  cursor: pointer;
+}

@@ -13,12 +13,13 @@ import PhoneHub from '../components/PhoneHub';
 import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import IconPlacementMode from '../components/IconPlacementMode';
-import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey } from '../lib/overlayUtils';
+import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey, pickZoneLibraryIcon, isZoneOutOfBounds, moveZoneInside } from '../lib/overlayUtils';
 import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
 import AIProposalReview from '../components/phone-editor/AIProposalReview';
 import MissionEditor from '../components/phone-editor/MissionEditor';
 import ConditionRow from '../components/phone-editor/ConditionRow';
 import ActionRow from '../components/phone-editor/ActionRow';
+import ZoneIconPicker, { ZoneIconSummary } from '../components/phone-editor/ZoneIconPicker';
 // PhoneHubSteps removed — see below where the 4-step guide was deleted.
 import ContentZoneEditor from '../components/ContentZoneEditor';
 import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode';
@@ -118,6 +119,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [tapZonesDraft, setTapZonesDraft] = useState([]);
   const [tapZonesDirty, setTapZonesDirty] = useState(false);
   const [tapSelectedZoneId, setTapSelectedZoneId] = useState(null);
+  // Zones workspace (Task #2014): the Tap Zones row whose icon picker is
+  // open; the side panel ICON mode renders its picker into, beside the phone;
+  // and ICON mode's unsaved state, for the "Unsaved" marker.
+  const [tapIconZoneId, setTapIconZoneId] = useState(null);
+  const [iconSidePanel, setIconSidePanel] = useState(null);
+  const [iconZonesDirty, setIconZonesDirty] = useState(false);
   // Which zone row has its advanced panel (conditions + actions) open.
   // Kept separate from selection so picking a target doesn't auto-open a
   // big drawer.
@@ -414,13 +421,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       )).length;
       const tapCount = Math.max(0, links.length - iconCount);
 
-      const invalidBoundsZones = links.filter(link => {
-        if (typeof link?.x !== 'number' || typeof link?.y !== 'number' || typeof link?.w !== 'number' || typeof link?.h !== 'number') return true;
-        if (link.w <= 0 || link.h <= 0) return true;
-        if (link.x < 0 || link.y < 0) return true;
-        if ((link.x + link.w) > 100 || (link.y + link.h) > 100) return true;
-        return false;
-      });
+      const invalidBoundsZones = links.filter(isZoneOutOfBounds);
 
       const missingTargetZones = links.filter(link => !link?.target);
       const brokenTargetZones = links.filter(link => link?.target && !generatedKeys.has(link.target));
@@ -447,12 +448,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       }
       if (invalidBounds > 0) issues.push(`${invalidBounds} zone${invalidBounds > 1 ? 's are' : ' is'} outside valid bounds`);
       if (invalidBounds > 0) {
+        // Name the zones, and offer the one-click fix (Task #2014).
+        const names = invalidBoundsZones.map(z => `"${z.label || z.target || `Zone ${links.indexOf(z) + 1}`}"`);
         issueItems.push({
           id: `${screen.id}-invalid-bounds`,
-          text: `${invalidBounds} zone${invalidBounds > 1 ? 's' : ''} out of bounds`,
+          text: invalidBounds === 1
+            ? `${names[0]} is out of bounds`
+            : `${invalidBounds} zones out of bounds: ${names.slice(0, 3).join(', ')}${invalidBounds > 3 ? ` +${invalidBounds - 3}` : ''}`,
           mode: 'zones',
           screenId: screen.id,
           zoneId: invalidBoundsZones[0]?.id,
+          fix: { kind: 'move-inside', zoneIds: invalidBoundsZones.map(z => z.id) },
         });
       }
       if (missingTarget > 0) issues.push(`${missingTarget} zone${missingTarget > 1 ? 's are' : ' is'} missing a target`);
@@ -878,6 +884,21 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
+  // Screen health's "Move inside" (Task #2014): clamps the named zones into
+  // the screen and saves at once. In TAP mode it starts from the editor's
+  // draft, so other unsaved edits are saved with it, as Done would. ICON
+  // mode keeps its own draft, so it asks for that to be saved first.
+  const handleMoveInside = async (issue) => {
+    const ids = new Set(issue?.fix?.zoneIds || []);
+    if (!ids.size || !activeScreen) return;
+    if (zoneEditorMode === 'icons' && iconZonesDirty) {
+      flash('Save your icon changes first, then Move inside', 'error');
+      return;
+    }
+    const source = (zoneEditorMode === 'zones' && linkEditorRef.current?.getZones?.()) || getScreenLinks(activeScreen);
+    await handleSaveLinks(source.map(z => (ids.has(z.id) ? moveZoneInside(z) : z)));
+  };
+
   // Bulk-place (Phase 3.3) — copies the given zone (icon, label, position) onto
   // each target screen as an independent new zone. Each copy gets a fresh id so
   // they can be repositioned / edited per screen without affecting the original.
@@ -996,11 +1017,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       if (iconUrl) {
         // Append uploaded icon to the link's icon_urls array
         const currentLinks = getScreenLinks(activeScreen);
+        // The upload becomes the zone's image ("Custom image"), replacing a
+        // library icon if it had one; otherwise the key would keep drawing
+        // the library icon and the upload would never show (Task #2014).
         const updated = currentLinks.map(l => {
           if (l.id !== linkId) return l;
-          const existing = l.icon_urls?.length ? l.icon_urls : (l.icon_url ? [l.icon_url] : []);
-          const icon_urls = [...existing, iconUrl];
-          return { ...l, icon_urls, icon_url: icon_urls[0] };
+          const { icon_overlay_id: _replacedKey, ...rest } = l;
+          return { ...rest, icon_urls: [iconUrl], icon_url: iconUrl };
         });
         setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, screen_links: updated, metadata: { ...(o.metadata || {}), screen_links: updated } } : o));
         setActiveScreen(prev => prev ? { ...prev, screen_links: updated, metadata: { ...(prev.metadata || {}), screen_links: updated } } : prev);
@@ -1670,6 +1693,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         showId={showId}
                         phoneSkin={phoneSkin}
                         customFrameUrl={customFrameUrl}
+                        sidePanel={iconSidePanel}
+                        onDirtyChange={setIconZonesDirty}
                       />
                     )}
                   </div>
@@ -1681,6 +1706,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           <div className="zones-tab__sidebar-label">Zones Workspace</div>
                           <div className="zones-tab__sidebar-screen">{activeScreen?.name}</div>
                         </div>
+                        {((zoneEditorMode === 'zones' && tapZonesDirty) || (zoneEditorMode === 'icons' && iconZonesDirty)) && (
+                          <span className="zones-unsaved" role="status">● Unsaved</span>
+                        )}
                         <button onClick={() => {
                           if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
                           setActiveTab('screens');
@@ -1689,6 +1717,12 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           <Check size={14} /> Done
                         </button>
                       </div>
+
+                      {/* ICON mode renders its picker and icon panels here,
+                          beside the phone (Task #2014). */}
+                      {zoneEditorMode === 'icons' && (
+                        <div ref={setIconSidePanel} className="zones-tab__icon-panel" />
+                      )}
 
                       <ScreenThumbnailStrip
                         screens={editableScreens}
@@ -1709,7 +1743,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         {activeHealth.issueCount > 0 ? (
                           <ul className="zones-health__list">
                             {(activeHealth.issueItems || []).slice(0, 3).map((issue) => (
-                              <li key={issue.id}>
+                              <li key={issue.id} className={issue.fix ? 'zones-health__item--fixable' : undefined}>
                                 <button
                                   type="button"
                                   className="zones-health__jump"
@@ -1717,6 +1751,15 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                 >
                                   {issue.text}
                                 </button>
+                                {issue.fix?.kind === 'move-inside' && (
+                                  <button
+                                    type="button"
+                                    className="zones-health__fix"
+                                    onClick={() => handleMoveInside(issue)}
+                                  >
+                                    Move inside
+                                  </button>
+                                )}
                               </li>
                             ))}
                           </ul>
@@ -1768,6 +1811,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                 const isSelected = tapSelectedZoneId === zone.id;
                                 const hasTarget = !!zone.target;
                                 const isExpanded = tapExpandedZoneId === zone.id;
+                                const isIconOpen = tapIconZoneId === zone.id;
                                 const conditionCount = Array.isArray(zone.conditions) ? zone.conditions.length : 0;
                                 const actionCount = Array.isArray(zone.actions) ? zone.actions.length : 0;
                                 const advancedCount = conditionCount + actionCount;
@@ -1813,6 +1857,33 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                     >
                                       ×
                                     </button>
+                                    {/* The zone's icon (Task #2014): one line on every
+                                        row, and the icon grid on demand. */}
+                                    <div className="zones-tap-row__icon">
+                                      <ZoneIconSummary zone={zone} icons={iconOverlaysForEditor} />
+                                      <button
+                                        type="button"
+                                        className="zones-tap-panel__btn"
+                                        onClick={() => {
+                                          setTapIconZoneId(isIconOpen ? null : zone.id);
+                                          linkEditorRef.current?.setSelectedZone?.(zone.id);
+                                        }}
+                                        aria-expanded={isIconOpen}
+                                        aria-label={`${isIconOpen ? 'Close icons for' : 'Choose icon for'} ${zone.label || `zone ${index + 1}`}`}
+                                      >
+                                        {isIconOpen ? 'Close' : (zone.icon_url || zone.icon_overlay_id ? 'Change icon' : 'Choose icon')}
+                                      </button>
+                                    </div>
+                                    {isIconOpen && (
+                                      <div className="zones-tap-row__icon-picker">
+                                        <ZoneIconPicker
+                                          zone={zone}
+                                          icons={iconOverlaysForEditor}
+                                          onPick={(ico) => linkEditorRef.current?.updateZone?.(zone.id, pickZoneLibraryIcon(zone, ico, iconOverlaysForEditor))}
+                                          onUpload={() => linkEditorRef.current?.uploadIcon?.(zone.id)}
+                                        />
+                                      </div>
+                                    )}
                                     {isExpanded && (
                                       <div className="zones-tap-row__advanced">
                                         <div className="zones-tap-row__adv-section">
