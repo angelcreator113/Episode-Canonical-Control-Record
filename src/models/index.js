@@ -62,7 +62,7 @@ let TimelinePlacement, Marker;
 let AIEditPlan, EditingDecision, AIRevision, VideoProcessingJob;
 let AITrainingData, ScriptMetadata, SceneLayerConfiguration, LayerPreset, Layer, LayerAsset;
 let SceneFootageLink;
-let UserDecision, DecisionPattern, DecisionLog;
+let UserDecision, DecisionPattern;
 let ShowConfig, ScriptTemplate, ScriptLearningProfile, ScriptEditHistory, ScriptSuggestion;
 let EditMap, CharacterProfile;
 let Character; // Characters model
@@ -240,7 +240,6 @@ try {
   // Decision Logging models
   UserDecision = require('./UserDecision')(sequelize);
   DecisionPattern = require('./DecisionPattern')(sequelize);
-  DecisionLog = require('./DecisionLog')(sequelize);
 
   // Script Generator models
   ShowConfig = require('./ShowConfig')(sequelize);
@@ -503,7 +502,6 @@ const requiredModels = {
   SceneProposal,
   CharacterGrowthLog,
   FranchiseKnowledge,
-  DecisionLog,
   ShowConfig,
   ScriptTemplate,
   ScriptLearningProfile,
@@ -1751,7 +1749,6 @@ const db = {
     LayerPreset,
     UserDecision,
     DecisionPattern,
-    DecisionLog,
     TimelineData,
     LalaverseBrand,
     WardrobeBrandTag,
@@ -1975,7 +1972,6 @@ module.exports.Layer = Layer;
 module.exports.LayerAsset = LayerAsset;
 module.exports.UserDecision = UserDecision;
 module.exports.DecisionPattern = DecisionPattern;
-module.exports.DecisionLog = DecisionLog;
 module.exports.SceneFootageLink = SceneFootageLink;
 module.exports.ShowConfig = ShowConfig;
 module.exports.ScriptTemplate = ScriptTemplate;

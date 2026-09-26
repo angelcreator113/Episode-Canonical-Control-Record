@@ -110,7 +110,6 @@
 1	src/services/careerPipelineService.js	} catch { /* no event */ }
 2	src/services/distributionService.js	).catch(() => []);
 4	src/services/episodeCompletionService.js	).catch(() => []);
-1	src/services/episodeCompletionService.js	} catch { /* no-op — authenticity signal just doesn't fire */ }
 5	src/services/episodeCompletionService.js	} catch { /* non-blocking */ }
 1	src/services/episodeGeneratorService.js	).catch(() => []);
 1	src/services/episodeGeneratorService.js	} catch { /* non-blocking */ }
