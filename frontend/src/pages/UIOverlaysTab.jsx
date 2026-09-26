@@ -28,6 +28,9 @@ import PhoneFrame from '../components/phone/PhoneFrame';
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
 
+// Browser-only skin key from before Task #1964; read once for the carry-over.
+const LEGACY_SKIN_KEY = 'phone_hub_skin';
+
 class OverlayErrorBoundary extends Component {
   state = { hasError: false, error: null };
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -169,12 +172,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     setPendingIssueFocus(null);
   }, [pendingIssueFocus, activeScreen, zoneEditorMode]);
 
-  // Load phone skin preference
-  useEffect(() => {
-    const saved = localStorage.getItem('phone_hub_skin');
-    if (saved) setPhoneSkin(saved);
-  }, []);
-
   const handleHideScreen = (key) => {
     setHiddenScreens(prev => {
       const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
@@ -183,9 +180,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     });
   };
 
+  // The skin is saved per show on the server (Task #1964), so the Episode's
+  // Preview Phone shows the same device as Producer Mode.
   const handleChangeSkin = (skin) => {
     setPhoneSkin(skin);
-    localStorage.setItem('phone_hub_skin', skin);
+    if (!showId) return;
+    api.put(`/api/v1/ui-overlays/${showId}/phone-skin`, { phone_skin: skin }).catch(err => {
+      console.error('[PhoneHub] Failed to save phone skin:', err.message);
+      flash('Failed to save phone skin', 'error');
+    });
   };
 
   const flash = useCallback((msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 4000); }, []);
@@ -255,6 +258,19 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     api.get(`/api/v1/ui-overlays/${showId}/frame`).then(r => {
       if (!frameRemovedRef.current && r.data?.frame_url) setCustomFrameUrl(r.data.frame_url);
       if (r.data?.global_fit) setGlobalFit(r.data.global_fit);
+      if (r.data?.phone_skin) {
+        setPhoneSkin(r.data.phone_skin);
+      } else {
+        // One-time carry-over (Task #1964): the skin used to live only in this
+        // browser. The key is not per show, so it lands on the first show loaded.
+        const legacySkin = localStorage.getItem(LEGACY_SKIN_KEY);
+        if (legacySkin) {
+          setPhoneSkin(legacySkin);
+          api.put(`/api/v1/ui-overlays/${showId}/phone-skin`, { phone_skin: legacySkin })
+            .then(() => localStorage.removeItem(LEGACY_SKIN_KEY))
+            .catch(err => console.error('[PhoneHub] Failed to carry over the saved phone skin:', err.message));
+        }
+      }
     }).catch(err => {
       console.warn('[PhoneHub] Failed to load frame/fit settings:', err.message);
     });
