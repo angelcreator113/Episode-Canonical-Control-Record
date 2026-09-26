@@ -155,6 +155,19 @@ processed derivative stay distinguishable. The read behind this is
 *Why:* a placement holding a copy of an image goes stale on every image
 change.
 
+**18. The phone is edited in stages.** Ruled by Evoni on 2026-09-26
+("adopt it"), verbatim: "Lala's Phone is edited in four stages, Build
+(shell, screens, icons), Connect (place icons, choose destinations), Content
+(areas whose content changes per episode) and Preview (test the real phone),
+with Missions, conditions, state and flow audit under Advanced. The phone
+stays visible on the left in every stage. '+ Add' asks whether you're adding
+a Screen, an Icon or a Content Area. Keys are derived from names at creation
+and never change. Every screen shows its status in plain words and one next
+action." Renaming changes only the display name, never the key; rule 17
+depends on it, because placements store the icon's key. A "Core Phone kit",
+and anything that generates images, are not decided here.
+*Why:* the page exposed its data model instead of the job.
+
 ---
 
 ## Not decided here
@@ -179,5 +192,7 @@ Open navigation questions, not resolved by this document:
   their questions only.
 - **Retiring `/episodes/create` and `/shows/:showId/quick-episode`.**
   Pending the call-path census (`PROJECT_CONTEXT.md` §10 item 23).
+- **The Core Phone kit.** What it contains, and whether it is uploaded or
+  generated (generating is a cost decision). Rule 18 names neither.
 
 These are their own task, not this one.
