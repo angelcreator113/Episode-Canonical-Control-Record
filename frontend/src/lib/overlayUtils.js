@@ -74,3 +74,61 @@ export const getIconUrls = (zone) => {
   if (zone?.icon_url) return [zone.icon_url];
   return [];
 };
+
+// ── Icon identity (doctrine rule 17, Task #2005) ───────────────────────────
+//
+// A placement stands for an icon by its key, not by a copy of its image, so
+// "Change image", "Generate" and "Remove BG" (which each give the icon a new
+// image address) never leave a placement stale. `icons` is the list of icon
+// overlays as the list route returns them: `id` is the icon's type key, which
+// stays the same across image changes; `url` is its current image (processed
+// if present, else raw).
+
+/**
+ * The key of the icon overlay a zone stands for, or null.
+ *   - A zone placed from an icon carries `icon_overlay_id`; it resolves when
+ *     that icon is in `icons`.
+ *   - A legacy zone carrying only `icon_url` resolves when that address is an
+ *     icon's current image. A zone that went stale through an earlier image
+ *     change does not: the old address isn't in the loaded data.
+ *   - A zone's own custom icon (uploaded per zone) matches no icon: null.
+ */
+export const resolveZoneIconKey = (zone, icons = []) => {
+  if (!zone) return null;
+  const iconList = (icons || []).filter(isIcon);
+  if (zone.icon_overlay_id && iconList.some(i => i.id === zone.icon_overlay_id)) {
+    return zone.icon_overlay_id;
+  }
+  if (zone.icon_url) {
+    const match = iconList.find(i => i.url && i.url === zone.icon_url);
+    if (match) return match.id;
+  }
+  return null;
+};
+
+/**
+ * The image a zone should draw: its icon's current image when the zone
+ * resolves to an icon that has one, otherwise the zone's own `icon_url`
+ * (legacy addresses and per-zone custom icons keep working). Null when the
+ * zone has no icon.
+ */
+export const resolveZoneIcon = (zone, icons = []) => {
+  const key = resolveZoneIconKey(zone, icons);
+  if (key) {
+    const icon = (icons || []).find(i => i.id === key && isIcon(i));
+    if (icon?.url) return icon.url;
+  }
+  return zone?.icon_url || null;
+};
+
+/**
+ * A legacy zone that resolves to an icon, stamped with that icon's key so the
+ * reference survives the next image change. Used when an editor saves a
+ * screen's zones. Zones that already carry a key, or that don't resolve, are
+ * returned unchanged.
+ */
+export const withResolvedIconKey = (zone, icons = []) => {
+  if (!zone || zone.icon_overlay_id || !zone.icon_url) return zone;
+  const key = resolveZoneIconKey(zone, icons);
+  return key ? { ...zone, icon_overlay_id: key } : zone;
+};

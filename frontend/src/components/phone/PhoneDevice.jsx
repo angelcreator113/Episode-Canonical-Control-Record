@@ -18,14 +18,19 @@
  *                        generated or not.
  *   episodeId          — passed to ScreenContentRenderer.
  *   contentInteractive — passed to ScreenContentRenderer as `interactive`.
+ *
+ * `icons` (Task #2005, doctrine rule 17) is the show's icon overlays. A tap
+ * zone placed from an icon draws that icon's current image, looked up by key,
+ * so an image change never leaves a placement stale.
  */
 import ScreenContentRenderer from '../ScreenContentRenderer';
 import PhoneFrame from './PhoneFrame';
 import PhoneMapView, { isMapScreen } from './PhoneMapView';
 import { getScreenImageStyle } from './phoneStyle';
+import { resolveZoneIcon } from '../../lib/overlayUtils';
 
 // Renders interactive tap zone overlays on the phone screen
-function ScreenLinkOverlay({ links = [], onNavigate }) {
+function ScreenLinkOverlay({ links = [], icons = [], onNavigate }) {
   if (!links.length || !onNavigate) return null;
   return (
     <>
@@ -50,9 +55,9 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(184,150,46,0.12)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
-          {link.icon_url && (
+          {resolveZoneIcon(link, icons) && (
             <img
-              src={link.icon_url}
+              src={resolveZoneIcon(link, icons)}
               alt={link.label || link.target}
               style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }}
               draggable={false}
@@ -65,7 +70,7 @@ function ScreenLinkOverlay({ links = [], onNavigate }) {
 }
 
 // Renders persistent icons (from home screen) that stay visible on all screens
-function PersistentOverlay({ links = [], onNavigate }) {
+function PersistentOverlay({ links = [], icons = [], onNavigate }) {
   if (!links.length || !onNavigate) return null;
   return (
     <>
@@ -90,9 +95,9 @@ function PersistentOverlay({ links = [], onNavigate }) {
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(184,150,46,0.15)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
-          {link.icon_url && (
+          {resolveZoneIcon(link, icons) && (
             <img
-              src={link.icon_url}
+              src={resolveZoneIcon(link, icons)}
               alt={link.label || link.target}
               style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }}
               draggable={false}
@@ -121,6 +126,7 @@ export default function PhoneDevice({
   tapLayer,
   episodeId,
   contentInteractive = false,
+  icons = [],
 }) {
   return (
       <PhoneFrame
@@ -157,13 +163,13 @@ export default function PhoneDevice({
               episodeId={episodeId}
             />
             {!tapLayer && (
-              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} icons={icons} onNavigate={onNavigate} />
             )}
             {/* Persistent icons from home screen — show on non-home screens
                 except the Map, which is meant to be a full-bleed canvas
                 where home-screen icons would just clutter the world view. */}
             {!tapLayer && activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && !isMapScreen(phoneScreen) && (
-              <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
+              <PersistentOverlay links={persistentLinks} icons={icons} onNavigate={onNavigate} />
             )}
           </>
         ) : useCustomFrame ? (

@@ -15,6 +15,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Grid3x3, Save, Trash2, X, Pin } from 'lucide-react';
 import PhoneFrame from './phone/PhoneFrame';
+import { resolveZoneIcon } from '../lib/overlayUtils';
 import ScreenContentRenderer from './ScreenContentRenderer';
 
 const HOME_GRID = {
@@ -468,8 +469,8 @@ export default function IconPlacementMode({
               zIndex: dragging?.ids?.includes(zone.id) ? 10 : 2,
             }}
           >
-            {zone.icon_url ? (
-              <img src={zone.icon_url} alt={zone.label || ''} style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
+            {resolveZoneIcon(zone, iconOverlays) ? (
+              <img src={resolveZoneIcon(zone, iconOverlays)} alt={zone.label || ''} style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} draggable={false} />
             ) : (
               <div style={{ width: '100%', height: '100%', background: 'rgba(184,150,46,0.15)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: '#B8962E' }}>
                 {zone.label || '?'}
@@ -596,7 +597,7 @@ export default function IconPlacementMode({
       {selected && !showPicker && !showBatchActions && (
         <div style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {selected.icon_url && <img src={selected.icon_url} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />}
+            {resolveZoneIcon(selected, iconOverlays) && <img src={resolveZoneIcon(selected, iconOverlays)} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', border: '1px solid #eee' }} />}
             <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{selected.label || 'Untitled'}</span>
             <button onClick={() => removeZone(selected.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: 4 }}>
               <Trash2 size={16} />

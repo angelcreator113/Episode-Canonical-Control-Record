@@ -13,7 +13,7 @@ import PhoneHub from '../components/PhoneHub';
 import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import IconPlacementMode from '../components/IconPlacementMode';
-import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks } from '../lib/overlayUtils';
+import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey } from '../lib/overlayUtils';
 import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
 import AIProposalReview from '../components/phone-editor/AIProposalReview';
 import MissionEditor from '../components/phone-editor/MissionEditor';
@@ -557,45 +557,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
-  // Shared: auto-place an icon on the home screen when it has both a linked
-  // navigation target (opens_screen) and an image (url). Idempotent — skips
-  // if a zone on the home screen already references this icon's URL. Returns
-  // true when a new zone was placed, false otherwise. Callers refresh state
-  // themselves; this only performs the PUT.
-  const autoPlaceIconOnHome = async (freshOverlays, iconTypeKey) => {
-    if (!showId || !iconTypeKey) return false;
-    const icon = freshOverlays.find(o => o.id === iconTypeKey);
-    if (!icon) return false;
-    const isIcon = icon.category === 'phone_icon' || icon.category === 'icon';
-    if (!isIcon || !icon.url || !icon.opens_screen) return false;
-    const home = freshOverlays.find(o => o.is_home && o.generated && o.url && o.category === 'phone')
-      || freshOverlays.find(o => o.generated && o.url && o.category === 'phone');
-    if (!home?.asset_id) return false;
-    const existingLinks = getScreenLinks(home);
-    if (existingLinks.some(l => l.icon_url === icon.url)) return false;
-    const iconLinks = existingLinks.filter(l => l.icon_url);
-    const col = iconLinks.length % 4;
-    const row = Math.floor(iconLinks.length / 4);
-    const newZone = {
-      id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-      x: 8 + col * 22,
-      y: Math.max(8, 75 - row * 14),
-      w: 18, h: 10,
-      target: icon.opens_screen,
-      label: icon.name,
-      icon_url: icon.url,
-      icon_urls: [icon.url],
-    };
-    try {
-      await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${home.asset_id}`, {
-        screen_links: [...existingLinks, newZone],
-      });
-      return true;
-    } catch (err) {
-      console.warn('[autoPlaceIconOnHome] failed', err);
-      return false;
-    }
-  };
+  // No automatic placement (doctrine rule 17, Task #2005): icons are placed
+  // only through the deliberate placement paths (the phone's icon placement
+  // mode, the Zones tab, the icon's Placements tab). Creating an icon,
+  // Generate, Change image and setting an icon's target never create a zone.
 
   // Generate one
   const handleGenerateOne = async (overlayId, prompt) => {
@@ -611,13 +576,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       setOverlays(all);
       const updated = all.find(o => o.id === overlayId);
       if (updated) setActiveScreen(updated);
-      // Newly-generated icons with an opens_screen target haven't been placed
-      // yet; auto-place them on home so creators don't have to remember a
-      // second step after generation.
-      if (await autoPlaceIconOnHome(all, overlayId)) {
-        loadOverlays(false);
-        flash('Generated + placed on home screen');
-      }
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
     setGeneratingId(null);
   };
@@ -646,13 +604,8 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       // uploaded icon with a bg-stripped version, which read as "a new
       // image got auto-generated." The Remove BG button on the detail
       // card is still available for the cases where they DO want it.
-      // Freshly-uploaded icon with a pre-set opens_screen? Place it on home.
-      if (await autoPlaceIconOnHome(all, activeScreen.id)) {
-        loadOverlays(false);
-        flash('Uploaded + placed on home screen');
-      } else if ((updated?.category === 'phone_icon' || updated?.category === 'icon')) {
-        flash('Uploaded + bg removed');
-      }
+      // No auto-placement either (doctrine rule 17): the icon's existing
+      // placements draw the new image by its key; nothing is placed.
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -807,7 +760,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         opens_screen: newType.opens_screen, is_home: !!newType.is_home,
         custom: true, custom_id: newType.id, generated: false, url: null,
       }]);
-      let autoPlaced = false;
       if (file && newType.type_key) {
         try {
           const fd = new FormData();
@@ -821,28 +773,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
           console.warn('[createScreen] image upload failed', upErr);
           flash('Created, but the image upload failed — upload from the card', 'error');
         }
-        // Refetch to surface the newly-uploaded asset URL on the icon, then
-        // auto-bg-remove + auto-place if this is a linked icon.
-        let fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => []);
+        // Refetch to surface the newly-uploaded asset URL on the icon. A new
+        // icon lands in the icon library only; it is placed deliberately,
+        // never automatically (doctrine rule 17). Auto-bg-removal is off
+        // here too — mirror of handleUpload.
+        const fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => []);
         setOverlays(fresh);
-        if (createMode === 'phone_icon') {
-          // Auto-bg-removal disabled here too — mirror of the change in
-          // handleUpload. Creators can hit Remove BG from the card when
-          // they want it; we don't modify their uploaded image silently.
-          autoPlaced = await autoPlaceIconOnHome(fresh, newType.type_key);
-          if (autoPlaced) loadOverlays(false);
-        }
       }
       setShowCreateModal(false);
-      if (autoPlaced) {
-        flash(createMode === 'phone_icon'
-          ? `${newType.name} created and placed on the home screen — drag to reposition`
-          : `${newType.name} created and placed on the home screen — drag to reposition`);
-      } else {
-        flash(createMode === 'phone_icon'
-          ? (file ? 'Icon created + image uploaded' : 'Icon type created')
-          : (file ? 'Screen created + image uploaded' : 'Screen type created'));
-      }
+      flash(createMode === 'phone_icon'
+        ? (file ? 'Icon created + image uploaded' : 'Icon type created')
+        : (file ? 'Screen created + image uploaded' : 'Screen type created'));
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -916,8 +857,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
   // ── Screen link editing ──
 
-  const handleSaveLinks = async (links) => {
+  const handleSaveLinks = async (savedLinks) => {
     if (!activeScreen?.asset_id || !showId) return;
+    // A legacy zone whose address is an icon's current image gains that
+    // icon's key as it is saved, so the reference survives the next image
+    // change (doctrine rule 17, Task #2005). Other zones are saved as given.
+    const iconList = overlays.filter(isIcon);
+    const links = (savedLinks || []).map(z => withResolvedIconKey(z, iconList));
     try {
       await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${activeScreen.asset_id}`, { screen_links: links });
       // Update local state
@@ -1177,21 +1123,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
       await api.put(`/api/v1/ui-overlays/${showId}/types/${activeScreen.custom_id}`, { opens_screen: targetKey || null });
       setOverlays(prev => prev.map(o => o.id === activeScreen.id ? { ...o, opens_screen: targetKey || null } : o));
       setActiveScreen(prev => prev ? { ...prev, opens_screen: targetKey || null } : prev);
-      // Auto-place if this is an icon that just got a target — mirrors the
-      // behaviour of the Create modal so setting the link post-hoc still
-      // produces a tap zone on the home screen.
-      let autoPlaced = false;
-      if (targetKey && isIcon(activeScreen) && activeScreen.url) {
-        const fresh = await api.get(`/api/v1/ui-overlays/${showId}`).then(r => r.data?.data || []).catch(() => []);
-        if (fresh.length) setOverlays(fresh);
-        autoPlaced = await autoPlaceIconOnHome(fresh.length ? fresh : overlays, activeScreen.id);
-        if (autoPlaced) loadOverlays(false);
-      }
-      flash(
-        autoPlaced ? `Opens screen updated + placed on home screen`
-        : targetKey ? 'Opens screen updated'
-        : 'Opens screen cleared'
-      );
+      // Setting a target places nothing (doctrine rule 17); the icon is
+      // placed deliberately from its Placements tab or the phone.
+      flash(targetKey ? 'Opens screen updated' : 'Opens screen cleared');
     } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
   };
 
@@ -1268,12 +1202,15 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
     [overlays]
   );
   const placementsCount = useMemo(() => {
-    const iconUrls = new Set(iconOverlays.map(i => i.url).filter(Boolean));
-    const seen = new Set(iconUrls);  // library icons always count
+    // Library icons always count, by key; zones that resolve to no icon
+    // (inline uploads, stale addresses) count by address (doctrine rule 17).
+    const seen = new Set(iconOverlays.filter(i => i.url).map(i => `icon:${i.id}`));
     screenOverlays.forEach(screen => {
       const links = getScreenLinks(screen);
       links.forEach(link => {
-        if (link.icon_url) seen.add(link.icon_url);
+        const key = resolveZoneIconKey(link, iconOverlays);
+        if (key) seen.add(`icon:${key}`);
+        else if (link.icon_url) seen.add(`url:${link.icon_url}`);
       });
     });
     return seen.size;
@@ -2367,11 +2304,15 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               {editorTab === 'placements' && isIcon(activeScreen) && activeScreen?.url && (() => {
                 const iconUrl = activeScreen.url;
                 const screenList = overlays.filter(o => isScreen(o));
+                // A zone belongs to this icon when it resolves to the icon's
+                // key, whatever image it last stored (doctrine rule 17).
+                const iconList = overlays.filter(isIcon);
+                const isThisIcon = (l) => resolveZoneIconKey(l, iconList) === activeScreen.id;
                 const placements = [];
                 const placedScreenIds = new Set();
                 screenList.forEach(s => {
                   const links = s.screen_links || s.metadata?.screen_links || [];
-                  const matching = links.filter(l => l.icon_url === iconUrl);
+                  const matching = links.filter(isThisIcon);
                   if (matching.length) {
                     placements.push({ screen: s, matchingCount: matching.length });
                     placedScreenIds.add(s.id);
@@ -2381,7 +2322,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
 
                 const removeFromScreen = async (screen) => {
                   const links = screen.screen_links || screen.metadata?.screen_links || [];
-                  const next = links.filter(l => l.icon_url !== iconUrl);
+                  const next = links.filter(l => !isThisIcon(l));
                   try {
                     await api.put(`/api/v1/ui-overlays/${showId}/screen-links/${screen.asset_id}`, { screen_links: next });
                     setOverlays(prev => prev.map(o => o.id === screen.id

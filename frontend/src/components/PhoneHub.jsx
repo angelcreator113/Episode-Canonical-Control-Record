@@ -19,7 +19,7 @@ import { MoreVertical, Trash2, EyeOff, Edit3, Settings } from 'lucide-react';
 import PhoneDevice from './phone/PhoneDevice';
 import { PHONE_SKINS, getScreenImageStyle } from './phone/phoneStyle';
 import PhoneHubSectionTabs from './PhoneHubSectionTabs';
-import { isIcon, isScreen, getScreenLinks, getIconUrls } from '../lib/overlayUtils';
+import { isIcon, isScreen, getScreenLinks, getIconUrls, resolveZoneIconKey } from '../lib/overlayUtils';
 
 // Screen types are now fully dynamic — defined per-show in the database.
 // The `screens` prop already contains all type data from the API.
@@ -244,25 +244,34 @@ export default function PhoneHub({
   // through each screen one by one. Declared AFTER screenTypes/iconTypes so
   // the useMemo body doesn't reference them before initialization.
   const placements = useMemo(() => {
+    // Buckets are keyed by icon key for library icons (doctrine rule 17: a
+    // placement stands for its icon, whatever image it last stored) and by
+    // address for zones that resolve to no icon.
     const byIcon = new Map();
     // Seed with library icons so icons with zero placements still show (with a count of 0).
     iconTypes.forEach(icon => {
       if (!icon.url) return;
-      byIcon.set(icon.url, { icon, placements: [] });
+      byIcon.set(`icon:${icon.id}`, { icon, placements: [] });
     });
     // Walk every screen's zones and append them to the matching icon's bucket.
     screenTypes.forEach(screen => {
       const links = getScreenLinks(screen);
       links.forEach(link => {
+        const key = resolveZoneIconKey(link, iconTypes);
+        if (key && byIcon.has(`icon:${key}`)) {
+          byIcon.get(`icon:${key}`).placements.push({ screen, zone: link });
+          return;
+        }
         const icons = getIconUrls(link);
         icons.forEach(iconUrl => {
-          const entry = byIcon.get(iconUrl);
+          const entry = byIcon.get(`url:${iconUrl}`);
           if (entry) {
             entry.placements.push({ screen, zone: link });
           } else {
-            // Zone uses an icon that isn't in the library (inline upload). Surface it
-            // as an orphan entry so the creator can still see where it's used.
-            byIcon.set(iconUrl, {
+            // Zone uses an icon that isn't in the library (inline upload, or an
+            // address no icon holds any more). Surface it as an orphan entry so
+            // the creator can still see where it's used.
+            byIcon.set(`url:${iconUrl}`, {
               icon: { id: `orphan-${iconUrl}`, url: iconUrl, name: 'Inline icon', orphan: true },
               placements: [{ screen, zone: link }],
             });
@@ -275,24 +284,27 @@ export default function PhoneHub({
   }, [screenTypes, iconTypes]);
 
   // Link status for status badges on Screen / Icon cards.
-  //   iconLinkByUrl: icon_url -> { screenCount, hasTargetedPlacement }
+  //   iconLinkByKey: icon key -> { screenCount, hasTargetedPlacement }, counting
+  //     every zone that resolves to the icon (by icon_overlay_id, or a legacy
+  //     zone whose address is the icon's current image), so an image change
+  //     never turns a placed icon "Unplaced" (doctrine rule 17)
   //     screenCount = # of distinct screens this icon is placed on
   //     hasTargetedPlacement = at least one of those placements has a target set
   //   screenReachById: screen_id -> incomingZoneCount (# of zones with target = this screen)
-  const { iconLinkByUrl, screenReachById } = useMemo(() => {
-    const iconLinkByUrl = new Map();
+  const { iconLinkByKey, screenReachById } = useMemo(() => {
+    const iconLinkByKey = new Map();
     const screenReachById = new Map();
     screenTypes.forEach(src => {
       const links = src.screen_links || src.metadata?.screen_links || [];
       links.forEach(link => {
-        // Icon usage (by URL, dedup screens per icon)
-        const iconUrls = getIconUrls(link);
-        iconUrls.forEach(url => {
-          if (!iconLinkByUrl.has(url)) iconLinkByUrl.set(url, { screens: new Set(), hasTargetedPlacement: false });
-          const entry = iconLinkByUrl.get(url);
+        // Icon usage (by icon key, dedup screens per icon)
+        const key = resolveZoneIconKey(link, iconTypes);
+        if (key) {
+          if (!iconLinkByKey.has(key)) iconLinkByKey.set(key, { screens: new Set(), hasTargetedPlacement: false });
+          const entry = iconLinkByKey.get(key);
           entry.screens.add(src.id);
           if (link.target) entry.hasTargetedPlacement = true;
-        });
+        }
         // Screen reach (count of zones pointing to each target)
         if (link.target) {
           screenReachById.set(link.target, (screenReachById.get(link.target) || 0) + 1);
@@ -301,9 +313,9 @@ export default function PhoneHub({
     });
     // Freeze to plain values to keep memo outputs stable
     const iconOut = new Map();
-    iconLinkByUrl.forEach((v, k) => iconOut.set(k, { screenCount: v.screens.size, hasTargetedPlacement: v.hasTargetedPlacement }));
-    return { iconLinkByUrl: iconOut, screenReachById };
-  }, [screenTypes]);
+    iconLinkByKey.forEach((v, k) => iconOut.set(k, { screenCount: v.screens.size, hasTargetedPlacement: v.hasTargetedPlacement }));
+    return { iconLinkByKey: iconOut, screenReachById };
+  }, [screenTypes, iconTypes]);
 
   return (
     <div className="phone-hub-inner">
@@ -318,6 +330,7 @@ export default function PhoneHub({
         activeScreen={activeScreen}
         firstScreen={firstScreen}
         persistentLinks={persistentLinks}
+        icons={iconTypes}
         globalFit={globalFit}
         onNavigate={onNavigate}
         navigationHistory={navigationHistory}
@@ -406,7 +419,7 @@ export default function PhoneHub({
         {gridSection === 'icons' && (gridFilter === 'all' || gridFilter === 'icon') && iconTypes.length > 0 && (
           <div className="phone-hub-icon-grid">
             {iconTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onEditScreen={onEditScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon linkCount={s.url && iconLinkByUrl.get(s.url)?.screenCount || 0} hasTargetedPlacement={!!(s.url && iconLinkByUrl.get(s.url)?.hasTargetedPlacement)} />
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '🎨', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onEditScreen={onEditScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} isIcon linkCount={iconLinkByKey.get(s.id)?.screenCount || 0} hasTargetedPlacement={!!iconLinkByKey.get(s.id)?.hasTargetedPlacement} />
             ))}
           </div>
         )}
