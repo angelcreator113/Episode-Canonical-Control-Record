@@ -4,7 +4,7 @@
  */
 import { useState, useCallback, useEffect, useMemo, Fragment } from 'react';
 import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle } from 'lucide-react';
-import { getScreenImageStyle, PHONE_SKINS } from './phone/phoneStyle';
+import PhoneDevice from './phone/PhoneDevice';
 import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C' };
@@ -27,11 +27,14 @@ function getLinks(screen) {
  *     taps hit the server-side evaluator, and the reset button clears the
  *     DB row in place. Same evaluator runs on both sides.
  */
-export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', playthrough = null, missions = [] }) {
-  const skin = PHONE_SKINS.find(s => s.key === phoneSkin) || PHONE_SKINS[0];
+export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', customFrameUrl = null, playthrough = null, missions = [] }) {
   const [activeScreen, setActiveScreen] = useState(initialScreen || screens[0] || null);
   const [history, setHistory] = useState([]);
   const [slideDir, setSlideDir] = useState(null); // 'left' | 'right' | null
+  // A custom frame that fails to load falls back to the built-in frame, as in
+  // Producer Mode; a new frame URL gets a fresh try.
+  const [frameError, setFrameError] = useState(false);
+  useEffect(() => { setFrameError(false); }, [customFrameUrl]);
   const [animating, setAnimating] = useState(false);
   // ── Phone runtime state ──
   // In author mode, these drive the evaluator directly (in-memory).
@@ -268,6 +271,94 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     ? 'translateX(-100%)' : slideDir === 'right'
     ? 'translateX(100%)' : 'translateX(0)';
 
+  // The Preview's runtime, drawn inside PhoneDevice's screen area in place of
+  // its own tap zones: status bar, back, opens_screen, the runtime-filtered tap
+  // zones with the slide transition, and a home target along the bottom. The
+  // layer itself lets taps through (pointer-events: none) so anything under it
+  // that is not covered by one of these controls stays reachable.
+  const tapLayer = (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 6, pointerEvents: 'none' }}>
+      {/* Status bar */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '6px 16px', background: 'linear-gradient(rgba(0,0,0,0.4), transparent)',
+      }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', fontFamily: MONO }}>9:41</span>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <Signal size={11} color="#fff" />
+          <Wifi size={11} color="#fff" />
+          <BatteryFull size={11} color="#fff" />
+        </div>
+      </div>
+
+      {/* Back button */}
+      {history.length > 0 && (
+        <button onClick={goBack} style={{
+          position: 'absolute', top: 26, left: 8, zIndex: 6,
+          background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 12,
+          padding: '4px 8px', cursor: 'pointer', color: '#fff',
+          display: 'flex', alignItems: 'center', gap: 2,
+          backdropFilter: 'blur(4px)', fontSize: 10, fontWeight: 700,
+          pointerEvents: 'auto',
+        }}>
+          <ChevronLeft size={12} /> Back
+        </button>
+      )}
+
+      {/* Tap targets with slide transition */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        transform: slideDir ? slideTransform : 'translateX(0)',
+        transition: slideDir ? `transform ${TRANSITION_MS}ms ease-in-out` : 'none',
+      }}>
+        {/* opens_screen navigation — if this screen type auto-opens another screen, show a tap target */}
+        {activeScreen?.opens_screen && (
+          <div
+            onClick={(e) => { e.stopPropagation(); navigateTo(activeScreen.opens_screen, 'left'); }}
+            style={{ position: 'absolute', inset: 0, cursor: 'pointer', zIndex: 2, pointerEvents: 'auto' }}
+            title={`Opens ${activeScreen.opens_screen}`}
+          />
+        )}
+
+        {/* Tap zone hotspots */}
+        {links.map(link => ( /* onClick below routes through phoneRuntime; preview + runtime share one tap path */
+          <div
+            key={link.id}
+            onClick={(e) => { e.stopPropagation(); handleZoneTap(link); }}
+            title={link.label || link.target}
+            style={{
+              position: 'absolute',
+              left: `${link.x}%`, top: `${link.y}%`,
+              width: `${link.w}%`, height: `${link.h}%`,
+              cursor: link.target ? 'pointer' : 'default',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 6, zIndex: 3, transition: 'background 0.15s',
+              pointerEvents: 'auto',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(184,150,46,0.18)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            {link.icon_url && (
+              <img src={link.icon_url} alt={link.label || ''} draggable={false}
+                style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Home — a tap target over the frame's home indicator */}
+      <div
+        onClick={goHome}
+        title="Home"
+        style={{
+          position: 'absolute', bottom: 0, left: '30%', width: '40%', height: '4%',
+          zIndex: 7, cursor: 'pointer', pointerEvents: 'auto',
+        }}
+      />
+    </div>
+  );
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
@@ -411,125 +502,20 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         }}>Episode complete</div>
       )}
 
-      {/* Phone device */}
-      <div style={{
-        width: 320, background: skin.body, borderRadius: 40,
-        padding: '14px 10px', position: 'relative',
-        boxShadow: `0 12px 48px ${skin.shadow}, inset 0 1px 0 ${skin.accent}`,
-      }}>
-        {/* Notch */}
-        <div style={{
-          width: 90, height: 7, borderRadius: 4,
-          background: skin.notch, margin: '0 auto 6px',
-        }} />
-
-        {/* Screen area */}
-        <div style={{
-          width: '100%', aspectRatio: '9/19.5', borderRadius: 24,
-          overflow: 'hidden', position: 'relative',
-          background: activeScreen?.url ? '#000' : 'linear-gradient(135deg, #2a2a4a 0%, #1a1a2e 100%)',
-        }}>
-          {/* Status bar */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5,
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '6px 16px', background: 'linear-gradient(rgba(0,0,0,0.4), transparent)',
-          }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', fontFamily: MONO }}>9:41</span>
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              <Signal size={11} color="#fff" />
-              <Wifi size={11} color="#fff" />
-              <BatteryFull size={11} color="#fff" />
-            </div>
-          </div>
-
-          {/* Back button */}
-          {history.length > 0 && (
-            <button onClick={goBack} style={{
-              position: 'absolute', top: 26, left: 8, zIndex: 6,
-              background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 12,
-              padding: '4px 8px', cursor: 'pointer', color: '#fff',
-              display: 'flex', alignItems: 'center', gap: 2,
-              backdropFilter: 'blur(4px)', fontSize: 10, fontWeight: 700,
-            }}>
-              <ChevronLeft size={12} /> Back
-            </button>
-          )}
-
-          {/* Screen content with slide transition */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            transform: slideDir ? slideTransform : 'translateX(0)',
-            transition: slideDir ? `transform ${TRANSITION_MS}ms ease-in-out` : 'none',
-          }}>
-            {activeScreen?.url ? (
-              <img
-                src={activeScreen.url}
-                alt={activeScreen.name}
-                style={getScreenImageStyle(activeScreen, globalFit)}
-                draggable={false}
-              />
-            ) : (
-              <div style={{
-                width: '100%', height: '100%',
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', color: '#555',
-              }}>
-                <span style={{ fontSize: 36 }}>📱</span>
-                <span style={{ fontSize: 11, marginTop: 8, fontFamily: MONO }}>
-                  {activeScreen ? 'No image' : 'No screen'}
-                </span>
-              </div>
-            )}
-
-            {/* opens_screen navigation — if this screen type auto-opens another screen, show a tap target */}
-            {activeScreen?.opens_screen && (
-              <div
-                onClick={(e) => { e.stopPropagation(); navigateTo(activeScreen.opens_screen, 'left'); }}
-                style={{ position: 'absolute', inset: 0, cursor: 'pointer', zIndex: 2 }}
-                title={`Opens ${activeScreen.opens_screen}`}
-              />
-            )}
-
-            {/* Tap zone hotspots */}
-            {links.map(link => ( /* onClick below routes through phoneRuntime; preview + runtime share one tap path */
-              <div
-                key={link.id}
-                onClick={(e) => { e.stopPropagation(); handleZoneTap(link); }}
-                title={link.label || link.target}
-                style={{
-                  position: 'absolute',
-                  left: `${link.x}%`, top: `${link.y}%`,
-                  width: `${link.w}%`, height: `${link.h}%`,
-                  cursor: link.target ? 'pointer' : 'default',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 6, zIndex: 3, transition: 'background 0.15s',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(184,150,46,0.18)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                {link.icon_url && (
-                  <img src={link.icon_url} alt={link.label || ''} draggable={false}
-                    style={{ width: '80%', height: '80%', objectFit: 'contain', pointerEvents: 'none' }} />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Home button bar */}
-        <div
-          onClick={goHome}
-          title="Home"
-          style={{
-            width: 44, height: 5, borderRadius: 3,
-            background: skin.btn, margin: '8px auto 0', cursor: 'pointer',
-            transition: 'opacity 0.15s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.7'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-        />
-      </div>
+      {/* Phone device — drawn by PhoneDevice, the same device Producer Mode
+          draws (doctrine rule 16, step C2). The tap layer keeps the Preview's
+          own runtime on top of it. */}
+      <PhoneDevice
+        skin={phoneSkin}
+        customFrameUrl={customFrameUrl}
+        useCustomFrame={Boolean(customFrameUrl) && !frameError}
+        onCustomFrameError={() => setFrameError(true)}
+        phoneScreen={activeScreen}
+        activeScreen={activeScreen}
+        firstScreen={homeScreen}
+        globalFit={globalFit}
+        tapLayer={tapLayer}
+      />
 
       {/* Screen name */}
       {activeScreen && (

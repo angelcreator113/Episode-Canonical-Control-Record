@@ -4,19 +4,8 @@
    so the Zones tab matches the Screens/Icons/Placements tabs exactly.
 */
 
-/* .phone-hub-frame was historically styled inside PhoneHub's inline <style>
-   block, which disappears when PhoneHub unmounts (e.g. during the Zones tab).
-   Re-declaring the rules here keeps the editor's phone the same width
-   whether PhoneHub is mounted or not. Keep the responsive breakpoints in
-   sync with PhoneHub's internal ones. */
-.phone-hub-frame {
-  width: 280px;
-  position: relative;
-}
-@media (max-width: 1024px) { .phone-hub-frame { width: 240px; } }
-@media (max-width: 768px)  { .phone-hub-frame { width: 220px; } }
-@media (max-width: 480px)  { .phone-hub-frame { width: 180px; } }
-@media (max-width: 375px)  { .phone-hub-frame { width: 160px; } }
+/* .phone-hub-frame's width lives in phone/PhoneFrame.css, imported by
+   PhoneFrame.jsx (Task #1990). */
 
 /* Mirrors .phone-hub-inner so the phone sits in the exact same visual slot
    (sticky 280px column on the left, flex:1 controls on the right). When you
