@@ -23,6 +23,7 @@ import usePhonePlaythrough from './usePhonePlaythrough';
  *   missions           — show-wide + episode-scoped missions
  *   skin               — phone device chrome (e.g. 'rosegold')
  *   globalFit          — per-screen image fit cascade defaults
+ *   frameUrl           — the show's custom frame image URL, or null
  *   playthrough        — server-backed state object from usePhonePlaythrough
  *                        (null when not playing — keeps the underlying hook
  *                        idle until needed)
@@ -33,6 +34,7 @@ export default function usePhonePlayback(episode) {
   const [missions, setMissions] = useState([]);
   const [skin, setSkin] = useState('rosegold');
   const [globalFit, setGlobalFit] = useState({});
+  const [frameUrl, setFrameUrl] = useState(null);
   // Pass null while idle so usePhonePlaythrough stays dormant — it polls /
   // fetches on episodeId change, and we don't want that running in the
   // background of every episode page view.
@@ -54,6 +56,9 @@ export default function usePhonePlayback(episode) {
       const frameRes = await api.get(`/api/v1/ui-overlays/${showId}/frame`).catch(() => ({ data: {} }));
       if (frameRes.data?.global_fit) setGlobalFit(frameRes.data.global_fit);
       if (frameRes.data?.phone_skin) setSkin(frameRes.data.phone_skin);
+      // The show's custom frame, if one is uploaded (Task #1990), so the
+      // Preview draws the same frame Producer Mode does.
+      setFrameUrl(frameRes.data?.frame_url || null);
       // Show-wide + episode-scoped observers. Fail-open if phone_missions
       // table isn't deployed yet — skipping the mission UI is fine.
       const missionsRes = await api.get(`/api/v1/ui-overlays/${showId}/missions?episode_id=${encodeURIComponent(episode.id)}`).catch(() => ({ data: {} }));
@@ -66,5 +71,5 @@ export default function usePhonePlayback(episode) {
 
   const stop = useCallback(() => setIsPlaying(false), []);
 
-  return { isPlaying, start, stop, overlays, missions, skin, globalFit, playthrough };
+  return { isPlaying, start, stop, overlays, missions, skin, globalFit, frameUrl, playthrough };
 }

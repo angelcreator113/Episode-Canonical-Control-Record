@@ -1,0 +1,14 @@
+/* PhoneFrame — the phone frame's width (Task #1990, C2).
+   Moved from ZonesTab.css, which only Producer Mode's page loads, so the
+   frame keeps its width wherever PhoneFrame is drawn (Producer Mode, the
+   Zones tab, and Preview Phone on the episode page). PhoneHub's inline
+   <style> block still carries its own copy of the breakpoints; keep them in
+   sync. */
+.phone-hub-frame {
+  width: 280px;
+  position: relative;
+}
+@media (max-width: 1024px) { .phone-hub-frame { width: 240px; } }
+@media (max-width: 768px)  { .phone-hub-frame { width: 220px; } }
+@media (max-width: 480px)  { .phone-hub-frame { width: 180px; } }
+@media (max-width: 375px)  { .phone-hub-frame { width: 160px; } }

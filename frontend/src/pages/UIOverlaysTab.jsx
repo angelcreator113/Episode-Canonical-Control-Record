@@ -2539,6 +2539,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           onClose={() => setPreviewMode(false)}
           globalFit={globalFit}
           phoneSkin={phoneSkin}
+          customFrameUrl={customFrameUrl}
         />
       )}
 

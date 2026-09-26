@@ -1,4 +1,5 @@
 import { PHONE_SKINS } from './phoneStyle';
+import './PhoneFrame.css';
 
 /**
  * Shared phone chrome. Renders device body, side buttons, dynamic island,
@@ -11,7 +12,9 @@ import { PHONE_SKINS } from './phoneStyle';
  *     (screen inset 6% from each edge, behind the frame image)
  *
  * This replaces chrome previously duplicated across PhoneHub.jsx:380-543,
- * ScreenLinkEditor.jsx:611-790, and PhonePreviewMode.jsx:416-432.
+ * ScreenLinkEditor.jsx:611-790, and PhonePreviewMode.jsx:416-432. The
+ * Preview now draws through PhoneDevice (Task #1990), and the frame's width
+ * lives in PhoneFrame.css so it holds wherever the frame is drawn.
  */
 export default function PhoneFrame({
   skin = 'midnight',

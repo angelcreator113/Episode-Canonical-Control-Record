@@ -1008,6 +1008,7 @@ const EpisodeDetail = () => {
             }
             globalFit={phone.globalFit}
             phoneSkin={phone.skin}
+            customFrameUrl={phone.frameUrl}
             playthrough={phone.playthrough}
             missions={phone.missions}
             onClose={phone.stop}

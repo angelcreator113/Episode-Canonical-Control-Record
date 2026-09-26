@@ -8,6 +8,16 @@
  * 16, docs/DESIGN_DOCTRINE.md): PhoneHub renders it for Producer Mode.
  * It owns no state and fetches nothing itself; the caller passes the
  * screen, the navigation callbacks and the frame's load/error handlers.
+ *
+ * Preview Phone draws through it too (Task #1990, step C2), with three
+ * optional props that default to Producer Mode's behaviour:
+ *   tapLayer           — a node the caller renders inside the screen area in
+ *                        place of the tap zones and persistent icons, so the
+ *                        Preview keeps its own runtime (conditions, missions,
+ *                        playthrough, back, home). Rendered on every screen,
+ *                        generated or not.
+ *   episodeId          — passed to ScreenContentRenderer.
+ *   contentInteractive — passed to ScreenContentRenderer as `interactive`.
  */
 import ScreenContentRenderer from '../ScreenContentRenderer';
 import PhoneFrame from './PhoneFrame';
@@ -108,6 +118,9 @@ export default function PhoneDevice({
   onNavigate,
   navigationHistory = [],
   onBack,
+  tapLayer,
+  episodeId,
+  contentInteractive = false,
 }) {
   return (
       <PhoneFrame
@@ -140,13 +153,16 @@ export default function PhoneDevice({
               zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
               showId={activeScreen.show_id}
               screenMeta={activeScreen.metadata}
-              interactive={false}
+              interactive={contentInteractive}
+              episodeId={episodeId}
             />
-            <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+            {!tapLayer && (
+              <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
+            )}
             {/* Persistent icons from home screen — show on non-home screens
                 except the Map, which is meant to be a full-bleed canvas
                 where home-screen icons would just clutter the world view. */}
-            {activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && !isMapScreen(phoneScreen) && (
+            {!tapLayer && activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && !isMapScreen(phoneScreen) && (
               <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
             )}
           </>
@@ -167,6 +183,8 @@ export default function PhoneDevice({
             </span>
           </div>
         )}
+
+        {tapLayer}
 
         {/* Back button for navigation — position shifts when Dynamic Island is present */}
         {navigationHistory.length > 0 && onBack && (
