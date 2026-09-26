@@ -4116,6 +4116,11 @@ router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, async (r
     });
   } catch (err) {
     console.error('[CompleteEpisode] Error:', err);
+    // Task #1933: completion refuses a result that would take coins below zero.
+    const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
+    if (err instanceof InsufficientCoinsError) {
+      return res.status(err.status).json(insufficientCoinsBody(err));
+    }
     return res.status(500).json({ success: false, error: err.message });
   }
 });

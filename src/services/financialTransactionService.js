@@ -323,9 +323,14 @@ function normalizePaidFreeFlags(event) {
  * @param {string} episodeId
  * @param {string} showId
  * @param {object} sequelize
+ * @param {object} [options]
+ * @param {boolean} [options.dryRun] compute the transactions and summary
+ *   without writing anything (no ledger rows, no episode totals, no history
+ *   row, no milestones). episodeCompletionService uses it to refuse, before
+ *   any write, a completion that would take coins below zero (Task #1933).
  * @returns {object} { transactions, summary, balance_before, balance_after }
  */
-async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
+async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun = false } = {}) {
   // 1. Check if already finalized
   const [existingTx] = await sequelize.query(
     `SELECT COUNT(*) as cnt FROM financial_transactions
@@ -400,6 +405,7 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
     tx.balance_after = balance;
     tx.episode_id = episodeId;
     tx.event_id = event?.id || null;
+    if (dryRun) { transactions.push(tx); return; }
     const logged = await logTransaction(sequelize, showId, tx);
     if (logged) transactions.push(logged);
   };
@@ -495,6 +501,16 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize) {
   const totalIncome = transactions.filter(t => t.type === 'income' || t.type === 'reward').reduce((s, t) => s + parseFloat(t.amount), 0);
   const totalExpenses = transactions.filter(t => t.type === 'expense' || t.type === 'deduction').reduce((s, t) => s + parseFloat(t.amount), 0);
   const netProfit = totalIncome - totalExpenses;
+
+  if (dryRun) {
+    return {
+      dry_run: true,
+      transactions,
+      summary: { total_income: totalIncome, total_expenses: totalExpenses, net_profit: netProfit },
+      balance_before: balanceBefore,
+      balance_after: balance,
+    };
+  }
 
   try {
     await sequelize.query(

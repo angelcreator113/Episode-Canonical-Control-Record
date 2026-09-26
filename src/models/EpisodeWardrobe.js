@@ -108,6 +108,9 @@ module.exports = (sequelize) => {
       deletedAt: 'deleted_at',
       paranoid: true,
       underscored: true,
+      // Task #1933: the table's only indexes on these columns, after
+      // src/migrations/20260926000000-dedupe-episode-wardrobe-indexes.js
+      // drops the duplicates and keeps one of each under these names.
       indexes: [
         {
           unique: true,
@@ -116,9 +119,11 @@ module.exports = (sequelize) => {
         },
         {
           fields: ['episode_id'],
+          name: 'episode_wardrobe_episode_id',
         },
         {
           fields: ['wardrobe_id'],
+          name: 'episode_wardrobe_wardrobe_id',
         },
       ],
     }

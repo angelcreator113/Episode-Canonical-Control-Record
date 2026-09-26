@@ -7,6 +7,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
+const { spendCoins, InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -1246,27 +1247,40 @@ router.post('/select', requireAuth, async (req, res) => {
         // coins decremented in character_state with no audit trail (silent
         // money loss). logTransaction rethrows when given a transaction
         // option so the rollback cascades up.
+        //
+        // Task #1933: the read above is only a fast refusal. The deduction
+        // itself is conditional (spendCoins: `WHERE coins >= :cost`), so a
+        // second spend that landed between the read and this write can no
+        // longer take the balance below zero; it is refused instead and the
+        // transaction (ledger row included) rolls back.
         const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
         const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
-        await models.sequelize.transaction(async (t) => {
-          await models.sequelize.query(
-            `UPDATE character_state SET coins = coins - :cost, updated_at = NOW() WHERE id = :id`,
-            { replacements: { cost, id: state.id }, transaction: t }
-          );
-          await logTransaction(models.sequelize, show_id, {
-            type: 'expense',
-            category: 'wardrobe_purchase',
-            amount: cost,
-            description: `Wardrobe purchase: ${item.name}`,
-            source_type: 'wardrobe',
-            source_id: wardrobe_id,
-            source_name: item.name,
-            balance_before: ledgerBefore,
-            balance_after: ledgerBefore - cost,
-            metadata: { wardrobe_id, item_name: item.name, flow: 'select' },
-            transaction: t,
+        try {
+          await models.sequelize.transaction(async (t) => {
+            if (cost > 0) {
+              await spendCoins(models.sequelize, { stateId: state?.id, cost, transaction: t, action: 'wardrobe_select' });
+            }
+            await logTransaction(models.sequelize, show_id, {
+              type: 'expense',
+              category: 'wardrobe_purchase',
+              amount: cost,
+              description: `Wardrobe purchase: ${item.name}`,
+              source_type: 'wardrobe',
+              source_id: wardrobe_id,
+              source_name: item.name,
+              balance_before: ledgerBefore,
+              balance_after: ledgerBefore - cost,
+              metadata: { wardrobe_id, item_name: item.name, flow: 'select' },
+              transaction: t,
+            });
           });
-        });
+        } catch (spendErr) {
+          if (spendErr instanceof InsufficientCoinsError) {
+            console.error(`[SELECT] refused "${item.name}": ${spendErr.message}`);
+            return res.status(400).json(insufficientCoinsBody(spendErr));
+          }
+          throw spendErr;
+        }
         // Mark item as owned
         await models.Wardrobe.update(
           { is_owned: true, updated_at: new Date() },
@@ -1354,7 +1368,7 @@ router.post('/purchase', requireAuth, async (req, res) => {
 
     // 2. Get Lala's coins
     const state = await models.CharacterState.findOne({
-      attributes: ['coins'],
+      attributes: ['id', 'coins'],
       where: { show_id, character_key: 'lala' },
       order: [['updated_at', 'DESC']],
       raw: true,
@@ -1375,29 +1389,41 @@ router.post('/purchase', requireAuth, async (req, res) => {
     // /select route. Either both writes succeed or both roll back, so a
     // failing ledger insert can no longer leave coins missing without an
     // audit trail.
-    const newCoins = currentCoins - cost;
+    //
+    // Task #1933: this used to write the balance it had read minus the cost
+    // (`SET coins = :newCoins`) to every 'lala' row of the show, so two
+    // concurrent purchases both paid from the same balance. The deduction is
+    // now conditional on the row it read (spendCoins: `WHERE coins >=
+    // :cost`); a purchase that lost a race is refused and rolls back.
+    let newCoins = currentCoins - cost;
     const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
     const ledgerBefore = await getCurrentBalance(models.sequelize, show_id);
-    await models.sequelize.transaction(async (t) => {
-      await models.sequelize.query(
-        `UPDATE character_state SET coins = :newCoins, updated_at = NOW()
-         WHERE show_id = :show_id AND character_key = 'lala'`,
-        { replacements: { newCoins, show_id }, transaction: t }
-      );
-      await logTransaction(models.sequelize, show_id, {
-        type: 'expense',
-        category: 'wardrobe_purchase',
-        amount: cost,
-        description: `Wardrobe purchase: ${item.name}`,
-        source_type: 'wardrobe',
-        source_id: wardrobe_id,
-        source_name: item.name,
-        balance_before: ledgerBefore,
-        balance_after: ledgerBefore - cost,
-        metadata: { wardrobe_id, item_name: item.name, flow: 'purchase' },
-        transaction: t,
+    try {
+      await models.sequelize.transaction(async (t) => {
+        if (cost > 0) {
+          newCoins = await spendCoins(models.sequelize, { stateId: state?.id, cost, transaction: t, action: 'wardrobe_purchase' });
+        }
+        await logTransaction(models.sequelize, show_id, {
+          type: 'expense',
+          category: 'wardrobe_purchase',
+          amount: cost,
+          description: `Wardrobe purchase: ${item.name}`,
+          source_type: 'wardrobe',
+          source_id: wardrobe_id,
+          source_name: item.name,
+          balance_before: ledgerBefore,
+          balance_after: ledgerBefore - cost,
+          metadata: { wardrobe_id, item_name: item.name, flow: 'purchase' },
+          transaction: t,
+        });
       });
-    });
+    } catch (spendErr) {
+      if (spendErr instanceof InsufficientCoinsError) {
+        console.error(`[PURCHASE] refused "${item.name}": ${spendErr.message}`);
+        return res.status(400).json(insufficientCoinsBody(spendErr));
+      }
+      throw spendErr;
+    }
 
     // 4. Mark item as owned
     await models.Wardrobe.update(
