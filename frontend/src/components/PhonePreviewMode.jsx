@@ -26,8 +26,13 @@ function getLinks(screen) {
  *     `usePhonePlaythrough(episodeId)` hook. State persists across sessions,
  *     taps hit the server-side evaluator, and the reset button clears the
  *     DB row in place. Same evaluator runs on both sides.
+ *
+ * `embedded` (Task #1994, step C3 of doctrine rule 16) draws the same phone
+ * inside its container instead of as a full-screen overlay: no backdrop, no
+ * Close button, no ESC listener. The runtime is unchanged. The Episode tab
+ * uses it with playthrough={null}, so nothing is saved.
  */
-export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', customFrameUrl = null, playthrough = null, missions = [] }) {
+export default function PhonePreviewMode({ screens = [], initialScreen, onClose, globalFit, phoneSkin = 'midnight', customFrameUrl = null, playthrough = null, missions = [], embedded = false }) {
   const [activeScreen, setActiveScreen] = useState(initialScreen || screens[0] || null);
   const [history, setHistory] = useState([]);
   const [slideDir, setSlideDir] = useState(null); // 'left' | 'right' | null
@@ -236,12 +241,13 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     }, TRANSITION_MS);
   }, [initialScreen, screens, animating]);
 
-  // ESC key handler
+  // ESC key handler — overlay only; an embedded phone leaves ESC to its page.
   useEffect(() => {
+    if (embedded) return undefined;
     const handler = (e) => { if (e.key === 'Escape') onClose?.(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
+  }, [onClose, embedded]);
 
   // Breadcrumb trail
   const breadcrumbs = useMemo(() => {
@@ -359,32 +365,52 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
     </div>
   );
 
-  return (
-    <div style={{
+  // Embedded: sits in its container on a light page, so the controls and
+  // breadcrumb take ink colours and Reset sits in the flow above the phone.
+  const shellStyle = embedded
+    ? {
+      position: 'relative', width: '100%',
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+    }
+    : {
       position: 'fixed', inset: 0, zIndex: 9999,
       background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(8px)',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    }}>
-      {/* Close button */}
-      <button onClick={onClose} title="Close (ESC)" style={{
-        position: 'absolute', top: 16, right: 16, zIndex: 10,
-        background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8,
-        padding: '8px 14px', cursor: 'pointer', color: '#fff',
-        display: 'flex', alignItems: 'center', gap: 6,
-        fontFamily: MONO, fontSize: 12,
-      }}>
-        <span style={{ opacity: 0.6 }}>ESC</span>
-        <X size={16} />
-      </button>
+    };
+  const resetStyle = embedded
+    ? {
+      alignSelf: 'flex-end', marginBottom: 8,
+      background: 'transparent', border: `1px solid ${TOKENS.gold}`, borderRadius: 8,
+      padding: '6px 10px', cursor: 'pointer', color: TOKENS.ink,
+      display: 'flex', alignItems: 'center', gap: 6,
+      fontFamily: MONO, fontSize: 11,
+    }
+    : {
+      position: 'absolute', top: 16, right: 92, zIndex: 10,
+      background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8,
+      padding: '8px 12px', cursor: 'pointer', color: '#fff',
+      display: 'flex', alignItems: 'center', gap: 6,
+      fontFamily: MONO, fontSize: 12,
+    };
+
+  return (
+    <div style={shellStyle} data-embedded={embedded ? 'true' : undefined}>
+      {/* Close button — overlay only */}
+      {!embedded && (
+        <button onClick={onClose} title="Close (ESC)" style={{
+          position: 'absolute', top: 16, right: 16, zIndex: 10,
+          background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8,
+          padding: '8px 14px', cursor: 'pointer', color: '#fff',
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontFamily: MONO, fontSize: 12,
+        }}>
+          <span style={{ opacity: 0.6 }}>ESC</span>
+          <X size={16} />
+        </button>
+      )}
 
       {/* Reset button — wipes in-memory state + visited + history so authors can replay from scratch */}
-      <button onClick={resetState} title="Reset playthrough" style={{
-        position: 'absolute', top: 16, right: 92, zIndex: 10,
-        background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8,
-        padding: '8px 12px', cursor: 'pointer', color: '#fff',
-        display: 'flex', alignItems: 'center', gap: 6,
-        fontFamily: MONO, fontSize: 12,
-      }}>
+      <button onClick={resetState} title="Reset playthrough" style={resetStyle}>
         <RotateCcw size={14} /> Reset
       </button>
 
@@ -517,25 +543,16 @@ export default function PhonePreviewMode({ screens = [], initialScreen, onClose,
         tapLayer={tapLayer}
       />
 
-      {/* Screen name */}
-      {activeScreen && (
-        <div style={{
-          marginTop: 12, textAlign: 'center', color: '#fff',
-          fontFamily: PROSE, fontSize: 15, fontWeight: 600,
-        }}>
-          {activeScreen.name || activeScreen.beat || activeScreen.id}
-        </div>
-      )}
-
-      {/* Breadcrumb trail */}
+      {/* Breadcrumb trail. The screen's name is on the device itself, so it
+          is not repeated below it (Task #1994). */}
       <div style={{
-        marginTop: 8, display: 'flex', alignItems: 'center', gap: 6,
-        fontFamily: MONO, fontSize: 10, color: 'rgba(255,255,255,0.45)',
+        marginTop: 12, display: 'flex', alignItems: 'center', gap: 6,
+        fontFamily: MONO, fontSize: 10, color: embedded ? '#6B6557' : 'rgba(255,255,255,0.45)',
         flexWrap: 'wrap', justifyContent: 'center', maxWidth: 360, padding: '0 12px',
       }}>
         {breadcrumbs.map((name, i) => (
           <Fragment key={i}>
-            {i > 0 && <span style={{ color: 'rgba(255,255,255,0.25)' }}>{'>'}</span>}
+            {i > 0 && <span style={{ color: embedded ? '#A09889' : 'rgba(255,255,255,0.25)' }}>{'>'}</span>}
             <span style={i === breadcrumbs.length - 1 ? { color: TOKENS.gold, fontWeight: 600 } : {}}>
               {name}
             </span>
