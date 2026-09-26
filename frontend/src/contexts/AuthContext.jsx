@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }) => {
           setIsAuthenticated(false);
         }
       } catch (err) {
-        console.error('[AuthContext] Check auth error:', err);
+        console.error('[AuthContext] Check auth error:', err.message);
         setError(err.message);
         setIsAuthenticated(false);
       } finally {
@@ -73,21 +73,17 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = useCallback(async (email, password) => {
-    console.log('[AuthContext] Login called');
     setLoading(true);
     setError(null);
     try {
       const response = await authService.login(email, password);
-      console.log('[AuthContext] Login response:', response);
       const user = response?.user || { email };
-      console.log('[AuthContext] Setting user:', user);
       setUser(user);
-      console.log('[AuthContext] Setting isAuthenticated to true');
       setIsAuthenticated(true);
-      console.log('[AuthContext] Login complete, isAuthenticated is now true');
       return response;
     } catch (err) {
-      console.error('[AuthContext] Login error:', err);
+      // Message and status only: an axios error carries the login body (Task #1976).
+      console.error('[AuthContext] Login error:', err.message, err.response?.status);
       setError(err.message);
       setIsAuthenticated(false);
       throw err;
@@ -97,7 +93,6 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const logout = useCallback(async () => {
-    console.log('[AuthContext] Logout called');
     setLoading(true);
     try {
       // Clear backend/storage first
@@ -106,9 +101,8 @@ export const AuthProvider = ({ children }) => {
       // Then clear state
       setUser(null);
       setIsAuthenticated(false);
-      console.log('[AuthContext] Logout complete');
     } catch (err) {
-      console.error('[AuthContext] Logout error:', err);
+      console.error('[AuthContext] Logout error:', err.message);
       setError(err.message);
       // Still clear state even if backend call fails
       setUser(null);

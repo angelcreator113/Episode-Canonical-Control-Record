@@ -12,7 +12,6 @@ export const authService = {
    */
   async login(email, password) {
     try {
-      console.log('[authService] Sending login request to:', '/api/v1/auth/login');
       const response = await api.post('/api/v1/auth/login', {
         email,
         password,
@@ -20,19 +19,14 @@ export const authService = {
         role: 'USER',
       });
 
-      console.log('[authService] Login response received:', response.status);
-      console.log('[authService] Response data:', response.data);
-
       if (response.data.data?.accessToken) {
         const { accessToken, refreshToken, user } = response.data.data;
         
-        console.log('[authService] Storing tokens and user...');
         // Store tokens
         localStorage.setItem('authToken', accessToken);
         localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(user));
         
-        console.log('[authService] Tokens stored successfully');
         return {
           accessToken,
           refreshToken,
@@ -42,13 +36,9 @@ export const authService = {
       }
       throw new Error('No token in response');
     } catch (error) {
-      console.error('[authService] Login failed:', error);
-      console.error('[authService] Error details:', {
-        message: error.message,
-        response: error.response?.status,
-        responseData: error.response?.data,
-        code: error.code,
-      });
+      // Message and status only: the error object carries the request body
+      // (email and password) and the response body (Task #1976).
+      console.error('[authService] Login failed:', error.message, error.response?.status);
       throw error;
     }
   },
@@ -136,7 +126,8 @@ export const authService = {
       }
       throw new Error('No token in refresh response');
     } catch (error) {
-      console.error('Token refresh failed:', error);
+      // Message and status only: the request body carries the refresh token (Task #1976).
+      console.error('Token refresh failed:', error.message, error.response?.status);
       this.logout();
       throw error;
     }
