@@ -830,7 +830,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
 
   // ── Screen link navigation ──
 
-  const handleNavigate = (targetKey) => {
+  // fromKey: the screen the phone was showing, when the caller knows it —
+  // PhoneHub passes it so that navigating while an icon is selected records
+  // that screen, not the icon, for Back (Task #2008).
+  const handleNavigate = (targetKey, fromKey) => {
     // Find the overlay matching the target screen key
     const target = overlays.find(o => {
       const id = (o.id || '').toLowerCase();
@@ -840,8 +843,9 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     });
     if (target) {
       // Push current screen to history for back navigation
-      if (activeScreen) {
-        setNavHistory(prev => [...prev, activeScreen.id || activeScreen.key]);
+      const from = fromKey || (activeScreen && (activeScreen.id || activeScreen.key));
+      if (from) {
+        setNavHistory(prev => [...prev, from]);
       }
       setActiveScreen(target);
     }
