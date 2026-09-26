@@ -200,6 +200,12 @@
   letter-spacing: 0.4px;
 }
 
+/* Task #1920: marks a screen that is this episode's own override. */
+.lalas-phone-badge-override {
+  background: var(--lala-ink, #2C2C2C);
+  color: var(--lala-parchment, #FAF7F0);
+}
+
 .lalas-phone-moments {
   list-style: none;
   margin: 0;
