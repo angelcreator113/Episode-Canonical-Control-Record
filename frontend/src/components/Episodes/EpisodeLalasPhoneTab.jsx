@@ -166,6 +166,14 @@ function EpisodeLalasPhoneTab({ episode, onPreview }) {
                       <div className="lalas-phone-screen-name">
                         {s.name}
                         {s.is_home && <span className="lalas-phone-badge">HOME</span>}
+                        {s.is_episode_override && (
+                          <span
+                            className="lalas-phone-badge lalas-phone-badge-override"
+                            title="This episode's own version of the screen, replacing the show default"
+                          >
+                            THIS EPISODE
+                          </span>
+                        )}
                       </div>
                       <div className="lalas-phone-screen-meta">
                         {taps} tap {taps === 1 ? 'zone' : 'zones'} · {zones} content {zones === 1 ? 'zone' : 'zones'}

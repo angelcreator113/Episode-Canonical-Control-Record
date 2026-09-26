@@ -136,6 +136,9 @@ router.get('/:showId', requireAuth, async (req, res) => {
         screen_links: primary?.metadata?.screen_links || null,
         image_fit: primary?.metadata?.image_fit || null,
         content_zones: primary?.metadata?.content_zones || null,
+        // True when the screen shown is this episode's own override of the
+        // show default (only possible with ?episode_id=). Additive (Task #1920).
+        is_episode_override: !!primary?.is_episode_override,
         // Category override from asset metadata (for built-in types reassigned by user)
         ...(primary?.metadata?.overlay_category ? { category: primary.metadata.overlay_category } : {}),
         variants,

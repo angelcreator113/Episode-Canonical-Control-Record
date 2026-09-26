@@ -42,7 +42,10 @@ export default function usePhonePlayback(episode) {
     const showId = episode?.show_id || episode?.showId;
     if (!showId) return;
     try {
-      const res = await api.get(`/api/v1/ui-overlays/${showId}`);
+      // Scoped to the episode (Task #1920), so the preview plays the screens
+      // the Lala's Phone tab lists: show defaults with this episode's overrides.
+      const episodeQuery = episode?.id ? `?episode_id=${encodeURIComponent(episode.id)}` : '';
+      const res = await api.get(`/api/v1/ui-overlays/${showId}${episodeQuery}`);
       const all = res.data?.data || [];
       setOverlays(all.filter(o => o.generated && o.url));
       // Frame settings (skin + per-screen fit cascade) so the player sees

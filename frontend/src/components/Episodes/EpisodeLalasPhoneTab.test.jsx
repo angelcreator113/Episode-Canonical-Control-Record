@@ -112,6 +112,22 @@ describe('EpisodeLalasPhoneTab — render', () => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
   });
 
+  test('marks a screen that is this episode\'s own override (Task #1920)', async () => {
+    mockGets({
+      overlays: [
+        { id: 'home', name: 'Home', category: 'phone', is_home: true, generated: true, url: 'https://x/home.png', asset_id: 'a-home', is_episode_override: false },
+        { id: 'camera', name: 'Camera', category: 'phone', generated: true, url: 'https://x/cam-ep.png', asset_id: 'a-cam-ep', is_episode_override: true },
+      ],
+    });
+    render(<EpisodeLalasPhoneTab episode={EPISODE} onPreview={() => {}} />);
+    const camera = (await screen.findByText('Camera')).closest('li');
+    expect(within(camera).getByText('THIS EPISODE')).toBeTruthy();
+    const home = screen.getByText('Home', { selector: '.lalas-phone-screen-name' }).closest('li');
+    expect(within(home).queryByText('THIS EPISODE')).toBeNull();
+    const list = camera.closest('ul');
+    expect(within(list).getAllByText('THIS EPISODE')).toHaveLength(1);
+  });
+
   test('leads with the Preview Phone action, which calls onPreview', async () => {
     mockGets();
     const onPreview = vi.fn();
