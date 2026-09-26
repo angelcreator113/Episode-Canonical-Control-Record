@@ -16,9 +16,7 @@
  */
 import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { MoreVertical, Trash2, EyeOff, Edit3, Settings } from 'lucide-react';
-import ScreenContentRenderer from './ScreenContentRenderer';
-import PhoneFrame from './phone/PhoneFrame';
-import PhoneMapView, { isMapScreen } from './phone/PhoneMapView';
+import PhoneDevice from './phone/PhoneDevice';
 import PhoneHubSectionTabs from './PhoneHubSectionTabs';
 import { isIcon, isScreen, getScreenLinks, getIconUrls } from '../lib/overlayUtils';
 
@@ -69,86 +67,6 @@ function getScreenImageStyle(screen, globalFit) {
   }
 
   return style;
-}
-
-// Renders interactive tap zone overlays on the phone screen
-function ScreenLinkOverlay({ links = [], onNavigate }) {
-  if (!links.length || !onNavigate) return null;
-  return (
-    <>
-      {links.map(link => (
-        <div
-          key={link.id}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (link.target) onNavigate(link.target);
-          }}
-          title={link.label || link.target}
-          style={{
-            position: 'absolute',
-            left: `${link.x}%`, top: `${link.y}%`,
-            width: `${link.w}%`, height: `${link.h}%`,
-            cursor: link.target ? 'pointer' : 'default',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 6,
-            transition: 'background 0.15s',
-            zIndex: 2,
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(184,150,46,0.12)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-        >
-          {link.icon_url && (
-            <img
-              src={link.icon_url}
-              alt={link.label || link.target}
-              style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }}
-              draggable={false}
-            />
-          )}
-        </div>
-      ))}
-    </>
-  );
-}
-
-// Renders persistent icons (from home screen) that stay visible on all screens
-function PersistentOverlay({ links = [], onNavigate }) {
-  if (!links.length || !onNavigate) return null;
-  return (
-    <>
-      {links.map(link => (
-        <div
-          key={link.id}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (link.target) onNavigate(link.target);
-          }}
-          title={link.label || link.target}
-          style={{
-            position: 'absolute',
-            left: `${link.x}%`, top: `${link.y}%`,
-            width: `${link.w}%`, height: `${link.h}%`,
-            cursor: link.target ? 'pointer' : 'default',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 6,
-            zIndex: 4,
-            transition: 'background 0.15s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(184,150,46,0.15)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-        >
-          {link.icon_url && (
-            <img
-              src={link.icon_url}
-              alt={link.label || link.target}
-              style={{ width: '92%', height: '92%', objectFit: 'contain', pointerEvents: 'none' }}
-              draggable={false}
-            />
-          )}
-        </div>
-      ))}
-    </>
-  );
 }
 
 const menuItemStyle = {
@@ -435,91 +353,21 @@ export default function PhoneHub({
     <div className="phone-hub-inner">
       {/* Phone Device */}
       <div className="phone-hub-device">
-      <PhoneFrame
+      <PhoneDevice
         skin={skin}
-        customFrameUrl={useCustomFrame ? customFrameUrl : null}
+        customFrameUrl={customFrameUrl}
+        useCustomFrame={useCustomFrame}
         onCustomFrameLoad={() => setFrameLoaded(true)}
         onCustomFrameError={() => { setFrameError(true); setFrameLoaded(false); }}
-      >
-        {phoneScreen && (isMapScreen(phoneScreen) || phoneScreen.url) ? (
-          <>
-            {/* Map screens render the live World Foundation map as their
-                base layer (image + city pins) instead of the uploaded
-                screen image. Falls back to the uploaded image if WF has
-                no map image set yet. Regular screens render the upload. */}
-            {isMapScreen(phoneScreen) ? (
-              <div style={{ position: 'absolute', inset: 0 }}>
-                <PhoneMapView
-                  showId={activeScreen.show_id}
-                  fallbackImageUrl={phoneScreen.url}
-                />
-              </div>
-            ) : (
-              <img
-                src={phoneScreen.url}
-                alt={phoneScreen.name}
-                style={getScreenImageStyle(phoneScreen, globalFit)}
-              />
-            )}
-            <ScreenContentRenderer
-              zones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
-              showId={activeScreen.show_id}
-              screenMeta={activeScreen.metadata}
-              interactive={false}
-            />
-            <ScreenLinkOverlay links={activeScreen.screen_links || activeScreen.metadata?.screen_links || []} onNavigate={onNavigate} />
-            {/* Persistent icons from home screen — show on non-home screens
-                except the Map, which is meant to be a full-bleed canvas
-                where home-screen icons would just clutter the world view. */}
-            {activeScreen.id !== firstScreen?.id && persistentLinks.length > 0 && !isMapScreen(phoneScreen) && (
-              <PersistentOverlay links={persistentLinks} onNavigate={onNavigate} />
-            )}
-          </>
-        ) : useCustomFrame ? (
-          <div style={{ width: '100%', height: '100%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>
-            <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace" }}>{phoneScreen ? 'Not generated' : 'Select a screen'}</span>
-          </div>
-        ) : (
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            color: '#555',
-          }}>
-            <span style={{ fontSize: 32 }}>📱</span>
-            <span style={{ fontSize: 11, marginTop: 8, fontFamily: "'DM Mono', monospace" }}>
-              {phoneScreen ? 'Not generated yet' : 'Select a screen'}
-            </span>
-          </div>
-        )}
-
-        {/* Back button for navigation — position shifts when Dynamic Island is present */}
-        {navigationHistory.length > 0 && onBack && (
-          <button onClick={onBack} style={{
-            position: 'absolute',
-            top: useCustomFrame ? 6 : 38,
-            left: useCustomFrame ? 6 : 8,
-            zIndex: 10,
-            padding: '3px 8px', fontSize: 9, fontWeight: 700, border: 'none',
-            borderRadius: 10, background: 'rgba(0,0,0,0.5)', color: '#fff',
-            cursor: 'pointer', backdropFilter: 'blur(4px)',
-          }}>← Back</button>
-        )}
-
-        {/* Screen name overlay — built-in frame only (custom frames often have their own chrome) */}
-        {!useCustomFrame && phoneScreen && (
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
-            padding: '20px 12px 10px',
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{phoneScreen.name}</div>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', fontFamily: "'DM Mono', monospace" }}>
-              {phoneScreen.beat || phoneScreen.description?.slice(0, 40)}
-            </div>
-          </div>
-        )}
-      </PhoneFrame>
+        phoneScreen={phoneScreen}
+        activeScreen={activeScreen}
+        firstScreen={firstScreen}
+        persistentLinks={persistentLinks}
+        globalFit={globalFit}
+        onNavigate={onNavigate}
+        navigationHistory={navigationHistory}
+        onBack={onBack}
+      />
 
       {/* "Edit Tap Zones" button removed — the Zones tab in the section bar
           is the canonical entry point now. `onEditZones` prop kept for any
