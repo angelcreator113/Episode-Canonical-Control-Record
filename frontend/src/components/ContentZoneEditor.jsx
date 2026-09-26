@@ -19,7 +19,7 @@ import ScreenContentRenderer from './ScreenContentRenderer';
 import ConditionRow from './phone-editor/ConditionRow';
 import api from '../services/api';
 import PhoneFrame from './phone/PhoneFrame';
-import { getScreenImageStyle } from './PhoneHub';
+import { getScreenImageStyle } from './phone/phoneStyle';
 
 const ZONE_COLORS = ['#e8a0b4', '#b8a9d4', '#7ab3d4', '#a8d5a2', '#c9a84c', '#6bba9a', '#e06060', '#b89060'];
 

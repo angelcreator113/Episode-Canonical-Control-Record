@@ -4,7 +4,7 @@
  */
 import { useState, useCallback, useEffect, useMemo, Fragment } from 'react';
 import { X, ChevronLeft, Wifi, Signal, BatteryFull, RotateCcw, Target, CheckCircle2, Circle } from 'lucide-react';
-import { getScreenImageStyle, PHONE_SKINS } from '../components/PhoneHub';
+import { getScreenImageStyle, PHONE_SKINS } from './phone/phoneStyle';
 import { filterZones, applyActions, actionsForZone, evaluateMissions, applyMissionRewards } from '../lib/phoneRuntime';
 
 const TOKENS = { parchment: '#FAF7F0', gold: '#B8962E', ink: '#2C2C2C' };

@@ -1,4 +1,4 @@
-import { PHONE_SKINS } from '../PhoneHub';
+import { PHONE_SKINS } from './phoneStyle';
 
 /**
  * Shared phone chrome. Renders device body, side buttons, dynamic island,

@@ -12,7 +12,7 @@
 import ScreenContentRenderer from '../ScreenContentRenderer';
 import PhoneFrame from './PhoneFrame';
 import PhoneMapView, { isMapScreen } from './PhoneMapView';
-import { getScreenImageStyle } from '../PhoneHub';
+import { getScreenImageStyle } from './phoneStyle';
 
 // Renders interactive tap zone overlays on the phone screen
 function ScreenLinkOverlay({ links = [], onNavigate }) {
