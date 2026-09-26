@@ -111,12 +111,14 @@ class DecisionLogger {
     try {
       await this._writeToDb(entry);
     } catch (e) {
-      // Buffer for later
+      // Buffer for later. Routes build one logger per request and discard
+      // it, so a buffered entry is in practice a lost row: say so at error
+      // level (#1954), not as routine info.
       this.buffer.push(entry);
       if (this.buffer.length >= this.bufferSize) {
         await this.flush();
       }
-      console.log('Decision buffered:', type, e.message);
+      console.error('[DecisionLogger] decision_log write failed; entry buffered on this instance and lost if it is discarded:', type, e.message);
     }
   }
 
@@ -230,10 +232,12 @@ class DecisionLogger {
   /**
    * Log a browse pool generation
    */
-  async logBrowsePoolGenerated({ episode_id, show_id, user_id, bias, pool_size, total_items, has_wardrobe }) {
+  async logBrowsePoolGenerated({ episode_id, show_id, user_id, bias, pool_size, total_items, has_wardrobe, source = 'evaluate_page' }) {
     // user_id is passed through as given — no fallback. It is the
     // middleware-mapped req.user.id and is the F-AUTH-1 G3 clause 3 evidence
-    // path (#1942); a substituted default would mask a missing principal.
+    // path (#1942, #1954); a substituted default would mask a missing principal.
+    // source: the world route keeps its original 'evaluate_page' label; the
+    // styling game's POST /wardrobe/browse-pool passes 'styling_game' (#1954).
     return this.log({
       type: DECISION_TYPES.BROWSE_POOL_GENERATED,
       episode_id,
@@ -241,7 +245,7 @@ class DecisionLogger {
       user_id,
       context: { has_wardrobe },
       decision: { bias, pool_size, total_items },
-      source: 'evaluate_page',
+      source,
     });
   }
 

@@ -9,6 +9,7 @@ const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { spendCoins, InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 const { itemReach, toCharacter } = require('../services/wardrobeReach');
+const { DecisionLogger } = require('../utils/decisionLogger');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
@@ -1052,6 +1053,39 @@ function parseJSON(val, fallback) {
 }
 
 
+/**
+ * #1954: record who generated a browse pool, in decision_log.
+ *
+ * This is the route the styling game calls (EpisodeWardrobeGameplay's
+ * loadPool), so this row is the live path for F-AUTH-1 G3 clause 3's
+ * write-attribution evidence. user_id is req.user.id as the auth
+ * middleware maps it, with no fallback: a substituted default would mask a
+ * missing principal.
+ *
+ * Awaited, so the row is committed before the response is sent (the clause-3
+ * integration test reads the table right after the response; one INSERT).
+ * It never fails or changes the pool response: DecisionLogger.log catches a
+ * failed INSERT itself and logs it with console.error, and anything else
+ * thrown here is caught and logged below.
+ */
+async function recordBrowsePoolGenerated(models, req, facts) {
+  try {
+    const logger = new DecisionLogger(models.sequelize);
+    await logger.logBrowsePoolGenerated({
+      episode_id: facts.episode_id,
+      show_id: facts.show_id,
+      user_id: req.user.id,
+      bias: null,
+      pool_size: facts.pool_size,
+      total_items: facts.total_items,
+      has_wardrobe: facts.total_items > 0,
+      source: 'styling_game',
+    });
+  } catch (err) {
+    console.error('[wardrobe] browse-pool decision_log write failed (pool response unaffected):', err?.message);
+  }
+}
+
 // ═══════════════════════════════════════════
 // POST /api/v1/wardrobe/browse-pool
 // ═══════════════════════════════════════════
@@ -1110,6 +1144,9 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
     });
 
     if (allItems.length === 0) {
+      await recordBrowsePoolGenerated(models, req, {
+        episode_id, show_id, pool_size: 0, total_items: 0,
+      });
       return res.json({ success: true, pool: [], message: 'No wardrobe items found. Seed items first.' });
     }
 
@@ -1303,6 +1340,10 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
       if (a.is_owned && !b.is_owned) return -1;
       if (!a.is_owned && b.is_owned) return 1;
       return (b.match_score + Math.random() * 10) - (a.match_score + Math.random() * 10);
+    });
+
+    await recordBrowsePoolGenerated(models, req, {
+      episode_id, show_id, pool_size: shuffled.length, total_items: allItems.length,
     });
 
     return res.json({
