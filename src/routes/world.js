@@ -253,6 +253,9 @@ router.post('/world/:showId/browse-pool', requireAuth, async (req, res) => {
       await logger.logBrowsePoolGenerated({
         episode_id,
         show_id: showId,
+        // No fallback: this route is auth-gated, so req.user is set; the persisted value is
+        // F-AUTH-1 G3 clause 3's evidence (#1942), so it must be the mapped id.
+        user_id: req.user.id,
         bias,
         pool_size,
         total_items: result.config.total_items,

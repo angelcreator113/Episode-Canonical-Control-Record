@@ -1,49 +1,59 @@
 /**
- * F-AUTH-1 Gate G3 clause 3 — decisionLogs `user_id` test.
+ * F-AUTH-1 Gate G3 clause 3 — write attribution: persisted user id equals the
+ * middleware-mapped principal.
  *
- * Specified at Fix Plan v2.53 §1.1 and restated at v2.54 §2.1. This is NOT
- * v1.5 §4.6's verification step 1, which compared the persisted value against
- * a sibling route's write and therefore passed when both were `undefined`.
+ * RETARGETED (#1942). This file previously exercised POST /api/v1/decision-logs
+ * and the plural `decision_logs` table. That surface was retired under
+ * Evoni's ruling (b) on #1942: production never had `decision_logs`, so the
+ * test only ever passed against CI's migrated schema and clause 3's evidence
+ * was never exercised against production. Under her ruling option 1 on #1942
+ * (2026-09-26) it now exercises the one write-attribution path this change
+ * creates: POST /api/v1/world/:showId/browse-pool (requireAuth) →
+ * DecisionLogger.logBrowsePoolGenerated → INSERT INTO decision_log, whose
+ * `user_id` (uuid) exists in production (canon capture 2026-09-17) and is
+ * created by the live migration 20260219000001-decision-log-browse-pool.js.
+ * The substitution and the finding behind it are recorded in the register
+ * (docs/audit/F-AUTH-1_G3Clause3_Retarget_2026-09-26.md). The filename is
+ * kept because Fix Plan v2.52–v2.59 cite this file by name.
  *
- * Discharges v2.52 §6 item 1. Per v2.52 §3 a test discharging a recorded
- * ledger obligation requires no authorizing revision; the migration it depends
- * on is authorized separately at v2.54 §1.
- *
- * THE THREE ASSERTIONS, and why each is worded as it is:
+ * Specified at Fix Plan v2.53 §1.1 and restated at v2.54 §2.1; the three
+ * assertions are unchanged in substance:
  *
  *   1. Persisted `user_id` is non-null and not the string 'undefined'.
- *      The string form matters: `req.user?.sub` evaluated to `undefined` and a
- *      permissive column would have stored "undefined" as text.
  *
- *   2. It equals `req.user.id` AS THE MIDDLEWARE SETS IT — not a sibling
- *      route's write, and not the `sub` claim. Ground truth is read from
- *      GET /api/v1/auth/me, which returns the middleware-mapped `req.user`.
- *      Asserting against the signed `sub` would be correct today and wrong
- *      after any remapping, which is the coupling F-Auth-5 removed and which
- *      a test must not reintroduce.
- *
+ *   2. It equals `req.user.id` AS THE MIDDLEWARE SETS IT. Ground truth is read
+ *      from GET /api/v1/auth/me, which returns the middleware-mapped `req.user`.
  *      COUPLING, RECORDED NOT DESIGNED AROUND (v2.54 §2.1): /me runs
  *      `authenticateJWT` from src/middleware/jwtAuth.js, a different
- *      middleware from this route's `requireAuth` (src/middleware/auth.js:487).
- *      Both map `id: decoded.sub`, and no `sub` key is set by any of the five
- *      req.user assignment sites across the two files. The proxy is sound
- *      today; it is not sound by construction. `req.user` is not reachable
- *      from the test boundary and this is the closest available ground truth.
+ *      middleware from this route's `requireAuth` (src/middleware/auth.js).
+ *      Both map `id: decoded.sub`. The proxy is sound today; it is not sound
+ *      by construction.
  *
- *   3. An anonymous POST persists NO ROW. Verified by absence of a row
- *      carrying that request's unique `entity_id`, not by a count delta,
- *      which would race anything else writing to the table.
+ *   3. An anonymous POST persists NO ROW. Verified by absence of any row for
+ *      a show created for that request alone, not by a count delta.
  *
- * The persisted value is read from the DATABASE, not from the response body.
- * A response could echo a value it did not store — the same echo/decode split
- * the FD-65 suite makes explicit.
+ * WHY THE DATABASE, NOT THE RESPONSE. The route awaits the decision-log write
+ * but DecisionLogger.log catches any write failure and buffers the entry on a
+ * per-request logger instance that is then discarded, so the route returns 200
+ * whether or not a row was written. The response proves nothing; only the
+ * table does. Because the write is awaited before the response is sent, the
+ * row (if any) is committed by the time the response arrives — no sleep and
+ * no flush is needed, and none is used.
+ *
+ * WHY `uuid` IS UNMOCKED HERE. tests/setup.js mocks `uuid` to return
+ * 'test-uuid-…' strings. DecisionLogger uses uuid v4 for `decision_log.id`, a
+ * uuid column, so under the mock every insert fails and is silently buffered —
+ * the test would fail for a harness reason, not a product one. This file
+ * restores the real module so the write behaves as it does in production.
  */
+jest.mock('uuid', () => jest.requireActual('uuid'));
+
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const request = require('supertest');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
-const { DecisionLog } = require('../../src/models');
+const models = require('../../src/models');
 
 // The nested probe script reads host/port from its own argv rather than
 // having them interpolated into the source text. That's what actually fixes
@@ -113,14 +123,12 @@ function isDatabaseReachable(databaseUrl, timeoutMs = 1500) {
 const shouldSkip =
   process.env.DATABASE_URL?.includes('amazonaws.com') || !isDatabaseReachable(process.env.DATABASE_URL);
 
-const DECISION_LOGS_URL = '/api/v1/decision-logs';
 const ME_URL = '/api/v1/auth/me';
+const browsePoolUrl = (showId) => `/api/v1/world/${showId}/browse-pool`;
 
-// `decision_logs.entity_id` is uuid-typed, and tests/setup.js:20 mocks the
-// `uuid` module to return non-UUID strings — so crypto.randomUUID(), not v4().
-const uniqueEntityId = () => crypto.randomUUID();
-
-const principalId = `g3c3-${crypto.randomUUID()}`;
+// `decision_log.user_id` is uuid-typed, so the principal id must be a UUID
+// (a Cognito `sub` is one). crypto.randomUUID(), not the mocked uuid module.
+const principalId = crypto.randomUUID();
 const token = TokenService.generateToken(
   {
     id: principalId,
@@ -131,81 +139,96 @@ const token = TokenService.generateToken(
   'access'
 );
 
-const postLog = (entityId, bearer) => {
-  const req = request(app).post(DECISION_LOGS_URL);
+const postBrowsePool = (showId, bearer) => {
+  const req = request(app).post(browsePoolUrl(showId));
   if (bearer) req.set('Authorization', `Bearer ${bearer}`);
-  return req.send({
-    action_type: 'g3c3-verify',
-    entity_type: 'g3c3',
-    entity_id: entityId,
-  });
+  return req.send({ bias: 'balanced', pool_size: 4 });
 };
 
-(shouldSkip ? describe.skip : describe)('F-AUTH-1 Gate G3 clause 3 — decisionLogs user_id', () => {
-  const created = [];
+// Every decision_log row for the show, read straight from the table.
+const rowsForShow = async (showId) => {
+  const [rows] = await models.sequelize.query(
+    `SELECT user_id::text AS user_id, type FROM decision_log WHERE show_id = :showId`,
+    { replacements: { showId } }
+  );
+  return rows;
+};
 
-  afterAll(async () => {
-    // force: true — DecisionLog is paranoid, so a soft delete would leave the
-    // row and the next run's absence assertion would still pass, but the table
-    // would accumulate. Tolerate failure: before the migration lands, the
-    // model cannot query this table at all.
-    for (const entityId of created) {
-      try {
-        await DecisionLog.destroy({ where: { entity_id: entityId }, force: true });
-      } catch {
-        /* nothing was persisted, or the column is absent — either way, nothing to clean */
+(shouldSkip ? describe.skip : describe)(
+  'F-AUTH-1 Gate G3 clause 3 — browse-pool decision_log user_id',
+  () => {
+    const shows = [];
+
+    const makeShow = async (label) => {
+      const suffix = crypto.randomUUID();
+      const show = await models.Show.create({
+        name: `g3c3 ${label} ${suffix}`,
+        slug: `g3c3-${label}-${suffix}`,
+      });
+      shows.push(show.id);
+      return show.id;
+    };
+
+    afterAll(async () => {
+      for (const showId of shows) {
+        try {
+          await models.sequelize.query('DELETE FROM decision_log WHERE show_id = :showId', {
+            replacements: { showId },
+          });
+          await models.Show.destroy({ where: { id: showId }, force: true });
+        } catch (err) {
+          console.error('[g3c3 cleanup] failed for show', showId, err.message);
+        }
       }
-    }
-  });
-
-  test('authenticated POST persists user_id equal to the middleware-mapped principal', async () => {
-    const me = await request(app).get(ME_URL).set('Authorization', `Bearer ${token}`);
-
-    // Ground truth for assertion 2. If /me is not serving req.user, the rest
-    // of this test has nothing to compare against and should say so here.
-    expect({ status: me.status, hasId: Boolean(me.body?.data?.user?.id) }).toEqual({
-      status: 200,
-      hasId: true,
-    });
-    const middlewareMappedId = me.body.data.user.id;
-
-    const entityId = uniqueEntityId();
-    created.push(entityId);
-    const res = await postLog(entityId, token);
-
-    // Surface the server's error text on failure rather than only the status,
-    // so a failing run shows WHICH failure it was (v2.54 §2 step 1).
-    expect({ status: res.status, error: res.body?.error }).toEqual({
-      status: 201,
-      error: undefined,
     });
 
-    // Read the PERSISTED row, not the echo.
-    const row = await DecisionLog.findOne({ where: { entity_id: entityId } });
-    expect(row).not.toBeNull();
+    test('authenticated POST persists user_id equal to the middleware-mapped principal', async () => {
+      const me = await request(app).get(ME_URL).set('Authorization', `Bearer ${token}`);
 
-    // Assertion 1 — non-null, and not the string 'undefined'.
-    expect(row.user_id).not.toBeNull();
-    expect(row.user_id).not.toBeUndefined();
-    expect(row.user_id).not.toBe('undefined');
-    expect(row.user_id).not.toBe('');
+      // Ground truth for assertion 2.
+      expect({ status: me.status, hasId: Boolean(me.body?.data?.user?.id) }).toEqual({
+        status: 200,
+        hasId: true,
+      });
+      const middlewareMappedId = me.body.data.user.id;
 
-    // Assertion 2 — equals req.user.id as the middleware sets it.
-    expect(row.user_id).toBe(middlewareMappedId);
-  });
+      const showId = await makeShow('auth');
+      const res = await postBrowsePool(showId, token);
 
-  test('anonymous POST is refused and persists no row', async () => {
-    const entityId = uniqueEntityId();
-    created.push(entityId);
+      // A 200 here does NOT show a row was written (see header); it only
+      // shows the handler ran to the logging step.
+      expect({ status: res.status, error: res.body?.error }).toEqual({
+        status: 200,
+        error: undefined,
+      });
 
-    const res = await postLog(entityId, null);
+      // Read the PERSISTED row, not the echo.
+      const rows = await rowsForShow(showId);
+      expect(rows).toHaveLength(1);
+      const [row] = rows;
+      expect(row.type).toBe('browse_pool_generated');
 
-    expect(res.status).toBe(401);
-    expect(res.body).toHaveProperty('code', 'AUTH_REQUIRED');
+      // Assertion 1 — non-null, and not the string 'undefined'.
+      expect(row.user_id).not.toBeNull();
+      expect(row.user_id).not.toBeUndefined();
+      expect(row.user_id).not.toBe('undefined');
+      expect(row.user_id).not.toBe('');
 
-    // Assertion 3 — absence of this request's row specifically. Not a count
-    // delta: a count would race any concurrent writer.
-    const row = await DecisionLog.findOne({ where: { entity_id: entityId } });
-    expect(row).toBeNull();
-  });
-});
+      // Assertion 2 — equals req.user.id as the middleware sets it.
+      expect(row.user_id).toBe(middlewareMappedId);
+    });
+
+    test('anonymous POST is refused and persists no row', async () => {
+      const showId = await makeShow('anon');
+
+      const res = await postBrowsePool(showId, null);
+
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty('code', 'AUTH_REQUIRED');
+
+      // Assertion 3 — no row for this request's own show. Not a count delta.
+      const rows = await rowsForShow(showId);
+      expect(rows).toEqual([]);
+    });
+  }
+);
