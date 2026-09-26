@@ -21,7 +21,7 @@
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader, Sparkles, ChevronLeft } from 'lucide-react';
 import { getIconUrls } from '../lib/overlayUtils';
-import { getScreenImageStyle, PHONE_SKINS } from './PhoneHub';
+import { getScreenImageStyle, PHONE_SKINS } from './phone/phoneStyle';
 import ScreenContentRenderer from './ScreenContentRenderer';
 import ZoneBadges from './phone-editor/ZoneBadges';
 import ConditionRow from './phone-editor/ConditionRow';

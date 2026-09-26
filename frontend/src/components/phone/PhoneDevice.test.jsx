@@ -39,7 +39,7 @@ vi.mock('./PhoneMapView', async (importOriginal) => {
 });
 
 import PhoneDevice from './PhoneDevice';
-import { getScreenImageStyle } from '../PhoneHub';
+import { getScreenImageStyle } from './phoneStyle';
 
 const HOME = {
   id: 'home', name: 'Home', category: 'phone', generated: true, is_home: true,

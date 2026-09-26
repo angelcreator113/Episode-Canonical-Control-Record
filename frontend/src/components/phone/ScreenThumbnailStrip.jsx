@@ -1,4 +1,4 @@
-import { getScreenImageStyle } from '../PhoneHub';
+import { getScreenImageStyle } from './phoneStyle';
 
 /**
  * Horizontal-scroll screen picker for the Zones tab.
