@@ -1,7 +1,7 @@
 /* EpisodeLalasPhoneTab.css — Production → Phone (issue #1908) */
 
 .lalas-phone-tab {
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
   overflow-x: hidden;
   color: var(--lala-ink, #2C2C2C);
@@ -35,6 +35,79 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--lala-ink-muted, #6B6557);
+}
+
+/* Task #1994: header actions — Edit in Phone Studio + Preview Phone. */
+.lalas-phone-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.lalas-phone-studio-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--lala-h-control, 40px);
+  padding: 0 12px;
+  border: 1px solid var(--lala-gold, #B8962E);
+  border-radius: var(--lala-radius, 8px);
+  color: var(--lala-ink, #2C2C2C);
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.lalas-phone-studio-link:hover {
+  background: var(--lala-gold-soft, #FDF8EE);
+}
+
+/* Task #1994: two panes — the phone on the left, the tab's content on the
+   right. The frame's own width (PhoneFrame.css) sizes the left pane. */
+.lalas-phone-panes {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.lalas-phone-device-pane {
+  position: sticky;
+  top: 16px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lalas-phone-device-hint {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--lala-ink-muted, #6B6557);
+}
+
+.lalas-phone-device-hint a {
+  color: var(--lala-gold, #B8962E);
+  font-weight: 700;
+}
+
+.lalas-phone-content-pane {
+  min-width: 0;
+}
+
+/* Below 768px the panes stack, phone first. */
+@media (max-width: 768px) {
+  .lalas-phone-panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lalas-phone-device-pane {
+    position: static;
+  }
 }
 
 .lalas-phone-preview-btn {
@@ -246,7 +319,12 @@
 }
 
 @media (max-width: 480px) {
-  .lalas-phone-preview-btn {
+  .lalas-phone-header-actions {
+    width: 100%;
+  }
+
+  .lalas-phone-preview-btn,
+  .lalas-phone-studio-link {
     width: 100%;
     justify-content: center;
   }

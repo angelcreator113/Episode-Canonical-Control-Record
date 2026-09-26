@@ -9,7 +9,11 @@
 
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+
+// The tab's header links to Phone Studio (Task #1994), so it renders inside a router.
+const render = (ui) => rtlRender(<MemoryRouter>{ui}</MemoryRouter>);
 
 vi.mock('../../services/api', () => ({
   default: {
