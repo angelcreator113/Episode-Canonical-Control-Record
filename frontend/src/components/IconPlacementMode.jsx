@@ -16,8 +16,11 @@
  *                      panels and the Save button render there instead of
  *                      below the phone, so the picker is in view as you tap.
  *   onDirtyChange(dirty) — optional; told when unsaved changes appear or clear.
+ *   controlRef       — optional ref given { save(), isDirty() } (Task #2016), so the
+ *                      workspace saves ICON placements on Done, screen switches and
+ *                      Tap / Icon switches, as it does TAP zones.
  */
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import { Grid3x3, Save, Trash2, X, Pin } from 'lucide-react';
 import PhoneFrame from './phone/PhoneFrame';
@@ -86,6 +89,7 @@ export default function IconPlacementMode({
   showId,
   sidePanel = null,
   onDirtyChange,
+  controlRef,
 }) {
   const [zones, setZones] = useState(links);
   const [selectedId, setSelectedId] = useState(null);
@@ -280,6 +284,11 @@ export default function IconPlacementMode({
     if (onSave) onSave(zones);
     setIsDirty(false);
   };
+
+  useImperativeHandle(controlRef, () => ({
+    save: handleSave,
+    isDirty: () => isDirty,
+  }), [zones, isDirty, onSave]);
 
   const handleAutoLayout = () => {
     setZones(prev => prev.map((zone, index) => normalizeIconZone(zone, index)));

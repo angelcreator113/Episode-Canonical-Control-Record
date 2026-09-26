@@ -7,15 +7,13 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef, useMemo, Component } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Layers, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
 import IconPlacementMode from '../components/IconPlacementMode';
 import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey, pickZoneLibraryIcon, isZoneOutOfBounds, moveZoneInside } from '../lib/overlayUtils';
-import AIAssistantPanel from '../components/phone-editor/AIAssistantPanel';
-import AIProposalReview from '../components/phone-editor/AIProposalReview';
 import MissionEditor from '../components/phone-editor/MissionEditor';
 import ConditionRow from '../components/phone-editor/ConditionRow';
 import ActionRow from '../components/phone-editor/ActionRow';
@@ -91,7 +89,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [activeScreen, setActiveScreen] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editorTab, setEditorTab] = useState('actions');
-  const [generating, setGenerating] = useState(false);
   const [generatingId, setGeneratingId] = useState(null);
   const [toast, setToast] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -136,7 +133,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [activeVariantIdx, setActiveVariantIdx] = useState(0);
   const [addingVariant, setAddingVariant] = useState(false);
   const [newVariantLabel, setNewVariantLabel] = useState('');
-  const [previewMode, setPreviewMode] = useState(false);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [showFlowMap, setShowFlowMap] = useState(false);
   const [expandedSections, setExpandedSections] = useState({ actions: true, fit: false, links: false, content: false, variants: true });
@@ -161,9 +157,15 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const variantInputRef = useRef(null);
   const frameInputRef = useRef(null);
   const batchInputRef = useRef(null);
-  const pollRef = useRef(null);
-  const genTimeoutRef = useRef(null);  // tracks the 5-min generation timeout
   const linkEditorRef = useRef(null);  // exposes save()/isDirty()/undo()/redo() from the inline zone editor
+  const iconEditorRef = useRef(null);  // exposes save()/isDirty() from ICON mode (Task #2016)
+  // Save whichever zones editor has unsaved changes — TAP or ICON, only one is
+  // mounted — before Done, a screen switch or a Tap / Icon switch, so ICON
+  // placements are kept exactly as TAP zones always were (Task #2016).
+  const saveZoneDrafts = () => {
+    if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+    if (iconEditorRef.current?.isDirty?.()) iconEditorRef.current.save();
+  };
   const [removingBg, setRemovingBg] = useState(false);  // loading state for Remove BG
 
   // Keep activeScreenRef in sync with activeScreen state
@@ -513,35 +515,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   }, [overlays]);
 
   useEffect(() => { loadOverlays(true); }, [loadOverlays]);
-  useEffect(() => { return () => { if (pollRef.current) clearTimeout(pollRef.current); if (genTimeoutRef.current) clearTimeout(genTimeoutRef.current); }; }, []);
 
-  // Generate all
-  const handleGenerateAll = async () => {
-    if (!showId) return;
-    setGenerating(true);
-    try {
-      await api.post(`/api/v1/ui-overlays/${showId}/generate-all`);
-      let pollErrors = 0;
-      const poll = () => {
-        api.get(`/api/v1/ui-overlays/${showId}`).then(r => {
-          pollErrors = 0;
-          const data = r.data?.data || [];
-          setOverlays(data);
-          if (data.filter(o => o.generated).length >= data.length) {
-            clearTimeout(pollRef.current); pollRef.current = null; setGenerating(false);
-            return;
-          }
-          pollRef.current = setTimeout(poll, 5000);
-        }).catch(() => {
-          pollErrors++;
-          if (pollErrors >= 5) { pollRef.current = null; setGenerating(false); flash('Generation polling failed — refresh to check status', 'error'); return; }
-          pollRef.current = setTimeout(poll, 5000 * Math.pow(2, pollErrors));
-        });
-      };
-      pollRef.current = setTimeout(poll, 3000);
-      genTimeoutRef.current = setTimeout(() => { if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; } setGenerating(false); }, 300000);
-    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); setGenerating(false); }
-  };
+  // "Generate All" was removed from the toolbar (Task #2016): it spent on AI
+  // for every screen at once. Screens are generated one at a time below; the
+  // backend's generate-all route stays.
 
   // Shared: auto-run background removal on freshly-uploaded icon assets.
   // Icons are almost always meant to be transparent PNGs sitting on top of a
@@ -946,11 +923,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     }
   };
 
-  // ── AI panel state — the panel lives outside ScreenLinkEditor so it needs its
-  //    own proposal holder + review modal. Separate from ScreenLinkEditor's
-  //    toolbar AI flow so both entry points can coexist without fighting. ──
-  const [panelProposal, setPanelProposal] = useState(null);
-  const [panelAiBusy, setPanelAiBusy] = useState(false);
   // Missions modal (PR4). No per-episode context here — missions are show-scoped,
   // optionally per-episode, and that's picked inside the editor form.
   // Opened when activeTab === 'missions'; closing reverts to the Screens tab.
@@ -967,27 +939,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const previewStart = (activeScreen && isScreen(activeScreen) && activeScreen.generated && activeScreen.url)
     ? activeScreen
     : (overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && isScreen(o)) || null);
-
-  const handlePanelAddZones = async (hint) => {
-    if (!activeScreen?.asset_id || !showId || panelAiBusy) return;
-    setPanelAiBusy(true);
-    try {
-      const data = await handleRequestAiZones(hint);
-      if (data?.proposal) setPanelProposal(data);
-    } finally {
-      setPanelAiBusy(false);
-    }
-  };
-
-  // When the user approves a panel-generated proposal, merge the new zones with
-  // whatever the screen already has and save through the existing PUT.
-  const handleApprovePanelProposal = async () => {
-    if (!panelProposal?.proposal?.zones?.length || !activeScreen) return;
-    const existing = getScreenLinks(activeScreen);
-    const merged = [...existing, ...panelProposal.proposal.zones];
-    await handleSaveLinks(merged);
-    setPanelProposal(null);
-  };
 
   // Zone-level AI — called from ContentZoneEditor via prop. Returns the proposal;
   // the editor renders an inline Apply/Discard surface and applies on approve.
@@ -1308,10 +1259,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             <button onClick={() => setShowSizeGuide(!showSizeGuide)} title="Upload size guide" aria-label="Toggle upload size guide" className="overlays-header-btn" style={{ color: '#aaa', border: '1px solid #eee' }}>
               <Info size={13} />
             </button>
-            {/* Preview stays visible — it's the most common view action. */}
-            <button onClick={() => setPreviewMode(true)} disabled={!generatedCount} title="Preview mode" className="overlays-header-btn" style={{ color: '#B8962E', border: '1px solid #B8962E30' }}>
-              <Play size={13} /> <span className="btn-label">Preview</span>
-            </button>
+            {/* The header Preview button was removed (Task #2016): the Preview
+                stage plays the phone inside the page. */}
             {/* Flow Map + Export move into a "More" menu — used less often. */}
             <ToolbarMenu label="More" disabled={!generatedCount}>
               <button onClick={() => setShowFlowMap(true)} disabled={!generatedCount}>
@@ -1339,7 +1288,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         )}
 
         {/* Action buttons row — creation actions collapse into a "+ Add"
-            dropdown; Generate All stays as the primary CTA at full size. */}
+            dropdown. */}
         <div className="overlays-toolbar">
           <ToolbarMenu label="Add" icon={<span style={{ fontWeight: 700, marginRight: 2 }}>+</span>} disabled={!showId && batchUploading}>
             <button onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId}>
@@ -1376,13 +1325,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
           {/* Missions moved to the tab bar (see PhoneHub). Toolbar button removed. */}
-          <button onClick={handleGenerateAll} disabled={generating || !showId} className="overlays-header-btn" style={{
-            background: generating ? 'var(--lala-parchment-2)' : 'var(--lala-gold)',
-            color: generating ? 'var(--lala-ink-faint)' : '#fff',
-            border: 'none',
-          }}>
-            {generating ? <><Loader size={13} className="spin" /> Generating...</> : <><Sparkles size={13} /> Generate All</>}
-          </button>
         </div>
       </div>
 
@@ -1489,7 +1431,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               const editableScreens = overlays.filter(o => o.generated && o.url && isScreen(o));
               const switchToScreen = (target) => {
                 if (!target || target.id === activeScreen.id) return;
-                if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                saveZoneDrafts();
                 setActiveScreen(target);
                 setNavHistory([]);
                 setFlowAudit(null);
@@ -1520,7 +1462,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               };
               const switchMode = (next) => {
                 if (zoneEditorMode === next) return;
-                if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                saveZoneDrafts();
                 setZoneEditorMode(next);
               };
               const focusIssue = (issue) => {
@@ -1529,7 +1471,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 if (targetScreen && targetScreen.id !== activeScreen.id) switchToScreen(targetScreen);
                 // Content issues live on their own top-level tab now.
                 if (issue.mode === 'content') {
-                  if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                  saveZoneDrafts();
                   setActiveTab('content');
                   setPendingIssueFocus({
                     screenId: issue.screenId || activeScreen.id,
@@ -1695,6 +1637,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         customFrameUrl={customFrameUrl}
                         sidePanel={iconSidePanel}
                         onDirtyChange={setIconZonesDirty}
+                        controlRef={iconEditorRef}
                       />
                     )}
                   </div>
@@ -1710,7 +1653,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           <span className="zones-unsaved" role="status">● Unsaved</span>
                         )}
                         <button onClick={() => {
-                          if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
+                          saveZoneDrafts();
                           setActiveTab('screens');
                           setNavHistory([]);
                         }} className="zone-editor-done-btn">
@@ -2043,19 +1986,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       )}
                     </div>
 
-                    {/* AI Assistant — screen-scoped, proposes tap zones for the
-                        active screen. */}
-                      {activeScreen?.url && !activeScreen.placeholder && (
-                        <div className="zones-tab__sidebar-card">
-                        <AIAssistantPanel
-                          scope="screen"
-                          scopeLabel={`Screen: ${activeScreen.name}`}
-                          activeScreen={activeScreen}
-                          onRunAddZones={handlePanelAddZones}
-                          busy={panelAiBusy}
-                        />
-                        </div>
-                      )}
+                    {/* The AI Assistant panel was removed from the zones
+                        workspace (Task #2016); its component and routes stay. */}
                     </div>
                 </div>
                 </div>
@@ -2330,6 +2262,21 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       <button onClick={handleSetHome} className={`editor-home-btn ${activeScreen.is_home ? 'is-home' : ''}`}>
                         {activeScreen.is_home ? '★ Home Screen' : 'Set as Home Screen'}
                       </button>
+                      {/* With no home marked, say where the phone opens instead —
+                          the first generated screen, as PhoneHub picks it (Task #2016). */}
+                      {(() => {
+                        const generated = overlays.filter(o => o.generated && o.url && isScreen(o));
+                        if (generated.some(o => o.is_home)) return null;
+                        const opensOn = generated[0];
+                        if (!opensOn) return null;
+                        return (
+                          <p className="editor-home-hint">
+                            {opensOn.id === activeScreen.id
+                              ? 'No home screen set — the phone opens on this screen'
+                              : `No home screen set — the phone opens on ${opensOn.name}`}
+                          </p>
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -2568,30 +2515,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         showId={showId}
         onClose={() => setActiveTab('screens')}
       />
-
-      {/* AI proposal from the Assistant panel — separate modal from the one
-          ScreenLinkEditor's toolbar button uses so both entry points work. */}
-      {panelProposal && (
-        <AIProposalReview
-          proposal={panelProposal.proposal}
-          contextSummary={panelProposal.context_summary}
-          busy={panelAiBusy}
-          onReject={() => setPanelProposal(null)}
-          onApprove={handleApprovePanelProposal}
-        />
-      )}
-
-      {/* Preview Mode */}
-      {previewMode && (
-        <PhonePreviewMode
-          screens={overlays}
-          initialScreen={overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && isScreen(o)) || overlays.find(o => o.generated)}
-          onClose={() => setPreviewMode(false)}
-          globalFit={globalFit}
-          phoneSkin={phoneSkin}
-          customFrameUrl={customFrameUrl}
-        />
-      )}
 
       {/* Flow Map — visual graph of screen-to-screen links */}
       {showFlowMap && (

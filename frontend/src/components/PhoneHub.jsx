@@ -36,7 +36,7 @@ const menuItemStyle = {
   borderBottom: '1px solid #f5f3ee',
 };
 
-const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onEditScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false }) {
+const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onEditScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false, isHome = false }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';
@@ -119,7 +119,21 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
       </div>
       {/* Link status badge — shows at a glance whether this card participates
           in the phone flow. Skipped for placeholders (no real screen/icon). */}
-      {screen && !isHidden && (() => {
+      {/* The home screen is where the phone opens, so it is always reached
+          (Task #2016): it reads HOME, never "Unreached". */}
+      {screen && !isHidden && isHome && !isIcon && (
+        <div
+          className="screen-card-home"
+          title="The phone opens on this screen"
+          style={{
+            marginTop: 4, fontSize: 9, fontFamily: "'DM Mono', monospace", fontWeight: 700, letterSpacing: 0.3,
+            color: isActive ? '#F0DFA8' : '#B8962E',
+          }}
+        >
+          ★ HOME
+        </div>
+      )}
+      {screen && !isHidden && !(isHome && !isIcon) && (() => {
         const linked = linkCount > 0;
         const isIconCard = !!isIcon;
         // For icons: "linked" means it's placed on ≥1 screen AND at least one of
@@ -450,7 +464,7 @@ export default function PhoneHub({
         {gridSection === 'screens' && (
           <div className="phone-hub-screen-grid">
             {screenTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onEditScreen={onEditScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} linkCount={screenReachById.get(s.id) || 0} />
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onEditScreen={onEditScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} linkCount={screenReachById.get(s.id) || 0} isHome={s.id === firstScreen?.id} />
             ))}
           </div>
         )}

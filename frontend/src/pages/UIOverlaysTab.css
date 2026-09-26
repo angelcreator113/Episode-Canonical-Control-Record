@@ -971,3 +971,11 @@
   color: var(--lala-ink-muted);
   text-align: center;
 }
+
+/* Beside "Set as Home Screen" when no screen is marked home (Task #2016). */
+.editor-home-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  color: var(--lala-ink-muted);
+}
