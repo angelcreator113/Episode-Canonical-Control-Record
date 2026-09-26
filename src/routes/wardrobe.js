@@ -8,9 +8,40 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { requireAuth } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { spendCoins, InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
+const { itemReach, toCharacter } = require('../services/wardrobeReach');
 
 async function getModels() {
   try { return require('../models'); } catch (e) { console.error('Failed to load models:', e.message); return null; }
+}
+
+/**
+ * Task #1937: make sure the browse pool offers, for each required outfit
+ * slot, at least one item Lala can wear now (`can_select`), when the show has
+ * one. Required slots are the styling game's canLock: body (a dress, or a top
+ * and a bottom) and shoes. Adds the best-matching reachable item for a slot
+ * that has none; ranking and the other pool roles are left as they are.
+ */
+function ensureReachableRequiredSlots(pool, scored, addToPool) {
+  const catOf = (i) => String(i.clothing_category || '').toLowerCase();
+  const reachableInPool = (cat) => pool.some((i) => i.can_select && catOf(i) === cat);
+  const bestReachable = (cat) => scored
+    .filter((i) => i.can_select && catOf(i) === cat)
+    .sort((a, b) => b.match_score - a.match_score)[0];
+  const roleOf = (i) => (i.is_owned ? 'safe' : 'stretch');
+  const offer = (cat) => {
+    if (reachableInPool(cat)) return;
+    const best = bestReachable(cat);
+    if (best) addToPool(best, roleOf(best));
+  };
+
+  // Body, dress route.
+  offer('dress');
+  // Body, top + bottom route: only as a pair, since one alone can't lock.
+  if (bestReachable('top') && bestReachable('bottom')) {
+    offer('top');
+    offer('bottom');
+  }
+  offer('shoes');
 }
 
 // Configure multer for file uploads (memory storage)
@@ -1009,8 +1040,13 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
     const eventTypeLower = event_type.toLowerCase();
     const brandLower = (host_brand || '').toLowerCase();
 
+    // Task #1937: one reach rule (src/services/wardrobeReach.js). Missing
+    // reputation is 0 here, as in /wardrobe/select (this used `|| 1`).
+    const character = toCharacter(character_state);
+
     // 3. Score each item
     const scored = allItems.map(item => {
+      const reach = itemReach(item, character);
       const aesthetics = parseJSON(item.aesthetic_tags, []);
       const eventTypes = parseJSON(item.event_types, []);
       let score = 0;
@@ -1068,8 +1104,7 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
           riskLevel = 'locked_tease';
           reasons.push(`Drops Ep ${item.season_unlock_episode} 🕒`);
         } else if (item.lock_type === 'reputation') {
-          const rep = character_state.reputation || 1;
-          if (rep >= (item.reputation_required || 0)) {
+          if (reach.can_select) {
             score += 3;
             reasons.push('Reputation unlockable');
             riskLevel = 'stretch';
@@ -1078,8 +1113,7 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
             reasons.push(`Needs Rep ${item.reputation_required}`);
           }
         } else if (item.lock_type === 'coin') {
-          const coins = character_state.coins || 0;
-          if (coins >= (item.coin_cost || 0)) {
+          if (reach.can_purchase) {
             score += 3;
             reasons.push('Affordable');
             riskLevel = 'stretch';
@@ -1117,8 +1151,8 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
         match_reasons: reasons,
         risk_level: riskLevel,
         lala_reaction,
-        can_select: item.is_owned || (item.lock_type === 'reputation' && (character_state.reputation || 1) >= (item.reputation_required || 0)) || (item.lock_type === 'coin' && (character_state.coins || 0) >= (item.coin_cost || 0)),
-        can_purchase: !item.is_owned && item.lock_type === 'coin' && (character_state.coins || 0) >= (item.coin_cost || 0),
+        can_select: reach.can_select,
+        can_purchase: reach.can_purchase,
       };
     });
 
@@ -1172,6 +1206,16 @@ router.post('/browse-pool', requireAuth, async (req, res) => {
         best.forEach(item => addToPool(item, item.is_owned ? 'safe' : 'stretch'));
       }
     }
+
+    // Task #1937: every required slot gets something Lala can wear now.
+    // The picks above rank by match score alone, so an event whose
+    // best-matching dresses and shoes are all out of reach offered none she
+    // could lock, while her owned ones sat in Full Closet. Required slots
+    // match the component's canLock: body = a dress, or a top and a bottom;
+    // and shoes. When the pool has no reachable item for one, the
+    // best-matching reachable one is added (if the show has one). Category
+    // names compare lowercased, as the component filters them.
+    ensureReachableRequiredSlots(pool, scored, addToPool);
 
     // 5. Shuffle with slight randomness
     const shuffled = pool.sort((a, b) => {
@@ -1338,6 +1382,171 @@ router.post('/select', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('[SELECT] error:', error);
     return res.status(500).json({ error: 'Failed to select wardrobe item', detail: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/wardrobe/lock-outfit-atomic
+// Body: { episode_id, show_id, wardrobe_ids: [...] }
+// ═══════════════════════════════════════════
+//
+// Task #1937: the styling game's Lock used to call /select once per piece.
+// Each call bought its own coin-locked piece in its own transaction, so a
+// later piece that failed (not enough coins after the earlier purchases, a
+// network error, a 500) left the earlier pieces bought and linked. This
+// handler checks every piece's reach (src/services/wardrobeReach.js) and the
+// outfit's TOTAL coin cost against Lala's balance up front, then in ONE
+// transaction spends the total through the coin guard (conditional, never
+// below zero; a spend that lost a race is refused), writes the ledger row
+// /select writes for each purchase, marks the purchased pieces owned and
+// writes every episode_wardrobe link as 'approved' (the /select upsert,
+// which also restores a soft-deleted link). Any failure rolls all of it
+// back: no coins spent, no rows written.
+//
+// Like /select, the links are added to the episode's existing ones; this
+// does not remove pieces locked earlier (the wardrobe-events lock-outfit
+// route is the one that replaces an outfit). Reputation is read from Lala's
+// character_state row, not taken from the request body.
+
+router.post('/lock-outfit-atomic', requireAuth, async (req, res) => {
+  try {
+    const { episode_id, show_id, wardrobe_ids } = req.body || {};
+    if (!episode_id || !show_id) {
+      return res.status(400).json({ error: 'episode_id and show_id are required' });
+    }
+    if (!Array.isArray(wardrobe_ids) || wardrobe_ids.length === 0
+      || wardrobe_ids.some((id) => typeof id !== 'string' || !id)) {
+      return res.status(400).json({ error: 'wardrobe_ids must be a non-empty array of ids' });
+    }
+    const ids = [...new Set(wardrobe_ids)];
+
+    const models = await getModels();
+    if (!models || !models.sequelize) {
+      return res.status(500).json({ error: 'Models not available' });
+    }
+
+    // 1. Every piece must exist.
+    const items = await models.Wardrobe.findAll({
+      attributes: ['id', 'name', 'is_owned', 'lock_type', 'coin_cost', 'reputation_required'],
+      where: { id: ids, deleted_at: null },
+      raw: true,
+    });
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const missing = ids.filter((id) => !byId.has(id));
+    if (missing.length > 0) {
+      return res.status(404).json({ success: false, error: 'Wardrobe item not found', missing });
+    }
+
+    // 2. Every piece must be within reach, and the outfit's total cost
+    //    within the balance, before anything is written.
+    const state = await models.CharacterState.findOne({
+      attributes: ['id', 'coins', 'reputation'],
+      where: { show_id, character_key: 'lala' },
+      order: [['updated_at', 'DESC']],
+      raw: true,
+    });
+    const character = { coins: state?.coins ?? 0, reputation: state?.reputation ?? 0 };
+    const pieces = ids.map((id) => ({ item: byId.get(id), reach: itemReach(byId.get(id), character) }));
+
+    const purchases = pieces.filter((p) => p.reach.needs_purchase);
+    const totalCost = purchases.reduce((sum, p) => sum + p.reach.coin_cost, 0);
+    if (totalCost > character.coins) {
+      const err = new InsufficientCoinsError({ needed: totalCost, have: state ? character.coins : null, action: 'wardrobe_lock_outfit' });
+      console.error(`[LOCK-OUTFIT] refused episode ${episode_id}: ${err.message}`);
+      return res.status(400).json(insufficientCoinsBody(err));
+    }
+    const outOfReach = pieces.filter((p) => !p.reach.needs_purchase && !p.reach.can_select);
+    if (outOfReach.length > 0) {
+      const names = outOfReach.map((p) => p.item.name);
+      console.error(`[LOCK-OUTFIT] refused episode ${episode_id}: out of reach: ${names.join(', ')}`);
+      return res.status(400).json({
+        success: false,
+        error: `Not within reach: ${names.join(', ')}`,
+        out_of_reach: outOfReach.map((p) => ({ id: p.item.id, name: p.item.name, lock_type: p.item.lock_type })),
+      });
+    }
+
+    // 3. One transaction: spend, ledger, ownership, links.
+    const { logTransaction, getCurrentBalance } = require('../services/financialTransactionService');
+    const ledgerBefore = purchases.length > 0 ? await getCurrentBalance(models.sequelize, show_id) : null;
+    let coinsAfter = character.coins;
+    try {
+      await models.sequelize.transaction(async (t) => {
+        if (totalCost > 0) {
+          coinsAfter = await spendCoins(models.sequelize, {
+            stateId: state?.id, cost: totalCost, transaction: t, action: 'wardrobe_lock_outfit',
+          });
+        }
+        let running = ledgerBefore;
+        for (const { item, reach } of purchases) {
+          await logTransaction(models.sequelize, show_id, {
+            type: 'expense',
+            category: 'wardrobe_purchase',
+            amount: reach.coin_cost,
+            description: `Wardrobe purchase: ${item.name}`,
+            source_type: 'wardrobe',
+            source_id: item.id,
+            source_name: item.name,
+            episode_id,
+            balance_before: running,
+            balance_after: running - reach.coin_cost,
+            metadata: { wardrobe_id: item.id, item_name: item.name, flow: 'lock_outfit' },
+            transaction: t,
+          });
+          running -= reach.coin_cost;
+        }
+        if (purchases.length > 0) {
+          await models.Wardrobe.update(
+            { is_owned: true, updated_at: new Date() },
+            { where: { id: purchases.map((p) => p.item.id) }, transaction: t }
+          );
+        }
+        // Same upsert as /select (Task #1924): approved, and a removed
+        // (soft-deleted) or unapproved pair comes back as approved.
+        for (const id of ids) {
+          await models.sequelize.query(
+            `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, approved_at, created_at, updated_at)
+             VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW(), NOW())
+             ON CONFLICT (episode_id, wardrobe_id) DO UPDATE SET
+               approval_status = 'approved',
+               approved_at = COALESCE(episode_wardrobe.approved_at, NOW()),
+               rejection_reason = NULL,
+               deleted_at = NULL,
+               updated_at = NOW()`,
+            { replacements: { episode_id, wardrobe_id: id }, transaction: t }
+          );
+        }
+      });
+    } catch (lockErr) {
+      if (lockErr instanceof InsufficientCoinsError) {
+        console.error(`[LOCK-OUTFIT] refused episode ${episode_id}: ${lockErr.message}`);
+        return res.status(400).json(insufficientCoinsBody(lockErr));
+      }
+      throw lockErr;
+    }
+
+    // 4. times_worn, after the commit and non-fatal (as in /select).
+    try {
+      await models.Wardrobe.update(
+        { times_worn: models.sequelize.literal('COALESCE(times_worn, 0) + 1'), updated_at: new Date() },
+        { where: { id: ids } }
+      );
+    } catch (wornErr) {
+      console.error('[LOCK-OUTFIT] times_worn update failed (non-fatal):', wornErr.message);
+    }
+
+    const purchasedIds = new Set(purchases.map((p) => p.item.id));
+    return res.json({
+      success: true,
+      message: `Locked ${ids.length} piece${ids.length === 1 ? '' : 's'}${purchases.length ? `, bought ${purchases.length} for ${totalCost} coins` : ''}`,
+      locked: ids.map((id) => ({ id, name: byId.get(id).name, coin_purchased: purchasedIds.has(id) })),
+      coins_spent: totalCost,
+      coins_after: coinsAfter,
+    });
+  } catch (error) {
+    console.error('[LOCK-OUTFIT] error:', error);
+    return res.status(500).json({ error: 'Failed to lock outfit', detail: error.message });
   }
 });
 

@@ -33,6 +33,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../services/api';
 import { resolveWardrobeImageUrl } from '../utils/wardrobeImage';
+import { withReach } from '../utils/wardrobeReach';
 
 // ─── CONSTANTS ───
 
@@ -191,6 +192,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const [success, setSuccess] = useState(null);
   const [localCoins, setLocalCoins] = useState(null); // tracks coins after purchases
   const coins = localCoins ?? characterState.coins ?? 0;
+  const reputation = characterState.reputation ?? 0;
 
   // Slot state
   const [filledSlots, setFilledSlots] = useState({});
@@ -332,12 +334,27 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         ...i,
         aesthetic_tags: typeof i.aesthetic_tags === 'string' ? JSON.parse(i.aesthetic_tags) : (i.aesthetic_tags || []),
         event_types: typeof i.event_types === 'string' ? JSON.parse(i.event_types) : (i.event_types || []),
-        can_select: i.is_owned !== false,
         match_score: 0,
       })) : []);
-    } catch { setClosetItems([]); }
+    } catch (err) {
+      console.error('Failed to load closet:', err);
+      setClosetItems([]);
+    }
     finally { setClosetLoading(false); }
   }, [showId, closetItems.length]);
+
+  // Task #1937: Closet and Search apply the backend's reach rule (owned, or
+  // coin-locked and affordable, or reputation-locked and qualified) to the
+  // coins and reputation the pool is asked with, so the three tabs agree and
+  // follow the balance as it changes.
+  const closetWithReach = useMemo(
+    () => closetItems.map(i => withReach(i, { coins, reputation })),
+    [closetItems, coins, reputation]
+  );
+  const markOwnedInCloset = (ids) => {
+    const owned = new Set(ids);
+    setClosetItems(prev => prev.map(i => (owned.has(i.id) ? { ...i, is_owned: true } : i)));
+  };
 
   // ─── v3: Load todo list ───
   useEffect(() => {
@@ -427,12 +444,12 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         .sort((a, b) => b.match_score - a.match_score);
     }
     if (browseMode === 'closet') {
-      return closetItems.filter(item => cats.includes((item.clothing_category || '').toLowerCase()))
+      return closetWithReach.filter(item => cats.includes((item.clothing_category || '').toLowerCase()))
         .sort((a, b) => (b.match_score || 0) - (a.match_score || 0) || a.name.localeCompare(b.name));
     }
     if (browseMode === 'search' && searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      return closetItems.filter(item => {
+      return closetWithReach.filter(item => {
         const name = (item.name || '').toLowerCase();
         const brand = (item.brand || '').toLowerCase();
         const tags = (item.aesthetic_tags || []).join(' ').toLowerCase();
@@ -441,7 +458,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       });
     }
     return [];
-  }, [pool, closetItems, browseMode, activeSlot, searchQuery]);
+  }, [pool, closetWithReach, browseMode, activeSlot, searchQuery]);
 
   // ─── Assign item to slot ───
   const assignToSlot = (item) => {
@@ -489,6 +506,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         }
 
         // Refresh pool to get updated ownership flags
+        markOwnedInCloset([item.id]);
         await loadPool();
 
         // Auto-equip the purchased/owned item into the active slot
@@ -504,9 +522,17 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     try {
       const items = Object.entries(filledSlots).filter(([, v]) => v && v.can_select).map(([slot, item]) => ({ slot, item }));
       if (items.length === 0) { setError('No selectable items in outfit'); setConfirming(false); return; }
-      for (const { item } of items) {
-        await api.post('/api/v1/wardrobe/select', { episode_id: episodeId, wardrobe_id: item.id, show_id: showId, reputation: characterState?.reputation ?? 0 });
-      }
+      // Task #1937: one request for the whole outfit. The server checks every
+      // piece and the total cost first, then buys and links all of them in
+      // one transaction, or none.
+      const res = await api.post('/api/v1/wardrobe/lock-outfit-atomic', {
+        episode_id: episodeId,
+        show_id: showId,
+        wardrobe_ids: items.map(({ item }) => item.id),
+      });
+      const bought = (res.data?.locked || []).filter(l => l.coin_purchased).map(l => l.id);
+      if (bought.length > 0) markOwnedInCloset(bought);
+      if (res.data?.coins_after != null) setLocalCoins(res.data.coins_after);
       setOutfitLocked(true);
       setSuccess('Outfit locked! 🔒✨');
       // Clear localStorage draft — outfit is now persisted on backend
@@ -778,7 +804,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                     <div style={{ fontSize: 9, marginTop: 3, fontWeight: 600,
                       color: isUsed ? '#6366f1' : item.can_select ? '#16a34a' : item.can_purchase ? '#eab308' : '#dc2626' }}>
                       {isUsed ? '✓ In outfit'
-                        : item.can_select ? '✅ Tap to equip'
+                        : item.can_select ? (item.can_purchase ? `✅ Tap to equip · 🪙 ${item.coin_cost} on Lock` : '✅ Tap to equip')
                         : item.can_purchase ? (
                           <span onClick={(e) => { e.stopPropagation(); purchaseItem(item); }}
                             style={{ cursor: 'pointer', color: '#eab308' }}>

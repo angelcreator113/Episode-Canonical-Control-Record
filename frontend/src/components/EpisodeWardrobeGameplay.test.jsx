@@ -142,3 +142,107 @@ describe('EpisodeWardrobeGameplay — garment images', () => {
     });
   });
 });
+
+// ─── Task #1937: Closet/Search use the backend's reach rule; Lock is one request ───
+
+const CLOSET = [
+  { ...base, id: 'c-owned', name: 'Cotton Sundress', is_owned: true, lock_type: 'none', coin_cost: 0, can_select: undefined, pool_role: undefined },
+  { ...base, id: 'c-cheap', name: 'Budget Wrap Dress', is_owned: false, lock_type: 'coin', coin_cost: 300, can_select: undefined, pool_role: undefined },
+  { ...base, id: 'c-dear', name: 'Midnight Gown', is_owned: false, lock_type: 'coin', coin_cost: 900, can_select: undefined, pool_role: undefined },
+  { ...base, id: 'c-rep', name: 'Invite-Only Gown', is_owned: false, lock_type: 'reputation', reputation_required: 5, can_select: undefined, pool_role: undefined },
+];
+
+function mockCloset() {
+  mockApi();
+  const poolGet = api.get.getMockImplementation();
+  api.get.mockImplementation((url) => {
+    if (url.startsWith('/api/v1/wardrobe?show_id=')) return Promise.resolve({ data: { data: CLOSET } });
+    return poolGet(url);
+  });
+}
+
+function cardOf(name) {
+  return screen.getByText(name).closest('[style*="border-radius: 12px"]');
+}
+
+describe('EpisodeWardrobeGameplay — reach in Closet and Search (Task #1937)', () => {
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    window.localStorage.clear();
+    mockCloset();
+  });
+
+  test('Closet marks an affordable coin item buyable and an unaffordable one locked with its cost', async () => {
+    await renderGame(); // 500 coins, reputation 3
+    fireEvent.click(screen.getByRole('button', { name: 'Full Closet' }));
+    await screen.findByText('Budget Wrap Dress');
+
+    expect(within(cardOf('Budget Wrap Dress')).getByText(/Tap to equip · 🪙 300 on Lock/)).toBeTruthy();
+    expect(within(cardOf('Midnight Gown')).getByText(/Need 900 coins/)).toBeTruthy();
+    expect(within(cardOf('Invite-Only Gown')).getByText(/Rep 5\+/)).toBeTruthy();
+    expect(within(cardOf('Cotton Sundress')).getByText('✅ Tap to equip')).toBeTruthy();
+
+    // The affordable one equips; the unaffordable one opens the inspector instead.
+    fireEvent.click(screen.getByText('Budget Wrap Dress'));
+    await waitFor(() => expect(screen.getAllByText('Budget Wrap Dress').length).toBe(2));
+    fireEvent.click(screen.getByText('Midnight Gown'));
+    expect(await screen.findByText(/🔒 Need 900 coins/)).toBeTruthy();
+  });
+
+  test('Search uses the same rule', async () => {
+    await renderGame();
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    fireEvent.change(await screen.findByPlaceholderText(/Search by name/), { target: { value: 'dress' } });
+    await screen.findByText('Budget Wrap Dress');
+    expect(within(cardOf('Budget Wrap Dress')).getByText(/Tap to equip · 🪙 300 on Lock/)).toBeTruthy();
+  });
+});
+
+describe('EpisodeWardrobeGameplay — Lock is all-or-nothing (Task #1937)', () => {
+  const DRESS = { ...base, id: 'd-draft', name: 'Draft Gown', match_score: 50, can_select: true, can_purchase: true, is_owned: false, lock_type: 'coin', coin_cost: 300 };
+  const SHOES = { ...base, id: 's1', name: 'Canvas Sneakers', clothing_category: 'shoes', match_score: 20 };
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    window.localStorage.clear();
+    window.localStorage.setItem('wardrobe_draft_ep-1', JSON.stringify({ body: DRESS, shoes: SHOES }));
+    mockApi();
+  });
+
+  test('Lock calls the atomic endpoint once with every piece', async () => {
+    api.post.mockImplementation((url) => {
+      if (url === '/api/v1/wardrobe/browse-pool') return Promise.resolve({ data: { pool: POOL, pool_breakdown: {} } });
+      if (url === '/api/v1/wardrobe/lock-outfit-atomic') {
+        return Promise.resolve({ data: { success: true, locked: [{ id: 'd-draft', coin_purchased: true }, { id: 's1', coin_purchased: false }], coins_spent: 300, coins_after: 200 } });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    await renderGame();
+    fireEvent.click(await screen.findByRole('button', { name: /Lock Outfit/ }));
+    await screen.findByText('Outfit Locked');
+
+    const lockCalls = api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/lock-outfit-atomic');
+    expect(lockCalls).toHaveLength(1);
+    expect(lockCalls[0][1]).toEqual({ episode_id: 'ep-1', show_id: 'show-1', wardrobe_ids: expect.arrayContaining(['d-draft', 's1']) });
+    expect(lockCalls[0][1].wardrobe_ids).toHaveLength(2);
+    expect(api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/select')).toHaveLength(0);
+    // Setting the returned balance reloads the pool (coins feed its reach
+    // flags), so wait for the header to render the new balance.
+    expect(await screen.findByText('🪙 200')).toBeTruthy();
+  });
+
+  test('a refused lock leaves the outfit unlocked and shows why', async () => {
+    api.post.mockImplementation((url) => {
+      if (url === '/api/v1/wardrobe/browse-pool') return Promise.resolve({ data: { pool: POOL, pool_breakdown: {} } });
+      if (url === '/api/v1/wardrobe/lock-outfit-atomic') {
+        return Promise.reject({ response: { status: 400, data: { success: false, error: 'Not enough coins — need 400, have 350' } } });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    await renderGame();
+    fireEvent.click(await screen.findByRole('button', { name: /Lock Outfit/ }));
+    expect(await screen.findByText(/Not enough coins — need 400, have 350/)).toBeTruthy();
+    expect(screen.queryByText('Outfit Locked')).toBeNull();
+    expect(api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/lock-outfit-atomic')).toHaveLength(1);
+  });
+});
