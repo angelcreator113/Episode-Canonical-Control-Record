@@ -22,18 +22,15 @@ export default function Login() {
     setSuccess('');
 
     try {
-      console.log('[Login] Attempting login with:', email);
-      
       // ✅ FIX: Use the auth hook's login function
-      const result = await login(email, password);
-      console.log('[Login] Login successful:', result);
+      await login(email, password);
       setSuccess(`Welcome!`);
       
       // Note: Navigation will happen automatically via AppContent
       // when isAuthenticated changes to true
     } catch (err) {
-      console.error('[Login] Login error:', err);
-      console.error('[Login] Error response:', err.response);
+      // Message and status only: the error carries the login body (Task #1976).
+      console.error('[Login] Login error:', err.message, err.response?.status);
       const status = err.response?.status;
       const serverMsg = err.response?.data?.message;
       let errorMsg;
@@ -50,7 +47,6 @@ export default function Login() {
       } else {
         errorMsg = 'Login failed. Please check your credentials and try again.';
       }
-      console.log('[Login] Error message:', errorMsg);
       setError(errorMsg);
     } finally {
       setLoading(false);
