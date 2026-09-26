@@ -7,7 +7,7 @@
  * Bottom: detail panel for selected screen (generate, upload, edit, delete)
  */
 import { useState, useEffect, useCallback, useRef, useMemo, Component } from 'react';
-import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Layers, Play, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
+import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Layers, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, GitBranch, Check, Target } from 'lucide-react';
 import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
@@ -89,7 +89,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [activeScreen, setActiveScreen] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editorTab, setEditorTab] = useState('actions');
-  const [generating, setGenerating] = useState(false);
   const [generatingId, setGeneratingId] = useState(null);
   const [toast, setToast] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -134,7 +133,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const [activeVariantIdx, setActiveVariantIdx] = useState(0);
   const [addingVariant, setAddingVariant] = useState(false);
   const [newVariantLabel, setNewVariantLabel] = useState('');
-  const [previewMode, setPreviewMode] = useState(false);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [showFlowMap, setShowFlowMap] = useState(false);
   const [expandedSections, setExpandedSections] = useState({ actions: true, fit: false, links: false, content: false, variants: true });
@@ -159,8 +157,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const variantInputRef = useRef(null);
   const frameInputRef = useRef(null);
   const batchInputRef = useRef(null);
-  const pollRef = useRef(null);
-  const genTimeoutRef = useRef(null);  // tracks the 5-min generation timeout
   const linkEditorRef = useRef(null);  // exposes save()/isDirty()/undo()/redo() from the inline zone editor
   const iconEditorRef = useRef(null);  // exposes save()/isDirty() from ICON mode (Task #2016)
   // Save whichever zones editor has unsaved changes — TAP or ICON, only one is
@@ -519,35 +515,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   }, [overlays]);
 
   useEffect(() => { loadOverlays(true); }, [loadOverlays]);
-  useEffect(() => { return () => { if (pollRef.current) clearTimeout(pollRef.current); if (genTimeoutRef.current) clearTimeout(genTimeoutRef.current); }; }, []);
 
-  // Generate all
-  const handleGenerateAll = async () => {
-    if (!showId) return;
-    setGenerating(true);
-    try {
-      await api.post(`/api/v1/ui-overlays/${showId}/generate-all`);
-      let pollErrors = 0;
-      const poll = () => {
-        api.get(`/api/v1/ui-overlays/${showId}`).then(r => {
-          pollErrors = 0;
-          const data = r.data?.data || [];
-          setOverlays(data);
-          if (data.filter(o => o.generated).length >= data.length) {
-            clearTimeout(pollRef.current); pollRef.current = null; setGenerating(false);
-            return;
-          }
-          pollRef.current = setTimeout(poll, 5000);
-        }).catch(() => {
-          pollErrors++;
-          if (pollErrors >= 5) { pollRef.current = null; setGenerating(false); flash('Generation polling failed — refresh to check status', 'error'); return; }
-          pollRef.current = setTimeout(poll, 5000 * Math.pow(2, pollErrors));
-        });
-      };
-      pollRef.current = setTimeout(poll, 3000);
-      genTimeoutRef.current = setTimeout(() => { if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; } setGenerating(false); }, 300000);
-    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); setGenerating(false); }
-  };
+  // "Generate All" was removed from the toolbar (Task #2016): it spent on AI
+  // for every screen at once. Screens are generated one at a time below; the
+  // backend's generate-all route stays.
 
   // Shared: auto-run background removal on freshly-uploaded icon assets.
   // Icons are almost always meant to be transparent PNGs sitting on top of a
@@ -1288,10 +1259,8 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             <button onClick={() => setShowSizeGuide(!showSizeGuide)} title="Upload size guide" aria-label="Toggle upload size guide" className="overlays-header-btn" style={{ color: '#aaa', border: '1px solid #eee' }}>
               <Info size={13} />
             </button>
-            {/* Preview stays visible — it's the most common view action. */}
-            <button onClick={() => setPreviewMode(true)} disabled={!generatedCount} title="Preview mode" className="overlays-header-btn" style={{ color: '#B8962E', border: '1px solid #B8962E30' }}>
-              <Play size={13} /> <span className="btn-label">Preview</span>
-            </button>
+            {/* The header Preview button was removed (Task #2016): the Preview
+                stage plays the phone inside the page. */}
             {/* Flow Map + Export move into a "More" menu — used less often. */}
             <ToolbarMenu label="More" disabled={!generatedCount}>
               <button onClick={() => setShowFlowMap(true)} disabled={!generatedCount}>
@@ -1319,7 +1288,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         )}
 
         {/* Action buttons row — creation actions collapse into a "+ Add"
-            dropdown; Generate All stays as the primary CTA at full size. */}
+            dropdown. */}
         <div className="overlays-toolbar">
           <ToolbarMenu label="Add" icon={<span style={{ fontWeight: 700, marginRight: 2 }}>+</span>} disabled={!showId && batchUploading}>
             <button onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId}>
@@ -1356,13 +1325,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
           {/* Missions moved to the tab bar (see PhoneHub). Toolbar button removed. */}
-          <button onClick={handleGenerateAll} disabled={generating || !showId} className="overlays-header-btn" style={{
-            background: generating ? 'var(--lala-parchment-2)' : 'var(--lala-gold)',
-            color: generating ? 'var(--lala-ink-faint)' : '#fff',
-            border: 'none',
-          }}>
-            {generating ? <><Loader size={13} className="spin" /> Generating...</> : <><Sparkles size={13} /> Generate All</>}
-          </button>
         </div>
       </div>
 
@@ -2553,18 +2515,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         showId={showId}
         onClose={() => setActiveTab('screens')}
       />
-
-      {/* Preview Mode */}
-      {previewMode && (
-        <PhonePreviewMode
-          screens={overlays}
-          initialScreen={overlays.find(o => o.is_home && o.generated) || overlays.find(o => o.generated && isScreen(o)) || overlays.find(o => o.generated)}
-          onClose={() => setPreviewMode(false)}
-          globalFit={globalFit}
-          phoneSkin={phoneSkin}
-          customFrameUrl={customFrameUrl}
-        />
-      )}
 
       {/* Flow Map — visual graph of screen-to-screen links */}
       {showFlowMap && (

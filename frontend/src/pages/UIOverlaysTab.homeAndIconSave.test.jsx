@@ -1,6 +1,7 @@
 /**
  * UIOverlaysTab — home is never "Unreached", ICON placements are saved like
- * TAP zones, and no AI panel (Task #2016, doctrine rules 17 and 18).
+ * TAP zones, no AI panel, and no header Preview or Generate All (Task #2016,
+ * doctrine rules 17 and 18).
  */
 
 import React from 'react';
@@ -148,5 +149,21 @@ describe('UIOverlaysTab — "Set as Home Screen" hint (Task #2016)', () => {
     await renderPage();
     await openEditor('calls list');
     expect(screen.queryByText(/No home screen set/)).toBeNull();
+  });
+});
+
+describe('UIOverlaysTab — no header Preview, no Generate All (Task #2016)', () => {
+  test('neither button renders; the Preview stage and per-screen Generate remain', async () => {
+    await renderPage([HOME, { ...CALLS, generated: false, url: null }]);
+    expect(screen.queryByTitle('Preview mode')).toBeNull();
+    expect(screen.queryByText('Generate All')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Generate All/ })).toBeNull();
+    // The Preview stage is the page's preview now.
+    expect(within(document.querySelector('.phone-hub-stage-row')).getByRole('button', { name: 'Preview' })).toBeTruthy();
+    // A screen still generates on its own, from its editor.
+    fireEvent.click(within(cardOf('calls list')).getByRole('button', { name: 'Screen options' }));
+    fireEvent.click(within(cardOf('calls list')).getByText('Edit'));
+    expect(await screen.findByRole('button', { name: /^\s*Generate\s*$/ })).toBeTruthy();
+    expect(vi.mocked(api.post).mock.calls.filter(([url]) => String(url).includes('generate-all'))).toEqual([]);
   });
 });
