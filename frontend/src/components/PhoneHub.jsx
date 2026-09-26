@@ -198,6 +198,10 @@ export default function PhoneHub({
   // the tabs stay visible even when PhoneHub itself unmounts for tabs
   // that have their own workspace (Zones, Content).
   suppressSectionTabs = false,
+  // Optional node drawn in the device's place (Task #2010): the Preview
+  // stage puts the embedded, non-saving Preview phone here, beside the
+  // same screen list. Without it, PhoneDevice and the skin picker as before.
+  devicePane = null,
 }) {
   // Placements memo lives below the screenTypes/iconTypes declarations so it
   // doesn't TDZ-crash (useMemo body runs synchronously on first render).
@@ -343,6 +347,7 @@ export default function PhoneHub({
     <div className="phone-hub-inner">
       {/* Phone Device */}
       <div className="phone-hub-device">
+      {devicePane || (<>
       <PhoneDevice
         skin={skin}
         customFrameUrl={customFrameUrl}
@@ -419,6 +424,7 @@ export default function PhoneHub({
           )}
         </div>
       )}
+      </>)}
       </div>
 
       {/* Screen Slots Grid — Screens / Icons shown one at a time via tabs so the
