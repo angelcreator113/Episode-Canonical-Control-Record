@@ -460,6 +460,7 @@ router.get('/:showId/frame', requireAuth, async (req, res) => {
 
     let frame_url = null;
     let global_fit = null;
+    let phone_skin = null;
 
     if (PageContent) {
       const frameRow = await PageContent.findOne({ where: { page_name: `phone_hub_${showId}`, constant_key: 'FRAME_URL' } });
@@ -467,9 +468,12 @@ router.get('/:showId/frame', requireAuth, async (req, res) => {
 
       const fitRow = await PageContent.findOne({ where: { page_name: `phone_hub_${showId}`, constant_key: 'GLOBAL_FIT' } });
       if (fitRow?.data) global_fit = fitRow.data.global_fit || null;
+
+      const skinRow = await PageContent.findOne({ where: { page_name: `phone_hub_${showId}`, constant_key: 'PHONE_SKIN' } });
+      if (skinRow?.data) phone_skin = skinRow.data.phone_skin || null;
     }
 
-    return res.json({ success: true, frame_url, global_fit });
+    return res.json({ success: true, frame_url, global_fit, phone_skin });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -509,6 +513,38 @@ router.put('/:showId/global-fit', requireAuth, async (req, res) => {
 
     return res.json({ success: true, global_fit });
   } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/v1/ui-overlays/:showId/phone-skin — save Lala's Phone skin for the
+// show, so Producer Mode and the Episode preview show the same device (Task #1964).
+// Unlike /global-fit, a missing PageContent model is an error, never a silent success.
+const PHONE_SKIN_PATTERN = /^[a-z0-9_-]{1,32}$/;
+router.put('/:showId/phone-skin', requireAuth, async (req, res) => {
+  try {
+    const models = require('../models');
+    const showId = req.params.showId;
+    const { phone_skin } = req.body || {};
+
+    if (typeof phone_skin !== 'string' || !PHONE_SKIN_PATTERN.test(phone_skin)) {
+      return res.status(400).json({ success: false, error: 'phone_skin must be 1-32 characters of a-z, 0-9, _ or -' });
+    }
+
+    const PageContent = models.PageContent;
+    if (!PageContent) {
+      console.error('[phone-skin] PageContent model is not loaded; skin not saved');
+      return res.status(500).json({ success: false, error: 'PageContent model is not loaded' });
+    }
+
+    await PageContent.upsert(
+      { page_name: `phone_hub_${showId}`, constant_key: 'PHONE_SKIN', data: { phone_skin } },
+      { conflictFields: ['page_name', 'constant_key'] }
+    );
+
+    return res.json({ success: true, phone_skin });
+  } catch (err) {
+    console.error('[phone-skin] Failed to save phone skin:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
