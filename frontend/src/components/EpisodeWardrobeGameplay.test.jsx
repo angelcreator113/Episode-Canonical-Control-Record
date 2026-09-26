@@ -226,7 +226,9 @@ describe('EpisodeWardrobeGameplay — Lock is all-or-nothing (Task #1937)', () =
     expect(lockCalls[0][1]).toEqual({ episode_id: 'ep-1', show_id: 'show-1', wardrobe_ids: expect.arrayContaining(['d-draft', 's1']) });
     expect(lockCalls[0][1].wardrobe_ids).toHaveLength(2);
     expect(api.post.mock.calls.filter(([url]) => url === '/api/v1/wardrobe/select')).toHaveLength(0);
-    expect(screen.getByText('🪙 200')).toBeTruthy();
+    // Setting the returned balance reloads the pool (coins feed its reach
+    // flags), so wait for the header to render the new balance.
+    expect(await screen.findByText('🪙 200')).toBeTruthy();
   });
 
   test('a refused lock leaves the outfit unlocked and shows why', async () => {
