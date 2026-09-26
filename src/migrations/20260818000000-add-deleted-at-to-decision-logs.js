@@ -26,16 +26,52 @@
  * per 20240101000001-create-episodes.js:112-115 and three others, materialized
  * as `timestamp with time zone`, nullable, no default across all 70 tables
  * carrying the column.
+ *
+ * GUARDED, Task #1942 (Evoni's ruling (b), 2026-09-26): skips when
+ * `decision_logs` is absent, as it is in production, and when the column is
+ * already there. It has never run in production, so it is edited in place
+ * rather than superseded. Where it has run (CI, and local databases built
+ * from the migrations, which have the table) the guarded version does the
+ * same thing, so their SequelizeMeta rows stay true.
  */
+const TABLE = 'decision_logs';
+const LOG = '[migration 20260818000000]';
+
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.addColumn('decision_logs', 'deleted_at', {
+    // Task #1942. Production never had decision_logs: its create migration,
+    // 20260208110001-create-decision-logs-table.js, was recorded in
+    // SequelizeMeta by scripts/bootstrap-sequelize-meta.js without running
+    // (docs/MIGRATION_DRIFT_READ.md §2). The unguarded addColumn failed there
+    // and stopped every later migration. Where the table is absent this now
+    // logs and returns; where it exists (CI, a local database built from the
+    // migrations) it adds the column as before. The working table is
+    // decision_log (singular), which this file does not touch.
+    if (!(await queryInterface.tableExists(TABLE))) {
+      console.warn(`${LOG} ${TABLE} does not exist here; nothing to add deleted_at to. Skipped (Task #1942).`);
+      return;
+    }
+    const columns = await queryInterface.describeTable(TABLE);
+    if (columns.deleted_at) {
+      console.log(`${LOG} ${TABLE}.deleted_at already exists; nothing to do.`);
+      return;
+    }
+    await queryInterface.addColumn(TABLE, 'deleted_at', {
       type: Sequelize.DATE,
       allowNull: true,
     });
   },
 
   down: async (queryInterface) => {
-    await queryInterface.removeColumn('decision_logs', 'deleted_at');
+    if (!(await queryInterface.tableExists(TABLE))) {
+      console.warn(`${LOG} ${TABLE} does not exist here; nothing to remove.`);
+      return;
+    }
+    const columns = await queryInterface.describeTable(TABLE);
+    if (!columns.deleted_at) {
+      console.warn(`${LOG} ${TABLE}.deleted_at does not exist here; nothing to remove.`);
+      return;
+    }
+    await queryInterface.removeColumn(TABLE, 'deleted_at');
   },
 };
