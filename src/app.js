@@ -282,7 +282,23 @@ app.use('/api', (req, res, next) => {
 // ============================================================================
 // HEALTH CHECK
 // ============================================================================
-app.get('/health', async (req, res) => {
+// Public /health reports only status, database connected/disconnected, uptime,
+// version and environment (Task #1999). The full diagnostic body (config, the
+// database's name, counts, error text) is served only at /_diag/health, a path
+// nginx never proxies (its /api and /health blocks don't match it; the SPA
+// catch-all serves index.html instead), and only to a loopback request that
+// carries no X-Forwarded-For. A loopback check cannot guard /health itself:
+// nginx's `location /health` proxies without setting X-Forwarded-For, so a
+// public request reaches Node from loopback looking local.
+const PUBLIC_HEALTH_FIELDS = ['status', 'timestamp', 'uptime', 'version', 'environment', 'database'];
+const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+// req.ip is not used: app.js sets trust proxy, so req.ip follows X-Forwarded-For.
+function isLocalDiagnosticRequest(req) {
+  return LOOPBACK_ADDRESSES.has(req.socket?.remoteAddress) && !req.headers['x-forwarded-for'];
+}
+
+async function collectHealth() {
   const health = {
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -321,20 +337,42 @@ app.get('/health', async (req, res) => {
         const [[dbInfo]] = await db.sequelize.query("SELECT current_database() as db_name");
         health.currentDatabase = dbInfo.db_name;
       } catch (err) {
+        console.error('[health] table check failed:', err.message);
         health.showsTableExists = false;
         health.tableCheckError = err.message;
       }
     } catch (error) {
+      // Logged server-side so the detail stays in the pm2 log now that the
+      // public response no longer carries it.
+      console.error('[health] database check failed:', error.message);
       health.database = 'disconnected';
       health.databaseError = error.message;
       health.status = 'degraded';
-      return res.status(503).json(health);
+      return { code: 503, health };
     }
   } else {
     health.database = 'skipped'; // In test mode without DB
   }
 
-  res.status(200).json(health);
+  return { code: 200, health };
+}
+
+app.get('/health', async (req, res) => {
+  const { code, health } = await collectHealth();
+  const body = {};
+  for (const key of PUBLIC_HEALTH_FIELDS) {
+    if (health[key] !== undefined) body[key] = health[key];
+  }
+  res.status(code).json(body);
+});
+
+// On the box only: curl localhost:<port>/_diag/health
+app.get('/_diag/health', async (req, res) => {
+  if (!isLocalDiagnosticRequest(req)) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const { code, health } = await collectHealth();
+  res.status(code).json(health);
 });
 
 // Alias so /api/v1/health also works (nginx only proxies /api to backend)
