@@ -260,9 +260,54 @@ The manual deploy is Evoni's own action on the box: fast-forward the working tre
    - Exit 1: files are pending. **Do not restart.** Deal with the listed files first.
    - Exit 2: the ledger could not be read (connection, query or permission error, printed). **Do not restart.** An unreadable ledger is not "nothing pending".
    - Until the drifted files in `docs/MIGRATION_DRIFT_READ.md` §1 are cleared, `--report-only` prints the same list but exits 0 on pending files. It still exits 2 on errors.
-3. `pm2 restart`, only after step 2 exited 0.
+3. `pm2 restart`, only after step 2 exited 0. If the deploy also changed a credential or `.env`, follow §7.2 instead of a plain restart.
 
 Whether the app's database user can `SELECT` from `SequelizeMeta` is unverified; if the first run exits 2 with "permission denied", that is the answer.
+
+### 7.2 Credential changes and reboots: keep pm2's snapshot current
+
+Ruled by Evoni on 2026-09-26 ("Yes, I want those two rulings adopted as the review chat worded them."), adopting these two rules verbatim:
+
+1. "After any change to a credential or to `.env`, restart with `--update-env`, then `pm2 save`."
+2. "Before any reboot, compare the snapshot with the live process on the password too, as SAME/DIFFERENT."
+
+**Why.** On 2026-09-26 a reboot took production down (`docs/audit/F-Deploy-1_Fix_Plan_v1.55.md` §4–§7). pm2's saved snapshot (`~/.pm2/dump.pm2`, dated 2026-07-22) still carried a database password that had since been superseded. The reboot restored it, and `/health` returned 503 with `password authentication failed` until a `--update-env` restart and a `pm2 save`. `ecosystem.config.js` reads `.env` only when pm2 evaluates the config (its lines 1–2 load `.env`; lines 12–16 copy the `DB_*` values), but a reboot restores the snapshot instead of re-reading the config. So a credential change that is never saved into the snapshot waits for the next reboot. The pre-reboot check that day compared every field except the password (v1.55 §4).
+
+**Before any reboot**, from the repo root on the box, in one SSH session. It prints only SAME, DIFFERENT or MISSING, never a value:
+
+```bash
+APP=episode-api-prod-hotfix
+pm2 jlist | node -e '
+const fs = require("fs"), os = require("os");
+const app = process.argv[1];
+const pick = (list) => {
+  const p = (list || []).find((x) => (x.name || (x.pm2_env || {}).name) === app);
+  if (!p) return null;
+  const e = p.pm2_env || p;
+  return { ...(e.env || {}), ...e };
+};
+const live = pick(JSON.parse(fs.readFileSync(0, "utf8")));
+const dump = pick(JSON.parse(fs.readFileSync(os.homedir() + "/.pm2/dump.pm2", "utf8")));
+if (!live || !dump) { console.log("app not found in " + (!live ? "live list" : "dump")); process.exit(2); }
+for (const k of ["DB_PASSWORD", "DB_HOST"]) {
+  const verdict = live[k] === undefined || dump[k] === undefined ? "MISSING"
+    : live[k] === dump[k] ? "SAME" : "DIFFERENT";
+  console.log(k + ": " + verdict);
+}
+' "$APP"
+systemctl is-enabled pm2-ubuntu
+```
+
+Read both values in this one session: the live list and the dump are compared inside the same command, because a value kept in a shell variable does not survive the SSH session. `systemctl is-enabled` should print `enabled` (pm2 restores the snapshot at boot).
+
+**If either line prints DIFFERENT or MISSING, do not reboot.** Instead:
+
+1. Restart the app with `--update-env`, taking the values from `.env`.
+2. Confirm `/health` reports the database connected.
+3. `pm2 save`.
+4. Run the check again. Reboot only when both lines print SAME.
+
+The check is written from the repository and has not been run by an agent session; it reads the dump's layout defensively (a process's variables at the top level or under `env`). If it prints MISSING for a key the app does use, compare that key by hand, as SAME/DIFFERENT only.
 
 ---
 
