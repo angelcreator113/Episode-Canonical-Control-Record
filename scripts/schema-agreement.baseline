@@ -53,12 +53,9 @@ src/controllers/thumbnailController.js	Episode.findByPk	attributes	episodeNumber
 src/controllers/thumbnailController.js	Episode.findByPk	attributes	episodeTitle
 src/controllers/thumbnailController.js	Episode.findByPk	attributes	seasonNumber
 src/controllers/thumbnailController.js	Episode.findByPk	attributes	showName
-src/controllers/wardrobeApprovalController.js	EpisodeWardrobe.findAll	include(as)	wardrobe
-src/controllers/wardrobeApprovalController.js	EpisodeWardrobe.findOne	include(as)	wardrobe
 src/controllers/wardrobeLibraryController.js	EpisodeWardrobe.create	values	override_character
 src/controllers/wardrobeLibraryController.js	EpisodeWardrobe.create	values	override_occasion
 src/controllers/wardrobeLibraryController.js	EpisodeWardrobe.create	values	override_season
-src/controllers/wardrobeLibraryController.js	EpisodeWardrobe.findAll	include(as)	wardrobe
 src/controllers/wardrobeLibraryController.js	Wardrobe.create	values	created_by
 src/controllers/wardrobeLibraryController.js	Wardrobe.create	values	imageUrl
 src/controllers/wardrobeLibraryController.js	Wardrobe.create	values	thumbnailUrl

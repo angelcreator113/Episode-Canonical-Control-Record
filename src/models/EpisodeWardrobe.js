@@ -124,23 +124,10 @@ module.exports = (sequelize) => {
     }
   );
 
-  // Define associations
-  EpisodeWardrobe.associate = function (models) {
-    EpisodeWardrobe.belongsTo(models.Episode, {
-      foreignKey: 'episode_id',
-      as: 'episode',
-    });
-
-    EpisodeWardrobe.belongsTo(models.Wardrobe, {
-      foreignKey: 'wardrobe_id',
-      as: 'wardrobe',
-    });
-
-    EpisodeWardrobe.belongsTo(models.Scene, {
-      foreignKey: 'scene_id',
-      as: 'sceneDetails', // Use different alias to avoid collision with 'scene' attribute
-    });
-  };
+  // Associations live in src/models/index.js (WARDROBE ASSOCIATIONS), the
+  // one declaration: 'episode', 'wardrobeItem' (→ Wardrobe, wardrobe_id) and
+  // 'sceneDetails'. Task #1926: an associate() here named the Wardrobe side
+  // 'wardrobe'; index.js never called it, and includes that trusted it threw.
 
   return EpisodeWardrobe;
 };
