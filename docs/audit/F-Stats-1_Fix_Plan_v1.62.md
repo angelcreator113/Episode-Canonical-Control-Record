@@ -4,15 +4,15 @@
 
 ## What changed in v1.62
 
-**RULING (Evoni, 2026-09-27): "adopt all six as suggested, and fold §64.4-R into XK-3".** The six suggestions she adopted are quoted verbatim at §65.1. They are the only things this revision rules; every other clause is MEASURED and says so.
+**RULING (Evoni, 2026-09-27): "adopt all six as suggested, and fold §64.4-R into XK-3"; and, added before merge, "Item 2 closes on the comparison. Item 6's fix is homed to F-Stats-1."** The six suggestions she adopted are quoted verbatim at §65.1. They and the added sentences are the only things this revision rules; every other clause is MEASURED and says so.
 
 **XK-4 is ratified**: the second shape, a route reaching a child record by a caller-supplied id with no show check. It is admitted to `Cross_Keystone_Register.md` by this revision, as v1.57 admitted XK-3. §65.4.
 
 **§64.4-R is folded into XK-3.** The owner-on-shows remedy and its two gates now live on XK-3's entry. §65.4.
 
-**Item 2's comparison is performed**: the eleven `sync()` sites are v1.60's ten route-level calls plus one in a worker. §65.2.
+**Item 2 closes on its comparison**: the eleven `sync()` sites are v1.60's ten route-level calls plus one in a worker. §65.2.
 
-**Owed from these rulings**: item 3's reach probe (§65.3-P); item 6's transaction fix (§65.6-F). Item 6's ruling names no keystone for its fix, and this revision records that as unspecified.
+**Owed from these rulings**: item 3's reach probe (§65.3-P); item 6's transaction fix (§65.6-F), homed to F-Stats-1.
 
 ---
 
@@ -42,6 +42,10 @@ F-Stats-1_Fix_Plan_v1.62.md
 
 > "adopt all six as suggested, and fold §64.4-R into XK-3"
 
+**Added by Evoni before merge**, verbatim, in the review chat the same day:
+
+> "Item 2 closes on the comparison. Item 6's fix is homed to F-Stats-1."
+
 **The six suggestions adopted**, verbatim as set out in the review chat the same day. Each was written against `F-Stats-1_PhaseB_Items2to7_Decisions_2026-09-27.md` (PR #2067):
 
 - **Item 2:** "accept that bullet as the list meant, compare its 11 `model.sync()` sites with v1.60's 10, and record the 6 inline `CREATE TABLE` sites as observed, outside this item."
@@ -51,7 +55,7 @@ F-Stats-1_Fix_Plan_v1.62.md
 - **Item 6:** "**rule it a defect and owe a fix now.** Wrap the five deletes in one transaction so they succeed or fail together. It's small, in one handler, and needs no schema change, so it's allowed during the fix cycle."
 - **Item 7:** "record the two as \"scoped to a caller-asserted show, bounded by XK-3\", which is the honest version. Record the third as not show-scoped, and note that correction to v1.60 additively."
 
-**Nothing else is ruled.** Where a suggestion leaves a point open, the sections below say so and do not fill it.
+**Nothing else is ruled.** Where a suggestion leaves a point open and the added sentences do not settle it, the sections below say so and do not fill it.
 
 ### §65.2 Item 2 — the eleven `sync()` sites
 
@@ -101,7 +105,7 @@ origin/main:src/routes/storyHealth.js:276:      CREATE TABLE IF NOT EXISTS chapt
 origin/main:src/routes/worldStudio.js:320:    CREATE TABLE IF NOT EXISTS ecosystem_previews (
 ```
 
-**Disposition:** the citation is resolved and the comparison is done. The scoping note's "To close" for item 2 ("locate the eleven sites … read them, and compare against v1.60 §63.1's ten") is met. The adopted suggestion does not say "close", so this revision records the criterion met and leaves the word to Evoni.
+**Disposition: item 2 is CLOSED** on the comparison (RULED, the added sentence). The citation is resolved, and the scoping note's "To close" criterion ("locate the eleven sites … read them, and compare against v1.60 §63.1's ten") is met.
 
 ### §65.3 Item 3 — §35.5 classes 2–6
 
@@ -179,11 +183,11 @@ $ git show origin/main:src/routes/worldStudio.js | grep -n -E "router.delete\('/
 1865:      `DELETE FROM world_characters WHERE id = :id`,
 ```
 
-**Owed: §65.6-F**, the transaction fix. The adopted suggestion says it "needs no schema change, so it's allowed during the fix cycle". It is agent-doable in one handler; testing it needs the backend test database.
+**Owed: §65.6-F**, the transaction fix, homed to F-Stats-1. The adopted suggestion says it "needs no schema change, so it's allowed during the fix cycle". It is agent-doable in one handler; testing it needs the backend test database.
 
-**Unspecified by the ruling: which keystone carries the fix.** The file is excluded from F-Stats-1's populations by domain (v1.44 §47.2), and v1.60 §63.2 records that the exclusion "clears nothing". This revision records the fix as owed at §65.6-F and does not choose a keystone.
+**Homed to F-Stats-1** (RULED, the added sentence). The file is excluded from F-Stats-1's populations by domain (v1.44 §47.2), and v1.60 §63.2 records that the exclusion "clears nothing". The ruling homes this fix to F-Stats-1 all the same. It does not revisit the exclusion, which governs survey populations, not where a ruled defect is fixed.
 
-**Disposition:** item 6 is closed as a ruling; the fix is owed.
+**Disposition:** item 6 is closed as a ruling; the fix is owed under F-Stats-1 and buildable now.
 
 ### §65.7 Item 7 — the three compound-predicate sites
 
@@ -213,8 +217,8 @@ $ git show origin/main:src/routes/worldStudio.js | grep -n "DELETE FROM characte
 
 - **Rules nothing beyond §65.1's quoted words.**
 - **Mints no FD, no PE.** Mints **XK-4** by ratification. FD tail remains **FD-62**; XK tail becomes **XK-4**.
-- **Does not declare Phase B closed**, and does not say "close" for item 2 where the ruling did not.
-- **Does not choose a keystone for §65.6-F**, and does not write the fix.
+- **Does not declare Phase B closed.**
+- **Does not write the §65.6-F fix.**
 - **Does not run §65.3-P.**
 - Does not sum XK-4's write and read counts, and does not revisit v1.61 §64.4's separation beyond the ruling's words.
 - **Does not edit** v1.60, v1.61 or any other filed document in place. The Cross-Keystone Register receives additive rows, an entry, a footer line and one banner, per its §6.
@@ -225,14 +229,14 @@ $ git show origin/main:src/routes/worldStudio.js | grep -n "DELETE FROM characte
 
 ## §11 Plan Version History (UPDATED)
 
-| v1.62 | 2026-09-27 | **RULES (Evoni): "adopt all six as suggested, and fold §64.4-R into XK-3".** The six adopted suggestions are quoted verbatim at §65.1; nothing else is ruled. **Item 2 (§65.2):** the audit report's line 514 is the cited list. The comparison is MEASURED: eleven `model.sync()` sites = v1.60's ten route-level calls + `sceneGenerationWorker.js:235`, the same seven models. Inline `CREATE TABLE` sites are recorded as observed, outside the item (4 over 3 tables at this basis; the report said 6). The closing criterion is met, and the word "close" is left to Evoni. **Item 3 (§65.3):** classes 2–6 homed to F-Stats-1, `worldEvents.js`-only, reach not established. Class 4 (money) is the priority, class 6 stays an observation, and **§65.3-P reach probe owed**. **Item 4 (§65.4):** **XK-4 RATIFIED**, the second shape, writes 40 / 39 / 20 plus the read instances (36 ruled at v1.61, 40 as amended), counted separately. Admitted against CKR §2, with its remedy dependent on XK-3. **§64.4-R FOLDED into XK-3** by banner. **Item 5 (§65.5):** closed on the read; the absence of `references` is accepted for now, revisitable after the fix cycle. **Item 6 (§65.6):** the non-transactional character-delete cascade is a **defect**; **§65.6-F transaction fix owed now**, with its keystone unspecified by the ruling. **Item 7 (§65.7):** two `worldEvents.js` deletes recorded "scoped to a caller-asserted show, bounded by XK-3"; the `worldStudio.js` delete recorded not show-scoped; **CORRECTION to v1.60 §63.5** recorded additively. Mints XK-4; no FD, no PE. No agent database contact. §65 minted. Basis `eb674ae4`. |
+| v1.62 | 2026-09-27 | **RULES (Evoni): "adopt all six as suggested, and fold §64.4-R into XK-3"; added before merge: "Item 2 closes on the comparison. Item 6's fix is homed to F-Stats-1."** The six adopted suggestions are quoted verbatim at §65.1; nothing else is ruled. **Item 2 (§65.2):** the audit report's line 514 is the cited list. The comparison is MEASURED: eleven `model.sync()` sites = v1.60's ten route-level calls + `sceneGenerationWorker.js:235`, the same seven models. Inline `CREATE TABLE` sites are recorded as observed, outside the item (4 over 3 tables at this basis; the report said 6). **Item 2 CLOSED** on the comparison. **Item 3 (§65.3):** classes 2–6 homed to F-Stats-1, `worldEvents.js`-only, reach not established. Class 4 (money) is the priority, class 6 stays an observation, and **§65.3-P reach probe owed**. **Item 4 (§65.4):** **XK-4 RATIFIED**, the second shape, writes 40 / 39 / 20 plus the read instances (36 ruled at v1.61, 40 as amended), counted separately. Admitted against CKR §2, with its remedy dependent on XK-3. **§64.4-R FOLDED into XK-3** by banner. **Item 5 (§65.5):** closed on the read; the absence of `references` is accepted for now, revisitable after the fix cycle. **Item 6 (§65.6):** the non-transactional character-delete cascade is a **defect**; **§65.6-F transaction fix owed now, homed to F-Stats-1**. **Item 7 (§65.7):** two `worldEvents.js` deletes recorded "scoped to a caller-asserted show, bounded by XK-3"; the `worldStudio.js` delete recorded not show-scoped; **CORRECTION to v1.60 §63.5** recorded additively. Mints XK-4; no FD, no PE. No agent database contact. §65 minted. Basis `eb674ae4`. |
 
 ## Register hygiene
 
-- **RULES** (§65.1, Evoni): items 2–7 as adopted; §64.4-R folded into XK-3.
+- **RULES** (§65.1, Evoni): items 2–7 as adopted; §64.4-R folded into XK-3; item 2 closes on the comparison; item 6's fix homed to F-Stats-1.
 - **Mints:** §65; **XK-4** (ratified; `Cross_Keystone_Register.md` §4). No FD (tail **FD-62**), no PE.
-- **Closes:** items 4, 5, 6 (as a ruling) and 7. Item 3's homing is done. Item 2's closing criterion is met, with the word left to Evoni.
-- **Owes, new:** §65.3-P (item 3's reach probe, later); §65.6-F (item 6's transaction fix, now; keystone unspecified).
+- **Closes:** items 2, 4, 5, 6 (as a ruling) and 7. Item 3's homing is done.
+- **Owes, new:** §65.3-P (item 3's reach probe, later); §65.6-F (item 6's transaction fix, now; homed to F-Stats-1).
 - **Moves:** §64.4-R → XK-3 (one item; gates and dependencies carried by banner).
 - **Corrects:** v1.60 §63.5's description of the third compound-predicate site (§65.7). v1.60 is not edited.
 - Carries forward from v1.61: everything not named above.
@@ -251,4 +255,4 @@ $ git show origin/main:src/routes/worldStudio.js | grep -n "DELETE FROM characte
 
 *Author: Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni.*
 *Date: 2026-09-27. Basis: `origin/main` at `eb674ae4ccd3009246d87acccfc56478d272ac5e`. Predecessor: v1.61.*
-*Minted: §65; XK-4 (ratified). Ruled (Evoni): items 2–7 as adopted; §64.4-R folded into XK-3. Owed: §65.3-P; §65.6-F. Corrected: v1.60 §63.5 (third site). Mints no FD, no PE. Tail: FD-62. XK tail: XK-4. Task: #2068. [skip-automerge]*
+*Minted: §65; XK-4 (ratified). Ruled (Evoni): items 2–7 as adopted; §64.4-R folded into XK-3; item 2 closed on the comparison; item 6's fix homed to F-Stats-1. Owed: §65.3-P; §65.6-F. Corrected: v1.60 §63.5 (third site). Mints no FD, no PE. Tail: FD-62. XK tail: XK-4. Task: #2068. [skip-automerge]*
