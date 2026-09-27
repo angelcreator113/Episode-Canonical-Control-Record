@@ -2,6 +2,11 @@
  * UIOverlaysTab — home is never "Unreached", ICON placements are saved like
  * TAP zones, no AI panel, and no header Preview or Generate All (Task #2016,
  * doctrine rules 17 and 18).
+ *
+ * Task #2021 (one Connect editor) removed ICON mode: the placement cases now
+ * place Call by a tap in the one editor. "Switching to Tap saves them" has no
+ * toggle left to switch; it is replaced by the jump to Content, the other way
+ * the workspace is left mid-edit.
  */
 
 import React from 'react';
@@ -21,6 +26,14 @@ vi.mock('../components/ContentZoneEditor', () => ({ default: () => null }));
 
 import api from '../services/api';
 import UIOverlaysTab from './UIOverlaysTab';
+
+// jsdom has no PointerEvent; a MouseEvent-based stand-in keeps coordinates.
+if (typeof window.PointerEvent === 'undefined') {
+  class PointerEventPolyfill extends MouseEvent {
+    constructor(type, init = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+  }
+  window.PointerEvent = PointerEventPolyfill;
+}
 
 const SHOW = 's-1';
 const CALL = { id: 'call_icon', name: 'Call', category: 'phone_icon', generated: true, url: 'https://x/call.png', asset_id: 'a-call' };
@@ -54,10 +67,13 @@ const linkWrites = () => vi.mocked(api.put).mock.calls.filter(([url]) => String(
 
 async function placeCallInIconMode() {
   fireEvent.click(within(document.querySelector('.phone-hub-stage-row')).getByRole('button', { name: 'Connect' }));
-  fireEvent.click(await screen.findByRole('tab', { name: 'Icon' }));
-  const canvas = document.querySelector('.zones-tab__canvas');
+  const canvas = document.querySelector('.zones-tab__canvas') || await waitFor(() => {
+    const c = document.querySelector('.zones-tab__canvas'); if (!c) throw new Error('no canvas'); return c;
+  });
   await waitFor(() => expect(canvas.querySelector('[style*="crosshair"]')).toBeTruthy());
-  fireEvent.click(canvas.querySelector('[style*="crosshair"]'), { clientX: 50, clientY: 50 });
+  const surface = canvas.querySelector('[style*="crosshair"]');
+  fireEvent.pointerDown(surface, { pointerId: 1, clientX: 50, clientY: 50 });
+  fireEvent.pointerUp(surface, { pointerId: 1, clientX: 50, clientY: 50 });
   fireEvent.click(await within(document.querySelector('.zones-tab__icon-panel')).findByTitle('Call'));
   expect(await screen.findByText('● Unsaved')).toBeTruthy();
   expect(linkWrites()).toHaveLength(0);
@@ -108,10 +124,10 @@ describe('UIOverlaysTab — ICON placements are saved like TAP zones (Task #2016
     expectCallSavedOnHome();
   });
 
-  test('switching to Tap saves them', async () => {
-    await renderPage();
+  test('the jump to Content saves them', async () => {
+    await renderPage([{ ...HOME, content_zones: [{ id: 'cz1', x: 0, y: 50, w: 100, h: 40 }] }, CALLS]);
     await placeCallInIconMode();
-    fireEvent.click(screen.getByRole('tab', { name: 'Tap' }));
+    fireEvent.click(within(document.querySelector('.zones-health')).getByText('1 content zone unassigned'));
     await waitFor(() => expect(linkWrites()).toHaveLength(1));
     expectCallSavedOnHome();
   });

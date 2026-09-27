@@ -254,6 +254,8 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     // editor's file input (Task #2014).
     uploadIcon: (id) => handleIconUpload(id),
     removeZone: (id) => removeZone(id),
+    // Delete several zones in one undo step (ICON mode's Delete Selected, Task #2021).
+    removeZones: (ids) => removeZones(ids),
     transformZones: (kind) => transformZones(kind),
     undo,
     redo,
@@ -481,6 +483,16 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     pushUndo();
     setZones(prev => prev.filter(z => z.id !== id));
     if (selectedZone === id) setSelectedZone(null);
+    setIsDirty(true);
+  };
+
+  const removeZones = (ids) => {
+    const drop = new Set(ids || []);
+    if (!drop.size) return;
+    pushUndo();
+    setZones(prev => prev.filter(z => !drop.has(z.id)));
+    setSelectedIds(new Set());
+    setSelectedZone(null);
     setIsDirty(true);
   };
 

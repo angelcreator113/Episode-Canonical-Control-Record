@@ -1,7 +1,8 @@
 /**
  * The home screen's icon grid, shared by the Connect editors (Task #2020):
  * 4 columns, starting 8% / 14% in, 21% / 14% apart, icons 12% × 9%. Moved
- * unchanged from IconPlacementMode so the TAP editor snaps to the same grid.
+ * unchanged from the former ICON mode (IconPlacementMode, removed by Task
+ * #2021), so the one Connect editor snaps to the same grid.
  */
 
 export const HOME_GRID = {

@@ -28,6 +28,14 @@ vi.mock('../components/ContentZoneEditor', () => ({ default: () => null }));
 import api from '../services/api';
 import UIOverlaysTab from './UIOverlaysTab';
 
+// jsdom has no PointerEvent; a MouseEvent-based stand-in keeps coordinates.
+if (typeof window.PointerEvent === 'undefined') {
+  class PointerEventPolyfill extends MouseEvent {
+    constructor(type, init = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+  }
+  window.PointerEvent = PointerEventPolyfill;
+}
+
 const SHOW = 's-1';
 const CALL = { id: 'call_icon', name: 'Call', category: 'phone_icon', generated: true, url: 'https://x/call.png', asset_id: 'a-call' };
 const CALLS = { id: 'calls', name: 'calls list', category: 'phone', generated: true, url: 'https://x/calls.png', asset_id: 'a-calls', show_id: SHOW, screen_links: [] };
@@ -105,12 +113,15 @@ describe('UIOverlaysTab — Connect zones workspace (Task #2014)', () => {
     await waitFor(() => expect(within(document.querySelector('.zones-health')).queryByText(/out of bounds/)).toBeNull());
   });
 
-  test('ICON mode: tapping the phone opens the picker beside it, not under it', async () => {
+  // Task #2021: there is no Icon tab any more; the one editor opens the same
+  // picker on a tap on an empty spot.
+  test('tapping the phone opens the picker beside it, not under it', async () => {
     await openConnect([keyed]);
-    fireEvent.click(screen.getByRole('tab', { name: 'Icon' }));
     const canvas = document.querySelector('.zones-tab__canvas');
     await waitFor(() => expect(canvas.querySelector('[style*="crosshair"]')).toBeTruthy());
-    fireEvent.click(canvas.querySelector('[style*="crosshair"]'), { clientX: 50, clientY: 50 });
+    const surface = canvas.querySelector('[style*="crosshair"]');
+    fireEvent.pointerDown(surface, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(surface, { pointerId: 1, clientX: 50, clientY: 50 });
     const side = document.querySelector('.zones-tab__icon-panel');
     expect(await within(side).findByText('PICK AN ICON + WHERE IT OPENS')).toBeTruthy();
     expect(within(canvas).queryByText('PICK AN ICON + WHERE IT OPENS')).toBeNull();

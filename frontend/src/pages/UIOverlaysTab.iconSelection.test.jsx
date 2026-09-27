@@ -24,7 +24,6 @@ vi.mock('../components/phone-editor/AIProposalReview', () => ({ default: () => n
 vi.mock('../components/phone-editor/MissionEditor', () => ({ default: () => null }));
 vi.mock('../components/ContentZoneEditor', () => ({ default: () => null }));
 vi.mock('../components/ScreenLinkEditor', () => ({ default: () => null }));
-vi.mock('../components/IconPlacementMode', () => ({ default: () => null }));
 vi.mock('../components/PhonePreviewMode', () => ({ default: () => null, ScreenFlowMap: () => null }));
 
 import api from '../services/api';

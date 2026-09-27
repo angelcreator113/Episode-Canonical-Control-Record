@@ -19,7 +19,6 @@ vi.mock('../components/phone/PhoneMapView', async (importOriginal) => {
   return { ...actual, default: () => null };
 });
 vi.mock('../components/ScreenLinkEditor', () => ({ default: () => <div data-testid="view-zones" /> }));
-vi.mock('../components/IconPlacementMode', () => ({ default: () => null }));
 vi.mock('../components/ContentZoneEditor', () => ({ default: () => <div data-testid="view-content" /> }));
 vi.mock('../components/phone-editor/MissionEditor', () => ({
   default: ({ open }) => (open ? <div data-testid="view-missions" /> : null),
