@@ -1518,6 +1518,23 @@ router.post('/propose-registry-update', requireAuth, aiRateLimiter, async (req, 
   }
 });
 
+// The registry a story was generated from. generate-story-multi stores
+// fetchSceneContext's rows as registry_dossiers_used; each carries its own
+// registry_characters id, and all were loaded WHERE registry_id = the story's
+// registry. The dossiers carry no registry_id of their own, so it is read back
+// from those rows. Returns null when there are no dossier ids, when none of
+// the rows is found, or when they now span more than one registry.
+async function resolveStoryRegistryId(story, transaction) {
+  const ids = (Array.isArray(story.registry_dossiers_used) ? story.registry_dossiers_used : [])
+    .map(d => d?.id).filter(Boolean);
+  if (!ids.length) return null;
+  const rows = await db.RegistryCharacter.findAll({
+    where: { id: ids }, attributes: ['registry_id'], transaction,
+  });
+  const registryIds = [...new Set(rows.map(r => r.registry_id))];
+  return registryIds.length === 1 ? registryIds[0] : null;
+}
+
 // ── POST /write-back ──────────────────────────────────────────────────────
 router.post('/write-back', requireAuth, async (req, res) => {
   const { story_id, chapter_id, confirmed_memories, confirmed_registry_updates } = req.body;
@@ -1583,10 +1600,19 @@ router.post('/write-back', requireAuth, async (req, res) => {
       'personality_matrix', 'deep_profile', 'extra_fields',
     ]);
     if (confirmed_registry_updates?.length) {
+      // F-Reg-2 O-e: character_key is unique only within a registry, so each
+      // update is scoped to the story's own registry. When that cannot be
+      // resolved, nothing is written for the key (no guessing across
+      // registries); the skip is logged.
+      const storyRegistryId = await resolveStoryRegistryId(story, transaction);
       for (const upd of confirmed_registry_updates) {
         if (!upd.field || !SAFE_REGISTRY_FIELDS.has(upd.field)) continue;
+        if (!storyRegistryId) {
+          console.warn(`[write-back] story ${story_id}: registry not resolved; skipped registry update for character_key "${upd.character_key}"`);
+          continue;
+        }
         const char = await db.RegistryCharacter.findOne({
-          where: { character_key: upd.character_key },
+          where: { character_key: upd.character_key, registry_id: storyRegistryId },
           transaction,
         });
         if (char && upd.proposed_value !== undefined) {

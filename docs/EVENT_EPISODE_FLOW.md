@@ -2265,6 +2265,55 @@ evaluation.
 | 6. Deliverable load | Item 5: separate from difficulty, computed from accepted deliverables only, and not until they exist. | How it is computed and shown. |
 | 7. Two misleading labels | Item 8: both renamed in #1810. | Nothing. |
 
+**(u) Event generation rulings (Evoni, 2026-09-27, Task #2088).** Docs
+only: no code is changed by this entry. The basis is
+`docs/EVENT_DRAFT_READ.md` (merged as `2e1fc195`), cited, not restated.
+Recorded from `origin/main` at `2063168c397d11e79929a52c3a69ed27baf0d77d`.
+Rule 14 of `docs/DESIGN_DOCTRINE.md` is amended by the same task.
+
+**R1 Auto-draft:** as rule 14 (amended).
+
+**R2 Readiness:** auto-drafted fields count toward Event Ready, including
+organizer and invitation when they were created as part of the draft. No
+special exceptions.
+
+**R3 Order:** creator → concept → description/activity → category and
+format → time, dress code, styling → name. The name describes the
+finished concept and is never used to infer category or format.
+
+**R4 Formats:** add workout_class, masterclass, workshop, dinner,
+showcase, preview, pop_up, retreat, meetup, run_club, performance,
+photoshoot, tasting, panel, competition to the existing 8. Note:
+wellness_session may be considered later.
+
+**R5** The same taxonomy task fixes the event_type checks that use
+non-canonical format words ("launch", "opening") in
+financialTransactionService.js and wardrobeIntelligenceService.js (see
+EVENT_DRAFT_READ.md §5, disagreement 3).
+
+**R6 Categories:** add `fitness` as its own category. Content category
+`fitness` maps to `fitness`; content category `lifestyle` maps to
+`community_local`.
+
+**R7 Styling:** dress_code and dress_code_keywords remain the canonical
+scoring inputs and are filled at creation. Add a styling_brief that
+reuses the wardrobe-brief concept (not necessarily
+Opportunity.wardrobe_brief's exact shape), with at least activity,
+formality, function_requirements, avoid, style_direction; environment and
+footwear_requirements may be included.
+
+**R8 Description contract:** "The public event description explains why
+the event exists, what attendees will actually do, the setting/atmosphere,
+and what guests should expect. It contains no database stats, evaluation
+language, or private story consequences."
+
+**R9 Name prompt:** replace the "fashion/lifestyle content-creator show"
+framing with the organizer's niche and the event concept, e.g. "Name this
+fictional event for a luxury fitness creator hosting a sunset sculpt
+workout and recovery social." The show name is never an input (rule 11).
+
+**R10** New formats get start-time and dress-code defaults, set in task 1.
+
 ---
 
 ## 9. Owed before enforcement
