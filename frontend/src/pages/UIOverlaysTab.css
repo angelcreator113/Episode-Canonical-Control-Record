@@ -979,3 +979,93 @@
   font-family: var(--font-ui);
   color: var(--lala-ink-muted);
 }
+
+/* ============================================
+   "+ ADD" ASKS WHAT YOU'RE ADDING (Task #2024)
+   ============================================ */
+
+/* The chooser: a question, then three options with one line each. */
+.overlays-toolbar .toolbar-menu__list {
+  width: 280px;
+  max-width: calc(100vw - 32px);
+}
+.overlays-add-chooser__title {
+  padding: 6px 10px 4px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--lala-ink-faint);
+}
+.toolbar-menu__list > button.overlays-add-chooser__option {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  white-space: normal;
+}
+.overlays-add-chooser__label {
+  font-weight: 600;
+  color: var(--lala-ink);
+}
+.overlays-add-chooser__desc {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--lala-ink-faint);
+}
+
+/* The key a new item gets, shown under its name. */
+.overlays-modal__key {
+  margin-top: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #6B6557;
+}
+.overlays-modal__key code {
+  color: var(--lala-gold);
+  font-family: inherit;
+}
+
+/* Content Area: which screen it's on. */
+.overlays-content-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.overlays-content-pick__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+}
+.overlays-content-pick__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #6B6557;
+}
+
+/* An icon's background state (I3). */
+.editor-bg-state {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: #6B6557;
+}
+.editor-bg-state--removed strong { color: #3f8a6b; }
+.editor-bg-state--removing strong { color: var(--lala-gold); }
+.editor-bg-state--failed strong,
+.editor-bg-state__reason { color: #b42318; }
+.editor-bg-state__retry {
+  padding: 4px 10px;
+  min-height: 28px;
+  border: 1px solid var(--lala-parchment-3);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--lala-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
