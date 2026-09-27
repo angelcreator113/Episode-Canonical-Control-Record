@@ -522,11 +522,53 @@ export default function UIOverlaysTab({ showId: propShowId }) {
         issueItems,
         issueCount: issues.length,
         severity,
+        // Zones with no destination, for the screen cards' status (Task
+        // #2042): no target set, or a target that is no generated screen.
+        missingTarget,
+        brokenTarget,
       });
     });
 
     return diagnostics;
   }, [overlays]);
+
+  // Full edit of a screen: select it and open the detail panel in Build.
+  // The card's ⋮ → Edit, a click on a card with no image, and a card's
+  // "Continue →" for its image all come here.
+  const openScreenEditor = (s) => {
+    setActiveScreen(s);
+    setPanelOpen(true);
+    setNavHistory([]);
+    setActiveTab('screens');
+    setActiveVariantIdx(0);
+    setAddingVariant(false);
+    setEditingName(false);
+    setEditorTab('actions');
+  };
+
+  // A screen card's one next action (doctrine rule 18, Task #2042):
+  //   image    → Build, the screen's editor
+  //   links    → Connect on that screen, at its first zone with no destination
+  //   incoming → Connect on the home screen, where a link to it is placed
+  const handleContinueCard = (s, step) => {
+    if (!s) return;
+    if (step === 'image') { openScreenEditor(s); return; }
+    let target = s;
+    let zoneId = null;
+    if (step === 'links') {
+      const item = screenDiagnostics.get(s.id)?.issueItems
+        ?.find(i => i.id.endsWith('-broken-target') || i.id.endsWith('-missing-target'));
+      zoneId = item?.zoneId || null;
+    } else if (step === 'incoming') {
+      const generated = overlays.filter(o => o.generated && o.url && isScreen(o));
+      target = generated.find(o => o.is_home) || generated[0] || s;
+    }
+    saveZoneDrafts();
+    setActiveScreen(target);
+    setNavHistory([]);
+    setActiveTab('zones');
+    setPendingIssueFocus({ screenId: target.id, mode: 'zones', zoneId });
+  };
 
   useEffect(() => { loadOverlays(true); }, [loadOverlays]);
 
@@ -1404,19 +1446,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   setNavHistory([]);
                   if (previewing) setPreviewRun(n => n + 1);
                 }}
-                onEditScreen={(s) => {
-                  // Full edit: select + open the detail modal. Triggered
-                  // from the card's ⋮ → Edit menu, or auto-fired when a
-                  // creator clicks a placeholder card (no image yet).
-                  setActiveScreen(s);
-                  setPanelOpen(true);
-                  setNavHistory([]);
-                  setActiveTab('screens');
-                  setActiveVariantIdx(0);
-                  setAddingVariant(false);
-                  setEditingName(false);
-                  setEditorTab('actions');
-                }}
+                onEditScreen={openScreenEditor}
+                screenDiagnostics={screenDiagnostics}
+                onContinue={handleContinueCard}
                 onDelete={handleDeleteScreen}
                 onHideScreen={handleHideScreen}
                 hiddenScreens={hiddenScreens}

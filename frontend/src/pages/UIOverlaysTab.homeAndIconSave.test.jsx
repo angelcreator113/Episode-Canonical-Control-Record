@@ -87,11 +87,13 @@ function expectCallSavedOnHome() {
 }
 
 describe('UIOverlaysTab — home is never "Unreached" (Task #2016)', () => {
-  test('the home card reads HOME; another screen no zone reaches still reads Unreached', async () => {
+  // Task #2042 (doctrine rule 18) renamed a screen card's "⚠ Unreached" to
+  // "⚠ Nothing links here"; the home card still never carries it.
+  test('the home card reads HOME; another screen no zone reaches reads Nothing links here', async () => {
     await renderPage();
     expect(within(cardOf('Homepage')).getByText('★ HOME')).toBeTruthy();
-    expect(within(cardOf('Homepage')).queryByText('⚠ Unreached')).toBeNull();
-    expect(within(cardOf('calls list')).getByText('⚠ Unreached')).toBeTruthy();
+    expect(within(cardOf('Homepage')).queryByText(/Unreached|Nothing links here/)).toBeNull();
+    expect(within(cardOf('calls list')).getByText('⚠ Nothing links here')).toBeTruthy();
   });
 
   test('with no screen marked home, the first generated screen is home', async () => {
