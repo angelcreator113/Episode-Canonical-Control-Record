@@ -50,6 +50,7 @@ concerns **FD-40 (F-Deploy-1)**, which is unrelated to open item 40 (F-Stats-1).
 | XK-1 | `paranoid` exposure — 48 model tables inherit `paranoid` with no `deleted_at` column | F-Stats-1, F-Ward-1, F-Ward-3 | OWNED (F-Stats-1 v1.31) | UNEVALUATED |
 | XK-2 | Row-scope not enforced in SQL — scope parameter present in the route, used for a read, dropped at the write | F-Stats-1, F-AUTH-1 | OWNED (F-Stats-1 v1.46) | UNEVALUATED |
 | XK-3 | No authorization substrate for the tenancy root — no user↔show relation exists, so `show_id` is caller-asserted and unverifiable | F-AUTH-1, F-Stats-1 | OWNED (F-Stats-1 v1.57) | UNEVALUATED |
+| XK-4 | Tenancy absent from the route contract — a route reaches a child record by a caller-supplied id, and no layer applies a show | F-Stats-1, F-Ward-1, F-AUTH-1 | OWNED (F-Stats-1 v1.62) | UNEVALUATED |
 
 ---
 
@@ -287,6 +288,16 @@ means the item has a home and a reader, not that a remedy is selected.**
 
 ### XK-3 — no authorization substrate for the tenancy root
 
+> **Banner (2026-09-27, F-Stats-1 Fix Plan v1.62 §65.4; Evoni's ruling, "fold
+> §64.4-R into XK-3").** F-Stats-1 v1.61's owed item **§64.4-R**, "give shows
+> an owner, and check it on the request path", is one item with this entry and
+> is folded into it. It carries its two gates (RULED, v1.61 §64.1): the fix
+> cycle ending, and Evoni's decision about multiple users. It also carries
+> v1.61 §64.4's recorded dependencies: an owner column on `shows` is a schema
+> change under the locked sequence's standing rule; F-AUTH-1's Tier 4 public
+> reads; the excluded franchise-tier files. **XK-4's remedy depends on this
+> entry** (v1.62 §65.4). The body below is unchanged; its fix stays UNEVALUATED.
+
 **Origin:** arrived through FD-62's remedy question (F-Stats-1 v1.56 §59.7), not
 through a probe aimed at this. FD-62 records three destructive handlers taking
 `show_id` from the request body and validating presence only. Designing a remedy
@@ -396,6 +407,53 @@ implies a different remedy for FD-62 and for the 30-site shape. Every candidate
 touches schema and requires its own gated decision. **Ownership here means the item
 has a home and a reader, not that a remedy is selected.**
 
+### XK-4 — tenancy absent from the route contract
+
+**Origin:** recorded as a shape, not minted, at F-Stats-1 v1.48 §51 ("routes
+addressed by child-entity id", the scope value "absent at every layer"). Held
+under v1.48 §51.5's option 3, "Record and defer", through v1.61. Admitted here by
+F-Stats-1 v1.62 §65.4, on Evoni's ruling (2026-09-27) adopting "mint it as XK-4".
+
+**Evidence artifacts:** F-Stats-1 Fix Plan v1.48 §51 (the shape and its homing
+options), v1.49 through v1.59 (the write instances, to 40 sites / 39 handlers /
+20 files at v1.59 §62), the five reads slices
+(`F-Stats-1_ReadsSlice_*_2026-09-27.md`) with the calendarRoutes.js slice's
+Amendment 1, and v1.61 §64 (the reads survey closed on them). **None is
+superseded or moved.**
+
+**Mechanism.** A handler reads or writes a row chosen by an identifier the
+caller supplies, on a table that carries a show directly or through a parent,
+and no layer applies a tenant: not the route contract, the statement's
+predicate, a prior lookup, or router or mount middleware (v1.48 §51.2; the
+episodes.js reads slice, "The rule"). Every reads slice records "Nothing in the
+request path supplies a tenant."
+
+**Extent, recorded separately and not summed.**
+
+| Surface | Count | Source |
+|---|---|---|
+| Writes | 40 sites / 39 handlers / 20 files | F-Stats-1 v1.59 §62 (unchanged at v1.60, v1.61) |
+| Reads | 36 instances across five files, as ruled; 40 as amended (arithmetic) | F-Stats-1 v1.61 §64.2; `F-Stats-1_ReadsSlice_calendarRoutes_Amd1_2026-09-27.md` §4 |
+
+The reads survey closed without reading the remaining 76 route files (v1.61
+§64.4): **those files are not surveyed, and no absence is asserted for them.**
+
+**Distinct from XK-2.** XK-2 is a scope present in the route and dropped at the
+write; here the scope is absent at every layer. v1.48 §51.4: "Two findings that
+share a symptom and not a remedy are two findings."
+
+**Depends on XK-3.** A tenant check needs a relation to check against, and XK-3
+records that none exists. The remedy candidates for this entry wait on XK-3's
+(RULED, v1.62 §65.4).
+
+**Admission (§2):** criterion 1, reach across F-Stats-1, F-Ward-1 and F-AUTH-1
+(v1.48 §51.5, option 1's note); criterion 2, it does not resolve inside one
+keystone, since its remedy depends on XK-3; criterion 3, ratified by F-Stats-1
+v1.62.
+
+**Fix: unevaluated.** **Ownership here means the item has a home and a reader,
+not that a remedy is selected.**
+
 ## §5 What this register does not do
 
 - Does not evaluate or select fixes. Every entry's remedy is unevaluated.
@@ -419,3 +477,4 @@ by a Fix Plan revision that cites the entry, never by editing this file alone.
 *Admitted: XK-1. Mints no FD. Evaluates no fix. No live database contact.*
 *Admitted: XK-2 — 2026-08-14. Ratified by: F-Stats-1 Fix Plan v1.46. Main at `055da746`. Mints no FD. Evaluates no fix. No live database contact.*
 *Admitted: XK-3 — 2026-08-16. Ratified by: F-Stats-1 Fix Plan v1.57. Main at `ff3637ec`. Mints no FD. Evaluates no fix. No live database contact.*
+*Admitted: XK-4 — 2026-09-27. Ratified by: F-Stats-1 Fix Plan v1.62. Main at `eb674ae4`. Mints no FD. Evaluates no fix. No live database contact.*
