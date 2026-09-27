@@ -61,7 +61,6 @@ ProcessingQueue	retry_count	canon-missing-column
 ProcessingQueue	sqs_message_id	canon-missing-column
 ProcessingQueue	sqs_receipt_handle	canon-missing-column
 ProcessingQueue	started_at	canon-missing-column
-RegistryCharacter	world	missing-column
 SceneAngle	angle_description	missing-column
 SceneAngle	artifact_flags	missing-column
 SceneAngle	camera_direction	missing-column

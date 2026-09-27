@@ -18,13 +18,6 @@ jest.unmock('uuid');
  * extra_fields.memories, generate-section's result is in extra_fields, other
  * extra_fields keys survive, and two concurrent calls on one character both
  * land.
- *
- * Test-only fixture: the RegistryCharacter model declares a `world` column
- * (ENUM 'book-1', 'lalaverse', 'series-2') that production has (the
- * 2026-09-17 canon capture) but no migration creates, so on a database built by
- * the migration tree every RegistryCharacter load fails with 'column "world"
- * does not exist'. beforeAll adds the column only when it is missing, and
- * afterAll removes only what beforeAll added. No migration or model changes.
  */
 const mockCreate = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: mockCreate } })));
@@ -105,22 +98,7 @@ async function cleanup(ids) {
   const seeded = [];
   const auth = () => `Bearer ${token}`;
 
-  let addedWorld = false;
-  let addedWorldType = false;
-
   beforeAll(async () => {
-    const [col] = await q(`SELECT 1 AS present FROM information_schema.columns
-                           WHERE table_schema = 'public' AND table_name = 'registry_characters' AND column_name = 'world'`);
-    if (!col) {
-      const [type] = await q(`SELECT 1 AS present FROM pg_type WHERE typname = 'enum_registry_characters_world'`);
-      if (!type) {
-        await run(`CREATE TYPE enum_registry_characters_world AS ENUM ('book-1', 'lalaverse', 'series-2')`);
-        addedWorldType = true;
-      }
-      await run(`ALTER TABLE registry_characters ADD COLUMN world enum_registry_characters_world`);
-      addedWorld = true;
-    }
-
     token = TokenService.generateTokenPair({
       id: 'test-user-registry-json',
       email: 'test@registry-json.dev',
@@ -137,8 +115,6 @@ async function cleanup(ids) {
 
   afterAll(async () => {
     for (const ids of seeded) await cleanup(ids);
-    if (addedWorld) await run(`ALTER TABLE registry_characters DROP COLUMN world`);
-    if (addedWorldType) await run(`DROP TYPE enum_registry_characters_world`);
   });
 
   const confirm = (memoryId, ids) =>
