@@ -452,7 +452,12 @@ async function finalizeEpisodeFinancials(episodeId, showId, sequelize, { dryRun 
     const drinks = EVENT_EXTRAS.drinks(prestige);
     const valet = EVENT_EXTRAS.valet(prestige);
     const photoBoothPrompt = (event.dress_code || '').toLowerCase();
-    const wantsPhotoBooth = ['gala', 'premiere', 'launch', 'brand_deal'].includes(event.event_type)
+    // format first (§8(u) R5). The event_type fallback stays because
+    // /memories/generate-events writes format words into event_type
+    // (docs/EVENT_DRAFT_READ.md §5, disagreement 2); brand_deal is an
+    // event_type value, not a format, so it lives only there.
+    const wantsPhotoBooth = ['gala', 'premiere', 'brand_launch'].includes(event.format)
+      || ['gala', 'premiere', 'launch', 'brand_deal'].includes(event.event_type)
       || photoBoothPrompt.includes('red carpet') || photoBoothPrompt.includes('photo');
     const photoBooth = wantsPhotoBooth ? EVENT_EXTRAS.photo_booth(prestige) : 0;
     const extras = drinks + valet + photoBooth;

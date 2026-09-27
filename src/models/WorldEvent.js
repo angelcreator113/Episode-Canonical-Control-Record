@@ -39,24 +39,25 @@ module.exports = (sequelize) => {
       comment: 'invite | upgrade | guest | fail_test | deliverable | brand_deal',
     },
     // category/format — Evoni's taxonomy ruling, 2026-09-22
-    // (docs/EVENT_EPISODE_FLOW.md §8(k)/(l)). Nullable, no default, no
+    // (docs/EVENT_EPISODE_FLOW.md §8(k)/(l); §8(u) R4/R6 added 15 formats
+    // and fitness). Nullable, no default, no
     // backfill on existing rows. isIn is skipped by Sequelize on a null
     // value when allowNull is true (node_modules/sequelize/lib/instance-
     // validator.js's _singleAttrValidate), so existing NULL rows are safe.
     category: {
       type: DataTypes.STRING(50),
       allowNull: true,
-      comment: 'fashion | social | brunch_dining | beauty_wellness | creator_brand | arts_entertainment | luxury_prestige | community_local | travel_destination | personal_relationship',
+      comment: 'fashion | social | brunch_dining | beauty_wellness | creator_brand | arts_entertainment | luxury_prestige | community_local | travel_destination | personal_relationship | fitness',
       validate: {
-        isIn: [['fashion', 'social', 'brunch_dining', 'beauty_wellness', 'creator_brand', 'arts_entertainment', 'luxury_prestige', 'community_local', 'travel_destination', 'personal_relationship']],
+        isIn: [['fashion', 'social', 'brunch_dining', 'beauty_wellness', 'creator_brand', 'arts_entertainment', 'luxury_prestige', 'community_local', 'travel_destination', 'personal_relationship', 'fitness']],
       },
     },
     format: {
       type: DataTypes.STRING(50),
       allowNull: true,
-      comment: 'cocktail_party | garden_soiree | gallery_opening | gala | brunch | concert | brand_launch | premiere',
+      comment: 'cocktail_party | garden_soiree | gallery_opening | gala | brunch | concert | brand_launch | premiere | workout_class | masterclass | workshop | dinner | showcase | preview | pop_up | retreat | meetup | run_club | performance | photoshoot | tasting | panel | competition',
       validate: {
-        isIn: [['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere']],
+        isIn: [['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere', 'workout_class', 'masterclass', 'workshop', 'dinner', 'showcase', 'preview', 'pop_up', 'retreat', 'meetup', 'run_club', 'performance', 'photoshoot', 'tasting', 'panel', 'competition']],
       },
     },
     host: {

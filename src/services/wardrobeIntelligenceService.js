@@ -586,15 +586,24 @@ function evaluateColorPsychology(items, event) {
   if (count < Math.ceil(families.length / 2)) return null;
 
   const eventType = String(event.event_type || '').toLowerCase();
+  const eventFormat = String(event.format || '').toLowerCase();
   const dressCode = String(event.dress_code || '').toLowerCase();
   const prestige = parseInt(event.prestige, 10) || 5;
   // Prestige threshold lowered 7→6 so listening sessions, brand cocktails,
   // and other prestige-6 events catch the high-stakes color bonus too.
   // 7 was missing the entire "borderline elevated" band that creators
   // most often work in.
-  const HIGH_STAKES = ['gala', 'premiere', 'brand_deal'].includes(eventType) || prestige >= 6;
-  const INTIMATE = ['date', 'dinner', 'coffee'].includes(eventType) || prestige <= 4;
-  const CELEBRATORY = ['launch', 'after_party', 'opening'].includes(eventType)
+  // format first, with canonical spellings (§8(u) R5). The event_type lists
+  // are an unchanged fallback: /memories/generate-events writes format words
+  // into event_type (docs/EVENT_DRAFT_READ.md §5, disagreement 2). date,
+  // coffee and after_party have no canonical format, and brand_deal is an
+  // event_type value, so those stay in the fallback only.
+  const HIGH_STAKES = ['gala', 'premiere'].includes(eventFormat)
+    || ['gala', 'premiere', 'brand_deal'].includes(eventType) || prestige >= 6;
+  const INTIMATE = ['dinner'].includes(eventFormat)
+    || ['date', 'dinner', 'coffee'].includes(eventType) || prestige <= 4;
+  const CELEBRATORY = ['brand_launch', 'gallery_opening'].includes(eventFormat)
+    || ['launch', 'after_party', 'opening'].includes(eventType)
     || /sparkle|disco|metallic|dazzle|festive/.test(dressCode);
   const PROFESSIONAL = ['press', 'fitting', 'meeting', 'interview'].includes(eventType)
     || /business|professional|corporate|chic professional/.test(dressCode);
