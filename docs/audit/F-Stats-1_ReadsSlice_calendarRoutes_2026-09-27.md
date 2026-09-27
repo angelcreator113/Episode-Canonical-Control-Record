@@ -283,9 +283,11 @@ below tests both.
 
 Method, as in the episodes.js slice: load the real routers in Node and use
 Express's own layer matching (`layer.match`). Every `:param` becomes a UUID.
-Two scripts, run with `node <script> <outfile>` from the repo root. Both live
-in the session scratchpad and neither is committed. `<repo>` stands for the
-checkout's absolute path.
+Two scripts, each run from the checkout as `node <scratch>/<script>
+<scratch>/<outfile>`. Both files live in the session scratchpad and neither is
+committed. `<repo>` stands for the checkout's absolute path and `<scratch>` for
+the scratchpad directory's absolute path. The transcripts below show the
+commands as run, with only those two paths abbreviated.
 
 **Script 1** loads `calendarRoutes` and lists its routes with each route's
 middleware and the router's non-route layers. It then checks that each
@@ -358,7 +360,7 @@ setTimeout(() => process.exit(0), 50);
 Its output, the whole file it writes:
 
 ```
-$ node cal1.js cal1.out >/dev/null 2>&1; echo exit=$?; cat cal1.out
+$ cd <repo> && node <scratch>/cal1.js <scratch>/cal1.out >/dev/null 2>&1; echo exit=$?; cat <scratch>/cal1.out
 exit=0
 calendar routes 19; non-route layers: ["requireAuth"]
   GET /markers [<anonymous>]
@@ -426,7 +428,7 @@ setTimeout(() => process.exit(0), 50);
 ```
 
 ```
-$ node cal2.js cal2.out >/dev/null 2>&1; echo exit=$?; cat cal2.out
+$ cd <repo> && node <scratch>/cal2.js <scratch>/cal2.out >/dev/null 2>&1; echo exit=$?; cat <scratch>/cal2.out
 exit=0
 WorldEvent has source_calendar_event_id attribute: true
 StoryClockMarker: show_id=false series_id=true associations=events
