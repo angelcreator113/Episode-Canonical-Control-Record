@@ -5444,38 +5444,60 @@ Set any field to null if it should NOT be updated.`;
       if (parsed.core_updates.belief_pressured) { updatePayload.belief_pressured = parsed.core_updates.belief_pressured; fieldsUpdated++; }
     }
 
-    // Merge-style JSONB updates
+    // Merge-style JSONB updates. F-Reg-2 fix group 1 (O-b): each merge is
+    // built inside the write's transaction, onto the row's current value read
+    // under a lock, and into a copy. Merging personality_matrix into the
+    // object read before the AI call edited it in place, so the update saw no
+    // change and dropped it; and all three merges overwrote any change made
+    // during the call.
+    const jsonMerges = {};
     if (parsed.updates) {
       if (parsed.updates.relationships_map?.data) {
-        const existing = plain.relationships_map || {};
-        updatePayload.relationships_map = { ...existing, ...parsed.updates.relationships_map.data };
+        const data = parsed.updates.relationships_map.data;
+        jsonMerges.relationships_map = (current) => ({ ...(current || {}), ...data });
+        updatePayload.relationships_map = null;
         fieldsUpdated++;
       }
       if (parsed.updates.evolution_tracking?.data) {
-        const existing = plain.evolution_tracking || {};
-        updatePayload.evolution_tracking = { ...existing, ...parsed.updates.evolution_tracking.data };
+        const data = parsed.updates.evolution_tracking.data;
+        jsonMerges.evolution_tracking = (current) => ({ ...(current || {}), ...data });
+        updatePayload.evolution_tracking = null;
         fieldsUpdated++;
       }
       if (parsed.updates.personality_matrix?.data) {
-        const existing = plain.personality_matrix || {};
         // Merge arrays instead of overwriting
         const newData = parsed.updates.personality_matrix.data;
-        if (newData.new_strengths?.length) {
-          existing.strengths = [...new Set([...(existing.strengths || []), ...newData.new_strengths])];
-        }
-        if (newData.new_vulnerabilities?.length) {
-          existing.vulnerabilities = [...new Set([...(existing.vulnerabilities || []), ...newData.new_vulnerabilities])];
-        }
-        if (newData.trait_shifts?.length) {
-          existing.trait_shifts = [...(existing.trait_shifts || []), ...newData.trait_shifts];
-        }
-        updatePayload.personality_matrix = existing;
+        jsonMerges.personality_matrix = (current) => {
+          const existing = JSON.parse(JSON.stringify(current || {}));
+          if (newData.new_strengths?.length) {
+            existing.strengths = [...new Set([...(existing.strengths || []), ...newData.new_strengths])];
+          }
+          if (newData.new_vulnerabilities?.length) {
+            existing.vulnerabilities = [...new Set([...(existing.vulnerabilities || []), ...newData.new_vulnerabilities])];
+          }
+          if (newData.trait_shifts?.length) {
+            existing.trait_shifts = [...(existing.trait_shifts || []), ...newData.trait_shifts];
+          }
+          return existing;
+        };
+        updatePayload.personality_matrix = null;
         fieldsUpdated++;
       }
     }
 
     if (fieldsUpdated > 0) {
-      await charRow.update(updatePayload);
+      await RegistryCharacter.sequelize.transaction(async (transaction) => {
+        const current = await RegistryCharacter.findByPk(charRow.id, {
+          attributes: ['id', 'relationships_map', 'evolution_tracking', 'personality_matrix'],
+          transaction,
+          lock: transaction.LOCK.UPDATE,
+        });
+        if (!current) return;
+        for (const [field, merge] of Object.entries(jsonMerges)) {
+          updatePayload[field] = merge(current.get(field));
+        }
+        await RegistryCharacter.update(updatePayload, { where: { id: current.id }, transaction });
+      });
       console.log(`[story-engine-update-registry] Updated ${fieldsUpdated} fields for ${characterKey} after story ${storyNumber}`);
     }
 
