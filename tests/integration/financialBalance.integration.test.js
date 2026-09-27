@@ -7,12 +7,18 @@ jest.unmock('uuid');
  * GET /world/:showId/balance reads the ledger (financial_transactions) through
  * getCurrentBalance. These tests seed one show with a ledger that sums to 2000
  * and compare what each handler reports as the balance.
+ *
+ * Before the fix both handlers read character_state_history.state_json, a column
+ * that does not exist, and answered 500 from a bare catch. They now read the
+ * same ledger balance as /balance. financial-pressure's three other queries
+ * stay as fallbacks and log when they fail.
  */
 const request = require('supertest');
 const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const { sequelize } = require('../../src/models');
+const { DEFAULT_STARTING_BALANCE } = require('../../src/utils/financialRates');
 
 const shouldSkip =
   !process.env.DATABASE_URL ||
@@ -66,17 +72,60 @@ async function cleanup(ids) {
     expect(res.body.balance).toBe(LEDGER_BALANCE);
   });
 
-  test('today, affordability uses a balance of 500, not the ledger', async () => {
+  test('affordability uses the ledger balance, as /balance does', async () => {
     const res = await request(app)
       .get(`/api/v1/world/${ids.show}/events/${ids.event}/affordability`)
       .set('Authorization', auth());
     expect(res.status).toBe(200);
-    expect(res.body.currentBalance).toBe(500);
+    expect(res.body.currentBalance).toBe(LEDGER_BALANCE);
   });
 
-  test('today, financial-pressure uses a balance of 500, not the ledger', async () => {
+  test('financial-pressure uses the ledger balance, as /balance does', async () => {
     const res = await request(app).get(`/api/v1/world/${ids.show}/financial-pressure`).set('Authorization', auth());
     expect(res.status).toBe(200);
-    expect(res.body.balance).toBe(500);
+    expect(res.body.balance).toBe(LEDGER_BALANCE);
+  });
+
+  test('a failing fallback query in financial-pressure is logged, and the response still returns', async () => {
+    const original = sequelize.query.bind(sequelize);
+    const querySpy = jest.spyOn(sequelize, 'query').mockImplementation((sql, ...rest) => (
+      typeof sql === 'string' && sql.includes('FROM opportunities')
+        ? Promise.reject(new Error('test_2078: opportunities query refused'))
+        : original(sql, ...rest)
+    ));
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await request(app).get(`/api/v1/world/${ids.show}/financial-pressure`).set('Authorization', auth());
+      expect(res.status).toBe(200);
+      expect(res.body.balance).toBe(LEDGER_BALANCE);
+      expect(res.body.pipeline_context).toBe('');
+      expect(errors.mock.calls.some(([msg, detail]) =>
+        String(msg).includes('opportunities query failed') && String(detail).includes('test_2078'))).toBe(true);
+    } finally {
+      querySpy.mockRestore();
+      errors.mockRestore();
+    }
+  });
+
+  test('when the ledger query fails, affordability takes getCurrentBalance\'s own fallback, not a fixed 500', async () => {
+    const original = sequelize.query.bind(sequelize);
+    const querySpy = jest.spyOn(sequelize, 'query').mockImplementation((sql, ...rest) => (
+      typeof sql === 'string' && sql.includes('FROM financial_transactions')
+        ? Promise.reject(new Error('test_2078: ledger query refused'))
+        : original(sql, ...rest)
+    ));
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await request(app)
+        .get(`/api/v1/world/${ids.show}/events/${ids.event}/affordability`)
+        .set('Authorization', auth());
+      // getCurrentBalance catches a failed ledger query itself and falls back
+      // to the show's starting balance; this show sets none, so the default.
+      expect(res.status).toBe(200);
+      expect(res.body.currentBalance).toBe(DEFAULT_STARTING_BALANCE);
+    } finally {
+      querySpy.mockRestore();
+      errors.mockRestore();
+    }
   });
 });

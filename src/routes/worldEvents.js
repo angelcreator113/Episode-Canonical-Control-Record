@@ -2670,21 +2670,18 @@ router.get('/world/:showId/events/:eventId/affordability', requireAuth, async (r
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
     // Get Lala's current balance
-    let balance = 500; // default
-    try {
-      const [state] = await models.sequelize.query(
-        `SELECT state_json FROM character_state_history WHERE show_id = :showId ORDER BY created_at DESC LIMIT 1`,
-        { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
-      );
-      const stateJson = typeof state?.state_json === 'string' ? JSON.parse(state.state_json) : state?.state_json;
-      balance = stateJson?.coins ?? 500;
-    } catch { /* use default */ }
+    // The ledger balance, as GET /world/:showId/balance reads it (F-Stats-1
+    // v1.63 §66.3-F). getCurrentBalance has its own fallbacks; anything it
+    // throws reaches the outer catch, which logs.
+    const { getCurrentBalance } = require('../services/financialTransactionService');
+    const balance = await getCurrentBalance(models.sequelize, showId);
 
     const { checkAffordability } = require('../services/financialPressureService');
     const result = checkAffordability(event, balance);
 
     return res.json({ success: true, ...result });
   } catch (err) {
+    console.error('[affordability] failed:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -2722,15 +2719,11 @@ router.get('/world/:showId/financial-pressure', requireAuth, async (req, res) =>
     const models = await getModels();
 
     // Get Lala's balance
-    let balance = 500;
-    try {
-      const [state] = await models.sequelize.query(
-        `SELECT state_json FROM character_state_history WHERE show_id = :showId ORDER BY created_at DESC LIMIT 1`,
-        { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
-      );
-      const stateJson = typeof state?.state_json === 'string' ? JSON.parse(state.state_json) : state?.state_json;
-      balance = stateJson?.coins ?? 500;
-    } catch { /* use default */ }
+    // The ledger balance, as GET /world/:showId/balance reads it (F-Stats-1
+    // v1.63 §66.3-F). getCurrentBalance has its own fallbacks; anything it
+    // throws reaches the outer catch, which logs.
+    const { getCurrentBalance } = require('../services/financialTransactionService');
+    const balance = await getCurrentBalance(models.sequelize, showId);
 
     // Get declined invites
     let declinedInvites = [];
@@ -2743,7 +2736,10 @@ router.get('/world/:showId/financial-pressure', requireAuth, async (req, res) =>
         const cc = typeof r.canon_consequences === 'string' ? JSON.parse(r.canon_consequences) : r.canon_consequences;
         return cc?.declined || { event_name: r.name };
       });
-    } catch { /* table may not have status=declined */ }
+    } catch (err) {
+      // A fallback: every column here exists in canon (capture 2026-09-17), so this fires only on a real error.
+      console.error('[financial-pressure] declined invites query failed:', err.message);
+    }
 
     // Get pending opportunities
     let pendingOpps = [];
@@ -2753,7 +2749,10 @@ router.get('/world/:showId/financial-pressure', requireAuth, async (req, res) =>
         { replacements: { showId } }
       );
       pendingOpps = rows;
-    } catch { /* table may not exist */ }
+    } catch (err) {
+      // A fallback: the table and its columns exist in canon (capture 2026-09-17).
+      console.error('[financial-pressure] opportunities query failed:', err.message);
+    }
 
     // Get recent transactions (from episode financials)
     let transactions = [];
@@ -2766,13 +2765,17 @@ router.get('/world/:showId/financial-pressure', requireAuth, async (req, res) =>
         ...(parseFloat(r.total_income) > 0 ? [{ type: 'income', amount: parseFloat(r.total_income), source: r.title }] : []),
         ...(parseFloat(r.total_expenses) > 0 ? [{ type: 'expense', amount: parseFloat(r.total_expenses), source: r.title }] : []),
       ]);
-    } catch { /* columns may not exist */ }
+    } catch (err) {
+      // A fallback: every column here exists in canon (capture 2026-09-17).
+      console.error('[financial-pressure] episode financials query failed:', err.message);
+    }
 
     const { buildFinancialPressureContext } = require('../services/financialPressureService');
     const context = buildFinancialPressureContext(balance, transactions, declinedInvites, pendingOpps);
 
     return res.json({ success: true, ...context });
   } catch (err) {
+    console.error('[financial-pressure] failed:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
