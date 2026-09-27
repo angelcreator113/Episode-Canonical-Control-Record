@@ -11,18 +11,18 @@ const MODEL_SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 
 const ROUTE_SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'worldEvents.js'), 'utf8');
 const QEC_SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend', 'src', 'components', 'QuickEpisodeCreator.jsx'), 'utf8');
 
-const CATEGORIES = ['fashion', 'social', 'brunch_dining', 'beauty_wellness', 'creator_brand', 'arts_entertainment', 'luxury_prestige', 'community_local', 'travel_destination', 'personal_relationship'];
-const FORMATS = ['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere'];
+const CATEGORIES = ['fashion', 'social', 'brunch_dining', 'beauty_wellness', 'creator_brand', 'arts_entertainment', 'luxury_prestige', 'community_local', 'travel_destination', 'personal_relationship', 'fitness'];
+const FORMATS = ['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere', 'workout_class', 'masterclass', 'workshop', 'dinner', 'showcase', 'preview', 'pop_up', 'retreat', 'meetup', 'run_club', 'performance', 'photoshoot', 'tasting', 'panel', 'competition'];
 
 describe('Task #1640 — WorldEvent model validates the settled taxonomy', () => {
-  test('category field exists with isIn validation against the exact ten values', () => {
+  test('category field exists with isIn validation against the exact eleven values', () => {
     const match = MODEL_SRC.match(/category:\s*\{[\s\S]*?isIn:\s*\[\[([\s\S]*?)\]\]/);
     expect(match).not.toBeNull();
     const listed = match[1].split(',').map((s) => s.trim().replace(/'/g, ''));
     expect(listed.sort()).toEqual([...CATEGORIES].sort());
   });
 
-  test('format field exists with isIn validation against the exact eight values', () => {
+  test('format field exists with isIn validation against the exact twenty-three values', () => {
     const match = MODEL_SRC.match(/format:\s*\{[\s\S]*?isIn:\s*\[\[([\s\S]*?)\]\]/);
     expect(match).not.toBeNull();
     const listed = match[1].split(',').map((s) => s.trim().replace(/'/g, ''));

@@ -33,9 +33,10 @@ import { EVENT_CATEGORIES, EVENT_FORMATS, resolveTaxonomyField } from './eventTa
 // eventBasics.test.js pins the name.
 export const AUTO_DATE_KEY = 'event_date_auto';
 
-// Start time per format — the eight values in Evoni's taxonomy ruling
-// (WorldEvent.format's isIn list). A proposed table, not a ruling: evening
-// formats land in the evening, daytime formats in the day.
+// Start time per format (WorldEvent.format's isIn list). The first eight
+// were a proposed table, not a ruling: evening formats land in the evening,
+// daytime formats in the day. The fifteen from workout_class on are Evoni's
+// approved defaults (docs/EVENT_EPISODE_FLOW.md §8(u) R10, Task #2116).
 export const FORMAT_START_TIMES = {
   cocktail_party: '19:00',
   garden_soiree: '16:00',
@@ -45,11 +46,27 @@ export const FORMAT_START_TIMES = {
   concert: '21:00',
   brand_launch: '19:00',
   premiere: '19:30',
+  workout_class: '08:00',
+  masterclass: '11:00',
+  workshop: '11:00',
+  dinner: '19:30',
+  showcase: '18:00',
+  preview: '18:00',
+  pop_up: '12:00',
+  retreat: '10:00',
+  meetup: '18:30',
+  run_club: '07:00',
+  performance: '20:00',
+  photoshoot: '10:00',
+  tasting: '18:00',
+  panel: '14:00',
+  competition: '10:00',
 };
 
 // Dress code per format. The seven preset strings are QuickEpisodeCreator's
 // EVENT_PRESETS, verbatim, so both surfaces say the same thing; premiere has
-// no preset and gets its own.
+// no preset and gets its own. The fifteen from workout_class on are Evoni's
+// approved defaults (§8(u) R10, Task #2116).
 export const FORMAT_DRESS_CODES = {
   cocktail_party: 'cocktail elegant',
   garden_soiree: 'romantic garden casual',
@@ -59,6 +76,21 @@ export const FORMAT_DRESS_CODES = {
   concert: 'edgy nightlife',
   brand_launch: 'luxury brand aligned',
   premiere: 'red carpet glam',
+  workout_class: 'performance activewear',
+  masterclass: 'smart casual',
+  workshop: 'casual, hands-on',
+  dinner: 'smart elegant',
+  showcase: 'cocktail',
+  preview: 'fashion-forward smart',
+  pop_up: 'casual chic',
+  retreat: 'relaxed resort wear',
+  meetup: 'casual chic',
+  run_club: 'running gear',
+  performance: 'evening chic',
+  photoshoot: 'camera-ready, per shoot brief',
+  tasting: 'smart casual',
+  panel: 'business chic',
+  competition: 'sporty chic',
 };
 
 // Prestige at or above this makes a dress-code suggestion "elevated",
@@ -141,12 +173,13 @@ export function suggestDressCode(event, venueLocation) {
 // read: every event has one.
 //
 // Each table maps one fact to one taxonomy value; a fact not listed (e.g.
-// content category "lifestyle") suggests nothing. Sources are tried in a
+// content category "drama") suggests nothing. Sources are tried in a
 // fixed order and the first that yields a value wins. A name whose words
 // point at two different values is ambiguous and suggests nothing.
 
 // Content category (SocialProfile.content_category, free text) → category.
-// Whole value only, trimmed and lower-cased.
+// Whole value only, trimmed and lower-cased. fitness and lifestyle follow
+// docs/EVENT_EPISODE_FLOW.md §8(u) R6.
 export const CONTENT_CATEGORY_TO_CATEGORY = {
   fashion: 'fashion',
   style: 'fashion',
@@ -155,7 +188,7 @@ export const CONTENT_CATEGORY_TO_CATEGORY = {
   skincare: 'beauty_wellness',
   makeup: 'beauty_wellness',
   wellness: 'beauty_wellness',
-  fitness: 'beauty_wellness',
+  fitness: 'fitness',
   food: 'brunch_dining',
   culinary: 'brunch_dining',
   music: 'arts_entertainment',
@@ -168,6 +201,7 @@ export const CONTENT_CATEGORY_TO_CATEGORY = {
   community: 'community_local',
   philanthropy: 'community_local',
   activism: 'community_local',
+  lifestyle: 'community_local',
   creator_economy: 'creator_brand',
 };
 

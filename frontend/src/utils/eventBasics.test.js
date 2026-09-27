@@ -17,10 +17,10 @@ import { createRequire } from 'module';
 // label scenarios below replay what the route actually stores.
 const { mergeCanonConsequences } = createRequire(import.meta.url)('../../../src/utils/canonConsequencesMerge.js');
 
-const FORMATS = ['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere'];
+const FORMATS = ['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere', 'workout_class', 'masterclass', 'workshop', 'dinner', 'showcase', 'preview', 'pop_up', 'retreat', 'meetup', 'run_club', 'performance', 'photoshoot', 'tasting', 'panel', 'competition'];
 
 describe('suggestion tables', () => {
-  test('cover exactly the eight format values', () => {
+  test('cover exactly the twenty-three format values', () => {
     expect(Object.keys(FORMAT_START_TIMES).sort()).toEqual([...FORMATS].sort());
     expect(Object.keys(FORMAT_DRESS_CODES).sort()).toEqual([...FORMATS].sort());
   });
@@ -271,6 +271,14 @@ describe('category and format suggestions (Task #1888)', () => {
         .toEqual({ value: 'beauty_wellness', basis: 'From organizer: beauty creator' });
     });
 
+    test('fitness and lifestyle follow §8(u) R6', () => {
+      expect(suggestEventCategory({}, { content_category: 'fitness' }))
+        .toEqual({ value: 'fitness', basis: 'From organizer: fitness creator' });
+      // Lifestyle suggested nothing before R6; it now maps to community_local.
+      expect(suggestEventCategory({ canon_consequences: { automation: { content_category: 'lifestyle' } } }, { content_category: 'drama' }))
+        .toEqual({ value: 'community_local', basis: 'From Feed creator: lifestyle creator' });
+    });
+
     test('from the Feed creator the event was started from (from-profile)', () => {
       expect(suggestEventCategory(fromProfile, null))
         .toEqual({ value: 'fashion', basis: 'From Feed creator: fashion creator' });
@@ -299,7 +307,7 @@ describe('category and format suggestions (Task #1888)', () => {
       expect(suggestEventCategory(null)).toBeNull();
       expect(suggestEventCategory({ name: 'Event with Kai', event_type: 'invite', prestige: 9 })).toBeNull();
       // A content category with no plain mapping suggests nothing.
-      expect(suggestEventCategory({ canon_consequences: { automation: { content_category: 'lifestyle' } } }, { content_category: 'drama' })).toBeNull();
+      expect(suggestEventCategory({ canon_consequences: { automation: { content_category: 'gaming' } } }, { content_category: 'drama' })).toBeNull();
       // An opportunity type with no plain mapping suggests nothing.
       expect(suggestEventCategory({ canon_consequences: { automation: { opportunity_type: 'podcast' } } })).toBeNull();
       // A name whose words point two ways is ambiguous.

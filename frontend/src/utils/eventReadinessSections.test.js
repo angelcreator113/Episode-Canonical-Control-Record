@@ -204,7 +204,7 @@ describe('suggestions never satisfy; accepted values do', () => {
   });
 
   test('no Basics item is satisfied in any state but set', () => {
-    for (const format of ['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere']) {
+    for (const format of ['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere', 'workout_class', 'masterclass', 'workshop', 'dinner', 'showcase', 'preview', 'pop_up', 'retreat', 'meetup', 'run_club', 'performance', 'photoshoot', 'tasting', 'panel', 'competition']) {
       const ev = { ...full(), format, event_time: null, dress_code: null };
       const r = computeEventPackageReadiness(ev);
       const b = resolveEventBasics(ev);

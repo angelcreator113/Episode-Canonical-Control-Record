@@ -4,9 +4,9 @@ import {
 } from './eventTaxonomy';
 
 describe('eventTaxonomy lists', () => {
-  it('has the ten categories and eight formats, no duplicates', () => {
-    expect(EVENT_CATEGORIES).toHaveLength(10);
-    expect(EVENT_FORMATS).toHaveLength(8);
+  it('has the eleven categories and twenty-three formats, no duplicates', () => {
+    expect(EVENT_CATEGORIES).toHaveLength(11);
+    expect(EVENT_FORMATS).toHaveLength(23);
     expect(new Set(EVENT_CATEGORIES).size).toBe(EVENT_CATEGORIES.length);
     expect(new Set(EVENT_FORMATS).size).toBe(EVENT_FORMATS.length);
   });

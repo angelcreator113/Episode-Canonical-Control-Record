@@ -9,7 +9,8 @@
     "luxury_prestige",
     "community_local",
     "travel_destination",
-    "personal_relationship"
+    "personal_relationship",
+    "fitness"
   ],
   "format": [
     "cocktail_party",
@@ -19,6 +20,21 @@
     "brunch",
     "concert",
     "brand_launch",
-    "premiere"
+    "premiere",
+    "workout_class",
+    "masterclass",
+    "workshop",
+    "dinner",
+    "showcase",
+    "preview",
+    "pop_up",
+    "retreat",
+    "meetup",
+    "run_club",
+    "performance",
+    "photoshoot",
+    "tasting",
+    "panel",
+    "competition"
   ]
 }
