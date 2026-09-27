@@ -23,6 +23,7 @@ import PhonePreviewMode, { ScreenFlowMap } from '../components/PhonePreviewMode'
 import ScreenThumbnailStrip from '../components/phone/ScreenThumbnailStrip';
 import ToolbarMenu from '../components/phone/ToolbarMenu';
 import PhoneFrame from '../components/phone/PhoneFrame';
+import PhoneSetupGuide, { phoneSetupProgress } from '../components/phone/PhoneSetupGuide';
 import '../components/phone/ZonesTab.css';
 import './UIOverlaysTab.css';
 
@@ -84,6 +85,89 @@ function findZoneOverlapPairs(zones = []) {
     }
   }
   return pairs;
+}
+
+// The flow test (Connect's Flow Test card, and the setup guide's Run,
+// Task #2053): dead links, screens not reachable from startId, and cycles
+// across the screens given. Pure; the page keeps the result in flowAudit.
+function auditPhoneFlow(editableScreens, startId) {
+  const byId = new Map(editableScreens.map(screen => [screen.id, screen]));
+  const linksByScreen = new Map(editableScreens.map(screen => [screen.id, getScreenLinks(screen)]));
+  const deadLinks = [];
+  const graph = new Map();
+
+  editableScreens.forEach((screen) => {
+    const links = linksByScreen.get(screen.id) || [];
+    const targets = [];
+    links.forEach((zone) => {
+      if (!zone?.target) return;
+      if (!byId.has(zone.target)) {
+        deadLinks.push({
+          sourceScreenId: screen.id,
+          sourceScreenName: screen.name,
+          zoneId: zone.id,
+          zoneLabel: zone.label || zone.target || 'Unnamed zone',
+          target: zone.target,
+        });
+        return;
+      }
+      targets.push(zone.target);
+    });
+    graph.set(screen.id, targets);
+  });
+
+  const visited = new Set();
+  const stack = [startId];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current || visited.has(current)) continue;
+    visited.add(current);
+    (graph.get(current) || []).forEach(next => {
+      if (!visited.has(next)) stack.push(next);
+    });
+  }
+
+  const unreachable = editableScreens
+    .filter(screen => !visited.has(screen.id))
+    .map(screen => ({ id: screen.id, name: screen.name }));
+
+  const cycles = [];
+  const cycleKeys = new Set();
+  const state = new Map();
+  const path = [];
+  const dfs = (node) => {
+    state.set(node, 1);
+    path.push(node);
+    (graph.get(node) || []).forEach((next) => {
+      if (state.get(next) === 0 || !state.has(next)) {
+        dfs(next);
+        return;
+      }
+      if (state.get(next) === 1) {
+        const idx = path.indexOf(next);
+        const loop = [...path.slice(idx), next];
+        const key = loop.join('>');
+        if (!cycleKeys.has(key)) {
+          cycleKeys.add(key);
+          cycles.push(loop);
+        }
+      }
+    });
+    path.pop();
+    state.set(node, 2);
+  };
+  editableScreens.forEach((screen) => {
+    if (!state.has(screen.id)) dfs(screen.id);
+  });
+
+  return {
+    deadLinks,
+    unreachable,
+    cycles,
+    scanned: editableScreens.length,
+    reached: visited.size,
+    ranAt: new Date().toLocaleTimeString(),
+  };
 }
 
 export default function UIOverlaysTab({ showId: propShowId }) {
@@ -1283,6 +1367,61 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
     return seen.size;
   }, [iconOverlays, screenOverlays]);
 
+  // The setup guide (doctrine rule 18, Task #2053). It starts collapsed once
+  // Screens, Icons and Links are complete; a toggle is remembered per show in
+  // this browser.
+  const setupProgress = phoneSetupProgress({
+    screens: screenOverlays,
+    icons: iconOverlays,
+    diagnostics: screenDiagnostics,
+    flowAudit,
+  });
+  const setupGuideKey = showId ? `phoneSetupGuide:${showId}` : null;
+  const [setupGuideChoice, setSetupGuideChoice] = useState(null);
+  useEffect(() => {
+    let stored = null;
+    try { stored = setupGuideKey ? window.localStorage.getItem(setupGuideKey) : null; } catch (err) {
+      console.warn('[PhoneSetupGuide] could not read the collapsed choice:', err.message);
+    }
+    setSetupGuideChoice(stored === 'open' || stored === 'closed' ? stored : null);
+  }, [setupGuideKey]);
+  const setupGuideCollapsed = setupGuideChoice ? setupGuideChoice === 'closed' : setupProgress.complete;
+  const toggleSetupGuide = () => {
+    const choice = setupGuideCollapsed ? 'open' : 'closed';
+    setSetupGuideChoice(choice);
+    try { if (setupGuideKey) window.localStorage.setItem(setupGuideKey, choice); } catch (err) {
+      console.warn('[PhoneSetupGuide] could not store the collapsed choice:', err.message);
+    }
+  };
+  const homeScreenForGuide = () => {
+    const generated = overlays.filter(o => o.generated && o.url && isScreen(o));
+    return generated.find(o => o.is_home) || generated[0] || null;
+  };
+  // "Continue setup →" opens the same places the screen cards' Continue does.
+  //   screens → Build, the first screen with no image (or "+ Add" ▸ Screen
+  //             when there are no screens)
+  //   links   → Connect on the first screen with a zone that has no destination
+  //   icons   → Connect on the home screen, where icons are placed
+  const continueSetup = (next) => {
+    if (!next) return;
+    if (next.key === 'screens') {
+      if (next.screen) handleContinueCard(next.screen, 'image');
+      else { setCreateMode('phone'); setShowCreateModal(true); }
+      return;
+    }
+    if (next.key === 'links') { handleContinueCard(next.screen, 'links'); return; }
+    if (next.key === 'icons') {
+      const home = homeScreenForGuide();
+      if (home) handleContinueCard(home, 'incoming');
+    }
+  };
+  // Preview's Run: the Flow Test, from the home screen.
+  const runSetupFlowTest = () => {
+    const home = homeScreenForGuide();
+    if (!home) return;
+    setFlowAudit(auditPhoneFlow(overlays.filter(o => o.generated && o.url && isScreen(o)), home.id));
+  };
+
   // Lightweight mission count fetch — refreshes on mount + whenever the
   // missions modal closes (after a save/delete). Keeps the step header in
   // sync without prop-drilling the modal's internal list.
@@ -1420,10 +1559,16 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         </div>
       ) : (
         <>
-        {/* 4-step guide removed — creators don't need the hand-holding every
-            visit, and it was eating prime real estate above the phone. The
-            same state (screens generated, missions, preview) is still
-            reachable via the header buttons + grid tabs. */}
+        {/* The setup guide (doctrine rule 18, Task #2053) replaces the old
+            4-step guide: plain-word progress, one next step, and it collapses
+            once the phone's screens, icons and links are done. */}
+        <PhoneSetupGuide
+          progress={setupProgress}
+          collapsed={setupGuideCollapsed}
+          onToggle={toggleSetupGuide}
+          onContinue={continueSetup}
+          onRunPreview={runSetupFlowTest}
+        />
 
         <div className="phone-hub-layout">
           {/* Section tabs rendered outside PhoneHub so they stay visible
@@ -1556,85 +1701,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   zoneId: issue.zoneId || null,
                 });
               };
-              const runFlowAudit = () => {
-                const byId = new Map(editableScreens.map(screen => [screen.id, screen]));
-                const linksByScreen = new Map(editableScreens.map(screen => [screen.id, getScreenLinks(screen)]));
-                const deadLinks = [];
-                const graph = new Map();
-
-                editableScreens.forEach((screen) => {
-                  const links = linksByScreen.get(screen.id) || [];
-                  const targets = [];
-                  links.forEach((zone) => {
-                    if (!zone?.target) return;
-                    if (!byId.has(zone.target)) {
-                      deadLinks.push({
-                        sourceScreenId: screen.id,
-                        sourceScreenName: screen.name,
-                        zoneId: zone.id,
-                        zoneLabel: zone.label || zone.target || 'Unnamed zone',
-                        target: zone.target,
-                      });
-                      return;
-                    }
-                    targets.push(zone.target);
-                  });
-                  graph.set(screen.id, targets);
-                });
-
-                const visited = new Set();
-                const stack = [activeScreen.id];
-                while (stack.length) {
-                  const current = stack.pop();
-                  if (!current || visited.has(current)) continue;
-                  visited.add(current);
-                  (graph.get(current) || []).forEach(next => {
-                    if (!visited.has(next)) stack.push(next);
-                  });
-                }
-
-                const unreachable = editableScreens
-                  .filter(screen => !visited.has(screen.id))
-                  .map(screen => ({ id: screen.id, name: screen.name }));
-
-                const cycles = [];
-                const cycleKeys = new Set();
-                const state = new Map();
-                const path = [];
-                const dfs = (node) => {
-                  state.set(node, 1);
-                  path.push(node);
-                  (graph.get(node) || []).forEach((next) => {
-                    if (state.get(next) === 0 || !state.has(next)) {
-                      dfs(next);
-                      return;
-                    }
-                    if (state.get(next) === 1) {
-                      const idx = path.indexOf(next);
-                      const loop = [...path.slice(idx), next];
-                      const key = loop.join('>');
-                      if (!cycleKeys.has(key)) {
-                        cycleKeys.add(key);
-                        cycles.push(loop);
-                      }
-                    }
-                  });
-                  path.pop();
-                  state.set(node, 2);
-                };
-                editableScreens.forEach((screen) => {
-                  if (!state.has(screen.id)) dfs(screen.id);
-                });
-
-                setFlowAudit({
-                  deadLinks,
-                  unreachable,
-                  cycles,
-                  scanned: editableScreens.length,
-                  reached: visited.size,
-                  ranAt: new Date().toLocaleTimeString(),
-                });
-              };
+              const runFlowAudit = () => setFlowAudit(auditPhoneFlow(editableScreens, activeScreen.id));
               return (
                 <div className="phone-hub-zones-panel">
                                   <div className="zones-tab">
