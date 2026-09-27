@@ -2120,32 +2120,44 @@ router.post('/characters/:id/deep-profile/accept', requireAuth, async (req, res)
 
   const db = getModels();
   try {
-    const character = await db.RegistryCharacter.findByPk(id, {
-      attributes: ['id', 'display_name', 'deep_profile'],
-    });
-    if (!character) return res.status(404).json({ error: 'Character not found' });
+    // F-Reg-2 fix group 1 (O-b): read, merge and write under a row lock, and
+    // merge into a copy. The merge used to reuse each existing dimension
+    // object, so additions to existing dimensions edited the loaded value in
+    // place and the save wrote nothing; two concurrent accepts could also
+    // overwrite each other.
+    const merged = await db.sequelize.transaction(async (transaction) => {
+      const character = await db.RegistryCharacter.findByPk(id, {
+        attributes: ['id', 'deep_profile'],
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!character) return null;
 
-    const existing = character.deep_profile || {};
-
-    // Deep merge: for each dimension, merge sub-fields
-    const merged = { ...existing };
-    for (const [dimKey, dimVal] of Object.entries(additions)) {
-      if (!dimVal || typeof dimVal !== 'object') continue;
-      merged[dimKey] = merged[dimKey] || {};
-      for (const [fieldKey, fieldVal] of Object.entries(dimVal)) {
-        if (fieldVal === null || fieldVal === undefined) continue;
-        const existingVal = merged[dimKey][fieldKey];
-        if (!existingVal) {
-          merged[dimKey][fieldKey] = fieldVal;
-        } else if (typeof existingVal === 'string' && typeof fieldVal === 'string') {
-          // Append new info to existing
-          merged[dimKey][fieldKey] = `${existingVal} — ${fieldVal}`;
+      // Deep merge: for each dimension, merge sub-fields
+      const next = JSON.parse(JSON.stringify(character.deep_profile || {}));
+      for (const [dimKey, dimVal] of Object.entries(additions)) {
+        if (!dimVal || typeof dimVal !== 'object') continue;
+        next[dimKey] = next[dimKey] || {};
+        for (const [fieldKey, fieldVal] of Object.entries(dimVal)) {
+          if (fieldVal === null || fieldVal === undefined) continue;
+          const existingVal = next[dimKey][fieldKey];
+          if (!existingVal) {
+            next[dimKey][fieldKey] = fieldVal;
+          } else if (typeof existingVal === 'string' && typeof fieldVal === 'string') {
+            // Append new info to existing
+            next[dimKey][fieldKey] = `${existingVal} — ${fieldVal}`;
+          }
         }
       }
-    }
 
-    character.deep_profile = merged;
-    await character.save();
+      await db.sequelize.query(
+        `UPDATE registry_characters SET deep_profile = CAST(:value AS jsonb), updated_at = NOW()
+          WHERE id = :id AND deleted_at IS NULL`,
+        { replacements: { value: JSON.stringify(next), id: character.id }, transaction }
+      );
+      return next;
+    });
+    if (!merged) return res.status(404).json({ error: 'Character not found' });
 
     return res.json({
       success: true,
@@ -2223,18 +2235,37 @@ Return ONLY a JSON object with 14 dimensions: life_stage, the_body, class_and_mo
       if (!jsonMatch) { results.failed++; results.errors.push(`${character.display_name}: parse failed`); continue; }
       const generated = JSON.parse(jsonMatch[0]);
 
-      const merged = { ...existing };
-      for (const [dimKey, dimVal] of Object.entries(generated)) {
-        if (!dimVal || typeof dimVal !== 'object') continue;
-        merged[dimKey] = merged[dimKey] || {};
-        for (const [fieldKey, fieldVal] of Object.entries(dimVal)) {
-          if (fieldVal === null || fieldVal === undefined) continue;
-          if (!merged[dimKey][fieldKey]) merged[dimKey][fieldKey] = fieldVal;
-        }
-      }
+      // F-Reg-2 fix group 1 (O-b): merge after the AI call, onto the row's
+      // current deep_profile read under a lock, and into a copy. Merging onto
+      // the value read before the call reused its dimension objects, so fields
+      // added to existing dimensions were never saved, and a change made
+      // during the call was overwritten.
+      const saved = await db.sequelize.transaction(async (transaction) => {
+        const current = await db.RegistryCharacter.findByPk(id, {
+          attributes: ['id', 'deep_profile'],
+          transaction,
+          lock: transaction.LOCK.UPDATE,
+        });
+        if (!current) return false;
 
-      character.deep_profile = merged;
-      await character.save();
+        const merged = JSON.parse(JSON.stringify(current.deep_profile || {}));
+        for (const [dimKey, dimVal] of Object.entries(generated)) {
+          if (!dimVal || typeof dimVal !== 'object') continue;
+          merged[dimKey] = merged[dimKey] || {};
+          for (const [fieldKey, fieldVal] of Object.entries(dimVal)) {
+            if (fieldVal === null || fieldVal === undefined) continue;
+            if (!merged[dimKey][fieldKey]) merged[dimKey][fieldKey] = fieldVal;
+          }
+        }
+
+        await db.sequelize.query(
+          `UPDATE registry_characters SET deep_profile = CAST(:value AS jsonb), updated_at = NOW()
+            WHERE id = :id AND deleted_at IS NULL`,
+          { replacements: { value: JSON.stringify(merged), id: current.id }, transaction }
+        );
+        return true;
+      });
+      if (!saved) { results.skipped++; continue; }
       results.succeeded++;
     } catch (err) {
       results.failed++;
