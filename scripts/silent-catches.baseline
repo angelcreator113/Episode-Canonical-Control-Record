@@ -102,7 +102,7 @@
 2	src/routes/worldEvents.js	} catch { /* wardrobe may not exist yet */ }
 1	src/routes/worldEvents.js	} catch { /* wardrobe table may not exist yet */ }
 5	src/routes/worldEvents.js	}).catch(() => null);
-2	src/routes/worldStudio.js	).catch(() => []);
+1	src/routes/worldStudio.js	).catch(() => []);
 1	src/routes/worldStudio.js	const exists = await WorldLocation.findOne({ where: { slug } }).catch(() => null);
 1	src/routes/worldStudio.js	} catch (_) { /* registry lookup failed, non-critical */ }
 3	src/routes/worldStudio.js	} catch { /* association may not exist */ }
