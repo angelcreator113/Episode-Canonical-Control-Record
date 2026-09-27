@@ -8,6 +8,11 @@
  * ICON (IconPlacementMode): Make Row, Make Column, Snap Selected, Auto
  * Layout, and a drag that snaps to the home grid when Snap is on.
  *
+ * Task #2021 (part 2) deleted IconPlacementMode. Its five cases here now run
+ * against the one editor, ScreenLinkEditor, through the same actions
+ * (Multi Select, transformZones, iconGridSnap); every expected value is
+ * unchanged.
+ *
  * Abilities already pinned elsewhere, and required to keep passing: save
  * shape and per-zone upload and tap-to-place (zonesWorkspace.pinned), click /
  * drag / Multi Select in ICON (IconPlacementMode.drag), Move inside, the
@@ -25,7 +30,6 @@ vi.mock('./ScreenContentRenderer', () => ({ default: () => null }));
 vi.mock('./phone-editor/AIProposalReview', () => ({ default: () => null }));
 
 import ScreenLinkEditor from './ScreenLinkEditor';
-import IconPlacementMode from './IconPlacementMode';
 
 // jsdom has no PointerEvent; a MouseEvent-based stand-in keeps coordinates.
 if (typeof window.PointerEvent === 'undefined') {
@@ -115,58 +119,58 @@ describe('TAP editor — pinned (Task #2020)', () => {
   });
 });
 
-describe('ICON editor — pinned (Task #2020)', () => {
+describe('ICON abilities — pinned (Task #2020; one editor since Task #2021)', () => {
   function icon(links, { snap = false } = {}) {
-    try { localStorage.setItem('phone_hub_icon_grid_snap', snap ? '1' : '0'); } catch (err) { console.warn(err); }
+    const ref = createRef();
     const onSave = vi.fn();
-    const utils = render(<IconPlacementMode links={links} iconOverlays={[CALL]} onSave={onSave} screenUrl={SCREEN.url} screenTypes={[]} />);
+    const utils = render(<ScreenLinkEditor ref={ref} screen={SCREEN} links={links} iconOverlays={[CALL]} onSave={onSave} embedded multiSelect iconGridSnap={snap} />);
     const canvas = utils.container.querySelector('[style*="crosshair"]');
-    const save = () => { fireEvent.click(screen.getByText(/Save Icon Placement/)); return onSave.mock.calls.at(-1)[0]; };
+    const save = () => { act(() => { ref.current.save(); }); return onSave.mock.calls.at(-1)[0]; };
     const press = async (id, x, y, to = null) => {
-      fireEvent.pointerDown(utils.container.querySelector(`[data-icon-id="${id}"]`), { pointerId: 1, clientX: x, clientY: y });
+      fireEvent.pointerDown(utils.container.querySelector(`[data-zone-id="${id}"]`), { pointerId: 1, clientX: x, clientY: y });
       if (to) fireEvent.pointerMove(canvas, { pointerId: 1, clientX: to[0], clientY: to[1] });
       fireEvent.pointerUp(canvas, { pointerId: 1, clientX: (to || [x])[0], clientY: (to || [x, y])[1] });
       fireEvent.click(canvas);
       await act(async () => { await new Promise(r => setTimeout(r, 0)); });
     };
-    return { ...utils, canvas, save, press };
+    const act2 = (kind) => act(() => { ref.current.transformZones(kind); });
+    return { ...utils, canvas, save, press, transform: act2 };
   }
   const three = () => [zone('a', 10, 12), zone('b', 40, 20), zone('c', 70, 30)];
 
   async function selectAll(press) {
-    fireEvent.click(screen.getByText(/Multi Select/));
+    // Multi Select is on (the multiSelect prop, the workspace's toggle).
     await press('a', 15, 16); await press('b', 45, 24); await press('c', 75, 34);
-    expect(screen.getByText('3 ICONS SELECTED')).toBeTruthy();
   }
 
   test('Make Row lines the selected icons up on the home grid\'s row step', async () => {
-    const { press, save } = icon(three());
+    const { press, save, transform } = icon(three());
     await selectAll(press);
-    fireEvent.click(screen.getByText('Make Row'));
+    transform('make_row');
     const z = save();
     expect(z.map(v => v.x)).toEqual([10, 31, 52]);
     near(z[0].y, 20.67); near(z[1].y, 20.67); near(z[2].y, 20.67);
   });
 
   test('Make Column stacks the selected icons on the home grid\'s column step', async () => {
-    const { press, save } = icon(three());
+    const { press, save, transform } = icon(three());
     await selectAll(press);
-    fireEvent.click(screen.getByText('Make Column'));
+    transform('make_column');
     const z = save();
     expect(z.map(v => v.y)).toEqual([12, 26, 40]);
     near(z[0].x, 40); near(z[2].x, 40);
   });
 
   test('Snap Selected moves the selected icons onto home-grid slots', async () => {
-    const { press, save } = icon(three());
+    const { press, save, transform } = icon(three());
     await selectAll(press);
-    fireEvent.click(screen.getByText('Snap Selected'));
+    transform('snap_grid');
     expect(save().map(v => [v.x, v.y])).toEqual([[8, 14], [50, 14], [71, 28]]);
   });
 
   test('Auto Layout puts every icon in the next home-grid slot, icon-sized', () => {
-    const { save } = icon([zone('a', 60, 60, { w: 20, h: 20 }), zone('b', 5, 80)]);
-    fireEvent.click(screen.getByText(/Auto Layout/));
+    const { save, transform } = icon([zone('a', 60, 60, { w: 20, h: 20 }), zone('b', 5, 80)]);
+    transform('auto_layout');
     expect(save().map(v => [v.x, v.y, v.w, v.h])).toEqual([[8, 14, 12, 9], [29, 14, 12, 9]]);
   });
 

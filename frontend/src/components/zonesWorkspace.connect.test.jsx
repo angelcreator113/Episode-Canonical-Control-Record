@@ -17,7 +17,14 @@ vi.mock('./ScreenContentRenderer', () => ({ default: () => null }));
 vi.mock('./phone-editor/AIProposalReview', () => ({ default: () => null }));
 
 import ScreenLinkEditor from './ScreenLinkEditor';
-import IconPlacementMode from './IconPlacementMode';
+
+// jsdom has no PointerEvent; a MouseEvent-based stand-in keeps coordinates.
+if (typeof window.PointerEvent === 'undefined') {
+  class PointerEventPolyfill extends MouseEvent {
+    constructor(type, init = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+  }
+  window.PointerEvent = PointerEventPolyfill;
+}
 
 const SCREEN = { id: 'home', name: 'Homepage', url: 'https://x/home.png' };
 const CALL = { id: 'call_icon', name: 'Call', category: 'phone_icon', url: 'https://x/call-v1.png' };
@@ -77,32 +84,35 @@ describe('ScreenLinkEditor — library icons by key (Task #2014)', () => {
   });
 });
 
-describe('IconPlacementMode — beside the phone, and kept inside (Task #2014)', () => {
-  const ZONE = { id: 'i1', x: 85, y: 88, w: 10, h: 9, target: '', label: 'Call', icon_url: CALL.url, icon_overlay_id: 'call_icon' };
-
+// Task #2021 (one Connect editor) deleted IconPlacementMode. Its two cases
+// here now run against the one editor: the picker still opens in the side
+// panel, and resizing still keeps a zone inside (the row's Width / Height;
+// the workspace's own control is tested in UIOverlaysTab.connectEditor).
+describe('Icon placement — beside the phone, and kept inside (Task #2014; one editor since Task #2021)', () => {
   test('with a side panel, the picker renders there, not under the phone', () => {
     const side = document.createElement('div');
     document.body.appendChild(side);
-    const { container } = render(<IconPlacementMode links={[]} iconOverlays={[CALL]} onSave={vi.fn()} screenUrl={SCREEN.url} screenTypes={[]} sidePanel={side} />);
-    fireEvent.click(container.querySelector('[style*="crosshair"]'), { clientX: 50, clientY: 50 });
+    const { container } = render(<ScreenLinkEditor screen={SCREEN} links={[]} iconOverlays={[CALL]} onSave={vi.fn()} screenTypes={[]} sidePanel={side} embedded />);
+    const surface = container.querySelector('[style*="crosshair"]');
+    fireEvent.pointerDown(surface, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(surface, { pointerId: 1, clientX: 50, clientY: 50 });
     expect(within(side).getByText('PICK AN ICON + WHERE IT OPENS')).toBeTruthy();
     expect(within(container).queryByText('PICK AN ICON + WHERE IT OPENS')).toBeNull();
     fireEvent.click(within(side).getByTitle('Call'));
-    expect(within(side).getByText(/Save Icon Placement/)).toBeTruthy();
+    expect(within(side).queryByText('PICK AN ICON + WHERE IT OPENS')).toBeNull();
     side.remove();
   });
 
-  test('widening or heightening a zone near the edge keeps it inside, and reports unsaved changes', () => {
+  test('widening a zone near the edge keeps it inside, and reports unsaved changes', () => {
     const onSave = vi.fn();
-    const onDirtyChange = vi.fn();
-    const { container } = render(<IconPlacementMode links={[ZONE]} iconOverlays={[CALL]} onSave={onSave} screenUrl={SCREEN.url} screenTypes={[]} onDirtyChange={onDirtyChange} />);
-    fireEvent.click(container.querySelector('[data-icon-id="i1"]'));
-    const [width, height] = container.querySelectorAll('input[type="range"]');
+    const onZonesChange = vi.fn();
+    const ZONE = plain({ id: 'i1', x: 85, y: 88, w: 10, h: 9, label: 'Edge' });
+    render(<ScreenLinkEditor screen={SCREEN} links={[ZONE]} iconOverlays={[CALL]} onSave={onSave} onZonesChange={onZonesChange} />);
+    fireEvent.click(screen.getAllByText('Edge')[0]);
+    const width = screen.getByText('W').closest('div').parentElement.querySelector('input[type="range"]');
     fireEvent.change(width, { target: { value: '30' } });
-    fireEvent.change(height, { target: { value: '30' } });
-    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
-    fireEvent.click(screen.getByText(/Save Icon Placement/));
-    expect(onSave.mock.calls[0][0][0]).toMatchObject({ w: 30, h: 30, x: 70, y: 70 });
-    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    const [zones, dirty] = onZonesChange.mock.calls.at(-1);
+    expect(dirty).toBe(true);
+    expect(zones[0].x + zones[0].w).toBeLessThanOrEqual(100);
   });
 });

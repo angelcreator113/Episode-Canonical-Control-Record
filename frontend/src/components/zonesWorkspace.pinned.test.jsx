@@ -7,6 +7,10 @@
  * kept on save; a per-zone custom icon upload reaches onUploadIcon.
  * ICON mode (IconPlacementMode): tapping the screen and picking an icon still
  * creates a zone, saved with its icon.
+ *
+ * Task #2021 (one Connect editor) deleted IconPlacementMode; its case here now
+ * runs against the one editor, ScreenLinkEditor, where a tap on an empty spot
+ * opens the same picker. The expectation is unchanged.
  */
 
 import React, { createRef } from 'react';
@@ -17,7 +21,14 @@ vi.mock('./ScreenContentRenderer', () => ({ default: () => null }));
 vi.mock('./phone-editor/AIProposalReview', () => ({ default: () => null }));
 
 import ScreenLinkEditor from './ScreenLinkEditor';
-import IconPlacementMode from './IconPlacementMode';
+
+// jsdom has no PointerEvent; a MouseEvent-based stand-in keeps coordinates.
+if (typeof window.PointerEvent === 'undefined') {
+  class PointerEventPolyfill extends MouseEvent {
+    constructor(type, init = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+  }
+  window.PointerEvent = PointerEventPolyfill;
+}
 
 const SCREEN = { id: 'home', name: 'Homepage', url: 'https://x/home.png' };
 const CALL = { id: 'call_icon', name: 'Call', category: 'phone_icon', url: 'https://x/call.png' };
@@ -76,14 +87,16 @@ describe('ScreenLinkEditor — pinned (Task #2014)', () => {
   });
 });
 
-describe('IconPlacementMode — pinned (Task #2014)', () => {
+describe('Icon placement — pinned (Task #2014; one editor since Task #2021)', () => {
   test('tapping the screen and picking an icon creates a zone, saved with its icon', () => {
     const onSave = vi.fn();
-    render(<IconPlacementMode links={[]} iconOverlays={[CALL]} onSave={onSave} screenUrl={SCREEN.url} screenTypes={[]} />);
+    const ref = createRef();
+    render(<ScreenLinkEditor ref={ref} screen={SCREEN} links={[]} iconOverlays={[CALL]} onSave={onSave} screenTypes={[]} embedded />);
     const surface = document.querySelector('[style*="crosshair"]');
-    fireEvent.click(surface, { clientX: 50, clientY: 50 });
+    fireEvent.pointerDown(surface, { pointerId: 1, clientX: 50, clientY: 50 });
+    fireEvent.pointerUp(surface, { pointerId: 1, clientX: 50, clientY: 50 });
     fireEvent.click(screen.getByTitle('Call'));
-    fireEvent.click(screen.getByText(/Save Icon Placement/));
+    act(() => { ref.current.save(); });
     expect(onSave).toHaveBeenCalledTimes(1);
     const saved = onSave.mock.calls[0][0];
     expect(saved).toHaveLength(1);

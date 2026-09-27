@@ -12,7 +12,6 @@ import api from '../services/api';
 import PhoneHub from '../components/PhoneHub';
 import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
 import ScreenLinkEditor from '../components/ScreenLinkEditor';
-import IconPlacementMode from '../components/IconPlacementMode';
 import { isIcon, isScreen, isGeneratedScreen, deriveTypeKey, getScreenLinks, resolveZoneIconKey, withResolvedIconKey, pickZoneLibraryIcon, isZoneOutOfBounds, moveZoneInside } from '../lib/overlayUtils';
 import MissionEditor from '../components/phone-editor/MissionEditor';
 import ConditionRow from '../components/phone-editor/ConditionRow';
@@ -107,12 +106,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const editingContent = activeTab === 'content';  // new Content top-level tab,
                                                    // promoted out of the old
                                                    // Zones mode toggle.
-  // 'zones' — draw-rectangle ScreenLinkEditor (the precise/advanced mode with conditions, variants, AI).
-  // 'icons' — IconPlacementMode (tap the phone, pick an icon from the picker — simpler for placing
-  // app-icon-style tap zones on a home screen). Both persist to the same screen_links array.
-  // Content zones are a different feature (content_zones table) and now live on
-  // their own top-level tab instead of inside this toggle.
-  const [zoneEditorMode, setZoneEditorMode] = useState('zones');
+  // Connect has one zone editor, ScreenLinkEditor (Task #2021): it draws tap
+  // zones, places library icons by tapping, and edits both. The Tap / Icon
+  // toggle and IconPlacementMode are gone. Content zones are a different
+  // feature (content_zones) and live on the Content stage.
   const [tapZonesDraft, setTapZonesDraft] = useState([]);
   const [tapZonesDirty, setTapZonesDirty] = useState(false);
   const [tapSelectedZoneId, setTapSelectedZoneId] = useState(null);
@@ -132,7 +129,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     try { localStorage.setItem('screenLinkEditor.iconGridSnap', tapIconGridSnap ? '1' : '0'); } catch (err) { console.warn('[UIOverlaysTab] localStorage unavailable:', err.message); }
   }, [tapIconGridSnap]);
   const [iconSidePanel, setIconSidePanel] = useState(null);
-  const [iconZonesDirty, setIconZonesDirty] = useState(false);
   // Which zone row has its advanced panel (conditions + actions) open.
   // Kept separate from selection so picking a target doesn't auto-open a
   // big drawer.
@@ -169,13 +165,10 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const frameInputRef = useRef(null);
   const batchInputRef = useRef(null);
   const linkEditorRef = useRef(null);  // exposes save()/isDirty()/undo()/redo() from the inline zone editor
-  const iconEditorRef = useRef(null);  // exposes save()/isDirty() from ICON mode (Task #2016)
-  // Save whichever zones editor has unsaved changes — TAP or ICON, only one is
-  // mounted — before Done, a screen switch or a Tap / Icon switch, so ICON
-  // placements are kept exactly as TAP zones always were (Task #2016).
+  // Save the zone editor's unsaved changes before Done, a screen switch or
+  // the jump to Content (Task #2016; one editor since Task #2021).
   const saveZoneDrafts = () => {
     if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
-    if (iconEditorRef.current?.isDirty?.()) iconEditorRef.current.save();
   };
   const [removingBg, setRemovingBg] = useState(false);  // loading state for Remove BG
 
@@ -185,13 +178,13 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   useEffect(() => {
     if (!pendingIssueFocus || !activeScreen) return;
     const sameScreen = activeScreen.id === pendingIssueFocus.screenId;
-    const sameMode = zoneEditorMode === pendingIssueFocus.mode;
-    if (!sameScreen || !sameMode) return;
+    // Content issues are picked up by the Content stage.
+    if (!sameScreen || pendingIssueFocus.mode !== 'zones') return;
     if (pendingIssueFocus.mode === 'zones' && pendingIssueFocus.zoneId) {
       linkEditorRef.current?.setSelectedZone?.(pendingIssueFocus.zoneId);
     }
     setPendingIssueFocus(null);
-  }, [pendingIssueFocus, activeScreen, zoneEditorMode]);
+  }, [pendingIssueFocus, activeScreen]);
 
   const handleHideScreen = (key) => {
     setHiddenScreens(prev => {
@@ -873,17 +866,12 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   };
 
   // Screen health's "Move inside" (Task #2014): clamps the named zones into
-  // the screen and saves at once. In TAP mode it starts from the editor's
-  // draft, so other unsaved edits are saved with it, as Done would. ICON
-  // mode keeps its own draft, so it asks for that to be saved first.
+  // the screen and saves at once. It starts from the editor's draft, so other
+  // unsaved edits are saved with it, as Done would.
   const handleMoveInside = async (issue) => {
     const ids = new Set(issue?.fix?.zoneIds || []);
     if (!ids.size || !activeScreen) return;
-    if (zoneEditorMode === 'icons' && iconZonesDirty) {
-      flash('Save your icon changes first, then Move inside', 'error');
-      return;
-    }
-    const source = (zoneEditorMode === 'zones' && linkEditorRef.current?.getZones?.()) || getScreenLinks(activeScreen);
+    const source = linkEditorRef.current?.getZones?.() || getScreenLinks(activeScreen);
     await handleSaveLinks(source.map(z => (ids.has(z.id) ? moveZoneInside(z) : z)));
   };
 
@@ -1471,11 +1459,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                 issueCount: 0,
                 severity: 'ok',
               };
-              const switchMode = (next) => {
-                if (zoneEditorMode === next) return;
-                saveZoneDrafts();
-                setZoneEditorMode(next);
-              };
               const focusIssue = (issue) => {
                 if (!issue) return;
                 const targetScreen = editableScreens.find(s => s.id === issue.screenId);
@@ -1491,7 +1474,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   });
                   return;
                 }
-                if (issue.mode && zoneEditorMode !== issue.mode) switchMode(issue.mode);
                 setPendingIssueFocus({
                   screenId: issue.screenId || activeScreen.id,
                   mode: issue.mode || 'zones',
@@ -1579,34 +1561,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
               };
               return (
                 <div className="phone-hub-zones-panel">
-                  {/* Sub-tabs — Tap and Icon are two views of the same data
-                      (screen_links). Placed at the top of the Zones surface so
-                      they feel like a second tier under the main tab bar,
-                      instead of a sidebar pill group. */}
-                  <div className="zones-subtabs" role="tablist" aria-label="Zone edit mode">
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={zoneEditorMode === 'zones'}
-                      className={`zones-subtab ${zoneEditorMode === 'zones' ? 'active' : ''}`}
-                      onClick={() => switchMode('zones')}
-                    >
-                      Tap
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={zoneEditorMode === 'icons'}
-                      className={`zones-subtab ${zoneEditorMode === 'icons' ? 'active' : ''}`}
-                      onClick={() => switchMode('icons')}
-                    >
-                      Icon
-                    </button>
-                  </div>
-                <div className="zones-tab">
+                                  <div className="zones-tab">
                     <div className="zones-tab__canvas">
-                    {zoneEditorMode === 'zones' ? (
-                      <ScreenLinkEditor
+                    <ScreenLinkEditor
                         ref={linkEditorRef}
                         screen={activeScreen}
                         screenUrl={activeScreen.url}
@@ -1638,23 +1595,6 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         multiSelect={tapMultiSelect}
                         iconGridSnap={tapIconGridSnap}
                       />
-                    ) : (
-                      <IconPlacementMode
-                        links={getScreenLinks(activeScreen)}
-                        iconOverlays={iconOverlaysForEditor}
-                        screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, icon: '📱', desc: o.description || '' }))}
-                        generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
-                        onSave={handleSaveLinks}
-                        screenUrl={activeScreen.url}
-                        contentZones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
-                        showId={showId}
-                        phoneSkin={phoneSkin}
-                        customFrameUrl={customFrameUrl}
-                        sidePanel={iconSidePanel}
-                        onDirtyChange={setIconZonesDirty}
-                        controlRef={iconEditorRef}
-                      />
-                    )}
                   </div>
 
                     <div className="zones-tab__controls">
@@ -1664,7 +1604,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           <div className="zones-tab__sidebar-label">Zones Workspace</div>
                           <div className="zones-tab__sidebar-screen">{activeScreen?.name}</div>
                         </div>
-                        {((zoneEditorMode === 'zones' && tapZonesDirty) || (zoneEditorMode === 'icons' && iconZonesDirty)) && (
+                        {tapZonesDirty && (
                           <span className="zones-unsaved" role="status">● Unsaved</span>
                         )}
                         <button onClick={() => {
@@ -1724,10 +1664,10 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         )}
                       </div>
 
-                      {zoneEditorMode === 'zones' && (
+                      {(
                         <div className="zones-tab__sidebar-card">
                           <div className="zones-tap-panel__header">
-                            <span className="zones-tap-panel__title">Tap Zones ({tapZonesDraft.length})</span>
+                            <span className="zones-tap-panel__title">Zones ({tapZonesDraft.length})</span>
                             <div className="zones-tap-panel__actions">
                               <button
                                 type="button"
@@ -1758,6 +1698,11 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('make_column')}>Make Column</button>
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('snap_grid')}>Snap to Grid</button>
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('auto_layout')}>Auto Layout</button>
+                              {tapSelectedIds.length > 1 && (
+                                <button type="button" className="zones-tap-tools__danger" onClick={() => linkEditorRef.current?.removeZones?.(tapSelectedIds)}>
+                                  Delete {tapSelectedIds.length} Selected
+                                </button>
+                              )}
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('align_left')}>Align L</button>
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('align_center')}>Align C</button>
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('align_right')}>Align R</button>
@@ -1768,7 +1713,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           )}
 
                           {tapZonesDraft.length === 0 ? (
-                            <div className="zones-tap-panel__empty">Draw on the phone to create your first tap zone.</div>
+                            <div className="zones-tap-panel__empty">Tap the phone to place an icon, or draw to make a tap zone.</div>
                           ) : (
                             <div className="zones-tap-panel__list">
                               {tapZonesDraft.map((zone, index) => {
@@ -1850,6 +1795,15 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                     )}
                                     {isExpanded && (
                                       <div className="zones-tap-row__advanced">
+                                        {/* Pin: shown on every screen (ICON mode's pin, Task #2021). */}
+                                        <label className="zones-tap-row__pin">
+                                          <input
+                                            type="checkbox"
+                                            checked={!!zone.persistent}
+                                            onChange={(e) => linkEditorRef.current?.updateZone?.(zone.id, { persistent: e.target.checked })}
+                                          />
+                                          Pin to all screens
+                                        </label>
                                         {/* Size, kept inside the screen (Task #2020). */}
                                         <div className="zones-tap-row__adv-section zones-tap-row__size">
                                           <div className="zones-tap-row__adv-header"><span>SIZE</span></div>
@@ -1947,7 +1901,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           editable on the Home screen. Surface them here so
                           creators can tell what's pinned and jump back to
                           Home in one click instead of hunting for them. */}
-                      {zoneEditorMode === 'zones' && (() => {
+                      {(() => {
                         const homeScreen = overlays.find(o => o.is_home && isScreen(o))
                           || overlays.find(o => o.generated && o.url && isScreen(o));
                         if (!homeScreen || homeScreen.id === activeScreen.id) return null;
@@ -1993,7 +1947,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         );
                       })()}
 
-                      {zoneEditorMode === 'zones' && (
+                      {(
                         <div className="zones-tab__sidebar-card">
                           <div className="zones-flow__header">
                             <span className="zones-flow__title">Flow Test</span>
@@ -2191,9 +2145,11 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   type="button"
                   className="editor-tab editor-tab--link"
                   onClick={() => {
+                    // A screen with content zones opens on the Content stage, as
+                    // this link always meant to; it used to set a 'content' zone
+                    // mode, which the Tap / Icon toggle read as ICON mode.
                     const hasContent = (activeScreen.content_zones || activeScreen.metadata?.content_zones || []).length > 0;
-                    setZoneEditorMode(hasContent ? 'content' : 'zones');
-                    setActiveTab('zones');
+                    setActiveTab(hasContent ? 'content' : 'zones');
                     setPanelOpen(false);
                   }}
                   title="Open the Zones tab for this screen"
