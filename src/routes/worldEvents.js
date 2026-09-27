@@ -287,18 +287,14 @@ router.post('/world/:showId/events/:eventId/suggest-names', requireAuth, aiRateL
       }
     }
 
-    let showName = null;
-    if (models.Show) {
-      const show = await models.Show.findByPk(showId, { attributes: ['name'] }).catch(() => null);
-      showName = show?.name || null;
-    }
+    // No show name (Task #2086): doctrine rule 11 says an event name never
+    // uses the show name, so the show is not a fact the model sees.
 
     // Every fact line is conditional — most events have almost none of
     // these set today (no venue, no category, no format), so the prompt
     // below tells the model explicitly not to invent what's missing
     // rather than silently degrading to a generic prompt.
     const facts = [
-      showName ? `Show: ${showName}` : null,
       hostLine,
       event.category ? `Category: ${String(event.category).replace(/_/g, ' ')}` : null,
       event.format ? `Format: ${String(event.format).replace(/_/g, ' ')}` : null,
