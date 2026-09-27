@@ -17,8 +17,22 @@
  *   onSave(links)   — callback to persist updated links
  *   onUploadIcon(linkId, file) — callback to upload icon image for a zone
  *   readOnly        — if true, hide editing controls (used in preview mode)
+ *
+ * ICON mode's abilities (Task #2020, one Connect editor, part 1):
+ *   sidePanel       — optional DOM element beside the phone. A tap (not a drag)
+ *                     on an empty spot opens the icon picker there (or below
+ *                     the phone without one): pick a library icon, or a blank
+ *                     tap zone, placed icon-sized where you tapped.
+ *   multiSelect     — when true, clicking zones adds to the selection (as
+ *                     Ctrl/Cmd/Shift-click always does). A drag on a selected
+ *                     zone moves the whole selection. Layout actions act on the
+ *                     selection when it holds two or more zones, else on all.
+ *   iconGridSnap    — when true, dragged and tap-placed zones land on the home
+ *                     screen's icon grid (phone/homeGrid.js), as ICON mode's Snap.
+ *   transformZones  — also 'make_row', 'make_column', 'snap_grid', 'auto_layout'.
  */
-import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Trash2, Upload, Link2, Save, X, Move, GripVertical, Pin, Eye, EyeOff, Ruler, Info, Check, Undo2, Redo2, Grid3x3, AlertTriangle, Loader, Sparkles, ChevronLeft } from 'lucide-react';
 import { getIconUrls, resolveZoneIcon, resolveZoneIconKey, pickZoneLibraryIcon } from '../lib/overlayUtils';
 import { getScreenImageStyle, PHONE_SKINS } from './phone/phoneStyle';
@@ -28,6 +42,7 @@ import ConditionRow from './phone-editor/ConditionRow';
 import ActionRow from './phone-editor/ActionRow';
 import AIProposalReview from './phone-editor/AIProposalReview';
 import ZoneIconPicker, { ZoneIconSummary } from './phone-editor/ZoneIconPicker';
+import { HOME_GRID, clamp, snapZoneToGrid, normalizeIconZone } from './phone/homeGrid';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
@@ -37,6 +52,11 @@ const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b8
 const GRID_COLS = 4;
 const GRID_ROWS = 6;
 const snap = (v, step) => Math.round(v / step) * step;
+// A zone press becomes a drag past this much movement (% of the screen); an
+// empty-spot press under TAP_THRESHOLD is a tap that opens the icon picker
+// (Task #2020). Between the two and under 5%, nothing is drawn, as before.
+const DRAG_THRESHOLD = 0.5;
+const TAP_THRESHOLD = 1.5;
 // When grid-snap is on, round to nearest grid cell edge.
 const snapZone = (z, enabled) => {
   if (!enabled) return z;
@@ -85,6 +105,9 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   // them. Pass `getContentZones(screen)` from the parent.
   contentZones = [],
   showId,
+  sidePanel = null,
+  multiSelect = false,
+  iconGridSnap = false,
 }, ref) {
   // Resolve the image URL: prefer the full screen object, fall back to legacy screenUrl prop.
   const resolvedScreenUrl = screen?.url || screenUrl;
@@ -111,6 +134,19 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   // Hovering a zone row in the list lights up just that zone on the phone, so you can see
   // which card corresponds to which tap area without committing to a click-to-select.
   const [hoveredZoneId, setHoveredZoneId] = useState(null);
+  // Multi-selection (Task #2020). selectedZone stays the primary selection
+  // every existing control reads; selectedIds holds every selected zone.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  // Tap-to-place: where the empty-spot tap landed, whether the picker is
+  // open, and the destination chosen in it (kept between placements).
+  const [pendingPos, setPendingPos] = useState(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [pendingTarget, setPendingTarget] = useState('');
+  // A press that started on a zone: { id, additive, moved }. Pressing a zone
+  // captures the pointer on the canvas, so the click that follows lands on
+  // the canvas, not the zone (#2018); suppressClickRef swallows it.
+  const pressRef = useRef(null);
+  const suppressClickRef = useRef(false);
   // Bulk-place: zone id currently being "copied to other screens" (null = panel closed)
   // and the set of target screen ids selected via checkboxes.
   const [bulkPlacingZoneId, setBulkPlacingZoneId] = useState(null);
@@ -164,9 +200,21 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     setUndoTick(t => t + 1);
   }, [links, iconOverlays]);
 
+  // Any control that sets only the primary selection (row click, a new zone,
+  // the workspace panel) selects just that zone.
   useEffect(() => {
-    if (onZonesChange) onZonesChange(zones, isDirty, selectedZone);
-  }, [zones, isDirty, selectedZone, onZonesChange]);
+    setSelectedIds(prev => {
+      if (!selectedZone) return prev.size ? new Set() : prev;
+      return prev.has(selectedZone) ? prev : new Set([selectedZone]);
+    });
+  }, [selectedZone]);
+
+  // One array per selection, so a parent that stores it (the workspace does)
+  // gets the same array back until the selection changes, and settles.
+  const selectedIdList = useMemo(() => Array.from(selectedIds), [selectedIds]);
+  useEffect(() => {
+    if (onZonesChange) onZonesChange(zones, isDirty, selectedZone, selectedIdList);
+  }, [zones, isDirty, selectedZone, selectedIdList, onZonesChange]);
 
   // Save a snapshot of current zones before mutating, clearing redo since the timeline branched.
   const pushUndo = useCallback(() => {
@@ -209,7 +257,10 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     transformZones: (kind) => transformZones(kind),
     undo,
     redo,
-  }), [onSave, zones, isDirty, undo, redo]);
+  }));
+  // No dependency list (Task #2020): the handle's functions read the current
+  // selection, so it is refreshed every render. With [zones, isDirty, …] it went
+  // stale when only the selection changed, and Equal Size used the first zone.
 
   // Keyboard shortcuts: Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z = redo. Only active while editor is mounted.
   useEffect(() => {
@@ -255,11 +306,13 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     if (editingDisabled || dragging) return;
     if (e.target.closest('[data-zone-id]')) return;
     e.preventDefault();
-    // Capture pointer so we keep getting events even if finger moves fast
-    if (e.target.setPointerCapture) {
-      try { e.target.setPointerCapture(e.pointerId); } catch {}
+    // Capture pointer so we keep getting events even if finger moves fast —
+    // on the canvas, the same element the release comes from (#2018).
+    if (containerRef.current?.setPointerCapture) {
+      try { containerRef.current.setPointerCapture(e.pointerId); } catch (err) { console.warn('[ScreenLinkEditor] setPointerCapture failed:', err.message); }
     }
     const pos = getRelativePos(e);
+    setShowPicker(false);
     setDrawing(true);
     setDrawStart(pos);
     setDrawCurrent(pos);
@@ -270,11 +323,25 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     if (dragging) {
       e.preventDefault();
       const pos = getRelativePos(e);
-      setZones(prev => prev.map(z => z.id === dragging.id ? {
-        ...z,
-        x: Math.max(0, Math.min(100 - z.w, dragging.origX + (pos.x - dragging.startX))),
-        y: Math.max(0, Math.min(100 - z.h, dragging.origY + (pos.y - dragging.startY))),
-      } : z));
+      const dx = pos.x - dragging.startX;
+      const dy = pos.y - dragging.startY;
+      // A press becomes a drag once it moves; a steady click moves nothing,
+      // snaps nothing and leaves no undo step (#2018).
+      const press = pressRef.current;
+      if (press && !press.moved) {
+        if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+        press.moved = true;
+        pushUndo();
+      }
+      setZones(prev => prev.map(z => {
+        const origin = dragging.originById[z.id];
+        if (!origin) return z;
+        return {
+          ...z,
+          x: clamp(origin.x + dx, 0, 100 - z.w),
+          y: clamp(origin.y + dy, 0, 100 - z.h),
+        };
+      }));
       setIsDirty(true);
       return;
     }
@@ -284,19 +351,47 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   };
 
   const handlePointerUp = (e) => {
-    // Release pointer capture
-    if (e?.target?.releasePointerCapture && e?.pointerId !== undefined) {
-      try { e.target.releasePointerCapture(e.pointerId); } catch {}
+    // Release pointer capture from the canvas, which took it.
+    if (containerRef.current?.releasePointerCapture && e?.pointerId !== undefined) {
+      try {
+        if (!containerRef.current.hasPointerCapture || containerRef.current.hasPointerCapture(e.pointerId)) {
+          containerRef.current.releasePointerCapture(e.pointerId);
+        }
+      } catch (err) { console.warn('[ScreenLinkEditor] releasePointerCapture failed:', err.message); }
     }
     if (dragging) {
-      // Snap the dragged zone to the grid on release.
-      if (gridSnap) {
-        setZones(prev => prev.map(z => z.id === dragging.id ? snapZone(z, true) : z));
+      const press = pressRef.current;
+      pressRef.current = null;
+      if (!press || press.moved) {
+        // Snap the dragged zones on release: the 4×6 grid, or the home icon grid.
+        const ids = new Set(Object.keys(dragging.originById));
+        if (gridSnap) setZones(prev => prev.map(z => ids.has(z.id) ? snapZone(z, true) : z));
+        if (iconGridSnap) setZones(prev => prev.map(z => ids.has(z.id) ? snapZoneToGrid(z) : z));
+      } else if (press.additive) {
+        // A Ctrl/Cmd/Shift or Multi Select click adds or removes the zone.
+        const next = new Set(selectedIds);
+        if (next.has(press.id)) next.delete(press.id); else next.add(press.id);
+        setSelectedIds(next);
+        setSelectedZone(next.has(press.id) ? press.id : (next.values().next().value || null));
+      }
+      if (press) {
+        suppressClickRef.current = true;
+        setTimeout(() => { suppressClickRef.current = false; }, 0);
       }
       setDragging(null);
       return;
     }
     if (!drawing || !drawStart || !drawCurrent) { setDrawing(false); return; }
+
+    // A tap (not a drag) on an empty spot opens the icon picker there.
+    if (Math.abs(drawCurrent.x - drawStart.x) < TAP_THRESHOLD && Math.abs(drawCurrent.y - drawStart.y) < TAP_THRESHOLD) {
+      setPendingPos(drawStart);
+      setShowPicker(true);
+      setDrawing(false);
+      setDrawStart(null);
+      setDrawCurrent(null);
+      return;
+    }
 
     const x = Math.min(drawStart.x, drawCurrent.x);
     const y = Math.min(drawStart.y, drawCurrent.y);
@@ -332,12 +427,48 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
     e.stopPropagation();
     e.preventDefault();
     if (containerRef.current?.setPointerCapture) {
-      try { containerRef.current.setPointerCapture(e.pointerId); } catch {}
+      try { containerRef.current.setPointerCapture(e.pointerId); } catch (err) { console.warn('[ScreenLinkEditor] setPointerCapture failed:', err.message); }
     }
-    pushUndo();
+    setShowPicker(false);
     const pos = getRelativePos(e);
-    setDragging({ id: zone.id, startX: pos.x, startY: pos.y, origX: zone.x, origY: zone.y });
-    setSelectedZone(zone.id);
+    const additive = multiSelect || e.metaKey || e.ctrlKey || e.shiftKey;
+    pressRef.current = { id: zone.id, additive, moved: false };
+    // Pressing a zone in a multi-selection drags the whole selection.
+    const ids = selectedIds.has(zone.id) && selectedIds.size > 1 ? Array.from(selectedIds) : [zone.id];
+    const originById = Object.fromEntries(zones.filter(z => ids.includes(z.id)).map(z => [z.id, { x: z.x, y: z.y }]));
+    setDragging({ id: zone.id, startX: pos.x, startY: pos.y, origX: zone.x, origY: zone.y, originById });
+    if (!additive) {
+      if (!selectedIds.has(zone.id)) setSelectedIds(new Set([zone.id]));
+      setSelectedZone(zone.id);
+    }
+  };
+
+  // Tap-to-place (Task #2020): a library icon, or a blank tap zone when ico is
+  // null, icon-sized and centred where the empty-spot tap landed.
+  const handlePlaceFromPicker = (ico) => {
+    if (!pendingPos) return;
+    pushUndo();
+    let placed = {
+      id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      x: pendingPos.x - (HOME_GRID.width / 2),
+      y: pendingPos.y - (HOME_GRID.height / 2),
+      w: HOME_GRID.width,
+      h: HOME_GRID.height,
+      target: pendingTarget || '',
+      label: '',
+      icon_url: null,
+      icon_urls: [],
+    };
+    if (ico) placed = { ...placed, ...pickZoneLibraryIcon(placed, ico, iconOverlays) };
+    placed = iconGridSnap
+      ? snapZoneToGrid(placed)
+      : { ...placed, x: clamp(placed.x, 0, 100 - placed.w), y: clamp(placed.y, 0, 100 - placed.h) };
+    setZones(prev => [...prev, placed]);
+    setSelectedIds(new Set([placed.id]));
+    setSelectedZone(placed.id);
+    setIsDirty(true);
+    setShowPicker(false);
+    setPendingPos(null);
   };
 
   const updateZone = (id, changes) => {
@@ -354,51 +485,76 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
   };
 
   const transformZones = (kind) => {
-    if (!Array.isArray(zones) || zones.length < 2) return;
+    // Layout actions act on the selection when it holds two or more zones,
+    // else on every zone, as before (Task #2020).
+    const scopeIds = selectedIds.size >= 2 ? new Set(selectedIds) : null;
+    const inScope = (z) => !scopeIds || scopeIds.has(z.id);
+    const scoped = (Array.isArray(zones) ? zones : []).filter(inScope);
+    const single = kind === 'snap_grid' || kind === 'auto_layout';
+    if (scoped.length < (single ? 1 : 2)) return;
     const clampX = (x, z) => Math.max(0, Math.min(100 - z.w, x));
     const clampY = (y, z) => Math.max(0, Math.min(100 - z.h, y));
     pushUndo();
-    setZones((prev) => {
-      if (!Array.isArray(prev) || prev.length < 2) return prev;
+    setZones((all) => {
+      const prev = all.filter(inScope);
+      const merge = (changed) => {
+        const byId = new Map(changed.map(z => [z.id, z]));
+        return all.map(z => byId.get(z.id) || z);
+      };
+      if (kind === 'snap_grid') return merge(prev.map(snapZoneToGrid));
+      if (kind === 'auto_layout') return merge(prev.map((z, i) => normalizeIconZone(z, i)));
+      if (!Array.isArray(prev) || prev.length < 2) return all;
+      if (kind === 'make_row' || kind === 'make_column') {
+        // ICON mode's Make Row / Make Column: one home-grid step apart.
+        const row = kind === 'make_row';
+        const sorted = [...prev].sort((a, b) => (row ? a.x - b.x : a.y - b.y));
+        const avg = sorted.reduce((sum, z) => sum + (row ? z.y : z.x), 0) / sorted.length;
+        const start = row
+          ? clamp(Math.min(...sorted.map(z => z.x)), 0, 100 - HOME_GRID.width)
+          : clamp(Math.min(...sorted.map(z => z.y)), 0, 100 - HOME_GRID.height);
+        return merge(sorted.map((z, i) => (row
+          ? { ...z, x: clamp(start + (i * HOME_GRID.stepX), 0, 100 - z.w), y: clamp(avg, 0, 100 - z.h) }
+          : { ...z, x: clamp(avg, 0, 100 - z.w), y: clamp(start + (i * HOME_GRID.stepY), 0, 100 - z.h) })));
+      }
       const sortedX = [...prev].sort((a, b) => a.x - b.x);
       const sortedY = [...prev].sort((a, b) => a.y - b.y);
 
       if (kind === 'align_left') {
         const left = Math.min(...prev.map(z => z.x));
-        return prev.map(z => ({ ...z, x: clampX(left, z) }));
+        return merge(prev.map(z => ({ ...z, x: clampX(left, z) })));
       }
       if (kind === 'align_center') {
         const center = prev.reduce((sum, z) => sum + z.x + (z.w / 2), 0) / prev.length;
-        return prev.map(z => ({ ...z, x: clampX(center - (z.w / 2), z) }));
+        return merge(prev.map(z => ({ ...z, x: clampX(center - (z.w / 2), z) })));
       }
       if (kind === 'align_right') {
         const right = Math.max(...prev.map(z => z.x + z.w));
-        return prev.map(z => ({ ...z, x: clampX(right - z.w, z) }));
+        return merge(prev.map(z => ({ ...z, x: clampX(right - z.w, z) })));
       }
       if (kind === 'distribute_horizontal') {
-        if (sortedX.length < 3) return prev;
+        if (sortedX.length < 3) return all;
         const first = sortedX[0];
         const last = sortedX[sortedX.length - 1];
         const step = (last.x - first.x) / (sortedX.length - 1);
         const nextX = new Map(sortedX.map((z, i) => [z.id, first.x + (step * i)]));
-        return prev.map(z => ({ ...z, x: clampX(nextX.get(z.id), z) }));
+        return merge(prev.map(z => ({ ...z, x: clampX(nextX.get(z.id), z) })));
       }
       if (kind === 'distribute_vertical') {
-        if (sortedY.length < 3) return prev;
+        if (sortedY.length < 3) return all;
         const first = sortedY[0];
         const last = sortedY[sortedY.length - 1];
         const step = (last.y - first.y) / (sortedY.length - 1);
         const nextY = new Map(sortedY.map((z, i) => [z.id, first.y + (step * i)]));
-        return prev.map(z => ({ ...z, y: clampY(nextY.get(z.id), z) }));
+        return merge(prev.map(z => ({ ...z, y: clampY(nextY.get(z.id), z) })));
       }
       if (kind === 'equal_size') {
         const selected = prev.find(z => z.id === selectedZone) || prev[0];
-        return prev.map(z => {
+        return merge(prev.map(z => {
           const next = { ...z, w: selected.w, h: selected.h };
           return { ...next, x: clampX(next.x, next), y: clampY(next.y, next) };
-        });
+        }));
       }
-      return prev;
+      return all;
     });
     setIsDirty(true);
   };
@@ -760,6 +916,8 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
             onPointerDown={(e) => !editingDisabled && handleZoneDragStart(e, zone)}
             onClick={(e) => {
               e.stopPropagation();
+              // The release of this press already selected (or toggled) it.
+              if (suppressClickRef.current) { suppressClickRef.current = false; return; }
               if (preview) {
                 // In preview, clicking a zone walks the actual navigation flow — catches broken targets fast.
                 if (onNavigate && zone.target) onNavigate(zone.target);
@@ -775,7 +933,7 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
               //   2. Show Guides toggle is on (overview / debug)
               //   3. zone is selected
               //   4. zone is hovered from the list row
-              const isSel = selectedZone === zone.id;
+              const isSel = selectedZone === zone.id || selectedIds.has(zone.id);
               const isHovered = hoveredZoneId === zone.id;
               const showOutline = !preview && (showSafeArea || isSel || isHovered);
               // A zone with no icon keeps a dashed outline around its label, so it
@@ -911,6 +1069,64 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
         )}
       </div>
       </div>
+
+      {/* Tap-to-place picker — beside the phone when the workspace gives a
+          side panel, else under the phone (Task #2020). */}
+      {showPicker && !editingDisabled && (() => {
+        const libraryIcons = iconOverlays.filter((ico, idx, arr) => ico.url && arr.findIndex(i => i.url === ico.url) === idx);
+        const picker = (
+          <div className="tap-place-picker" style={{ background: '#fff', border: '1px solid #e8e0d0', borderRadius: 10, padding: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#B8962E', fontFamily: "'DM Mono', monospace" }}>
+                PICK AN ICON + WHERE IT OPENS
+              </span>
+              <button type="button" aria-label="Close" onClick={() => { setShowPicker(false); setPendingPos(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4 }}>
+                <X size={16} />
+              </button>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', fontFamily: "'DM Mono', monospace", letterSpacing: '0.05em', marginBottom: 4, textTransform: 'uppercase' }}>
+                Opens screen
+                <select
+                  value={pendingTarget}
+                  onChange={(e) => setPendingTarget(e.target.value)}
+                  style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', border: '1px solid #e0d9ce', borderRadius: 6, fontSize: 13, minHeight: 36, background: '#fff', textTransform: 'none', letterSpacing: 0 }}
+                >
+                  <option value="">— No target (set later) —</option>
+                  {screenTypes.map(st => (
+                    <option key={st.key} value={st.key}>{st.label}{generatedScreenKeys?.has(st.key) ? ' ✓' : ''}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+              <button
+                type="button"
+                title="Blank tap zone"
+                onClick={() => handlePlaceFromPicker(null)}
+                style={{ width: '100%', aspectRatio: '1/1', borderRadius: 8, border: '1px dashed #B8962E', background: '#fafaf5', color: '#B8962E', cursor: 'pointer', padding: 4, fontSize: 8, fontWeight: 700, fontFamily: "'DM Mono', monospace", display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}
+              >
+                BLANK TAP ZONE
+              </button>
+              {libraryIcons.map(ico => (
+                <button
+                  key={ico.id}
+                  type="button"
+                  title={ico.name}
+                  onClick={() => handlePlaceFromPicker(ico)}
+                  style={{ width: '100%', aspectRatio: '1/1', borderRadius: 8, border: '1px solid #e0d9ce', background: '#fff', cursor: 'pointer', padding: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}
+                >
+                  <img src={ico.url} alt={ico.name} style={{ width: '100%', flex: 1, objectFit: 'contain', borderRadius: 4, minHeight: 0 }} draggable={false} />
+                  <span style={{ fontSize: 7, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center', lineHeight: 1 }}>
+                    {(ico.name || '').replace(/\s*Icon$/i, '')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+        return sidePanel ? createPortal(picker, sidePanel) : picker;
+      })()}
 
       {/* Zone list + editor */}
       {!readOnly && !embedded && (
