@@ -7,7 +7,7 @@ New record, not a Fix Plan revision, and not an amendment of
 `F-Deploy-1_Deploy_2026-09-27_BB.md` (the BB record). This document follows
 that one rather than editing it. Basis:
 `943b7e657227b31964901fa5903ce413814e2bf7` (#2079), the tree Deploy BC moved
-production to. `origin/main` at filing is `7e2ea9ce` (§8).
+production to. `origin/main` at filing is `a0c795d6` (§8).
 
 **Author**
 
@@ -196,10 +196,14 @@ take effect. No `.env` or credential change is in the range.
 
 ```
 $ git log -1 --format='%H %ad %s' --date=short origin/main
-7e2ea9ce89e22336a1647d1c951963e810fa9072 2026-09-27 feat(db): a migration that creates episode_wardrobe as production has it [skip-automerge] (#2089)
+a0c795d67dab21afa3e45d068d4ccc6926102873 2026-09-27 fix(events): drop show name from suggest-names prompt [skip-automerge] (#2090)
+$ git log --first-parent --format="%h %cI %s" 7e2ea9ce..origin/main
+a0c795d67 2026-09-27T16:24:50-04:00 fix(events): drop show name from suggest-names prompt [skip-automerge] (#2090)
+$ git diff --name-only 7e2ea9ce origin/main
+src/routes/worldEvents.js
 ```
 
-That is Deploy BD's end.
+Deploy BD's end is `7e2ea9ce` (the BD record). One commit merged after it, #2090, a backend change to `src/routes/worldEvents.js`; no deploy record at filing says it has reached production.
 
 ## §9. What this document does not do
 
