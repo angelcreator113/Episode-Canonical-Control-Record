@@ -264,6 +264,8 @@ The manual deploy is Evoni's own action on the box: fast-forward the working tre
 
 Whether the app's database user can `SELECT` from `SequelizeMeta` is unverified; if the first run exits 2 with "permission denied", that is the answer.
 
+The load balancer's health check is `GET /health`, expecting 200 (`docs/audit/F-Deploy-1_Fix_Plan_v1.56.md` §1); any change to `/health` must keep that.
+
 ### 7.2 Credential changes and reboots: keep pm2's snapshot current
 
 Ruled by Evoni on 2026-09-26 ("Yes, I want those two rulings adopted as the review chat worded them."), adopting these two rules verbatim:
@@ -308,6 +310,24 @@ Read both values in this one session: the live list and the dump are compared in
 4. Run the check again. Reboot only when both lines print SAME.
 
 The check is written from the repository and has not been run by an agent session; it reads the dump's layout defensively (a process's variables at the top level or under `env`). If it prints MISSING for a key the app does use, compare that key by hand, as SAME/DIFFERENT only.
+
+### 7.3 Frontend deploys: production is served from frontend/dist
+
+**Where production's pages come from** (`docs/audit/F-Deploy-1_Fix_Plan_v1.56.md`, Task #2028, filed by PR #2031). HTTPS traffic goes from the load balancer to the box's app on port 3000, and the app serves the built frontend from `frontend/dist` (`frontendDistPath` in `src/app.js`). nginx and `/var/www/html` serve only `dev.primepisodes.com` and plain HTTP. So `vite build` is what reaches production, and the backup that matters is of `frontend/dist`.
+
+**Steps**, as used from Deploy AS on, on the box, from the repo root:
+
+1. Fast-forward the working tree to `origin/main`.
+2. Confirm `git diff --name-only HEAD@{1} HEAD -- src/ src/migrations/` prints nothing. If it prints anything, this is a backend deploy as well: follow §7.1 too.
+3. **Before building**, back up the current build: `cp -a frontend/dist ~/dist.bak-<date>-pre<PR>`, and confirm the copy holds the current entry (the `index-*.js` that `frontend/dist/index.html` names).
+4. `cd frontend && npx vite build`.
+5. Confirm the new entry in `frontend/dist/index.html`.
+6. No restart: the app serves `frontend/dist` from disk.
+7. Optional, for the dev site only: rsync `frontend/dist/` to `/var/www/html/`, with a dry run first.
+
+**Rollback**: `rm -rf frontend/dist && cp -a ~/dist.bak-<…> frontend/dist`. The older `/var/www/html.bak-*` copies also hold previous builds (the rsync had mirrored `frontend/dist`) and restore into `frontend/dist` the same way (v1.56 §5(b)).
+
+**Live check**: reload the page first. A tab left open across a deploy keeps running the old code.
 
 ---
 
