@@ -68,6 +68,14 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: false,
       },
+      // F-Ward-1 Fix Plan v1.0 O2 (Task #2087): production has times_worn
+      // integer NOT NULL DEFAULT 1 (Evoni's read, 2026-09-27); the model
+      // declares it to match.
+      times_worn: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+      },
       // Task #1924: approval_status, approved_by, approved_at and
       // rejection_reason were declared here and absent from the table
       // (Evoni's production read, ATTESTED 2026-09-25), so every

@@ -67,7 +67,13 @@ describe(`the migration ${MIGRATION}`, () => {
   test('exists, is the only live migration adding the table\'s columns, and adds the five columns with the model\'s types', async () => {
     expect(fs.existsSync(MIGRATION_PATH)).toBe(true);
     // Task #1933's migration also names the table; it changes only indexes.
-    expect(tableMigrations()).toEqual([MIGRATION, '20260926000000-dedupe-episode-wardrobe-indexes.js']);
+    // Task #2087's creates the table where it is missing and changes nothing
+    // where it exists, so it adds no column to an existing table.
+    expect(tableMigrations()).toEqual([
+      MIGRATION,
+      '20260926000000-dedupe-episode-wardrobe-indexes.js',
+      '20260927000000-create-episode-wardrobe.js',
+    ]);
 
     const qi = recordingQueryInterface(canonColumns());
     await require(MIGRATION_PATH).up(qi, Sequelize);
