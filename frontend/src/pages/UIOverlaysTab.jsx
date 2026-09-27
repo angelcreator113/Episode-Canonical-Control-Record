@@ -1262,6 +1262,12 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
     () => overlays.filter(o => (isIcon(o) || o.type === 'icon') && o.url),
     [overlays]
   );
+  // The same for the editor's links (Task #2044). A screen that has never had
+  // zones has no screen_links, so getScreenLinks returns a new [] on every
+  // call; the editor reset its zones on each one and the workspace re-rendered
+  // it again, a loop that wiped every zone as soon as it was added. One array
+  // per screen object.
+  const activeScreenLinks = useMemo(() => getScreenLinks(activeScreen), [activeScreen]);
   const placementsCount = useMemo(() => {
     // Library icons always count, by key; zones that resolve to no icon
     // (inline uploads, stale addresses) count by address (doctrine rule 17).
@@ -1637,7 +1643,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         ref={linkEditorRef}
                         screen={activeScreen}
                         screenUrl={activeScreen.url}
-                        links={getScreenLinks(activeScreen)}
+                        links={activeScreenLinks}
                         screenTypes={overlays.filter(o => isScreen(o)).map(o => ({ key: o.id, label: o.name, desc: o.description || '' }))}
                         generatedScreenKeys={new Set(overlays.filter(o => o.generated && o.url).map(o => o.id))}
                         iconOverlays={iconOverlaysForEditor}
