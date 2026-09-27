@@ -1531,6 +1531,14 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const charName = known.display_name || known.selected_name || 'this character';
 
+    // extra_fields keys a section sets. F-Reg-2 fix group 1 (O-b): each key is
+    // written by its own UPDATE after the save, built from the column itself.
+    // Editing the loaded extra_fields in place and assigning an equal copy left
+    // Sequelize nothing to write, so the dilemma and plot threads were lost
+    // whenever extra_fields was already set, and it would let two concurrent
+    // sections overwrite each other.
+    const extraFieldsSets = [];
+
     // Section-specific schemas and prompts
     const sectionConfigs = {
       demographics: {
@@ -1616,9 +1624,7 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
   ]
 }`,
         apply: (generated) => {
-          const ef = character.extra_fields || {};
-          ef.dilemma = generated;
-          character.extra_fields = { ...ef };
+          extraFieldsSets.push(['dilemma', generated]);
           return ['extra_fields.dilemma'];
         },
       },
@@ -1635,9 +1641,7 @@ router.post('/characters/:id/generate-section', requireAuth, async (req, res) =>
             status: t.status || 'open',
             source: 'ai-generated',
           }));
-          const ef = character.extra_fields || {};
-          ef.plot_threads = threads;
-          character.extra_fields = { ...ef };
+          extraFieldsSets.push(['plot_threads', threads]);
           return ['plot_threads'];
         },
       },
@@ -1696,6 +1700,21 @@ ${config.schema}`,
 
     const updated = config.apply(generated);
     await character.save();
+
+    for (const [key, value] of extraFieldsSets) {
+      await db.sequelize.query(
+        `UPDATE registry_characters
+            SET extra_fields = jsonb_set(
+                  CASE WHEN jsonb_typeof(extra_fields) = 'object'
+                       THEN extra_fields ELSE CAST('{}' AS jsonb) END,
+                  ARRAY[CAST(:key AS text)],
+                  CAST(:value AS jsonb)
+                ),
+                updated_at = NOW()
+          WHERE id = :id AND deleted_at IS NULL`,
+        { replacements: { key, value: JSON.stringify(value), id: character.id } }
+      );
+    }
 
     return res.json({
       success: true,
