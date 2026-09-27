@@ -764,3 +764,31 @@
   border-radius: var(--lala-radius);
   cursor: pointer;
 }
+
+/* ============================================
+   ONE CONNECT EDITOR, PART 1 (Task #2020)
+   ============================================ */
+
+.zones-tap-tools button.is-on {
+  border-color: var(--lala-gold);
+  background: var(--lala-gold-soft);
+  color: var(--lala-gold);
+}
+
+.zones-tap-row__size-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  color: var(--lala-ink-muted);
+}
+
+.zones-tap-row__size-control span {
+  min-width: 84px;
+}
+
+.zones-tap-row__size-control input[type="range"] {
+  flex: 1;
+  accent-color: var(--lala-gold);
+}

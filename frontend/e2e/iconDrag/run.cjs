@@ -8,6 +8,10 @@
  * non-zero unless the drag moved the icon with the grabbing cursor, the
  * click selected it, and neither opened the new-icon picker.
  *
+ * Task #2020 adds two TAP-mode scenarios: dragging the placed zone with the
+ * mouse, and a mouse tap on an empty spot that opens the picker beside the
+ * phone, where picking Call places it.
+ *
  * Not part of CI. Run from the repo root, with Playwright's Chromium:
  *   NODE_PATH=$(npm root -g) node frontend/e2e/iconDrag/run.cjs
  */
@@ -31,18 +35,20 @@ const { chromium } = require('playwright');
 
   const browser = await chromium.launch();
 
-  async function scenario(name, steps) {
+  async function scenario(name, steps, mode = 'icon') {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('file://' + path.join(out, 'index.html'));
     await page.click('.phone-hub-stage-row >> text=Connect');
-    await page.click('role=tab[name="Icon"]');
-    const icon = await page.waitForSelector('.zones-tab__canvas [data-icon-id="z-call"]');
+    if (mode === 'icon') await page.click('role=tab[name="Icon"]');
+    const icon = await page.waitForSelector(mode === 'icon'
+      ? '.zones-tab__canvas [data-icon-id="z-call"]'
+      : '.zones-tab__canvas [data-zone-id="z-call"]');
     // Record where pointer and click events land, in the capture phase.
     await page.evaluate(() => {
       window.__events = [];
-      const where = (t) => (t.closest && t.closest('[data-icon-id]') ? 'icon' : (t.closest && t.closest('[style*="crosshair"]') ? 'phone' : 'other'));
+      const where = (t) => (t.closest && t.closest('[data-icon-id], [data-zone-id]') ? 'icon' : (t.closest && t.closest('[style*="crosshair"]') ? 'phone' : 'other'));
       for (const type of ['pointerdown', 'pointerup', 'click']) {
         document.addEventListener(type, (e) => window.__events.push(`${type}→${where(e.target)}`), true);
       }
@@ -60,7 +66,10 @@ const { chromium } = require('playwright');
       after,
       moved: before.left !== after.left || before.top !== after.top,
       pickerOpen: await page.isVisible('text=PICK AN ICON + WHERE IT OPENS'),
-      iconSelected: await page.isVisible('.zones-tab__icon-panel input[placeholder="Label"]'),
+      iconSelected: mode === 'icon'
+        ? await page.isVisible('.zones-tab__icon-panel input[placeholder="Label"]')
+        : await page.evaluate(() => !!document.querySelector('.zones-tap-row.active')),
+      zoneCount: await page.evaluate(() => document.querySelectorAll('.zones-tab__canvas [data-zone-id], .zones-tab__canvas [data-icon-id]').length),
       events: await page.evaluate(() => window.__events),
       cursorDuring,
       pageErrors: errors,
@@ -87,11 +96,32 @@ const { chromium } = require('playwright');
     return null;
   });
 
-  console.log(JSON.stringify([drag, click], null, 1));
+  // 3. TAP mode: drag the placed zone with the mouse.
+  const tapDrag = await scenario('tap-drag', async (page, sx, sy) => {
+    await page.mouse.move(sx, sy);
+    await page.mouse.down();
+    for (let i = 1; i <= 6; i += 1) await page.mouse.move(sx + i * 8, sy + i * 12);
+    await page.mouse.up();
+    return null;
+  }, 'tap');
+  // 4. TAP mode: a mouse tap on an empty spot opens the picker beside the
+  //    phone; picking Call places a second zone.
+  const tapPlace = await scenario('tap-place', async (page) => {
+    const canvas = await page.$('.zones-tab__canvas [style*="crosshair"]');
+    const box = await canvas.boundingBox();
+    await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.6);
+    const beside = await page.isVisible('.zones-tab__icon-panel >> text=PICK AN ICON + WHERE IT OPENS');
+    await page.click('.zones-tab__icon-panel [title="Call"]');
+    return beside ? 'picker beside the phone' : 'picker NOT beside the phone';
+  }, 'tap');
+
+  console.log(JSON.stringify([drag, click, tapDrag, tapPlace], null, 1));
   await browser.close();
   const ok = drag.moved && !drag.pickerOpen && drag.cursorDuring === 'grabbing'
     && !click.moved && !click.pickerOpen && click.iconSelected
-    && drag.pageErrors.length === 0 && click.pageErrors.length === 0;
-  console.log(ok ? 'PASS: the icon drags with the mouse, a click selects it, and no picker opens' : 'FAIL');
+    && tapDrag.moved && !tapDrag.pickerOpen && tapDrag.iconSelected
+    && tapPlace.cursorDuring === 'picker beside the phone' && tapPlace.zoneCount === 2 && !tapPlace.pickerOpen
+    && [drag, click, tapDrag, tapPlace].every(r => r.pageErrors.length === 0);
+  console.log(ok ? 'PASS: icons drag and click in ICON mode; in TAP a zone drags and a tap places an icon from the picker beside the phone' : 'FAIL');
   process.exit(ok ? 0 : 1);
 })().catch((e) => { console.error(e); process.exit(2); });

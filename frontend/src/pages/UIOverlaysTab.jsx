@@ -120,6 +120,17 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   // open; the side panel ICON mode renders its picker into, beside the phone;
   // and ICON mode's unsaved state, for the "Unsaved" marker.
   const [tapIconZoneId, setTapIconZoneId] = useState(null);
+  // The TAP editor's ICON-mode abilities (Task #2020): the whole selection,
+  // Multi Select, and snapping to the home icon grid (remembered, off by
+  // default so drawn zones behave as before).
+  const [tapSelectedIds, setTapSelectedIds] = useState([]);
+  const [tapMultiSelect, setTapMultiSelect] = useState(false);
+  const [tapIconGridSnap, setTapIconGridSnap] = useState(() => {
+    try { return localStorage.getItem('screenLinkEditor.iconGridSnap') === '1'; } catch (err) { console.warn('[UIOverlaysTab] localStorage unavailable:', err.message); return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('screenLinkEditor.iconGridSnap', tapIconGridSnap ? '1' : '0'); } catch (err) { console.warn('[UIOverlaysTab] localStorage unavailable:', err.message); }
+  }, [tapIconGridSnap]);
   const [iconSidePanel, setIconSidePanel] = useState(null);
   const [iconZonesDirty, setIconZonesDirty] = useState(false);
   // Which zone row has its advanced panel (conditions + actions) open.
@@ -1617,11 +1628,15 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         embedded
                         contentZones={activeScreen.content_zones || activeScreen.metadata?.content_zones || []}
                         showId={showId}
-                        onZonesChange={(zones, dirty, selectedId) => {
+                        onZonesChange={(zones, dirty, selectedId, selectedIds) => {
                           setTapZonesDraft(zones || []);
                           setTapZonesDirty(!!dirty);
                           setTapSelectedZoneId(selectedId || null);
+                          setTapSelectedIds(selectedIds || []);
                         }}
+                        sidePanel={iconSidePanel}
+                        multiSelect={tapMultiSelect}
+                        iconGridSnap={tapIconGridSnap}
                       />
                     ) : (
                       <IconPlacementMode
@@ -1661,11 +1676,9 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                         </button>
                       </div>
 
-                      {/* ICON mode renders its picker and icon panels here,
-                          beside the phone (Task #2014). */}
-                      {zoneEditorMode === 'icons' && (
-                        <div ref={setIconSidePanel} className="zones-tab__icon-panel" />
-                      )}
+                      {/* Both editors render their icon picker here, beside the
+                          phone (Tasks #2014, #2020). Hidden while empty. */}
+                      <div ref={setIconSidePanel} className="zones-tab__icon-panel" />
 
                       <ScreenThumbnailStrip
                         screens={editableScreens}
@@ -1735,8 +1748,16 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                             </div>
                           </div>
 
-                          {tapZonesDraft.length > 1 && (
+                          {tapZonesDraft.length > 0 && (
                             <div className="zones-tap-tools">
+                              {/* ICON mode's layout abilities (Task #2020). They act on
+                                  the selection when it holds two or more zones. */}
+                              <button type="button" aria-pressed={tapMultiSelect} className={tapMultiSelect ? 'is-on' : undefined} onClick={() => setTapMultiSelect(v => !v)}>Multi Select</button>
+                              <button type="button" aria-pressed={tapIconGridSnap} className={tapIconGridSnap ? 'is-on' : undefined} onClick={() => setTapIconGridSnap(v => !v)}>{tapIconGridSnap ? 'Snap On' : 'Snap Off'}</button>
+                              <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('make_row')}>Make Row</button>
+                              <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('make_column')}>Make Column</button>
+                              <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('snap_grid')}>Snap to Grid</button>
+                              <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('auto_layout')}>Auto Layout</button>
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('align_left')}>Align L</button>
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('align_center')}>Align C</button>
                               <button type="button" onClick={() => linkEditorRef.current?.transformZones?.('align_right')}>Align R</button>
@@ -1751,7 +1772,7 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                           ) : (
                             <div className="zones-tap-panel__list">
                               {tapZonesDraft.map((zone, index) => {
-                                const isSelected = tapSelectedZoneId === zone.id;
+                                const isSelected = tapSelectedZoneId === zone.id || tapSelectedIds.includes(zone.id);
                                 const hasTarget = !!zone.target;
                                 const isExpanded = tapExpandedZoneId === zone.id;
                                 const isIconOpen = tapIconZoneId === zone.id;
@@ -1829,6 +1850,27 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                                     )}
                                     {isExpanded && (
                                       <div className="zones-tap-row__advanced">
+                                        {/* Size, kept inside the screen (Task #2020). */}
+                                        <div className="zones-tap-row__adv-section zones-tap-row__size">
+                                          <div className="zones-tap-row__adv-header"><span>SIZE</span></div>
+                                          {[['w', 'Width', 'x'], ['h', 'Height', 'y']].map(([key, name, pos]) => (
+                                            <label key={key} className="zones-tap-row__size-control">
+                                              <span>{name} {Math.round(zone[key])}%</span>
+                                              <input
+                                                type="range"
+                                                min={3}
+                                                max={100}
+                                                value={Math.round(zone[key]) || 3}
+                                                aria-label={`${name} of ${zone.label || `zone ${index + 1}`}`}
+                                                onChange={(e) => {
+                                                  const size = Math.max(3, Math.min(100, parseInt(e.target.value, 10) || 3));
+                                                  const at = typeof zone[pos] === 'number' ? zone[pos] : 0;
+                                                  linkEditorRef.current?.updateZone?.(zone.id, { [key]: size, [pos]: Math.max(0, Math.min(100 - size, at)) });
+                                                }}
+                                              />
+                                            </label>
+                                          ))}
+                                        </div>
                                         <div className="zones-tap-row__adv-section">
                                           <div className="zones-tap-row__adv-header">
                                             <span>VISIBLE WHEN{conditionCount > 0 ? ` (${conditionCount})` : ' — always'}</span>
