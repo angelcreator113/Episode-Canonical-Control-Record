@@ -169,7 +169,10 @@ describe('TAP editor — selection and layout (Task #2020)', () => {
   test('Snap to Grid and Auto Layout use the home icon grid; with no selection they act on every zone', () => {
     const { ref, last } = tap([zone('a', 10, 12), zone('b', 40, 20, { w: 20, h: 20 })]);
     act(() => { ref.current.transformZones('snap_grid'); });
-    expect(last()[0].map(z => [z.x, z.y])).toEqual([[8, 14], [50, 14]]);
+    // Task #2030: a zone is centred in the slot nearest its centre. b (20×20,
+    // centre 50, 30) goes to column 2, row 1 (centre 56, 32.5); before, its
+    // top-left corner was pinned to column 2, row 0.
+    expect(last()[0].map(z => [z.x, z.y])).toEqual([[8, 14], [46, 22.5]]);
     act(() => { ref.current.transformZones('auto_layout'); });
     expect(last()[0].map(z => [z.x, z.y, z.w, z.h])).toEqual([[8, 14, 12, 9], [29, 14, 12, 9]]);
   });
