@@ -36,7 +36,49 @@ const menuItemStyle = {
   borderBottom: '1px solid #f5f3ee',
 };
 
-const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onEditScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false, isHome = false }) {
+// A screen's state in plain words and its one next action (doctrine rule 18,
+// Task #2042), from what the page already computes: whether the screen has an
+// image, the page's screenDiagnostics for it (zone counts and zones with no
+// destination) and how many zones on other screens lead here. Up to three
+// lines, in the order the next action is chosen: image, links, incoming.
+// `next` is 'image', 'links', 'incoming' or null (Ready).
+export function screenCardStatus({ hasImage, diagnostics, isHome = false, incoming = 0 }) {
+  const lines = [];
+  let next = null;
+  const need = (step) => { if (!next) next = step; };
+
+  if (hasImage) lines.push({ key: 'image', text: '✓ Image', warn: false });
+  else { lines.push({ key: 'image', text: '⚠ No image', warn: true }); need('image'); }
+
+  if (hasImage && diagnostics?.counts) {
+    const { tap = 0, icon = 0 } = diagnostics.counts;
+    const total = tap + icon;
+    const noDestination = (diagnostics.missingTarget || 0) + (diagnostics.brokenTarget || 0);
+    if (noDestination > 0) {
+      lines.push({ key: 'links', text: `⚠ ${noDestination} zone${noDestination === 1 ? ' has' : 's have'} no destination`, warn: true });
+      need('links');
+    } else if (total > 0) {
+      lines.push({ key: 'links', text: `${icon} icon${icon === 1 ? '' : 's'} · ${total}/${total} linked`, warn: false });
+    } else {
+      lines.push({ key: 'links', text: 'No zones yet', warn: false });
+    }
+  }
+
+  if (!isHome && incoming === 0) {
+    lines.push({ key: 'incoming', text: '⚠ Nothing links here', warn: true });
+    need('incoming');
+  }
+
+  return { ready: next === null, next, lines };
+}
+
+const CONTINUE_TITLES = {
+  image: 'Add an image in Build',
+  links: 'Set destinations in Connect',
+  incoming: 'Link to this screen from the home screen in Connect',
+};
+
+const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSelectScreen, onEditScreen, onDelete, onHide, isHidden, globalFit, isIcon, linkCount = 0, hasTargetedPlacement = false, isHome = false, status = null, onContinue }) {
   const isActive = activeScreen?.id === screen?.id && screen;
   const hasImage = screen?.generated && screen?.url;
   const accentColor = isIcon ? '#a889c8' : '#B8962E';
@@ -133,35 +175,51 @@ const ScreenCard = memo(function ScreenCard({ type, screen, activeScreen, onSele
           ★ HOME
         </div>
       )}
-      {screen && !isHidden && !(isHome && !isIcon) && (() => {
-        const linked = linkCount > 0;
-        const isIconCard = !!isIcon;
-        // For icons: "linked" means it's placed on ≥1 screen AND at least one of
-        // those placements has a target. Placed-but-no-target = unlinked.
-        const reallyLinked = isIconCard ? (linked && hasTargetedPlacement) : linked;
-        const label = isIconCard
-          ? (reallyLinked
-              ? `✓ ${linkCount} screen${linkCount === 1 ? '' : 's'}`
-              : linked
-                ? '⚠ No target'
-                : '○ Unplaced')
-          : (linked
-              ? `← ${linkCount} zone${linkCount === 1 ? '' : 's'}`
-              : '⚠ Unreached');
-        const color = reallyLinked
+      {/* A screen card's state in plain words and its one next action
+          (doctrine rule 18, Task #2042). Icon cards keep their label below. */}
+      {screen && !isHidden && !isIcon && status && (
+        <div className="screen-card-status" data-testid="screen-card-status">
+          <div className={`screen-card-status__word screen-card-status__word--${status.ready ? 'ready' : 'setup'}${isActive ? ' is-active' : ''}`}>
+            {status.ready ? 'Ready' : 'Needs setup'}
+          </div>
+          {status.lines.map(line => (
+            <div key={line.key} className={`screen-card-status__line${line.warn ? ' is-warn' : ''}${isActive ? ' is-active' : ''}`} title={line.text}>
+              {line.text}
+            </div>
+          ))}
+          {status.next && onContinue && (
+            <button
+              type="button"
+              className="screen-card-continue"
+              title={CONTINUE_TITLES[status.next]}
+              aria-label={`Continue: ${CONTINUE_TITLES[status.next]}`}
+              onClick={(e) => { e.stopPropagation(); onContinue(screen, status.next); }}
+            >
+              Continue →
+            </button>
+          )}
+        </div>
+      )}
+      {screen && !isHidden && isIcon && (() => {
+        // An icon is "linked" when it is placed on at least one screen AND one
+        // of those placements has a target. Placed-but-no-target = unlinked.
+        const placed = linkCount > 0;
+        const linked = placed && hasTargetedPlacement;
+        const label = linked
+          ? `✓ ${linkCount} screen${linkCount === 1 ? '' : 's'}`
+          : placed
+            ? '⚠ No target'
+            : '○ Unplaced';
+        const color = linked
           ? (isActive ? 'rgba(255,255,255,0.85)' : '#5a8f3b')
-          : !linked && !isIconCard
+          : placed
             ? (isActive ? 'rgba(255,200,150,0.95)' : '#B84D2E')
-            : isIconCard && !linked
-              ? (isActive ? 'rgba(255,255,255,0.55)' : '#A09889')
-              : (isActive ? 'rgba(255,200,150,0.95)' : '#B84D2E');
+            : (isActive ? 'rgba(255,255,255,0.55)' : '#A09889');
         return (
           <div
-            title={reallyLinked
-              ? (isIconCard ? 'Placed on screens with targets set' : 'Zones link here')
-              : isIconCard
-                ? (linked ? 'Placed but has no navigation target' : 'Not placed on any screen yet')
-                : 'No zones link to this screen'}
+            title={linked
+              ? 'Placed on screens with targets set'
+              : placed ? 'Placed but has no navigation target' : 'Not placed on any screen yet'}
             style={{
               marginTop: 4,
               fontSize: 9,
@@ -216,6 +274,11 @@ export default function PhoneHub({
   // stage puts the embedded, non-saving Preview phone here, beside the
   // same screen list. Without it, PhoneDevice and the skin picker as before.
   devicePane = null,
+  // The page's per-screen diagnostics (UIOverlaysTab's screenDiagnostics, a
+  // Map by screen id) and the handler for a card's "Continue →" (Task #2042).
+  // Without them a card still shows its image and incoming lines, and no button.
+  screenDiagnostics = null,
+  onContinue,
 }) {
   // Placements memo lives below the screenTypes/iconTypes declarations so it
   // doesn't TDZ-crash (useMemo body runs synchronously on first render).
@@ -464,7 +527,15 @@ export default function PhoneHub({
         {gridSection === 'screens' && (
           <div className="phone-hub-screen-grid">
             {screenTypes.filter(s => showHidden || !hiddenScreens.includes(s.id)).map(s => (
-              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onEditScreen={onEditScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} linkCount={screenReachById.get(s.id) || 0} isHome={s.id === firstScreen?.id} />
+              <ScreenCard key={s.id} type={{ key: s.id, label: s.name, icon: '📱', desc: s.description || '' }} screen={s} activeScreen={activeScreen} onSelectScreen={onSelectScreen} onEditScreen={onEditScreen} onDelete={onDelete} onHide={onHideScreen} isHidden={hiddenScreens.includes(s.id)} globalFit={globalFit} linkCount={screenReachById.get(s.id) || 0} isHome={s.id === firstScreen?.id}
+                status={screenCardStatus({
+                  hasImage: !!(s.generated && s.url),
+                  diagnostics: screenDiagnostics?.get?.(s.id),
+                  isHome: s.id === firstScreen?.id,
+                  incoming: screenReachById.get(s.id) || 0,
+                })}
+                onContinue={onContinue}
+              />
             ))}
           </div>
         )}
@@ -613,6 +684,35 @@ export default function PhoneHub({
         }
 
         .screen-card-thumb { aspect-ratio: 9/16; }
+
+        /* Status lines and the one next action (Task #2042). Every line is one
+           row that truncates, so a narrow card never scrolls sideways. */
+        /* A grid item's minimum width is its content's by default; a nowrap
+           status line would widen the column past a 375px screen. */
+        .phone-hub-screen-grid > .screen-card { min-width: 0; }
+        .screen-card-status { margin-top: 4px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .screen-card-status__word {
+          font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.3px;
+          text-transform: uppercase;
+        }
+        .screen-card-status__word--ready { color: #5a8f3b; }
+        .screen-card-status__word--setup { color: #B84D2E; }
+        .screen-card-status__word.is-active { color: rgba(255,255,255,0.85); }
+        .screen-card-status__line {
+          font-family: 'DM Mono', monospace; font-size: 9px; line-height: 1.3; color: #6B6557;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+        }
+        .screen-card-status__line.is-warn { color: #B84D2E; }
+        .screen-card-status__line.is-active { color: rgba(255,255,255,0.7); }
+        .screen-card-status__line.is-warn.is-active { color: rgba(255,200,150,0.95); }
+        .screen-card-continue {
+          align-self: flex-start; max-width: 100%; margin-top: 4px; min-height: 28px; padding: 4px 8px;
+          font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+          color: var(--lala-gold); background: var(--lala-gold-soft);
+          border: 1px solid var(--lala-gold-line, #B8962E); border-radius: 6px; cursor: pointer;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .screen-card-continue:hover { background: var(--lala-gold); color: #fff; }
 
         @media (max-width: 1024px) {
           .phone-hub-inner { gap: 16px; }
