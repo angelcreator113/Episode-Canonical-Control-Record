@@ -42,7 +42,7 @@ import ConditionRow from './phone-editor/ConditionRow';
 import ActionRow from './phone-editor/ActionRow';
 import AIProposalReview from './phone-editor/AIProposalReview';
 import ZoneIconPicker, { ZoneIconSummary } from './phone-editor/ZoneIconPicker';
-import { HOME_GRID, clamp, snapZoneToGrid, normalizeIconZone } from './phone/homeGrid';
+import { HOME_GRID, clamp, snapZoneToGrid, normalizeIconZone, lineUpCentres } from './phone/homeGrid';
 
 const ZONE_COLORS = ['#d4789a', '#a889c8', '#c9a84c', '#6bba9a', '#7ab3d4', '#b89060', '#e06060', '#60b0e0'];
 
@@ -516,54 +516,68 @@ const ScreenLinkEditor = forwardRef(function ScreenLinkEditor({
       if (kind === 'snap_grid') return merge(prev.map(snapZoneToGrid));
       if (kind === 'auto_layout') return merge(prev.map((z, i) => normalizeIconZone(z, i)));
       if (!Array.isArray(prev) || prev.length < 2) return all;
+      // Tools line zones up by their centres, so zones of different sizes,
+      // and the icons drawn centred in them, line up (Task #2030). Align L / R
+      // are the exceptions: they align edges.
+      const cxOf = (z) => z.x + (z.w / 2);
+      const cyOf = (z) => z.y + (z.h / 2);
+      const atCx = (z, cx) => clampX(cx - (z.w / 2), z);
+      const atCy = (z, cy) => clampY(cy - (z.h / 2), z);
+      const mean = (vals) => vals.reduce((sum, v) => sum + v, 0) / vals.length;
+      // One shared centre line, moved in only as far as the largest zone needs.
+      const sharedLine = (value, sizes) => {
+        const half = Math.max(...sizes) / 2;
+        return clamp(value, half, 100 - half);
+      };
+
       if (kind === 'make_row' || kind === 'make_column') {
-        // ICON mode's Make Row / Make Column: one home-grid step apart.
+        // ICON mode's Make Row / Make Column: one home-grid step apart,
+        // centre to centre, on one shared centre line.
         const row = kind === 'make_row';
-        const sorted = [...prev].sort((a, b) => (row ? a.x - b.x : a.y - b.y));
-        const avg = sorted.reduce((sum, z) => sum + (row ? z.y : z.x), 0) / sorted.length;
-        const start = row
-          ? clamp(Math.min(...sorted.map(z => z.x)), 0, 100 - HOME_GRID.width)
-          : clamp(Math.min(...sorted.map(z => z.y)), 0, 100 - HOME_GRID.height);
+        const sorted = [...prev].sort((a, b) => (row ? cxOf(a) - cxOf(b) : cyOf(a) - cyOf(b)));
+        const along = lineUpCentres(
+          sorted.map(z => (row ? z.w : z.h)),
+          Math.min(...sorted.map(row ? cxOf : cyOf)),
+          row ? HOME_GRID.stepX : HOME_GRID.stepY,
+        );
+        const line = row
+          ? sharedLine(mean(sorted.map(cyOf)), sorted.map(z => z.h))
+          : sharedLine(mean(sorted.map(cxOf)), sorted.map(z => z.w));
         return merge(sorted.map((z, i) => (row
-          ? { ...z, x: clamp(start + (i * HOME_GRID.stepX), 0, 100 - z.w), y: clamp(avg, 0, 100 - z.h) }
-          : { ...z, x: clamp(avg, 0, 100 - z.w), y: clamp(start + (i * HOME_GRID.stepY), 0, 100 - z.h) })));
+          ? { ...z, x: atCx(z, along[i]), y: atCy(z, line) }
+          : { ...z, x: atCx(z, line), y: atCy(z, along[i]) })));
       }
-      const sortedX = [...prev].sort((a, b) => a.x - b.x);
-      const sortedY = [...prev].sort((a, b) => a.y - b.y);
 
       if (kind === 'align_left') {
-        const left = Math.min(...prev.map(z => z.x));
+        const left = Math.min(Math.min(...prev.map(z => z.x)), 100 - Math.max(...prev.map(z => z.w)));
         return merge(prev.map(z => ({ ...z, x: clampX(left, z) })));
       }
       if (kind === 'align_center') {
-        const center = prev.reduce((sum, z) => sum + z.x + (z.w / 2), 0) / prev.length;
-        return merge(prev.map(z => ({ ...z, x: clampX(center - (z.w / 2), z) })));
+        const center = sharedLine(mean(prev.map(cxOf)), prev.map(z => z.w));
+        return merge(prev.map(z => ({ ...z, x: atCx(z, center) })));
       }
       if (kind === 'align_right') {
-        const right = Math.max(...prev.map(z => z.x + z.w));
+        const right = Math.max(Math.max(...prev.map(z => z.x + z.w)), Math.max(...prev.map(z => z.w)));
         return merge(prev.map(z => ({ ...z, x: clampX(right - z.w, z) })));
       }
-      if (kind === 'distribute_horizontal') {
-        if (sortedX.length < 3) return all;
-        const first = sortedX[0];
-        const last = sortedX[sortedX.length - 1];
-        const step = (last.x - first.x) / (sortedX.length - 1);
-        const nextX = new Map(sortedX.map((z, i) => [z.id, first.x + (step * i)]));
-        return merge(prev.map(z => ({ ...z, x: clampX(nextX.get(z.id), z) })));
-      }
-      if (kind === 'distribute_vertical') {
-        if (sortedY.length < 3) return all;
-        const first = sortedY[0];
-        const last = sortedY[sortedY.length - 1];
-        const step = (last.y - first.y) / (sortedY.length - 1);
-        const nextY = new Map(sortedY.map((z, i) => [z.id, first.y + (step * i)]));
-        return merge(prev.map(z => ({ ...z, y: clampY(nextY.get(z.id), z) })));
+      if (kind === 'distribute_horizontal' || kind === 'distribute_vertical') {
+        // Centres evenly spaced between the first and last zone's centres.
+        if (prev.length < 3) return all;
+        const across = kind === 'distribute_horizontal';
+        const centre = across ? cxOf : cyOf;
+        const sorted = [...prev].sort((a, b) => centre(a) - centre(b));
+        const first = centre(sorted[0]);
+        const step = (centre(sorted[sorted.length - 1]) - first) / (sorted.length - 1);
+        return merge(sorted.map((z, i) => (across
+          ? { ...z, x: atCx(z, first + (step * i)) }
+          : { ...z, y: atCy(z, first + (step * i)) })));
       }
       if (kind === 'equal_size') {
+        // Every zone takes the chosen zone's size, keeping its own centre.
         const selected = prev.find(z => z.id === selectedZone) || prev[0];
         return merge(prev.map(z => {
           const next = { ...z, w: selected.w, h: selected.h };
-          return { ...next, x: clampX(next.x, next), y: clampY(next.y, next) };
+          return { ...next, x: atCx(next, cxOf(z)), y: atCy(next, cyOf(z)) };
         }));
       }
       return all;

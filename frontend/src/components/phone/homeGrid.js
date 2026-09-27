@@ -29,17 +29,41 @@ export function getGridSlot(index) {
   };
 }
 
-/** A zone moved to its nearest slot (6 rows), kept inside the screen. */
+/**
+ * A zone moved to its nearest slot (6 rows), kept inside the screen. The
+ * slot is chosen by the zone's centre and the zone is centred in it, so
+ * zones of different sizes line up (Task #2030). For an icon-sized zone
+ * (12 × 9) this is the slot's top-left, as before.
+ */
 export function snapZoneToGrid(zone) {
-  const col = Math.round((zone.x - HOME_GRID.originX) / HOME_GRID.stepX);
-  const row = Math.round((zone.y - HOME_GRID.originY) / HOME_GRID.stepY);
+  const slotCx = HOME_GRID.originX + (HOME_GRID.width / 2);
+  const slotCy = HOME_GRID.originY + (HOME_GRID.height / 2);
+  const col = Math.round((zone.x + (zone.w / 2) - slotCx) / HOME_GRID.stepX);
+  const row = Math.round((zone.y + (zone.h / 2) - slotCy) / HOME_GRID.stepY);
   const maxCol = HOME_GRID.columns - 1;
   const maxRow = 5;
   return {
     ...zone,
-    x: clamp(HOME_GRID.originX + (clamp(col, 0, maxCol) * HOME_GRID.stepX), 0, 100 - zone.w),
-    y: clamp(HOME_GRID.originY + (clamp(row, 0, maxRow) * HOME_GRID.stepY), 0, 100 - zone.h),
+    x: clamp(slotCx + (clamp(col, 0, maxCol) * HOME_GRID.stepX) - (zone.w / 2), 0, 100 - zone.w),
+    y: clamp(slotCy + (clamp(row, 0, maxRow) * HOME_GRID.stepY) - (zone.h / 2), 0, 100 - zone.h),
   };
+}
+
+/**
+ * Centres along one axis for `sizes` (each zone's width, or height, in
+ * order), a `step` apart, starting as near `start` as fits: the first zone's
+ * near edge and the last zone's far edge stay inside 0–100. If `step` is too
+ * long for them all to fit, it shrinks to fit (Task #2030).
+ */
+export function lineUpCentres(sizes, start, step) {
+  const n = sizes.length;
+  if (n === 0) return [];
+  const firstHalf = sizes[0] / 2;
+  const lastHalf = sizes[n - 1] / 2;
+  const room = Math.max(0, 100 - firstHalf - lastHalf);
+  const gap = n > 1 ? Math.min(step, room / (n - 1)) : 0;
+  const from = clamp(start, firstHalf, 100 - lastHalf - (gap * (n - 1)));
+  return sizes.map((_, i) => from + (gap * i));
 }
 
 /** A zone made icon-sized and put in the index-th slot (Auto Layout). */
