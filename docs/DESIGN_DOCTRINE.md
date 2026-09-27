@@ -109,10 +109,21 @@ an organizer sets it; the Event Package shows it as set, with only
 "Change Organizer" reopening the choice.
 *Why:* extends rule 8.
 
-**14. Suggestions stay suggestions.** Anything Prime Studios proposes is
-shown as suggested until Evoni accepts it. Field states are Set,
-Suggested, Generating, Missing, or Waiting for <dependency>.
-*Why:* nothing is written as canon silently.
+**14. Suggestions stay suggestions, except the first draft.** Creating a
+new event may write a complete initial draft automatically. Every
+generated field is labelled 'Auto-drafted · <source>' until Evoni changes
+it, and then shows as Edited. Changes to an existing event remain
+suggestions until Evoni accepts them. Field states are Set, Auto-drafted,
+Edited, Suggested, Generating, Missing, or Waiting for <dependency>.
+*Why:* the draft is visible and labelled, so nothing becomes canon
+silently, and a new event starts complete instead of as a checklist.
+
+Amended 2026-09-27 by #2088. Previous text:
+
+> **14. Suggestions stay suggestions.** Anything Prime Studios proposes is
+> shown as suggested until Evoni accepts it. Field states are Set,
+> Suggested, Generating, Missing, or Waiting for <dependency>.
+> *Why:* nothing is written as canon silently.
 
 **15. Readiness is phased.** The gates, and the question each answers:
 Event Ready (do we know what is happening?), Story Ready (what is this
