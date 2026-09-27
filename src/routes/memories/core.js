@@ -413,12 +413,28 @@ router.post('/memories/:memoryId/confirm', requireAuth, async (req, res) => {
     // Write to Character Registry — append memory to extra_fields.memories array
     // This is the lightweight approach that reuses the existing JSONB column.
     // Phase 2 may introduce a dedicated memories association instead.
+    // F-Reg-2 fix group 1 (O-b): the append happens in one UPDATE, built from
+    // the column itself. Pushing onto the loaded array and saving an equal copy
+    // left Sequelize nothing to write, so every memory after the first was lost,
+    // and two concurrent confirmations could overwrite each other.
+    // A missing or non-array memories value starts again as [], as before;
+    // a missing or non-object extra_fields starts again as {}.
     const memoryEntry = `[${memory.type.toUpperCase()} · ${new Date().toISOString().split('T')[0]}] ${finalStatement}`;
-    const currentExtra = character.extra_fields || {};
-    const existingMemories = Array.isArray(currentExtra.memories) ? currentExtra.memories : [];
-    existingMemories.push(memoryEntry);
-
-    await character.update({ extra_fields: { ...currentExtra, memories: existingMemories } });
+    await db.sequelize.query(
+      `UPDATE registry_characters
+          SET extra_fields = jsonb_set(
+                CASE WHEN jsonb_typeof(extra_fields) = 'object'
+                     THEN extra_fields ELSE CAST('{}' AS jsonb) END,
+                '{memories}',
+                CASE WHEN jsonb_typeof(extra_fields->'memories') = 'array'
+                     THEN extra_fields->'memories'
+                     ELSE CAST('[]' AS jsonb) END
+                  || jsonb_build_array(CAST(:entry AS text))
+              ),
+              updated_at = NOW()
+        WHERE id = :id AND deleted_at IS NULL`,
+      { replacements: { entry: memoryEntry, id: character.id } }
+    );
 
     // ── Registry Sync: memory confirmed trigger ──
     if (registrySync) {
