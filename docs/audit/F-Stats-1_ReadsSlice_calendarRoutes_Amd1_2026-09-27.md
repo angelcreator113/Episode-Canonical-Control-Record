@@ -21,7 +21,7 @@ note's own name with `_Amd1` before the date, as
 - **the amended slice's basis:** `98dd2e3a` (as the slice states);
 - **this amendment's own basis:** `origin/main` below.
 
-**Standing:** MEASURED unless marked INFERRED or ATTESTED. Rules nothing.
+**Standing:** MEASURED unless marked INFERRED or ATTESTED. Rules nothing of its own; the condition-1 reading of row #3 is Evoni's, quoted in §3.
 
 Task: #2062. No host, AWS, database, or Cognito contact.
 
@@ -164,7 +164,7 @@ source, scope, what it returns, auth) is the slice's, unchanged.
 
 | # | Site | As filed | Re-applied | Reason |
 | --- | --- | --- | --- | --- |
-| 3 | `:171` `GET /events` | Not an instance — condition 2 | **Instance** — when the caller supplies `series_id` or `story_position`, for events with a `source_line_id` | Condition 2 is now met for sourced events. **Condition 1, which the slice did not need to decide:** `series_id` and `story_position` are identifiers the caller supplies (`calendarRoutes.js:161`, `:163`), and when supplied they choose the rows. When no identifier is supplied every event is returned, the shape the slice's #12 classifies as condition 1 not met. The response carries each event's stored fields (`:171–176`) |
+| 3 | `:171` `GET /events` | Not an instance — condition 2 | **Not an instance** — condition 1 | Condition 2 is now met for sourced events, so condition 1 decides it, which the slice did not need to. **Evoni's reading (review chat, 2026-09-27):** `series_id` and `story_position` (`calendarRoutes.js:161`, `:163`) "are list filters, not an identifier selecting a row (the same basis as #12)." Recorded beside #12 under "Observed, not ruled" |
 | 4 | `:232` `PUT /events/:id` | Not an instance — condition 2 | **Instance** — for an event with a `source_line_id` | Caller-supplied id; condition 2 now met; returns the event after the update, with fields the caller did not send (`:234–235`) |
 | 5 | `:246` `DELETE /events/:id` | Not an instance — gates the delete; condition 2 also fails | **Not an instance** — gates the delete | Unchanged classification; only the secondary reason falls away (condition 2 is met for sourced events). Note: existence |
 | 7 | `:283` `POST /events/:id/attendees` | Not an instance — gates the insert; condition 2 also fails | **Not an instance** — gates the insert | As #5. Note: existence |
@@ -196,15 +196,15 @@ $ grep -n -E "^\| \*\*(Instances|Not instances|Cannot tell)\*\*" docs/audit/F-St
 
 | | Probe sites (16) | Found by reading (2) | All (18) |
 | --- | --- | --- | --- |
-| **Instances** | **11** — #3, 4, 6, 8, 9, 10, 11, 13, 14, 15, 16 | 0 | **11** |
-| **Not instances** | **5** — #1, 2, 5, 7, 12 | **2** — R1, R2 | **7** |
+| **Instances** | **10** — #4, 6, 8, 9, 10, 11, 13, 14, 15, 16 | 0 | **10** |
+| **Not instances** | **6** — #1, 2, 3, 5, 7, 12 | **2** — R1, R2 | **8** |
 | **Cannot tell** | 0 | 0 | **0** |
 
-Five rows move from not-instance to instance: #3, #4, #9, #13, #16.
+Four rows move from not-instance to instance: #4, #9, #13, #16. #3 stays a not-instance, now on condition 1 (Evoni's reading, §3).
 
 **The survey, as arithmetic only.** v1.61 §64.2 records 36 instances across
-the five slices, of which the calendar slice's 6. Amended: 36 − 6 + 11 =
-**41**.
+the five slices, of which the calendar slice's 6. Amended: 36 − 6 + 10 =
+**40**.
 
 **v1.61's ruling text is unchanged** ("closes on the five filed reads slices
 (36 instances)"). Whether the amended count affects it is for Evoni. The
@@ -218,13 +218,25 @@ met at every site (the slice's §0.1).
 From `F-Stats-1_Fix_Plan_v1.61.md` §64.3: `story_calendar_events` held **0
 rows** in production on 2026-09-27 (Evoni's own read-only query, quoted
 there). **This changes no classification.** The slices classify code, not
-data: the five instances added here are reads the code performs on any event
+data: the four instances added here are reads the code performs on any event
 with a `source_line_id`, whether or not one exists today.
+
+## Observed, not ruled
+
+- **`GET /events` (#3) beside `GET /simultaneous` (#12).** Both return
+  calendar events chosen by list filters rather than by an identifier
+  selecting a row: #12 by a moment in time, #3 by optional `series_id`,
+  `story_position` and other filters, or none. Neither filters by show. With
+  the `sourceLine` path (§2), events with a `source_line_id` reach a show, so
+  both can list events of any show, with each event's stored fields (#3,
+  `:171–176`) or its attendees and their characters (#12, `:433–450`). The
+  slice recorded #12 as "unfiltered by series or show"; #3 is recorded beside
+  it on the same basis. Not an instance under condition 1; recorded only.
 
 ## What this document does not do
 
 - **Edits no filed document.** The calendar slice and v1.61 are unchanged.
-- **Rules nothing.** Whether 41 replaces 36 anywhere is Evoni's. Mints no FD,
+- **Rules nothing of its own.** Row #3's condition-1 reading is Evoni's, quoted. Whether 40 replaces 36 anywhere is Evoni's. Mints no FD,
   XK or PE.
 - Re-reads only the rows in §3; every other row of the slice stands as filed.
 - Introduces no per-row test: §2 uses the slice's own per-table form.
