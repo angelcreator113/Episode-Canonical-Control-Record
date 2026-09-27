@@ -41,21 +41,51 @@ MEASURED. This is the second F-Ward-1 document and its first Fix Plan.
 
 ## §2 Production's `episode_wardrobe`, 2026-09-27 — ATTESTED
 
-Evoni read it in production as `postgres`, read-only, on 2026-09-27. The two parts arrived in different forms.
+Evoni read it in production as `postgres`, read-only, on 2026-09-27. She gave two raw outputs in the review chat: the rows, columns and constraints (§2.1), and the indexes (§2.2).
 
-### §2.1 Rows, columns, constraints — ATTESTED, her summary
+### §2.1 Rows, columns, constraints — ATTESTED, raw output
 
-Her account, in the review chat, as a table. **The raw psql output for these three was not pasted.** The message that would have carried it held the placeholder "[paste your earlier output: the row count, the 16 columns and the 5 constraints, exactly as it printed]". What follows is her summary, verbatim:
+Her output, verbatim, as she pasted it:
 
-> | Part | Production has |
-> |---|---|
-> | **Rows** | 4, all live, all for 1 episode |
-> | **Columns** | 16: `id` (auto uuid), `episode_id`, `wardrobe_id`, `scene`, `worn_at`, `notes`, `created_at` and `updated_at` (default now), `scene_id`, `is_episode_favorite` (default false), `times_worn` (default 1), `approval_status` (default 'pending'), `approved_by`, `approved_at`, `rejection_reason`, `deleted_at` |
-> | **Constraints** | 5: the primary key; unique `(episode_id, wardrobe_id)`; foreign keys to `episodes` (cascade), `wardrobe` (cascade) and `scenes` (set null) |
+```
+ all_rows | live_rows | episodes 
+----------+-----------+----------
+        4 |         4 |        1
+(1 row)
 
-And: "It answers the open question: **`times_worn` defaults to 1**. That's why inserts worked even though the model doesn't declare it."
+     column_name     |        data_type         | is_nullable |        column_default        
+---------------------+--------------------------+-------------+------------------------------
+ id                  | uuid                     | NO          | gen_random_uuid()
+ episode_id          | uuid                     | NO          | 
+ wardrobe_id         | uuid                     | NO          | 
+ scene               | character varying        | YES         | 
+ worn_at             | timestamp with time zone | YES         | 
+ notes               | text                     | YES         | 
+ created_at          | timestamp with time zone | YES         | now()
+ updated_at          | timestamp with time zone | YES         | now()
+ scene_id            | uuid                     | YES         | 
+ is_episode_favorite | boolean                  | NO          | false
+ times_worn          | integer                  | NO          | 1
+ approval_status     | character varying        | YES         | 'pending'::character varying
+ approved_by         | character varying        | YES         | 
+ approved_at         | timestamp with time zone | YES         | 
+ rejection_reason    | text                     | YES         | 
+ deleted_at          | timestamp with time zone | YES         | 
+(16 rows)
 
-**Not in the summary:** each column's type and nullability, and the constraints' exact names and definitions. The ruling's "recreates production's current schema exactly" needs them. They are owed from her raw output before the migration is written (§6, O1a).
+              conname              |                        pg_get_constraintdef                         
+-----------------------------------+---------------------------------------------------------------------
+ episode_wardrobe_episode_id_fkey  | FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
+ episode_wardrobe_pkey             | PRIMARY KEY (id)
+ episode_wardrobe_scene_id_fkey    | FOREIGN KEY (scene_id) REFERENCES scenes(id) ON DELETE SET NULL
+ episode_wardrobe_wardrobe_id_fkey | FOREIGN KEY (wardrobe_id) REFERENCES wardrobe(id) ON DELETE CASCADE
+ unique_episode_wardrobe           | UNIQUE (episode_id, wardrobe_id)
+(5 rows)
+```
+
+In the same chat, before the raw output, she wrote: "It answers the open question: **`times_worn` defaults to 1**. That's why inserts worked even though the model doesn't declare it."
+
+**Observed, not ruled:** the output gives `character varying` without a length. `data_type` does not carry one, so this read does not show the lengths of `scene`, `approval_status` or `approved_by`.
 
 ### §2.2 Indexes — ATTESTED, raw output
 
@@ -104,24 +134,24 @@ $ grep -nE "^      [a-zA-Z_]+: \{" src/models/EpisodeWardrobe.js
 
 `timestamps: true` (`:105`), `createdAt`, `updatedAt` and `deletedAt` mapped to snake_case (`:106–108`), `paranoid: true` (`:109`).
 
-| Column | Model (`src/models/EpisodeWardrobe.js`) | Production (§2.1, ATTESTED) | Difference |
+| Column | Model (`src/models/EpisodeWardrobe.js`) | Production (§2.1, ATTESTED: type, nullable, default) | Difference |
 |---|---|---|---|
-| `id` | UUID, `defaultValue: UUIDV4`, NOT NULL (`:12–16`) | auto uuid | none in kind: the model defaults in the app, production in the database |
-| `episode_id` | UUID, NOT NULL, FK `episodes.id` `ON DELETE CASCADE` (`:18–26`) | FK to `episodes` (cascade) | none |
-| `wardrobe_id` | UUID, NOT NULL, FK `wardrobe.id` `ON DELETE CASCADE` (`:27–35`) | FK to `wardrobe` (cascade) | none |
-| `scene_id` | UUID, NULL, FK `scenes.id` `ON DELETE SET NULL` (`:36–45`) | FK to `scenes` (set null) | none |
-| `scene` | STRING(255), NULL (`:46–50`) | present | type and nullability not in her summary |
-| `worn_at` | DATE, **NOT NULL**, `defaultValue: NOW` (`:51–56`) | present | **nullability unknown for production.** The 2026-09-17 canon capture lists it nullable (YES); the model says NOT NULL. §6, O1a. |
-| `notes` | TEXT, NULL (`:57–61`) | present | none known |
-| `is_episode_favorite` | BOOLEAN, NOT NULL, default `false` (`:66–70`) | default false | none |
-| `approval_status` | STRING(50), NULL, default `'pending'` (`:77–81`) | default 'pending' | none |
-| `approved_by` | STRING(255), NULL (`:83–86`) | present | none known |
-| `approved_at` | DATE, NULL (`:88–91`) | present | none known |
-| `rejection_reason` | TEXT, NULL (`:93–96`) | present | none known |
-| `created_at` | timestamps (`:106`) | default now | none in kind: the model sets it in the app, production defaults it |
-| `updated_at` | timestamps (`:107`) | default now | as above |
-| `deleted_at` | paranoid (`:108–109`) | present | none |
-| `times_worn` | **not declared** | **default 1** | **missing from the model.** The ruling: "The EpisodeWardrobe model gains times_worn to match." |
+| `id` | UUID, `defaultValue: UUIDV4`, NOT NULL (`:12–16`) | uuid, NO, `gen_random_uuid()` | none in kind: the model defaults in the app, production in the database |
+| `episode_id` | UUID, NOT NULL, FK `episodes.id` `ON DELETE CASCADE` (`:18–26`) | uuid, NO; `episode_wardrobe_episode_id_fkey` … `ON DELETE CASCADE` | none |
+| `wardrobe_id` | UUID, NOT NULL, FK `wardrobe.id` `ON DELETE CASCADE` (`:27–35`) | uuid, NO; `episode_wardrobe_wardrobe_id_fkey` … `ON DELETE CASCADE` | none |
+| `scene_id` | UUID, NULL, FK `scenes.id` `ON DELETE SET NULL` (`:36–45`) | uuid, YES; `episode_wardrobe_scene_id_fkey` … `ON DELETE SET NULL` | none |
+| `scene` | STRING(255), NULL (`:46–50`) | character varying, YES | none known (length not in the read) |
+| `worn_at` | DATE, **NOT NULL**, `defaultValue: NOW` (`:51–56`) | timestamp with time zone, **YES**, no default | **Observed, not ruled:** production has `worn_at` nullable (YES); the model has it NOT NULL, with an app-side default. The 2026-09-17 canon capture agrees with production (YES). |
+| `notes` | TEXT, NULL (`:57–61`) | text, YES | none |
+| `is_episode_favorite` | BOOLEAN, NOT NULL, default `false` (`:66–70`) | boolean, NO, `false` | none |
+| `approval_status` | STRING(50), NULL, default `'pending'` (`:77–81`) | character varying, YES, `'pending'::character varying` | none known (length not in the read) |
+| `approved_by` | STRING(255), NULL (`:83–86`) | character varying, YES | none known (length not in the read) |
+| `approved_at` | DATE, NULL (`:88–91`) | timestamp with time zone, YES | none |
+| `rejection_reason` | TEXT, NULL (`:93–96`) | text, YES | none |
+| `created_at` | timestamps (`:106`) | timestamp with time zone, YES, `now()` | the model sets it in the app; production defaults it in the database and allows NULL |
+| `updated_at` | timestamps (`:107`) | timestamp with time zone, YES, `now()` | as above |
+| `deleted_at` | paranoid (`:108–109`) | timestamp with time zone, YES | none |
+| `times_worn` | **not declared** | integer, **NO, 1** | **missing from the model.** The ruling: "The EpisodeWardrobe model gains times_worn to match." |
 
 **Indexes, model against production.** The model declares three (`:114–128`): `unique_episode_wardrobe (episode_id, wardrobe_id)`, `episode_wardrobe_episode_id`, `episode_wardrobe_wardrobe_id`. All three are among production's seven. The model does not declare the other four:
 - `episode_wardrobe_pkey`, which follows from the primary key;
@@ -131,7 +161,7 @@ $ grep -nE "^      [a-zA-Z_]+: \{" src/models/EpisodeWardrobe.js
 
 Nothing runs `sync()` against this table, so the model's list governs no DDL. The ruling's migration must create all seven.
 
-**Constraints.** The unique constraint on `(episode_id, wardrobe_id)` is served by `unique_episode_wardrobe` (§2.2). Deploy AI dropped the other one, `episode_wardrobe_episode_id_wardrobe_id_key`, as a constraint. The three foreign keys match the model's `references` and `onDelete`.
+**Constraints.** Production's five (§2.1): the primary key `episode_wardrobe_pkey`; the unique constraint `unique_episode_wardrobe (episode_id, wardrobe_id)`, which the index of the same name serves (§2.2); and the three foreign keys. Deploy AI dropped the duplicate unique constraint `episode_wardrobe_episode_id_wardrobe_id_key`, which is absent here. The three foreign keys match the model's `references` and `onDelete`.
 
 **The migration tree has no file that creates `episode_wardrobe`.** This is carried from the scoping note §3.1, which measured it at `943b7e65`. Nothing under `src/migrations/` changed between that SHA and this basis:
 
@@ -158,7 +188,7 @@ The Register requires this reference, at `Cross_Keystone_Register.md:190` (XK-1'
 
 **Since then — MEASURED and ATTESTED, not re-ruled.**
 - `EpisodeWardrobe` is now `paranoid: true` with `deletedAt: 'deleted_at'` (`src/models/EpisodeWardrobe.js:108–109`, Task #1924). A deletion attribute now resolves.
-- Production has the `deleted_at` column (ATTESTED, Deploy AG and §2.1). So in production the model's paranoid filter has its column.
+- Production has the `deleted_at` column (ATTESTED: Deploy AG, and §2.1's column list). So in production the model's paranoid filter has its column.
 - On a migration-built database the table does not exist at all (§3). There the failure is a missing relation, not a missing `deleted_at`.
 - XK-1's banner leaves that case open for `outfit_sets` and `outfit_set_items`: "Whether such tables belong in a `paranoid`-exposure finding is unresolved" (`Cross_Keystone_Register.md:142`).
 
@@ -173,7 +203,7 @@ The Register requires this reference, at `Cross_Keystone_Register.md:190` (XK-1'
 **RULED:** the migration "recreates production's current episode_wardrobe schema exactly (16 columns, 5 constraints, 7 indexes, as I read them on 2026-09-27) and changes nothing where the table already exists." The model "gains times_worn to match."
 
 What that sets, read from the ruling's words, not added to it:
-- **Target.** Production as Evoni read it on 2026-09-27: §2.1's 16 columns and 5 constraints, and §2.2's 7 indexes, by name and definition.
+- **Target.** Production as Evoni read it on 2026-09-27: §2.1's 16 columns (type, nullability, default) and 5 constraints, and §2.2's 7 indexes, each by name and definition.
 - **Idempotent where the table exists.** In production, and any database that already has the table, the migration changes nothing.
 - **Model.** `times_worn` declared with production's default, 1.
 
@@ -186,7 +216,6 @@ The existing `episode_wardrobe` migrations already use the "no CREATE TABLE wher
 | # | Item | Source | Standing |
 |---|---|---|---|
 | O1 | **The migration**: a live migration that creates `episode_wardrobe` exactly as production has it, and changes nothing where it exists | RULED (§1); Decision #59 (`Prime_Studios_Audit_Handoff_v8.md:2289–2290`) | **Owed now; F-Ward-1's first step.** |
-| O1a | The raw production output for columns (type, nullability, default) and constraints (names, definitions). It is needed to recreate them "exactly", including `worn_at`'s nullability (§3). | §2.1: the summary lacks them; the raw output was not pasted | **Owed from Evoni, before O1 is written.** Read-only; a query is at `F-Ward-1_Scoping_2026-09-27.md` §4, Q2 and Q3. |
 | O2 | `EpisodeWardrobe` gains `times_worn` (production default 1) | RULED (§1); §3 | **Owed now**, with O1 or alongside it. |
 | O3 | `outfit_sets`, `outfit_set_items`, `episode_outfits`, `episode_outfit_items`: no creating migrations | RULED (§1): "owed to F-Ward-3"; scoping note §3.3 | **Owed to F-Ward-3.** Recorded here; F-Ward-3 has no document yet. |
 | O4 | `wardrobe_library`, `wardrobe_library_references`, `wardrobe_usage_history`: no creating migrations | RULED (§1): "owed with no home yet"; scoping note §3.3 | **Owed, unhomed.** |
@@ -214,7 +243,8 @@ The existing `episode_wardrobe` migrations already use the "no CREATE TABLE wher
 
 - **RULES** (§1, Evoni): F-Ward-1's scope (the `episode_wardrobe` migration gap only); where the seven other tables go; the migration's target (production as read on 2026-09-27) and behaviour; `times_worn` on the model.
 - **Opens:** the F-Ward-1 Fix Plan series (v1.0).
-- **Owes, new:** O1 (the migration), O1a (the raw schema output), O2 (`times_worn`), O3 (to F-Ward-3), O4 (unhomed).
+- **Owes, new:** O1 (the migration), O2 (`times_worn`), O3 (to F-Ward-3), O4 (unhomed).
+- **Records, observed, not ruled:** production's `worn_at` is nullable (YES) while the model has it NOT NULL (§3).
 - **Mints:** nothing. FD, XK and PE tails are unchanged.
 - FD-21 check: no closing keywords adjacent to `#N`.
 - Ships WITH `[skip-automerge]` (doc-only PR).
@@ -227,4 +257,4 @@ F-Ward-1 began as one sentence in the v8 handoff: a table the wardrobe game writ
 
 *Author: Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni.*
 *Date: 2026-09-27. Basis: `origin/main` at `3188fe5325dac91dc3cf48a5febaddd068876417`. Scoping: `F-Ward-1_Scoping_2026-09-27.md`.*
-*Ruled (Evoni): F-Ward-1's scope and first step. Owed: O1, O1a, O2, O3 (F-Ward-3), O4 (unhomed). References XK-1 and its inventory. Mints nothing. Task: #2084. [skip-automerge]*
+*Ruled (Evoni): F-Ward-1's scope and first step. Owed: O1, O2, O3 (F-Ward-3), O4 (unhomed). References XK-1 and its inventory. Mints nothing. Task: #2084. [skip-automerge]*
