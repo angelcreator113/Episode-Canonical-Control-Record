@@ -1,0 +1,131 @@
+/* PhoneSetupGuide (Task #2053): the Phone Hub's setup guide. Every line and
+   button truncates on one row, so the guide fits at 375px without sideways
+   scroll. */
+
+.phone-setup-guide {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--lala-parchment, #FAF7F0);
+  border: 1px solid rgba(184, 150, 46, 0.35);
+  border-radius: 10px;
+  font-family: 'DM Mono', monospace;
+  color: var(--lala-ink, #2C2C2C);
+}
+
+.phone-setup-guide__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.phone-setup-guide__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.phone-setup-guide__title {
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  font-weight: 700;
+  flex: none;
+}
+
+.phone-setup-guide__summary {
+  font-size: 11px;
+  color: #7a7263;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-setup-guide__chevron {
+  flex: none;
+  transition: transform 0.15s ease;
+}
+
+.phone-setup-guide--collapsed .phone-setup-guide__chevron {
+  transform: rotate(-90deg);
+}
+
+.phone-setup-guide__continue {
+  flex: none;
+  max-width: 100%;
+  padding: 5px 10px;
+  background: var(--lala-gold, #B8962E);
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-setup-guide__lines {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.phone-setup-guide__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.phone-setup-guide__mark {
+  flex: none;
+  width: 12px;
+  text-align: center;
+}
+
+.phone-setup-guide__line--done .phone-setup-guide__mark { color: #5a8f3b; }
+.phone-setup-guide__line--todo .phone-setup-guide__mark { color: #B84D2E; }
+.phone-setup-guide__line--empty .phone-setup-guide__mark,
+.phone-setup-guide__line--info .phone-setup-guide__mark { color: #A09889; }
+
+.phone-setup-guide__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-setup-guide__text strong {
+  font-weight: 600;
+}
+
+.phone-setup-guide__run {
+  flex: none;
+  padding: 1px 8px;
+  background: none;
+  border: 1px solid rgba(184, 150, 46, 0.6);
+  border-radius: 5px;
+  color: var(--lala-gold, #B8962E);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
