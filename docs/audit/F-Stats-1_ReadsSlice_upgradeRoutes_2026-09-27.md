@@ -520,11 +520,13 @@ error message (`:143-145`) instead of a brief. That the live databases lack
 the column is **INFERRED** from the migration tree; this session contacted no
 database.
 
-**ATTESTED for one database (Evoni, 2026-09-27, pasted in the review chat).**
-Evoni ran this on the EC2 host, from its `episode-metadata` checkout, against
-the database its `.env` names (`DB_HOST`, `DB_PORT`, `DB_NAME`; user
-`postgres`; SSL required). The paste does not say which environment that is,
-and the host and credentials are not recorded here:
+**ATTESTED for production (Evoni, 2026-09-27, pasted in the review chat).**
+Evoni ran this on the production EC2 host, from its `episode-metadata`
+checkout, against the database its `.env` names (`DB_HOST`, `DB_PORT`,
+`DB_NAME`; user `postgres`; SSL required). Evoni attests that this is
+production: the populated database the live app uses, confirmed earlier the
+same day by the `DB_HOST` match with the running process and by its data. The
+host and credentials are not recorded here:
 
 ```
 $ psql -W -c "SELECT column_name FROM information_schema.columns WHERE table_name = 'storyteller_stories' AND column_name = 'book_id';"
@@ -534,8 +536,8 @@ Password:
 (0 rows)
 ```
 
-So in that database the column is absent, and `:57` fails whenever it runs.
-Any other database stays INFERRED.
+So in production the column is absent, and `:57` fails whenever it runs. Any
+other database (dev, a fork) stays INFERRED.
 
 ## §3. The sites — one row each
 
@@ -545,7 +547,7 @@ Paths are relative to `/api/v1`. "Scope" answers condition 3 (never met;
 | # | Site | Handler | Reads | Id source | Scope | Returns (condition 4) | Auth | Classification — reason |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `:48` | `POST /session/brief` (`:43`) | `FranchiseTechKnowledge`, every active entry | none (fixed filter) | none | the entries' titles and content go into the model prompt (`:93`); the brief is model output (`:131`, `:140`) | `requireAuth`, `aiRateLimiter` | **Not an instance** — conditions 1 and 2 |
-| 2 | `:56` | as #1 | `StorytellerBook` by pk | `req.body.book_id` (`:44`) | none | the book's `current_arc_stage` and `arc_stage_scores` (`:67-68`) go into `storySnapshot`, which goes into the prompt (`:96`); the returned `brief_text` is model output from it (`:131`, `:140`). The snapshot is also stored in the new `session_briefs` row (`:137`), which `GET /session/brief/latest` returns whole to any signed-in caller (#5) | `requireAuth`, `aiRateLimiter` | **Instance** — a show-partitioned book chosen by a caller-supplied id, with no tenant check; values derived from it reach the response (that the brief text reflects them is INFERRED: model output). **Latent at this basis:** whenever `book_id` is sent, `:57` fails first and the handler answers 500 (§2: ATTESTED for the database Evoni checked, INFERRED for any other), so the response carries nothing yet. The rule is applied to the code, not to database state |
+| 2 | `:56` | as #1 | `StorytellerBook` by pk | `req.body.book_id` (`:44`) | none | the book's `current_arc_stage` and `arc_stage_scores` (`:67-68`) go into `storySnapshot`, which goes into the prompt (`:96`); the returned `brief_text` is model output from it (`:131`, `:140`). The snapshot is also stored in the new `session_briefs` row (`:137`), which `GET /session/brief/latest` returns whole to any signed-in caller (#5) | `requireAuth`, `aiRateLimiter` | **Instance** — a show-partitioned book chosen by a caller-supplied id, with no tenant check; values derived from it reach the response (that the brief text reflects them is INFERRED: model output). **Latent at this basis:** whenever `book_id` is sent, `:57` fails first and the handler answers 500 (§2: ATTESTED for production, INFERRED for any other database), so the response carries nothing yet. The rule is applied to the code, not to database state |
 | 3 | `:57` | as #1 | `StorytellerStory` where `book_id` and a status | `req.body.book_id` (`:44`) | none | five stories' `scene_type`, `tone_dial`, `status` and the first 80 characters of `scene_brief`, into the prompt and the stored snapshot (`:69-74`) | as #1 | **Not an instance** — condition 2 (`storyteller_stories` carries no show). The filter names a column the model and migrations lack (§2) |
 | 4 | `:62` | as #1 | `CharacterGrowthLog`, five unreviewed contradiction flags | none (fixed filter) | none | a count only (`:75`), into the prompt and the stored snapshot | as #1 | **Not an instance** — condition 1. `character_growth_log` carries a show through its character (§0.2), but no caller value chooses the rows |
 | 5 | `:152` | `GET /session/brief/latest` (`:149`) | `SessionBrief`, the newest | none | none | the whole brief, including `story_snapshot` and `pending_builds` (`:155`); the handler also writes `used_at` (`:154`) | `requireAuth` | **Not an instance** — conditions 1 and 2 (`session_briefs` carries no show). Note: it returns whichever brief is newest, including a book's arc stage and scores copied into it by #2 (see "Observed, not ruled") |
@@ -601,8 +603,8 @@ No site calls a helper outside this file. **Cannot tell:** none.
 
 The one instance is `:56`, the only read of a table that carries a show
 directly, chosen by a caller-supplied id. It is latent at this basis: the
-read after it (`:57`) fails whenever it runs: ATTESTED for the database
-Evoni checked, INFERRED for any other (§2).
+read after it (`:57`) fails whenever it runs: ATTESTED for production,
+INFERRED for any other database (§2).
 Of the fifteen not instances, one reads a show-carrying table with no
 caller-chosen rows (#4), one only gates (#8), and the rest read tables with no
 show.
@@ -667,8 +669,8 @@ c245c2f4:src/routes/storyEvaluationRoutes.js:1601:    story.written_back_chapter
 - Does not check whether the routers mounted at `/api/v1` collide with each
   other beyond this file's paths.
 - Does not measure any database: this session contacted none. Whether
-  `storyteller_stories.book_id` exists is ATTESTED for the one database Evoni
-  checked (§2) and INFERRED from the migration tree for any other.
+  `storyteller_stories.book_id` exists is ATTESTED for production (Evoni's
+  query, §2) and INFERRED from the migration tree for any other database.
 - Does not edit any filed document.
 - No live database contact. No prod-box or dev-box contact. No AWS, Cognito or
   GitHub-settings contact.
