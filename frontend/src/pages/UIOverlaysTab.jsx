@@ -29,6 +29,12 @@ import './UIOverlaysTab.css';
 // Browser-only skin key from before Task #1964; read once for the carry-over.
 const LEGACY_SKIN_KEY = 'phone_hub_skin';
 
+// A failed background removal, in plain words (Task #2024).
+function bgFailureReason(err) {
+  if (err?.response?.status === 503) return "Background removal isn't set up on this server";
+  return err?.response?.data?.error || err?.message || 'Background removal failed';
+}
+
 class OverlayErrorBoundary extends Component {
   state = { hasError: false, error: null };
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -170,7 +176,11 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   const saveZoneDrafts = () => {
     if (linkEditorRef.current?.isDirty?.()) linkEditorRef.current.save();
   };
-  const [removingBg, setRemovingBg] = useState(false);  // loading state for Remove BG
+  // Background removal this session, by overlay id: { state: 'removing' } or
+  // { state: 'failed', reason }. Original / Removed come from bg_removed
+  // (Task #2024); nothing here is stored.
+  const [bgAttempts, setBgAttempts] = useState({});
+  const [contentAreaPick, setContentAreaPick] = useState(false);  // "+ Add" ▸ Content Area
 
   // Keep activeScreenRef in sync with activeScreen state
   useEffect(() => { activeScreenRef.current = activeScreen; }, [activeScreen]);
@@ -624,19 +634,39 @@ export default function UIOverlaysTab({ showId: propShowId }) {
   };
 
   // Remove background
+  // The message says what happened only once the refetch shows it: an icon
+  // reads Removed when bg_removed is true, and Failed, with the reason,
+  // otherwise (Task #2024, I3).
   const handleRemoveBg = async () => {
-    if (!activeScreen?.asset_id || removingBg) return;
-    setRemovingBg(true);
+    const target = activeScreen;
+    if (!target?.asset_id || bgAttempts[target.id]?.state === 'removing') return;
+    const setAttempt = (attempt) => setBgAttempts(prev => {
+      const next = { ...prev };
+      if (attempt) next[target.id] = attempt; else delete next[target.id];
+      return next;
+    });
+    setAttempt({ state: 'removing' });
     try {
-      await api.post(`/api/v1/ui-overlays/${showId}/remove-bg/${activeScreen.asset_id}`);
-      flash('Background removed!');
+      await api.post(`/api/v1/ui-overlays/${showId}/remove-bg/${target.asset_id}`);
       const res = await api.get(`/api/v1/ui-overlays/${showId}`);
       const all = res.data?.data || [];
       setOverlays(all);
-      const updated = all.find(o => o.id === activeScreen.id);
-      if (updated) setActiveScreen(updated);
-    } catch (err) { flash(err.response?.data?.error || err.message, 'error'); }
-    setRemovingBg(false);
+      const updated = all.find(o => o.id === target.id);
+      if (updated) setActiveScreen(prev => (prev?.id === target.id ? updated : prev));
+      if (updated?.bg_removed) {
+        setAttempt(null);
+        flash('Background removed');
+      } else {
+        const reason = "The server didn't report the background as removed";
+        setAttempt({ state: 'failed', reason });
+        flash(reason, 'error');
+      }
+    } catch (err) {
+      console.warn('[handleRemoveBg] failed', err);
+      const reason = bgFailureReason(err);
+      setAttempt({ state: 'failed', reason });
+      flash(reason, 'error');
+    }
   };
 
   // Delete screen + clean up any links pointing to it from other screens
@@ -710,7 +740,6 @@ export default function UIOverlaysTab({ showId: propShowId }) {
     // the existing list, then upload — but only if the existing type's category
     // matches what the creator just asked for, otherwise we'd silently upload
     // a new Icon's image to an existing Screen (or vice versa).
-    const deriveTypeKey = (name) => (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
     const categoryMatches = (existing, target) => {
       const existingIsIcon = existing?.category === 'phone_icon' || existing?.category === 'icon';
       const targetIsIcon = target === 'phone_icon' || target === 'icon';
@@ -1260,14 +1289,39 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
             </button>
             {/* The header Preview button was removed (Task #2016): the Preview
                 stage plays the phone inside the page. */}
-            {/* Flow Map + Export move into a "More" menu — used less often. */}
-            <ToolbarMenu label="More" disabled={!generatedCount}>
+            {/* Flow Map, Export, Batch Upload and the phone frame sit in "More":
+                used less often ("+ Add" only asks what you're adding, Task #2024). */}
+            <ToolbarMenu label="More">
               <button onClick={() => setShowFlowMap(true)} disabled={!generatedCount}>
                 <GitBranch size={13} /> Flow Map
               </button>
               <button onClick={handleExportContactSheet} disabled={!generatedCount}>
                 <Download size={13} /> Export contact sheet
               </button>
+              <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId}>
+                <Upload size={13} /> {batchUploading ? 'Uploading...' : 'Batch Upload'}
+              </button>
+              <button onClick={() => frameInputRef.current?.click()}>
+                <Monitor size={13} /> {customFrameUrl ? 'Change Frame' : 'Upload Frame'}
+              </button>
+              {customFrameUrl && (
+                <button
+                  onClick={async () => {
+                    if (!confirm('Remove custom phone frame?')) return;
+                    frameRemovedRef.current = true;
+                    setCustomFrameUrl(null);
+                    flash('Using built-in frame');
+                    if (showId) {
+                      try { await api.delete(`/api/v1/ui-overlays/${showId}/frame`); } catch (err) {
+                        console.warn('[PhoneHub] Failed to delete frame:', err.message);
+                      }
+                    }
+                  }}
+                  style={{ color: '#dc2626' }}
+                >
+                  <X size={13} /> Remove Frame
+                </button>
+              )}
             </ToolbarMenu>
           </div>
         </div>
@@ -1286,40 +1340,24 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
           </div>
         )}
 
-        {/* Action buttons row — creation actions collapse into a "+ Add"
-            dropdown. */}
+        {/* "+ Add" asks one question: a Screen, an Icon or a Content Area
+            (doctrine rule 18, Task #2024). Batch Upload and the phone frame
+            live in the header's "More" menu. */}
         <div className="overlays-toolbar">
-          <ToolbarMenu label="Add" icon={<span style={{ fontWeight: 700, marginRight: 2 }}>+</span>} disabled={!showId && batchUploading}>
-            <button onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId}>
-              + New Screen
+          <ToolbarMenu label="Add" icon={<span style={{ fontWeight: 700, marginRight: 2 }}>+</span>} disabled={!showId}>
+            <div className="overlays-add-chooser__title" role="presentation">What are you adding?</div>
+            <button className="overlays-add-chooser__option" onClick={() => { setCreateMode('phone'); setShowCreateModal(true); }} disabled={!showId}>
+              <span className="overlays-add-chooser__label">Screen</span>{' '}
+              <span className="overlays-add-chooser__desc">A page of the phone, like a feed, a chat or settings</span>
             </button>
-            <button onClick={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }} disabled={!showId}>
-              + New Icon
+            <button className="overlays-add-chooser__option" onClick={() => { setCreateMode('phone_icon'); setShowCreateModal(true); }} disabled={!showId}>
+              <span className="overlays-add-chooser__label">Icon</span>{' '}
+              <span className="overlays-add-chooser__desc">An app icon you place on a screen to open another</span>
             </button>
-            <button onClick={() => batchInputRef.current?.click()} disabled={batchUploading || !showId}>
-              <Upload size={13} /> {batchUploading ? 'Uploading...' : 'Batch Upload'}
+            <button className="overlays-add-chooser__option" onClick={() => setContentAreaPick(true)} disabled={!showId}>
+              <span className="overlays-add-chooser__label">Content Area</span>{' '}
+              <span className="overlays-add-chooser__desc">A part of a screen whose content changes per episode</span>
             </button>
-            <button onClick={() => frameInputRef.current?.click()}>
-              <Monitor size={13} /> {customFrameUrl ? 'Change Frame' : 'Upload Frame'}
-            </button>
-            {customFrameUrl && (
-              <button
-                onClick={async () => {
-                  if (!confirm('Remove custom phone frame?')) return;
-                  frameRemovedRef.current = true;
-                  setCustomFrameUrl(null);
-                  flash('Using built-in frame');
-                  if (showId) {
-                    try { await api.delete(`/api/v1/ui-overlays/${showId}/frame`); } catch (err) {
-                      console.warn('[PhoneHub] Failed to delete frame:', err.message);
-                    }
-                  }
-                }}
-                style={{ color: '#dc2626' }}
-              >
-                <X size={13} /> Remove Frame
-              </button>
-            )}
           </ToolbarMenu>
           <input ref={batchInputRef} type="file" accept="image/*" multiple onChange={handleBatchUpload} style={{ display: 'none' }} />
           <input ref={frameInputRef} type="file" accept="image/*" onChange={handleFrameUpload} style={{ display: 'none' }} />
@@ -2312,7 +2350,10 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                   {!activeScreen.placeholder && (activeScreen.url || activeScreen.asset_id) && (
                     <div className="editor-secondary-actions">
                       {activeScreen.url && <ActionBtn icon={Download} label="Download" onClick={handleDownload} color="#6bba9a" />}
-                      {activeScreen.asset_id && <ActionBtn icon={removingBg ? Loader : Eraser} label={removingBg ? 'Removing...' : 'Remove BG'} onClick={handleRemoveBg} disabled={removingBg} color="#6B6557" />}
+                      {activeScreen.asset_id && (() => {
+                        const removing = bgAttempts[activeScreen.id]?.state === 'removing';
+                        return <ActionBtn icon={removing ? Loader : Eraser} label={removing ? 'Removing…' : 'Remove BG'} onClick={handleRemoveBg} disabled={removing} color="#6B6557" />;
+                      })()}
                       {activeScreen.url && overlays.filter(o => o.id !== activeScreen.id && o.generated).length > 0 && (
                         <DuplicateSettingsBtn
                           screens={overlays.filter(o => o.id !== activeScreen.id && o.generated)}
@@ -2321,6 +2362,29 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
                       )}
                     </div>
                   )}
+
+                  {/* An icon's background, truthfully: Original, Removing…,
+                      Removed or Failed with Retry (Task #2024, I3). Screens
+                      keep their backgrounds and show no state. */}
+                  {isIcon(activeScreen) && activeScreen.asset_id && (() => {
+                    const attempt = bgAttempts[activeScreen.id];
+                    const state = attempt?.state === 'removing' ? 'removing'
+                      : attempt?.state === 'failed' ? 'failed'
+                        : activeScreen.bg_removed ? 'removed' : 'original';
+                    const words = { original: 'Original', removing: 'Removing…', removed: 'Removed', failed: 'Failed' };
+                    return (
+                      <div className={`editor-bg-state editor-bg-state--${state}`} data-testid="bg-state" role="status">
+                        <span className="editor-bg-state__label">Background:</span>{' '}
+                        <strong>{words[state]}</strong>
+                        {state === 'failed' && (
+                          <>
+                            <span className="editor-bg-state__reason"> — {attempt.reason}</span>
+                            <button type="button" className="editor-bg-state__retry" onClick={handleRemoveBg}>Retry</button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Danger Zone — destructive actions isolated at the bottom with a
                       visible boundary so Delete isn't a one-tap mistake next to Download. */}
@@ -2534,6 +2598,29 @@ ${generated.map(s => { const esc = (str) => String(str || '').replace(/&/g,'&amp
         />
       )}
 
+      {/* "+ Add" ▸ Content Area: pick the screen, then draw it in Content
+          (Task #2024). */}
+      {contentAreaPick && (
+        <ContentAreaPickModal
+          screens={overlays.filter(o => o.generated && o.url && isScreen(o))}
+          currentId={activeScreen?.id}
+          onClose={() => setContentAreaPick(false)}
+          onPick={(target) => {
+            saveZoneDrafts();
+            setContentAreaPick(false);
+            setPanelOpen(false);
+            setActiveScreen(target);
+            setNavHistory([]);
+            setActiveTab('content');
+          }}
+          onAddScreen={() => {
+            setContentAreaPick(false);
+            setCreateMode('phone');
+            setShowCreateModal(true);
+          }}
+        />
+      )}
+
     </div>
   );
 }
@@ -2723,6 +2810,43 @@ function DuplicateSettingsBtn({ screens, onDuplicate }) {
   );
 }
 
+// "+ Add" ▸ Content Area (Task #2024): a content area is drawn on a screen,
+// so this asks which one, starting from the phone's current screen, then
+// opens the Content stage there. With no screen to draw on, it offers Screen.
+function ContentAreaPickModal({ screens, currentId, onClose, onPick, onAddScreen }) {
+  const [pickedId, setPickedId] = useState(() => (
+    screens.some(s => s.id === currentId) ? currentId : (screens[0]?.id || '')
+  ));
+  const picked = screens.find(s => s.id === pickedId);
+  return (
+    <div className="overlays-modal-backdrop" onClick={onClose}>
+      <div className="overlays-modal" role="dialog" aria-label="Add a content area" onClick={e => e.stopPropagation()}>
+        <div className="overlays-modal__header">
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>New Content Area</h3>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 8, minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
+        </div>
+        <div className="overlays-modal__body">
+          {screens.length === 0 ? (
+            <div className="overlays-content-pick">
+              <p className="overlays-content-pick__note">A content area is drawn on a screen, and no screen has an image yet. Add a screen first.</p>
+              <button type="button" className="overlays-modal__submit" onClick={onAddScreen}>Add a Screen</button>
+            </div>
+          ) : (
+            <div className="overlays-content-pick">
+              <label htmlFor="content-area-screen" className="overlays-content-pick__label">Which screen is it on?</label>
+              <select id="content-area-screen" value={pickedId} onChange={e => setPickedId(e.target.value)} className="overlays-modal__field" style={{ cursor: 'pointer' }}>
+                {screens.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <p className="overlays-content-pick__note">Content opens on this screen. Draw the area where the content goes.</p>
+              <button type="button" className="overlays-modal__submit" onClick={() => picked && onPick(picked)} disabled={!picked}>Draw it in Content</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existingScreens = [] }) {
   const [form, setForm] = useState({ name: '', beat: '', description: '', prompt: '', opens_screen: '' });
   // Optional details (beat / description / generation prompt) collapsed by
@@ -2800,6 +2924,13 @@ function CreateScreenModal({ onClose, onCreate, isIcon = false, showId, existing
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#888', marginBottom: 4, display: 'block' }}>{isIcon ? 'Icon Name' : 'Screen Name'}</label>
               <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder={isIcon ? 'e.g., Social Feed Icon, Camera Icon' : 'e.g., Feed View, DM Conversation'} className="overlays-modal__field" />
+              {/* The key is set from the name now and never changes; a
+                  rename later changes only the name (Task #2024). */}
+              {deriveTypeKey(form.name) && (
+                <div className="overlays-modal__key" data-testid="create-key">
+                  Key: <code>{deriveTypeKey(form.name)}</code> — can't be changed later
+                </div>
+              )}
             </div>
 
             {/* Inline image upload — lets creators attach their own image right
