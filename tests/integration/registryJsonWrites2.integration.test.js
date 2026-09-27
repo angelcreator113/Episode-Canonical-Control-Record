@@ -21,13 +21,6 @@ jest.unmock('uuid');
  *
  * Each describe pins the saved state, and a concurrent write made while the
  * handler is working must survive.
- *
- * Test-only fixture, as in registryJsonWrites.integration.test.js: the
- * RegistryCharacter model declares a `world` column (ENUM 'book-1',
- * 'lalaverse', 'series-2') that production has (the 2026-09-17 canon capture)
- * but no migration creates yet (owed to F-Reg-2, Evoni's ruling recorded on
- * Task #2101). beforeAll adds it only when missing; afterAll removes only what
- * beforeAll added.
  */
 const mockCreate = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: mockCreate } })));
@@ -77,22 +70,7 @@ async function column(ids, name) {
   let token;
   const seeded = [];
   const auth = () => `Bearer ${token}`;
-  let addedWorld = false;
-  let addedWorldType = false;
-
   beforeAll(async () => {
-    const [col] = await q(`SELECT 1 AS present FROM information_schema.columns
-                           WHERE table_schema = 'public' AND table_name = 'registry_characters' AND column_name = 'world'`);
-    if (!col) {
-      const [type] = await q(`SELECT 1 AS present FROM pg_type WHERE typname = 'enum_registry_characters_world'`);
-      if (!type) {
-        await run(`CREATE TYPE enum_registry_characters_world AS ENUM ('book-1', 'lalaverse', 'series-2')`);
-        addedWorldType = true;
-      }
-      await run(`ALTER TABLE registry_characters ADD COLUMN world enum_registry_characters_world`);
-      addedWorld = true;
-    }
-
     token = TokenService.generateTokenPair({
       id: 'test-user-registry-json-2',
       email: 'test@registry-json-2.dev',
@@ -108,8 +86,6 @@ async function column(ids, name) {
 
   afterAll(async () => {
     for (const ids of seeded) await run(`DELETE FROM character_registries WHERE id = :registry`, ids);
-    if (addedWorld) await run(`ALTER TABLE registry_characters DROP COLUMN world`);
-    if (addedWorldType) await run(`DROP TYPE enum_registry_characters_world`);
   });
 
   describe('POST /characters/:id/deep-profile/accept', () => {

@@ -17,14 +17,12 @@ jest.unmock('uuid');
  * character in that registry, and writes nothing for a key when the story's
  * registry cannot be resolved.
  *
- * Test-only fixtures, as in registryJsonWrites.integration.test.js: columns
- * that a model declares and production has (the 2026-09-17 canon capture) but
- * no migration creates, so a migration-built database fails to load the model.
- * Each is added for this file's run only, when missing, and removed after:
- *   - registry_characters.world (owed to F-Reg-2, Task #2101);
- *   - storyteller_chapters.sections (jsonb) and chapter_template
- *     (varchar(100)), which StorytellerChapter declares and the write-back
- *     loads; not yet homed.
+ * Test-only fixture: storyteller_chapters.sections (jsonb) and
+ * chapter_template (varchar(100)), which StorytellerChapter declares and
+ * production has (the 2026-09-17 canon capture) but no migration creates, so a
+ * migration-built database fails to load the chapter the write-back reads.
+ * Each is added for this file's run only, when missing, and removed after.
+ * Owed, with no home yet (F-Reg-2_Fix_Plan_v1.1.md §1, ruling 2).
  */
 const mockCreate = jest.fn();
 jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messages: { create: mockCreate } })));
@@ -85,22 +83,9 @@ async function cleanup(ids) {
   let token;
   const seeded = [];
   const auth = () => `Bearer ${token}`;
-  let addedWorld = false;
-  let addedWorldType = false;
   const addedChapterColumns = [];
 
   beforeAll(async () => {
-    const [col] = await q(`SELECT 1 AS present FROM information_schema.columns
-                           WHERE table_schema = 'public' AND table_name = 'registry_characters' AND column_name = 'world'`);
-    if (!col) {
-      const [type] = await q(`SELECT 1 AS present FROM pg_type WHERE typname = 'enum_registry_characters_world'`);
-      if (!type) {
-        await run(`CREATE TYPE enum_registry_characters_world AS ENUM ('book-1', 'lalaverse', 'series-2')`);
-        addedWorldType = true;
-      }
-      await run(`ALTER TABLE registry_characters ADD COLUMN world enum_registry_characters_world`);
-      addedWorld = true;
-    }
     for (const [name, type] of [['sections', 'jsonb'], ['chapter_template', 'character varying(100)']]) {
       const [present] = await q(`SELECT 1 AS present FROM information_schema.columns
                                  WHERE table_schema = 'public' AND table_name = 'storyteller_chapters' AND column_name = :name`, { name });
@@ -121,8 +106,6 @@ async function cleanup(ids) {
 
   afterAll(async () => {
     for (const ids of seeded) await cleanup(ids);
-    if (addedWorld) await run(`ALTER TABLE registry_characters DROP COLUMN world`);
-    if (addedWorldType) await run(`DROP TYPE enum_registry_characters_world`);
     for (const name of addedChapterColumns) await run(`ALTER TABLE storyteller_chapters DROP COLUMN ${name}`);
   });
 
