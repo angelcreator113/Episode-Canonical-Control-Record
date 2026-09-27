@@ -1832,41 +1832,43 @@ router.post('/world/characters/bulk-re-sync', requireAuth, async (req, res) => {
 });
 
 // DELETE /world/characters/:id
+// All-or-nothing (F-Stats-1 v1.62 §65.6-F, Task #2070): every statement runs in
+// one transaction, so a failure part-way rolls the whole delete back instead of
+// leaving a half-deleted character. Nothing is caught inside it: in Postgres the
+// first error aborts the transaction, so catch-and-continue cannot work there.
+// character_relationships_extended exists in canon but no migration or model in
+// this repo creates it, so its delete runs only where the table exists.
 router.delete('/world/characters/:id', requireAuth, async (req, res) => {
   try {
-    // Remove linked relationship rows (via registry_characters)
-    const [rc] = await Q(req,
-      `SELECT id FROM registry_characters WHERE world_character_id = :id`,
-      { replacements: { id: req.params.id } }
-    ).catch(() => []);
-    if (rc) {
-      await sequelize.query(
-        `DELETE FROM character_relationships WHERE character_id_a = :rcId OR character_id_b = :rcId`,
-        { replacements: { rcId: rc.id }, type: sequelize.QueryTypes.DELETE }
-      ).catch(e => console.warn('[world-studio] delete character relationships error:', e?.message));
-    }
-    // Remove linked registry character
-    await sequelize.query(
-      `DELETE FROM registry_characters WHERE world_character_id = :id`,
-      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
-    ).catch(e => console.warn('[world-studio] delete registry character error:', e?.message));
-    // Remove linked scenes
-    await sequelize.query(
-      `DELETE FROM intimate_scenes WHERE character_a_id = :id OR character_b_id = :id`,
-      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
-    ).catch(e => console.warn('[world-studio] delete intimate scenes error:', e?.message));
-    // Remove extended relationships
-    await sequelize.query(
-      `DELETE FROM character_relationships_extended WHERE character_id = :id OR related_character_id = :id`,
-      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
-    ).catch(e => console.warn('[world-studio] delete extended relationships error:', e?.message));
-    // Delete the character
-    await sequelize.query(
-      `DELETE FROM world_characters WHERE id = :id`,
-      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
-    );
+    await sequelize.transaction(async (transaction) => {
+      const del = (sql, replacements) =>
+        sequelize.query(sql, { replacements, type: sequelize.QueryTypes.DELETE, transaction });
+      // Remove linked relationship rows (via registry_characters)
+      const [rc] = await Q(req,
+        `SELECT id FROM registry_characters WHERE world_character_id = :id`,
+        { replacements: { id: req.params.id }, transaction }
+      );
+      if (rc) {
+        await del(`DELETE FROM character_relationships WHERE character_id_a = :rcId OR character_id_b = :rcId`, { rcId: rc.id });
+      }
+      // Remove linked registry character
+      await del(`DELETE FROM registry_characters WHERE world_character_id = :id`, { id: req.params.id });
+      // Remove linked scenes
+      await del(`DELETE FROM intimate_scenes WHERE character_a_id = :id OR character_b_id = :id`, { id: req.params.id });
+      // Remove extended relationships, where that table exists
+      const [ext] = await Q(req, 'SELECT to_regclass(:name) AS t',
+        { replacements: { name: 'character_relationships_extended' }, transaction });
+      if (ext && ext.t) {
+        await del(`DELETE FROM character_relationships_extended WHERE character_id = :id OR related_character_id = :id`, { id: req.params.id });
+      }
+      // Delete the character
+      await del(`DELETE FROM world_characters WHERE id = :id`, { id: req.params.id });
+    });
     res.json({ deleted: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[world-studio] delete character failed; rolled back:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /world/seed-relationships — manually seed relationship candidates for all active world characters

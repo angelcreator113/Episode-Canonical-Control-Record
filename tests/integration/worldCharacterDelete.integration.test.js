@@ -13,6 +13,10 @@ jest.unmock('uuid');
  *
  * `character_relationships_extended` has no migration or model in this repo,
  * so a database built by the migration tree (this one) does not have it.
+ *
+ * Added with the fix: a failure part-way rolls the whole delete back (a
+ * test-only trigger makes the third delete, intimate_scenes, raise), and the
+ * extended-relationships delete runs only where that table exists.
  */
 const request = require('supertest');
 const crypto = require('crypto');
@@ -32,7 +36,7 @@ const count = async (sql, replacements) => Number((await q(sql, replacements))[0
 
 // One world character with a linked registry character, a relationship to a
 // second (unlinked) registry character, and an intimate scene.
-async function seedCharacter() {
+async function seedCharacter(sceneType = 'test') {
   const ids = { world: uuid(), registry: uuid(), rc: uuid(), partner: uuid(), rel: uuid(), scene: uuid() };
   await run(`INSERT INTO character_registries (id, title, created_at, updated_at) VALUES (:registry, 'Delete test registry', NOW(), NOW())`, ids);
   await run(`INSERT INTO world_characters (id, name, character_type) VALUES (:world, 'Delete Test Character', 'test')`, ids);
@@ -41,7 +45,7 @@ async function seedCharacter() {
                     (:partner, :registry, :partnerKey, 'Partner', NULL, NOW(), NOW())`,
     { ...ids, rcKey: `del-test-${ids.rc.slice(0, 8)}`, partnerKey: `del-partner-${ids.partner.slice(0, 8)}` });
   await run(`INSERT INTO character_relationships (id, character_id_a, character_id_b, relationship_type) VALUES (:rel, :rc, :partner, 'friend')`, ids);
-  await run(`INSERT INTO intimate_scenes (id, character_a_id, character_a_name, scene_type) VALUES (:scene, :world, 'Delete Test Character', 'test')`, ids);
+  await run(`INSERT INTO intimate_scenes (id, character_a_id, character_a_name, scene_type) VALUES (:scene, :world, 'Delete Test Character', :sceneType)`, { ...ids, sceneType });
   return ids;
 }
 
@@ -107,5 +111,69 @@ async function cleanup(ids) {
   test('it still requires authentication', async () => {
     const res = await request(app).delete(`/api/v1/world/characters/${uuid()}`);
     expect(res.status).toBe(401);
+  });
+
+  describe('all-or-nothing (F-Stats-1 v1.62 §65.6-F)', () => {
+    beforeAll(async () => {
+      await run(`CREATE OR REPLACE FUNCTION test_2070_fail_scene_delete() RETURNS trigger AS $$
+                 BEGIN RAISE EXCEPTION 'test_2070: intimate_scenes delete refused'; END; $$ LANGUAGE plpgsql`);
+      await run(`CREATE TRIGGER test_2070_fail_scene_delete BEFORE DELETE ON intimate_scenes
+                 FOR EACH ROW WHEN (OLD.scene_type = 'test-2070-fail') EXECUTE FUNCTION test_2070_fail_scene_delete()`);
+    });
+
+    afterAll(async () => {
+      await run(`DROP TRIGGER IF EXISTS test_2070_fail_scene_delete ON intimate_scenes`);
+      await run(`DROP FUNCTION IF EXISTS test_2070_fail_scene_delete()`);
+    });
+
+    test('a failure part-way leaves nothing deleted: the transaction rolls back and the route answers 500', async () => {
+      const ids = await seedCharacter('test-2070-fail');
+      seeded.push(ids);
+      const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const res = await request(app).delete(`/api/v1/world/characters/${ids.world}`).set('Authorization', auth());
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toMatch(/intimate_scenes delete refused/);
+      // The relationship and registry character were deleted before the scene
+      // failed; the rollback restores them, and the character is untouched.
+      expect(await remaining(ids)).toEqual({ world: 1, rc: 1, partner: 1, rel: 1, scene: 1 });
+      expect(errors.mock.calls.some(([msg]) => String(msg).includes('delete character failed'))).toBe(true);
+      errors.mockRestore();
+      // Let cleanup delete the scene.
+      await run(`UPDATE intimate_scenes SET scene_type = 'test' WHERE id = :scene`, ids);
+    });
+
+    test('with character_relationships_extended absent, the delete still completes', async () => {
+      const [row] = await q(`SELECT to_regclass('character_relationships_extended') AS t`);
+      expect(row.t).toBeNull();
+      const ids = await seedCharacter();
+      seeded.push(ids);
+
+      const res = await request(app).delete(`/api/v1/world/characters/${ids.world}`).set('Authorization', auth());
+
+      expect(res.status).toBe(200);
+      expect(await remaining(ids)).toEqual({ world: 0, rc: 0, partner: 1, rel: 0, scene: 0 });
+    });
+
+    test('with character_relationships_extended present, its rows are deleted in the same transaction', async () => {
+      await run(`CREATE TABLE character_relationships_extended (id UUID PRIMARY KEY, character_id UUID, related_character_id UUID)`);
+      try {
+        const ids = await seedCharacter();
+        seeded.push(ids);
+        const other = uuid();
+        await run(`INSERT INTO character_relationships_extended VALUES (:a, :world, :other), (:b, :other, :world), (:c, :other, :other)`,
+          { a: uuid(), b: uuid(), c: uuid(), world: ids.world, other });
+
+        const res = await request(app).delete(`/api/v1/world/characters/${ids.world}`).set('Authorization', auth());
+
+        expect(res.status).toBe(200);
+        expect(await remaining(ids)).toEqual({ world: 0, rc: 0, partner: 1, rel: 0, scene: 0 });
+        expect(await count(`SELECT COUNT(*) AS n FROM character_relationships_extended WHERE character_id = :world OR related_character_id = :world`, ids)).toBe(0);
+        expect(await count(`SELECT COUNT(*) AS n FROM character_relationships_extended`)).toBe(1);
+      } finally {
+        await run(`DROP TABLE IF EXISTS character_relationships_extended`);
+      }
+    });
   });
 });
