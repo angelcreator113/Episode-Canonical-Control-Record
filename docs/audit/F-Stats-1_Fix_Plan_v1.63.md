@@ -4,7 +4,7 @@
 
 ## What changed in v1.63
 
-**RULING (Evoni, 2026-09-27): "Item 3 closes on the reach probe. Class 4's read of state_json, a column that does not exist, is a defect; its fix is owed now and homed to F-Stats-1. F-Stats-1 Phase B is complete apart from its owed fixes, and the locked sequence moves to F-Ward-1."** Quoted at §66.1. It is the only thing this revision rules; every other clause is MEASURED, ATTESTED or carried, and says so.
+**RULING (Evoni, 2026-09-27): "Item 3 closes on the reach probe. Class 4's read of state_json, a column that does not exist, is a defect; its fix is owed now and homed to F-Stats-1. F-Stats-1 Phase B is complete apart from its owed fixes, and the locked sequence moves to F-Ward-1."** **Added by Evoni before merge: "§66.3-F: the affordability and financial-pressure handlers take their balance from getCurrentBalance, the source /balance uses; their swallowing catches go and errors are logged; financialPressureService's logTransaction, unused and writing a column that does not exist, is removed if nothing calls it."** Both are quoted at §66.1. They are the only things this revision rules; every other clause is MEASURED, ATTESTED or carried, and says so.
 
 **Item 3 closes on the reach probe** (`F-Stats-1_S355_ReachProbe_2026-09-27.md`, PR #2075). §65.3-P is discharged. §66.2.
 
@@ -42,7 +42,11 @@ F-Stats-1_Fix_Plan_v1.62.md
 
 > "Item 3 closes on the reach probe. Class 4's read of state_json, a column that does not exist, is a defect; its fix is owed now and homed to F-Stats-1. F-Stats-1 Phase B is complete apart from its owed fixes, and the locked sequence moves to F-Ward-1."
 
-A trailing `"` in the chat paste is left out as a paste artifact. **Nothing else is ruled.** Where the ruling leaves a point open, the sections below say so and do not fill it.
+**Added by Evoni before merge**, verbatim, in the review chat the same day:
+
+> "§66.3-F: the affordability and financial-pressure handlers take their balance from getCurrentBalance, the source /balance uses; their swallowing catches go and errors are logged; financialPressureService's logTransaction, unused and writing a column that does not exist, is removed if nothing calls it."
+
+A trailing `"` in the first chat paste is left out as a paste artifact. **Nothing else is ruled.** Where the ruling leaves a point open, the sections below say so and do not fill it.
 
 ### §66.2 Item 3 — closed on the reach probe
 
@@ -78,11 +82,12 @@ $ git show origin/main:src/routes/worldEvents.js | grep -n "state_json\|router.g
 
 **Owed: §66.3-F**, the fix for the `state_json` read, homed to F-Stats-1, owed now.
 
-**Not specified by the ruling, recorded as open:**
-- **The fix's shape.** For example: read `state_after_json`, or read the balance through `getCurrentBalance` as `/balance` and `financial-forecast` do. The ruling picks neither.
-- **Whether the swallowing catch** that turns the failed read into 500 is in the fix's scope.
+**The fix's shape — RULED (the added sentence, §66.1):**
+- **The balance source.** Both handlers take their balance from `getCurrentBalance`, "the source /balance uses" (`worldEvents.js:4182` at this basis). This replaces the `state_json` read and its fixed 500 default.
+- **The catches.** "their swallowing catches go and errors are logged." The ruling says "their swallowing catches" and does not list them. At this basis the affordability handler has one bare catch (2681) and the financial-pressure handler has four (2733, 2746, 2756, 2769; probe §1.2). **Not specified:** whether all four financial-pressure catches are meant, or only the balance read's. The fix's PR should name the catches it changes.
+- **The third site.** `financialPressureService.js`'s `logTransaction` "is removed if nothing calls it" (below).
 
-**A third `state_json` site, outside the probe's population — MEASURED, not ruled:**
+**A third `state_json` site, outside the probe's population — MEASURED; its removal RULED by the added sentence:**
 
 ```
 $ git grep -n "state_json" origin/main -- src | grep -v state_after_json
@@ -107,9 +112,9 @@ origin/main:src/routes/worldEvents.js:2771:    const { buildFinancialPressureCon
 origin/main:src/routes/worldEvents.js:4180:    const { checkAffordability } = require('../services/financialPressureService');
 ```
 
-**Not specified by the ruling:** whether §66.3-F covers this third site. The ruling names "Class 4's read", which the probe located in the two route handlers above. This revision records the site and does not place it inside or outside the fix.
+**RULED (the added sentence):** `logTransaction` "is removed if nothing calls it". At this basis nothing calls it (MEASURED above). The condition is checked again when the fix is written, and the fix's PR shows the check.
 
-**Disposition:** the defect is ruled. §66.3-F is owed now under F-Stats-1, and it is agent-doable in one route file. Its shape and scope points above are open.
+**Disposition:** the defect is ruled, and so is the fix's shape. §66.3-F is owed now under F-Stats-1. It is agent-doable in `worldEvents.js` and `financialPressureService.js`. One point is open: which financial-pressure catches the ruling means.
 
 ### §66.4 Phase B — complete apart from its owed fixes
 
@@ -161,7 +166,7 @@ $ ls docs/audit | grep -c '^F-Ward-1'
 
 - **Rules nothing beyond §66.1's quoted words.**
 - **Mints no FD, no PE, no XK.** FD tail remains **FD-62**; XK tail remains **XK-4**.
-- **Does not write the §66.3-F fix**, choose its shape, or place `financialPressureService.js`'s third site inside or outside it.
+- **Does not write the §66.3-F fix.** Its shape is Evoni's added sentence (§66.1, §66.3). This revision adds nothing to it.
 - **Does not open F-Ward-1** or any F-Ward-1 document.
 - **Does not re-read the probe's other findings as defects.** Classes 2, 3, 5 and 6 stay as v1.62 §65.3 homed them.
 - **Does not edit** v1.62, the reach probe or any other filed document in place.
@@ -172,11 +177,11 @@ $ ls docs/audit | grep -c '^F-Ward-1'
 
 ## §11 Plan Version History (UPDATED)
 
-| v1.63 | 2026-09-27 | **RULES (Evoni): "Item 3 closes on the reach probe. Class 4's read of state_json, a column that does not exist, is a defect; its fix is owed now and homed to F-Stats-1. F-Stats-1 Phase B is complete apart from its owed fixes, and the locked sequence moves to F-Ward-1."** **Item 3 CLOSED** on `F-Stats-1_S355_ReachProbe_2026-09-27.md` (PR #2075); **§65.3-P discharged** (§66.2). **The `state_json` read (`worldEvents.js` `affordability` and `financial-pressure`) is a DEFECT; §66.3-F owed now, homed to F-Stats-1**; its shape and whether the swallowing catch is in scope are not specified. A third `state_json` site, `financialPressureService.js` `logTransaction`, has no caller at this basis; it is recorded, not placed (§66.3). **Phase B COMPLETE apart from its owed fixes:** §65.6-F done (PR #2071, Deploy BB); §66.3-F owed (§66.4). **The locked sequence moves to F-Ward-1** (§66.5). Mints §66; no FD, no PE, no XK. No agent database contact. Basis `b71444dd`. |
+| v1.63 | 2026-09-27 | **RULES (Evoni): "Item 3 closes on the reach probe. Class 4's read of state_json, a column that does not exist, is a defect; its fix is owed now and homed to F-Stats-1. F-Stats-1 Phase B is complete apart from its owed fixes, and the locked sequence moves to F-Ward-1."** **Item 3 CLOSED** on `F-Stats-1_S355_ReachProbe_2026-09-27.md` (PR #2075); **§65.3-P discharged** (§66.2). **The `state_json` read (`worldEvents.js` `affordability` and `financial-pressure`) is a DEFECT; §66.3-F owed now, homed to F-Stats-1**; **added before merge: "§66.3-F: the affordability and financial-pressure handlers take their balance from getCurrentBalance, the source /balance uses; their swallowing catches go and errors are logged; financialPressureService's logTransaction, unused and writing a column that does not exist, is removed if nothing calls it."** A third `state_json` site, `financialPressureService.js` `logTransaction`, has no caller at this basis (§66.3). **Phase B COMPLETE apart from its owed fixes:** §65.6-F done (PR #2071, Deploy BB); §66.3-F owed (§66.4). **The locked sequence moves to F-Ward-1** (§66.5). Mints §66; no FD, no PE, no XK. No agent database contact. Basis `b71444dd`. |
 
 ## Register hygiene
 
-- **RULES** (§66.1, Evoni): item 3 closed on the reach probe; the `state_json` read a defect, its fix owed now and homed to F-Stats-1; Phase B complete apart from its owed fixes; the locked sequence to F-Ward-1.
+- **RULES** (§66.1, Evoni): item 3 closed on the reach probe; the `state_json` read a defect, its fix owed now and homed to F-Stats-1; added before merge, §66.3-F's shape (`getCurrentBalance`, catches go and errors logged, `logTransaction` removed if uncalled); Phase B complete apart from its owed fixes; the locked sequence to F-Ward-1.
 - **Mints:** §66. No FD (tail **FD-62**), no PE, no XK (tail **XK-4**).
 - **Closes:** item 3 (§66.2). **Discharges:** §65.3-P. **Completes:** F-Stats-1 Phase B, apart from its owed fixes (§66.4).
 - **Owes, new:** §66.3-F (the `state_json` read's fix, now; homed to F-Stats-1).
@@ -198,4 +203,4 @@ $ ls docs/audit | grep -c '^F-Ward-1'
 
 *Author: Claude, with JustAWomanInHerPrime (JAWIHP) / Evoni.*
 *Date: 2026-09-27. Basis: `origin/main` at `b71444dd00bf43b823f74c5365264d0b004a329b`. Predecessor: v1.62.*
-*Minted: §66. Ruled (Evoni): item 3 closed on the reach probe; the `state_json` read a defect, fix owed now, homed to F-Stats-1; Phase B complete apart from its owed fixes; the locked sequence to F-Ward-1. Owed: §66.3-F. Discharged: §65.3-P. Mints no FD, no PE, no XK. Tail: FD-62. XK tail: XK-4. Task: #2076. [skip-automerge]*
+*Minted: §66. Ruled (Evoni): item 3 closed on the reach probe; the `state_json` read a defect, fix owed now, homed to F-Stats-1; §66.3-F's shape (added before merge); Phase B complete apart from its owed fixes; the locked sequence to F-Ward-1. Owed: §66.3-F. Discharged: §65.3-P. Mints no FD, no PE, no XK. Tail: FD-62. XK tail: XK-4. Task: #2076. [skip-automerge]*
