@@ -11,6 +11,11 @@
  * the click selected it, neither left the picker open, and the tap placed
  * the icon from the picker beside the phone.
  *
+ * Task #2044: on wallet and closet, screens with no zones yet, a tap on an
+ * empty spot then a picked icon, a drawn rectangle, and the Zones panel's Add
+ * must each leave one zone on the phone, and the page must settle (no React
+ * commits while idle; it looped before the fix).
+ *
  * Not part of CI. Run from the repo root, with Playwright's Chromium:
  *   NODE_PATH=$(npm root -g) node frontend/e2e/iconDrag/run.cjs
  */
@@ -94,12 +99,79 @@ const { chromium } = require('playwright');
     return beside ? 'picker beside the phone' : 'picker NOT beside the phone';
   });
 
-  console.log(JSON.stringify([drag, click, tapPlace], null, 1));
+  // 4. The first zone on a screen that has none (Task #2044).
+  async function firstZone(screenName, action) {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    // Count React commits, to tell a settled page from one re-rendering in a loop.
+    await page.addInitScript(() => {
+      window.__commits = 0;
+      window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = { supportsFiber: true, isDisabled: false, renderers: new Map(), inject() { return 1; }, onCommitFiberRoot() { window.__commits += 1; }, onCommitFiberUnmount() {}, onPostCommitFiberRoot() {}, checkDCE() {} };
+    });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('file://' + path.join(out, 'index.html'));
+    await page.click('.phone-hub-stage-row >> text=Connect');
+    await page.waitForSelector('.zones-tab__canvas [style*="crosshair"]');
+    await page.click(`.zones-thumbnail:has(.zones-thumbnail__label:text-is("${screenName}"))`);
+    await page.waitForFunction((n) => document.querySelector('.zones-tab__sidebar-screen')?.textContent === n, screenName);
+    await page.waitForTimeout(200);
+    const idleCommits = await page.evaluate(() => new Promise((resolve) => {
+      const start = window.__commits;
+      setTimeout(() => resolve(window.__commits - start), 500);
+    }));
+    await page.evaluate(() => {
+      window.__events = [];
+      const surface = document.querySelector('.zones-tab__canvas [style*="crosshair"]');
+      for (const type of ['pointerdown', 'pointerup']) surface.addEventListener(type, () => window.__events.push(type), true);
+    });
+    const zoneCount = () => page.evaluate(() => document.querySelectorAll('.zones-tab__canvas [data-zone-id]').length);
+    const before = await zoneCount();
+    const cb = await (await page.$('.zones-tab__canvas [style*="crosshair"]')).boundingBox();
+    let picker = null;
+    if (action === 'tap') {
+      await page.mouse.click(cb.x + cb.width * 0.7, cb.y + cb.height * 0.6);
+      await page.waitForTimeout(150);
+      picker = await page.evaluate(() => {
+        const el = document.querySelector('.tap-place-picker');
+        return el ? (el.closest('.zones-tab__icon-panel') ? 'beside the phone' : 'elsewhere') : 'not shown';
+      });
+      if (picker !== 'not shown') await page.click('.tap-place-picker [title="Call"]');
+    } else if (action === 'draw') {
+      await page.mouse.move(cb.x + cb.width * 0.2, cb.y + cb.height * 0.5);
+      await page.mouse.down();
+      for (let i = 1; i <= 6; i += 1) await page.mouse.move(cb.x + cb.width * (0.2 + i * 0.05), cb.y + cb.height * (0.5 + i * 0.02));
+      await page.mouse.up();
+    } else {
+      await page.click('.zones-tap-panel__btn >> text=Add');
+    }
+    await page.waitForTimeout(300);
+    const result = {
+      scenario: `first-zone ${screenName} ${action}`,
+      idleCommitsIn500ms: idleCommits,
+      zonesBefore: before,
+      zonesAfter: await zoneCount(),
+      panel: await page.evaluate(() => document.querySelector('.zones-tap-panel__title')?.textContent),
+      canvasEvents: await page.evaluate(() => window.__events.join(',')),
+      picker,
+      pageErrors: errors,
+    };
+    await page.close();
+    return result;
+  }
+  const first = [];
+  for (const screenName of ['wallet', 'closet']) {
+    for (const action of ['tap', 'draw', 'add']) first.push(await firstZone(screenName, action));
+  }
+
+  console.log(JSON.stringify([drag, click, tapPlace, ...first], null, 1));
   await browser.close();
+  const firstOk = first.every(r => r.idleCommitsIn500ms === 0 && r.zonesBefore === 0 && r.zonesAfter === 1
+    && r.panel === 'Zones (1)' && r.pageErrors.length === 0 && (r.picker === null || r.picker === 'beside the phone'));
   const ok = drag.moved && !drag.pickerOpen && drag.selected
     && !click.moved && !click.pickerOpen && click.selected
     && tapPlace.note === 'picker beside the phone' && tapPlace.zoneCount === 2 && !tapPlace.pickerOpen
-    && [drag, click, tapPlace].every(r => r.pageErrors.length === 0);
-  console.log(ok ? 'PASS: a zone drags and a click selects it with the mouse, and a tap places an icon from the picker beside the phone' : 'FAIL');
+    && [drag, click, tapPlace].every(r => r.pageErrors.length === 0)
+    && firstOk;
+  console.log(ok ? 'PASS: a zone drags and a click selects it with the mouse, a tap places an icon from the picker beside the phone, and the first zone can be added on a screen with none' : 'FAIL');
   process.exit(ok ? 0 : 1);
 })().catch((e) => { console.error(e); process.exit(2); });
