@@ -90,15 +90,11 @@
 1	src/routes/worldEvents.js	const show = await models.Show.findByPk(showId, { attributes: ['name'] }).catch(() => null);
 1	src/routes/worldEvents.js	} catch (e) { /* no state yet */ }
 1	src/routes/worldEvents.js	} catch { /* asset_scope/episode_id columns may not exist */ }
-1	src/routes/worldEvents.js	} catch { /* columns may not exist */ }
 1	src/routes/worldEvents.js	} catch { /* fall through */ }
 1	src/routes/worldEvents.js	} catch { /* model query failed too */ }
 9	src/routes/worldEvents.js	} catch { /* non-blocking */ }
 1	src/routes/worldEvents.js	} catch { /* non-fatal */ }
 1	src/routes/worldEvents.js	} catch { /* skip */ }
-1	src/routes/worldEvents.js	} catch { /* table may not exist */ }
-1	src/routes/worldEvents.js	} catch { /* table may not have status=declined */ }
-2	src/routes/worldEvents.js	} catch { /* use default */ }
 2	src/routes/worldEvents.js	} catch { /* wardrobe may not exist yet */ }
 1	src/routes/worldEvents.js	} catch { /* wardrobe table may not exist yet */ }
 5	src/routes/worldEvents.js	}).catch(() => null);

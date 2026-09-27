@@ -4,11 +4,12 @@
  * Financial Pressure Service
  *
  * Manages Lala's economic reality:
- * - Running balance from the character state (coins)
- * - Transaction ledger (income/expenses per event/opportunity)
  * - Affordability checks (can she attend this event?)
  * - Financial pressure context for script writing
  * - Declined invite tracking for future episode callbacks
+ *
+ * The balance itself comes from financialTransactionService.getCurrentBalance
+ * (the ledger); callers pass it in.
  */
 
 // ─── AFFORDABILITY CHECK ────────────────────────────────────────────────────
@@ -182,41 +183,8 @@ function buildFinancialPressureContext(balance, recentTransactions = [], decline
   };
 }
 
-// ─── TRANSACTION LOGGER ─────────────────────────────────────────────────────
-
-/**
- * Log a financial transaction and update Lala's balance.
- */
-async function logTransaction(models, showId, { type, amount, source: _source, source_id: _source_id, description: _description }) {
-  // Update character state coins
-  try {
-    const delta = type === 'income' ? amount : -amount;
-
-    // Get current state
-    const [state] = await models.sequelize.query(
-      `SELECT id, state_json FROM character_state_history
-       WHERE show_id = :showId ORDER BY created_at DESC LIMIT 1`,
-      { replacements: { showId }, type: models.sequelize.QueryTypes.SELECT }
-    );
-
-    if (state) {
-      const stateJson = typeof state.state_json === 'string' ? JSON.parse(state.state_json) : (state.state_json || {});
-      const currentCoins = stateJson.coins || 0;
-      stateJson.coins = Math.max(0, currentCoins + delta);
-
-      await models.sequelize.query(
-        'UPDATE character_state_history SET state_json = :state, updated_at = NOW() WHERE id = :id',
-        { replacements: { state: JSON.stringify(stateJson), id: state.id } }
-      );
-    }
-  } catch (err) {
-    console.warn('[FinancialPressure] Transaction log failed:', err.message);
-  }
-}
-
 module.exports = {
   checkAffordability,
   recordDeclinedInvite,
   buildFinancialPressureContext,
-  logTransaction,
 };
