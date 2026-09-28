@@ -143,3 +143,89 @@ describe('EventPackagePage Basics — category and format suggestions', () => {
     expect(screen.queryByTestId('basics-format-suggestion')).toBeNull();
   });
 });
+
+// ─── Task #2128: Auto-drafted and Edited (doctrine rule 14) ──────────────
+describe('EventPackagePage Basics — Auto-drafted and Edited (Task #2128)', () => {
+  // A from-profile event with a creation draft: the columns equal the saved
+  // copies, so each drafted field reads Auto-drafted.
+  const DRAFTED_EVENT = {
+    ...BASE_EVENT,
+    description: 'A golden-hour sculpt session to close out summer.',
+    dress_code: 'Sleek performance activewear',
+    category: 'fitness',
+    format: 'workout_class',
+    event_time: '18:30',
+    canon_consequences: {
+      automation: {
+        started_from_profile_id: 42,
+        event_date_auto: '2026-11-09',
+        auto_drafted: {
+          description: 'ai_draft', dress_code: 'ai_draft', category: 'ai_draft', format: 'ai_draft', event_time: 'ai_draft',
+        },
+        drafted_values: {
+          description: 'A golden-hour sculpt session to close out summer.',
+          dress_code: 'Sleek performance activewear',
+          category: 'fitness',
+          format: 'workout_class',
+          event_time: '18:30',
+        },
+      },
+    },
+  };
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    stored = JSON.parse(JSON.stringify(DRAFTED_EVENT));
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === EVENT_URL) return { data: payload() };
+      return { data: { success: true, deliverables: [], locked: false } };
+    });
+    vi.mocked(api.put).mockImplementation(async (url, body) => {
+      if (url !== EVENT_URL) return { data: { success: true } };
+      const { expected_updated_at: _v, ...fields } = body;
+      stored = { ...stored, ...fields, updated_at: '2026-09-25T10:05:00.000Z' };
+      return { data: { success: true, event: stored } };
+    });
+  });
+
+  test('drafted fields read Auto-drafted · AI draft; the date reads Auto-drafted · schedule', async () => {
+    renderPage();
+    await screen.findByTestId('basics-category');
+    for (const key of ['time', 'description', 'dressCode', 'category', 'format']) {
+      expect(screen.getByTestId(`basics-${key}`).getAttribute('data-state')).toBe('auto_drafted');
+      expect(screen.getByTestId(`basics-${key}-state`).textContent).toContain('Auto-drafted · AI draft');
+    }
+    expect(screen.getByTestId('basics-date').getAttribute('data-state')).toBe('auto_drafted');
+    expect(screen.getByTestId('basics-date-state').textContent).toContain('Auto-drafted · schedule');
+    // The value shows, with Edit (not "Not set" / Set).
+    const category = screen.getByTestId('basics-category');
+    expect(within(category).getByText('Fitness')).toBeTruthy();
+    expect(within(category).getByText('Edit')).toBeTruthy();
+    expect(screen.queryByText('Auto-scheduled')).toBeNull();
+  });
+
+  test('changing a drafted field makes it Edited', async () => {
+    stored = { ...stored, dress_code: 'All white' };
+    renderPage();
+    const dress = await screen.findByTestId('basics-dressCode');
+    expect(dress.getAttribute('data-state')).toBe('edited');
+    expect(screen.getByTestId('basics-dressCode-state').textContent).toContain('Edited');
+    expect(within(dress).getByText('All white')).toBeTruthy();
+  });
+
+  test('saving a new date sends only the date (flag kept) and the date reads Edited', async () => {
+    renderPage();
+    const date = await screen.findByTestId('basics-date');
+    fireEvent.click(within(date).getByText('Edit'));
+    expect(screen.getByTestId('basics-dialog-draft-note').textContent).toContain('Auto-drafted · schedule');
+    const dialog = screen.getByRole('dialog', { name: 'Event date' });
+    fireEvent.change(within(dialog).getByLabelText('Event date'), { target: { value: '2026-12-01' } });
+    fireEvent.click(within(dialog).getByText('Save'));
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    const [, body] = vi.mocked(api.put).mock.calls[0];
+    expect(body).toMatchObject({ event_date: '2026-12-01' });
+    expect(body).not.toHaveProperty('canon_consequences');
+    await waitFor(() => expect(screen.getByTestId('basics-date').getAttribute('data-state')).toBe('edited'));
+  });
+});

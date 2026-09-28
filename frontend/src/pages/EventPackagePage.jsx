@@ -71,7 +71,7 @@ import {
 import api from '../services/api';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, describeMissing } from '../utils/eventReadinessSections';
-import { resolveEventBasics, AUTO_DATE_KEY } from '../utils/eventBasics';
+import { resolveEventBasics, hasValueState, DATE_DRAFT_SOURCE } from '../utils/eventBasics';
 import {
   describeEventOrganizer, buildCreatorOrganizerUpdate, buildBrandOrganizerUpdate,
   filterBrands, brandIsListed, profileName, describeStartedFrom, BRAND_NAME_MAX,
@@ -112,7 +112,18 @@ const BASICS_FIELDS = {
   format: { label: 'Format', title: 'Format', column: 'format', input: 'select', options: EVENT_FORMATS },
 };
 const BASICS_ORDER = ['date', 'time', 'description', 'dressCode'];
-const BASICS_STATE_LABEL = { set: 'Set', suggested: 'Suggested', missing: 'Missing' };
+const BASICS_STATE_LABEL = { set: 'Set', edited: 'Edited', suggested: 'Suggested', missing: 'Missing' };
+// Task #2128 (doctrine rule 14): a drafted field reads "Auto-drafted ·
+// <source>" until Evoni changes it, then "Edited".
+const basicsStateLabel = (f) => (f.state === 'auto_drafted'
+  ? `Auto-drafted · ${f.source === DATE_DRAFT_SOURCE ? 'schedule' : 'AI draft'}`
+  : BASICS_STATE_LABEL[f.state]);
+const basicsStateIcon = (f) => {
+  if (f.state === 'auto_drafted') return f.source === DATE_DRAFT_SOURCE ? CalendarClock : Sparkles;
+  if (f.state === 'edited') return Pencil;
+  if (f.state === 'set') return CheckCircle2;
+  return f.state === 'suggested' ? Lightbulb : CircleDashed;
+};
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Review (Task #1775): one icon per readiness section. A section key not
@@ -381,10 +392,11 @@ export default function EventPackagePage() {
 
   // Saves one Basics field through the existing PUT (all four columns are in
   // its allowedFields). An empty value clears the column (the route turns ''
-  // into NULL). Saving a date — any date, even the same one — also removes
-  // automation.event_date_auto: the PUT merges canon_consequences two levels
-  // deep and deletes a key sent as null (mergeCanonConsequences), so this
-  // touches nothing else in canon_consequences. Time, dress code and
+  // into NULL). Nothing in canon_consequences is touched: a drafted field's
+  // state comes from comparing the column with its saved copy
+  // (automation.drafted_values, or automation.event_date_auto for the
+  // date), so a changed value reads Edited. Task #2128, Evoni's (b): saving
+  // a date no longer deletes event_date_auto. Time, dress code and
   // description never carry a derived value here: they are saved only from
   // what Evoni typed or a suggestion she accepted.
   const saveBasicsField = async (key, rawValue, successMessage) => {
@@ -392,9 +404,6 @@ export default function EventPackagePage() {
     if (!spec || used || basicsSaving) return;
     const value = typeof rawValue === 'string' ? rawValue.trim() : '';
     const body = { [spec.column]: value || null };
-    if (key === 'date' && event.canon_consequences?.automation?.[AUTO_DATE_KEY] !== undefined) {
-      body.canon_consequences = { automation: { [AUTO_DATE_KEY]: null } };
-    }
     setBasicsSaving(true);
     try {
       await putEvent(body);
@@ -424,25 +433,21 @@ export default function EventPackagePage() {
   const renderBasicsRow = (key) => {
     const spec = BASICS_FIELDS[key];
     const f = basics[key];
-    const StateIcon = f.state === 'set' ? CheckCircle2 : f.state === 'suggested' ? Lightbulb : CircleDashed;
+    const StateIcon = basicsStateIcon(f);
+    const hasValue = hasValueState(f.state);
     return (
       <div key={key} className={`epp-basic is-${f.state}`} data-testid={`basics-${key}`} data-state={f.state}>
         <dt>
           {spec.label}
-          <span className="epp-basic-state"><StateIcon size={11} aria-hidden="true" /> {BASICS_STATE_LABEL[f.state]}</span>
+          <span className="epp-basic-state" data-testid={`basics-${key}-state`}><StateIcon size={11} aria-hidden="true" /> {basicsStateLabel(f)}</span>
         </dt>
         <dd>
-          {f.state === 'set' ? (
+          {hasValue ? (
             <span className={key === 'description' ? 'epp-basic-value epp-basic-prose' : 'epp-basic-value'}>{fmtBasicsValue(key, f.value)}</span>
           ) : (
             <span className="epp-basic-unset">Not set</span>
           )}
-          {f.autoScheduled && (
-            <span className="epp-auto-chip" title="System default: 45 days after the event was created. Change it to make it yours.">
-              <CalendarClock size={11} aria-hidden="true" /> Auto-scheduled
-            </span>
-          )}
-          {f.state === 'set' && f.inList === false && (
+          {hasValue && f.inList === false && (
             <span className="epp-saved-copy" data-testid={`basics-${key}-unlisted`} title="Stored before the Event Package offered a list; not one of the allowed values. Choose one to replace it.">not an allowed value</span>
           )}
           {f.fromSavedCopy && (
@@ -450,7 +455,7 @@ export default function EventPackagePage() {
           )}
           {!used && (
             <button type="button" className="epp-inline-link" onClick={() => openBasicsEditor(key)} disabled={basicsSaving}>
-              {f.state === 'set' ? 'Edit' : 'Set'}
+              {hasValue ? 'Edit' : 'Set'}
             </button>
           )}
           {f.state === 'suggested' && (
@@ -1398,9 +1403,13 @@ export default function EventPackagePage() {
                 </button>
               </div>
               <div className="epp-basics-dialog">
-                {key === 'date' && f.autoScheduled && (
-                  <p className="epp-basics-note">
-                    <CalendarClock size={13} aria-hidden="true" /> Auto-scheduled 45 days after the event was created. Saving makes this date yours.
+                {f.state === 'auto_drafted' && (
+                  <p className="epp-basics-note" data-testid="basics-dialog-draft-note">
+                    {f.source === DATE_DRAFT_SOURCE ? (
+                      <><CalendarClock size={13} aria-hidden="true" /> Auto-drafted · schedule: 45 days after the event was created. Changing it marks it Edited.</>
+                    ) : (
+                      <><Sparkles size={13} aria-hidden="true" /> Auto-drafted · AI draft. Changing it marks it Edited.</>
+                    )}
                   </p>
                 )}
                 {spec.input === 'select' ? (

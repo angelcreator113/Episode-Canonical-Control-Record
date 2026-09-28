@@ -42,7 +42,7 @@
  * belong to the later ones. This module is Event Ready only.
  */
 import { resolveEventVenueAndDate, resolveEventOrganizer } from './eventReadiness';
-import { resolveEventBasics } from './eventBasics';
+import { resolveEventBasics, hasValueState } from './eventBasics';
 import { resolveEventStakes, COLUMN_DEFAULTS } from './eventStakes';
 
 // ── The gate declaration ──────────────────────────────────────────────
@@ -73,20 +73,26 @@ const text = (v) => (typeof v === 'string' ? v.trim() : '');
 
 const BASICS_NOTE = { suggested: 'Suggestion not accepted' };
 
+// Task #2128 (§8(u) R2): a drafted value counts toward Event Ready whether it
+// is still the draft or has been edited. The note names which.
+const draftNote = (field) => {
+  if (field?.state === 'auto_drafted') return `Auto-drafted · ${field.source === 'schedule' ? 'schedule' : 'AI draft'}`;
+  if (field?.state === 'edited') return 'Edited';
+  return null;
+};
+
 function item(key, label, satisfied, extra = {}) {
   return { key, label, satisfied: !!satisfied, state: satisfied ? 'set' : 'missing', note: null, ...extra };
 }
 
-// A Basics field is satisfied only in the 'set' state. A 'suggested'
-// field is reported as missing, keeping its state so the page can say a
-// suggestion is waiting.
+// A Basics field is satisfied in the 'set', 'auto_drafted' and 'edited'
+// states (hasValueState). A 'suggested' field is reported as missing,
+// keeping its state so the page can say a suggestion is waiting.
 function basicsItem(key, label, field) {
-  const satisfied = field?.state === 'set';
+  const satisfied = hasValueState(field?.state);
   return item(key, label, satisfied, {
     state: field?.state || 'missing',
-    note: satisfied
-      ? (field.autoScheduled ? 'Auto-scheduled' : null)
-      : (BASICS_NOTE[field?.state] || null),
+    note: satisfied ? draftNote(field) : (BASICS_NOTE[field?.state] || null),
   });
 }
 

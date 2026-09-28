@@ -50,7 +50,7 @@ const DRAFT = {
   activity: 'Guests take a guided rooftop sculpt class, then stretch and share mocktails.',
   description: 'A golden-hour sculpt session to close out summer. Expect a guided class, a slow stretch and a relaxed social afterwards.',
 };
-const DRAFT_KEYS = ['concept', 'activity', 'auto_drafted', 'styling_brief'];
+const DRAFT_KEYS = ['concept', 'activity', 'auto_drafted', 'styling_brief', 'drafted_values'];
 // Task #2124: the same draft with styling.
 const STYLING = {
   dress_code: 'Sleek performance activewear with a light layer for the social',
@@ -162,7 +162,7 @@ describe('from-profile with a draft', () => {
     // Task #2124: dress_code and dress_code_keywords also differ with styling.
     const strip = (d) => {
       const { description: _d, dress_code: _dc, dress_code_keywords: _dk, canon_consequences: cc, ...rest } = d;
-      const { description: _ad, concept: _c, activity: _a, auto_drafted: _ab, styling_brief: _sb, ...auto } = cc.automation;
+      const { description: _ad, concept: _c, activity: _a, auto_drafted: _ab, styling_brief: _sb, drafted_values: _dv, ...auto } = cc.automation;
       return { ...rest, automation: auto };
     };
     expect(strip(withDraft)).toEqual(strip(withoutDraft));
@@ -335,5 +335,32 @@ describe('Task #2126: drafted category, format and start time', () => {
     const [sql, { replacements }] = insertsOf().find(([q]) => !isFull(q));
     expect(sql).not.toMatch(/category|format|event_time/);
     for (const f of ['category', 'format', 'event_time']) expect(replacements).not.toHaveProperty(f);
+  });
+});
+
+describe('Task #2128: drafted_values, the copy each field state compares against', () => {
+  const valuesOf = () => mockCreate.mock.calls[0][0].canon_consequences.automation.drafted_values;
+
+  test('a full draft copies every drafted column value', async () => {
+    mockDraft.mockResolvedValue(WITH_TAXONOMY);
+    await post();
+    expect(valuesOf()).toEqual({
+      description: DRAFT.description,
+      dress_code: STYLING.dress_code,
+      dress_code_keywords: STYLING.dress_code_keywords,
+      category: 'fitness', format: 'workout_class', event_time: '18:30',
+    });
+  });
+
+  test('only drafted fields get a copy', async () => {
+    mockDraft.mockResolvedValue({ ...DRAFT, format: 'run_club' });
+    await post();
+    expect(valuesOf()).toEqual({ description: DRAFT.description, format: 'run_club' });
+  });
+
+  test('no draft: no drafted_values', async () => {
+    mockDraft.mockResolvedValue(null);
+    await post();
+    expect(mockCreate.mock.calls[0][0].canon_consequences.automation).not.toHaveProperty('drafted_values');
   });
 });
