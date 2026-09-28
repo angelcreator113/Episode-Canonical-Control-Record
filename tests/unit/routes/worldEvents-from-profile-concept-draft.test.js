@@ -232,6 +232,20 @@ describe('from-profile with no draft (null)', () => {
     for (const key of DRAFT_KEYS) expect(auto).not.toHaveProperty(key);
   });
 
+  test('Task #2141 (rule 12): the template states no guest count; the guest list is kept', async () => {
+    const eventAutomation = require('../../../src/services/eventAutomationService');
+    const guests = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, handle: `guest${i + 1}` }));
+    jest.spyOn(eventAutomation, 'assembleGuestList').mockResolvedValue(guests);
+    mockDraft.mockResolvedValue(null);
+    expect((await post()).status).toBe(201);
+
+    const data = mockCreate.mock.calls[0][0];
+    expect(data.description).toMatch(/^An exclusive fitness event with Maya Moves( at [^.]+)?\.$/);
+    expect(data.description).not.toMatch(/guest/i);
+    expect(data.canon_consequences.automation.description).toBe(data.description);
+    expect(data.canon_consequences.automation.guest_profiles).toEqual(guests);
+  });
+
   test('the raw-SQL fallbacks bind the template description and no draft keys', async () => {
     mockDraft.mockResolvedValue(null);
     mockCreate.mockRejectedValueOnce(new Error('create failed'));

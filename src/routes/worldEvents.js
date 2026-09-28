@@ -2529,9 +2529,11 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       border_style: archStyle.border_style,
     };
     // Task #1790: neither the name nor the description says the creator
-    // hosts or organizes the event.
+    // hosts or organizes the event. Task #2141 (doctrine rule 12): the
+    // description is attendee copy, so it no longer states a guest count;
+    // the guest list itself is unchanged (automation.guest_profiles).
     const creatorName = p.display_name || p.handle;
-    const templateDescription = `An exclusive ${p.content_category || 'creator'} event with ${creatorName}${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`;
+    const templateDescription = `An exclusive ${p.content_category || 'creator'} event with ${creatorName}${venue ? ` at ${venue.name}` : ''}.`;
 
     // Task #2122 (§8(u) R1, R8; §8(v)): one Haiku 4.5 call drafts a concept,
     // an activity and the public description. It never blocks creation:
