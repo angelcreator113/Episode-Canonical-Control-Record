@@ -293,14 +293,17 @@ router.post('/promote-ghost/:characterId', async (req, res) => {
       world_exists:  false,
     });
 
-    // Remove the ghost from the original character's ghost_characters array
-    const sourceCharacter = await RegistryCharacter.findByPk(req.params.characterId);
-    if (sourceCharacter?.ghost_characters) {
-      const updated = sourceCharacter.ghost_characters.map(g =>
-        g.name === ghost_name ? { ...g, promoted: true, promoted_id: newCharacter.id } : g
-      );
-      await sourceCharacter.update({ ghost_characters: updated });
-    }
+    // Remove the ghost from the original character's ghost_characters array.
+    // Read and write under a row lock so a concurrent promotion's mark is not lost.
+    await RegistryCharacter.sequelize.transaction(async (transaction) => {
+      const sourceCharacter = await RegistryCharacter.findByPk(req.params.characterId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (sourceCharacter?.ghost_characters) {
+        const updated = sourceCharacter.ghost_characters.map(g =>
+          g.name === ghost_name ? { ...g, promoted: true, promoted_id: newCharacter.id } : g
+        );
+        await sourceCharacter.update({ ghost_characters: updated }, { transaction });
+      }
+    });
 
     res.status(201).json({
       character: newCharacter,
