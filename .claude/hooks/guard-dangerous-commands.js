@@ -32,6 +32,32 @@ process.stdin.on('end', () => {
     [/(^|[\n;&|(`]\s*)git\s+push\b[^\n]*(\s|:)(origin\s+)?(main|dev)(\s|$)/, 'Direct push to main or dev. Work lands by PR + squash-merge.'],
     [/(^|[\n;&|(`]\s*)git\s+push\b[^\n]*(--force\b|\s-f\b|--force-with-lease)/, 'Force push. Never rewrite history on a shared branch.'],
   ];
+  // Task #2161: scripts/deploy-prod.sh is Evoni's production deploy. Executing
+  // it is blocked; reading, editing, grepping, syntax-checking (bash -n) and
+  // git commands on it are allowed. Execution means, at command position and
+  // after any sudo/env/nohup/time/nice/timeout/VAR=value prefix:
+  //   - a shell, exec, source or . given the script (bash|sh|zsh|dash|ksh);
+  //   - the script's path as the command (./scripts/deploy-prod.sh, …);
+  //   - its contents piped into a shell (cat …deploy-prod… | bash).
+  // Heredoc bodies fed to a shell count too, including a cat/tee heredoc
+  // whose output is piped into one (those are otherwise dropped as data).
+  const scanExec = cmd.replace(heredoc, (m, pre, line, tag) => {
+    const firstLine = m.slice(pre.length).split('\n')[0]; // the whole `cat <<EOF | …` line
+    return /(^|[\s;&|(])(cat|tee)\b/.test(line) && !/\|\s*(sudo\s+)?(bash|sh|zsh|dash|ksh)\b/.test(firstLine)
+      ? `${pre}${line}<<${tag}\n${tag}` : m;
+  });
+  const POS = '(?:^|[\\n;&|(`]\\s*|\\$\\(\\s*)';
+  const PREFIX = '(?:(?:sudo|nohup|time|nice|setsid|command|builtin)\\s+|env(?:\\s+-\\S+)*\\s+|timeout\\s+\\S+\\s+|[A-Za-z_][A-Za-z0-9_]*=\\S*\\s+)*';
+  const SYNTAX_ONLY = '-n\\s+[^\\s;&|]*deploy-prod[^\\s;&|]*\\s*(?:$|[;&|\\n])';
+  const deployProdExec = [
+    new RegExp(`${POS}${PREFIX}(?:(?:bash|sh|zsh|dash|ksh)\\s+(?!${SYNTAX_ONLY})|(?:exec|source|\\.)\\s+)[^\\n;&|]*deploy-prod`),
+    new RegExp(`${POS}${PREFIX}[^\\s;&|()<>]*deploy-prod`),
+    /deploy-prod[^\n]*\|\s*(?:sudo\s+)?(?:bash|sh|zsh|dash|ksh)\b/,
+  ];
+  if (deployProdExec.some((re) => re.test(scanExec))) {
+    process.stderr.write(`[guard] BLOCKED: executing scripts/deploy-prod.sh, Evoni's production deploy. Agent sessions never run it; reading, editing and git commands on it are fine.\nCommand: ${cmd.slice(0, 300)}\nIf this is genuinely needed, Evoni runs it herself outside the agent session.\n`);
+    process.exit(2);
+  }
   for (const [re, why] of rules) {
     if (re.test(scan)) {
       process.stderr.write(`[guard] BLOCKED: ${why}\nCommand: ${cmd.slice(0, 300)}\nIf this is genuinely needed, Evoni runs it herself outside the agent session.\n`);

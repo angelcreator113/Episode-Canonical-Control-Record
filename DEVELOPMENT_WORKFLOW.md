@@ -264,6 +264,8 @@ The manual deploy is Evoni's own action on the box: fast-forward the working tre
 
 Whether the app's database user can `SELECT` from `SequelizeMeta` is unverified; if the first run exits 2 with "permission denied", that is the answer.
 
+**The script** (Task #2161). `bash scripts/deploy-prod.sh`, run by Evoni on the box from the repo root, automates the steps above together with §7.3's `frontend/dist` backup and build, and §7.2's `--update-env` restart plus `pm2 save` when given `--update-env`. It stops with a plain message at each hazard: a modified tracked file, a migration or package file in the range, a refused fast-forward, a failed build, a pending-migration check that doesn't exit 0, a "no" at either prompt, or `/health` not healthy within 60 s. When it stops after the fast-forward, it prints the rollback steps as text and runs none of them. It ends with a summary to paste into a session for the deploy record, with no host, IP address or key value in it. It never edits `.env`, runs migrations, runs `npm ci` or `npm install`, resets or deletes anything, and it refuses to start inside a Claude Code session (`CLAUDECODE` set); the guard hook also blocks any agent Bash command that executes it (reading, editing and git commands on it stay allowed). The manual steps above stay valid, with or without the script.
+
 The load balancer's health check is `GET /health`, expecting 200 (`docs/audit/F-Deploy-1_Fix_Plan_v1.56.md` §1); any change to `/health` must keep that.
 
 ### 7.2 Credential changes and reboots: keep pm2's snapshot current
