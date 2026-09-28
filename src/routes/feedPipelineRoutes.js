@@ -20,7 +20,7 @@ router.post('/:showId/generate-opportunities', requireAuth, aiRateLimiter, async
 
 // POST /api/v1/feed-pipeline/:showId/schedule/:opportunityId
 // One-click: opportunity → fully-formed event
-router.post('/:showId/schedule/:opportunityId', requireAuth, async (req, res) => {
+router.post('/:showId/schedule/:opportunityId', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const models = require('../models');
     const { scheduleOpportunityAsEvent } = require('../services/feedEventPipelineService');
