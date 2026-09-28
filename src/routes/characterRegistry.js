@@ -1480,23 +1480,32 @@ ${allFieldsToFill}
     if (!filled) return res.status(404).json({ error: 'Character not found' });
     await character.reload();
 
-    // Also normalize relationships_map if it's in array format
+    // Also normalize relationships_map if it's in array format.
+    // F-Reg-2 fix group 2 (v1.2 R2), row 34: flatten the row's current value,
+    // read under a lock, and only while it is still an array, so a map written
+    // since the read is kept.
     if (Array.isArray(character.relationships_map)) {
-      const rm = character.relationships_map;
-      const flat = { allies: '', rivals: '', mentors: '', love_interests: '', business_partners: '', dynamic_notes: '' };
-      const typeMap = { support: 'allies', familial: 'allies', pressure: 'rivals', shadow: 'rivals', mirror: 'mentors', romantic: 'love_interests', transactional: 'business_partners', creation: 'allies' };
-      const notes = [];
-      rm.forEach(r => {
-        const cat = typeMap[r.type] || 'allies';
-        const label = r.target || 'Unknown';
-        const detail = r.feels ? `${label} (${r.feels})` : label;
-        flat[cat] = flat[cat] ? `${flat[cat]}, ${detail}` : detail;
-        if (r.note) notes.push(`${label}: ${r.note}`);
+      const normalized = await db.sequelize.transaction(async (transaction) => {
+        const current = await db.RegistryCharacter.findByPk(id, {
+          attributes: ['id', 'relationships_map'], transaction, lock: transaction.LOCK.UPDATE,
+        });
+        if (!current || !Array.isArray(current.relationships_map)) return false;
+        const rm = current.relationships_map;
+        const flat = { allies: '', rivals: '', mentors: '', love_interests: '', business_partners: '', dynamic_notes: '' };
+        const typeMap = { support: 'allies', familial: 'allies', pressure: 'rivals', shadow: 'rivals', mirror: 'mentors', romantic: 'love_interests', transactional: 'business_partners', creation: 'allies' };
+        const notes = [];
+        rm.forEach(r => {
+          const cat = typeMap[r.type] || 'allies';
+          const label = r.target || 'Unknown';
+          const detail = r.feels ? `${label} (${r.feels})` : label;
+          flat[cat] = flat[cat] ? `${flat[cat]}, ${detail}` : detail;
+          if (r.note) notes.push(`${label}: ${r.note}`);
+        });
+        if (notes.length) flat.dynamic_notes = notes.join('. ');
+        await db.RegistryCharacter.update({ relationships_map: flat }, { where: { id }, transaction });
+        return true;
       });
-      if (notes.length) flat.dynamic_notes = notes.join('. ');
-      character.relationships_map = flat;
-      await character.save();
-      filled.push('relationships_map_normalized');
+      if (normalized) filled.push('relationships_map_normalized');
     }
 
     // Also backfill plot_threads into extra_fields if empty
@@ -1520,9 +1529,24 @@ ${allFieldsToFill}
             status: t.status || 'open',
             source: 'auto-generated',
           }));
-          character.extra_fields = { ...ef, plot_threads: plotThreads };
-          await character.save();
-          filled.push('plot_threads');
+          // F-Reg-2 fix group 2 (v1.2 R2), row 35: set only the plot_threads
+          // key, in one UPDATE built from the column, and only while the
+          // threads are still empty, so extra_fields changes made during the
+          // AI call are kept.
+          const [written] = await db.sequelize.query(
+            `UPDATE registry_characters
+                SET extra_fields = jsonb_set(
+                      CASE WHEN jsonb_typeof(extra_fields) = 'object' THEN extra_fields ELSE CAST('{}' AS jsonb) END,
+                      '{plot_threads}', CAST(:threads AS jsonb)
+                    ),
+                    updated_at = NOW()
+              WHERE id = :id AND deleted_at IS NULL
+                AND jsonb_array_length(CASE WHEN jsonb_typeof(extra_fields->'plot_threads') = 'array'
+                                            THEN extra_fields->'plot_threads' ELSE CAST('[]' AS jsonb) END) = 0
+              RETURNING id`,
+            { replacements: { threads: JSON.stringify(plotThreads), id } }
+          );
+          if (written.length) filled.push('plot_threads');
         }
       } catch (ptErr) {
         console.error('[Backfill] Plot threads generation failed:', ptErr.message);
@@ -1891,7 +1915,6 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
         }
         const generated = JSON.parse(jsonMatch[0]);
 
-        const filled = [];
         const updateData = {};
         for (const section of emptySections) {
           if (generated[section] && typeof generated[section] === 'object') {
@@ -1900,29 +1923,50 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
               clean[k] = (v === null || v === undefined) ? '' : v;
             }
             updateData[section] = clean;
-            filled.push(section);
           }
         }
-        if (filled.length > 0) {
-          await db.RegistryCharacter.update(updateData, { where: { id: character.id } });
-        }
+        // F-Reg-2 fix group 2 (v1.2 R2), row 37: the registry was read before
+        // the AI call, so each section is written only if it is still empty on
+        // the row read under a lock after the call; a section filled meanwhile
+        // is kept.
+        const filled = await db.sequelize.transaction(async (transaction) => {
+          const current = await db.RegistryCharacter.findByPk(character.id, { transaction, lock: transaction.LOCK.UPDATE });
+          if (!current) return [];
+          const upd = {};
+          for (const [section, value] of Object.entries(updateData)) {
+            if (!hasData(current[section])) upd[section] = value;
+          }
+          if (Object.keys(upd).length) {
+            await db.RegistryCharacter.update(upd, { where: { id: character.id }, transaction });
+          }
+          return Object.keys(upd);
+        });
 
-        // Normalize array-format relationships_map
+        // Normalize array-format relationships_map.
+        // F-Reg-2 fix group 2 (v1.2 R2), row 38: flatten the row's current
+        // value, read under a lock, and only while it is still an array.
         if (Array.isArray(character.relationships_map)) {
-          const rm = character.relationships_map;
-          const flat = { allies: '', rivals: '', mentors: '', love_interests: '', business_partners: '', dynamic_notes: '' };
-          const typeMap = { support: 'allies', familial: 'allies', pressure: 'rivals', shadow: 'rivals', mirror: 'mentors', romantic: 'love_interests', transactional: 'business_partners', creation: 'allies' };
-          const notes = [];
-          rm.forEach(r => {
-            const cat = typeMap[r.type] || 'allies';
-            const label = r.target || 'Unknown';
-            const detail = r.feels ? `${label} (${r.feels})` : label;
-            flat[cat] = flat[cat] ? `${flat[cat]}, ${detail}` : detail;
-            if (r.note) notes.push(`${label}: ${r.note}`);
+          const normalized = await db.sequelize.transaction(async (transaction) => {
+            const current = await db.RegistryCharacter.findByPk(character.id, {
+              attributes: ['id', 'relationships_map'], transaction, lock: transaction.LOCK.UPDATE,
+            });
+            if (!current || !Array.isArray(current.relationships_map)) return false;
+            const rm = current.relationships_map;
+            const flat = { allies: '', rivals: '', mentors: '', love_interests: '', business_partners: '', dynamic_notes: '' };
+            const typeMap = { support: 'allies', familial: 'allies', pressure: 'rivals', shadow: 'rivals', mirror: 'mentors', romantic: 'love_interests', transactional: 'business_partners', creation: 'allies' };
+            const notes = [];
+            rm.forEach(r => {
+              const cat = typeMap[r.type] || 'allies';
+              const label = r.target || 'Unknown';
+              const detail = r.feels ? `${label} (${r.feels})` : label;
+              flat[cat] = flat[cat] ? `${flat[cat]}, ${detail}` : detail;
+              if (r.note) notes.push(`${label}: ${r.note}`);
+            });
+            if (notes.length) flat.dynamic_notes = notes.join('. ');
+            await db.RegistryCharacter.update({ relationships_map: flat }, { where: { id: character.id }, transaction });
+            return true;
           });
-          if (notes.length) flat.dynamic_notes = notes.join('. ');
-          await db.RegistryCharacter.update({ relationships_map: flat }, { where: { id: character.id } });
-          filled.push('relationships_map_normalized');
+          if (normalized) filled.push('relationships_map_normalized');
         }
 
         // Backfill plot_threads
@@ -1946,11 +1990,24 @@ router.post('/registries/:registryId/backfill-all', requireAuth, async (req, res
                 status: t.status || 'open',
                 source: 'auto-generated',
               }));
-              await db.RegistryCharacter.update(
-                { extra_fields: { ...ef, plot_threads: plotThreads } },
-                { where: { id: character.id } }
+              // F-Reg-2 fix group 2 (v1.2 R2), row 39: set only the plot_threads
+              // key, in one UPDATE built from the column, and only while the
+              // threads are still empty, so extra_fields changes made during
+              // the AI call are kept.
+              const [written] = await db.sequelize.query(
+                `UPDATE registry_characters
+                    SET extra_fields = jsonb_set(
+                          CASE WHEN jsonb_typeof(extra_fields) = 'object' THEN extra_fields ELSE CAST('{}' AS jsonb) END,
+                          '{plot_threads}', CAST(:threads AS jsonb)
+                        ),
+                        updated_at = NOW()
+                  WHERE id = :id AND deleted_at IS NULL
+                    AND jsonb_array_length(CASE WHEN jsonb_typeof(extra_fields->'plot_threads') = 'array'
+                                                THEN extra_fields->'plot_threads' ELSE CAST('[]' AS jsonb) END) = 0
+                  RETURNING id`,
+                { replacements: { threads: JSON.stringify(plotThreads), id: character.id } }
               );
-              filled.push('plot_threads');
+              if (written.length) filled.push('plot_threads');
             }
           } catch (ptErr) {
             console.error(`[Backfill-all] Plot threads failed for ${character.display_name}:`, ptErr.message);
