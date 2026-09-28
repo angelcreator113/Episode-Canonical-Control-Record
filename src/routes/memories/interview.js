@@ -668,32 +668,38 @@ router.post('/character-interview-save-progress', requireAuth, async (req, res) 
 
     if (!character_id) return res.status(400).json({ error: 'character_id required' });
 
-    const character = await RegistryCharacter.findByPk(character_id);
-    if (!character) return res.status(404).json({ error: 'Character not found' });
-
-    const existingExtra = character.extra_fields || {};
-    character.extra_fields = {
-      ...existingExtra,
-      interview_progress: {
-        messages,
-        answers,
-        question_index,
-        next_question,
-        sensory_asked,
-        private_life_asked,
-        unspoken_asked,
-        one_more_asked,
-        last_contradiction_check,
-        drift_history,
-        relational_notes,
-        current_drift,
-        step,
-        saved_at: new Date().toISOString(),
-      },
+    const interviewProgress = {
+      messages,
+      answers,
+      question_index,
+      next_question,
+      sensory_asked,
+      private_life_asked,
+      unspoken_asked,
+      one_more_asked,
+      last_contradiction_check,
+      drift_history,
+      relational_notes,
+      current_drift,
+      step,
+      saved_at: new Date().toISOString(),
     };
-    // Sequelize needs JSONB change flagged explicitly
-    character.changed('extra_fields', true);
-    await character.save();
+
+    // F-Reg-2 fix group 2 (v1.2 R2), row 50: set the key in one UPDATE built
+    // from the column, so an extra_fields key another request wrote is kept.
+    const [rows] = await db.sequelize.query(
+      `UPDATE registry_characters
+          SET extra_fields = jsonb_set(
+                CASE WHEN jsonb_typeof(extra_fields) = 'object' THEN extra_fields ELSE CAST('{}' AS jsonb) END,
+                '{interview_progress}',
+                CAST(:progress AS jsonb)
+              ),
+              updated_at = NOW()
+        WHERE id = :id AND deleted_at IS NULL
+        RETURNING id`,
+      { replacements: { progress: JSON.stringify(interviewProgress), id: character_id } }
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Character not found' });
 
     res.json({ success: true });
   } catch (err) {
