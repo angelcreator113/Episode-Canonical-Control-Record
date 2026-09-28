@@ -330,19 +330,24 @@ router.post('/save', requireAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
 
   try {
-    const character = await db.RegistryCharacter.findByPk(character_id);
-    if (!character) return res.status(404).json({ error: 'Character not found' });
+    // Read, merge and write writer_notes under a row lock so a concurrent write's key is not lost.
+    const found = await db.RegistryCharacter.sequelize.transaction(async (transaction) => {
+      const character = await db.RegistryCharacter.findByPk(character_id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!character) return false;
 
-    let notes = {};
-    try { notes = JSON.parse(character.writer_notes || '{}'); } catch (err) { console.warn('[consciousness] writer_notes parse error:', err?.message); }
+      let notes = {};
+      try { notes = JSON.parse(character.writer_notes || '{}'); } catch (err) { console.warn('[consciousness] writer_notes parse error:', err?.message); }
 
-    if (is_lala_profile) {
-      notes.inherited_consciousness = profile;
-    } else {
-      notes.consciousness = profile;
-    }
+      if (is_lala_profile) {
+        notes.inherited_consciousness = profile;
+      } else {
+        notes.consciousness = profile;
+      }
 
-    await character.update({ writer_notes: JSON.stringify(notes) });
+      await character.update({ writer_notes: JSON.stringify(notes) }, { transaction });
+      return true;
+    });
+    if (!found) return res.status(404).json({ error: 'Character not found' });
 
     return res.json({ success: true, character_id });
 
@@ -456,13 +461,16 @@ Return ONLY valid JSON:
     // Save triggers to character record
     const db = req.app.locals.db || require('../models');
     try {
-      const char = await db.RegistryCharacter.findByPk(character.id);
-      if (char) {
-        let notes = {};
-        try { notes = JSON.parse(char.writer_notes || '{}'); } catch (err) { console.warn('[consciousness] writer_notes parse error:', err?.message); }
-        notes.dilemma_triggers = triggers;
-        await char.update({ writer_notes: JSON.stringify(notes) });
-      }
+      // Read, merge and write writer_notes under a row lock so a concurrent write's key is not lost.
+      await db.RegistryCharacter.sequelize.transaction(async (transaction) => {
+        const char = await db.RegistryCharacter.findByPk(character.id, { transaction, lock: transaction.LOCK.UPDATE });
+        if (char) {
+          let notes = {};
+          try { notes = JSON.parse(char.writer_notes || '{}'); } catch (err) { console.warn('[consciousness] writer_notes parse error:', err?.message); }
+          notes.dilemma_triggers = triggers;
+          await char.update({ writer_notes: JSON.stringify(notes) }, { transaction });
+        }
+      });
     } catch (saveErr) {
       console.warn('[consciousness/dilemma-triggers] Save warning:', saveErr.message);
     }
