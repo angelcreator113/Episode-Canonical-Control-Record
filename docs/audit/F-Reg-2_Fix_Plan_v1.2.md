@@ -36,11 +36,11 @@ MEASURED. v1.1 is the newest F-Reg-2 plan. The scoping read is the newest F-Reg-
 
 ## §1 RULINGS — Evoni, 2026-09-28
 
-**RULED**, verbatim, as recorded on Task #2174:
+**RULED**, verbatim, as recorded on Task #2174. R2 is Evoni's corrected wording, given before this revision was pushed and recorded as a comment on #2174; the issue body carries her first wording.
 
 > R1. The four other registry_dossiers_used[0].registry_id sites (v1.1 §5 :174; locations per F-Reg-2_OwedScoping_2026-09-28.md) are fixed next, as fix group 1b, applying the same fix shape as #2113 (O-e), before fix group 2.
 
-> R2. Fix group 2's open sites are fixed one PR per file, in the order of the scoping read's fix-group-2 table. Rows already covered by #2102/#2107 are excluded.
+> R2. Fix group 2's open sites are fixed one file at a time, in the order of F-Reg-2_Fix_Plan_v1.0.md §4.2's by-file table (:214–227); a file with many open sites may be split across more than one PR. Rows already covered by #2102/#2107 are excluded.
 
 > R3. The scoping read's §2.2 finding (the unrun root migrations/20260316100000-registry-character-world.js) is recorded. Who created registry_characters.world on production stays NOT ESTABLISHED.
 
@@ -67,7 +67,7 @@ Each item's standing is the scoping read's; this plan does not restate its table
 - **Open sites:** 22.
 - **Excluded:** rows 36, 40, 41, 46 and 49, covered by #2102 and #2107.
 
-**Which table R2's order refers to — MEASURED, not ruled.** The scoping read has no fix-group-2 table of its own. Its §1.4 says: "The sites are listed by file in `F-Reg-2_Fix_Plan_v1.0.md:214–227`" (`F-Reg-2_OwedScoping_2026-09-28.md:101`). That table is v1.0 §4.2's by-file table, in this order:
+**The order — RULED (R2).** Files go one at a time, in the order of v1.0 §4.2's by-file table (`F-Reg-2_Fix_Plan_v1.0.md:214–227`), which the scoping read §1.4 also cites (`F-Reg-2_OwedScoping_2026-09-28.md:101`). Read from that table (MEASURED):
 1. `characterRegistry.js`
 2. `registrySync.js`
 3. `characterGenerationRoutes.js`
@@ -79,7 +79,7 @@ Each item's standing is the scoping read's; this plan does not restate its table
 9. `worldStudio.js`
 10. `registrySyncService.js`
 
-This plan records the pointer. It does not choose between readings. If Evoni meant a different order, a later revision records it.
+A file with many open sites may be split across more than one PR (R2). `characterRegistry.js` has 13 table sites, of which rows 36, 40 and 41 are excluded. `memories/core.js` (row 46) and `memories/engine.js` (row 49) have only excluded rows, so no open site remains in either (the scoping read §1.4).
 
 ### §2.3 The §2.2 finding — R3
 
@@ -148,7 +148,7 @@ Nothing minted here.
 
 ## What this plan does not do
 
-- **Rules nothing beyond §1's quoted words.** The table reading in §2.2 is recorded, not ruled.
+- **Rules nothing beyond §1's quoted words.**
 - **Edits no filed text.** Only the two additive banners (§3) are placed.
 - **Writes no fix, and changes no code or schema.** Fix group 1b and fix group 2 are their own PRs.
 - **Mints no FD, PE or XK number, and discharges nothing.**
@@ -160,7 +160,7 @@ Nothing minted here.
 
 - **RULES** (§1, Evoni):
   - Fix group 1b (the four sites, #2113's shape) is next, before fix group 2.
-  - Fix group 2 goes one PR per file, in the scoping read's table order, excluding #2102/#2107's rows.
+  - Fix group 2 goes one file at a time, in v1.0 §4.2's by-file table order, a file with many open sites splittable across PRs, excluding #2102/#2107's rows.
   - The §2.2 finding is recorded; production's history stays NOT ESTABLISHED.
   - O-a/O-c/O-d, Family and Boundary, the story-table columns and v1.0 §4.5 stay owed, unsequenced.
 - **Banners:** BH §7 and v1.1 §3, additive, pointing to the scoping read §2.2 (#2173).
