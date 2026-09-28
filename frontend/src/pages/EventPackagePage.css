@@ -1323,3 +1323,60 @@
   .epp-term-item.is-fulfilment { flex-direction: column; align-items: stretch; }
   .epp-term-item.is-fulfilment .epp-term-item-main { flex: none; }
 }
+
+/* ── Event concept (Task #2132, step 4b): read-only, for planning ──
+   Rows reuse .epp-fields / .epp-basic and step 4's state labels. */
+.epp-concept-subtitle {
+  margin: -4px 0 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-concept-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.epp-concept-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--lala-ink, #2C2C2C);
+  background: var(--lala-parchment-2, #F4EFE4);
+  border: 1px solid var(--lala-parchment-3, #E8E0D0);
+  overflow-wrap: anywhere;
+}
+.epp-concept-brief {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 0;
+}
+.epp-concept-brief > div {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: 8px;
+}
+.epp-concept-brief dt {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--lala-ink-muted, #6B6557);
+}
+.epp-concept-brief dd {
+  margin: 0;
+  font-family: 'Lora', Georgia, serif;
+  color: var(--lala-ink, #2C2C2C);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .epp-concept-brief > div { grid-template-columns: 1fr; gap: 0; }
+}
+.epp-concept-stale {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--lala-gold-hover, #A68324);
+}
