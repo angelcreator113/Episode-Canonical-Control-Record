@@ -1,17 +1,17 @@
 // Task #2120 — the suggest-names framing sentence (§8(u) R9): the organizer's
-// niche and the event's format, category and description, each omitted
+// niche and the event's format and description, each omitted
 // cleanly when missing; never the "content-creator show" framing.
 const { buildSuggestNamesFraming, descriptionLead, DESCRIPTION_MAX } = require('../../../src/utils/suggestNamesFraming');
 
 describe('buildSuggestNamesFraming', () => {
-  test('full input: niche, format, category and the description\'s first sentence', () => {
+  test('full input: niche, format and the description\'s first sentence; category is not in the sentence', () => {
     const event = {
       format: 'workout_class',
       category: 'fitness',
       description: 'A sunset sculpt session on the rooftop, then a recovery social. Guests bring their own mats.',
     };
     expect(buildSuggestNamesFraming(event, { content_category: 'fitness' })).toBe(
-      'Name this fictional workout class in the fitness world, hosted by a fitness creator. '
+      'Name this fictional workout class, hosted by a fitness creator. '
       + 'About it: A sunset sculpt session on the rooftop, then a recovery social.'
     );
   });

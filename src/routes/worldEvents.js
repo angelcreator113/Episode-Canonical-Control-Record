@@ -314,7 +314,7 @@ router.post('/world/:showId/events/:eventId/suggest-names', requireAuth, aiRateL
       ? facts.join('\n')
       : 'No details recorded for this event yet beyond it existing — do not invent any.';
 
-    // Framed by the organizer's niche and the event's format, category and
+    // Framed by the organizer's niche and the event's format and
     // description (§8(u) R9, src/utils/suggestNamesFraming.js).
     const framing = buildSuggestNamesFraming(event, organizer);
 

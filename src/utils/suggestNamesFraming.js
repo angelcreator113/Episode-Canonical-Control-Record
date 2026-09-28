@@ -7,9 +7,10 @@
  * docs/EVENT_EPISODE_FLOW.md §8(u) R9: the prompt names the organizer's niche
  * and the event's concept, never "a fashion/lifestyle content-creator show",
  * and never the show name (doctrine rule 11). "Concept" is not a field yet
- * (task 4 adds it); until then it is the event's saved format, category and
- * description. Each missing piece is omitted; with none, the sentence is
- * "Name this fictional event." Task #2120.
+ * (task 4 adds it); until then it is the event's saved format and
+ * description. Category is left to the prompt's own fact lines (Evoni,
+ * Task #2120 review). Each missing piece is omitted; with none, the sentence
+ * is "Name this fictional event." Task #2120.
  *
  * Pure; no I/O.
  */
@@ -36,11 +37,9 @@ function descriptionLead(description) {
 function buildSuggestNamesFraming(event, organizer) {
   const ev = event || {};
   const noun = words(ev.format) || 'event';
-  const category = words(ev.category);
   const niche = words(organizer && organizer.content_category);
 
   let sentence = `Name this fictional ${noun}`;
-  if (category) sentence += ` in the ${category} world`;
   if (niche) sentence += `, hosted by a ${niche} creator`;
   sentence += '.';
 
