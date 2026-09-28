@@ -8,7 +8,7 @@ amendment of `F-Deploy-1_Deploy_2026-09-28_BS.md`, whose deploy this one
 follows. This document edits no filed document.
 
 Basis: `origin/main` at `cd287a6b09446150d94f3656bac9611b35999030` (#2221),
-the tree Deploy BT moved production to (§8).
+read 2026-09-28, the tree Deploy BT moved production to (§8).
 
 **Author**
 
@@ -211,4 +211,6 @@ The tails are FD-69, XK-4 and PE 68. Nothing is minted here.
   sessions still never touch hosts, AWS, RDS or Cognito (`CLAUDE.md`).
 
 *Type: deploy record. Rules: nothing. Mints: nothing. Discharges: nothing.
-Host/AWS/DB/Cognito contact by the filing session: none. Task: none filed.*
+Host/AWS/DB/Cognito contact by the filing session: none. Task: none filed.
+Production's freeze is lifted (`F-Deploy-1_Fix_Plan_v1.53.md` §1); agent
+sessions still never touch hosts, AWS, RDS or Cognito (`CLAUDE.md`).*
