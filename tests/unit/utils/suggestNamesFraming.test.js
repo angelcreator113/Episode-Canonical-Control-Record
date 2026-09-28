@@ -33,6 +33,43 @@ describe('buildSuggestNamesFraming', () => {
       .toBe('Name this fictional event.');
   });
 
+  const CONCEPT = 'A sunset sculpt workout that ends in a recovery social.';
+  const withConcept = (extra, concept = CONCEPT) => ({ ...extra, canon_consequences: { automation: { concept } } });
+
+  test('Task #2135: concept only: the concept is the About line', () => {
+    expect(buildSuggestNamesFraming(withConcept({ format: 'workout_class' }), { content_category: 'fitness' })).toBe(
+      'Name this fictional workout class, hosted by a fitness creator. '
+      + `About it: ${CONCEPT}`
+    );
+  });
+
+  test('Task #2135: concept plus description: the concept replaces the description', () => {
+    const event = withConcept({ description: 'A golden-hour session on the rooftop. Bring a mat.' });
+    const sentence = buildSuggestNamesFraming(event, null);
+    expect(sentence).toBe(`Name this fictional event. About it: ${CONCEPT}`);
+    expect(sentence).not.toMatch(/golden-hour/);
+  });
+
+  test('Task #2135: no concept (missing, blank, or unreadable): the description, as before', () => {
+    const description = 'A golden-hour session on the rooftop. Bring a mat.';
+    const expected = 'Name this fictional event. About it: A golden-hour session on the rooftop.';
+    expect(buildSuggestNamesFraming({ description }, null)).toBe(expected);
+    expect(buildSuggestNamesFraming(withConcept({ description }, '   '), null)).toBe(expected);
+    expect(buildSuggestNamesFraming({ description, canon_consequences: { automation: {} } }, null)).toBe(expected);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(buildSuggestNamesFraming({ description, canon_consequences: '{not json' }, null)).toBe(expected);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test('Task #2135: the concept is capped like the description; a JSON-string column is read too', () => {
+    const long = `${'word '.repeat(60).trim()}.`;
+    expect(buildSuggestNamesFraming(withConcept({}, long), null))
+      .toBe(`Name this fictional event. About it: ${descriptionLead(long)}.`);
+    const asString = { canon_consequences: JSON.stringify({ automation: { concept: CONCEPT } }) };
+    expect(buildSuggestNamesFraming(asString, null)).toBe(`Name this fictional event. About it: ${CONCEPT}`);
+  });
+
   test('never uses the content-creator-show framing, whatever the input', () => {
     const inputs = [
       [{}, null],

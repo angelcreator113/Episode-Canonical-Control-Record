@@ -24,6 +24,12 @@
  * Event Package saves). Each is validated alone; an invalid one is dropped
  * with a warning and everything else is kept.
  *
+ * It drafts the event's name last (§8(u) R1, R3, R9; Task #2135), written
+ * from the concept, activity and format, under the suggest-names prompt's
+ * own name rules. A name that is empty, 40 characters or longer, or the
+ * route's fallback "Event with <creator>" is dropped with a warning (never
+ * truncated: a cut name reads broken), and everything else is kept.
+ *
  * The draft has its own per-user limit (§8(v) 5) because aiRateLimiter is
  * route middleware that answers 429, which would fail creation itself. It
  * reads the same env vars with the same defaults.
@@ -37,6 +43,12 @@ const MODELS = ['claude-haiku-4-5-20251001'];
 const DRAFT_TIMEOUT_MS = 10000;
 const MAX_TOKENS = 1000;
 const FIELD_MAX = { concept: 300, activity: 300, description: 1200 };
+// Task #2135: a drafted name is kept only when under this many characters,
+// the suggest-names prompt's "Each name is under 40 characters." rule.
+const NAME_LIMIT = 40;
+// Straight and curly quotation marks, single and double, as the
+// suggest-names handler strips them.
+const QUOTE_MARKS = /["'‘’“”]/g;
 
 // Styling (Task #2124). dress_code is STRING(200) on world_events.
 const STYLING_MAX = { dress_code: 200, keyword: 30, text: 300, item: 120, list: 5 };
@@ -121,14 +133,15 @@ Write these:
     - style_direction: one sentence on the look.
     - environment (optional): the setting, as it affects clothing.
     - footwear_requirements (optional): one short phrase.
+- name: write this last, from the concept, activity and format above. Each name is under 40 characters. No quotation marks in the name itself.
 
 Rules:
-- Do not name the event, and do not call the creator its organizer or host.
+- Do not call the creator the event's organizer or host.
 - Do not invent a venue, date or guest names the details above don't give you.
 - No quotation marks inside the values.
 
 Return ONLY this JSON, no other text:
-{"concept": "...", "activity": "...", "description": "...", "category": "...", "format": "...", "event_time": "HH:MM", "styling": {"dress_code": "...", "dress_code_keywords": ["..."], "styling_brief": {"activity": "...", "formality": "...", "function_requirements": ["..."], "avoid": ["..."], "style_direction": "...", "environment": "...", "footwear_requirements": "..."}}}`;
+{"concept": "...", "activity": "...", "description": "...", "category": "...", "format": "...", "event_time": "HH:MM", "styling": {"dress_code": "...", "dress_code_keywords": ["..."], "styling_brief": {"activity": "...", "formality": "...", "function_requirements": ["..."], "avoid": ["..."], "style_direction": "...", "environment": "...", "footwear_requirements": "..."}}, "name": "..."}`;
 }
 
 function cleanField(value, max) {
@@ -219,9 +232,41 @@ function parseTaxonomy(parsed) {
   return out;
 }
 
+// The route's fallback name (from-profile: "Event with <creator>"), or null
+// when the profile has no name to build it from.
+function fallbackNameFor(profile) {
+  const creator = profile && (profile.display_name || profile.handle);
+  return creator ? `Event with ${creator}` : null;
+}
+
+const nameKey = (v) => v.replace(QUOTE_MARKS, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+// The drafted name, or '' (with a warning) when it is empty, 40 characters
+// or longer, or the fallback name. Quotation marks are stripped first; the
+// name is never truncated.
+function parseName(raw, profile) {
+  const name = typeof raw === 'string' ? raw.replace(QUOTE_MARKS, '').replace(/\s+/g, ' ').trim() : '';
+  if (!name) {
+    console.warn('[eventConceptDraft] name missing or empty; the event keeps its fallback name');
+    return '';
+  }
+  if (name.length >= NAME_LIMIT) {
+    console.warn(`[eventConceptDraft] name ${JSON.stringify(name)} is ${name.length} characters (limit: under ${NAME_LIMIT}); the event keeps its fallback name`);
+    return '';
+  }
+  const fallback = fallbackNameFor(profile);
+  if (fallback && nameKey(name) === nameKey(fallback)) {
+    console.warn(`[eventConceptDraft] name ${JSON.stringify(name)} is the fallback pattern; the event keeps its fallback name`);
+    return '';
+  }
+  return name;
+}
+
 // The three concept fields from a model reply, or null when any is missing;
-// plus `styling` when the reply's styling is valid (Task #2124).
-function parseDraftReply(text) {
+// plus `styling` when the reply's styling is valid (Task #2124), and `name`
+// when the reply's name is valid (Task #2135; `profile` gives the fallback
+// name it must not equal).
+function parseDraftReply(text, profile = null) {
   if (typeof text !== 'string') return null;
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return null;
@@ -245,13 +290,16 @@ function parseDraftReply(text) {
   const styling = parseStyling(parsed.styling);
   if (styling) draft.styling = styling;
   else console.warn('[eventConceptDraft] styling missing or invalid; keeping the concept draft without styling');
+
+  const name = parseName(parsed.name, profile);
+  if (name) draft.name = name;
   return draft;
 }
 
 /**
  * @param {object} profile  the SocialProfile row (plain object)
  * @param {object} context  { venueName, userId }
- * @returns {Promise<{concept, activity, description, category?, format?, event_time?, styling?}|null>}
+ * @returns {Promise<{concept, activity, description, category?, format?, event_time?, styling?, name?}|null>}
  */
 async function draftEventConcept(profile, context = {}) {
   try {
@@ -274,7 +322,7 @@ async function draftEventConcept(profile, context = {}) {
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const draft = parseDraftReply(response.content?.[0]?.text);
+    const draft = parseDraftReply(response.content?.[0]?.text, profile);
     if (!draft) console.error('[eventConceptDraft] unusable reply; creating without a draft');
     return draft;
   } catch (err) {
@@ -289,12 +337,14 @@ module.exports = {
   parseDraftReply,
   parseStyling,
   parseTaxonomy,
+  parseName,
   normaliseTime,
   takeDraftSlot,
   resetDraftLimit,
   R8_CONTRACT,
   MODELS,
   DRAFT_TIMEOUT_MS,
+  NAME_LIMIT,
   FORMALITY_SCALE,
   PREFERRED_KEYWORDS,
 };

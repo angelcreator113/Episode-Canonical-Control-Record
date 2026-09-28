@@ -71,6 +71,8 @@ const ALL_DRAFTED = {
   description: 'ai_draft', concept: 'ai_draft', activity: 'ai_draft',
   dress_code: 'ai_draft', dress_code_keywords: 'ai_draft', styling_brief: 'ai_draft',
 };
+// Task #2135: a drafted name, as the service returns it once validated.
+const DRAFTED_NAME = 'Golden Hour Sculpt Social';
 const failBothToMinimal = () => {
   mockCreate.mockRejectedValueOnce(new Error('create failed'));
   mockQuery.mockImplementation(async (sql) => {
@@ -181,6 +183,18 @@ describe('from-profile with a draft', () => {
     };
     expect(stripTaxonomy(withTaxonomy)).toEqual(stripTaxonomy(withoutDraft));
     expect(withDraft.name).toBe('Event with Maya Moves');
+
+    // Task #2135: a name draft may also differ in the name, and only there.
+    mockCreate.mockClear();
+    mockDraft.mockResolvedValue({ ...WITH_TAXONOMY, name: DRAFTED_NAME });
+    await post();
+    const withName = mockCreate.mock.calls[0][0];
+    const stripName = (d) => {
+      const { name: _n, ...rest } = stripTaxonomy(d);
+      return rest;
+    };
+    expect(withName.name).toBe(DRAFTED_NAME);
+    expect(stripName(withName)).toEqual(stripName(withoutDraft));
   });
 
   test('the raw-SQL fallbacks bind the drafted description and draft keys', async () => {
@@ -362,5 +376,55 @@ describe('Task #2128: drafted_values, the copy each field state compares against
     mockDraft.mockResolvedValue(null);
     await post();
     expect(mockCreate.mock.calls[0][0].canon_consequences.automation).not.toHaveProperty('drafted_values');
+  });
+});
+
+describe('Task #2135: the drafted name', () => {
+  test('a drafted name is saved, marked in auto_drafted and copied to drafted_values', async () => {
+    mockDraft.mockResolvedValue({ ...WITH_TAXONOMY, name: DRAFTED_NAME });
+    expect((await post()).status).toBe(201);
+    const data = mockCreate.mock.calls[0][0];
+    const auto = data.canon_consequences.automation;
+    expect(data.name).toBe(DRAFTED_NAME);
+    expect(auto.auto_drafted.name).toBe('ai_draft');
+    expect(auto.drafted_values.name).toBe(DRAFTED_NAME);
+    expect(auto).not.toHaveProperty('name');
+  });
+
+  test('a draft without a name keeps "Event with <creator>", with no name entries', async () => {
+    mockDraft.mockResolvedValue(WITH_TAXONOMY);
+    await post();
+    const data = mockCreate.mock.calls[0][0];
+    const auto = data.canon_consequences.automation;
+    expect(data.name).toBe('Event with Maya Moves');
+    expect(auto.auto_drafted).not.toHaveProperty('name');
+    expect(auto.drafted_values).not.toHaveProperty('name');
+  });
+
+  test('no draft keeps "Event with <creator>"', async () => {
+    mockDraft.mockResolvedValue(null);
+    await post();
+    expect(mockCreate.mock.calls[0][0].name).toBe('Event with Maya Moves');
+  });
+
+  test('both raw-SQL fallbacks bind the drafted name', async () => {
+    mockDraft.mockResolvedValue({ ...DRAFT, name: DRAFTED_NAME });
+    failBothToMinimal();
+    expect((await post()).status).toBe(201);
+    const inserts = insertsOf();
+    expect(inserts).toHaveLength(2);
+    for (const [, { replacements }] of inserts) {
+      expect(replacements.name).toBe(DRAFTED_NAME);
+      const auto = JSON.parse(replacements.canon_consequences).automation;
+      expect(auto.auto_drafted.name).toBe('ai_draft');
+      expect(auto.drafted_values.name).toBe(DRAFTED_NAME);
+    }
+  });
+
+  test('both raw-SQL fallbacks bind the fallback name when nothing was drafted', async () => {
+    mockDraft.mockResolvedValue(null);
+    failBothToMinimal();
+    await post();
+    for (const [, { replacements }] of insertsOf()) expect(replacements.name).toBe('Event with Maya Moves');
   });
 });
