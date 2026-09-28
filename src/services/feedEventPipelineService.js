@@ -14,6 +14,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const { autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
+const { draftEventConcept } = require('./eventConceptDraftService');
 const {
   deliverablesFromOpportunity, restrictionsFromOpportunity, compensationFromOpportunity, insertEventDeliverables,
 } = require('./eventTermsService');
@@ -372,7 +373,13 @@ function opportunityGuestCategory(category) {
   return category;
 }
 
-async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
+// Task #2156: the venue line is passed to the creation draft as its venue
+// input, capped. It is an AI-written description, not a place name.
+const DRAFT_VENUE_MAX = 200;
+
+// userId (Task #2156) is the requesting user, the creation draft's rate-limit
+// key; the schedule route passes req.user's id.
+async function scheduleOpportunityAsEvent(opportunityId, showId, models, { userId = null } = {}) {
   const { sequelize } = models;
 
   // Load opportunity
@@ -443,6 +450,84 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
   const compensation = compensationFromOpportunity(opp);
   const deliverableRows = deliverablesFromOpportunity(opp);
 
+  // Task #2156 (§8(v); docs/EVENT_CREATE_PATHS_READ.md, the "Schedule as
+  // Event" row): the same single draft call as from-profile, after the venue
+  // call above, so one click makes two model calls. It runs only when the
+  // connector's profile loads (one query, the fields the draft reads); with
+  // no profile or a null draft, every field below is exactly as before.
+  //   - Role: this path saves the connector as automation.host_profile_id
+  //     and the opportunity's brand as host_brand, and the Package's
+  //     organizer rule lets a brand win (resolveEventOrganizer). So with a
+  //     brand the creator is who the event came through ('started_from');
+  //     without one they are its host ('host').
+  //   - Context: the opportunity's public title, type and brand only. It has
+  //     no public description field; its narrative_stakes, what_lala_wants,
+  //     what_could_go_wrong, emotional_arc, connection_story, career_impact,
+  //     career_milestone, reputation_risk, exclusivity and money fields are
+  //     story-only or private and are never sent.
+  //   - Fields: the opportunity's own values win (name, dress code). The
+  //     description is replaced: today it is the opportunity's
+  //     narrative_stakes (Lala's story stakes) or the type's template, not
+  //     public copy (§8(u) R8). Empty fields (time, category, format, and
+  //     styling when the opportunity gives no dress code) are filled. A
+  //     supplied dress code means none of the drafted styling is used.
+  // One query, by primary key, as from-profile loads its profile.
+  let creatorProfile = null;
+  if (opp.connector_profile_id && models.SocialProfile?.findByPk) {
+    try {
+      const row = await models.SocialProfile.findByPk(opp.connector_profile_id, {
+        attributes: ['id', 'handle', 'display_name', 'content_category', 'archetype'],
+      });
+      creatorProfile = row ? (row.toJSON ? row.toJSON() : row) : null;
+    } catch (err) {
+      console.warn('[FeedPipeline] Creator profile lookup failed (scheduling without a draft):', err.message);
+    }
+  }
+  const oppDressCode = wardrobe.dress_code || null;
+  const draft = creatorProfile
+    ? await draftEventConcept(creatorProfile, {
+      venueName: typeof venueTheme === 'string' ? venueTheme.slice(0, DRAFT_VENUE_MAX) : null,
+      userId,
+      creatorRole: opp.brand_or_company ? 'started_from' : 'host',
+      context: {
+        kind: 'opportunity',
+        title: opp.name,
+        type: opp.opportunity_type,
+        brand: opp.brand_or_company || null,
+      },
+    })
+    : null;
+  const styling = !oppDressCode ? (draft?.styling || null) : null;
+  const draftedTaxonomy = {};
+  for (const field of ['category', 'format', 'event_time']) {
+    if (draft?.[field]) draftedTaxonomy[field] = draft[field];
+  }
+  const draftAutomation = draft
+    ? {
+      concept: draft.concept,
+      activity: draft.activity,
+      ...(styling ? { styling_brief: styling.styling_brief } : {}),
+      auto_drafted: {
+        description: 'ai_draft',
+        concept: 'ai_draft',
+        activity: 'ai_draft',
+        ...(styling ? { dress_code: 'ai_draft', dress_code_keywords: 'ai_draft', styling_brief: 'ai_draft' } : {}),
+        ...Object.fromEntries(Object.keys(draftedTaxonomy).map((field) => [field, 'ai_draft'])),
+      },
+      drafted_values: {
+        description: draft.description,
+        ...(styling ? { dress_code: styling.dress_code, dress_code_keywords: styling.dress_code_keywords } : {}),
+        ...draftedTaxonomy,
+      },
+    }
+    : {};
+  // Drafted columns this INSERT did not write before; added only when
+  // drafted, so a null draft sends the same statement as before.
+  const draftedColumns = {
+    ...draftedTaxonomy,
+    ...(styling ? { dress_code_keywords: JSON.stringify(styling.dress_code_keywords) } : {}),
+  };
+
   // Create the world event
   const eventId = uuidv4();
   const eventData = {
@@ -452,12 +537,12 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
     event_type: config.event_type,
     host: opp.brand_or_company || opp.connector_handle || opp.name,
     host_brand: opp.brand_or_company || null,
-    description: opp.narrative_stakes || config.narrative_template,
+    description: draft ? draft.description : (opp.narrative_stakes || config.narrative_template),
     prestige,
     cost_coins: prestige >= 8 ? 500 : prestige >= 6 ? 300 : prestige >= 4 ? 150 : 50,
     strictness: Math.min(10, prestige + 1),
     deadline_type: prestige >= 8 ? 'urgent' : prestige >= 5 ? 'medium' : 'low',
-    dress_code: wardrobe.dress_code || null,
+    dress_code: oppDressCode || (styling ? styling.dress_code : null),
     location_hint: venueTheme,
     narrative_stakes: opp.what_could_go_wrong || opp.narrative_stakes || config.narrative_template,
     canon_consequences: JSON.stringify({
@@ -473,6 +558,7 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
         [AUTO_DATE_KEY]: eventDateStr,
         guest_profiles: guestProfiles,
         career_milestone: opp.career_milestone || null,
+        ...draftAutomation,
       },
     }),
     event_date: eventDateStr,
@@ -480,16 +566,22 @@ async function scheduleOpportunityAsEvent(opportunityId, showId, models) {
     is_paid: compensation.is_paid,
     payment_amount: compensation.payment_amount,
     status: 'ready',
+    ...draftedColumns,
   };
 
+  // Task #2156: drafted columns go after payment_amount, only when drafted
+  // (dress_code_keywords as jsonb); otherwise the statement is as before.
+  const extraColumns = Object.keys(draftedColumns);
+  const extraCols = extraColumns.map((c) => `, ${c}`).join('');
+  const extraVals = extraColumns.map((c) => (c === 'dress_code_keywords' ? `, :${c}::jsonb` : `, :${c}`)).join('');
   await sequelize.query(
     `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, description,
      prestige, cost_coins, strictness, deadline_type, dress_code, location_hint,
-     narrative_stakes, event_date, canon_consequences, restrictions, is_paid, payment_amount,
+     narrative_stakes, event_date, canon_consequences, restrictions, is_paid, payment_amount${extraCols},
      status, created_at, updated_at)
      VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :description,
      :prestige, :cost_coins, :strictness, :deadline_type, :dress_code, :location_hint,
-     :narrative_stakes, :event_date, :canon_consequences, :restrictions, :is_paid, :payment_amount,
+     :narrative_stakes, :event_date, :canon_consequences, :restrictions, :is_paid, :payment_amount${extraVals},
      :status, NOW(), NOW())`,
     { replacements: eventData }
   );
