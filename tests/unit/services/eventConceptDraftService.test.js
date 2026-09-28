@@ -16,6 +16,8 @@ const {
   buildDraftPrompt,
   parseDraftReply,
   resetDraftLimit,
+  parseStyling,
+  FORMALITY_SCALE,
   R8_CONTRACT,
   MODELS,
   DRAFT_TIMEOUT_MS,
@@ -27,6 +29,19 @@ const REPLY = {
   activity: 'Guests take a guided rooftop sculpt class, then stretch and share mocktails.',
   description: 'Maya Moves is celebrating the end of summer with a golden-hour sculpt session on the rooftop. '
     + 'Expect a guided class, a slow stretch as the sun goes down, and a relaxed social afterwards.',
+};
+const STYLING = {
+  dress_code: 'Sleek performance activewear with a light layer for the social',
+  dress_code_keywords: ['practical', 'modern', 'comfortable', 'clean'],
+  styling_brief: {
+    activity: 'A sculpt class on mats, then standing and mingling',
+    formality: 'casual',
+    function_requirements: ['full range of movement', 'breathable fabric'],
+    avoid: ['loose jewellery', 'heels'],
+    style_direction: 'Polished athleisure that goes straight from class to drinks.',
+    environment: 'Open-air rooftop at sunset',
+    footwear_requirements: 'clean training shoes',
+  },
 };
 const reply = (text) => ({ content: [{ text }] });
 
@@ -64,6 +79,28 @@ describe('draftEventConcept', () => {
     expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
     expect(DRAFT_TIMEOUT_MS).toBe(10000);
     expect(mockClientOptions).toEqual([{ timeout: 10000, maxRetries: 0 }]);
+  });
+
+  test('Task #2124: the same one call also returns valid styling', async () => {
+    mockMessagesCreate.mockResolvedValue(reply(JSON.stringify({ ...REPLY, styling: STYLING })));
+    const draft = await draftEventConcept(PROFILE, { userId: 'u1' });
+    expect(draft).toEqual({ ...REPLY, styling: STYLING });
+    expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+    expect(mockMessagesCreate.mock.calls[0][0].max_tokens).toBe(1000);
+  });
+
+  test('Task #2124: invalid styling keeps the concept draft, styling omitted, with a warning', async () => {
+    const bad = { ...STYLING, styling_brief: { ...STYLING.styling_brief, formality: 'very fancy' } };
+    mockMessagesCreate.mockResolvedValue(reply(JSON.stringify({ ...REPLY, styling: bad })));
+    const draft = await draftEventConcept(PROFILE, { userId: 'u1' });
+    expect(draft).toEqual(REPLY);
+    expect(draft).not.toHaveProperty('styling');
+    expect(console.warn).toHaveBeenCalledWith(expect.stringMatching(/styling missing or invalid/));
+  });
+
+  test('Task #2124: missing styling keeps the concept draft', async () => {
+    mockMessagesCreate.mockResolvedValue(reply(JSON.stringify(REPLY)));
+    expect(await draftEventConcept(PROFILE, { userId: 'u1' })).toEqual(REPLY);
   });
 
   test('a malformed reply gives null', async () => {
@@ -118,8 +155,53 @@ describe('buildDraftPrompt', () => {
     expect(prompt).not.toMatch(/content-creator show/);
   });
 
+  test('Task #2124: asks for styling on the wardrobe\'s own formality scale and tag words', () => {
+    const prompt = buildDraftPrompt(PROFILE, {});
+    expect(FORMALITY_SCALE).toEqual(['casual', 'smart-casual', 'business', 'formal', 'black-tie']);
+    expect(prompt).toContain('exactly one of casual, smart-casual, business, formal, black-tie');
+    expect(prompt).toContain('dress_code_keywords');
+    expect(prompt).toContain('old-money');
+    expect(prompt).toContain('styling_brief');
+  });
+
   test('with no facts it still asks for a simple draft and invents nothing', () => {
     expect(buildDraftPrompt({}, {})).toContain('do not invent specifics');
+  });
+});
+
+describe('parseStyling', () => {
+  test('a valid styling object passes through', () => {
+    expect(parseStyling(STYLING)).toEqual(STYLING);
+  });
+
+  test('keywords: lower-cased, de-duplicated, at most 8; fewer than 3 is invalid', () => {
+    const many = ['Elegant', 'elegant', 'bold', 'soft', 'modern', 'clean', 'classic', 'fresh', 'cozy', 'minimal'];
+    expect(parseStyling({ ...STYLING, dress_code_keywords: many }).dress_code_keywords)
+      .toEqual(['elegant', 'bold', 'soft', 'modern', 'clean', 'classic', 'fresh', 'cozy']);
+    expect(parseStyling({ ...STYLING, dress_code_keywords: ['bold', 'Bold', 'soft'] })).toBeNull();
+  });
+
+  test('each required field is required', () => {
+    expect(parseStyling({ ...STYLING, dress_code: '' })).toBeNull();
+    expect(parseStyling({ ...STYLING, styling_brief: undefined })).toBeNull();
+    for (const field of ['activity', 'formality', 'function_requirements', 'avoid', 'style_direction']) {
+      const { [field]: _omit, ...brief } = STYLING.styling_brief;
+      expect(parseStyling({ ...STYLING, styling_brief: brief })).toBeNull();
+    }
+    expect(parseStyling({ ...STYLING, styling_brief: { ...STYLING.styling_brief, avoid: [] } })).toBeNull();
+  });
+
+  test('optional fields are dropped when empty; a lone string counts as a one-item list', () => {
+    const { environment: _e, footwear_requirements: _f, ...rest } = STYLING.styling_brief;
+    const out = parseStyling({ ...STYLING, styling_brief: { ...rest, environment: '  ', avoid: 'heels' } });
+    expect(out.styling_brief).not.toHaveProperty('environment');
+    expect(out.styling_brief).not.toHaveProperty('footwear_requirements');
+    expect(out.styling_brief.avoid).toEqual(['heels']);
+  });
+
+  test('caps the dress code at the 200-character column limit', () => {
+    const out = parseStyling({ ...STYLING, dress_code: 'smart '.repeat(60).trim() });
+    expect(out.dress_code.length).toBeLessThanOrEqual(200);
   });
 });
 
