@@ -30,7 +30,11 @@ const mockCharacter = new Proxy({}, {
 const mockRegistry = { toJSON: () => ({ id: 'r1', title: 'Book 1', characters: [{ ...mockRow }] }) };
 
 jest.mock('../../../src/models', () => ({
-  RegistryCharacter: { findByPk: jest.fn(async () => mockCharacter) },
+  RegistryCharacter: {
+    findByPk: jest.fn(async () => mockCharacter),
+    // character-generation /confirm reads and writes under a row lock (F-Reg-2, #2184).
+    sequelize: { transaction: async (fn) => fn({ LOCK: { UPDATE: 'UPDATE' } }) },
+  },
   CharacterRegistry: { findByPk: jest.fn(async () => mockRegistry), findOne: jest.fn(async () => mockRegistry) },
 }));
 jest.mock('../../../src/services/feedAutoGeneration', () => ({ autoCreateFeedProfile: jest.fn() }));
