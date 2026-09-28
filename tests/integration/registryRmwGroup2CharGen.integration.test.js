@@ -1,9 +1,8 @@
 /**
  * F-Reg-2 fix group 2 (v1.2 R2), src/routes/characterGenerationRoutes.js:
- * row 4 of the scoping note's §3.4 (F-Reg-2_Fix_Plan_v1.0.md §4.2). Row 8
- * (POST /promote-ghost) is not reached: its create fails first (role_type
- * 'supporting' is not in the enum), so it is left as it is and described
- * in the PR.
+ * rows 4 and 8 of the scoping note's §3.4 (F-Reg-2_Fix_Plan_v1.0.md §4.2).
+ * Row 4 (POST /confirm) was #2186. Row 8 (POST /promote-ghost) was reached
+ * once #2187 fixed its create's role_type.
  * characterRegistry.js was #2179/#2181; registrySync.js was #2183.
  *
  * Each test holds the first request after its read of the character until a
@@ -97,5 +96,25 @@ function interleave(second, waitMs = 600) {
     expect(row.wound).toEqual({ origin: 'set by the first confirm' });
     expect(row.living_state).toEqual({ mood: 'set by the second confirm' });
     expect(row.depth_level).toBe('active');
+  });
+
+  it('row 8: two promotions from one source character keep both promoted marks', async () => {
+    const ids = await seed();
+    seeded.push(ids);
+    await run(`UPDATE registry_characters SET ghost_characters = CAST(:ghosts AS jsonb) WHERE id = :rc`,
+      { ...ids, ghosts: JSON.stringify([{ name: `Ghost A ${ids.rc.slice(0, 8)}` }, { name: `Ghost B ${ids.rc.slice(0, 8)}` }]) });
+    const promote = (ghost_name) =>
+      request(app).post(`${BASE}/promote-ghost/${ids.rc}`).set('Authorization', auth()).send({ ghost_name, registry_id: ids.reg });
+
+    const secondDone = interleave(() => promote(`Ghost B ${ids.rc.slice(0, 8)}`));
+    const first = await promote(`Ghost A ${ids.rc.slice(0, 8)}`);
+    const second = await secondDone();
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    const [row] = await q(`SELECT ghost_characters FROM registry_characters WHERE id = :rc`, ids);
+    const byName = Object.fromEntries(row.ghost_characters.map((g) => [g.name, g]));
+    expect(byName[`Ghost A ${ids.rc.slice(0, 8)}`]).toMatchObject({ promoted: true, promoted_id: first.body.character.id });
+    expect(byName[`Ghost B ${ids.rc.slice(0, 8)}`]).toMatchObject({ promoted: true, promoted_id: second.body.character.id });
   });
 });
