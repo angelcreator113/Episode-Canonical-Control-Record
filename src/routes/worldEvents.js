@@ -2544,6 +2544,13 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     // dress_code and dress_code_keywords go to their columns and the brief
     // to automation.styling_brief; without it, all three are as before.
     const styling = draft?.styling || null;
+    // Task #2126 (§8(u) R3): the draft's category, format and start time,
+    // each present only when valid. A field not drafted is saved as before
+    // (null) and the Event Package still suggests it.
+    const draftedTaxonomy = {};
+    for (const field of ['category', 'format', 'event_time']) {
+      if (draft?.[field]) draftedTaxonomy[field] = draft[field];
+    }
     const draftAutomation = draft
       ? {
         concept: draft.concept,
@@ -2554,6 +2561,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
           concept: 'ai_draft',
           activity: 'ai_draft',
           ...(styling ? { dress_code: 'ai_draft', dress_code_keywords: 'ai_draft', styling_brief: 'ai_draft' } : {}),
+          ...Object.fromEntries(Object.keys(draftedTaxonomy).map((field) => [field, 'ai_draft'])),
         },
       }
       : {};
@@ -2581,7 +2589,9 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       venue_name: venue?.name || null,
       venue_address: venueAddress || null,
       event_date: eventDateStr,
-      event_time: null,
+      event_time: draftedTaxonomy.event_time || null,
+      ...(draftedTaxonomy.category ? { category: draftedTaxonomy.category } : {}),
+      ...(draftedTaxonomy.format ? { format: draftedTaxonomy.format } : {}),
       description: descriptionText,
       narrative_stakes: narrativeText,
       theme: invStyle.theme,
@@ -2653,12 +2663,15 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
         await models.sequelize.query(
           `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, prestige, cost_coins,
            strictness, deadline_type, dress_code, dress_code_keywords, description, narrative_stakes, location_hint, venue_name,
-           venue_address, event_date, event_time, canon_consequences, status, created_at, updated_at)
+           venue_address, event_date, event_time, category, format, canon_consequences, status, created_at, updated_at)
            VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :prestige, :cost_coins,
            :strictness, :deadline_type, :dress_code, :dress_code_keywords::jsonb, :description, :narrative_stakes, :location_hint, :venue_name,
-           :venue_address, :event_date, :event_time, :canon_consequences, 'draft', NOW(), NOW())`,
+           :venue_address, :event_date, :event_time, :category, :format, :canon_consequences, 'draft', NOW(), NOW())`,
           { replacements: {
             ...eventData,
+            // Task #2126: null when not drafted, as the columns are today.
+            category: eventData.category || null,
+            format: eventData.format || null,
             // Task #2124: the column's default is []; a drafted list replaces it.
             dress_code_keywords: JSON.stringify(eventData.dress_code_keywords || []),
             canon_consequences: JSON.stringify(eventData.canon_consequences),

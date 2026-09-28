@@ -18,10 +18,20 @@
  * result: when it is missing or invalid the concept draft is still returned,
  * with no styling key.
  *
+ * It also drafts the taxonomy and start time (§8(u) R3, Task #2126):
+ * category and format from WorldEvent's own isIn lists, and event_time as
+ * 24h HH:MM (the format eventBasics' FORMAT_START_TIMES suggests and the
+ * Event Package saves). Each is validated alone; an invalid one is dropped
+ * with a warning and everything else is kept.
+ *
  * The draft has its own per-user limit (§8(v) 5) because aiRateLimiter is
  * route middleware that answers 429, which would fail creation itself. It
  * reads the same env vars with the same defaults.
  */
+
+// The model file is required directly, not the models index: it exports the
+// taxonomy lists on its define function and needs no database.
+const { CATEGORY_VALUES, FORMAT_VALUES } = require('../models/WorldEvent');
 
 const MODELS = ['claude-haiku-4-5-20251001'];
 const DRAFT_TIMEOUT_MS = 10000;
@@ -97,6 +107,9 @@ Write these:
 - concept: one sentence saying what the event is and why it exists.
 - activity: one sentence saying what attendees will actually do there.
 - description: the public event description, two to four sentences. ${R8_CONTRACT}
+- category: exactly one of ${CATEGORY_VALUES.join(', ')}.
+- format: exactly one of ${FORMAT_VALUES.join(', ')}. Choose it from the concept and activity above.
+- event_time: the start time that fits the concept and activity, as 24-hour HH:MM (e.g. 18:30).
 - styling, for what guests wear to this event and this activity:
   - dress_code: a short dress code, under 200 characters.
   - dress_code_keywords: ${KEYWORDS_MIN} to ${KEYWORDS_MAX} lower-case style words, each a single word or a hyphenated compound such as old-money or smart-casual. Prefer words from this list, which wardrobe items are tagged with: ${PREFERRED_KEYWORDS.join(', ')}.
@@ -111,11 +124,11 @@ Write these:
 
 Rules:
 - Do not name the event, and do not call the creator its organizer or host.
-- Do not invent a venue, date, time or guest names the details above don't give you.
+- Do not invent a venue, date or guest names the details above don't give you.
 - No quotation marks inside the values.
 
 Return ONLY this JSON, no other text:
-{"concept": "...", "activity": "...", "description": "...", "styling": {"dress_code": "...", "dress_code_keywords": ["..."], "styling_brief": {"activity": "...", "formality": "...", "function_requirements": ["..."], "avoid": ["..."], "style_direction": "...", "environment": "...", "footwear_requirements": "..."}}}`;
+{"concept": "...", "activity": "...", "description": "...", "category": "...", "format": "...", "event_time": "HH:MM", "styling": {"dress_code": "...", "dress_code_keywords": ["..."], "styling_brief": {"activity": "...", "formality": "...", "function_requirements": ["..."], "avoid": ["..."], "style_direction": "...", "environment": "...", "footwear_requirements": "..."}}}`;
 }
 
 function cleanField(value, max) {
@@ -174,6 +187,38 @@ function parseStyling(raw) {
   return { dress_code: dressCode, dress_code_keywords: keywords, styling_brief: brief };
 }
 
+// Lower-case, spaces and hyphens to underscores: "Workout Class" →
+// "workout_class", "pop-up" → "pop_up".
+const underscore = (v) => (typeof v === 'string'
+  ? v.trim().toLowerCase().replace(/[\s-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+  : '');
+
+// A start time as zero-padded 24h HH:MM, or '' when it doesn't parse.
+function normaliseTime(v) {
+  const m = typeof v === 'string' ? v.trim().match(/^(\d{1,2}):(\d{2})$/) : null;
+  if (!m) return '';
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return '';
+  return `${String(h).padStart(2, '0')}:${m[2]}`;
+}
+
+// category, format and event_time from a reply; each is kept only when
+// valid, with a warning naming any that was dropped.
+function parseTaxonomy(parsed) {
+  const out = {};
+  const category = underscore(parsed.category);
+  const format = underscore(parsed.format);
+  const time = normaliseTime(parsed.event_time);
+  if (CATEGORY_VALUES.includes(category)) out.category = category;
+  else console.warn(`[eventConceptDraft] category ${JSON.stringify(parsed.category)} not allowed; left for the Package to suggest`);
+  if (FORMAT_VALUES.includes(format)) out.format = format;
+  else console.warn(`[eventConceptDraft] format ${JSON.stringify(parsed.format)} not allowed; left for the Package to suggest`);
+  if (time) out.event_time = time;
+  else console.warn(`[eventConceptDraft] event_time ${JSON.stringify(parsed.event_time)} did not parse; left for the Package to suggest`);
+  return out;
+}
+
 // The three concept fields from a model reply, or null when any is missing;
 // plus `styling` when the reply's styling is valid (Task #2124).
 function parseDraftReply(text) {
@@ -195,6 +240,8 @@ function parseDraftReply(text) {
   };
   if (!draft.concept || !draft.activity || !draft.description) return null;
 
+  Object.assign(draft, parseTaxonomy(parsed));
+
   const styling = parseStyling(parsed.styling);
   if (styling) draft.styling = styling;
   else console.warn('[eventConceptDraft] styling missing or invalid; keeping the concept draft without styling');
@@ -204,7 +251,7 @@ function parseDraftReply(text) {
 /**
  * @param {object} profile  the SocialProfile row (plain object)
  * @param {object} context  { venueName, userId }
- * @returns {Promise<{concept, activity, description, styling?}|null>}
+ * @returns {Promise<{concept, activity, description, category?, format?, event_time?, styling?}|null>}
  */
 async function draftEventConcept(profile, context = {}) {
   try {
@@ -241,6 +288,8 @@ module.exports = {
   buildDraftPrompt,
   parseDraftReply,
   parseStyling,
+  parseTaxonomy,
+  normaliseTime,
   takeDraftSlot,
   resetDraftLimit,
   R8_CONTRACT,

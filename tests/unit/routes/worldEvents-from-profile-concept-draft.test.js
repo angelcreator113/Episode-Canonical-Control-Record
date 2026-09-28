@@ -64,6 +64,9 @@ const STYLING = {
   },
 };
 const STYLED = { ...DRAFT, styling: STYLING };
+// Task #2126: the same draft with category, format and start time.
+const TAXONOMY = { category: 'fitness', format: 'workout_class', event_time: '18:30' };
+const WITH_TAXONOMY = { ...STYLED, ...TAXONOMY };
 const ALL_DRAFTED = {
   description: 'ai_draft', concept: 'ai_draft', activity: 'ai_draft',
   dress_code: 'ai_draft', dress_code_keywords: 'ai_draft', styling_brief: 'ai_draft',
@@ -164,6 +167,19 @@ describe('from-profile with a draft', () => {
     };
     expect(strip(withDraft)).toEqual(strip(withoutDraft));
     expect(strip(withStyled)).toEqual(strip(withoutDraft));
+    // Neither draft above carries taxonomy, so category, format and
+    // event_time are compared too and must match the no-draft event.
+
+    // Task #2126: a taxonomy draft may also differ in those three.
+    mockCreate.mockClear();
+    mockDraft.mockResolvedValue(WITH_TAXONOMY);
+    await post();
+    const withTaxonomy = mockCreate.mock.calls[0][0];
+    const stripTaxonomy = (d) => {
+      const { category: _c, format: _f, event_time: _t, ...rest } = strip(d);
+      return rest;
+    };
+    expect(stripTaxonomy(withTaxonomy)).toEqual(stripTaxonomy(withoutDraft));
     expect(withDraft.name).toBe('Event with Maya Moves');
   });
 
@@ -258,5 +274,66 @@ describe('Task #2124: raw-SQL fallbacks and styling', () => {
     expect(replacements).not.toHaveProperty('dress_code');
     expect(replacements).not.toHaveProperty('dress_code_keywords');
     expect(JSON.parse(replacements.canon_consequences).automation.styling_brief).toEqual(STYLING.styling_brief);
+  });
+});
+
+describe('Task #2126: drafted category, format and start time', () => {
+  test('a full taxonomy draft saves all three to their columns, marked in auto_drafted', async () => {
+    mockDraft.mockResolvedValue(WITH_TAXONOMY);
+    expect((await post()).status).toBe(201);
+    const data = mockCreate.mock.calls[0][0];
+    expect(data.category).toBe('fitness');
+    expect(data.format).toBe('workout_class');
+    expect(data.event_time).toBe('18:30');
+    expect(data.canon_consequences.automation.auto_drafted).toEqual({
+      ...ALL_DRAFTED, category: 'ai_draft', format: 'ai_draft', event_time: 'ai_draft',
+    });
+    for (const f of ['category', 'format', 'event_time']) expect(data.canon_consequences.automation).not.toHaveProperty(f);
+  });
+
+  test('a partial draft saves only what it has; the rest is as today', async () => {
+    mockDraft.mockResolvedValue({ ...DRAFT, format: 'run_club' });
+    await post();
+    const data = mockCreate.mock.calls[0][0];
+    expect(data.format).toBe('run_club');
+    expect(data).not.toHaveProperty('category');
+    expect(data.event_time).toBeNull();
+    expect(data.canon_consequences.automation.auto_drafted).toEqual({
+      description: 'ai_draft', concept: 'ai_draft', activity: 'ai_draft', format: 'ai_draft',
+    });
+  });
+
+  test('a null draft saves no category or format and a null time, as today', async () => {
+    mockDraft.mockResolvedValue(null);
+    await post();
+    const data = mockCreate.mock.calls[0][0];
+    expect(data).not.toHaveProperty('category');
+    expect(data).not.toHaveProperty('format');
+    expect(data.event_time).toBeNull();
+  });
+
+  test('the full insert binds all three; null when not drafted', async () => {
+    mockDraft.mockResolvedValue(WITH_TAXONOMY);
+    failToFull();
+    await post();
+    let [sql, { replacements }] = insertsOf()[0];
+    expect(sql).toMatch(/:event_time, :category, :format,/);
+    expect(replacements).toMatchObject({ category: 'fitness', format: 'workout_class', event_time: '18:30' });
+
+    mockQuery.mockClear();
+    mockDraft.mockResolvedValue(null);
+    failToFull();
+    await post();
+    [sql, { replacements }] = insertsOf()[0];
+    expect(replacements).toMatchObject({ category: null, format: null, event_time: null });
+  });
+
+  test('the minimal insert is unchanged and saves none of the three', async () => {
+    mockDraft.mockResolvedValue(WITH_TAXONOMY);
+    failBothToMinimal();
+    expect((await post()).status).toBe(201);
+    const [sql, { replacements }] = insertsOf().find(([q]) => !isFull(q));
+    expect(sql).not.toMatch(/category|format|event_time/);
+    for (const f of ['category', 'format', 'event_time']) expect(replacements).not.toHaveProperty(f);
   });
 });

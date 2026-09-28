@@ -14,19 +14,23 @@ const QEC_SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'frontend
 const CATEGORIES = ['fashion', 'social', 'brunch_dining', 'beauty_wellness', 'creator_brand', 'arts_entertainment', 'luxury_prestige', 'community_local', 'travel_destination', 'personal_relationship', 'fitness'];
 const FORMATS = ['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere', 'workout_class', 'masterclass', 'workshop', 'dinner', 'showcase', 'preview', 'pop_up', 'retreat', 'meetup', 'run_club', 'performance', 'photoshoot', 'tasting', 'panel', 'competition'];
 
+// Task #2126: the lists live in exported constants (CATEGORY_VALUES,
+// FORMAT_VALUES) that the isIn validators use, so these read the model as
+// Sequelize builds it (in memory, no database) instead of its source text.
+const { Sequelize } = require('sequelize');
+const defineWorldEvent = require('../../../src/models/WorldEvent');
+const WORLD_EVENT = defineWorldEvent(new Sequelize('postgres://unused:unused@localhost:1/unused', { logging: false }));
+const isInOf = (field) => WORLD_EVENT.rawAttributes[field].validate.isIn[0];
+
 describe('Task #1640 — WorldEvent model validates the settled taxonomy', () => {
   test('category field exists with isIn validation against the exact eleven values', () => {
-    const match = MODEL_SRC.match(/category:\s*\{[\s\S]*?isIn:\s*\[\[([\s\S]*?)\]\]/);
-    expect(match).not.toBeNull();
-    const listed = match[1].split(',').map((s) => s.trim().replace(/'/g, ''));
-    expect(listed.sort()).toEqual([...CATEGORIES].sort());
+    expect([...isInOf('category')].sort()).toEqual([...CATEGORIES].sort());
+    expect([...defineWorldEvent.CATEGORY_VALUES]).toEqual(isInOf('category'));
   });
 
   test('format field exists with isIn validation against the exact twenty-three values', () => {
-    const match = MODEL_SRC.match(/format:\s*\{[\s\S]*?isIn:\s*\[\[([\s\S]*?)\]\]/);
-    expect(match).not.toBeNull();
-    const listed = match[1].split(',').map((s) => s.trim().replace(/'/g, ''));
-    expect(listed.sort()).toEqual([...FORMATS].sort());
+    expect([...isInOf('format')].sort()).toEqual([...FORMATS].sort());
+    expect([...defineWorldEvent.FORMAT_VALUES]).toEqual(isInOf('format'));
   });
 
   test('red_carpet is not a format value anywhere in the model', () => {
