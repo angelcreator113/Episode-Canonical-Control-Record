@@ -2338,10 +2338,10 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
 
 // POST /world/:showId/events/:eventId/regenerate-episode
 //
-// Tear down the existing episode generated from this event and create a
-// fresh one. Same generator service, but unblocks the "already used"
-// guard by clearing used_in_episode_id + soft-deleting the previous
-// episode first. Useful when the event has been edited (new outfit,
+// Replace the existing episode generated from this event with a fresh one.
+// Same generator service, told which episode it is replacing: the new
+// episode is created first, and the old one is soft-deleted and the event
+// relinked in the same transaction (§8(w) P3). Useful when the event has been edited (new outfit,
 // stakes, etc.) and the creator wants the episode to reflect those
 // changes without losing their place.
 router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, aiRateLimiter, async (req, res) => {
@@ -2358,16 +2358,12 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, ai
     const event = evRows?.[0];
     if (!event) return res.status(404).json({ success: false, error: 'Event not found' });
 
+    // The previous episode stays live and linked until its replacement
+    // exists: the generator supersedes it (soft-delete) and relinks the event
+    // in the same transaction that creates the new episode, so a failure
+    // leaves both as they were (§8(w) P3, Task #2210). Its briefs, wardrobe
+    // and scene plan are not cascade-deleted, as before.
     const oldEpisodeId = event.used_in_episode_id || null;
-    if (oldEpisodeId) {
-      // Soft-delete the previous episode (paranoid mode handles this) and
-      // unhook the event so the generator's duplicate-guard passes. We
-      // intentionally don't cascade-delete briefs / wardrobe / scene-plan
-      // because Sequelize paranoid will mask them via the same deleted_at
-      // and they'll be hidden from queries.
-      await models.sequelize.query('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :eventId', { replacements: { eventId } });
-      await models.sequelize.query('UPDATE episodes SET deleted_at = NOW() WHERE id = :episodeId AND deleted_at IS NULL', { replacements: { episodeId: oldEpisodeId } });
-    }
 
     // Re-fetch the event row in full so the generator gets every column.
     const [fullRows] = await models.sequelize.query(
@@ -2386,7 +2382,7 @@ router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, ai
     } catch { /* wardrobe may not exist yet */ }
 
     const episodeGenerator = require('../services/episodeGeneratorService');
-    const result = await episodeGenerator.generateEpisodeFromEvent(fullEvent, models, { showId, wardrobeItems });
+    const result = await episodeGenerator.generateEpisodeFromEvent(fullEvent, models, { showId, wardrobeItems, replacingEpisodeId: oldEpisodeId });
 
     return res.status(201).json({
       success: true,
