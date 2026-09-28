@@ -22,7 +22,7 @@ RECORD. Standings are marked on each claim and never upgraded:
   database or running app states. It cannot be reproduced from a clone.
 - **MEASURED** covers what this repository shows, read with local `git` on
   an unshallowed clone; the output is pasted.
-- **INFERRED** is marked where used (§6) and is not upgraded.
+- No clause is INFERRED.
 
 This document closes no keystone, discharges no owed item, mints no FD, XK or
 PE number, and rules on nothing. It records no token, email, password,
@@ -33,26 +33,30 @@ record §1, §8), and this deploy begins there (§1).
 
 ## §0. Evoni's account, as given
 
-**ATTESTED (Evoni, 2026-09-28, given in two parts; the script's summary
-block for this deploy was not supplied):**
+**ATTESTED (Evoni, 2026-09-28, about 17:10–17:12 UTC: the script's summary
+block, as she supplied it at filing, and her notes on the run):**
 
-- The range: `c0ebdf13` → `1039859f`, "my deploy output earlier today",
-  confirmed by Evoni at filing.
+- Tree: `c0ebdf1393d66a8260dcf7bd5d2d0016f25e2f4d` →
+  `1039859f334dc7c8dd899c7b70fc53cce389da7c` (fast-forward).
+- Range: 4 commits, 7 files; PRs #2163, #2165, #2169, #2170. No migration
+  or package/lock file.
+- Backup: `frontend/dist` → `~/dist-backup-20260928T171050Z`. vite build:
+  built in 35.10 s.
+- Pending check: `[host hidden]/episode_metadata` as `episode_app_dev`: 0
+  pending of 220 (exit 0). Database confirmed: y.
+- `ANTHROPIC_API_KEY` count 1 (value not read).
+- "Restart now": y. A plain restart; the restart count is now 14.
+- `/health` at 2026-09-28T17:11:48Z: healthy, database connected, uptime
+  6.2 s. `Ready to accept requests` at 17:11:47.
+- CFO audit, 17:11:55–17:12:00: 82/100, 1 critical, 5 warnings (BL: 84/100,
+  4 warnings). The detail line was not captured (the old filter, §5.2). The
+  new warning is not identified.
 - The script ran as `bash scripts/deploy-prod.sh` from the repository, not
   from a `/tmp` copy. It fast-forwarded itself: the old version kept
   running, so the CFO detail lines were still dropped. The fix applies from
   the next deploy.
 - A stray "y" was typed during the health wait; it had no effect.
-- The CFO audit: 82/100, 1 critical, 5 warnings (BL: 84/100, 4 warnings).
-  The new warning is not identified.
-- **App check:** not checked.
-
-Not supplied, so not recorded:
-- the backup directory name;
-- the vite build time;
-- the pending-migration lines;
-- the `ANTHROPIC_API_KEY` count;
-- the restart count and the `/health` body and time.
+- **App check:** not done.
 
 ## §1. Identity and continuity
 
@@ -104,8 +108,10 @@ No migration and no package manifest or lockfile is in the range.
 
 ## §3. The time
 
-**ATTESTED.** 2026-09-28, between BL (about 16:27–16:31 UTC, BL record §3)
-and BN (about 18:11–18:12 UTC, BN record §3). The exact time is not supplied.
+**ATTESTED.** 2026-09-28, about 17:10–17:12 UTC. The backup is stamped
+17:10:50Z, `Ready to accept requests` at 17:11:47, and `/health` answered at
+17:11:48Z with uptime 6.2 s (§0). This falls between BL (about 16:27–16:31
+UTC, BL record §3) and BN (about 18:11–18:12 UTC, BN record §3).
 
 **MEASURED.** The newest commit in the range is #2170, 17:09:21 UTC, so the
 deploy followed it:
@@ -117,8 +123,9 @@ $ git log --first-parent --format="%h %cI %s" c0ebdf13..1039859f | head -1
 
 ## §4. Pre-deploy checks
 
-**Not attested for this deploy:** the pending-migration lines were not
-supplied (§0).
+**ATTESTED (§0).** Pending-migration check against `episode_metadata` as
+`episode_app_dev`: 0 pending of 220, exit 0. Evoni confirmed at the script's
+prompt that this is the database the API uses.
 
 **MEASURED.** The range adds no migration (§2). The tree holds 220 migration
 files at `1039859f`, the same count BL and BN read as 0 pending of 220.
@@ -147,18 +154,22 @@ dropped the detail line.
 the pre-#2165 version. BN's summary (`F-Deploy-1_Deploy_2026-09-28_BN.md` §0)
 is the first to carry the detail line.
 
-### §5.3 The live check
+### §5.3 The build, the backup and the live check
 
-**Not checked (§0):** QuickEpisodeCreator's edit cost was not checked live.
+**ATTESTED (§0).** `frontend/dist` was backed up to
+`~/dist-backup-20260928T171050Z`; vite built in 35.10 s. `/health` was
+healthy with the database connected.
+
+**Not done (§0):** QuickEpisodeCreator's edit cost was not checked live.
 
 ## §6. Restarts
 
-**ATTESTED.** One plain restart (the script's only restart). The restart
-count is not supplied.
+**ATTESTED (§0).** One plain `pm2 restart` of `episode-api-prod-hotfix`; the
+restart count is now 14. `ANTHROPIC_API_KEY` count 1 (value not read).
 
-**INFERRED.** BL left the count at 13 (BL record §6), and BN's summary reads
-16 − 1 = 15 after its own single restart (BN record §0). BM's single restart
-therefore took it to 14.
+**MEASURED, against the filed records.** BL left the count at 13 (BL record
+§6), and BN's single restart reads 15 (BN record §0). BM's 14 sits between
+them, with no gap.
 
 ## §7. Schema changes
 
@@ -217,10 +228,10 @@ Nothing is minted here.
 - **Continuity:** the tree agrees with Evoni's confirmed range: 4 commits,
   7 files, no migration, no package change (§2). There is no gap after BL
   (§1).
-- **Unrecorded items:** the backup, build, pending-check, key-count, restart
-  count and `/health` lines were not supplied. The restart count (14) is
-  INFERRED (§6).
-- **App check:** not checked.
+- **Deploy:** 0 pending of 220; `/health` healthy and connected; restart
+  count 14, continuous from BL's 13 to BN's 15 (§6). All ATTESTED from the
+  summary block supplied at filing.
+- **App check:** not done.
 - **CFO:** 82/100 with 5 warnings; the critical is unnamed, because the old
   script ran (§5.2).
 - Nothing in this document is labelled RULED.
