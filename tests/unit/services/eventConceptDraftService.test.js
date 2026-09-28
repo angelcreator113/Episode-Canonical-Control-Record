@@ -5,9 +5,11 @@
 // ============================================================================
 
 const mockMessagesCreate = jest.fn();
-jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({
-  messages: { create: (...a) => mockMessagesCreate(...a) },
-})));
+const mockClientOptions = [];
+jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation((opts) => {
+  mockClientOptions.push(opts);
+  return { messages: { create: (...a) => mockMessagesCreate(...a) } };
+}));
 
 const {
   draftEventConcept,
@@ -16,6 +18,7 @@ const {
   resetDraftLimit,
   R8_CONTRACT,
   MODELS,
+  DRAFT_TIMEOUT_MS,
 } = require('../../../src/services/eventConceptDraftService');
 
 const PROFILE = { display_name: 'Maya Moves', handle: 'mayamoves', content_category: 'fitness', archetype: 'soft_life' };
@@ -33,6 +36,7 @@ beforeEach(() => {
   process.env.ANTHROPIC_API_KEY = 'test-key';
   delete process.env.AI_RATE_LIMIT_PER_IP;
   mockMessagesCreate.mockReset();
+  mockClientOptions.length = 0;
   resetDraftLimit();
   jest.spyOn(console, 'error').mockImplementation(() => {});
   jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -51,6 +55,15 @@ describe('draftEventConcept', () => {
     expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
     expect(mockMessagesCreate.mock.calls[0][0].model).toBe('claude-haiku-4-5-20251001');
     expect(MODELS).toEqual(['claude-haiku-4-5-20251001']);
+  });
+
+  test('one attempt only: 10s timeout, SDK retries off, no retry on overload', async () => {
+    const overloaded = Object.assign(new Error('Overloaded'), { status: 529 });
+    mockMessagesCreate.mockRejectedValue(overloaded);
+    expect(await draftEventConcept(PROFILE, { userId: 'u1' })).toBeNull();
+    expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+    expect(DRAFT_TIMEOUT_MS).toBe(10000);
+    expect(mockClientOptions).toEqual([{ timeout: 10000, maxRetries: 0 }]);
   });
 
   test('a malformed reply gives null', async () => {

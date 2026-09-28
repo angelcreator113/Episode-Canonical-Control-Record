@@ -10,7 +10,8 @@
  * a missing API key, the draft's own rate limit, aiCostTracker's budget
  * refusal (it patches the SDK and throws), an API error, a timeout or an
  * unusable reply all return null, and the caller keeps today's template
- * fields. It never throws.
+ * fields. It never throws. One attempt only: a 10s timeout, no retry and
+ * the SDK's own retries off, so creation waits at most about 10s for it.
  *
  * The draft has its own per-user limit (§8(v) 5) because aiRateLimiter is
  * route middleware that answers 429, which would fail creation itself. It
@@ -18,7 +19,7 @@
  */
 
 const MODELS = ['claude-haiku-4-5-20251001'];
-const DRAFT_TIMEOUT_MS = 15000;
+const DRAFT_TIMEOUT_MS = 10000;
 const MAX_TOKENS = 600;
 const FIELD_MAX = { concept: 300, activity: 300, description: 1200 };
 
@@ -128,39 +129,14 @@ async function draftEventConcept(profile, context = {}) {
 
     const prompt = buildDraftPrompt(profile, context);
     const Anthropic = require('@anthropic-ai/sdk');
-    // Short timeout, no SDK retries: creation must not wait on a slow call.
+    // One attempt (Evoni, Task #2122 review): 10s timeout, no retry, SDK
+    // retries off. Any error, overload included, falls to the catch below.
     const client = new Anthropic({ timeout: DRAFT_TIMEOUT_MS, maxRetries: 0 });
-
-    // House retry pattern: two attempts per model, 2s backoff on 529/503.
-    let response;
-    for (const model of MODELS) {
-      let succeeded = false;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          response = await client.messages.create({
-            model,
-            max_tokens: MAX_TOKENS,
-            messages: [{ role: 'user', content: prompt }],
-          });
-          succeeded = true;
-          break;
-        } catch (apiErr) {
-          const status = apiErr?.status || apiErr?.error?.status;
-          if ((status === 529 || status === 503) && attempt < 1) {
-            await new Promise((r) => setTimeout(r, 2000));
-            continue;
-          }
-          if (status === 529 || status === 503 || status === 404) break;
-          throw apiErr;
-        }
-      }
-      if (succeeded) break;
-    }
-
-    if (!response) {
-      console.error('[eventConceptDraft] no response (overloaded or unavailable); creating without a draft');
-      return null;
-    }
+    const response = await client.messages.create({
+      model: MODELS[0],
+      max_tokens: MAX_TOKENS,
+      messages: [{ role: 'user', content: prompt }],
+    });
 
     const draft = parseDraftReply(response.content?.[0]?.text);
     if (!draft) console.error('[eventConceptDraft] unusable reply; creating without a draft');
@@ -179,4 +155,5 @@ module.exports = {
   resetDraftLimit,
   R8_CONTRACT,
   MODELS,
+  DRAFT_TIMEOUT_MS,
 };
