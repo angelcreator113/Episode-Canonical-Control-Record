@@ -214,13 +214,39 @@ describe('suggestions never satisfy; accepted values do', () => {
     }
   });
 
-  test('the auto-scheduled date counts as set and meets the date gate (Task #1756)', () => {
+  test('the auto-scheduled date counts as Auto-drafted · schedule and meets the date gate (Task #1756, #2128)', () => {
     const ev = full();
     ev.canon_consequences.automation[AUTO_DATE_KEY] = ev.event_date;
     expect(resolveEventBasics(ev).date.autoScheduled).toBe(true);
     const r = computeEventPackageReadiness(ev);
-    expect(itemOf(r, 'identity', 'date')).toMatchObject({ satisfied: true, state: 'set', note: 'Auto-scheduled', gate: true });
+    expect(itemOf(r, 'identity', 'date')).toMatchObject({ satisfied: true, state: 'auto_drafted', note: 'Auto-drafted · schedule', gate: true });
     expect(r.gatesMet).toBe(true);
+  });
+});
+
+describe('drafted values count toward Event Ready (Task #2128, §8(u) R2)', () => {
+  const drafted = (dressCode) => {
+    const ev = full();
+    ev.dress_code = dressCode;
+    ev.canon_consequences.automation.auto_drafted = { dress_code: 'ai_draft', event_time: 'ai_draft' };
+    ev.canon_consequences.automation.drafted_values = { dress_code: 'black tie formal', event_time: '20:00' };
+    return ev;
+  };
+
+  test('an Auto-drafted field is satisfied, with its note', () => {
+    const r = computeEventPackageReadiness(drafted('black tie formal'));
+    expect(itemOf(r, 'look', 'dress_code')).toMatchObject({ satisfied: true, state: 'auto_drafted', note: 'Auto-drafted · AI draft' });
+    expect(itemOf(r, 'identity', 'time')).toMatchObject({ satisfied: true, state: 'auto_drafted' });
+  });
+
+  test('an Edited field is satisfied, with its note', () => {
+    const r = computeEventPackageReadiness(drafted('all white'));
+    expect(itemOf(r, 'look', 'dress_code')).toMatchObject({ satisfied: true, state: 'edited', note: 'Edited' });
+  });
+
+  test('a never-drafted set field is unchanged: satisfied, no note', () => {
+    const r = computeEventPackageReadiness(full());
+    expect(itemOf(r, 'look', 'dress_code')).toMatchObject({ satisfied: true, state: 'set', note: null });
   });
 });
 

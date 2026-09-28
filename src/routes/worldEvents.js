@@ -2563,6 +2563,15 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
           ...(styling ? { dress_code: 'ai_draft', dress_code_keywords: 'ai_draft', styling_brief: 'ai_draft' } : {}),
           ...Object.fromEntries(Object.keys(draftedTaxonomy).map((field) => [field, 'ai_draft'])),
         },
+        // Task #2128 (rule 14): a copy of each drafted column value. The
+        // Event Package shows a field Auto-drafted while its column equals
+        // this copy and Edited once it differs (the date's event_date_auto
+        // pattern). Only fields actually drafted get a copy.
+        drafted_values: {
+          description: draft.description,
+          ...(styling ? { dress_code: styling.dress_code, dress_code_keywords: styling.dress_code_keywords } : {}),
+          ...draftedTaxonomy,
+        },
       }
       : {};
     const narrativeText = `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${sponsorBrand ? `Brand opportunity with ${sponsorBrand}.` : ''}`;

@@ -9,6 +9,7 @@ import {
   suggestEventCategory, suggestEventFormat,
   CONTENT_CATEGORY_TO_CATEGORY, OPPORTUNITY_TYPE_TO_CATEGORY, OPPORTUNITY_TYPE_TO_FORMAT,
   NAME_WORDS_TO_CATEGORY, NAME_WORDS_TO_FORMAT,
+  draftStateOf, hasValueState,
 } from './eventBasics';
 import { computeEventPackageReadiness, computeEventState } from './eventReadinessSections';
 import { createRequire } from 'module';
@@ -100,7 +101,8 @@ describe('resolveEventBasics — three states', () => {
       description: 'A night at the museum', dress_code: null, event_time: null,
       canon_consequences: { automation: { [AUTO_DATE_KEY]: '2026-11-07' } },
     });
-    expect(b.date).toMatchObject({ state: 'set', value: '2026-11-07', autoScheduled: true });
+    // Task #2128: the system default date reads Auto-drafted · schedule.
+    expect(b.date).toMatchObject({ state: 'auto_drafted', source: 'schedule', value: '2026-11-07', autoScheduled: true });
     expect(b.time).toMatchObject({ state: 'suggested', value: null, suggestion: { value: '20:00' } });
     expect(b.description).toMatchObject({ state: 'set', value: 'A night at the museum' });
     expect(b.dressCode).toMatchObject({ state: 'suggested', suggestion: { value: 'black tie formal' } });
@@ -193,10 +195,11 @@ describe('auto-scheduled label across real saves (PUT merge replayed)', () => {
     expect(isAutoScheduledDate(created())).toBe(true);
   });
 
-  test('Package date save: label gone, flag deleted, guests kept', () => {
-    const after = put(created(), { event_date: X, canon_consequences: { automation: { [AUTO_DATE_KEY]: null } } });
+  test('Package date save (Task #2128, (b)): only the date is sent; the flag stays, so the date reads Edited; guests kept', () => {
+    const after = put(created(), { event_date: X });
     expect(isAutoScheduledDate(after)).toBe(false);
-    expect(after.canon_consequences.automation).not.toHaveProperty(AUTO_DATE_KEY);
+    expect(after.canon_consequences.automation[AUTO_DATE_KEY]).toBe(D);
+    expect(resolveEventBasics(after).date).toMatchObject({ state: 'edited', source: 'schedule', value: X });
     expect(after.canon_consequences.automation.guest_profiles).toEqual(guests);
   });
 
@@ -221,9 +224,10 @@ describe('auto-scheduled label across real saves (PUT merge replayed)', () => {
     const changed = put(opened, oldModalSave(opened, X));        // flag D left behind
     const back = put(changed, oldModalSave(changed, D));        // she picks D in the old editor
     expect(isAutoScheduledDate(back)).toBe(true);
-    // Any Package date save clears it for good:
-    const fixed = put(back, { event_date: D, canon_consequences: { automation: { [AUTO_DATE_KEY]: null } } });
-    expect(isAutoScheduledDate(fixed)).toBe(false);
+    // Task #2128, (b): the Package no longer deletes the flag, so a date set
+    // back to exactly the default reads Auto-drafted again (it is the draft).
+    const packageBack = put(back, { event_date: D });
+    expect(resolveEventBasics(packageBack).date.state).toBe('auto_drafted');
   });
 
   test('flag present but date column empty: no label (the date row reads the saved copy)', () => {
@@ -414,5 +418,74 @@ describe('category and format suggestions (Task #1888)', () => {
       expect(missing).not.toContain('category');
       expect(missing).not.toContain('format');
     });
+  });
+});
+
+// ─── Task #2128: Auto-drafted and Edited (doctrine rule 14) ──────────────
+describe('draft states (Task #2128)', () => {
+  const drafted = (overrides = {}, values = {}) => ({
+    event_date: '2026-11-07', description: 'Sunset sculpt.', dress_code: 'Sleek activewear',
+    category: 'fitness', format: 'workout_class', event_time: '18:30',
+    dress_code_keywords: ['practical', 'modern', 'comfortable'],
+    ...overrides,
+    canon_consequences: { automation: {
+      [AUTO_DATE_KEY]: '2026-11-07',
+      auto_drafted: {
+        description: 'ai_draft', dress_code: 'ai_draft', dress_code_keywords: 'ai_draft',
+        category: 'ai_draft', format: 'ai_draft', event_time: 'ai_draft',
+      },
+      drafted_values: {
+        description: 'Sunset sculpt.', dress_code: 'Sleek activewear',
+        dress_code_keywords: ['practical', 'modern', 'comfortable'],
+        category: 'fitness', format: 'workout_class', event_time: '18:30',
+        ...values,
+      },
+    } },
+  });
+
+  test('unchanged drafted fields read auto_drafted with their source', () => {
+    const b = resolveEventBasics(drafted());
+    for (const key of ['time', 'description', 'dressCode', 'category', 'format']) {
+      expect(b[key]).toMatchObject({ state: 'auto_drafted', source: 'ai_draft' });
+    }
+    expect(b.date).toMatchObject({ state: 'auto_drafted', source: 'schedule' });
+  });
+
+  test('a changed field reads edited, keeping its source and value', () => {
+    const b = resolveEventBasics(drafted({ dress_code: 'All white', format: 'meetup', event_time: '19:00', event_date: '2026-12-01' }));
+    expect(b.dressCode).toMatchObject({ state: 'edited', source: 'ai_draft', value: 'All white' });
+    expect(b.format).toMatchObject({ state: 'edited', value: 'meetup' });
+    expect(b.time).toMatchObject({ state: 'edited', value: '19:00' });
+    expect(b.date).toMatchObject({ state: 'edited', source: 'schedule', value: '2026-12-01' });
+    expect(b.category.state).toBe('auto_drafted');
+  });
+
+  test('a cleared drafted field falls back to suggested/missing (nothing to count)', () => {
+    const b = resolveEventBasics(drafted({ dress_code: null, category: null }));
+    expect(['suggested', 'missing']).toContain(b.dressCode.state);
+    expect(['suggested', 'missing']).toContain(b.category.state);
+  });
+
+  test('keywords compare as arrays', () => {
+    const ev = drafted();
+    expect(draftStateOf(ev, 'dress_code_keywords', ['practical', 'modern', 'comfortable'])).toEqual({ state: 'auto_drafted', source: 'ai_draft' });
+    expect(draftStateOf(ev, 'dress_code_keywords', ['practical', 'modern'])).toMatchObject({ state: 'edited' });
+    expect(draftStateOf(ev, 'dress_code_keywords', ['modern', 'practical', 'comfortable'])).toMatchObject({ state: 'edited' });
+  });
+
+  test('never-drafted fields and events are unchanged: set, or suggested/missing', () => {
+    const b = resolveEventBasics({ event_date: '2026-11-07', format: 'gala', dress_code: 'all white', canon_consequences: { automation: {} } });
+    expect(b.date.state).toBe('set');
+    expect(b.format.state).toBe('set');
+    expect(b.dressCode.state).toBe('set');
+    expect(b.time.state).toBe('suggested');
+    // In auto_drafted but with no saved copy: not a draft state.
+    const noCopy = { dress_code: 'x', canon_consequences: { automation: { auto_drafted: { dress_code: 'ai_draft' } } } };
+    expect(resolveEventBasics(noCopy).dressCode.state).toBe('set');
+  });
+
+  test('hasValueState: set, auto_drafted and edited hold a value', () => {
+    expect(['set', 'auto_drafted', 'edited'].every(hasValueState)).toBe(true);
+    expect(['suggested', 'missing', undefined].some(hasValueState)).toBe(false);
   });
 });

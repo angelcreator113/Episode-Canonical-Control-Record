@@ -33,6 +33,20 @@ import { EVENT_CATEGORIES, EVENT_FORMATS, resolveTaxonomyField } from './eventTa
 // eventBasics.test.js pins the name.
 export const AUTO_DATE_KEY = 'event_date_auto';
 
+// Task #2128 (doctrine rule 14; §8(u) R1-R2): the creation draft records
+// which columns it drafted (automation.auto_drafted, field → source) and a
+// copy of each drafted value (automation.drafted_values, written by
+// from-profile). A field is 'auto_drafted' while its column still equals the
+// copy and 'edited' once it differs; the date uses AUTO_DATE_KEY the same
+// way, with source 'schedule'. Both count toward Event Ready.
+export const AUTO_DRAFTED_KEY = 'auto_drafted';
+export const DRAFTED_VALUES_KEY = 'drafted_values';
+export const DATE_DRAFT_SOURCE = 'schedule';
+
+// The states that hold a value the event actually has.
+export const VALUE_STATES = Object.freeze(['set', 'auto_drafted', 'edited']);
+export const hasValueState = (state) => VALUE_STATES.includes(state);
+
 // Start time per format (WorldEvent.format's isIn list). The first eight
 // were a proposed table, not a ruling: evening formats land in the evening,
 // daytime formats in the day. The fifteen from workout_class on are Evoni's
@@ -329,8 +343,9 @@ export function suggestEventFormat(event, organizer) {
 // A category or format field: a stored value is set, with inList false
 // when the model would not allow it (Task #1780's flag); otherwise the
 // suggestion, else missing.
-function taxonomyField(stored, allowedValues, suggestion) {
+function taxonomyField(stored, allowedValues, suggestion, draft = null) {
   const base = resolveTaxonomyField(stored, allowedValues);
+  if (base.state === 'set' && draft) return { ...base, state: draft.state, source: draft.source, suggestion: null };
   if (base.state === 'set') return { ...base, suggestion: null };
   if (suggestion) return { state: 'suggested', value: null, suggestion, inList: true };
   return { ...base, suggestion: null };
@@ -350,18 +365,56 @@ export function isAutoScheduledDate(event) {
   return !!flagged && flagged === date;
 }
 
-function field(value, suggestion, extra = {}) {
+const sameDraftValue = (a, b) => {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
+  }
+  return text(a) === text(b);
+};
+
+/**
+ * The draft state of one column with a value: { state, source } when the
+ * creation draft wrote it ('auto_drafted' while the column equals the saved
+ * copy, 'edited' once it differs), or null when it was never drafted. A
+ * column that is now empty is not reported here: an empty field falls back
+ * to suggested/missing, since it has nothing to count toward readiness.
+ */
+export function draftStateOf(event, column, current) {
+  const auto = event?.canon_consequences?.automation || {};
+  const source = auto[AUTO_DRAFTED_KEY]?.[column];
+  const values = auto[DRAFTED_VALUES_KEY] || {};
+  if (!source || !Object.prototype.hasOwnProperty.call(values, column)) return null;
+  return { state: sameDraftValue(current, values[column]) ? 'auto_drafted' : 'edited', source };
+}
+
+// The date's draft state: the create path's 45-day default (AUTO_DATE_KEY)
+// is Auto-drafted · schedule while the event_date column still equals it,
+// Edited once it differs (Evoni's (b), Task #2128). Null when the event has
+// no flag, or no date in the column (a date read from the automation copy
+// stays 'set', as isAutoScheduledDate always treated it).
+export function dateDraftStateOf(event) {
+  const flagged = text(event?.canon_consequences?.automation?.[AUTO_DATE_KEY]);
+  const column = text(event?.event_date);
+  if (!flagged || !column) return null;
+  return { state: flagged === column ? 'auto_drafted' : 'edited', source: DATE_DRAFT_SOURCE };
+}
+
+function field(value, suggestion, extra = {}, draft = null) {
+  if (value && draft) return { state: draft.state, source: draft.source, value, suggestion: null, ...extra };
   if (value) return { state: 'set', value, suggestion: null, ...extra };
   if (suggestion) return { state: 'suggested', value: null, suggestion, ...extra };
   return { state: 'missing', value: null, suggestion: null, ...extra };
 }
 
 /**
- * The Basics fields, each { state: 'set'|'suggested'|'missing',
- * value, suggestion, ... }.
+ * The Basics fields, each { state: 'set'|'auto_drafted'|'edited'|
+ * 'suggested'|'missing', value, suggestion, source?, ... }. A field with a
+ * value is 'auto_drafted' or 'edited' when the creation draft wrote it
+ * (draftStateOf / dateDraftStateOf, with its source), else 'set'.
  *   - date: column, else the automation copy (shown "saved copy", as
  *     before — resolveEventVenueAndDate). Never suggested.
- *     autoScheduled per isAutoScheduledDate.
+ *     autoScheduled per isAutoScheduledDate (kept for callers; the
+ *     Package now shows the date's draft state instead).
  *   - time: column, else the automation copy; else a format suggestion.
  *   - description: column only. Never suggested.
  *   - dressCode: column only (what the Package has always shown); else a
@@ -376,20 +429,24 @@ function field(value, suggestion, extra = {}) {
 export function resolveEventBasics(event, venueLocation, { suggest = true, organizer = null } = {}) {
   const ev = event || {};
   const vd = resolveEventVenueAndDate(ev);
+  const date = text(vd.eventDate) || null;
+  const time = text(vd.eventTime) || null;
 
   return {
-    date: field(text(vd.eventDate) || null, null, {
+    date: field(date, null, {
       fromSavedCopy: vd.eventDateFromSavedCopy,
       autoScheduled: isAutoScheduledDate(ev),
-    }),
-    time: field(text(vd.eventTime) || null, suggest ? suggestEventTime(ev) : null, {
+    }, dateDraftStateOf(ev)),
+    time: field(time, suggest ? suggestEventTime(ev) : null, {
       fromSavedCopy: vd.eventTimeFromSavedCopy,
-    }),
-    description: field(text(ev.description) || null, null),
-    dressCode: field(text(ev.dress_code) || null, suggest ? suggestDressCode(ev, venueLocation) : null),
+    }, draftStateOf(ev, 'event_time', time)),
+    description: field(text(ev.description) || null, null, {},
+      draftStateOf(ev, 'description', ev.description)),
+    dressCode: field(text(ev.dress_code) || null, suggest ? suggestDressCode(ev, venueLocation) : null, {},
+      draftStateOf(ev, 'dress_code', ev.dress_code)),
     category: taxonomyField(ev.category, EVENT_CATEGORIES,
-      suggest ? suggestEventCategory(ev, organizer) : null),
+      suggest ? suggestEventCategory(ev, organizer) : null, draftStateOf(ev, 'category', ev.category)),
     format: taxonomyField(ev.format, EVENT_FORMATS,
-      suggest ? suggestEventFormat(ev, organizer) : null),
+      suggest ? suggestEventFormat(ev, organizer) : null, draftStateOf(ev, 'format', ev.format)),
   };
 }
