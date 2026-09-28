@@ -29,6 +29,7 @@ const { parseExpectedVersion, versionMatches, staleSaveBody } = require('../util
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../utils/eventEpisodeLink');
 const { withAutoScheduledDate, autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
+const { buildSuggestNamesFraming } = require('../utils/suggestNamesFraming');
 const { normalizeRestrictions } = require('../services/eventTermsService');
 
 async function getModels() {
@@ -274,12 +275,16 @@ router.post('/world/:showId/events/:eventId/suggest-names', requireAuth, aiRateL
     // same field the single-event GET above reads, :158) for its name AND
     // archetype; fall back to the event's own legacy `host` text field
     // when there's no linked profile.
+    // content_category is the organizer's niche for the framing sentence
+    // (§8(u) R9, Task #2120).
     let hostLine = event.host ? `Host: ${event.host}` : null;
+    let organizer = null;
     if (event.source_profile_id && models.SocialProfile) {
       const profile = await models.SocialProfile.findByPk(event.source_profile_id, {
-        attributes: ['display_name', 'handle', 'archetype'],
+        attributes: ['display_name', 'handle', 'archetype', 'content_category'],
       }).catch(() => null);
       if (profile) {
+        organizer = profile;
         const hostName = profile.display_name || profile.handle;
         hostLine = profile.archetype
           ? `Host: ${hostName} (${String(profile.archetype).replace(/_/g, ' ')})`
@@ -309,7 +314,11 @@ router.post('/world/:showId/events/:eventId/suggest-names', requireAuth, aiRateL
       ? facts.join('\n')
       : 'No details recorded for this event yet beyond it existing — do not invent any.';
 
-    const prompt = `Suggest three short, creative names for this fictional social event, for a fashion/lifestyle content-creator show.
+    // Framed by the organizer's niche and the event's format, category and
+    // description (§8(u) R9, src/utils/suggestNamesFraming.js).
+    const framing = buildSuggestNamesFraming(event, organizer);
+
+    const prompt = `${framing} Suggest three short, creative names for it.
 
 ${factsBlock}
 
