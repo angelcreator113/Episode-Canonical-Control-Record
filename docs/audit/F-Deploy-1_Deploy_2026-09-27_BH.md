@@ -8,7 +8,7 @@ New record, not a Fix Plan revision, and not an amendment of
 `F-Deploy-1_Deploy_2026-09-28_BI.md` (the BI record, which names this deploy's
 record as owed). This document follows them rather than editing either. Basis:
 `0386bb97cda965ec33ee4cbbcc2a5bf64f406adf` (#2114), the tree Deploy BH moved
-production to. `origin/main` at filing is `28d14ff9` (§8).
+production to. `origin/main` at filing is `fc75e20d` (§8).
 
 **Author**
 
@@ -33,8 +33,9 @@ host, IP address, key path, account number or ARN.
 
 **The letter.** This deploy is lettered BH. It followed Deploy BG and came
 before Deploy BI, whose record (§1 there) found it unrecorded and left BH for
-it. At this record's filing, the BI record is in an open pull request (#2130),
-not yet merged; nothing here edits it.
+it. The BI record is filed: `docs/audit/F-Deploy-1_Deploy_2026-09-28_BI.md`
+(PR #2130, squash `fc75e20d931201323dd1a30e4646a3fd660f8f3e`); nothing here
+edits it.
 
 ## §0. Evoni's account, as given
 
@@ -201,7 +202,7 @@ take effect. No `.env` or credential change is in the range.
 **The restart chain across the records:**
 - BG took the count from 7 to 8 (BG record §6).
 - BH took it from 8 to 9.
-- BI took it to 10 (BI record §6, in PR #2130 at this filing).
+- BI took it to 10 (BI record §6).
 
 ## §7. Schema changes
 
@@ -236,7 +237,7 @@ after `git fetch origin`, `origin/main` is:
 
 ```
 $ git log -1 --format='%H %ad %s' --date=short origin/main
-28d14ff9d4218b9e11b77eba0ffb6cdaa661d9d1 2026-09-27 feat(events): Auto-drafted and Edited field states per rule 14 [skip-automerge] (#2129)
+fc75e20d931201323dd1a30e4646a3fd660f8f3e 2026-09-27 docs(audit): file deploy record BI [skip-automerge] (#2130)
 ```
 
 ## §9. What this document does not do
