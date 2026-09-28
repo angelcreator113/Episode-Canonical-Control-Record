@@ -81,11 +81,45 @@ describe('EventPackagePage Basics — category and format suggestions', () => {
     expect(format.getAttribute('data-state')).toBe('suggested');
     expect(within(format).getByText('Gala')).toBeTruthy();
 
-    // No format saved yet, so time and dress code have nothing to read.
-    expect(screen.getByTestId('basics-time').getAttribute('data-state')).toBe('missing');
-    expect(screen.getByTestId('basics-dressCode').getAttribute('data-state')).toBe('missing');
+    // No format saved yet, so time and dress code wait for one (Task #2148).
+    expect(screen.getByTestId('basics-time').getAttribute('data-state')).toBe('waiting');
+    expect(screen.getByTestId('basics-dressCode').getAttribute('data-state')).toBe('waiting');
 
     expect(api.put).not.toHaveBeenCalled();
+  });
+
+  test('Task #2148: a waiting row reads "Waiting for format", offers Set, and no suggestion', async () => {
+    renderPage();
+    const time = await screen.findByTestId('basics-time');
+    const dress = screen.getByTestId('basics-dressCode');
+
+    for (const [key, row] of [['time', time], ['dressCode', dress]]) {
+      expect(screen.getByTestId(`basics-${key}-state`).textContent).toContain('Waiting for format');
+      expect(screen.queryByTestId(`basics-${key}-suggestion`)).toBeNull();
+      expect(screen.queryByTestId(`basics-${key}-accept`)).toBeNull();
+      expect(within(row).getByRole('button', { name: 'Set' })).toBeTruthy();
+    }
+
+    // Readiness lists both as not ready, with the waiting note.
+    for (const id of ['readiness-missing-identity-time', 'readiness-missing-look-dress_code']) {
+      const li = screen.getByTestId(id);
+      expect(li.getAttribute('data-item-state')).toBe('waiting');
+      expect(li.textContent).toContain('Waiting for format');
+    }
+  });
+
+  test('Task #2148: a waiting time can still be typed and saved directly', async () => {
+    renderPage();
+    const time = await screen.findByTestId('basics-time');
+    fireEvent.click(within(time).getByRole('button', { name: 'Set' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Start time' });
+    expect(within(dialog).queryByText(/Fill in suggestion/)).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Start time'), { target: { value: '19:45' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.put).mock.calls[0][1]).toMatchObject({ event_time: '19:45' });
+    await waitFor(() => expect(screen.getByTestId('basics-time').getAttribute('data-state')).toBe('set'));
   });
 
   test('accepting the category saves it through the event PUT', async () => {

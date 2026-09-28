@@ -107,11 +107,17 @@ describe('resolveEventBasics — three states', () => {
     expect(b.dressCode).toMatchObject({ state: 'suggested', suggestion: { value: 'black tie formal' } });
   });
 
-  test('no inputs → missing, never a suggestion', () => {
+  test('no inputs → never a suggestion; time and dress code wait for a format (Task #2148)', () => {
     const b = resolveEventBasics({ prestige: 9 });
     expect(b.date.state).toBe('missing');
-    expect(b.time).toEqual({ state: 'missing', value: null, suggestion: null, fromSavedCopy: false });
+    expect(b.time).toEqual({ state: 'waiting', value: null, suggestion: null, waitingFor: 'format', fromSavedCopy: false });
     expect(b.description.state).toBe('missing');
+    expect(b.dressCode).toEqual({ state: 'waiting', value: null, suggestion: null, waitingFor: 'format' });
+  });
+
+  test('no inputs on a used event (suggest: false) → missing, not waiting', () => {
+    const b = resolveEventBasics({ prestige: 9 }, null, { suggest: false });
+    expect(b.time).toEqual({ state: 'missing', value: null, suggestion: null, fromSavedCopy: false });
     expect(b.dressCode.state).toBe('missing');
   });
 
@@ -394,8 +400,9 @@ describe('category and format suggestions (Task #1888)', () => {
     test('a suggested format feeds no time or dress-code suggestion', () => {
       const b = resolveEventBasics(opportunity);
       expect(b.format.state).toBe('suggested');
-      expect(b.time.state).toBe('missing');
-      expect(b.dressCode.state).toBe('missing');
+      // Task #2148: an unaccepted format is not a saved one, so both wait.
+      expect(b.time).toMatchObject({ state: 'waiting', waitingFor: 'format', suggestion: null });
+      expect(b.dressCode).toMatchObject({ state: 'waiting', waitingFor: 'format', suggestion: null });
     });
 
     test('accepting the format yields the time and dress-code suggestions (the cascade)', () => {
@@ -491,5 +498,71 @@ describe('draft states (Task #2128)', () => {
   test('hasValueState: set, auto_drafted and edited hold a value', () => {
     expect(['set', 'auto_drafted', 'edited'].every(hasValueState)).toBe(true);
     expect(['suggested', 'missing', undefined].some(hasValueState)).toBe(false);
+  });
+});
+
+// Task #2148 (doctrine rule 14): "Waiting for <dependency>". Time and dress
+// code are suggested from the saved format, so with no saved format they
+// wait for one instead of reading missing (docs/EVENT_DRAFT_READ.md §6).
+describe('waiting for format (Task #2148)', () => {
+  const venue = (dress_code) => ({ id: 'loc-1', name: 'Club Noir', dress_code });
+
+  test('time waits with no saved format, and is suggested once a format is saved', () => {
+    expect(resolveEventBasics({}).time).toMatchObject({ state: 'waiting', waitingFor: 'format', value: null, suggestion: null });
+    expect(resolveEventBasics({ format: 'gala' }).time).toMatchObject({ state: 'suggested', suggestion: { value: '20:00' } });
+  });
+
+  test('a saved format outside the time table reads missing, not waiting', () => {
+    expect(resolveEventBasics({ format: 'hackathon' }).time).toMatchObject({ state: 'missing' });
+    expect(resolveEventBasics({ format: 'hackathon' }).time).not.toHaveProperty('waitingFor');
+  });
+
+  test('dress code waits with no format and no venue dress code', () => {
+    expect(resolveEventBasics({}, null).dressCode).toMatchObject({ state: 'waiting', waitingFor: 'format' });
+    expect(resolveEventBasics({ venue_location_id: 'loc-1' }, venue('')).dressCode).toMatchObject({ state: 'waiting', waitingFor: 'format' });
+    expect(resolveEventBasics({ prestige: 9 }, venue(null)).dressCode).toMatchObject({ state: 'waiting', waitingFor: 'format' });
+  });
+
+  test('with a venue dress code, dress code suggests from the venue as before', () => {
+    const b = resolveEventBasics({ venue_location_id: 'loc-1' }, venue('all white'));
+    expect(b.dressCode).toMatchObject({ state: 'suggested', suggestion: { value: 'all white', basis: 'From venue: Club Noir' } });
+    expect(b.dressCode).not.toHaveProperty('waitingFor');
+    expect(b.time).toMatchObject({ state: 'waiting', waitingFor: 'format' });
+  });
+
+  test('a linked venue that was not passed in leaves dress code missing, not waiting', () => {
+    expect(resolveEventBasics({ venue_location_id: 'loc-1' }, null).dressCode).toMatchObject({ state: 'missing' });
+    expect(resolveEventBasics({ canon_consequences: { automation: { venue_location_id: 'loc-1' } } }, null).dressCode)
+      .toMatchObject({ state: 'missing' });
+  });
+
+  test('a saved format brings the dress-code suggestion from the format', () => {
+    expect(resolveEventBasics({ format: 'brunch' }, venue('')).dressCode).toMatchObject({ state: 'suggested', suggestion: { value: 'casual chic' } });
+  });
+
+  test('filled fields never wait: set, saved copy, auto-drafted and edited keep their state', () => {
+    expect(resolveEventBasics({ event_time: '19:00', dress_code: 'all white' }).time.state).toBe('set');
+    expect(resolveEventBasics({ event_time: '19:00', dress_code: 'all white' }).dressCode.state).toBe('set');
+    expect(resolveEventBasics({ canon_consequences: { automation: { event_time: '18:00' } } }).time)
+      .toMatchObject({ state: 'set', fromSavedCopy: true });
+
+    const drafted = (dress_code) => ({
+      dress_code,
+      canon_consequences: { automation: {
+        auto_drafted: { dress_code: 'ai_draft' }, drafted_values: { dress_code: 'garden chic' },
+      } },
+    });
+    expect(resolveEventBasics(drafted('garden chic')).dressCode.state).toBe('auto_drafted');
+    expect(resolveEventBasics(drafted('all white')).dressCode.state).toBe('edited');
+  });
+
+  test('a used event (suggest: false) never waits', () => {
+    const b = resolveEventBasics({}, null, { suggest: false });
+    expect(b.time.state).toBe('missing');
+    expect(b.dressCode.state).toBe('missing');
+  });
+
+  test('waiting holds no value', () => {
+    expect(hasValueState('waiting')).toBe(false);
   });
 });
