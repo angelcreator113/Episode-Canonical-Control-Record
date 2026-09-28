@@ -32,6 +32,13 @@ process.stdin.on('end', () => {
     [/(^|[\n;&|(`]\s*)git\s+push\b[^\n]*(\s|:)(origin\s+)?(main|dev)(\s|$)/, 'Direct push to main or dev. Work lands by PR + squash-merge.'],
     [/(^|[\n;&|(`]\s*)git\s+push\b[^\n]*(--force\b|\s-f\b|--force-with-lease)/, 'Force push. Never rewrite history on a shared branch.'],
   ];
+  // Task #2161: scripts/deploy-prod.sh is Evoni's production deploy. Any Bash
+  // command that names it is blocked, anywhere in the command (heredoc bodies
+  // included), so no session runs it, sources it, or wraps it.
+  if (/deploy-prod/.test(cmd)) {
+    process.stderr.write(`[guard] BLOCKED: scripts/deploy-prod.sh is Evoni's production deploy; agent sessions never run it (or any command that names it).\nCommand: ${cmd.slice(0, 300)}\nIf this is genuinely needed, Evoni runs it herself outside the agent session.\n`);
+    process.exit(2);
+  }
   for (const [re, why] of rules) {
     if (re.test(scan)) {
       process.stderr.write(`[guard] BLOCKED: ${why}\nCommand: ${cmd.slice(0, 300)}\nIf this is genuinely needed, Evoni runs it herself outside the agent session.\n`);
