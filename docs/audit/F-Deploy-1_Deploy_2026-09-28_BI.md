@@ -57,9 +57,36 @@ The deploy between them, which took production from `acdb6c7d` to
 - **App check:** an event created from a Feed creator showed the drafted
   labels, and editing a field showed Edited.
 
-Her account gives no backup timestamp, no build entry file name and no
-`/health` timestamp; none is recorded here. The database hostname is not
-recorded.
+**ATTESTED, from her terminal output (pasted into the filing session):**
+
+- The backup command was `cp -a frontend/dist ~/dist-backup-$(date +%Y%m%d-%H%M)`;
+  the resulting directory name was not printed.
+- `git merge --ff-only origin/main` printed `Updating 0386bb97..28d14ff9`,
+  `Fast-forward`, `21 files changed, 1647 insertions(+), 118 deletions(-)`;
+  `git rev-parse HEAD` printed `28d14ff9d4218b9e11b77eba0ffb6cdaa661d9d1`.
+- `npx vite build` (vite v7.3.1): `✓ 3249 modules transformed`, `✓ built in
+  32.77s`. New entry `index-BKNFsVLN.js`; the Event Package chunk is
+  `EventPackagePage-Bn-sk8D4.js`.
+- The pending check printed `OK: 0 pending of 220 migration files checked.`
+  and `exit=0`; `grep -c '^ANTHROPIC_API_KEY=' .env` printed `1`.
+- After `pm2 restart episode-api-prod-hotfix`: the process table showed
+  `episode-api-prod-hotfix` online at restart count 10, and `episode-worker`
+  **stopped** (restart count 4). `/health` returned `"status":"healthy"`,
+  `"database":"connected"`, `"environment":"production"`, timestamp
+  `2026-09-28T01:36:26.291Z`, uptime about 5 s.
+- The startup lines in the out log run from the route mounts to `Ready to
+  accept requests` at 01:36:24 UTC, with the frontend served from
+  `frontend/dist`, the database authenticated, and Redis and Socket.io up.
+  The error log's lines at startup are warnings only: OpenSearch not
+  configured (PostgreSQL fallback), and the AWS SDK notices (v3's future
+  Node >= 22 requirement; v2 end-of-support). Before the restart it holds
+  404s for `/assets/.../` directory paths from one outside address at
+  01:27:37 UTC.
+- The logs grepped for `concept|draft|anthropic` (last 80 lines) printed
+  nothing.
+
+The database hostname and the outside address are in her output and are not
+recorded here.
 
 ## §1. Identity and continuity
 
@@ -151,7 +178,8 @@ twenty-one are tests. No migration file, no package manifest or lockfile.
 
 ## §3. The time
 
-**ATTESTED.** 2026-09-28 UTC. Her account gives no login or deploy time.
+**ATTESTED.** 2026-09-28 UTC. The restart's startup log reads 01:36:22 to
+01:36:24 UTC, and `/health` answered at 01:36:26 UTC (§0).
 
 **MEASURED.** The newest commit in the range is #2129, 01:29:04 UTC on
 2026-09-28, so the deploy followed it:
@@ -254,7 +282,9 @@ For production's request path, this record cites
 ## §6. Restarts
 
 **ATTESTED.** One plain `pm2 restart` of `episode-api-prod-hotfix`; the
-restart count is now 10. `.env` unchanged; `ANTHROPIC_API_KEY` present
+restart count is now 10. The process table also shows `episode-worker`
+stopped, at restart count 4; this deploy did not touch it, and whether it
+should be running is not a finding of this record. `.env` unchanged; `ANTHROPIC_API_KEY` present
 (count 1, value not read).
 
 **MEASURED.** Backend files changed (§2), so a restart was needed for them to
@@ -329,6 +359,8 @@ Nothing minted here.
 - **The live check (§5.2):** drafted labels on a new Feed-creator event, and
   Edited after a change; `/health` healthy and connected; startup log clean.
 - The two build warnings predate this range (§5.3).
+- `episode-worker` shows stopped in the process table (§6); noted, not
+  investigated.
 - **Owed:** the record of the deploy between BG and BI (`acdb6c7d` →
   `0386bb97`, migration `20260927210000-add-registry-characters-world.js`,
   restart 8 → 9), lettered BH, on Evoni's account.
