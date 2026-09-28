@@ -433,6 +433,8 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
       career_milestone, fail_consequence, success_unlock,
       // New venue fields (stored in event even pre-migration)
       venue_location_id, venue_name, venue_address, event_date, event_time,
+      // Task #2158: the creator link (WorldAdmin's form sends it).
+      source_profile_id,
       guest_list: _guest_list, invitation_details: _invitation_details, scene_set_id,
       // Narrative chain — see PUT allowlist for details. Optional on create.
       parent_event_id = null, chain_position = null, chain_reason = null,
@@ -454,10 +456,14 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
     let resolvedVenueName = venue_name || null;
     let resolvedVenueAddress = venue_address || null;
     let resolvedSceneSetId = scene_set_id || null;
+    // Task #2158: the venue link is saved when it names an existing
+    // WorldLocation (the lookup below), and left unsaved otherwise.
+    let savedVenueLocationId = null;
     if (venue_location_id && models.WorldLocation) {
       try {
         const venue = await models.WorldLocation.findByPk(venue_location_id);
         if (venue) {
+          savedVenueLocationId = venue_location_id;
           if (!resolvedVenueName) resolvedVenueName = venue.name;
           if (!resolvedVenueAddress) {
             const parts = [venue.street_address, venue.district, venue.city].filter(Boolean);
@@ -474,6 +480,27 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
         }
       } catch { /* non-blocking */ }
     }
+
+    // Task #2158: the creator link is saved when it names an existing
+    // SocialProfile, looked up the same way as the venue; an unknown or
+    // failed lookup is ignored and the event saves without it. Once saved,
+    // Suggest names frames names with this creator's niche, and the Event
+    // Package shows them as the organizer when no brand is set.
+    let savedSourceProfileId = null;
+    if (source_profile_id && models.SocialProfile) {
+      try {
+        const profile = await models.SocialProfile.findByPk(source_profile_id, { attributes: ['id'] });
+        if (profile) savedSourceProfileId = profile.id;
+        else console.warn(`[CreateEvent] source_profile_id ${JSON.stringify(source_profile_id)} names no SocialProfile; saving the event without it`);
+      } catch (err) {
+        console.warn('[CreateEvent] source_profile_id lookup failed; saving the event without it:', err.message);
+      }
+    }
+    // Only the links that validated, so a request with neither saves as before.
+    const savedLinks = {
+      ...(savedVenueLocationId ? { venue_location_id: savedVenueLocationId } : {}),
+      ...(savedSourceProfileId ? { source_profile_id: savedSourceProfileId } : {}),
+    };
 
     if (models.WorldEvent) {
       const event = await models.WorldEvent.create({
@@ -507,12 +534,17 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
         chain_position: chain_position || null,
         chain_reason: chain_reason || null,
         status: 'draft',
+        ...savedLinks,
       });
 
       return res.status(201).json({ success: true, event: event.toJSON() });
     }
 
-    // Fallback: raw SQL
+    // Fallback: raw SQL. The saved links (Task #2158) are appended only
+    // when present, so the statement is otherwise as before.
+    const linkColumns = Object.keys(savedLinks);
+    const linkCols = linkColumns.map((c) => `, ${c}`).join('');
+    const linkVals = linkColumns.map((c) => `, :${c}`).join('');
     const id = uuidv4();
     await models.sequelize.query(
       `INSERT INTO world_events
@@ -524,7 +556,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
         overlay_template, required_ui_overlays, browse_pool_bias, browse_pool_size,
         rewards, is_paid, payment_amount, requirements, career_tier,
         career_milestone, fail_consequence, success_unlock,
-        scene_set_id, parent_event_id, chain_position, chain_reason,
+        scene_set_id, parent_event_id, chain_position, chain_reason${linkCols},
         status, created_at, updated_at)
        VALUES
       (:id, :showId, :season_id, :arc_id, :name, :event_type, :category, :format, :host, :host_brand, :description,
@@ -535,7 +567,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
         :overlay_template, :required_ui_overlays, :browse_pool_bias, :browse_pool_size,
         :rewards, :is_paid, :payment_amount, :requirements, :career_tier,
         :career_milestone, :fail_consequence, :success_unlock,
-        :scene_set_id, :parent_event_id, :chain_position, :chain_reason,
+        :scene_set_id, :parent_event_id, :chain_position, :chain_reason${linkVals},
         'draft', NOW(), NOW())`,
       {
         replacements: {
@@ -571,6 +603,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
           parent_event_id: parent_event_id || null,
           chain_position: chain_position || null,
           chain_reason: chain_reason || null,
+          ...savedLinks,
         },
       }
     );
