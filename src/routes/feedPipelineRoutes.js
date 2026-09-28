@@ -24,7 +24,8 @@ router.post('/:showId/schedule/:opportunityId', requireAuth, aiRateLimiter, asyn
   try {
     const models = require('../models');
     const { scheduleOpportunityAsEvent } = require('../services/feedEventPipelineService');
-    const result = await scheduleOpportunityAsEvent(req.params.opportunityId, req.params.showId, models);
+    // Task #2156: the user id is the creation draft's rate-limit key.
+    const result = await scheduleOpportunityAsEvent(req.params.opportunityId, req.params.showId, models, { userId: req.user?.id || null });
     return res.json({ success: true, data: result });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

@@ -105,11 +105,31 @@ const words = (v) => (typeof v === 'string' ? v.replace(/_/g, ' ').replace(/\s+/
 // Task #2154 (§8(v)): the optional context an event is spawned inside, e.g. a
 // cultural calendar event, capped like the draft's own fields. Only public
 // facts: a calendar event's private what_only_we_know is never passed.
-const CONTEXT_MAX = { title: 200, theme: 100, description: 600 };
+// Task #2156 adds kind 'opportunity' (Schedule as Event): its title, type and
+// brand; the opportunity has no public description field.
+const CONTEXT_MAX = { title: 200, theme: 100, description: 600, type: 100, brand: 200 };
+
+const capped = (v, max) => cleanField(words(v), max);
+
+// The opportunity context block (Task #2156), or '' when no field is usable.
+function opportunityBlock(ctx) {
+  const lines = [
+    capped(ctx.title, CONTEXT_MAX.title) ? `Opportunity: ${capped(ctx.title, CONTEXT_MAX.title)}` : null,
+    capped(ctx.type, CONTEXT_MAX.type) ? `Type: ${capped(ctx.type, CONTEXT_MAX.type)}` : null,
+    capped(ctx.brand, CONTEXT_MAX.brand) ? `Brand: ${capped(ctx.brand, CONTEXT_MAX.brand)}` : null,
+  ].filter(Boolean);
+  if (lines.length === 0) return '';
+  return `This event comes from the career opportunity below. The concept, activity, description, styling and name must fit it.
+${lines.join('\n')}
+
+`;
+}
 
 // The context block for the prompt, or '' when no context field is usable.
+// A context with no kind is a calendar event (Task #2154), unchanged.
 function contextBlock(ctx) {
   if (!ctx || typeof ctx !== 'object') return '';
+  if (ctx.kind === 'opportunity') return opportunityBlock(ctx);
   const lines = [
     cleanField(words(ctx.title), CONTEXT_MAX.title) ? `Calendar event: ${cleanField(words(ctx.title), CONTEXT_MAX.title)}` : null,
     cleanField(words(ctx.theme), CONTEXT_MAX.theme) ? `Theme: ${cleanField(words(ctx.theme), CONTEXT_MAX.theme)}` : null,
@@ -128,21 +148,30 @@ ${lines.join('\n')}
 // the calendar path) the creator is the event's host (spawnEventsFromCalendar
 // saves them as host), so the prompt says so and drops that rule. A call
 // without context (from-profile) gets the same prompt as before, byte for byte.
+// Task #2156: context.creatorRole ('host' or 'started_from') sets the role
+// explicitly, for a caller whose creator is not always the host (Schedule as
+// Event: a brand, when there is one, is the organizer). Without it, the role
+// is 'host' with a context and 'started_from' without, as before.
+const CREATOR_ROLES = ['host', 'started_from'];
+
 function buildDraftPrompt(profile, context = {}) {
   const p = profile || {};
   const ctxBlock = contextBlock(context.context);
+  const isHost = CREATOR_ROLES.includes(context.creatorRole)
+    ? context.creatorRole === 'host'
+    : !!ctxBlock;
   const creator = words(p.display_name) || words(p.handle);
   const facts = [
-    creator ? (ctxBlock ? `Host (a Feed creator): ${creator}` : `Started from Feed creator: ${creator}`) : null,
+    creator ? (isHost ? `Host (a Feed creator): ${creator}` : `Started from Feed creator: ${creator}`) : null,
     words(p.content_category) ? `Creator's niche: ${words(p.content_category)}` : null,
     words(p.archetype) ? `Creator's archetype: ${words(p.archetype)}` : null,
     words(context.venueName) ? `Venue: ${words(context.venueName)}` : null,
   ].filter(Boolean);
 
-  const opening = ctxBlock
+  const opening = isHost
     ? 'Draft a fictional social event in Lala\'s world, hosted by the Feed creator below.'
     : 'Draft a fictional social event in Lala\'s world, fitting the Feed creator it was started from.';
-  const hostRule = ctxBlock ? '' : '- Do not call the creator the event\'s organizer or host.\n';
+  const hostRule = isHost ? '' : '- Do not call the creator the event\'s organizer or host.\n';
 
   return `${opening}
 
@@ -332,7 +361,9 @@ function parseDraftReply(text, profile = null) {
  * @param {object} profile  the SocialProfile row (plain object)
  * @param {object} context  { venueName, userId, context? } — context (Task
  *   #2154) is { title, theme, description } of the calendar event the event
- *   is spawned inside; omitted by from-profile
+ *   is spawned inside, or (Task #2156) { kind: 'opportunity', title, type,
+ *   brand }; omitted by from-profile. creatorRole? ('host' | 'started_from',
+ *   Task #2156) sets the creator's role explicitly.
  * @returns {Promise<{concept, activity, description, category?, format?, event_time?, styling?, name?}|null>}
  */
 async function draftEventConcept(profile, context = {}) {
@@ -377,6 +408,7 @@ module.exports = {
   resetDraftLimit,
   R8_CONTRACT,
   CONTEXT_MAX,
+  CREATOR_ROLES,
   MODELS,
   DRAFT_TIMEOUT_MS,
   NAME_LIMIT,

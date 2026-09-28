@@ -26,6 +26,7 @@ const {
   DRAFT_TIMEOUT_MS,
   NAME_LIMIT,
   CONTEXT_MAX,
+  CREATOR_ROLES,
 } = require('../../../src/services/eventConceptDraftService');
 
 const PROFILE = { display_name: 'Maya Moves', handle: 'mayamoves', content_category: 'fitness', archetype: 'soft_life' };
@@ -426,5 +427,77 @@ describe('buildDraftPrompt context (Task #2154)', () => {
     await draftEventConcept(PROFILE, { venueName: 'The Loft', userId: 'ctx-user', context: CAL });
     const sent = mockMessagesCreate.mock.calls[0][0].messages[0].content;
     expect(sent).toContain('Calendar event: Holiday Gala');
+  });
+});
+
+// Task #2156: the opportunity context and the explicit creator role
+// (Schedule as Event). From-profile's and the calendar's prompts are pinned.
+describe('buildDraftPrompt opportunity context and creatorRole (Task #2156)', () => {
+  const OPP = { kind: 'opportunity', title: "Maya Moves's casting call", type: 'casting_call', brand: 'Velour' };
+  const head = (p) => p.slice(0, p.indexOf('Write these:') + 'Write these:'.length);
+
+  test('the calendar prompt is pinned: no creatorRole means host wording, as #2155 shipped it', () => {
+    const prompt = buildDraftPrompt(PROFILE, {
+      venueName: 'The Loft',
+      context: { title: 'Holiday Gala', theme: 'luxury_prestige', description: "The season's biggest night." },
+    });
+    expect(head(prompt)).toBe(
+      "Draft a fictional social event in Lala's world, hosted by the Feed creator below.\n"
+      + '\n'
+      + 'Host (a Feed creator): Maya Moves\n'
+      + "Creator's niche: fitness\n"
+      + "Creator's archetype: soft life\n"
+      + 'Venue: The Loft\n'
+      + '\n'
+      + 'This event is part of the calendar event below. The concept, activity, description, styling and name must fit it.\n'
+      + 'Calendar event: Holiday Gala\n'
+      + 'Theme: luxury prestige\n'
+      + "What the world knows about it: The season's biggest night.\n"
+      + '\n'
+      + 'Write these:',
+    );
+    expect(prompt).not.toMatch(/Do not call the creator/);
+  });
+
+  test('the opportunity block carries only title, type and brand', () => {
+    const prompt = buildDraftPrompt(PROFILE, {
+      context: { ...OPP, description: 'SECRET-desc', narrative_stakes: 'SECRET-stakes', what_lala_wants: 'SECRET-wants' },
+      creatorRole: 'started_from',
+    });
+    expect(prompt).toContain('This event comes from the career opportunity below. The concept, activity, description, styling and name must fit it.\n'
+      + "Opportunity: Maya Moves's casting call\n"
+      + 'Type: casting call\n'
+      + 'Brand: Velour\n');
+    expect(prompt).not.toContain('SECRET');
+    expect(prompt).not.toContain('Calendar event:');
+  });
+
+  test("creatorRole 'started_from' keeps from-profile's wording and the no-host rule, even with a context", () => {
+    const prompt = buildDraftPrompt(PROFILE, { venueName: 'The Loft', context: OPP, creatorRole: 'started_from' });
+    expect(prompt.startsWith("Draft a fictional social event in Lala's world, fitting the Feed creator it was started from.\n")).toBe(true);
+    expect(prompt).toContain('Started from Feed creator: Maya Moves');
+    expect(prompt).toContain("- Do not call the creator the event's organizer or host.");
+    expect(prompt).not.toContain('Host (a Feed creator)');
+  });
+
+  test("creatorRole 'host' uses the host wording and drops the rule", () => {
+    const prompt = buildDraftPrompt(PROFILE, { venueName: 'The Loft', context: { ...OPP, brand: null }, creatorRole: 'host' });
+    expect(prompt.startsWith("Draft a fictional social event in Lala's world, hosted by the Feed creator below.\n")).toBe(true);
+    expect(prompt).toContain('Host (a Feed creator): Maya Moves');
+    expect(prompt).not.toMatch(/Do not call the creator/);
+    expect(prompt).not.toContain('Brand:');
+  });
+
+  test('an unknown creatorRole is ignored (the default by context applies)', () => {
+    expect(CREATOR_ROLES).toEqual(['host', 'started_from']);
+    expect(buildDraftPrompt(PROFILE, { venueName: 'The Loft', creatorRole: 'organizer' }))
+      .toBe(buildDraftPrompt(PROFILE, { venueName: 'The Loft' }));
+  });
+
+  test('opportunity fields are capped', () => {
+    const prompt = buildDraftPrompt(null, { context: { kind: 'opportunity', title: 'T '.repeat(300), brand: 'B '.repeat(300) }, creatorRole: 'host' });
+    const line = (label) => prompt.split('\n').find((l) => l.startsWith(label)).slice(label.length);
+    expect(line('Opportunity: ').length).toBeLessThanOrEqual(CONTEXT_MAX.title);
+    expect(line('Brand: ').length).toBeLessThanOrEqual(CONTEXT_MAX.brand);
   });
 });
