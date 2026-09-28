@@ -9,6 +9,8 @@
  *     suggestion she can accept in one action. Accepting saves it; only then
  *     is it canonical.
  *   - Each field is in exactly one of three states: set, suggested, missing.
+ *     (Since extended: auto_drafted and edited, Task #2128; waiting,
+ *     Task #2148 — see resolveEventBasics.)
  *
  * Category and format (Task #1888) are suggested the same way, from small
  * explicit tables below, never from a guess. An accepted format is what
@@ -356,18 +358,43 @@ export function dateDraftStateOf(event) {
   return { state: flagged === column ? 'auto_drafted' : 'edited', source: DATE_DRAFT_SOURCE };
 }
 
-function field(value, suggestion, extra = {}, draft = null) {
+// `waitingFor` names the dependency an empty, unsuggested field is waiting
+// on (doctrine rule 14's "Waiting for <dependency>", Task #2148); it applies
+// only when the field has no value and no suggestion.
+function field(value, suggestion, extra = {}, draft = null, waitingFor = null) {
   if (value && draft) return { state: draft.state, source: draft.source, value, suggestion: null, ...extra };
   if (value) return { state: 'set', value, suggestion: null, ...extra };
   if (suggestion) return { state: 'suggested', value: null, suggestion, ...extra };
+  if (waitingFor) return { state: 'waiting', value: null, suggestion: null, waitingFor, ...extra };
   return { state: 'missing', value: null, suggestion: null, ...extra };
 }
 
 /**
+ * The dependency an empty time or dress code is waiting on, or null
+ * (Task #2148; docs/EVENT_DRAFT_READ.md §6: both are suggested from the
+ * saved format). Only on an editable event (a used one reads missing, as
+ * with suggestions). Time waits for 'format' when the event has no saved
+ * format. Dress code waits for 'format' when there is also no venue dress
+ * code to suggest from; if the event links a venue that was not passed in,
+ * its dress code is unknown, so it stays missing rather than claim none.
+ */
+function waitingForFormat(ev, vd, venueLocation, suggest, { needsVenueCheck = false } = {}) {
+  if (!suggest || text(ev.format)) return null;
+  if (needsVenueCheck) {
+    if (text(venueLocation?.dress_code)) return null;
+    if (!venueLocation && vd.venueLocationId) return null;
+  }
+  return 'format';
+}
+
+/**
  * The Basics fields, each { state: 'set'|'auto_drafted'|'edited'|
- * 'suggested'|'missing', value, suggestion, source?, ... }. A field with a
+ * 'suggested'|'waiting'|'missing', value, suggestion, source?,
+ * waitingFor?, ... }. A field with a
  * value is 'auto_drafted' or 'edited' when the creation draft wrote it
  * (draftStateOf / dateDraftStateOf, with its source), else 'set'.
+ * 'waiting' (time, dressCode) is an empty field whose suggestion needs a
+ * saved format first (waitingForFormat); like 'missing', it never counts.
  *   - date: column, else the automation copy (shown "saved copy", as
  *     before — resolveEventVenueAndDate). Never suggested.
  *     autoScheduled per isAutoScheduledDate (kept for callers; the
@@ -396,11 +423,12 @@ export function resolveEventBasics(event, venueLocation, { suggest = true, organ
     }, dateDraftStateOf(ev)),
     time: field(time, suggest ? suggestEventTime(ev) : null, {
       fromSavedCopy: vd.eventTimeFromSavedCopy,
-    }, draftStateOf(ev, 'event_time', time)),
+    }, draftStateOf(ev, 'event_time', time), waitingForFormat(ev, vd, venueLocation, suggest)),
     description: field(text(ev.description) || null, null, {},
       draftStateOf(ev, 'description', ev.description)),
     dressCode: field(text(ev.dress_code) || null, suggest ? suggestDressCode(ev, venueLocation) : null, {},
-      draftStateOf(ev, 'dress_code', ev.dress_code)),
+      draftStateOf(ev, 'dress_code', ev.dress_code),
+      waitingForFormat(ev, vd, venueLocation, suggest, { needsVenueCheck: true })),
     category: taxonomyField(ev.category, EVENT_CATEGORIES,
       suggest ? suggestEventCategory(ev, organizer) : null, draftStateOf(ev, 'category', ev.category)),
     format: taxonomyField(ev.format, EVENT_FORMATS,

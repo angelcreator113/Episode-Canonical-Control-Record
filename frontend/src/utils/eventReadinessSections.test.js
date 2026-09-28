@@ -354,3 +354,39 @@ describe('adding a section needs no redesign', () => {
     expect(computeEventPackageReadiness({ ...full(), scene_set_id: null }, { items }).gatesMet).toBe(false);
   });
 });
+
+describe('waiting for format counts as not ready (Task #2148)', () => {
+  const noFormat = () => ({ ...full(), format: null, event_time: null, dress_code: null });
+
+  test('a waiting time is a warning, not satisfied, noted "Waiting for format"', () => {
+    const r = computeEventPackageReadiness(noFormat());
+    expect(r.warningItems.find((i) => i.key === 'time'))
+      .toMatchObject({ satisfied: false, state: 'waiting', note: 'Waiting for format' });
+    expect(missingKeys(r, 'identity')).toEqual(expect.arrayContaining(['format', 'time']));
+  });
+
+  test('with the venue passed and no venue dress code, dress code waits too', () => {
+    const r = computeEventPackageReadiness(noFormat(), { venueLocation: { id: 'loc-1', name: 'Club Noir', dress_code: '' } });
+    expect(itemOf(r, 'look', 'dress_code')).toMatchObject({ satisfied: false, state: 'waiting', note: 'Waiting for format' });
+  });
+
+  test('with a venue dress code, dress code is a suggestion, not waiting', () => {
+    const r = computeEventPackageReadiness(noFormat(), { venueLocation: { id: 'loc-1', name: 'Club Noir', dress_code: 'all white' } });
+    expect(itemOf(r, 'look', 'dress_code')).toMatchObject({ satisfied: false, state: 'suggested', note: 'Suggestion not accepted' });
+  });
+
+  test('with a linked venue not passed in, dress code stays missing with no note', () => {
+    expect(itemOf(computeEventPackageReadiness(noFormat()), 'look', 'dress_code'))
+      .toMatchObject({ satisfied: false, state: 'missing', note: null });
+  });
+
+  test('a used event (suggest: false) shows no waiting note', () => {
+    expect(itemOf(computeEventPackageReadiness(noFormat(), { suggest: false }), 'identity', 'time'))
+      .toMatchObject({ satisfied: false, state: 'missing', note: null });
+  });
+
+  test('waiting never satisfies: the same event with the values set is complete', () => {
+    const r = computeEventPackageReadiness({ ...noFormat(), format: 'gala', event_time: '20:00', dress_code: 'black tie formal' });
+    expect(r.allComplete).toBe(true);
+  });
+});

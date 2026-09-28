@@ -64,7 +64,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, User, UserPlus, Pencil, PlayCircle, Lock, AlertCircle,
   Search, X, CheckCircle2, Sparkles, RefreshCw, Loader2, MapPin, Plus,
-  Lightbulb, CircleDashed, CalendarClock, Building2,
+  Lightbulb, CircleDashed, CalendarClock, Building2, Hourglass,
   ChevronDown, ChevronRight, Coins, Gauge, HeartHandshake, TrendingUp, Info,
   Tag, Users, Mail, Shirt, AlertTriangle, PackagePlus,
 } from 'lucide-react';
@@ -116,13 +116,18 @@ const BASICS_ORDER = ['date', 'time', 'description', 'dressCode'];
 const BASICS_STATE_LABEL = { set: 'Set', edited: 'Edited', suggested: 'Suggested', missing: 'Missing' };
 // Task #2128 (doctrine rule 14): a drafted field reads "Auto-drafted ·
 // <source>" until Evoni changes it, then "Edited".
-const basicsStateLabel = (f) => (f.state === 'auto_drafted'
-  ? `Auto-drafted · ${f.source === DATE_DRAFT_SOURCE ? 'schedule' : 'AI draft'}`
-  : BASICS_STATE_LABEL[f.state]);
+// Task #2148 (rule 14): an empty field whose suggestion needs another
+// field first reads "Waiting for <dependency>".
+const basicsStateLabel = (f) => {
+  if (f.state === 'auto_drafted') return `Auto-drafted · ${f.source === DATE_DRAFT_SOURCE ? 'schedule' : 'AI draft'}`;
+  if (f.state === 'waiting') return `Waiting for ${f.waitingFor}`;
+  return BASICS_STATE_LABEL[f.state];
+};
 const basicsStateIcon = (f) => {
   if (f.state === 'auto_drafted') return f.source === DATE_DRAFT_SOURCE ? CalendarClock : Sparkles;
   if (f.state === 'edited') return Pencil;
   if (f.state === 'set') return CheckCircle2;
+  if (f.state === 'waiting') return Hourglass;
   return f.state === 'suggested' ? Lightbulb : CircleDashed;
 };
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -370,7 +375,7 @@ export default function EventPackagePage() {
 
   const { event, sourceProfile, startedFromProfile, sceneSet, venueLocation, invitationAsset, usedInEpisode } = data;
   const used = !!event.used_in_episode_id;
-  const readiness = computeEventPackageReadiness(event, { suggest: !used });
+  const readiness = computeEventPackageReadiness(event, { suggest: !used, venueLocation });
   const { gatesMet } = readiness;
   const blockedBy = describeMissing(readiness.blocking);
   // Category and format (Tasks #1780, #1888) come from resolveEventBasics

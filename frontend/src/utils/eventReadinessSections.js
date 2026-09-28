@@ -17,8 +17,9 @@
  * Rules:
  *   - A suggestion never satisfies readiness, for any field. Only a
  *     stored value does. For the Basics fields this means only
- *     resolveEventBasics's 'set' state counts; 'suggested' reads as
- *     missing, with a note that a suggestion is waiting.
+ *     resolveEventBasics's value states count; 'suggested' reads as
+ *     missing, with a note that a suggestion is waiting, and 'waiting'
+ *     reads as missing with "Waiting for <dependency>" (Task #2148).
  *   - The auto-scheduled date (canon_consequences.automation.
  *     event_date_auto, Task #1756) is a stored date, so it counts as set.
  *   - Nothing here fetches, saves or derives a value. Pure.
@@ -72,6 +73,11 @@ export const READINESS_ITEMS = {
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
 
 const BASICS_NOTE = { suggested: 'Suggestion not accepted' };
+// Task #2148 (doctrine rule 14): a 'waiting' field is not ready, like
+// 'missing', and its note names what it waits for.
+const basicsNote = (field) => (field?.state === 'waiting'
+  ? `Waiting for ${field.waitingFor}`
+  : (BASICS_NOTE[field?.state] || null));
 
 // Task #2128 (§8(u) R2): a drafted value counts toward Event Ready whether it
 // is still the draft or has been edited. The note names which.
@@ -86,13 +92,13 @@ function item(key, label, satisfied, extra = {}) {
 }
 
 // A Basics field is satisfied in the 'set', 'auto_drafted' and 'edited'
-// states (hasValueState). A 'suggested' field is reported as missing,
-// keeping its state so the page can say a suggestion is waiting.
+// states (hasValueState). A 'suggested' or 'waiting' field is reported as
+// missing, keeping its state so the page can say which.
 function basicsItem(key, label, field) {
   const satisfied = hasValueState(field?.state);
   return item(key, label, satisfied, {
     state: field?.state || 'missing',
-    note: satisfied ? draftNote(field) : (BASICS_NOTE[field?.state] || null),
+    note: satisfied ? draftNote(field) : basicsNote(field),
   });
 }
 
@@ -233,7 +239,11 @@ export const EVENT_PACKAGE_SECTIONS = [
  * `options.sections` and `options.items` (a READINESS_ITEMS stand-in) are
  * for tests and for adding a section; callers normally pass neither.
  * `options.suggest: false` (a used event) drops the "suggestion not
- * accepted" note; it cannot change what is satisfied.
+ * accepted" and "waiting for" notes; it cannot change what is satisfied.
+ * `options.venueLocation` is the linked venue, when the caller has it
+ * loaded: with it, a dress code can be told apart as waiting for a format
+ * or suggested from the venue (Task #2148). It cannot change what is
+ * satisfied either.
  */
 export function computeEventPackageReadiness(event, options = {}) {
   const ev = event || {};
@@ -241,7 +251,7 @@ export function computeEventPackageReadiness(event, options = {}) {
   const rules = options.items || READINESS_ITEMS;
   const ctx = {
     event: ev,
-    basics: resolveEventBasics(ev, null, { suggest: options.suggest !== false }),
+    basics: resolveEventBasics(ev, options.venueLocation || null, { suggest: options.suggest !== false }),
     venueDate: resolveEventVenueAndDate(ev),
     organizer: resolveEventOrganizer(ev),
     stakes: resolveEventStakes(ev),

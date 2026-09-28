@@ -878,6 +878,9 @@
    than one Evoni set; once edited it reads like any saved value. */
 .epp-fields > .epp-basic.is-auto_drafted { border-left-style: solid; border-left-color: var(--lala-gold-line, #E8D9A8); }
 .epp-fields > .epp-basic.is-edited { border-left-style: solid; border-left-color: var(--lala-gold, #B8962E); }
+/* Task #2148 (rule 14): waiting on another field (the format) — not a
+   fault to fix here, so a neutral dashed rule rather than danger red. */
+.epp-fields > .epp-basic.is-waiting { border-left-style: dashed; border-left-color: var(--lala-ink-faint, #A09889); }
 
 .epp-basic dt {
   display: flex;
@@ -919,6 +922,12 @@
 .epp-basic.is-edited .epp-basic-state {
   color: var(--lala-ink, #2C2C2C);
   background: var(--lala-parchment-2, #F4EFE4);
+}
+.epp-basic.is-waiting .epp-basic-state {
+  color: var(--lala-ink-muted, #6B6557);
+  background: var(--lala-parchment-2, #F4EFE4);
+  border: 1px dashed var(--lala-parchment-3, #E8E0D0);
+  white-space: nowrap;
 }
 
 .epp-basic-value { font-weight: 600; color: var(--lala-ink, #2C2C2C); }
