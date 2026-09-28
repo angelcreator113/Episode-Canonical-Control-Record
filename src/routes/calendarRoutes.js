@@ -659,7 +659,8 @@ router.post('/events/:id/auto-spawn', requireAuth, async (req, res) => {
     try {
       events = await eventAutomation.spawnEventsFromCalendar(
         calendarEvent, show_id, models,
-        { eventCount: requestedCount, maxGuests: maxGuestsInt }
+        // Task #2154: the user id is the creation draft's rate-limit key.
+        { eventCount: requestedCount, maxGuests: maxGuestsInt, userId: req.user?.id || null }
       );
     } catch (spawnErr) {
       // If some events were created before the error, return partial results

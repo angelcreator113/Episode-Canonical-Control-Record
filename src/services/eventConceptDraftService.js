@@ -102,23 +102,53 @@ function resetDraftLimit() {
 
 const words = (v) => (typeof v === 'string' ? v.replace(/_/g, ' ').replace(/\s+/g, ' ').trim() : '');
 
-// No show name (doctrine rule 11). The creator is who the event was started
-// from, not its organizer or host (§8(r); Task #1790), so the prompt does
-// not call them either.
+// Task #2154 (§8(v)): the optional context an event is spawned inside, e.g. a
+// cultural calendar event, capped like the draft's own fields. Only public
+// facts: a calendar event's private what_only_we_know is never passed.
+const CONTEXT_MAX = { title: 200, theme: 100, description: 600 };
+
+// The context block for the prompt, or '' when no context field is usable.
+function contextBlock(ctx) {
+  if (!ctx || typeof ctx !== 'object') return '';
+  const lines = [
+    cleanField(words(ctx.title), CONTEXT_MAX.title) ? `Calendar event: ${cleanField(words(ctx.title), CONTEXT_MAX.title)}` : null,
+    cleanField(words(ctx.theme), CONTEXT_MAX.theme) ? `Theme: ${cleanField(words(ctx.theme), CONTEXT_MAX.theme)}` : null,
+    cleanField(words(ctx.description), CONTEXT_MAX.description) ? `What the world knows about it: ${cleanField(words(ctx.description), CONTEXT_MAX.description)}` : null,
+  ].filter(Boolean);
+  if (lines.length === 0) return '';
+  return `This event is part of the calendar event below. The concept, activity, description, styling and name must fit it.
+${lines.join('\n')}
+
+`;
+}
+
+// No show name (doctrine rule 11). From-profile: the creator is who the
+// event was started from, not its organizer or host (§8(r); Task #1790), so
+// the prompt does not call them either. With context.context (Task #2154,
+// the calendar path) the creator is the event's host (spawnEventsFromCalendar
+// saves them as host), so the prompt says so and drops that rule. A call
+// without context (from-profile) gets the same prompt as before, byte for byte.
 function buildDraftPrompt(profile, context = {}) {
   const p = profile || {};
+  const ctxBlock = contextBlock(context.context);
+  const creator = words(p.display_name) || words(p.handle);
   const facts = [
-    words(p.display_name) || words(p.handle) ? `Started from Feed creator: ${words(p.display_name) || words(p.handle)}` : null,
+    creator ? (ctxBlock ? `Host (a Feed creator): ${creator}` : `Started from Feed creator: ${creator}`) : null,
     words(p.content_category) ? `Creator's niche: ${words(p.content_category)}` : null,
     words(p.archetype) ? `Creator's archetype: ${words(p.archetype)}` : null,
     words(context.venueName) ? `Venue: ${words(context.venueName)}` : null,
   ].filter(Boolean);
 
-  return `Draft a fictional social event in Lala's world, fitting the Feed creator it was started from.
+  const opening = ctxBlock
+    ? 'Draft a fictional social event in Lala\'s world, hosted by the Feed creator below.'
+    : 'Draft a fictional social event in Lala\'s world, fitting the Feed creator it was started from.';
+  const hostRule = ctxBlock ? '' : '- Do not call the creator the event\'s organizer or host.\n';
+
+  return `${opening}
 
 ${facts.length > 0 ? facts.join('\n') : 'No details beyond the event existing — keep it simple and do not invent specifics.'}
 
-Write these:
+${ctxBlock}Write these:
 - concept: one sentence saying what the event is and why it exists.
 - activity: one sentence saying what attendees will actually do there.
 - description: the public event description, two to four sentences. ${R8_CONTRACT}
@@ -139,8 +169,7 @@ Write these:
 - name: write this last, from the concept, activity and format above. Each name is under 40 characters. No quotation marks in the name itself.
 
 Rules:
-- Do not call the creator the event's organizer or host.
-- Do not invent a venue, date or guest names the details above don't give you.
+${hostRule}- Do not invent a venue, date or guest names the details above don't give you.
 - No quotation marks inside the values.
 
 Return ONLY this JSON, no other text:
@@ -301,7 +330,9 @@ function parseDraftReply(text, profile = null) {
 
 /**
  * @param {object} profile  the SocialProfile row (plain object)
- * @param {object} context  { venueName, userId }
+ * @param {object} context  { venueName, userId, context? } — context (Task
+ *   #2154) is { title, theme, description } of the calendar event the event
+ *   is spawned inside; omitted by from-profile
  * @returns {Promise<{concept, activity, description, category?, format?, event_time?, styling?, name?}|null>}
  */
 async function draftEventConcept(profile, context = {}) {
@@ -345,6 +376,7 @@ module.exports = {
   takeDraftSlot,
   resetDraftLimit,
   R8_CONTRACT,
+  CONTEXT_MAX,
   MODELS,
   DRAFT_TIMEOUT_MS,
   NAME_LIMIT,
