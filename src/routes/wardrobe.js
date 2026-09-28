@@ -1878,8 +1878,8 @@ async function loadEventPieceRows(models, pieces, { showId = null, rowsOnly = fa
  *
  * Maps the canonical scorer's response onto the legacy UI shape:
  *   { hasOutfit, score, items, breakdown, confidence, item_count }
- * so existing consumers (EpisodeWardrobeTab, completion service) keep
- * working without changes. Adds `signals`, `narrative_mood`, `slots`
+ * so existing consumers (EpisodeWardrobeGameplay, EvaluateEpisode, completion service)
+ * keep working without changes. Adds `signals`, `narrative_mood`, `slots`
  * for richer UIs that opt in.
  *
  * Task #1924: removed links (ew.deleted_at) are never scored. With
