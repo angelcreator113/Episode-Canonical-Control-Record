@@ -1,6 +1,8 @@
 | **PRIME STUDIOS** **F-DEPLOY-1 DEPLOY RECORD** *Deploy BH, 2026-09-27, backend only, one migration (a no-op on production), one plain restart, performed personally by Evoni, outside any agent session. `registry_characters.world` gets its creating migration; the Story Engine write-back touches only its own registry's character.* |
 | --- |
 
+> **BANNER** (added 2026-09-28, additive; `F-Reg-2_Fix_Plan_v1.2.md` §3, Task #2174). See `F-Reg-2_OwedScoping_2026-09-28.md` §2.2 (PR #2173) for a repository finding bearing on §7.
+
 **Document version**
 
 New record, not a Fix Plan revision, and not an amendment of
