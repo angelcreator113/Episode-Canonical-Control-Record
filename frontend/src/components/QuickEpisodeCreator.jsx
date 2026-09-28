@@ -224,8 +224,10 @@ export default function QuickEpisodeCreator() {
               setDressCodeKeywords(ev.dress_code_keywords || []);
               setPrestige(ev.prestige ?? 5);
               setStrictness(ev.strictness ?? 5);
-              setCost(ev.cost ?? 50);
-              setIsFree((ev.cost ?? 50) === 0);
+              // The event's cost lives in cost_coins; `cost` never came back (Task #2167).
+              const evCost = ev.cost_coins ?? ev.cost ?? 50;
+              setCost(evCost);
+              setIsFree(evCost === 0);
               setHostBrand(ev.host_brand || '');
               setNarrativeStakes(ev.narrative_stakes || '');
               setInviteType(ev.invite_type || 'invite');
@@ -322,7 +324,7 @@ export default function QuickEpisodeCreator() {
               dress_code_keywords: dressCodeKeywords,
               prestige: prestige,
               strictness: strictness,
-              cost: isFree ? 0 : cost,
+              cost_coins: isFree ? 0 : cost,
               host_brand: hostBrand,
               narrative_stakes: narrativeStakes,
             });
