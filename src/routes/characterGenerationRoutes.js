@@ -126,24 +126,32 @@ router.post('/confirm', async (req, res) => {
 
     // If character_id provided — updating an existing character
     if (character_id) {
-      const character = await RegistryCharacter.findByPk(character_id);
-      if (!character) return res.status(404).json({ error: 'Character not found' });
+      // F-Reg-2 fix group 2 (v1.2 R2), row 4: read, compute depth_level and
+      // write under a row lock, so the depth is calculated from the row as it
+      // is at write time and a field set since the read still counts.
+      const result = await RegistryCharacter.sequelize.transaction(async (transaction) => {
+        const character = await RegistryCharacter.findByPk(character_id, { transaction, lock: transaction.LOCK.UPDATE });
+        if (!character) return null;
+        const wasAlive = character.depth_level === 'alive';
 
-      // Depth warning instead of 403 block
-      if (character.depth_level === 'alive') {
-        // Don't block — but flag that this is a significant edit
-        console.log(`[characterGenerationRoutes] Editing alive character: ${character.selected_name}`);
-      }
+        // Depth warning instead of 403 block
+        if (wasAlive) {
+          // Don't block — but flag that this is a significant edit
+          console.log(`[characterGenerationRoutes] Editing alive character: ${character.selected_name}`);
+        }
 
-      // Auto-calculate depth level from the proposed data
-      const depth_level = calculateDepthLevel({ ...character.toJSON(), ...proposed });
+        // Auto-calculate depth level from the proposed data
+        const depth_level = calculateDepthLevel({ ...character.toJSON(), ...proposed });
 
-      await character.update({ ...proposed, depth_level });
+        await character.update({ ...proposed, depth_level }, { transaction });
+        return { character, depth_level, wasAlive };
+      });
+      if (!result) return res.status(404).json({ error: 'Character not found' });
 
       return res.json({
-        character,
-        depth_level,
-        depth_warning: character.depth_level === 'alive'
+        character: result.character,
+        depth_level: result.depth_level,
+        depth_warning: result.wasAlive
           ? 'This character was at Alive depth. Changes have been applied and flagged.'
           : null,
       });
