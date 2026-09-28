@@ -2540,11 +2540,21 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     // "Auto-drafted · <source>" label.
     const draft = await draftEventConcept(p, { venueName: venue?.name || null, userId: req.user?.id });
     const descriptionText = draft ? draft.description : templateDescription;
+    // Task #2124 (§8(u) R7): the same draft may carry styling. With it,
+    // dress_code and dress_code_keywords go to their columns and the brief
+    // to automation.styling_brief; without it, all three are as before.
+    const styling = draft?.styling || null;
     const draftAutomation = draft
       ? {
         concept: draft.concept,
         activity: draft.activity,
-        auto_drafted: { description: 'ai_draft', concept: 'ai_draft', activity: 'ai_draft' },
+        ...(styling ? { styling_brief: styling.styling_brief } : {}),
+        auto_drafted: {
+          description: 'ai_draft',
+          concept: 'ai_draft',
+          activity: 'ai_draft',
+          ...(styling ? { dress_code: 'ai_draft', dress_code_keywords: 'ai_draft', styling_brief: 'ai_draft' } : {}),
+        },
       }
       : {};
     const narrativeText = `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${sponsorBrand ? `Brand opportunity with ${sponsorBrand}.` : ''}`;
@@ -2560,7 +2570,8 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       cost_coins: costCoins,
       strictness,
       deadline_type: deadlineType,
-      dress_code: null,
+      dress_code: styling ? styling.dress_code : null,
+      ...(styling ? { dress_code_keywords: styling.dress_code_keywords } : {}),
       location_hint: venueAddress || null,
       // Top-level FK to the WorldLocation. Without this, the venue only
       // lives nested in canon_consequences.automation and Overview's
@@ -2641,12 +2652,17 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
       try {
         await models.sequelize.query(
           `INSERT INTO world_events (id, show_id, name, event_type, host, host_brand, prestige, cost_coins,
-           strictness, deadline_type, dress_code, description, narrative_stakes, location_hint, venue_name,
+           strictness, deadline_type, dress_code, dress_code_keywords, description, narrative_stakes, location_hint, venue_name,
            venue_address, event_date, event_time, canon_consequences, status, created_at, updated_at)
            VALUES (:id, :show_id, :name, :event_type, :host, :host_brand, :prestige, :cost_coins,
-           :strictness, :deadline_type, :dress_code, :description, :narrative_stakes, :location_hint, :venue_name,
+           :strictness, :deadline_type, :dress_code, :dress_code_keywords::jsonb, :description, :narrative_stakes, :location_hint, :venue_name,
            :venue_address, :event_date, :event_time, :canon_consequences, 'draft', NOW(), NOW())`,
-          { replacements: { ...eventData, canon_consequences: JSON.stringify(eventData.canon_consequences) } }
+          { replacements: {
+            ...eventData,
+            // Task #2124: the column's default is []; a drafted list replaces it.
+            dress_code_keywords: JSON.stringify(eventData.dress_code_keywords || []),
+            canon_consequences: JSON.stringify(eventData.canon_consequences),
+          } }
         );
       } catch (sqlErr) {
         console.warn('Full SQL insert failed, trying minimal:', sqlErr.message);
