@@ -66,7 +66,7 @@ output):**
 - A grep of the error log for `eventConceptDraft` returned nothing.
 - **App check:** a new event created from a Feed creator showed a drafted
   name, every Basics field labelled Auto-drafted, and the Event concept
-  section.
+  section. Picking a suggested name turned the name Edited.
 
 Hostnames, IP addresses, key paths and credentials in her output are not
 recorded here.
@@ -193,17 +193,20 @@ The last three steps of the event-generation workstream
 ### §5.2 The live check, beside the code
 
 **ATTESTED (§0).** A new Feed-creator event showed a drafted name, every
-Basics field labelled Auto-drafted, and the Event concept section.
+Basics field labelled Auto-drafted, and the Event concept section. Picking
+a suggested name turned the name Edited.
 `/health` healthy, database connected. The error log holds no
 `eventConceptDraft` line.
 
-**MEASURED.** The drafted name is #2137; the Event concept section is #2133.
-In `src/services/eventConceptDraftService.js`, the draft's own rate limit,
-a dropped name, invalid styling, and a dropped category, format or time each
-call `console.warn`;
-an unusable reply, an unparseable one, or a failed call calls
-`console.error`. A draft with every field valid logs nothing, and so does
-the skip when `ANTHROPIC_API_KEY` is absent.
+**MEASURED.** The drafted name and its turn to Edited are #2137: a picked
+name is saved through the event PUT (`saveEventName`), and the Name row
+compares the saved name with `drafted_values.name` (`draftStateOf`). The
+Event concept section is #2133. In `src/services/eventConceptDraftService.js`,
+the draft's own rate limit, a dropped name, invalid styling, and a dropped
+category, format or time each call `console.warn`; an unusable reply, an
+unparseable one, or a failed call calls `console.error`. A draft with every
+field valid logs nothing, and so does the skip when `ANTHROPIC_API_KEY` is
+absent.
 
 **INFERRED.** Node writes `console.warn` and `console.error` to stderr,
 which pm2 keeps in the error log, so an empty `eventConceptDraft` grep means
@@ -212,8 +215,7 @@ the app check: a drafted name and every Basics field Auto-drafted is a draft
 with every field valid.
 
 **Not attested:**
-- that picking a suggested name turned the name Edited (the third
-  post-deploy check);
+- which suggested name was picked;
 - the extent of the grepped error-log window;
 - which Basics fields the checked event had (the account says every one was
   Auto-drafted).
@@ -330,8 +332,8 @@ Nothing minted here.
 - **The live check (§5.2):** a drafted name, every Basics field
   Auto-drafted, and the Event concept section on a new Feed-creator event.
   `/health` was healthy and connected on the second curl, and the error log
-  has no `eventConceptDraft` line. That picking a suggested name turns the
-  name Edited is not attested.
+  has no `eventConceptDraft` line. Picking a suggested name turned the name
+  Edited (ATTESTED).
 - The CFO audit's `cost_watchdog` 50.0% error rate and `dependency_audit`
   14 critical/high are noted, not investigated; the code that reports them
   is unchanged in the range (§6).
