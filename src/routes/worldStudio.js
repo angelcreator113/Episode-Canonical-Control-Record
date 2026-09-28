@@ -840,26 +840,30 @@ async function backfillRelationshipsMap(seededPairs) {
   // Merge into existing relationships_map on each registry character
   for (const [rcId, rels] of charRels) {
     try {
-      const [existing] = await sequelize.query(
-        'SELECT relationships_map FROM registry_characters WHERE id = :id',
-        { replacements: { id: rcId }, type: sequelize.QueryTypes.SELECT }
-      );
-      const current = (existing?.relationships_map && typeof existing.relationships_map === 'object')
-        ? existing.relationships_map : {};
+      // F-Reg-2 fix group 2 (v1.2 R2), row 60: read, union and write under a
+      // row lock so an entry another request adds is not lost.
+      await sequelize.transaction(async (transaction) => {
+        const [existing] = await sequelize.query(
+          'SELECT relationships_map FROM registry_characters WHERE id = :id FOR UPDATE',
+          { replacements: { id: rcId }, type: sequelize.QueryTypes.SELECT, transaction }
+        );
+        const current = (existing?.relationships_map && typeof existing.relationships_map === 'object')
+          ? existing.relationships_map : {};
 
-      const merged = {
-        ...current,
-        allies: [...new Set([...(current.allies || []), ...rels.allies])].filter(Boolean) || null,
-        rivals: [...new Set([...(current.rivals || []), ...rels.rivals])].filter(Boolean) || null,
-        mentors: [...new Set([...(current.mentors || []), ...rels.mentors])].filter(Boolean) || null,
-        love_interests: [...new Set([...(current.love_interests || []), ...rels.love_interests])].filter(Boolean) || null,
-        business_partners: [...new Set([...(current.business_partners || []), ...rels.business_partners])].filter(Boolean) || null,
-      };
+        const merged = {
+          ...current,
+          allies: [...new Set([...(current.allies || []), ...rels.allies])].filter(Boolean) || null,
+          rivals: [...new Set([...(current.rivals || []), ...rels.rivals])].filter(Boolean) || null,
+          mentors: [...new Set([...(current.mentors || []), ...rels.mentors])].filter(Boolean) || null,
+          love_interests: [...new Set([...(current.love_interests || []), ...rels.love_interests])].filter(Boolean) || null,
+          business_partners: [...new Set([...(current.business_partners || []), ...rels.business_partners])].filter(Boolean) || null,
+        };
 
-      await sequelize.query(
-        'UPDATE registry_characters SET relationships_map = :map, updated_at = NOW() WHERE id = :id',
-        { replacements: { id: rcId, map: JSON.stringify(merged) }, type: sequelize.QueryTypes.UPDATE }
-      );
+        await sequelize.query(
+          'UPDATE registry_characters SET relationships_map = :map, updated_at = NOW() WHERE id = :id',
+          { replacements: { id: rcId, map: JSON.stringify(merged) }, type: sequelize.QueryTypes.UPDATE, transaction }
+        );
+      });
     } catch (err) {
       console.error(`backfillRelationshipsMap error for ${rcId}:`, err.message);
     }
