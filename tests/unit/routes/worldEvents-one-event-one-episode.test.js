@@ -212,6 +212,18 @@ describe('generateEpisodeFromEvent guard (shared by generate-episode, -from-many
       .rejects.toThrow('PASSED_GUARD');
   });
 
+  test('regenerate: replacing the event\'s own live episode passes the guard (§8(w) P3)', async () => {
+    await expect(episodeGenerator.generateEpisodeFromEvent(mockEvents['ev-live'], serviceModels(), { showId: SHOW, replacingEpisodeId: 'ep-live' }))
+      .rejects.toThrow('PASSED_GUARD');
+  });
+
+  test('regenerate: naming a different episode does not pass the guard', async () => {
+    const err = await episodeGenerator.generateEpisodeFromEvent(mockEvents['ev-live'], serviceModels(), { showId: SHOW, replacingEpisodeId: 'ep-other' })
+      .catch(e => e);
+    expect(err.code).toBe('EVENT_ALREADY_HAS_EPISODE');
+    expect(err.episode.id).toBe('ep-live');
+  });
+
   test('a link to a hard-deleted episode passes the guard', async () => {
     const ev = { ...mockEvents['ev-dead'], id: 'ev-gone' };
     mockEvents['ev-gone'] = { ...ev, used_in_episode_id: 'ep-gone' };
