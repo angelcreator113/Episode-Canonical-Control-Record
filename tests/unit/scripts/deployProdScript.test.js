@@ -63,7 +63,11 @@ case "$1" in
     echo "0|episode- | 2026-09-28 12:40:05: [CFO] ✅ Audit complete — Score: 70/100 | 2 critical | 4 warnings | 900ms"
     echo "0|episode- | 2026-09-28 12:48:09: 🔗 Ready to accept requests (on ip-10-0-1-5, 10.0.1.5)"
     echo "0|episode- | 2026-09-28 12:48:18: [CFO] ⏰ Scheduled audit starting..."
-    echo "0|episode- | 2026-09-28 12:48:22: [CFO] ✅ Audit complete — Score: 84/100 | 1 critical | 4 warnings | 812ms" ;;
+    echo "0|episode- | 2026-09-28 12:48:22: [CFO] ✅ Audit complete — Score: 84/100 | 1 critical | 4 warnings | 812ms"
+    echo "0|episode- | 2026-09-28 12:48:22: [CFO] 🚨 Critical issues found:"
+    echo "0|episode- | 2026-09-28 12:48:22:   → [dependency_audit] 14 critical/high vulnerabilities (seen from 10.0.1.5)"
+    echo "0|episode- | 2026-09-28 12:48:23: GET /health 200 3ms"
+    echo "0|episode- | 2026-09-28 12:48:24:   → [stray] an arrow line not under a critical header" ;;
   *) echo "unexpected pm2 call: $*" >&2; exit 97 ;;
 esac
 `,
@@ -318,6 +322,15 @@ describe('the happy path', () => {
     expect(summary).toContain('Score: 84/100');
     expect(summary).not.toContain('Score: 70/100'); // only lines since the latest Ready
     expect(summary).toMatch(/===== end =====/);
+  });
+
+  test('keeps the critical detail line under "Critical issues found:", and no other untagged line', () => {
+    const summary = r.out.slice(r.out.indexOf('===== Paste this into a session for the deploy record ====='));
+    for (const text of [r.out.slice(0, r.out.indexOf('===== Paste')), summary]) {
+      expect(text).toMatch(/\[CFO\] 🚨 Critical issues found:\n.*→ \[dependency_audit\] 14 critical\/high vulnerabilities \(seen from \[ip\]\)/);
+      expect(text).not.toContain('GET /health 200');
+      expect(text).not.toContain('[stray]');
+    }
   });
 
   test('no host, IP address or key value anywhere in the output', () => {

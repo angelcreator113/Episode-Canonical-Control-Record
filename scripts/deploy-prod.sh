@@ -296,9 +296,18 @@ since_ready() {
 READY_LINE="$(since_ready | head -1 | redact || true)"
 echo "Ready line: ${READY_LINE:-(not found in the last 300 log lines)}"
 
+# [CFO] lines, plus the untagged "  → [agent] msg" detail lines that directly
+# follow "[CFO] ... Critical issues found:" (cfoAgent prints them without the
+# tag). A → line anywhere else, and any other untagged line, is not kept.
+cfo_filter() {
+  awk '/\[CFO\]/ { print; crit = /Critical issues found:/; next }
+       crit && /→ \[/ { print; next }
+       { crit = 0 }'
+}
+
 CFO_LINES=""
 for _ in $(seq 1 "$CFO_TRIES"); do
-  CFO_LINES="$(since_ready | grep '\[CFO\]' | redact || true)"
+  CFO_LINES="$(since_ready | cfo_filter | redact || true)"
   if printf '%s' "$CFO_LINES" | grep -qE 'Audit complete|Scheduled audit failed'; then break; fi
   sleep 3
 done
