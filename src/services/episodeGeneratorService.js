@@ -801,7 +801,11 @@ Return ONLY JSON.` }],
     : event.canon_consequences)?.automation || {};
 
   // ── 3b. Generate Feed Moments for each beat ──
+  // Each beat's moment is written onto its scene_plans row by id; every
+  // failure is recorded in feedMomentSave and returned, never silent
+  // (§8(w) P5, Task #2213). scenePlanRows are plain objects, not instances.
   let feedMoments = {};
+  const feedMomentSave = { attempted: 0, saved: 0, failed: [] };
   try {
     const { generateFeedMoments } = require('./feedMomentsService');
     const guestProfiles = automation.guest_profiles || [];
@@ -811,16 +815,26 @@ Return ONLY JSON.` }],
     for (const row of scenePlanRows) {
       const beatNum = row.beat_number || row.dataValues?.beat_number;
       if (feedMoments[beatNum]) {
+        feedMomentSave.attempted++;
         try {
           const moment = feedMoments[beatNum];
-          const updates = { feed_moment: moment };
-          if (moment.script_lines) updates.script_lines = moment.script_lines;
-          await row.update(updates);
+          const setLines = moment.script_lines ? ', script_lines = CAST(:scriptLines AS jsonb)' : '';
+          const [updated] = await models.sequelize.query(
+            `UPDATE scene_plans SET feed_moment = CAST(:feedMoment AS jsonb)${setLines}, updated_at = NOW() WHERE id = :id RETURNING id`,
+            { replacements: { id: row.id, feedMoment: JSON.stringify(moment), scriptLines: JSON.stringify(moment.script_lines || null) } }
+          );
+          if (!Array.isArray(updated) || updated.length === 0) throw new Error(`scene_plans row ${row.id} not found`);
+          row.feed_moment = moment;
+          if (moment.script_lines) row.script_lines = moment.script_lines;
+          feedMomentSave.saved++;
         } catch (momentErr) {
-          // feed_moment column may not exist yet — non-blocking, logged.
-          console.warn(`[EpisodeGenerator] Feed moment attach failed for beat ${beatNum} (non-blocking):`, momentErr.message);
+          console.error(`[EpisodeGenerator] Feed moment save failed for beat ${beatNum}:`, momentErr.message);
+          feedMomentSave.failed.push({ beat_number: beatNum, error: momentErr.message });
         }
       }
+    }
+    if (feedMomentSave.failed.length > 0) {
+      console.error(`[EpisodeGenerator] ${feedMomentSave.failed.length} of ${feedMomentSave.attempted} feed moment(s) were not saved for episode ${episode.id}`);
     }
   } catch (fmErr) {
     console.warn('[EpisodeGenerator] Feed moments generation failed (non-blocking):', fmErr.message);
@@ -1013,6 +1027,7 @@ Return ONLY JSON.` }],
     beats: BEAT_TEMPLATES,
     feedPosts,
     feedMoments,
+    feedMomentSave,
   };
 }
 
