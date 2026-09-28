@@ -1350,15 +1350,23 @@
   border: 1px solid var(--lala-parchment-3, #E8E0D0);
   overflow-wrap: anywhere;
 }
+/* One label column for the whole brief (Task #2140). Each row used to be
+   its own grid sized to its own label, and the uppercase, letter-spaced
+   labels (.epp-fields dt) made "Style direction" and "Needs to allow" wider
+   than 96px, so their values started further right. The rows now take their
+   columns from this grid (subgrid), so every value starts at one position. */
 .epp-concept-brief {
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(96px, max-content) 1fr;
+  column-gap: 8px;
+  row-gap: 6px;
   margin: 2px 0 0;
 }
 .epp-concept-brief > div {
   display: grid;
-  grid-template-columns: minmax(96px, auto) 1fr;
-  gap: 8px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  row-gap: 0;
 }
 .epp-concept-brief dt {
   font-family: 'DM Mono', monospace;
@@ -1372,7 +1380,7 @@
   overflow-wrap: anywhere;
 }
 @media (max-width: 480px) {
-  .epp-concept-brief > div { grid-template-columns: 1fr; gap: 0; }
+  .epp-concept-brief { grid-template-columns: 1fr; }
 }
 .epp-concept-stale {
   margin: 8px 0 0;
