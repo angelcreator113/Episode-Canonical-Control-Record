@@ -17,6 +17,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const { autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
+const { draftEventConcept } = require('./eventConceptDraftService');
 
 // ─── CATEGORY MAPPING ────────────────────────────────────────────────────────
 // Maps cultural calendar categories to feed profile content categories
@@ -571,13 +572,24 @@ function generateEventName(category, hostName, calendarTitle, venueName) {
  * @param {object} calendarEvent — StoryCalendarEvent instance
  * @param {string} showId — show to create events for
  * @param {object} models — Sequelize models
- * @param {object} [options] — { eventCount: 1-3, maxGuests: 8 }
+ * @param {object} [options] — { eventCount: 1-3, maxGuests: 8, userId }
+ *   userId (Task #2154) is the requesting user, the creation draft's
+ *   rate-limit key; the auto-spawn route passes req.user's id.
  * @returns {Array} Created world events
  */
 async function spawnEventsFromCalendar(calendarEvent, showId, models, options = {}) {
-  const { eventCount = 1, maxGuests = 8 } = options;
+  const { eventCount = 1, maxGuests = 8, userId = null } = options;
   const createdEvents = [];
   const usedHostIds = [];
+  // Task #2154 (§8(v)): the calendar event's own public facts, so each
+  // event's draft fits its theme. Its private what_only_we_know is not sent.
+  const calendarContext = {
+    title: calendarEvent.title,
+    theme: calendarEvent.cultural_category,
+    description: calendarEvent.what_world_knows,
+  };
+  // A dress code the calendar event itself supplies wins over the draft's.
+  const calendarDressCode = calendarEvent.activities?.dress_code || null;
 
   for (let i = 0; i < eventCount; i++) {
     // Find host
@@ -632,7 +644,53 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
 
     // Generate event name
     const category = calendarEvent.cultural_category || 'default';
-    const eventName = generateEventName(category, hostName, calendarEvent.title, venueName);
+    const templateName = generateEventName(category, hostName, calendarEvent.title, venueName);
+    const templateDescription = `${calendarEvent.title} — ${calendarEvent.what_world_knows || templateName}`;
+
+    // Task #2154 (§8(v); docs/EVENT_CREATE_PATHS_READ.md, the calendar
+    // row): the same single draft call as from-profile, with the calendar
+    // event as context. It never blocks creation: with a null draft every
+    // field below is exactly as before. Events are drafted one after another
+    // (this loop awaits each), and one event's null draft does not affect
+    // the next. Per field, as from-profile does:
+    //   - a template value (name, description) is replaced by the draft's;
+    //   - an empty field (event_time, category, format, dress_code_keywords,
+    //     and dress_code when the calendar gives none) is filled by it;
+    //   - a value the calendar event supplies (its dress code) is kept, and
+    //     then none of the drafted styling is used: the drafted keywords and
+    //     brief were written for the drafted dress code, not the calendar's.
+    // Each drafted field is recorded in automation.auto_drafted ('ai_draft')
+    // with its value in automation.drafted_values.
+    const draft = await draftEventConcept(host, { venueName, userId, context: calendarContext });
+    const styling = !calendarDressCode ? (draft?.styling || null) : null;
+    const draftedTaxonomy = {};
+    for (const field of ['category', 'format', 'event_time']) {
+      if (draft?.[field]) draftedTaxonomy[field] = draft[field];
+    }
+    const draftedName = draft?.name || null;
+    const eventName = draftedName || templateName;
+    const descriptionText = draft ? draft.description : templateDescription;
+    const draftAutomation = draft
+      ? {
+        concept: draft.concept,
+        activity: draft.activity,
+        ...(styling ? { styling_brief: styling.styling_brief } : {}),
+        auto_drafted: {
+          description: 'ai_draft',
+          concept: 'ai_draft',
+          activity: 'ai_draft',
+          ...(styling ? { dress_code: 'ai_draft', dress_code_keywords: 'ai_draft', styling_brief: 'ai_draft' } : {}),
+          ...Object.fromEntries(Object.keys(draftedTaxonomy).map((field) => [field, 'ai_draft'])),
+          ...(draftedName ? { name: 'ai_draft' } : {}),
+        },
+        drafted_values: {
+          description: draft.description,
+          ...(styling ? { dress_code: styling.dress_code, dress_code_keywords: styling.dress_code_keywords } : {}),
+          ...draftedTaxonomy,
+          ...(draftedName ? { name: draftedName } : {}),
+        },
+      }
+      : {};
 
     // Determine prestige from calendar severity
     const prestige = Math.min(10, (calendarEvent.severity_level || 5) + Math.floor(Math.random() * 3));
@@ -650,6 +708,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
     // No event time (Task #1757): a calendar event supplies none, and this
     // used to derive one from prestige (20:00/19:00/18:00) and save it to
     // the column and the automation copy. The Event Package suggests one.
+    // Since Task #2154 the creation draft may fill it (draftedTaxonomy).
 
     const automationData = {
       host_profile_id: host?.id || null,
@@ -670,7 +729,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       cost_coins: costCoins,
       strictness,
       deadline_type: deadlineType,
-      dress_code: calendarEvent.activities?.dress_code || null,
+      dress_code: calendarDressCode,
       // Auto-generated social tasks
       social_tasks: (() => {
         try {
@@ -697,12 +756,13 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
               // is true of a creator's partner brand.
               host_brand: sponsorBrand,
               venue_name: venueName,
-              dress_code: calendarEvent.activities?.dress_code || null,
+              dress_code: calendarDressCode,
               guest_names: guestList.map(g => g.display_name || g.handle).filter(Boolean),
             }
           );
         } catch { return []; }
       })(),
+      ...draftAutomation,
     };
 
     const eventData = {
@@ -712,7 +772,7 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       event_type: i === 0 ? 'invite' : (i === 1 ? 'guest' : 'upgrade'),
       host: hostName,
       host_brand: null,
-      description: `${calendarEvent.title} — ${calendarEvent.what_world_knows || eventName}`,
+      description: descriptionText,
       prestige,
       cost_coins: costCoins,
       strictness,
@@ -721,8 +781,11 @@ async function spawnEventsFromCalendar(calendarEvent, showId, models, options = 
       venue_name: venueName || null,
       venue_address: venueAddress || null,
       event_date: eventDateStr,
-      event_time: null,
-      dress_code: calendarEvent.activities?.dress_code || null,
+      event_time: draftedTaxonomy.event_time || null,
+      ...(draftedTaxonomy.category ? { category: draftedTaxonomy.category } : {}),
+      ...(draftedTaxonomy.format ? { format: draftedTaxonomy.format } : {}),
+      dress_code: calendarDressCode || (styling ? styling.dress_code : null),
+      ...(styling ? { dress_code_keywords: styling.dress_code_keywords } : {}),
       narrative_stakes: calendarEvent.what_only_we_know || null,
       canon_consequences: { automation: automationData },
       status: 'ready',

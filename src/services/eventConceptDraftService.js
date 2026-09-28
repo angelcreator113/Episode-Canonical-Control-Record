@@ -102,9 +102,30 @@ function resetDraftLimit() {
 
 const words = (v) => (typeof v === 'string' ? v.replace(/_/g, ' ').replace(/\s+/g, ' ').trim() : '');
 
+// Task #2154 (§8(v)): the optional context an event is spawned inside, e.g. a
+// cultural calendar event, capped like the draft's own fields. Only public
+// facts: a calendar event's private what_only_we_know is never passed.
+const CONTEXT_MAX = { title: 200, theme: 100, description: 600 };
+
+// The context block for the prompt, or '' when no context field is usable.
+function contextBlock(ctx) {
+  if (!ctx || typeof ctx !== 'object') return '';
+  const lines = [
+    cleanField(words(ctx.title), CONTEXT_MAX.title) ? `Calendar event: ${cleanField(words(ctx.title), CONTEXT_MAX.title)}` : null,
+    cleanField(words(ctx.theme), CONTEXT_MAX.theme) ? `Theme: ${cleanField(words(ctx.theme), CONTEXT_MAX.theme)}` : null,
+    cleanField(words(ctx.description), CONTEXT_MAX.description) ? `What the world knows about it: ${cleanField(words(ctx.description), CONTEXT_MAX.description)}` : null,
+  ].filter(Boolean);
+  if (lines.length === 0) return '';
+  return `This event is part of the calendar event below. The concept, activity, description, styling and name must fit it.
+${lines.join('\n')}
+
+`;
+}
+
 // No show name (doctrine rule 11). The creator is who the event was started
 // from, not its organizer or host (§8(r); Task #1790), so the prompt does
-// not call them either.
+// not call them either. context.context (Task #2154) adds a block only when
+// present, so a call without it (from-profile) gets the same prompt as before.
 function buildDraftPrompt(profile, context = {}) {
   const p = profile || {};
   const facts = [
@@ -118,7 +139,7 @@ function buildDraftPrompt(profile, context = {}) {
 
 ${facts.length > 0 ? facts.join('\n') : 'No details beyond the event existing — keep it simple and do not invent specifics.'}
 
-Write these:
+${contextBlock(context.context)}Write these:
 - concept: one sentence saying what the event is and why it exists.
 - activity: one sentence saying what attendees will actually do there.
 - description: the public event description, two to four sentences. ${R8_CONTRACT}
@@ -301,7 +322,9 @@ function parseDraftReply(text, profile = null) {
 
 /**
  * @param {object} profile  the SocialProfile row (plain object)
- * @param {object} context  { venueName, userId }
+ * @param {object} context  { venueName, userId, context? } — context (Task
+ *   #2154) is { title, theme, description } of the calendar event the event
+ *   is spawned inside; omitted by from-profile
  * @returns {Promise<{concept, activity, description, category?, format?, event_time?, styling?, name?}|null>}
  */
 async function draftEventConcept(profile, context = {}) {
@@ -345,6 +368,7 @@ module.exports = {
   takeDraftSlot,
   resetDraftLimit,
   R8_CONTRACT,
+  CONTEXT_MAX,
   MODELS,
   DRAFT_TIMEOUT_MS,
   NAME_LIMIT,

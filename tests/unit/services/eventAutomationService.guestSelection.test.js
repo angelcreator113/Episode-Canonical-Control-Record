@@ -132,7 +132,8 @@ describe('both callers keep their contract: shape and count', () => {
     const route = fs.readFileSync(path.join(root, 'src/routes/worldEvents.js'), 'utf8');
     const svc = fs.readFileSync(path.join(root, 'src/services/eventAutomationService.js'), 'utf8');
     expect(route).toMatch(/assembleGuestList\(profile, fakeCalEvent, models, 6\)/);
-    expect(svc).toMatch(/const \{ eventCount = 1, maxGuests = 8 \} = options;/);
+    // Task #2154 added userId (the draft's rate-limit key); the defaults are unchanged.
+    expect(svc).toMatch(/const \{ eventCount = 1, maxGuests = 8, userId = null \} = options;/);
     expect(svc).toMatch(/assembleGuestList\(host, calendarEvent, models, maxGuests\)/);
   });
 

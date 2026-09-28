@@ -25,6 +25,7 @@ const {
   MODELS,
   DRAFT_TIMEOUT_MS,
   NAME_LIMIT,
+  CONTEXT_MAX,
 } = require('../../../src/services/eventConceptDraftService');
 
 const PROFILE = { display_name: 'Maya Moves', handle: 'mayamoves', content_category: 'fitness', archetype: 'soft_life' };
@@ -357,5 +358,59 @@ describe('parseDraftReply', () => {
     expect(parseDraftReply(undefined)).toBeNull();
     expect(parseDraftReply('no json here')).toBeNull();
     expect(parseDraftReply('{"concept": "", "activity": "a", "description": "d"}')).toBeNull();
+  });
+});
+
+// Task #2154 (§8(v)): an optional calendar context. from-profile passes none,
+// and its prompt is byte-for-byte what it was.
+describe('buildDraftPrompt context (Task #2154)', () => {
+  const CAL = { title: 'Holiday Gala', theme: 'luxury_prestige', description: "The season's biggest night." };
+
+  test('from-profile prompt unchanged: exact text up to "Write these:"', () => {
+    const prompt = buildDraftPrompt(PROFILE, { venueName: 'The Loft', userId: 'u1' });
+    expect(prompt.slice(0, prompt.indexOf('Write these:') + 'Write these:'.length)).toBe(
+      "Draft a fictional social event in Lala's world, fitting the Feed creator it was started from.\n"
+      + '\n'
+      + 'Started from Feed creator: Maya Moves\n'
+      + "Creator's niche: fitness\n"
+      + "Creator's archetype: soft life\n"
+      + 'Venue: The Loft\n'
+      + '\n'
+      + 'Write these:',
+    );
+    expect(prompt).not.toMatch(/calendar event/i);
+  });
+
+  test('no context, an empty context and an all-blank context give the same prompt', () => {
+    const base = buildDraftPrompt(PROFILE, { venueName: 'The Loft' });
+    expect(buildDraftPrompt(PROFILE, { venueName: 'The Loft', context: undefined })).toBe(base);
+    expect(buildDraftPrompt(PROFILE, { venueName: 'The Loft', context: {} })).toBe(base);
+    expect(buildDraftPrompt(PROFILE, { venueName: 'The Loft', context: { title: '  ', theme: null } })).toBe(base);
+  });
+
+  test('the context appears in the prompt, and the model is told the event must fit it', () => {
+    const prompt = buildDraftPrompt(PROFILE, { venueName: 'The Loft', context: CAL });
+    expect(prompt).toContain('This event is part of the calendar event below. The concept, activity, description, styling and name must fit it.');
+    expect(prompt).toContain('Calendar event: Holiday Gala');
+    expect(prompt).toContain('Theme: luxury prestige');
+    expect(prompt).toContain("What the world knows about it: The season's biggest night.");
+    // Only the block is added: everything from "Write these:" on is unchanged.
+    const tail = (p) => p.slice(p.indexOf('Write these:'));
+    expect(tail(prompt)).toBe(tail(buildDraftPrompt(PROFILE, { venueName: 'The Loft' })));
+  });
+
+  test('context fields are capped like the draft fields; a missing one is left out', () => {
+    const prompt = buildDraftPrompt(null, { context: { title: 'T '.repeat(300), description: 'word '.repeat(400) } });
+    const line = (label) => prompt.split('\n').find((l) => l.startsWith(label)).slice(label.length);
+    expect(line('Calendar event: ').length).toBeLessThanOrEqual(CONTEXT_MAX.title);
+    expect(line('What the world knows about it: ').length).toBeLessThanOrEqual(CONTEXT_MAX.description);
+    expect(prompt).not.toContain('Theme:');
+  });
+
+  test('draftEventConcept sends the context to the model', async () => {
+    mockMessagesCreate.mockResolvedValue(reply(JSON.stringify(REPLY)));
+    await draftEventConcept(PROFILE, { venueName: 'The Loft', userId: 'ctx-user', context: CAL });
+    const sent = mockMessagesCreate.mock.calls[0][0].messages[0].content;
+    expect(sent).toContain('Calendar event: Holiday Gala');
   });
 });
