@@ -65,6 +65,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(rows.map((r) => r.beat_number)).toEqual(momentBeats.sort((a, b) => a - b));
     for (const r of rows) expect(r.feed_moment).toEqual(result.feedMoments[r.beat_number]);
     expect(result.feedMomentSave).toEqual({ attempted: momentBeats.length, saved: momentBeats.length, failed: [] });
+    // The outcome is recorded on the brief for the Scenes tab (Task #2216).
+    const [brief] = await q(`SELECT event_metadata FROM episode_briefs WHERE episode_id = :ep`, { ep: result.episode.id });
+    expect(brief.event_metadata.feed_moment_save).toMatchObject({ attempted: momentBeats.length, saved: momentBeats.length, failed: [] });
   });
 
   it('a failed save is reported, not counted as saved', async () => {
@@ -85,5 +88,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(result.feedMomentSave.failed[0].error).toContain('injected feed moment save failure');
     const saved = await q(`SELECT count(*)::int AS n FROM scene_plans WHERE episode_id = :ep AND feed_moment IS NOT NULL`, { ep: result.episode.id });
     expect(saved[0].n).toBe(0);
+    // The failed beats are recorded on the brief for the Scenes tab (Task #2216).
+    const [brief] = await q(`SELECT event_metadata FROM episode_briefs WHERE episode_id = :ep`, { ep: result.episode.id });
+    expect(brief.event_metadata.feed_moment_save.failed.map((f) => f.beat_number))
+      .toEqual(result.feedMomentSave.failed.map((f) => f.beat_number));
   });
 });

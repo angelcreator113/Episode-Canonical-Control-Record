@@ -120,8 +120,35 @@ router.post('/:episodeId/generate-plan', requireAuth, aiRateLimiter, async (req,
 
 // ── GET SCENE PLAN ────────────────────────────────────────────────────────────
 
+// Beats whose feed moment the episode generator could not save and that still
+// have none (§8(w) P5, Task #2216). Moments are rolled per beat, so an empty
+// scene_plans.feed_moment means nothing by itself; the generator's record on
+// the brief (event_metadata.feed_moment_save) says which beats should have one.
+async function missingFeedMomentBeats(episodeId) {
+  const brief = await EpisodeBrief.findOne({ where: { episode_id: episodeId }, attributes: ['id', 'event_metadata'] });
+  const failed = brief?.event_metadata?.feed_moment_save?.failed || [];
+  const beats = [...new Set(failed.map((f) => Number(f?.beat_number)).filter(Number.isInteger))];
+  if (beats.length === 0) return [];
+  const saved = await ScenePlan.sequelize.query(
+    `SELECT beat_number FROM scene_plans
+      WHERE episode_id = :episodeId AND deleted_at IS NULL AND feed_moment IS NOT NULL AND beat_number IN (:beats)`,
+    { replacements: { episodeId, beats }, type: ScenePlan.sequelize.QueryTypes.SELECT }
+  );
+  const savedBeats = new Set(saved.map((r) => Number(r.beat_number)));
+  return beats.filter((b) => !savedBeats.has(b)).sort((a, b) => a - b);
+}
+
 router.get('/:episodeId/plan', requireAuth, async (req, res) => {
   try {
+    let feedMomentMissing = null;
+    let feedMomentCheckError = null;
+    try {
+      feedMomentMissing = await missingFeedMomentBeats(req.params.episodeId);
+    } catch (checkErr) {
+      console.error('[ScenePlanner] feed moment check failed:', checkErr.message);
+      feedMomentCheckError = checkErr.message;
+    }
+
     const plans = await ScenePlan.findAll({
       where: { episode_id: req.params.episodeId, deleted_at: null },
       order: [['beat_number', 'ASC']],
@@ -133,7 +160,12 @@ router.get('/:episodeId/plan', requireAuth, async (req, res) => {
       }],
     });
 
-    return res.json({ data: plans, count: plans.length });
+    return res.json({
+      data: plans,
+      count: plans.length,
+      feed_moment_missing: feedMomentMissing,
+      ...(feedMomentCheckError ? { feed_moment_check_error: feedMomentCheckError } : {}),
+    });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

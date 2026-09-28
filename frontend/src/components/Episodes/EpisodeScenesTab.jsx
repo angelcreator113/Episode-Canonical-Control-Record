@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, ChevronDown, ChevronRight, Camera, Plus, Trash2, GripVertical, ExternalLink, Clapperboard, Film, Sparkles, Loader } from 'lucide-react';
+import { MapPin, ChevronDown, ChevronRight, Camera, Plus, Trash2, GripVertical, ExternalLink, Clapperboard, Film, Sparkles, Loader, AlertTriangle } from 'lucide-react';
 import apiClient from '../../services/api';
 import './EpisodeScenesTab.css';
 
@@ -26,6 +26,8 @@ export const createSceneFromAngleApi = (episodeId, payload) =>
   apiClient.post(`${API_BASE}/episodes/${episodeId}/scenes/from-angle`, payload);
 export const deleteSceneApi = (sceneId) =>
   apiClient.delete(`${API_BASE}/scenes/${sceneId}`);
+export const getEpisodePlanApi = (episodeId) =>
+  apiClient.get(`${API_BASE}/episode-brief/${episodeId}/plan`);
 
 // Scene-set routes (duplicated from CP2 SceneSetsTab.jsx per file-local convention)
 export const listSceneSetsApi = () => apiClient.get(`${API_BASE}/scene-sets`);
@@ -41,6 +43,11 @@ const SCENE_TYPE_COLORS = {
   TRANSITION: { bg: '#fef3c7', color: '#92400e' },
   OTHER: { bg: '#f1f5f9', color: '#475569' },
 };
+
+// "3", "3 and 7", "3, 7 and 12"
+const listBeats = (beats) => (beats.length < 2
+  ? String(beats[0])
+  : `${beats.slice(0, -1).join(', ')} and ${beats[beats.length - 1]}`);
 
 const EpisodeScenesTab = ({ episode, onToast }) => {
   const navigate = useNavigate();
@@ -66,6 +73,9 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
 
   // Generating angles
   const [generatingAnglesFor, setGeneratingAnglesFor] = useState(null);
+
+  // Beats whose feed moment was not saved at generation (§8(w) P5, Task #2216)
+  const [feedMomentCheck, setFeedMomentCheck] = useState({ missing: [], error: null });
 
   const toast = useCallback((msg, type = 'info') => {
     if (onToast) onToast(msg, type);
@@ -107,10 +117,27 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
     }
   }, [episodeId]);
 
+  // Which beats lost their feed moment when the episode was generated
+  const fetchFeedMomentCheck = useCallback(async () => {
+    if (!episodeId) return;
+    try {
+      const res = await getEpisodePlanApi(episodeId);
+      const data = res.data || {};
+      setFeedMomentCheck({
+        missing: Array.isArray(data.feed_moment_missing) ? data.feed_moment_missing : [],
+        error: data.feed_moment_check_error || null,
+      });
+    } catch (err) {
+      console.error('Failed to check feed moments:', err);
+      setFeedMomentCheck({ missing: [], error: err.message || 'request failed' });
+    }
+  }, [episodeId]);
+
   useEffect(() => {
     fetchSceneSets();
     fetchScenes();
-  }, [fetchSceneSets, fetchScenes]);
+    fetchFeedMomentCheck();
+  }, [fetchSceneSets, fetchScenes, fetchFeedMomentCheck]);
 
   // Refetch when browser tab/window regains focus (e.g. user linked sets in Scene Library)
   useEffect(() => {
@@ -238,6 +265,23 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
 
   return (
     <div className="est-container">
+      {feedMomentCheck.missing.length > 0 && (
+        <div className="est-warning" role="alert">
+          <AlertTriangle size={16} className="est-warning-icon" />
+          <p>
+            Lala's phone moment was not saved for {feedMomentCheck.missing.length === 1 ? 'beat' : 'beats'}{' '}
+            {listBeats(feedMomentCheck.missing)}, so {feedMomentCheck.missing.length === 1 ? 'that beat has' : 'those beats have'} no
+            feed moment. Regenerating the episode from its event tries again.
+          </p>
+        </div>
+      )}
+      {feedMomentCheck.error && (
+        <div className="est-warning" role="alert">
+          <AlertTriangle size={16} className="est-warning-icon" />
+          <p>Could not check whether this episode's feed moments were saved: {feedMomentCheck.error}</p>
+        </div>
+      )}
+
       {/* ===== SECTION 1: Scene Sets (Locations) ===== */}
       <div className="est-section">
         <div className="est-section-header">
