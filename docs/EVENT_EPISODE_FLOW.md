@@ -2314,6 +2314,34 @@ workout and recovery social." The show name is never an input (rule 11).
 
 **R10** New formats get start-time and dress-code defaults, set in task 1.
 
+**(v) The creation draft's cost, scope and storage (Evoni, 2026-09-28, Task
+#2122).**
+
+**1. AI call at creation:** yes, on Haiku 4.5, and it must never block
+creation. If the call fails, hits the rate limit or is refused by
+`aiCostTracker`, the event saves with today's template fields and no draft.
+The rate limit applies to the draft call only, never to the route. I agree a
+"Draft this event" button would bring back the checklist that R1 removed.
+
+**2. Scope of step 1:** `from-profile` only. It's the path the read mapped.
+The calendar, opportunity and manual paths become a later task once the draft
+shape has settled.
+
+**3. Storage (adopted):** the concept and activity are stored as
+`canon_consequences.automation.concept` and `.activity`, with no migration; a
+column can come later if something needs to query them.
+
+**4. Provenance (adopted):** step 1 writes
+`canon_consequences.automation.auto_drafted`, a map from each drafted field to
+its source (e.g. `{ description: 'ai_draft' }`), so step 4 can show
+"Auto-drafted · <source>" and flip an entry to Edited when Evoni changes the
+field.
+
+**5. Rate limit (adopted):** `aiRateLimiter` is route middleware and answers
+429, so it is not mounted on `from-profile`; the draft has its own small
+per-user check that skips the draft instead of failing the route.
+`aiCostTracker`'s budget refusal is caught the same way.
+
 ---
 
 ## 9. Owed before enforcement
