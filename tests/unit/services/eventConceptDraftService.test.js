@@ -17,6 +17,8 @@ const {
   parseDraftReply,
   resetDraftLimit,
   parseStyling,
+  parseTaxonomy,
+  normaliseTime,
   FORMALITY_SCALE,
   R8_CONTRACT,
   MODELS,
@@ -43,6 +45,8 @@ const STYLING = {
     footwear_requirements: 'clean training shoes',
   },
 };
+const TAXONOMY = { category: 'fitness', format: 'workout_class', event_time: '18:30' };
+const { CATEGORY_VALUES, FORMAT_VALUES } = require('../../../src/models/WorldEvent');
 const reply = (text) => ({ content: [{ text }] });
 
 const originalKey = process.env.ANTHROPIC_API_KEY;
@@ -101,6 +105,29 @@ describe('draftEventConcept', () => {
   test('Task #2124: missing styling keeps the concept draft', async () => {
     mockMessagesCreate.mockResolvedValue(reply(JSON.stringify(REPLY)));
     expect(await draftEventConcept(PROFILE, { userId: 'u1' })).toEqual(REPLY);
+  });
+
+  test('Task #2126: the same one call also returns category, format and start time', async () => {
+    mockMessagesCreate.mockResolvedValue(reply(JSON.stringify({ ...REPLY, ...TAXONOMY, styling: STYLING })));
+    const draft = await draftEventConcept(PROFILE, { userId: 'u1' });
+    expect(draft).toEqual({ ...REPLY, ...TAXONOMY, styling: STYLING });
+    expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+  });
+
+  test('Task #2126: each invalid taxonomy field is dropped alone; concept and styling kept', async () => {
+    const cases = [
+      [{ category: 'wellness_retreat' }, 'category'],
+      [{ format: 'rave' }, 'format'],
+      [{ event_time: '6:30pm' }, 'event_time'],
+    ];
+    for (const [bad, dropped] of cases) {
+      mockMessagesCreate.mockResolvedValue(reply(JSON.stringify({ ...REPLY, ...TAXONOMY, ...bad, styling: STYLING })));
+      const draft = await draftEventConcept(PROFILE, { userId: 'u1' });
+      const expected = { ...REPLY, ...TAXONOMY, styling: STYLING };
+      delete expected[dropped];
+      expect(draft).toEqual(expected);
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(dropped));
+    }
   });
 
   test('a malformed reply gives null', async () => {
@@ -165,6 +192,14 @@ describe('buildDraftPrompt', () => {
     expect(prompt).toContain('styling_brief');
   });
 
+  test('Task #2126: category and format lists come from the model\'s own isIn arrays', () => {
+    const prompt = buildDraftPrompt(PROFILE, {});
+    expect(prompt).toContain(`category: exactly one of ${CATEGORY_VALUES.join(', ')}.`);
+    expect(prompt).toContain(`format: exactly one of ${FORMAT_VALUES.join(', ')}.`);
+    expect(prompt).toContain('24-hour HH:MM');
+    expect(prompt).not.toMatch(/invent a venue, date, time/);
+  });
+
   test('with no facts it still asks for a simple draft and invents nothing', () => {
     expect(buildDraftPrompt({}, {})).toContain('do not invent specifics');
   });
@@ -218,6 +253,30 @@ describe('parseStyling', () => {
   test('caps the dress code at the 200-character column limit', () => {
     const out = parseStyling({ ...STYLING, dress_code: 'smart '.repeat(60).trim() });
     expect(out.dress_code.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('parseTaxonomy', () => {
+  test('normalises category and format: lower-case, spaces and hyphens to underscores', () => {
+    expect(parseTaxonomy({ category: 'Brunch Dining', format: 'pop-up', event_time: '11:00' }))
+      .toEqual({ category: 'brunch_dining', format: 'pop_up', event_time: '11:00' });
+    expect(parseTaxonomy({ category: ' FITNESS ', format: 'Run Club', event_time: '07:00' }))
+      .toEqual({ category: 'fitness', format: 'run_club', event_time: '07:00' });
+  });
+
+  test('missing fields are simply absent', () => {
+    expect(parseTaxonomy({})).toEqual({});
+  });
+});
+
+describe('normaliseTime', () => {
+  test('zero-pads valid 24h times; rejects anything else', () => {
+    expect(normaliseTime('9:05')).toBe('09:05');
+    expect(normaliseTime('18:30')).toBe('18:30');
+    expect(normaliseTime('00:00')).toBe('00:00');
+    for (const bad of ['24:00', '12:60', '6:30pm', '1830', '9:5', '', null, 18.5]) {
+      expect(normaliseTime(bad)).toBe('');
+    }
   });
 });
 

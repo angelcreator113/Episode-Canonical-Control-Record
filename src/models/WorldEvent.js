@@ -7,6 +7,15 @@ const { DataTypes } = require('sequelize');
  * Previously managed via raw SQL. This model adds proper associations,
  * venue linking, invitation details, and guest list management.
  */
+
+// The allowed category and format values (docs/EVENT_EPISODE_FLOW.md §8(k),
+// §8(u) R4/R6). Exported on the model function so code that must not load
+// the models index (eventConceptDraftService) can read them (Task #2126).
+// frontend/src/constants/eventTaxonomy.json mirrors them; the mirror test
+// pins it to these isIn lists.
+const CATEGORY_VALUES = Object.freeze(['fashion', 'social', 'brunch_dining', 'beauty_wellness', 'creator_brand', 'arts_entertainment', 'luxury_prestige', 'community_local', 'travel_destination', 'personal_relationship', 'fitness']);
+const FORMAT_VALUES = Object.freeze(['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere', 'workout_class', 'masterclass', 'workshop', 'dinner', 'showcase', 'preview', 'pop_up', 'retreat', 'meetup', 'run_club', 'performance', 'photoshoot', 'tasting', 'panel', 'competition']);
+
 module.exports = (sequelize) => {
   const WorldEvent = sequelize.define('WorldEvent', {
     id: {
@@ -49,7 +58,7 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'fashion | social | brunch_dining | beauty_wellness | creator_brand | arts_entertainment | luxury_prestige | community_local | travel_destination | personal_relationship | fitness',
       validate: {
-        isIn: [['fashion', 'social', 'brunch_dining', 'beauty_wellness', 'creator_brand', 'arts_entertainment', 'luxury_prestige', 'community_local', 'travel_destination', 'personal_relationship', 'fitness']],
+        isIn: [[...CATEGORY_VALUES]],
       },
     },
     format: {
@@ -57,7 +66,7 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'cocktail_party | garden_soiree | gallery_opening | gala | brunch | concert | brand_launch | premiere | workout_class | masterclass | workshop | dinner | showcase | preview | pop_up | retreat | meetup | run_club | performance | photoshoot | tasting | panel | competition',
       validate: {
-        isIn: [['cocktail_party', 'garden_soiree', 'gallery_opening', 'gala', 'brunch', 'concert', 'brand_launch', 'premiere', 'workout_class', 'masterclass', 'workshop', 'dinner', 'showcase', 'preview', 'pop_up', 'retreat', 'meetup', 'run_club', 'performance', 'photoshoot', 'tasting', 'panel', 'competition']],
+        isIn: [[...FORMAT_VALUES]],
       },
     },
     host: {
@@ -439,3 +448,6 @@ module.exports = (sequelize) => {
 
   return WorldEvent;
 };
+
+module.exports.CATEGORY_VALUES = CATEGORY_VALUES;
+module.exports.FORMAT_VALUES = FORMAT_VALUES;
