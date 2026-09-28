@@ -2,7 +2,8 @@
 // UNIT TESTS — feedPipelineRoutes.js (Step 3 CP8 — PROMOTE)
 // ============================================================================
 // 3 handlers all Tier 1.
-// 1 service-mediated AI POST aiRateLimiter (generate-opportunities).
+// 2 service-mediated AI POSTs with aiRateLimiter (generate-opportunities;
+// schedule, since Task #2152).
 
 const fs = require('fs');
 const path = require('path');
@@ -19,8 +20,10 @@ describe('Step 3 CP8 — feedPipelineRoutes.js PROMOTE shape', () => {
     expect(SRC).toMatch(/router\.post\('\/:showId\/generate-opportunities',\s*requireAuth,\s*aiRateLimiter,\s*async/);
   });
 
-  test('POST /:showId/schedule/:opportunityId → requireAuth (non-AI scheduling)', () => {
-    expect(SRC).toMatch(/router\.post\('\/:showId\/schedule\/:opportunityId',\s*requireAuth,\s*async/);
+  // Task #2152: not non-AI — scheduleOpportunityAsEvent calls Haiku for the
+  // venue line (generateUniqueVenue), so it now carries aiRateLimiter too.
+  test('POST /:showId/schedule/:opportunityId → requireAuth + aiRateLimiter', () => {
+    expect(SRC).toMatch(/router\.post\('\/:showId\/schedule\/:opportunityId',\s*requireAuth,\s*aiRateLimiter,\s*async/);
   });
 
   test('GET /:showId/suggestions → requireAuth', () => {

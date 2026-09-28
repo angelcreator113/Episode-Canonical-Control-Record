@@ -711,7 +711,7 @@ router.post('/events/:id/auto-spawn', requireAuth, async (req, res) => {
 // POST /events/generate-seasonal — Auto-generate seasonal events for a month
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/events/generate-seasonal', requireAuth, async (req, res) => {
+router.post('/events/generate-seasonal', requireAuth, aiRateLimiter, async (req, res) => {
   try {
     const { month, count = 4, year = 2026, show_id } = req.body;
     if (month === undefined || month < 0 || month > 11) {
