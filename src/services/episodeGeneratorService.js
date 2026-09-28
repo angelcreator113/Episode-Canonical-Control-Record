@@ -840,6 +840,24 @@ Return ONLY JSON.` }],
     console.warn('[EpisodeGenerator] Feed moments generation failed (non-blocking):', fmErr.message);
   }
 
+  // Record the outcome on the brief (event_metadata.feed_moment_save; no new
+  // column) so the episode's Scenes tab can name the beats whose moment was
+  // not saved. Moments are rolled per beat, so an empty scene_plans.feed_moment
+  // alone cannot say whether one was meant to be there (Task #2216).
+  if (brief?.id) {
+    try {
+      await models.sequelize.query(
+        `UPDATE episode_briefs
+            SET event_metadata = jsonb_set(COALESCE(event_metadata, '{}'::jsonb), '{feed_moment_save}', CAST(:save AS jsonb)),
+                updated_at = NOW()
+          WHERE id = :id`,
+        { replacements: { id: brief.id, save: JSON.stringify({ ...feedMomentSave, recorded_at: new Date().toISOString() }) } }
+      );
+    } catch (recordErr) {
+      console.error(`[EpisodeGenerator] Could not record the feed moment save outcome on brief ${brief.id}:`, recordErr.message);
+    }
+  }
+
   // ── 4. Create Todo List (wardrobe + social tasks) ──
   const eventType = event.event_type || 'invite';
 
