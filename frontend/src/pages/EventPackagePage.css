@@ -1354,7 +1354,8 @@
    its own grid sized to its own label, and the uppercase, letter-spaced
    labels (.epp-fields dt) made "Style direction" and "Needs to allow" wider
    than 96px, so their values started further right. The rows now take their
-   columns from this grid (subgrid), so every value starts at one position. */
+   columns from this grid (subgrid), so every value starts at one position.
+   Each label sits at the top of its row, level with the value's first line. */
 .epp-concept-brief {
   display: grid;
   grid-template-columns: minmax(96px, max-content) 1fr;
@@ -1367,6 +1368,7 @@
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
   row-gap: 0;
+  align-items: start;
 }
 .epp-concept-brief dt {
   font-family: 'DM Mono', monospace;
