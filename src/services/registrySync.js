@@ -43,52 +43,60 @@ const registrySync = {
     try {
       if (!session?.character_id) return;
 
-      const character = await models.RegistryCharacter.findByPk(session.character_id);
-      if (!character) return;
-      if (character.status === 'finalized') return; // respect the lock
+      // F-Reg-2 fix group 2 (v1.2 R2), row 70: read, compute and write under a
+      // row lock, so a note, state or depth written by a concurrent trigger
+      // since the read is built on rather than overwritten. A lock rather than
+      // one UPDATE, because the appends keep _appendNote's JS formatting.
+      const sequelize = models.RegistryCharacter.sequelize;
+      await sequelize.transaction(async (transaction) => {
+        const character = await models.RegistryCharacter.findByPk(session.character_id, { transaction, lock: transaction.LOCK.UPDATE });
+        if (!character) return;
+        if (character.status === 'finalized') return; // respect the lock
 
-      // Build delta from session data
-      const updates = {};
+        // Build delta from session data
+        const updates = {};
 
-      // Emotional state — session stores start/end emotional readings
-      if (session.emotional_state_end) {
-        updates.emotional_function = _mergeEmotionalState(
-          character.emotional_function,
-          session.emotional_state_end,
-          session.session_number
-        );
-      }
+        // Emotional state — session stores start/end emotional readings
+        if (session.emotional_state_end) {
+          updates.emotional_function = _mergeEmotionalState(
+            character.emotional_function,
+            session.emotional_state_end,
+            session.session_number
+          );
+        }
 
-      // Defense mechanism shifts — if therapist detected a change
-      if (session.defense_shift_detected && session.new_defense_mechanism) {
-        updates.writer_notes = _appendNote(
-          character.writer_notes,
-          `Session ${session.session_number}: Defense shift detected — ${session.new_defense_mechanism}`,
-          'therapy'
-        );
-      }
+        // Defense mechanism shifts — if therapist detected a change
+        if (session.defense_shift_detected && session.new_defense_mechanism) {
+          updates.writer_notes = _appendNote(
+            character.writer_notes,
+            `Session ${session.session_number}: Defense shift detected — ${session.new_defense_mechanism}`,
+            'therapy'
+          );
+        }
 
-      // Wound depth — track how many times the wound was activated
-      if (session.wound_activated) {
-        const currentDepth = character.wound_depth || 0;
-        updates.wound_depth = Math.min(10, currentDepth + 1);
-      }
+        // Wound depth — track how many times the wound was activated
+        if (session.wound_activated) {
+          const currentDepth = character.wound_depth || 0;
+          updates.wound_depth = Math.min(10, currentDepth + 1);
+        }
 
-      // Breakthrough — session marked as breakthrough
-      if (session.breakthrough_moment) {
-        updates.writer_notes = _appendNote(
-          updates.writer_notes || character.writer_notes,
-          `Session ${session.session_number} breakthrough: ${session.breakthrough_moment}`,
-          'therapy'
-        );
-      }
+        // Breakthrough — session marked as breakthrough
+        if (session.breakthrough_moment) {
+          updates.writer_notes = _appendNote(
+            updates.writer_notes || character.writer_notes,
+            `Session ${session.session_number} breakthrough: ${session.breakthrough_moment}`,
+            'therapy'
+          );
+        }
 
-      if (Object.keys(updates).length > 0) {
-        await models.RegistryCharacter.update(updates, {
-          where: { id: session.character_id },
-        });
-        console.log(`[registrySync] Therapy close → updated ${character.selected_name || character.name}`);
-      }
+        if (Object.keys(updates).length > 0) {
+          await models.RegistryCharacter.update(updates, {
+            where: { id: session.character_id },
+            transaction,
+          });
+          console.log(`[registrySync] Therapy close → updated ${character.selected_name || character.name}`);
+        }
+      });
 
     } catch (err) {
       console.error('[registrySync] onTherapySessionClose error:', err.message);
@@ -105,61 +113,70 @@ const registrySync = {
     try {
       if (!memory?.character_id) return;
 
-      const character = await models.RegistryCharacter.findByPk(memory.character_id);
-      if (!character) return;
-      if (character.status === 'finalized') return;
+      // F-Reg-2 fix group 2 (v1.2 R2), row 71: read, compute and write under a
+      // row lock, so a note or belief written by a concurrent trigger since the
+      // read is built on rather than overwritten. A pain point is handed to
+      // onPainPointTagged after this transaction, which takes its own lock.
+      const sequelize = models.RegistryCharacter.sequelize;
+      const found = await sequelize.transaction(async (transaction) => {
+        const character = await models.RegistryCharacter.findByPk(memory.character_id, { transaction, lock: transaction.LOCK.UPDATE });
+        if (!character) return false;
+        if (character.status === 'finalized') return false;
 
-      const updates = {};
+        const updates = {};
 
-      // Memory type drives which field gets updated
-      switch (memory.type) {
-        case 'belief':
-          // Confirmed belief memory → update or enrich belief_pressured
-          if (memory.statement && !character.belief_pressured) {
-            updates.belief_pressured = memory.statement;
-          } else if (memory.statement) {
+        // Memory type drives which field gets updated
+        switch (memory.type) {
+          case 'belief':
+            // Confirmed belief memory → update or enrich belief_pressured
+            if (memory.statement && !character.belief_pressured) {
+              updates.belief_pressured = memory.statement;
+            } else if (memory.statement) {
+              updates.writer_notes = _appendNote(
+                character.writer_notes,
+                `Confirmed belief: "${memory.statement}" (confidence: ${memory.confidence})`,
+                'memory'
+              );
+            }
+            break;
+
+          case 'constraint':
+            // Constraint memory → adds to what limits this character
             updates.writer_notes = _appendNote(
               character.writer_notes,
-              `Confirmed belief: "${memory.statement}" (confidence: ${memory.confidence})`,
+              `Confirmed constraint: "${memory.statement}"`,
               'memory'
             );
-          }
-          break;
+            break;
 
-        case 'constraint':
-          // Constraint memory → adds to what limits this character
-          updates.writer_notes = _appendNote(
-            character.writer_notes,
-            `Confirmed constraint: "${memory.statement}"`,
-            'memory'
-          );
-          break;
+          case 'character_dynamic':
+            // Dynamic with another character → enriches relationship data
+            updates.writer_notes = _appendNote(
+              character.writer_notes,
+              `Confirmed dynamic: "${memory.statement}"`,
+              'memory'
+            );
+            break;
+        }
 
-        case 'character_dynamic':
-          // Dynamic with another character → enriches relationship data
-          updates.writer_notes = _appendNote(
-            character.writer_notes,
-            `Confirmed dynamic: "${memory.statement}"`,
-            'memory'
-          );
-          break;
+        if (Object.keys(updates).length > 0) {
+          await models.RegistryCharacter.update(updates, {
+            where: { id: memory.character_id },
+            transaction,
+          });
+          console.log(`[registrySync] Memory confirmed → updated ${character.selected_name || character.name}`);
+        }
+        return true;
+      });
 
-        case 'pain_point':
-          // Pain point confirmed → feeds wound tracking
-          await this.onPainPointTagged({
-            character_id: memory.character_id,
-            category:     memory.tags?.[0] || 'untagged',
-            statement:    memory.statement,
-            confidence:   memory.confidence,
-          }, models);
-          break;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await models.RegistryCharacter.update(updates, {
-          where: { id: memory.character_id },
-        });
-        console.log(`[registrySync] Memory confirmed → updated ${character.selected_name || character.name}`);
+      if (found && memory.type === 'pain_point') {
+        // Pain point confirmed → feeds wound tracking
+        await this.onPainPointTagged({
+          character_id: memory.character_id,
+          category:     memory.tags?.[0] || 'untagged',
+          statement:    memory.statement,
+          confidence:   memory.confidence,
+        }, models);
       }
 
     } catch (err) {
@@ -250,15 +267,26 @@ If nothing new is revealed, return { "moments": [] }`;
           (c.selected_name || c.name).toLowerCase() === moment.character_name.toLowerCase()
         );
         if (!character) continue;
-        if (character.status === 'finalized') continue;
 
-        await models.RegistryCharacter.update({
-          writer_notes: _appendNote(
-            character.writer_notes,
-            `From story (line ~${approvedCount}): ${moment.moment}`,
-            'story'
-          ),
-        }, { where: { id: character.id } });
+        // F-Reg-2 fix group 2 (v1.2 R2), row 72: the characters were read
+        // before the AI call, so each note is appended to the row's current
+        // writer_notes, read under a lock, and the finalized check reads the
+        // current status too.
+        const written = await models.RegistryCharacter.sequelize.transaction(async (transaction) => {
+          const current = await models.RegistryCharacter.findByPk(character.id, {
+            attributes: ['id', 'status', 'writer_notes'], transaction, lock: transaction.LOCK.UPDATE,
+          });
+          if (!current || current.status === 'finalized') return false;
+          await models.RegistryCharacter.update({
+            writer_notes: _appendNote(
+              current.writer_notes,
+              `From story (line ~${approvedCount}): ${moment.moment}`,
+              'story'
+            ),
+          }, { where: { id: character.id }, transaction });
+          return true;
+        });
+        if (!written) continue;
 
         console.log(`[registrySync] Line approved → extracted moment for ${character.selected_name || character.name}`);
       }
@@ -278,60 +306,68 @@ If nothing new is revealed, return { "moments": [] }`;
     try {
       if (!painPoint?.character_id) return;
 
-      const character = await models.RegistryCharacter.findByPk(painPoint.character_id);
-      if (!character) return;
-      if (character.status === 'finalized') return;
+      // F-Reg-2 fix group 2 (v1.2 R2), row 73: read, compute and write under a
+      // row lock, and change a copy of personality_matrix, so a depth, note or
+      // matrix change made by a concurrent trigger since the read is built on
+      // rather than overwritten.
+      const sequelize = models.RegistryCharacter.sequelize;
+      await sequelize.transaction(async (transaction) => {
+        const character = await models.RegistryCharacter.findByPk(painPoint.character_id, { transaction, lock: transaction.LOCK.UPDATE });
+        if (!character) return;
+        if (character.status === 'finalized') return;
 
-      const updates = {};
+        const updates = {};
 
-      // Increment wound depth (capped at 10)
-      const currentDepth = character.wound_depth || 0;
-      updates.wound_depth = Math.min(10, currentDepth + 0.5); // pain points add half a point
+        // Increment wound depth (capped at 10)
+        const currentDepth = character.wound_depth || 0;
+        updates.wound_depth = Math.min(10, currentDepth + 0.5); // pain points add half a point
 
-      // Track active wound categories in personality_matrix or writer_notes
-      const existingNotes = character.writer_notes || '';
-      const categoryLabel = _painPointLabel(painPoint.category);
+        // Track active wound categories in personality_matrix or writer_notes
+        const existingNotes = character.writer_notes || '';
+        const categoryLabel = _painPointLabel(painPoint.category);
 
-      updates.writer_notes = _appendNote(
-        existingNotes,
-        `Pain point: ${categoryLabel} — "${painPoint.statement}"`,
-        'pain_point'
-      );
+        updates.writer_notes = _appendNote(
+          existingNotes,
+          `Pain point: ${categoryLabel} — "${painPoint.statement}"`,
+          'pain_point'
+        );
 
-      // Update personality_matrix JSONB if it exists
-      if (character.personality_matrix) {
-        try {
-          const matrix = typeof character.personality_matrix === 'string'
-            ? JSON.parse(character.personality_matrix)
-            : character.personality_matrix;
+        // Update personality_matrix JSONB if it exists
+        if (character.personality_matrix) {
+          try {
+            const matrix = typeof character.personality_matrix === 'string'
+              ? JSON.parse(character.personality_matrix)
+              : JSON.parse(JSON.stringify(character.personality_matrix));
 
-          // Pain points affect specific dimensions
-          const PAIN_TO_DIMENSION = {
-            comparison_spiral:     { dimension: 'confidence',   delta: -0.5 },
-            visibility_gap:        { dimension: 'confidence',   delta: -0.3 },
-            identity_drift:        { dimension: 'softness',     delta: +0.3 },
-            financial_risk:        { dimension: 'drama',        delta: +0.4 },
-            consistency_collapse:  { dimension: 'playfulness',  delta: -0.2 },
-            clarity_deficit:       { dimension: 'drama',        delta: +0.3 },
-            external_validation:   { dimension: 'confidence',   delta: -0.4 },
-            restart_cycle:         { dimension: 'luxury_tone',  delta: -0.2 },
-          };
+            // Pain points affect specific dimensions
+            const PAIN_TO_DIMENSION = {
+              comparison_spiral:     { dimension: 'confidence',   delta: -0.5 },
+              visibility_gap:        { dimension: 'confidence',   delta: -0.3 },
+              identity_drift:        { dimension: 'softness',     delta: +0.3 },
+              financial_risk:        { dimension: 'drama',        delta: +0.4 },
+              consistency_collapse:  { dimension: 'playfulness',  delta: -0.2 },
+              clarity_deficit:       { dimension: 'drama',        delta: +0.3 },
+              external_validation:   { dimension: 'confidence',   delta: -0.4 },
+              restart_cycle:         { dimension: 'luxury_tone',  delta: -0.2 },
+            };
 
-          const effect = PAIN_TO_DIMENSION[painPoint.category];
-          if (effect && matrix[effect.dimension] !== undefined) {
-            matrix[effect.dimension] = Math.max(0, Math.min(10,
-              matrix[effect.dimension] + effect.delta
-            ));
-            updates.personality_matrix = matrix;
-          }
-        } catch (err) { console.warn('[registrySync] personality matrix compute error:', err?.message); }
-      }
+            const effect = PAIN_TO_DIMENSION[painPoint.category];
+            if (effect && matrix[effect.dimension] !== undefined) {
+              matrix[effect.dimension] = Math.max(0, Math.min(10,
+                matrix[effect.dimension] + effect.delta
+              ));
+              updates.personality_matrix = matrix;
+            }
+          } catch (err) { console.warn('[registrySync] personality matrix compute error:', err?.message); }
+        }
 
-      await models.RegistryCharacter.update(updates, {
-        where: { id: painPoint.character_id },
+        await models.RegistryCharacter.update(updates, {
+          where: { id: painPoint.character_id },
+          transaction,
+        });
+
+        console.log(`[registrySync] Pain point → updated wound depth for ${character.selected_name || character.name}`);
       });
-
-      console.log(`[registrySync] Pain point → updated wound depth for ${character.selected_name || character.name}`);
 
     } catch (err) {
       console.error('[registrySync] onPainPointTagged error:', err.message);
