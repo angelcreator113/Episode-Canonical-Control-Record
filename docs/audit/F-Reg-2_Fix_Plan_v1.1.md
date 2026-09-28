@@ -2,6 +2,8 @@
 
 **`registry_characters.world` homed; fix group 1 progress — Prime Studios audit canon**
 
+> **BANNER** (added 2026-09-28, additive; `F-Reg-2_Fix_Plan_v1.2.md` §3, Task #2174). See `F-Reg-2_OwedScoping_2026-09-28.md` §2.2 (PR #2173) for a repository finding bearing on §3.
+
 | | |
 |---|---|
 | **Version** | 1.1. Additive-supersede on `F-Reg-2_Fix_Plan_v1.0.md`. |
