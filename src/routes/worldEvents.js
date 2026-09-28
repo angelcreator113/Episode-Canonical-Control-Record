@@ -30,6 +30,7 @@ const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE } = require('../ut
 const { withAutoScheduledDate, autoScheduledEventDate, AUTO_DATE_KEY } = require('../utils/eventDateDefault');
 const { eventCreatorOrganizer } = require('../utils/eventOrganizer');
 const { buildSuggestNamesFraming } = require('../utils/suggestNamesFraming');
+const { draftEventConcept } = require('../services/eventConceptDraftService');
 const { normalizeRestrictions } = require('../services/eventTermsService');
 
 async function getModels() {
@@ -2529,7 +2530,23 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
     // Task #1790: neither the name nor the description says the creator
     // hosts or organizes the event.
     const creatorName = p.display_name || p.handle;
-    const descriptionText = `An exclusive ${p.content_category || 'creator'} event with ${creatorName}${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`;
+    const templateDescription = `An exclusive ${p.content_category || 'creator'} event with ${creatorName}${venue ? ` at ${venue.name}` : ''}. ${guestList.length > 0 ? `${guestList.length} guests on the list.` : ''}`;
+
+    // Task #2122 (§8(u) R1, R8; §8(v)): one Haiku 4.5 call drafts a concept,
+    // an activity and the public description. It never blocks creation:
+    // draftEventConcept returns null on any failure, its own rate limit or a
+    // budget refusal, and the event keeps the template description with no
+    // draft keys. auto_drafted records what was drafted, for step 4's
+    // "Auto-drafted · <source>" label.
+    const draft = await draftEventConcept(p, { venueName: venue?.name || null, userId: req.user?.id });
+    const descriptionText = draft ? draft.description : templateDescription;
+    const draftAutomation = draft
+      ? {
+        concept: draft.concept,
+        activity: draft.activity,
+        auto_drafted: { description: 'ai_draft', concept: 'ai_draft', activity: 'ai_draft' },
+      }
+      : {};
     const narrativeText = `This event could ${prestige >= 6 ? 'elevate' : 'establish'} Lala's position in the ${p.content_category || 'creator'} scene. ${sponsorBrand ? `Brand opportunity with ${sponsorBrand}.` : ''}`;
 
     const eventData = {
@@ -2576,6 +2593,7 @@ router.post('/world/:showId/events/from-profile', requireAuth, async (req, res) 
           strictness,
           deadline_type: deadlineType,
           description: descriptionText,
+          ...draftAutomation,
           narrative_stakes: narrativeText,
           theme: invStyle.theme,
           mood: invStyle.mood,
