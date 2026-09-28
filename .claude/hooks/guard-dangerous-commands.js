@@ -37,7 +37,8 @@ process.stdin.on('end', () => {
   // git commands on it are allowed. Execution means, at command position and
   // after any sudo/env/nohup/time/nice/timeout/VAR=value prefix:
   //   - a shell, exec, source or . given the script (bash|sh|zsh|dash|ksh);
-  //   - the script's path as the command (./scripts/deploy-prod.sh, …);
+  //   - the script's path as the command (./scripts/deploy-prod.sh, …), but
+  //     not a bare assignment that only names it (S=scripts/deploy-prod.sh);
   //   - its contents piped into a shell (cat …deploy-prod… | bash).
   // Heredoc bodies fed to a shell count too, including a cat/tee heredoc
   // whose output is piped into one (those are otherwise dropped as data).
@@ -51,7 +52,9 @@ process.stdin.on('end', () => {
   const SYNTAX_ONLY = '-n\\s+[^\\s;&|]*deploy-prod[^\\s;&|]*\\s*(?:$|[;&|\\n])';
   const deployProdExec = [
     new RegExp(`${POS}${PREFIX}(?:(?:bash|sh|zsh|dash|ksh)\\s+(?!${SYNTAX_ONLY})|(?:exec|source|\\.)\\s+)[^\\n;&|]*deploy-prod`),
-    new RegExp(`${POS}${PREFIX}[^\\s;&|()<>]*deploy-prod`),
+    // The command word itself must not be an assignment: `S=scripts/deploy-prod.sh`
+    // only names the path (Task #2166); `S=x ./scripts/deploy-prod.sh` still runs it.
+    new RegExp(`${POS}${PREFIX}(?![A-Za-z_][A-Za-z0-9_]*=)[^\\s;&|()<>]*deploy-prod`),
     /deploy-prod[^\n]*\|\s*(?:sudo\s+)?(?:bash|sh|zsh|dash|ksh)\b/,
   ];
   if (deployProdExec.some((re) => re.test(scanExec))) {
