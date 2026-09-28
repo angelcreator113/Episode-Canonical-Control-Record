@@ -161,6 +161,7 @@ describe('buildDraftPrompt', () => {
     expect(prompt).toContain('exactly one of casual, smart-casual, business, formal, black-tie');
     expect(prompt).toContain('dress_code_keywords');
     expect(prompt).toContain('old-money');
+    expect(prompt).toContain('a single word or a hyphenated compound such as old-money or smart-casual');
     expect(prompt).toContain('styling_brief');
   });
 
@@ -179,6 +180,21 @@ describe('parseStyling', () => {
     expect(parseStyling({ ...STYLING, dress_code_keywords: many }).dress_code_keywords)
       .toEqual(['elegant', 'bold', 'soft', 'modern', 'clean', 'classic', 'fresh', 'cozy']);
     expect(parseStyling({ ...STYLING, dress_code_keywords: ['bold', 'Bold', 'soft'] })).toBeNull();
+  });
+
+  test('keywords: hyphenated compounds kept; spaces and underscores become hyphens; other shapes dropped', () => {
+    const out = parseStyling({ ...STYLING, dress_code_keywords: ['old-money', 'Smart Casual', 'black_tie', 'glam!', 'two  words here', 'chic'] });
+    expect(out.dress_code_keywords).toEqual(['old-money', 'smart-casual', 'black-tie', 'two-words-here', 'chic']);
+    // Dropped shapes don't count toward the minimum of 3.
+    expect(parseStyling({ ...STYLING, dress_code_keywords: ['glam!', '***', 'bold', 'soft'] })).toBeNull();
+  });
+
+  test('formality is normalised (case, spaces, underscores) before the five-value check', () => {
+    const withFormality = (f) => parseStyling({ ...STYLING, styling_brief: { ...STYLING.styling_brief, formality: f } });
+    expect(withFormality('Smart Casual').styling_brief.formality).toBe('smart-casual');
+    expect(withFormality('black_tie').styling_brief.formality).toBe('black-tie');
+    expect(withFormality('  FORMAL ').styling_brief.formality).toBe('formal');
+    expect(withFormality('very fancy')).toBeNull();
   });
 
   test('each required field is required', () => {

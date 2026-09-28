@@ -99,7 +99,7 @@ Write these:
 - description: the public event description, two to four sentences. ${R8_CONTRACT}
 - styling, for what guests wear to this event and this activity:
   - dress_code: a short dress code, under 200 characters.
-  - dress_code_keywords: ${KEYWORDS_MIN} to ${KEYWORDS_MAX} single lower-case style words (hyphens allowed). Prefer words from this list, which wardrobe items are tagged with: ${PREFERRED_KEYWORDS.join(', ')}.
+  - dress_code_keywords: ${KEYWORDS_MIN} to ${KEYWORDS_MAX} lower-case style words, each a single word or a hyphenated compound such as old-money or smart-casual. Prefer words from this list, which wardrobe items are tagged with: ${PREFERRED_KEYWORDS.join(', ')}.
   - styling_brief:
     - activity: what guests are physically doing, as it affects clothing.
     - formality: exactly one of ${FORMALITY_SCALE.join(', ')}.
@@ -127,6 +127,14 @@ function cleanField(value, max) {
   return (lastSpace > 0 ? cut.slice(0, lastSpace) : text.slice(0, max)).trim();
 }
 
+// Lower-case, spaces and underscores to hyphens (Task #2124 review): "Old
+// Money" → "old-money", "black_tie" → "black-tie".
+const hyphenate = (v) => (typeof v === 'string'
+  ? v.trim().toLowerCase().replace(/[\s_]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+  : '');
+// A keyword is one word or a hyphenated compound of words.
+const KEYWORD_SHAPE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
 // A list of short strings (a lone string counts as one item), capped; [] when
 // there is nothing usable.
 function cleanList(value, maxItems, maxLen) {
@@ -139,12 +147,15 @@ function cleanList(value, maxItems, maxLen) {
 function parseStyling(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const dressCode = cleanField(raw.dress_code, STYLING_MAX.dress_code);
+  // Keywords: normalised to single words or hyphenated compounds; anything
+  // else is dropped.
   const keywords = [...new Set(cleanList(raw.dress_code_keywords, KEYWORDS_MAX * 2, STYLING_MAX.keyword)
-    .map((k) => k.toLowerCase()))].slice(0, KEYWORDS_MAX);
+    .map(hyphenate)
+    .filter((k) => KEYWORD_SHAPE.test(k)))].slice(0, KEYWORDS_MAX);
   const b = raw.styling_brief && typeof raw.styling_brief === 'object' ? raw.styling_brief : null;
   if (!dressCode || keywords.length < KEYWORDS_MIN || !b) return null;
 
-  const formality = typeof b.formality === 'string' ? b.formality.trim().toLowerCase() : '';
+  const formality = hyphenate(b.formality);
   const brief = {
     activity: cleanField(b.activity, STYLING_MAX.text),
     formality: FORMALITY_SCALE.includes(formality) ? formality : '',
