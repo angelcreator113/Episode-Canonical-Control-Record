@@ -271,7 +271,7 @@ const EpisodeScenesTab = ({ episode, onToast }) => {
           <p>
             Lala's phone moment was not saved for {feedMomentCheck.missing.length === 1 ? 'beat' : 'beats'}{' '}
             {listBeats(feedMomentCheck.missing)}, so {feedMomentCheck.missing.length === 1 ? 'that beat has' : 'those beats have'} no
-            feed moment. Regenerating the episode from its event tries again.
+            feed moment.
           </p>
         </div>
       )}

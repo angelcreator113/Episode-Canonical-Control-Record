@@ -39,7 +39,9 @@ describe('EpisodeScenesTab feed moment warning', () => {
     renderTab();
 
     const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain('not saved for beats 3, 7 and 12');
+    expect(alert.textContent).toContain('not saved for beats 3, 7 and 12, so those beats have no feed moment.');
+    // Regenerating supersedes the whole episode, so the warning does not suggest it.
+    expect(alert.textContent).not.toMatch(/regenerat/i);
     expect(apiClient.get).toHaveBeenCalledWith('/api/v1/episode-brief/ep-1/plan');
   });
 
@@ -48,7 +50,7 @@ describe('EpisodeScenesTab feed moment warning', () => {
 
     renderTab();
 
-    expect((await screen.findByRole('alert')).textContent).toContain('not saved for beat 5, so that beat has no');
+    expect((await screen.findByRole('alert')).textContent).toContain('not saved for beat 5, so that beat has no feed moment.');
   });
 
   test('shows no warning when every feed moment was saved', async () => {
