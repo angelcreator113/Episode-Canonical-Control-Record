@@ -458,14 +458,14 @@ router.get('/characters/:id/plot-threads', requireAuth, async (req, res) => {
  */
 router.post('/characters/:id/plot-threads', requireAuth, async (req, res) => {
   try {
-    const { RegistryCharacter } = getModels();
+    const db = getModels();
+    const { RegistryCharacter } = db;
     const character = await RegistryCharacter.findByPk(req.params.id);
     if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
 
     const { title, description, status, source } = req.body;
     if (!title) return res.status(400).json({ success: false, error: 'title is required' });
 
-    const threads = (character.extra_fields?.plot_threads) || [];
     const newThread = {
       id: `pt-${Date.now()}`,
       title,
@@ -474,13 +474,26 @@ router.post('/characters/:id/plot-threads', requireAuth, async (req, res) => {
       source: source || '',
       created_at: new Date().toISOString(),
     };
-    threads.push(newThread);
 
-    character.extra_fields = { ...(character.extra_fields || {}), plot_threads: threads };
-    character.changed('extra_fields', true);
-    await character.save();
+    // F-Reg-2 fix group 2 (v1.2 R2), row 18: append in one UPDATE built from
+    // the column, so a thread another request added since the read is kept.
+    const [rows] = await db.sequelize.query(
+      `UPDATE registry_characters
+          SET extra_fields = jsonb_set(
+                CASE WHEN jsonb_typeof(extra_fields) = 'object' THEN extra_fields ELSE CAST('{}' AS jsonb) END,
+                '{plot_threads}',
+                CASE WHEN jsonb_typeof(extra_fields->'plot_threads') = 'array'
+                     THEN extra_fields->'plot_threads' ELSE CAST('[]' AS jsonb) END
+                  || jsonb_build_array(CAST(:thread AS jsonb))
+              ),
+              updated_at = NOW()
+        WHERE id = :id AND deleted_at IS NULL
+        RETURNING extra_fields->'plot_threads' AS threads`,
+      { replacements: { thread: JSON.stringify(newThread), id: character.id } }
+    );
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Character not found' });
 
-    return res.json({ success: true, thread: newThread, threads });
+    return res.json({ success: true, thread: newThread, threads: rows[0].threads });
   } catch (err) {
     console.error('[CharacterRegistry] POST plot-threads error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -493,26 +506,47 @@ router.post('/characters/:id/plot-threads', requireAuth, async (req, res) => {
  */
 router.put('/characters/:id/plot-threads/:threadId', requireAuth, async (req, res) => {
   try {
-    const { RegistryCharacter } = getModels();
-    const character = await RegistryCharacter.findByPk(req.params.id);
-    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
-
-    const threads = (character.extra_fields?.plot_threads) || [];
-    const idx = threads.findIndex(t => t.id === req.params.threadId);
-    if (idx === -1) return res.status(404).json({ success: false, error: 'Thread not found' });
-
+    const db = getModels();
+    const { RegistryCharacter } = db;
     const { title, description, status, source } = req.body;
-    if (title !== undefined) threads[idx].title = title;
-    if (description !== undefined) threads[idx].description = description;
-    if (status !== undefined) threads[idx].status = status;
-    if (source !== undefined) threads[idx].source = source;
-    threads[idx].updated_at = new Date().toISOString();
 
-    character.extra_fields = { ...(character.extra_fields || {}), plot_threads: threads };
-    character.changed('extra_fields', true);
-    await character.save();
+    // F-Reg-2 fix group 2 (v1.2 R2), row 19: read, edit and write under a row
+    // lock, onto a copy of the current threads, so a change another request
+    // made to the list since the read is kept.
+    const result = await db.sequelize.transaction(async (transaction) => {
+      const character = await RegistryCharacter.findByPk(req.params.id, {
+        attributes: ['id', 'extra_fields'],
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!character) return { error: 'Character not found' };
 
-    return res.json({ success: true, thread: threads[idx], threads });
+      const current = character.extra_fields?.plot_threads;
+      const threads = JSON.parse(JSON.stringify(Array.isArray(current) ? current : []));
+      const idx = threads.findIndex(t => t.id === req.params.threadId);
+      if (idx === -1) return { error: 'Thread not found' };
+
+      if (title !== undefined) threads[idx].title = title;
+      if (description !== undefined) threads[idx].description = description;
+      if (status !== undefined) threads[idx].status = status;
+      if (source !== undefined) threads[idx].source = source;
+      threads[idx].updated_at = new Date().toISOString();
+
+      await db.sequelize.query(
+        `UPDATE registry_characters
+            SET extra_fields = jsonb_set(
+                  CASE WHEN jsonb_typeof(extra_fields) = 'object' THEN extra_fields ELSE CAST('{}' AS jsonb) END,
+                  '{plot_threads}', CAST(:threads AS jsonb)
+                ),
+                updated_at = NOW()
+          WHERE id = :id AND deleted_at IS NULL`,
+        { replacements: { threads: JSON.stringify(threads), id: character.id }, transaction }
+      );
+      return { thread: threads[idx], threads };
+    });
+    if (result.error) return res.status(404).json({ success: false, error: result.error });
+
+    return res.json({ success: true, thread: result.thread, threads: result.threads });
   } catch (err) {
     console.error('[CharacterRegistry] PUT plot-threads error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -525,18 +559,36 @@ router.put('/characters/:id/plot-threads/:threadId', requireAuth, async (req, re
  */
 router.delete('/characters/:id/plot-threads/:threadId', requireAuth, async (req, res) => {
   try {
-    const { RegistryCharacter } = getModels();
+    const db = getModels();
+    const { RegistryCharacter } = db;
     const character = await RegistryCharacter.findByPk(req.params.id);
     if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
 
-    const threads = (character.extra_fields?.plot_threads) || [];
-    const filtered = threads.filter(t => t.id !== req.params.threadId);
+    // F-Reg-2 fix group 2 (v1.2 R2), row 20: filter in one UPDATE built from
+    // the column, so a change another request made since the read is kept.
+    const [rows] = await db.sequelize.query(
+      `UPDATE registry_characters
+          SET extra_fields = jsonb_set(
+                CASE WHEN jsonb_typeof(extra_fields) = 'object' THEN extra_fields ELSE CAST('{}' AS jsonb) END,
+                '{plot_threads}',
+                COALESCE(
+                  (SELECT jsonb_agg(t ORDER BY n)
+                     FROM jsonb_array_elements(
+                            CASE WHEN jsonb_typeof(extra_fields->'plot_threads') = 'array'
+                                 THEN extra_fields->'plot_threads' ELSE CAST('[]' AS jsonb) END
+                          ) WITH ORDINALITY AS e(t, n)
+                    WHERE t->>'id' IS DISTINCT FROM :threadId),
+                  CAST('[]' AS jsonb)
+                )
+              ),
+              updated_at = NOW()
+        WHERE id = :id AND deleted_at IS NULL
+        RETURNING extra_fields->'plot_threads' AS threads`,
+      { replacements: { threadId: req.params.threadId, id: character.id } }
+    );
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Character not found' });
 
-    character.extra_fields = { ...(character.extra_fields || {}), plot_threads: filtered };
-    character.changed('extra_fields', true);
-    await character.save();
-
-    return res.json({ success: true, threads: filtered });
+    return res.json({ success: true, threads: rows[0].threads });
   } catch (err) {
     console.error('[CharacterRegistry] DELETE plot-threads error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -1052,9 +1104,24 @@ router.post('/registries/:id/backfill-sections', requireAuth, async (req, res) =
       }
     }
 
-    // Batch update instead of N+1 individual saves
+    // Batch update instead of N+1 individual saves.
+    // F-Reg-2 fix group 2 (v1.2 R2), row 30: each fill-if-null is a COALESCE
+    // on the column itself, so a value set since the read is kept rather than
+    // replaced by the default. intimate_eligible is written as before.
+    const { sequelize } = getModels();
+    const JSON_DEFAULTS = new Set(['aesthetic_dna', 'career_status', 'relationships_map', 'story_presence', 'voice_signature', 'evolution_tracking']);
     for (const { id, updates: upd } of updateBatch) {
-      await RegistryCharacter.update(upd, { where: { id } });
+      const values = {};
+      for (const [field, value] of Object.entries(upd)) {
+        if (JSON_DEFAULTS.has(field)) {
+          values[field] = sequelize.fn('COALESCE', sequelize.col(field), sequelize.literal("CAST('{}' AS jsonb)"));
+        } else if (field === 'species' || field === 'is_alive') {
+          values[field] = sequelize.fn('COALESCE', sequelize.col(field), value);
+        } else {
+          values[field] = value;
+        }
+      }
+      await RegistryCharacter.update(values, { where: { id } });
     }
 
     // Reload
@@ -1348,8 +1415,10 @@ ${allFieldsToFill}
     if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse Claude response' });
     const generated = JSON.parse(jsonMatch[0]);
 
-    // Apply each generated JSONB section
-    const filled = [];
+    // Collect each generated value; they are written below, under a row lock.
+    const proposed = {};
+
+    // Each generated JSONB section
     for (const section of emptySections) {
       if (generated[section] && typeof generated[section] === 'object') {
         // Clean nulls
@@ -1357,16 +1426,14 @@ ${allFieldsToFill}
         for (const [k, v] of Object.entries(generated[section])) {
           clean[k] = (v === null || v === undefined) ? '' : v;
         }
-        character[section] = clean;
-        filled.push(section);
+        proposed[section] = clean;
       }
     }
 
-    // Apply each generated essence field (string columns)
+    // Each generated essence field (string columns)
     for (const field of essenceFields) {
       if (generated[field] && typeof generated[field] === 'string') {
-        character[field] = generated[field];
-        filled.push(field);
+        proposed[field] = generated[field];
       }
     }
 
@@ -1382,20 +1449,36 @@ ${allFieldsToFill}
         // age is an integer column
         if (field === 'age') {
           const parsed = parseInt(val, 10);
-          if (!isNaN(parsed)) { character[field] = parsed; filled.push(field); }
+          if (!isNaN(parsed)) proposed[field] = parsed;
         } else if (typeof val === 'string') {
           // Validate enum fields — skip if value not in allowed set
           if (ENUM_VALUES[field] && !ENUM_VALUES[field].includes(val)) {
             console.warn(`[Backfill] Skipping invalid enum value for ${field}: "${val}"`);
             continue;
           }
-          character[field] = val;
-          filled.push(field);
+          proposed[field] = val;
         }
       }
     }
 
-    await character.save();
+    // F-Reg-2 fix group 2 (v1.2 R2), row 33: the AI call can take many seconds,
+    // so each value is written only if its field is still empty on the row
+    // read under a lock after the call, and anything filled meanwhile is kept.
+    const filled = await db.sequelize.transaction(async (transaction) => {
+      const current = await db.RegistryCharacter.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!current) return null;
+      const upd = {};
+      for (const [field, value] of Object.entries(proposed)) {
+        const stillEmpty = emptySections.includes(field) ? !hasData(current[field]) : !current[field];
+        if (stillEmpty) upd[field] = value;
+      }
+      if (Object.keys(upd).length) {
+        await db.RegistryCharacter.update(upd, { where: { id }, transaction });
+      }
+      return Object.keys(upd);
+    });
+    if (!filled) return res.status(404).json({ error: 'Character not found' });
+    await character.reload();
 
     // Also normalize relationships_map if it's in array format
     if (Array.isArray(character.relationships_map)) {
